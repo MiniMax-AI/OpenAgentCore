@@ -2,11 +2,13 @@ package docker
 
 import (
 	"archive/tar"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -110,7 +112,7 @@ func TestSelfHostedLaunchUsesQualifiedIsolationAndPrivateBootstrap(t *testing.T)
 		t.Fatal("unsafe process configuration")
 	}
 	command, _ := json.Marshal(configuration.Cmd)
-	if strings.Contains(string(command), value.Credential.Token) || !strings.Contains(string(command), value.RemoteURL) {
+	if strings.Contains(string(command), value.Credential.Token) || !strings.Contains(string(command), value.RemoteURL) || configuration.Cmd[len(configuration.Cmd)-1] != "--self-hosted-install" {
 		t.Fatal("credential in argv or remote URL changed")
 	}
 	key := "/home/runtime/.parsar/parsar-daemon/executor-key.json"
@@ -145,18 +147,26 @@ func TestSelfHostedRetainsExistingRuntimeWithoutWrites(t *testing.T) {
 
 func TestSelfHostedCredentialReplacementOnlyWritesStoppedOwnedRuntime(t *testing.T) {
 	value := selfHostedFixture()
+	name := value.Name()
 	labels := map[string]string{labelPrefix + "user-owned": "true", labelPrefix + "installation": value.InstallationID, labelPrefix + "environment": value.EnvironmentID}
+	mounts := func(home string) []map[string]string {
+		return []map[string]string{{"Type": "volume", "Name": home, "Destination": "/home"},
+			{"Type": "volume", "Name": name + "-environment", "Destination": "/environment"},
+			{"Type": "volume", "Name": name + "-environment", "Destination": "/workspace"}}
+	}
 	rotated := value.Credential
 	rotated.Token = "rotated-private-token"
 	for _, tc := range []struct {
-		name, status, container string
-		labels                  map[string]string
-		replaced                bool
+		name, status, container, home, symlink string
+		labels                                 map[string]string
+		replaced                               bool
 	}{
-		{"stopped", "exited", value.Name(), labels, true},
-		{"running", "running", value.Name(), labels, false},
-		{"unlabeled", "exited", value.Name(), map[string]string{}, false},
-		{"other installation", "exited", "parsar-selfhost-" + strings.Repeat("0", 32), labels, false},
+		{"stopped", "exited", name, name + "-home", "", labels, true},
+		{"running", "running", name, name + "-home", "", labels, false},
+		{"unlabeled", "exited", name, name + "-home", "", map[string]string{}, false},
+		{"other installation", "exited", "parsar-selfhost-" + strings.Repeat("0", 32), name + "-home", "", labels, false},
+		{"victim volume at /home", "exited", name, "victim-home", "", labels, false},
+		{"redirected daemon directory", "exited", name, name + "-home", "/home/runtime/.parsar/parsar-daemon", labels, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			files := map[string]*tar.Header{}
@@ -166,7 +176,15 @@ func TestSelfHostedCredentialReplacementOnlyWritesStoppedOwnedRuntime(t *testing
 				w.Header().Set("Content-Type", "application/json")
 				switch {
 				case r.Method == "GET" && path == "/containers/"+tc.container+"/json":
-					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "runtime-id", "Config": map[string]any{"Labels": tc.labels}, "State": map[string]any{"Status": tc.status}})
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "runtime-id", "Config": map[string]any{"Labels": tc.labels},
+						"State": map[string]any{"Status": tc.status}, "HostConfig": map[string]any{"Tmpfs": map[string]string{"/tmp": "rw"}}, "Mounts": mounts(tc.home)})
+				case r.Method == "HEAD" && path == "/containers/runtime-id/archive":
+					stat := container.PathStat{Name: r.URL.Query().Get("path"), Mode: os.ModeDir | 0700}
+					if stat.Name == tc.symlink {
+						stat.Mode, stat.LinkTarget = os.ModeSymlink|0777, "/home/victim"
+					}
+					raw, _ := json.Marshal(stat)
+					w.Header().Set("X-Docker-Container-Path-Stat", base64.StdEncoding.EncodeToString(raw))
 				case r.Method == "PUT" && path == "/containers/runtime-id/archive":
 					reader := tar.NewReader(r.Body)
 					for header, err := reader.Next(); err == nil; header, err = reader.Next() {
@@ -189,7 +207,7 @@ func TestSelfHostedCredentialReplacementOnlyWritesStoppedOwnedRuntime(t *testing
 			err = ReplaceSelfHostedCredential(t.Context(), c, tc.container, rotated)
 			if !tc.replaced {
 				if err == nil || len(files) != 0 {
-					t.Fatal("credential written into a running or foreign Runtime", err)
+					t.Fatal("credential written into a running, foreign or redirected Runtime", err)
 				}
 				return
 			}

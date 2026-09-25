@@ -126,11 +126,15 @@ from a different Core distribution), makes no further requests, and exits 0 on
 SIGTERM or SIGINT. The container keeps its `unless-stopped` policy, so it has no
 restart loop yet still starts after a reboot, makes one enrollment request and
 parks again. Transport failures, 5xx and 404 still exit 1
-and are retried by the restart policy. The 401 message is:
+and are retried by the restart policy. The installer's launcher starts the daemon
+with `--self-hosted-install`, so its 401 message names the installer's rerun:
 
 ```text
-parsar-daemon: executor credential KEY_ID for Environment ENVIRONMENT_ID was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then rerun the self-hosted install command on this host and paste the new credential. To remove it instead, stop this container.
+parsar-daemon: executor credential KEY_ID for Environment ENVIRONMENT_ID was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then rerun the self-hosted install command on this host and paste it. To remove it instead, stop this container.
 ```
+
+Without that flag (for example a caller-managed E2B Runtime) the message says to
+install the rotated credential for this Runtime and restart it, or to stop it.
 
 The fix is always to rotate the same `key_id`, then rerun the install command.
 Issuing a new key does not work for an Environment that has already enrolled:
@@ -138,17 +142,26 @@ enrollment keeps the key the Environment first bound, and the connection check
 returns 409 for another key. Rotation restores a revoked key with a new secret.
 
 On rerun the installer checks the stored credential with the connection route.
-When Core rejects it (401 or 409), the installer asks for the replacement (or
-reads `--credential-file`) and checks it the same way: 409 means "rotate the
-stored `key_id` instead of issuing a new key", and 401 or no answer stops without
-changes. An accepted replacement is written into the same stopped container with
-`parsar-runtime replace-credential --container NAME --credential-file PATH`,
-which refuses a running container or one without this installation's labels and
-name. The installer then updates its stored credential, starts the same container
-and waits for connection. The container, its volumes and native history are kept.
-An interrupted replacement is completed by rerunning the same command. The host
-keeps two copies of the credential: the installer's state and the container's
-home volume.
+When Core rejects it, the installer asks for the replacement (or reads
+`--credential-file`):
+
+- 401 (revoked or rotated): only the same `key_id`, rotated, can replace it. A
+  different key is refused before any change, because the connection check alone
+  may accept a new key that enrollment would then reject with 409.
+- 409 (the Environment is bound to a different credential): the replacement must
+  be the credential first used for this Environment, rotated.
+
+The replacement is then checked the same way; 409 or 401, or no answer, stops
+without changes. The installer stops the container and writes the replacement
+into it with `parsar-runtime replace-credential --container NAME
+--credential-file PATH`. That command refuses a running container, one without
+this installation's labels and name or its exact `-home` and `-environment`
+volumes, and a symlinked private credential directory. The installer then starts
+the same container, updates its stored copy last and waits for connection. The
+container, its volumes and native history are kept. Because the stored copy
+changes last, an interrupted replacement still sees a rejected credential and is
+completed by rerunning the same command. The host keeps two copies of the
+credential: the installer's state and the container's home volume.
 
 ## Private connection confirmation
 

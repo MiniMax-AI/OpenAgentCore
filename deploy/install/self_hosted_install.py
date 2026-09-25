@@ -282,7 +282,7 @@ def inspect_prior_launch(root, state, replacing=False):
         raise InstallError('The retained container does not match this installation and Environment.' + guidance)
     if image not in (state['runtime_image'], state['runtime_manifest']):
         raise InstallError('The retained container image does not match this distribution.' + guidance)
-    if replacing and status in ('running', 'exited'):
+    if replacing and status in ('running', 'exited', 'restarting', 'created'):
         return name
     if status == 'running':
         print('Runtime already running: ' + name)
@@ -293,21 +293,35 @@ def inspect_prior_launch(root, state, replacing=False):
     raise InstallError('The retained Runtime requires inspection before continuing.' + guidance)
 
 
-def replace_credential(args, manifest, root, state, stored, supplied):
+def replace_credential(args, manifest, root, state, stored, rejection, supplied):
     """Give the same container a rotated credential after Core rejected the stored one.
 
-    The container, its volumes and native history stay. The stored credential
-    changes only after the container holds the replacement, so an interrupted
-    replacement is retried by rerunning the same command.
+    rejection is Core's answer for the stored credential: 401 when it was revoked
+    or rotated, so only that same key rotated can replace it; 409 when the
+    Environment is bound to a different credential. The container, its volumes and
+    native history stay. The stored copy changes last, so every interruption
+    leaves it rejected and rerunning the same command replaces it again.
     """
+    environment = args.environment_id
     name = inspect_prior_launch(root, state, replacing=True)
-    print('Executor credential ' + stored['key_id'] + ' is no longer accepted by Core.'
-          + ('' if supplied else ' Rotate it in Web (Session > Executor credentials > Rotate), then paste the new credential.'))
-    replacement = supplied or prompt_credential(args.environment_id)
-    verdict = credential_verdict(args.remote, args.environment_id, replacement)
+    if rejection == 401:
+        advice = ('Rotate this same credential in Web (Session > Executor credentials > Rotate); '
+                  'a newly issued credential cannot replace it.')
+        print('Executor credential ' + stored['key_id'] + ' is no longer accepted by Core. ' + advice
+              + ('' if supplied else ' Then paste the rotated credential.'))
+    else:
+        advice = ('Rotate the credential first used for this Environment in Web (Session > Executor credentials > Rotate) '
+                  'instead of issuing a new one.')
+        print('Environment ' + environment + ' is bound to a different executor credential than ' + stored['key_id'] + '. '
+              + advice + ('' if supplied else ' Then paste the rotated credential.'))
+    replacement = supplied or prompt_credential(environment)
+    if rejection == 401 and replacement['key_id'] != stored['key_id']:
+        raise InstallError('The pasted credential is ' + replacement['key_id'] + ', not ' + stored['key_id'] + '. '
+                           + advice + ' Then rerun this command. Nothing was changed.')
+    verdict = credential_verdict(args.remote, environment, replacement)
     if verdict == 409:
-        raise InstallError('Environment ' + args.environment_id + ' is bound to a different executor credential. Rotate credential '
-                           + stored['key_id'] + ' instead of issuing a new one, then rerun this command. Nothing was changed.')
+        raise InstallError('Environment ' + environment + ' is bound to a different executor credential. Rotate the credential '
+                           'first used for this Environment instead of issuing a new one, then rerun this command. Nothing was changed.')
     if verdict != 'accepted':
         raise InstallError('Core did not accept the replacement credential ('
                            + ('HTTP 401' if verdict == 401 else 'Core unavailable')
@@ -322,15 +336,14 @@ def replace_credential(args, manifest, root, state, stored, supplied):
             os.fsync(stream.fileno())
         checked(docker + ['stop', name], 'Cannot stop the Runtime to replace its credential; rerun this command', timeout=60)
         checked([str(launcher), 'replace-credential', '--container', name, '--credential-file', staged],
-                'Runtime credential replacement failed; the container is stopped. Rerun this command', timeout=90)
+                'Runtime credential replacement failed; rerun this command', timeout=90)
+        checked(docker + ['start', name], 'Cannot start the Runtime ' + name + '; rerun this command')
         os.replace(staged, root / 'executor-key.json')
     finally:
         if os.path.exists(staged):
             os.unlink(staged)
-    checked(docker + ['start', name], 'Cannot start the Runtime. Start the same container with: '
-            + ' '.join(docker) + ' start ' + name + '. Then rerun this command to confirm connection.')
     print('Executor credential replaced; restarted the same Runtime: ' + name)
-    wait_connected(args.remote, args.environment_id, replacement, name)
+    wait_connected(args.remote, environment, replacement, name)
 
 
 def install(args, root):
@@ -355,8 +368,9 @@ def install(args, root):
     if (root / 'launch.json').exists() or (root / 'launch.json').is_symlink():
         key = credential(private_read(root / 'executor-key.json'), args.environment_id)
         supplied = credential(private_read(Path(args.credential_file)), args.environment_id) if args.credential_file else None
-        if credential_verdict(args.remote, args.environment_id, key) in (401, 409):
-            replace_credential(args, manifest, root, state, key, supplied)
+        rejection = credential_verdict(args.remote, args.environment_id, key)
+        if rejection in (401, 409):
+            replace_credential(args, manifest, root, state, key, rejection, supplied)
             return
         name = inspect_prior_launch(root, state)
         if supplied and supplied != key:

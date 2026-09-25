@@ -532,6 +532,8 @@ WebSocket authentication uses the `Authorization` header, never a URL token.
 On a permanent rejection (enrollment 401 or 409, a permanent WebSocket rejection
 or close) `connect --environment-id` prints one message naming the fix, makes no
 further requests and exits 0 on SIGTERM or SIGINT; transient failures exit 1.
+The self-hosted launcher adds `--self-hosted-install`, so the message names the
+installer's rerun instead of a generic credential update and restart.
 
 The private `POST /api/v1/agent-daemon/enroll` endpoint accepts that executor bearer
 and `{"environment_id":"..."}`. It returns `device_id`, `session_id`,

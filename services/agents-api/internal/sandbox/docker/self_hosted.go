@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 )
 
@@ -93,7 +94,8 @@ func LaunchSelfHosted(ctx context.Context, c *client.Client, v SelfHostedLaunch)
 		}
 	}
 	options := runtimeContainerOptions(Config{Image: v.Image, Network: "bridge", Seccomp: v.Seccomp, NestedSandbox: true}, name, labels, nil)
-	options.Config.Cmd = []string{"connect", "--profile", "default", "--remote", v.RemoteURL, "--environment-id", v.EnvironmentID, "--credential-file", "/home/" + selfHostedCredentialPath}
+	// --self-hosted-install makes the daemon name this installer's rerun as the fix for a rejection.
+	options.Config.Cmd = []string{"connect", "--profile", "default", "--remote", v.RemoteURL, "--environment-id", v.EnvironmentID, "--credential-file", "/home/" + selfHostedCredentialPath, "--self-hosted-install"}
 	options.HostConfig.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyUnlessStopped}
 	created, err := c.ContainerCreate(ctx, options)
 	if err != nil {
@@ -132,20 +134,52 @@ func ReplaceSelfHostedCredential(ctx context.Context, c *client.Client, name str
 		return errors.New("cannot inspect Docker Runtime")
 	}
 	current := inspected.Container
-	if current.Config == nil || current.State == nil {
-		return sandbox.ErrOwnership
-	}
-	labels := current.Config.Labels
-	owner := SelfHostedLaunch{InstallationID: labels[labelPrefix+"installation"], EnvironmentID: labels[labelPrefix+"environment"]}
-	if labels[labelPrefix+"user-owned"] != "true" || !validID(owner.InstallationID) || owner.EnvironmentID != credential.EnvironmentID || owner.Name() != name {
-		return sandbox.ErrOwnership
+	if err = selfHostedOwned(current, name, credential.EnvironmentID); err != nil {
+		return err
 	}
 	if current.State.Status != container.StateExited && current.State.Status != container.StateCreated {
 		return errors.New("stop the Runtime before replacing its executor credential")
 	}
+	// A planted directory symlink would redirect the write out of the private home.
+	for _, path := range []string{"/home/runtime", "/home/runtime/.parsar", "/home/runtime/.parsar/parsar-daemon"} {
+		stat, err := c.ContainerStatPath(ctx, current.ID, client.ContainerStatPathOptions{Path: path})
+		if err != nil || !stat.Stat.Mode.IsDir() || stat.Stat.LinkTarget != "" {
+			return errors.New("the Runtime's private credential directory is missing or redirected")
+		}
+	}
 	raw, _ := json.Marshal(credential)
 	if err = copyRuntimeFiles(ctx, c, current.ID, "/home", []entry{{name: selfHostedCredentialPath, content: raw}}); err != nil {
 		return errors.New("cannot replace the Runtime executor credential; inspect the retained container")
+	}
+	return nil
+}
+
+// selfHostedOwned requires the labels, name and exactly the volume layout that
+// LaunchSelfHosted creates, so a container copying the name and labels cannot
+// direct the credential into another volume.
+func selfHostedOwned(current container.InspectResponse, name, environment string) error {
+	if current.Config == nil || current.State == nil || current.HostConfig == nil {
+		return sandbox.ErrOwnership
+	}
+	labels := current.Config.Labels
+	owner := SelfHostedLaunch{InstallationID: labels[labelPrefix+"installation"], EnvironmentID: labels[labelPrefix+"environment"]}
+	if labels[labelPrefix+"user-owned"] != "true" || !validID(owner.InstallationID) || owner.EnvironmentID != environment || owner.Name() != name {
+		return sandbox.ErrOwnership
+	}
+	want := map[string]string{"/home": name + "-home", "/environment": name + "-environment", "/workspace": name + "-environment"}
+	if len(current.Mounts) != len(want) {
+		return sandbox.ErrOwnership
+	}
+	for _, m := range current.Mounts {
+		if m.Type != mount.TypeVolume || m.Name == "" || want[m.Destination] != m.Name {
+			return sandbox.ErrOwnership
+		}
+		delete(want, m.Destination)
+	}
+	for path := range current.HostConfig.Tmpfs {
+		if path != "/tmp" {
+			return sandbox.ErrOwnership
+		}
 	}
 	return nil
 }

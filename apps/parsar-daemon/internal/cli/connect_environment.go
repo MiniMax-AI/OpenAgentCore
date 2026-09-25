@@ -130,7 +130,7 @@ func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string)
 	return boot, nil
 }
 
-func runEnvironmentConnect(rc *runContext, profile string, background bool, remote, environment, credentialFile string) error {
+func runEnvironmentConnect(rc *runContext, profile string, background bool, remote, environment, credentialFile string, selfHosted bool) error {
 	base, err := environmentBase(remote)
 	if err != nil {
 		return err
@@ -149,7 +149,7 @@ func runEnvironmentConnect(rc *runContext, profile string, background bool, remo
 	// the connection parks instead.
 	parks := !background || daemonize.IsBackgroundChild()
 	rejected := func(err error) error {
-		if message := environmentRejection(err, keyID, environment); parks && message != "" {
+		if message := environmentRejection(err, keyID, environment, selfHosted); parks && message != "" {
 			return parkEnvironment(rc.stderr, message)
 		}
 		return err
@@ -183,15 +183,20 @@ var (
 // environmentRejection names the fix for a permanent Environment rejection:
 // enrollment 401 or 409, or a permanent WebSocket rejection or close. It returns
 // "" for anything else (transport failures, 5xx, 404), which keeps the ordinary
-// failure exit so the Runtime's restart policy retries it.
-func environmentRejection(err error, keyID, environment string) string {
+// failure exit so the Runtime's restart policy retries it. Only a Runtime the
+// self-hosted installer started names that installer's rerun and container.
+func environmentRejection(err error, keyID, environment string, selfHosted bool) string {
+	reconnect, remove := "install it for this Runtime and restart it", "stop this Runtime"
+	if selfHosted {
+		reconnect, remove = "rerun the self-hosted install command on this host and paste it", "stop this container"
+	}
 	switch {
 	case errors.Is(err, errEnvironmentBindingConflict):
-		return fmt.Sprintf("executor credential %s cannot connect: Environment %s is bound to a different executor credential. This Runtime will not retry. Rotate the credential first used for this Environment instead of issuing a new one, then rerun the self-hosted install command on this host and paste it. To remove this Runtime instead, stop this container.", keyID, environment)
+		return fmt.Sprintf("executor credential %s cannot connect: Environment %s is bound to a different executor credential. This Runtime will not retry. Rotate the credential first used for this Environment instead of issuing a new one, then %s. To remove this Runtime instead, %s.", keyID, environment, reconnect, remove)
 	case errors.Is(err, transport.ErrIncompatibleVersion):
-		return fmt.Sprintf("Core refused this Runtime's daemon version for Environment %s; the Runtime comes from a different Core distribution. This Runtime will not retry. Stop this container.", environment)
+		return fmt.Sprintf("Core refused this Runtime's daemon version for Environment %s; the Runtime comes from a different Core distribution. This Runtime will not retry; %s.", environment, remove)
 	case errors.Is(err, errEnvironmentCredentialRejected), errors.Is(err, transport.ErrPermanent):
-		return fmt.Sprintf("executor credential %s for Environment %s was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then rerun the self-hosted install command on this host and paste the new credential. To remove it instead, stop this container.", keyID, environment)
+		return fmt.Sprintf("executor credential %s for Environment %s was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then %s. To remove it instead, %s.", keyID, environment, reconnect, remove)
 	}
 	return ""
 }

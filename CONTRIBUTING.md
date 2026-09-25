@@ -1790,9 +1790,10 @@ Web's install command carries no secret: the installer reads the credential at a
 hidden terminal prompt and verifies against the console's
 `self_hosted_installer_sha256`. On a permanent rejection the self-hosted daemon
 parks (one message, no requests, exit 0 on SIGTERM) rather than exiting into
-Docker's `unless-stopped` restart loop. Rerunning the installer with a rotated
-credential replaces it in the same stopped container through the launcher's
-`replace-credential`; never relaunch or adopt history to recover a credential.
+Docker's `unless-stopped` restart loop. Rerunning the installer with the same key
+rotated replaces it in the same stopped container through the launcher's
+`replace-credential`, which checks the container's labels, name, volumes and
+private directories; never relaunch or adopt history to recover a credential.
 Self-hosted installation confirms connection through the private daemon transport
 using only its restricted executor credential. The read checks the exact live
 Environment/key binding and current authenticated connection; it never enrolls,

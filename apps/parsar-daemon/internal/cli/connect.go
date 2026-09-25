@@ -64,6 +64,7 @@ func runConnect(ctx *runContext, args []string) error {
 		remote         = fs.String("remote", "", "self-hosted Environment remote_url, unchanged")
 		environment    = fs.String("environment-id", "", "self-hosted Environment ID")
 		credentialFile = fs.String("credential-file", "", "absolute path to protected executor credential JSON")
+		selfHosted     = fs.Bool("self-hosted-install", false, "started by the self-hosted installer: a rejection names its rerun as the fix")
 	)
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("connect: parse flags: %w", err)
@@ -79,11 +80,11 @@ func runConnect(ctx *runContext, args []string) error {
 	if err := paths.ValidateProfile(*profile); err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
-	if *remote != "" || *environment != "" || *credentialFile != "" {
+	if *remote != "" || *environment != "" || *credentialFile != "" || *selfHosted {
 		if *serverURL != "" || *token != "" || *deviceName != "" || fs.NArg() != 0 {
 			return errors.New("connect: Environment enrollment cannot use pairing options or positional arguments")
 		}
-		return runEnvironmentConnect(ctx, *profile, *background, *remote, *environment, *credentialFile)
+		return runEnvironmentConnect(ctx, *profile, *background, *remote, *environment, *credentialFile, *selfHosted)
 	}
 
 	inlinePair := strings.TrimSpace(*serverURL) != "" || strings.TrimSpace(*token) != ""

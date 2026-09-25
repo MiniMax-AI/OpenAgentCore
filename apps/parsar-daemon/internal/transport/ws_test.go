@@ -379,6 +379,9 @@ func TestDialMarksOperatorFixableUpgradeRejectionsAsPermanent(t *testing.T) {
 			if !errors.Is(err, transport.ErrPermanent) {
 				t.Errorf("Dial err %v does not wrap ErrPermanent (status %d)", err, tc.code)
 			}
+			if errors.Is(err, transport.ErrIncompatibleVersion) != (tc.code == http.StatusUpgradeRequired) {
+				t.Errorf("Dial err %v: only 426 marks an incompatible version", err)
+			}
 		})
 	}
 }
