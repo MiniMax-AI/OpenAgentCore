@@ -99,7 +99,6 @@ export function FirstProjectSetup({ onDone }: { onDone: () => void }) {
     content = (
       <>
         <h1 className="first-key-title">{t("firstRun.title")}</h1>
-        <p className="first-key-lead">{t("firstRun.lead")}</p>
         <form className="first-key-form" onSubmit={(event) => { event.preventDefault(); if (canSubmit(flow)) void controls.submit(); }}>
           <NameField
             name="project-name"

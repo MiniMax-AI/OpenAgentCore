@@ -69,12 +69,12 @@ export function SessionPage() {
 
   let body;
   if (!projectId || !sessionId) {
-    body = <EmptyState title={t("detail.missing")} description={t("detail.missingDescription")} action={<button className="button outline" type="button" onClick={back}>{t("detail.back")}</button>} />;
+    body = <EmptyState title={t("detail.missing")} hint={t("detail.missingDescription")} action={<button className="button outline" type="button" onClick={back}>{t("detail.back")}</button>} />;
   } else if (projects.status === "ready" && !project) {
     body = <EmptyState title={t("detail.projectMissing")} action={<button className="button outline" type="button" onClick={back}>{t("detail.back")}</button>} />;
   } else if (!session) {
     if (history.phase === "loading") body = <DetailSkeleton label={t("detail.loading")} />;
-    else if (isNotFound(history.error)) body = <EmptyState title={t("detail.notFound")} description={t("detail.notFoundDescription")} action={<button className="button outline" type="button" onClick={back}>{t("detail.back")}</button>} />;
+    else if (isNotFound(history.error)) body = <EmptyState title={t("detail.notFound")} hint={t("detail.notFoundDescription")} action={<button className="button outline" type="button" onClick={back}>{t("detail.back")}</button>} />;
     else body = <EmptyState title={t("detail.loadFailed")} description={errorText(history.error)} action={<button className="button outline" type="button" onClick={refresh}>{t("detail.retry")}</button>} />;
   } else {
     const items = history.history?.items ?? [];

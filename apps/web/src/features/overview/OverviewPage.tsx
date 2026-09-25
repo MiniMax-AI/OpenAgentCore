@@ -422,7 +422,7 @@ function AttentionTable({ sessions, expected, unread, now, onOpen }: {
         : null;
     return (
       <div className="overview-card-body">
-        {description ? <EmptyState title={t("attention.unlistedTitle")} description={description} /> : <EmptyState title={t("attention.emptyTitle")} description={t("attention.emptyDescription")} />}
+        {description ? <EmptyState title={t("attention.unlistedTitle")} description={description} /> : <EmptyState title={t("attention.emptyTitle")} hint={t("attention.emptyDescription")} />}
       </div>
     );
   }

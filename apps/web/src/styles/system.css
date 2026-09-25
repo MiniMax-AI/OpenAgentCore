@@ -1360,3 +1360,10 @@ pre {
   font-size: 13px;
   line-height: 20px;
 }
+
+/* An empty state's explanation sits behind a help tip beside its title. */
+.console-empty-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

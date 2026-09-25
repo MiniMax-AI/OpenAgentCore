@@ -110,7 +110,7 @@ export function SkillDetailPage({
         {status === "missing" ? (
           <EmptyState
             title={t("detail.missingTitle")}
-            description={t("detail.missingDescription")}
+            hint={t("detail.missingDescription")}
             action={<button className="button outline" type="button" onClick={onBack}>{t("actions.back")}</button>}
           />
         ) : !skill ? (

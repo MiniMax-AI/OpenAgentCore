@@ -137,7 +137,6 @@ function TemplatesList() {
         ) : (
           <EmptyState
             title={t("noMatch")}
-            description={tCommon("list.noMatchesDescription")}
             action={<button className="button outline" type="button" onClick={() => setQuery("")}>{tCommon("actions.clearSearch")}</button>}
           />
         )}

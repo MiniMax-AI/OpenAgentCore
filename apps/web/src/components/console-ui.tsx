@@ -243,21 +243,28 @@ export function Meter({
   );
 }
 
+/**
+ * An empty or failed area. `description` stays visible and is for what the
+ * reader must see (an error, why data is missing); an explanation goes in
+ * `hint`, behind a help tip beside the title, not as small print.
+ */
 export function EmptyState({
   icon: Icon,
   title,
+  hint,
   description,
   action,
 }: {
   icon?: LucideIcon;
   title: ReactNode;
+  hint?: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
 }) {
   return (
     <div className="console-empty">
       {Icon ? <Icon size={20} strokeWidth={1.5} aria-hidden="true" /> : null}
-      <p className="console-empty-title">{title}</p>
+      <p className="console-empty-title">{title}{hint ? <HelpTip>{hint}</HelpTip> : null}</p>
       {description ? <p className="console-empty-description">{description}</p> : null}
       {action ? <div className="console-empty-action">{action}</div> : null}
     </div>

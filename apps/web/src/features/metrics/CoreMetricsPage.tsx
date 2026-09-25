@@ -63,7 +63,7 @@ export function CoreMetricsPage() {
   let body: ReactNode;
   if (!metrics) {
     body = missing
-      ? <EmptyState icon={Network} title={t("core.missingTitle")} description={t("core.missingDescription")} />
+      ? <EmptyState icon={Network} title={t("core.missingTitle")} hint={t("core.missingDescription")} />
       : query.isError
         ? <p className="page-status" role="alert">{t("core.failed", { reason: error })}</p>
         : <DashboardSkeleton label={t("core.loading")} figures={5} />;

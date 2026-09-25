@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight, LogOut } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { HelpTip } from "../../components/console-ui";
 import { ThemeMenu } from "../../components/ThemeMenu";
 import { setLanguage } from "../../i18n";
 import { OnboardingLayout } from "../onboarding/OnboardingLayout";
@@ -93,6 +94,7 @@ function AccountForm({ setup, onAuthenticated, onRefresh }: {
   setup: boolean; onAuthenticated: (status: ConsoleAuth, from: HTMLElement | null) => void; onRefresh: () => void;
 }) {
   const { t } = useTranslation("firstRun");
+  const id = useId();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -129,12 +131,16 @@ function AccountForm({ setup, onAuthenticated, onRefresh }: {
     } finally { pending.current = false; if (!request.signal.aborted) setBusy(false); }
   }
   return <form className="console-auth-form form-stack" onSubmit={(event) => void submit(event)}>
-    <div><h2>{t(setup ? "Create your administrator account" : "Welcome back")}</h2>
-      <p>{t(setup ? "You manage this cloud." : "Use your administrator account to continue.")}</p></div>
-    <label className="field"><span>{t("Administrator username")}</span><input name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={64} pattern={setup ? "[a-zA-Z0-9._\\-]+" : undefined} disabled={busy || uncertain} />
-      {setup ? <small>{t("Letters, numbers, dots, underscores and hyphens.")}</small> : null}</label>
-    <label className="field"><span>{t("Password")}</span><input name="password" type="password" autoComplete={setup ? "new-password" : "current-password"} required disabled={busy || uncertain} />
-      {setup ? <small>{t("12–72 bytes. Keep this password somewhere safe.")}</small> : null}</label>
+    <h2>{t(setup ? "Create your administrator account" : "Welcome back")}</h2>
+    {/* Rules sit behind help tips beside their labels, not as small print under the fields. */}
+    <div className="field">
+      <span className="field-label-row"><label htmlFor={`${id}-username`}>{t("Administrator username")}</label>{setup ? <HelpTip>{t("Letters, numbers, dots, underscores and hyphens.")}</HelpTip> : null}</span>
+      <input id={`${id}-username`} name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={64} pattern={setup ? "[a-zA-Z0-9._\\-]+" : undefined} disabled={busy || uncertain} />
+    </div>
+    <div className="field">
+      <span className="field-label-row"><label htmlFor={`${id}-password`}>{t("Password")}</label>{setup ? <HelpTip>{t("12–72 bytes. Keep this password somewhere safe.")}</HelpTip> : null}</span>
+      <input id={`${id}-password`} name="password" type="password" autoComplete={setup ? "new-password" : "current-password"} required disabled={busy || uncertain} />
+    </div>
     {setup ? <label className="field"><span>{t("Confirm password")}</span><input name="confirm" type="password" autoComplete="new-password" required disabled={busy || uncertain} /></label> : null}
     {error ? <p className="console-auth-error" role="alert">{error}</p> : null}
     {uncertain ? <button className="button outline" type="button" onClick={onRefresh}>{t("Check account status")}</button> :

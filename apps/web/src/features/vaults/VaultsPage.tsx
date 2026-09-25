@@ -112,7 +112,6 @@ function VaultsList() {
         ) : (
           <EmptyState
             title={t("list.noMatch")}
-            description={tCommon("list.noMatchesDescription")}
             action={<button className="button outline" type="button" onClick={() => setQuery("")}>{tCommon("actions.clearSearch")}</button>}
           />
         )}
