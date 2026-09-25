@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Check, Compass, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip, StatusDot } from "../../components/console-ui";
@@ -12,8 +12,10 @@ import {
   checklistStorageKey,
   checklistView,
   gettingStartedSteps,
+  isCelebrating,
   readChecklistMemory,
   rememberInstallation,
+  setCelebrating,
   writeChecklistMemory,
   type ChecklistMemory,
   type StepState,
@@ -46,8 +48,14 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
     writeChecklistMemory(storageKey, value);
     setChosen({ key: storageKey, memory: value });
   }, [storageKey]);
-  // "You're set" stays until it is dismissed or the page is left, while the checklist is already closed.
-  const [celebrating, setCelebrating] = useState(false);
+  // "You're set" stays until it is dismissed, while the checklist is already closed; it outlasts the tour.
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
+  const celebrating = storageKey !== null && isCelebrating(storageKey);
+  const celebrate = useCallback((on: boolean) => {
+    if (storageKey === null) return;
+    setCelebrating(storageKey, on);
+    rerender();
+  }, [storageKey]);
   const [focusPending, setFocusPending] = useState(false);
   const view = storageKey === null ? "hidden" : checklistView(states, memory);
 
@@ -57,14 +65,14 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
   const next = view === "complete" ? "closed" : memory === null && storageKey !== null ? (view === "full" ? "open" : allDone ? "closed" : null) : null;
   useEffect(() => {
     if (!next) return;
-    if (view === "complete") setCelebrating(true);
+    if (view === "complete") celebrate(true);
     remember(next);
-  }, [next, remember, view]);
+  }, [celebrate, next, remember, view]);
 
   // Show Getting started, from the sidebar.
   useConsoleIntent("getting-started", storageKey === null ? "wait" : "ready", () => {
+    celebrate(false);
     remember("open");
-    setCelebrating(false);
     setFocusPending(true);
   });
   const showing = celebrating || view !== "hidden";
@@ -90,7 +98,7 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
         </div>
         <div className="getting-started-actions">
           {tourButton}
-          <button className="button outline" type="button" onClick={() => { setCelebrating(false); remember("closed"); }}>{t("gettingStarted.complete.dismiss")}</button>
+          <button className="button outline" type="button" onClick={() => { celebrate(false); remember("closed"); }}>{t("gettingStarted.complete.dismiss")}</button>
         </div>
       </section>
     );

@@ -119,3 +119,16 @@ test("opens Add node from Getting started when no node has joined", async ({ pag
   await expect(page.getByRole("heading", { name: "Nodes", level: 1 })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
 });
+
+test("reopens a finished Getting started from the sidebar and keeps You're set through the tour", async ({ page, request }) => {
+  await openConsole(page, request);
+  await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: "Show Getting started" }).click();
+  const done = page.getByRole("region", { name: "You're set" });
+  await expect(done).toBeVisible();
+  await done.getByRole("button", { name: "Take the tour" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await expect(done.getByRole("button", { name: "Take the tour" })).toBeFocused();
+  await done.getByRole("button", { name: "Dismiss" }).click();
+  await expect(done).toHaveCount(0);
+});

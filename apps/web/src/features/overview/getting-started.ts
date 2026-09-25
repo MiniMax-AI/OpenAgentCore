@@ -116,6 +116,21 @@ export function writeChecklistMemory(key: string, value: Exclude<ChecklistMemory
   writeStored(key, value);
 }
 
+/**
+ * Checklists whose "You're set" is on screen until dismissed, by storage entry.
+ * It lives outside the Overview so it outlasts the tour, which replaces the page.
+ */
+const celebrating = new Set<string>();
+
+export function isCelebrating(key: string): boolean {
+  return celebrating.has(key);
+}
+
+export function setCelebrating(key: string, on: boolean): void {
+  if (on) celebrating.add(key);
+  else celebrating.delete(key);
+}
+
 function readStored(key: string): string | null {
   try {
     return window.localStorage.getItem(key);
