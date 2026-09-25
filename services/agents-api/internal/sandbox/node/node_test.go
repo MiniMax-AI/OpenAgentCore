@@ -327,6 +327,9 @@ func TestEnrollmentRejectionNamesCoreCode(t *testing.T) {
 	if err := reject(http.StatusUnauthorized, `{"error":{"code":"invalid_node_credential"}}`); !errors.Is(err, ErrAuthentication) {
 		t.Fatal("a rejected credential was not an authentication failure", err)
 	}
+	if err := reject(http.StatusForbidden, `forbidden by proxy`); errors.Is(err, ErrAuthentication) {
+		t.Fatal("a proxy's 403 stopped the node for good", err)
+	}
 	err := reject(http.StatusConflict, `{"error":{"code":"sandbox_node_address_mismatch","message":"x"}}`)
 	if errors.Is(err, ErrAuthentication) || err.Error() != "node enrollment rejected (HTTP 409 sandbox_node_address_mismatch)" {
 		t.Fatal(err)

@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shutil
 import socket
 import stat
 import subprocess
@@ -54,12 +55,12 @@ def origin(value):
 
 
 def checked(arguments, failure, explain=None, **kwargs):
-    # explain(stderr) may replace the failure message; it must return fixed text only.
+    # explain(stderr) may replace the failure with an InstallError carrying fixed text only.
     try:
         result = subprocess.run(arguments, check=False, stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=kwargs.pop("timeout", 30), **kwargs)
         if result.returncode:
-            raise InstallError(explain(result.stderr) if explain else failure)
+            raise explain(result.stderr) if explain else InstallError(failure)
         return result.stdout.decode().strip()
     except (OSError, subprocess.SubprocessError):
         raise InstallError(failure) from None
@@ -71,19 +72,33 @@ REGISTRATION_UNCONFIRMED = ("Node enrollment was not confirmed. Check the Core U
 REJECTION = re.compile(rb"node enrollment rejected \(HTTP (\d{3})(?: ([a-z_]{1,64}))?\)")
 
 
+class AddressChanged(InstallError):
+    """Core refused the node's address before consuming the token, so it has no record of this node."""
+
+
 def registration_failure(stderr):
     """A fixed message for Core's answer to registration; never the node program's own text."""
     matches = list(REJECTION.finditer(stderr or b""))
     if not matches:
-        return REGISTRATION_UNCONFIRMED
+        return InstallError(REGISTRATION_UNCONFIRMED)
     status, code = matches[-1].group(1).decode(), (matches[-1].group(2) or b"").decode()
     if code == "sandbox_node_address_mismatch":
-        return ("Core's public URL changed after this command was generated, so Core refused this node's address. "
-                "Generate a new command on the Nodes page and run it on this host; the token was not used.")
+        return AddressChanged(node_spec.PUBLIC_URL_CHANGED + " The token was not used; downloaded files are kept.")
     if status == "401":
-        return ("The enrollment command expired or was already used. Generate a new command on the Nodes page and "
-                "run it on this host; downloaded files are kept.")
-    return REGISTRATION_UNCONFIRMED + " Core answered HTTP " + status + (" " + code if code else "") + "."
+        return InstallError("The enrollment command expired or was already used. Generate a new command on the Nodes "
+                            "page and run it on this host; downloaded files are kept.")
+    return InstallError(REGISTRATION_UNCONFIRMED + " Core answered HTTP " + status + (" " + code if code else "") + ".")
+
+
+def discard_unregistered(root):
+    """Remove the files that name the old address, so a new command can register this host.
+
+    Only for a node Core never recorded: downloads, the image and the service file stay."""
+    for name in ("installation.json", "provider.json"):
+        if existing_file(root / name):
+            (root / name).unlink()
+    if (root / "state/node").is_dir() and not (root / "state/node").is_symlink():
+        shutil.rmtree(root / "state/node")
 
 
 def preflight(provider):
@@ -372,9 +387,13 @@ def install(args, token):
                 with os.fdopen(descriptor, "w") as secret:
                     secret.write(token)
                 print("Registering this node with Core...", flush=True)
-                checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
-                         "--core-url", args.core_url, "--name", socket.gethostname(),
-                         "--enrollment-token-file", secret_path], REGISTRATION_UNCONFIRMED, explain=registration_failure)
+                try:
+                    checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
+                             "--core-url", args.core_url, "--name", socket.gethostname(),
+                             "--enrollment-token-file", secret_path], REGISTRATION_UNCONFIRMED, explain=registration_failure)
+                except AddressChanged:
+                    discard_unregistered(root)
+                    raise
                 write_once(marker, json_text(state))
             finally:
                 if os.path.exists(secret_path):

@@ -29,6 +29,8 @@ class ArtifactTests(unittest.TestCase):
             def do_GET(self):
                 test.requests.append(self.path)
                 self.send_response(test.status)
+                if test.status == 302:
+                    self.send_header('Location', 'https://elsewhere.example' + self.path)
                 self.end_headers()
                 if test.status == 200:
                     self.wfile.write(test.data)
@@ -121,6 +123,17 @@ class ArtifactTests(unittest.TestCase):
             distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'link')
 
 
+    def test_redirects_are_refused(self):
+        # The console never redirects; following one could fetch verified names from another origin.
+        self.status = 302
+        with self.assertRaisesRegex(distribution.DistributionError, 'do not follow redirects'):
+            distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
+        with self.assertRaisesRegex(distribution.DistributionError, 'do not follow redirects'):
+            distribution.load_manifest(source_url=f'http://127.0.0.1:{self.server.server_port}')
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+
 class DockerIdentityTests(unittest.TestCase):
     def setUp(self):
         self.config = 'sha256:' + 'a' * 64
@@ -184,10 +197,6 @@ class DockerIdentityTests(unittest.TestCase):
             self.manifest[field] = original
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class ManifestSourceTests(unittest.TestCase):
     """A release URL recorded by the build is never an artifact source."""
 
@@ -206,3 +215,7 @@ class ManifestSourceTests(unittest.TestCase):
         with patch.object(distribution.urllib.request, 'build_opener', return_value=opener):
             loaded = distribution.load_manifest(source_url='https://console.example')
         self.assertEqual(loaded['artifact_base_url'], 'https://console.example/node-install/artifacts')
+
+
+if __name__ == '__main__':
+    unittest.main()

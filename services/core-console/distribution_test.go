@@ -96,4 +96,14 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 	if _, body := responseBody(t, server, consoleRequest(t, server, "GET", "/console/config")); !strings.Contains(body, `"node_artifacts":[]`) {
 		t.Fatal("a console without node files offered them:", body)
 	}
+	// A console without any node payload also reports an empty list, never null.
+	bare, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: dist, coreKey: testCoreKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bare.Close()
+	bareServer := serveSignedIn(t, bare)
+	if _, body := responseBody(t, bareServer, consoleRequest(t, bareServer, "GET", "/console/config")); !strings.Contains(body, `"node_artifacts":[]`) {
+		t.Fatal("a console without a node payload did not report an empty list:", body)
+	}
 }

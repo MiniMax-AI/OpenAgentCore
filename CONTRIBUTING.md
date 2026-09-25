@@ -1832,14 +1832,14 @@ and a private loopback database port. Native Core needs no KVM or node assets. C
 Docker socket or node identity mount in either mode. The ordinary standalone node
 service owns its provider processes outside the Core container. Its `KillMode=process`
 preserves resident microVM/helper processes across a node-service restart. User KVM
-access and the Linux runtime libraries are prerequisites for microsandbox. A node
-installed without root runs as a systemd user service and needs linger. A root-run
-node installation (sudo mode) may instead install one root-owned system service per
-installation that runs the same node program as a dedicated unprivileged service
-user. Do not add any other launcher, scheduler or recovery path. Node services
-restart after failures without a start limit, so a node outlasts a Core outage,
-and stop restarting when the node program exits 78 because Core rejected its
-credential (a removed or retired node).
+access and the Linux runtime libraries are prerequisites for microsandbox. The node
+runs as a systemd user service and needs linger. The only other launcher allowed
+is the root-run node installation (sudo mode) planned for phase 2b: one root-owned
+system service per installation that runs the same node program as a dedicated
+unprivileged service user. Do not add any other launcher, scheduler or recovery
+path. Node services restart after failures without a start limit, so a node
+outlasts a Core outage, and stop restarting when the node program exits 78
+because Core answered 401 to its credential (a removed or retired node).
 The basic API image and binary builds remain independent artifacts.
 The standalone API release and Core distribution both include the Hosted Sandbox
 Manager guide at the relative path used by their packaged README. Include the
@@ -1896,9 +1896,11 @@ dialog, using the deployment's `core_url` (the installation public URL).
 Do not expose routine network wiring or manual runtime setup as the primary flow.
 Generate a one-time command only on user intent, never retry enrollment writes
 automatically, and discard credentials and late responses when the dialog closes
-or the Core connection changes. Detect successful addition by the command's
-`enrollment_id`, which Core reports on the node it registered (null for nodes
-enrolled before Core recorded it); an existing node reconnecting is not a new enrollment.
+or the Core connection changes. Web detects successful addition against the node
+IDs present before enrollment; an existing node reconnecting is not a new
+enrollment. Core also reports the command's `enrollment_id` on the node it
+registered (null for nodes enrolled before Core recorded it); Web's exact match on
+it lands with the Web follow-up.
 The command verifies the installer checksum before execution, retains normal TLS
 verification, and passes the enrollment credential only to the installer process.
 

@@ -272,9 +272,10 @@ unknown operations or cleanup records cannot be removed. Resolve those resources
 through their normal lifecycle and then retry; the API reports the conflict.
 Offline resources remain owned and visible. Explicit removal permanently retires
 the node identity; adding that host again requires a fresh private state directory.
-The node program then exits with status 78 when Core rejects its credential, and the
-installed service does not restart it. Other failures, including an unreachable
-Core, restart the service every 5 seconds without a start limit.
+The node program then exits with status 78 when Core answers 401 to its credential,
+and the installed service does not restart it. Other failures, including an
+unreachable Core or a 403 from a proxy in front of it, restart the service every
+5 seconds without a start limit.
 Ordinary disconnects and host restarts reuse the original identity. A local node
 uses the same removal and resource checks as any other enrolled node.
 

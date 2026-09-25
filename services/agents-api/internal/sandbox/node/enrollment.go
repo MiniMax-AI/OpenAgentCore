@@ -146,9 +146,10 @@ func RefreshIdentity(ctx context.Context, dir string) (StoredIdentity, error) {
 // rejection body that reaches the node's output.
 var coreErrorCode = regexp.MustCompile(`^[a-z_]{1,64}$`)
 
-// enrollmentRejection names Core's status and error code. A rejected credential
-// (401 or 403) is ErrAuthentication: the node was removed or retired, or the
-// enrollment token is invalid, so retrying cannot succeed.
+// enrollmentRejection names Core's status and error code. Only Core's 401 is
+// ErrAuthentication: the node was removed or retired, or the enrollment token is
+// invalid, so retrying cannot succeed. A 403 may come from a proxy or firewall in
+// front of Core, so it stays retryable.
 func enrollmentRejection(r *http.Response) error {
 	var body struct {
 		Error struct {
@@ -160,7 +161,7 @@ func enrollmentRejection(r *http.Response) error {
 	if coreErrorCode.MatchString(body.Error.Code) {
 		detail += " " + body.Error.Code
 	}
-	if r.StatusCode == http.StatusUnauthorized || r.StatusCode == http.StatusForbidden {
+	if r.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("node enrollment rejected (%s): %w", detail, ErrAuthentication)
 	}
 	return fmt.Errorf("node enrollment rejected (%s)", detail)
