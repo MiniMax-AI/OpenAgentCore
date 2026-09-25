@@ -506,12 +506,15 @@ request runs.
   Closing the dialog moves the key into a pending notice card on the page.
 - **How to call**: wherever a new key is shown, a card under it gives three
   copyable samples, each a Margin Gray block with a Hairline and its label and copy
-  button in a header row: `OPENAI_BASE_URL` (the installation's API base URL) and
-  `OPENAI_API_KEY` (the new key), a curl request and a Python example with the
-  pinned SDK. One Graphite line says running an Agent needs a model provider: in
-  each request, saved on the Agent, or the deployment default. When the public
-  address is loopback, a note above the samples says the API is reachable only on
-  the Core machine; without an API address only that note shows.
+  button in a header row: a Shell block exporting `OPENAI_BASE_URL` (the
+  installation's API base URL) and `OPENAI_API_KEY` (the new key) together, a curl
+  request and a Python example with the pinned SDK. A copy the clipboard refuses
+  selects the sample and says so in red underneath. One Graphite line says running
+  an Agent needs a model provider: in each request, saved on the Agent, or the
+  deployment default. When the public address is loopback, a note above the
+  samples says the API is reachable only on the Core machine; without a public
+  address only a note to set one shows. Before the installation is read, a
+  skeleton holds the first sample's place.
 
 ### Navigation
 Sidebar groups Monitor, Resources and Platform with 12px Graphite group labels;

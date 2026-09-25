@@ -19,7 +19,7 @@ test("creates a project, shows a new key once, revokes it and archives the proje
   // How to call Core with it: the official SDK's variables, set to the API base URL and this key.
   const key = await issued.getByLabel("New key ci").inputValue();
   const call = issued.getByRole("region", { name: "How to call" });
-  await expect(call.getByLabel("Environment", { exact: true })).toHaveText(`OPENAI_BASE_URL=https://core.example.com/v1\nOPENAI_API_KEY=${key}`);
+  await expect(call.getByLabel("Shell", { exact: true })).toHaveText(`export OPENAI_BASE_URL=https://core.example.com/v1\nexport OPENAI_API_KEY=${key}`);
   await expect(call.getByLabel("curl", { exact: true })).toContainText('curl "$OPENAI_BASE_URL/agents"');
   await expect(call.getByLabel("Python", { exact: true })).toContainText("pip install openai==3.13.0");
   await issued.getByRole("button", { name: "I've saved this key" }).click();

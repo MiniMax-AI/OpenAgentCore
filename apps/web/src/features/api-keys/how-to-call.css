@@ -54,3 +54,26 @@
   font-size: 12.5px;
   line-height: 18px;
 }
+
+.how-to-call-error {
+  margin: 0;
+  padding: 0 12px 10px;
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+/* Before the installation is read: the first sample's place, two lines tall. */
+.how-to-call-skeleton {
+  display: grid;
+  gap: 10px;
+  padding: 14px 12px;
+}
+
+.how-to-call-skeleton .skeleton-bar:first-child {
+  width: 62%;
+}
+
+.how-to-call-skeleton .skeleton-bar:last-child {
+  width: 48%;
+}

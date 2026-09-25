@@ -97,11 +97,13 @@ export const keys: TranslationShape<typeof english> = {
   },
   howToCall: {
     title: "如何调用",
-    env: "环境变量",
+    shell: "终端",
     copy: "复制 {{label}}",
-    loading: "正在读取 API 地址…",
+    copyFailed: "请选中文本后手动复制。",
+    loading: "正在读取 API 地址",
     failed: "无法读取 API 地址。",
     localOnly: "Core 的 API 只能在 Core 所在的机器上访问。要从其他机器调用，请在 config.json 中设置 public_url 并应用。",
+    noAddress: "Core 还没有公开地址。请在 config.json 中设置 public_url 并应用。",
     model: "运行 Agent 需要模型服务：在每个请求里传入、保存在 Agent 上，或使用部署默认值。",
   },
   detail: {

@@ -95,11 +95,13 @@ export const keys = {
   },
   howToCall: {
     title: "How to call",
-    env: "Environment",
+    shell: "Shell",
     copy: "Copy {{label}}",
-    loading: "Reading the API address…",
+    copyFailed: "Select the text and copy it manually.",
+    loading: "Reading the API address",
     failed: "The API address couldn't be read.",
     localOnly: "Core's API is only reachable on the Core machine. To call it from elsewhere, set public_url in config.json and apply it.",
+    noAddress: "Core has no public address yet. Set public_url in config.json and apply it.",
     model: "Running an Agent needs a model provider: pass one in each request, save one on the Agent, or rely on the deployment default.",
   },
   detail: {
