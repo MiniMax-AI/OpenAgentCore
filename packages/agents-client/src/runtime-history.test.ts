@@ -26,22 +26,6 @@ function clientFor(body: unknown, calls: FetchCall[] = []): AdminClient {
   });
 }
 
-function capabilities(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    object: "agent.runtime_history_capabilities",
-    available: true,
-    reason: null,
-    collection_mode: "periodic",
-    sample_interval_seconds: 30,
-    retention_seconds: 604800,
-    minimum_step_seconds: 30,
-    maximum_range_seconds: 86400,
-    maximum_points: 1000,
-    metrics: ["cpu", "memory", "tokens"],
-    ...overrides,
-  };
-}
-
 function history(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const first = {
     start: 1000,
@@ -96,12 +80,6 @@ function history(overrides: Record<string, unknown> = {}): Record<string, unknow
 }
 
 describe("Runtime history client", () => {
-  it("retrieves strict capabilities without exposing backend details", async () => {
-    const calls: FetchCall[] = [];
-    await expect(clientFor(capabilities(), calls).getRuntimeHistoryCapabilities()).resolves.toEqual(capabilities());
-    expect(String(calls[0]?.input)).toBe("https://core.example/core/v1/admin/runtime-history/capabilities");
-  });
-
   it("retrieves bounded Session history and preserves observed zeroes", async () => {
     const calls: FetchCall[] = [];
     const controller = new AbortController();
@@ -137,22 +115,6 @@ describe("Runtime history client", () => {
     }
     expect(calls).toHaveLength(0);
   });
-
-  for (const [name, body] of [
-    ["unknown field", capabilities({ backend: "postgres" })],
-    ["inconsistent availability", capabilities({ available: false })],
-    ["duplicate metrics", capabilities({ metrics: ["cpu", "cpu"] })],
-    ["invalid retention", capabilities({ retention_seconds: 60, maximum_range_seconds: 120 })],
-    ["unsafe maximum", capabilities({ maximum_points: 10001 })],
-    ["unqualified periodic", capabilities({ sample_interval_seconds: null })],
-  ] as const) {
-    it(`rejects ${name} in capabilities`, async () => {
-      await expect(clientFor(body).getRuntimeHistoryCapabilities()).rejects.toMatchObject({
-        status: 502,
-        code: "invalid_admin_response",
-      });
-    });
-  }
 
   for (const [name, mutate] of [
     ["unknown field", (value: Record<string, unknown>) => { value.tokens = 10; }],

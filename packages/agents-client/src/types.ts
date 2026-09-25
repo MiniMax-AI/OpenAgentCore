@@ -1098,23 +1098,6 @@ export type RuntimeObservation =
   | RuntimeNoneObservation
   | RuntimeSelfHostedObservation;
 
-export type RuntimeHistoryCollectionMode = "on_read" | "periodic";
-export type RuntimeHistoryCapabilityReason = "not_configured" | "periodic_collection_required";
-export type RuntimeHistoryMetric = "cpu" | "memory" | "tokens";
-
-export interface RuntimeHistoryCapabilities {
-  object: "agent.runtime_history_capabilities";
-  available: boolean;
-  reason: RuntimeHistoryCapabilityReason | null;
-  collection_mode: RuntimeHistoryCollectionMode | null;
-  sample_interval_seconds: number | null;
-  retention_seconds: number | null;
-  minimum_step_seconds: number | null;
-  maximum_range_seconds: number | null;
-  maximum_points: number | null;
-  metrics: RuntimeHistoryMetric[];
-}
-
 export interface RuntimeHistoryQuery extends ReadOptions {
   /** Inclusive Unix-second boundary. */
   start: number;
@@ -1200,7 +1183,6 @@ export interface RuntimeHistory {
 }
 
 export type CoreHarnessKind = "claude_sdk" | "codex" | "mcode";
-export type CoreManagedSandboxProvider = "docker" | "microsandbox";
 
 /** A complete replacement bundle. API keys are write-only. */
 export interface ModelProviderInput {
@@ -1249,30 +1231,6 @@ export interface SessionExecutionConfiguration {
     source: ExecutionConfigurationSource;
     status: "available" | "redacted" | "unavailable";
     configuration: ModelProviderView | null;
-  };
-}
-
-export interface CoreStartupConfiguration {
-  object: "agents.core.startup_configuration";
-  schema_version: 1;
-  supported: {
-    harnesses: CoreHarnessKind[];
-    managed_sandbox_providers: CoreManagedSandboxProvider[];
-  };
-  configured: {
-    default_harness: CoreHarnessKind;
-    enabled_harnesses: CoreHarnessKind[];
-    daemon_gateway: boolean;
-    self_hosted: boolean;
-    managed_sandbox: {
-      enabled: boolean;
-      provider: CoreManagedSandboxProvider | null;
-      maintenance: boolean;
-    };
-    model_providers: Array<{
-      harness: CoreHarnessKind;
-      endpoint_configured: boolean;
-    }>;
   };
 }
 

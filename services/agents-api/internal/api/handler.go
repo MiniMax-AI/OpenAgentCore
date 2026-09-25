@@ -64,7 +64,6 @@ type Handler struct {
 	subagents             SubagentStore
 	runtimeObservations   RuntimeObservationService
 	runtimeHistory        RuntimeHistoryService
-	startup               *v1.CoreStartupConfiguration
 }
 
 func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...Option) (http.Handler, error) {

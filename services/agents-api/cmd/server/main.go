@@ -89,7 +89,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	transientOptions, modelProviderEndpoints, err := executionOptionsConfiguration()
+	transientOptions, err := executionOptions()
 	if err != nil {
 		return err
 	}
@@ -278,11 +278,6 @@ func run() error {
 	metricsDone := make(chan struct{})
 	go func() { defer close(metricsDone); metrics.Run(metricsCtx) }()
 	defer func() { cancelMetrics(); <-metricsDone }()
-	startupManaged := managed
-	if managedNodes != nil && managedNodes.setup != nil {
-		startupManaged = managedNodes.setup.selected.Load()
-	}
-	options = append(options, api.WithStartupConfiguration(coreStartupConfiguration(engine, kinds, registry != nil, modelProviderEndpoints, managedRuntimeProviderKind(startupManaged), startupManaged)))
 	handler, err := api.NewHandler(executionStore, auth, engine, options...)
 	if err != nil {
 		return err

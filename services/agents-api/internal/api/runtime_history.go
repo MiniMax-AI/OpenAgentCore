@@ -27,15 +27,6 @@ func WithRuntimeHistory(service RuntimeHistoryService) Option {
 	return func(h *Handler) { h.runtimeHistory = service }
 }
 
-// getRuntimeHistoryCapabilities serves the administrator capability read.
-func (h *Handler) getRuntimeHistoryCapabilities(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Query()) != 0 {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Runtime history capabilities do not accept query parameters.")
-		return
-	}
-	writeJSON(w, http.StatusOK, runtimeHistoryCapabilitiesResponse(h.runtimeHistory))
-}
-
 // getRuntimeHistory serves the administrator per-Session history read.
 func (h *Handler) getRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 	if h.runtimeHistory == nil {
@@ -106,45 +97,6 @@ func readRuntimeHistoryRange(w http.ResponseWriter, r *http.Request, capabilitie
 		return runtimehistory.Range{}, false
 	}
 	return runtimehistory.Range{Start: time.Unix(start, 0).UTC(), End: time.Unix(end, 0).UTC(), MaxPoints: points}, true
-}
-
-func runtimeHistoryCapabilitiesResponse(service RuntimeHistoryService) v1.RuntimeHistoryCapabilities {
-	response := v1.RuntimeHistoryCapabilities{Object: "agent.runtime_history_capabilities", Metrics: []string{}}
-	if service == nil {
-		reason := "not_configured"
-		response.Reason = &reason
-		return response
-	}
-	capabilities := service.Capabilities()
-	if capabilities.Validate() != nil {
-		reason := "not_configured"
-		response.Reason = &reason
-		return response
-	}
-	mode := string(capabilities.CollectionMode)
-	retention := int64(capabilities.Retention / time.Second)
-	minimumStep := int64(capabilities.MinimumStep / time.Second)
-	maximumRange := int64(capabilities.MaximumRange / time.Second)
-	maximumPoints := capabilities.MaximumPoints
-	response.CollectionMode = &mode
-	response.RetentionSeconds = &retention
-	response.MinimumStepSeconds = &minimumStep
-	response.MaximumRangeSeconds = &maximumRange
-	response.MaximumPoints = &maximumPoints
-	response.Metrics = make([]string, len(capabilities.Metrics))
-	for index, metric := range capabilities.Metrics {
-		response.Metrics[index] = string(metric)
-	}
-	if capabilities.SampleInterval > 0 {
-		seconds := int64(capabilities.SampleInterval / time.Second)
-		response.SampleIntervalSeconds = &seconds
-	}
-	response.Available = capabilities.Durable()
-	if !response.Available {
-		reason := "periodic_collection_required"
-		response.Reason = &reason
-	}
-	return response
 }
 
 func runtimeHistoryResponse(value runtimehistory.Response, expectedTenantID, expectedSessionID string, expectedRange runtimehistory.Range) (v1.RuntimeHistory, error) {

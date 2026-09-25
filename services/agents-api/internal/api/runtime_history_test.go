@@ -44,30 +44,9 @@ func historyCapabilities(mode runtimehistory.CollectionMode) runtimehistory.Capa
 	return value
 }
 
-func TestRuntimeHistoryCapabilitiesAreSafeAndDisabledByDefault(t *testing.T) {
-	handler, _, _ := adminTestHandler(t)
-	response := runtimeObservationRequest(handler, "/core/v1/admin/runtime-history/capabilities")
-	if response.Code != http.StatusOK {
-		t.Fatalf("capabilities returned %d: %s", response.Code, response.Body)
-	}
-	var value v1.RuntimeHistoryCapabilities
-	if json.Unmarshal(response.Body.Bytes(), &value) != nil || value.Object != "agent.runtime_history_capabilities" || value.Available || value.Reason == nil || *value.Reason != "not_configured" || value.CollectionMode != nil || value.SampleIntervalSeconds != nil || value.RetentionSeconds != nil || value.MaximumPoints != nil || value.Metrics == nil || len(value.Metrics) != 0 {
-		t.Fatalf("unsafe disabled capabilities: %s", response.Body)
-	}
-	invalid := runtimeObservationRequest(handler, "/core/v1/admin/runtime-history/capabilities?backend=clickhouse")
-	if invalid.Code != http.StatusBadRequest {
-		t.Fatalf("capability query was accepted: %d %s", invalid.Code, invalid.Body)
-	}
-}
-
 func TestRuntimeHistoryRequiresQualifiedPeriodicCollection(t *testing.T) {
 	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionOnRead)}
 	handler, _, _ := adminTestHandler(t, WithRuntimeHistory(service))
-	capabilityResponse := runtimeObservationRequest(handler, "/core/v1/admin/runtime-history/capabilities")
-	var capabilities v1.RuntimeHistoryCapabilities
-	if capabilityResponse.Code != http.StatusOK || json.Unmarshal(capabilityResponse.Body.Bytes(), &capabilities) != nil || capabilities.Available || capabilities.Reason == nil || *capabilities.Reason != "periodic_collection_required" || capabilities.CollectionMode == nil || *capabilities.CollectionMode != "on_read" || capabilities.SampleIntervalSeconds != nil {
-		t.Fatalf("on-read capability was advertised as durable: %d %s", capabilityResponse.Code, capabilityResponse.Body)
-	}
 	response := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history?start=1&end=2")
 	if response.Code != http.StatusServiceUnavailable || service.calls != 0 {
 		t.Fatalf("on-read history reached query service: %d calls=%d body=%s", response.Code, service.calls, response.Body)
@@ -78,11 +57,6 @@ func TestRuntimeHistoryFailsClosedForMalformedCapabilities(t *testing.T) {
 	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionPeriodic)}
 	service.capabilities.Retention = 0
 	handler, _, _ := adminTestHandler(t, WithRuntimeHistory(service))
-	capabilityResponse := runtimeObservationRequest(handler, "/core/v1/admin/runtime-history/capabilities")
-	var capabilities v1.RuntimeHistoryCapabilities
-	if capabilityResponse.Code != http.StatusOK || json.Unmarshal(capabilityResponse.Body.Bytes(), &capabilities) != nil || capabilities.Available || capabilities.Reason == nil || *capabilities.Reason != "not_configured" || capabilities.CollectionMode != nil || len(capabilities.Metrics) != 0 {
-		t.Fatalf("malformed capabilities did not fail closed: %d %s", capabilityResponse.Code, capabilityResponse.Body)
-	}
 	response := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history?start=1&end=2")
 	if response.Code != http.StatusServiceUnavailable || service.calls != 0 {
 		t.Fatalf("malformed capabilities reached query service: %d calls=%d body=%s", response.Code, service.calls, response.Body)

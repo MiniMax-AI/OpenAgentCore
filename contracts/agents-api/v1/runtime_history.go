@@ -1,18 +1,5 @@
 package v1
 
-type RuntimeHistoryCapabilities struct {
-	Object                string   `json:"object" enums:"agent.runtime_history_capabilities" binding:"required"`
-	Available             bool     `json:"available" binding:"required"`
-	Reason                *string  `json:"reason" extensions:"x-nullable" binding:"required" enums:"not_configured,periodic_collection_required"`
-	CollectionMode        *string  `json:"collection_mode" extensions:"x-nullable" binding:"required" enums:"on_read,periodic"`
-	SampleIntervalSeconds *int64   `json:"sample_interval_seconds" extensions:"x-nullable" binding:"required" minimum:"1" maximum:"9007199254740991"`
-	RetentionSeconds      *int64   `json:"retention_seconds" extensions:"x-nullable" binding:"required" minimum:"1" maximum:"9007199254740991"`
-	MinimumStepSeconds    *int64   `json:"minimum_step_seconds" extensions:"x-nullable" binding:"required" minimum:"1" maximum:"9007199254740991"`
-	MaximumRangeSeconds   *int64   `json:"maximum_range_seconds" extensions:"x-nullable" binding:"required" minimum:"1" maximum:"9007199254740991"`
-	MaximumPoints         *int     `json:"maximum_points" extensions:"x-nullable" binding:"required" minimum:"2" maximum:"10000"`
-	Metrics               []string `json:"metrics" binding:"required" validate:"max=3" enums:"cpu,memory,tokens"`
-}
-
 type RuntimeHistory struct {
 	Object            string                          `json:"object" enums:"agent.runtime_history" binding:"required"`
 	Source            string                          `json:"source" enums:"durable" binding:"required"`

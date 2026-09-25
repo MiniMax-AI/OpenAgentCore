@@ -2,7 +2,6 @@ import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourc
 import type {
   RuntimeHistory,
   RuntimeHistoryCPU,
-  RuntimeHistoryCapabilities,
   RuntimeHistoryCoveragePoint,
   RuntimeHistoryMemory,
   RuntimeHistoryPoint,
@@ -13,10 +12,6 @@ import type {
 
 type InvalidRuntimeHistory = (message?: string) => never;
 
-const capabilityFields = new Set([
-  "object", "available", "reason", "collection_mode", "sample_interval_seconds",
-  "retention_seconds", "minimum_step_seconds", "maximum_range_seconds", "maximum_points", "metrics",
-]);
 const historyFields = new Set([
   "object", "source", "session_id", "requested_range", "resolution_seconds", "generated_at", "coverage", "series", "token_usage",
 ]);
@@ -34,8 +29,6 @@ const cpuFields = new Set(["contributor_count", "utilization_ratio", "capacity_c
 const memoryFields = new Set(["contributor_count", "usage_bytes", "limit_bytes"]);
 const tokenUsageFields = new Set(["start", "end", "sampled_at", "input_tokens", "output_tokens"]);
 const providerTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
-const metrics = new Set(["cpu", "memory", "tokens"]);
-const reasons = new Set(["not_configured", "periodic_collection_required"]);
 const maximumSeries = 1_000;
 const maximumTotalPoints = 100_000;
 
@@ -65,58 +58,6 @@ function nullablePositiveNumber(value: unknown, invalid: InvalidRuntimeHistory):
   const projected = nullableNonnegativeNumber(value, invalid);
   if (projected === 0) return invalid();
   return projected;
-}
-
-export function projectRuntimeHistoryCapabilities(
-  value: unknown,
-  invalid: InvalidRuntimeHistory,
-): RuntimeHistoryCapabilities {
-  if (
-    !isRecord(value) || !exactFields(value, capabilityFields) ||
-    value.object !== "agent.runtime_history_capabilities" || typeof value.available !== "boolean" ||
-    !(value.reason === null || (typeof value.reason === "string" && reasons.has(value.reason))) ||
-    !(value.collection_mode === null || value.collection_mode === "on_read" || value.collection_mode === "periodic") ||
-    !Array.isArray(value.metrics) || value.metrics.some((metric) => typeof metric !== "string" || !metrics.has(metric)) ||
-    new Set(value.metrics).size !== value.metrics.length || value.metrics.length > metrics.size
-  ) return invalid();
-
-  const sampleInterval = nullablePositiveInteger(value.sample_interval_seconds, invalid);
-  const retention = nullablePositiveInteger(value.retention_seconds, invalid);
-  const minimumStep = nullablePositiveInteger(value.minimum_step_seconds, invalid);
-  const maximumRange = nullablePositiveInteger(value.maximum_range_seconds, invalid);
-  const maximumPoints = nullablePositiveInteger(value.maximum_points, invalid);
-  const disabled = value.reason === "not_configured";
-  const onRead = value.reason === "periodic_collection_required";
-  if (
-    (disabled && (
-      value.available || value.collection_mode !== null || sampleInterval !== null || retention !== null ||
-      minimumStep !== null || maximumRange !== null || maximumPoints !== null || value.metrics.length !== 0
-    )) ||
-    (onRead && (
-      value.available || value.collection_mode !== "on_read" || sampleInterval !== null || retention === null ||
-      minimumStep === null || maximumRange === null || maximumPoints === null || value.metrics.length === 0
-    )) ||
-    (value.available && (
-      value.reason !== null || value.collection_mode !== "periodic" || sampleInterval === null || retention === null ||
-      minimumStep === null || maximumRange === null || maximumPoints === null || value.metrics.length === 0
-    )) ||
-    (!value.available && value.reason === null) ||
-    (retention !== null && maximumRange !== null && maximumRange > retention) ||
-    (maximumPoints !== null && (maximumPoints < 2 || maximumPoints > 10_000))
-  ) return invalid();
-
-  return {
-    object: "agent.runtime_history_capabilities",
-    available: value.available,
-    reason: value.reason as RuntimeHistoryCapabilities["reason"],
-    collection_mode: value.collection_mode as RuntimeHistoryCapabilities["collection_mode"],
-    sample_interval_seconds: sampleInterval,
-    retention_seconds: retention,
-    minimum_step_seconds: minimumStep,
-    maximum_range_seconds: maximumRange,
-    maximum_points: maximumPoints,
-    metrics: [...value.metrics] as RuntimeHistoryCapabilities["metrics"],
-  };
 }
 
 function projectCoveragePoint(
