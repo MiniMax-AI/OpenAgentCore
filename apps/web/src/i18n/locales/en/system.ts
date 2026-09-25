@@ -10,7 +10,7 @@ export const system = {
     apiBaseUrl: "API base URL",
     apiBaseUrlHelp: "Applications use it as OPENAI_BASE_URL, with a Project API key as OPENAI_API_KEY.",
     copyApiBaseUrl: "Copy API base URL",
-    localOnly: "Only reachable on this machine",
+    localOnly: "Only reachable on the Core machine",
     notSet: "Not set",
     id: "Installation ID",
     sourceCommit: "Source commit",

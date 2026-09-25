@@ -34,7 +34,8 @@ export function callSamples(apiBaseUrl: string, apiKey: string) {
 /**
  * How to call Core with a key that was just issued. The key comes from the
  * issuing flow's memory and leaves with it; the console never sends these
- * requests. Without a public API address it says so instead of guessing one.
+ * requests. When Core is reachable only on its own machine it says so, and
+ * without an API address it shows nothing to guess from.
  */
 export function HowToCall({ apiKey }: { apiKey: string }) {
   const { t } = useTranslation("keys");
@@ -53,6 +54,7 @@ export function HowToCall({ apiKey }: { apiKey: string }) {
   } else {
     const samples = callSamples(base, apiKey);
     body = <>
+      {installation.data.local_only ? <p className="how-to-call-note" role="note">{t("howToCall.localOnly")}</p> : null}
       <CodeSample label={t("howToCall.env")} value={samples.env} />
       <CodeSample label="curl" value={samples.curl} />
       <CodeSample label="Python" value={samples.python} />

@@ -18,7 +18,7 @@ the administrator API are defined by the [administrator API contract](../../cont
 | Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; the node installer (`node_installer`, `node_installer_sha256`) |
 | Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | Core key, added by the console server | Projects, keys, resource reads and deletion, executor credentials, provenance, summaries, Core metrics, the installation |
 | Sandbox administration | `/core/v1/sandbox/**` | Core key, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics; Runtime observations of every project |
-| Agents API | `/v1/**` | Project API key | Not used. Wherever a new key is shown, the console gives `OPENAI_BASE_URL` (the installation's `api_base_url`) and `OPENAI_API_KEY` (the new key) with `curl` and Python examples for `/v1/agents`, and sends neither; without an `api_base_url` it says the API is reachable only on the Core machine |
+| Agents API | `/v1/**` | Project API key | Not used. Wherever a new key is shown, the console gives `OPENAI_BASE_URL` (the installation's `api_base_url`) and `OPENAI_API_KEY` (the new key) with `curl` and Python examples for `/v1/agents`, and sends neither; when the installation is `local_only`, or has no `api_base_url`, it says the API is reachable only on the Core machine |
 
 Browser requests are same-origin and carry only the console session. The browser
 sends the Core key once, in the sign-in request body, and never stores it; it never

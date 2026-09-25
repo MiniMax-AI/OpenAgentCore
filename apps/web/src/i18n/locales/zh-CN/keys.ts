@@ -101,7 +101,7 @@ export const keys: TranslationShape<typeof english> = {
     copy: "复制 {{label}}",
     loading: "正在读取 API 地址…",
     failed: "无法读取 API 地址。",
-    localOnly: "Core 的 API 只能在本机访问。要从其他机器调用，请在 config.json 中设置 public_url 并应用。",
+    localOnly: "Core 的 API 只能在 Core 所在的机器上访问。要从其他机器调用，请在 config.json 中设置 public_url 并应用。",
     model: "运行 Agent 需要模型：在“系统”页面设置默认模型，或在每个请求里填写模型字段。",
   },
   detail: {

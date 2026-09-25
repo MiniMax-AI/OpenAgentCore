@@ -508,8 +508,9 @@ request runs.
   copyable samples, each a Margin Gray block with a Hairline and its label and copy
   button in a header row: `OPENAI_BASE_URL` (the installation's API base URL) and
   `OPENAI_API_KEY` (the new key), a curl request and a Python example with the
-  pinned SDK. One Graphite line says execution needs a model. Without a public API
-  address the card only says the API is reachable on the Core machine alone.
+  pinned SDK. One Graphite line says execution needs a model. When the public
+  address is loopback, a note above the samples says the API is reachable only on
+  the Core machine; without an API address only that note shows.
 
 ### Navigation
 Sidebar groups Monitor, Resources and Platform with 12px Graphite group labels;

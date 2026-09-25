@@ -32,16 +32,21 @@ const manifest = { platform: "linux/amd64", source_commit: release.source_commit
  */
 const PUBLIC_URL = "https://core.example.com";
 const LOCAL_URL = "http://127.0.0.1:8091";
+/** The address a node enrolled with before public_url last changed. */
+const OLD_URL = "https://core-old.example.com";
 const publicUrl = () => (state.installation === "local" ? LOCAL_URL : PUBLIC_URL);
+/** Core reports one installation ID, a canonical UUID, in the installation and the deployment. */
+const INSTALLATION_ID = "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f";
 
 /** GET /core/v1/installation: the address, the startup settings from config.json and what is bound to the address. */
 function installation() {
   const local = state.installation === "local";
   const setting = (key, value, fallback, restarts, extra = {}) => ({ key, value, default: fallback, changeable: true, sensitive: false, restarts, ...extra });
   const secret = (key, restarts) => ({ key, value: null, default: null, changeable: true, sensitive: true, restarts, configured: true });
-  const nodes = state.deployment?.provider && state.deployment.provider !== "e2b" ? state.nodes.length : 0;
+  const nodes = state.deployment?.provider && state.deployment.provider !== "e2b" ? state.nodes : [];
   return {
-    object: "core.installation", installation_id: "7f3c2a90-fixture", public_url: publicUrl(), api_base_url: local ? null : `${PUBLIC_URL}/v1`,
+    // As Core: api_base_url is always public_url followed by /v1; local_only marks a loopback public_url.
+    object: "core.installation", installation_id: INSTALLATION_ID, public_url: publicUrl(), api_base_url: `${publicUrl()}/v1`,
     local_only: local, source_commit: release.source_commit,
     configuration: {
       path: "/opt/parsar/config.json", apply_command: "sudo parsar apply", applied_at: "2026-09-24T09:30:00Z",
@@ -55,12 +60,12 @@ function installation() {
         secret("database_url", ["core"]),
       ],
     },
-    address_bindings: { nodes, nodes_on_other_address: state.installation === "stale" ? Math.min(1, nodes) : 0, hosted_sandboxes: 0, self_hosted_executors: 0 },
+    address_bindings: { nodes: nodes.length, nodes_on_other_address: nodes.filter((node) => node.core_url !== publicUrl()).length, hosted_sandboxes: 0, self_hosted_executors: 0 },
   };
 }
 
 function configuredDeployment() {
-  return { installation_id: "7f3c2a90-fixture", provider: "docker", core_url: publicUrl(), maintenance: false, owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture", suspension: null };
+  return { installation_id: INSTALLATION_ID, provider: "docker", core_url: publicUrl(), maintenance: false, owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture", suspension: null };
 }
 /** The E2B template build as Core read it when the selection was saved. */
 const templateBuild = { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 10240 } };
@@ -92,6 +97,8 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     deployment: null,
   };
   state.deployment = sandbox === "none" ? null : sandbox === "e2b" ? e2bDeployment() : configuredDeployment();
+  // Each node reports the address it enrolled with; in "stale" mode the first one enrolled before public_url changed.
+  state.nodes.forEach((node, index) => { node.core_url = address === "stale" && index === 0 ? OLD_URL : publicUrl(); });
   if (sandbox === "e2b") Object.assign(state, { nodes: [], allocations: [] });
 }
 reset();
@@ -296,7 +303,7 @@ async function sandboxRoute(request, response, path) {
     return send(response, initialize ? 201 : 200, state.deployment);
   }
   if (path === "/deployment") {
-    return send(response, 200, state.deployment ?? { installation_id: "7f3c2a90-fixture", provider: "", core_url: publicUrl(), maintenance: false, owner_epoch: 3, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null });
+    return send(response, 200, state.deployment ?? { installation_id: INSTALLATION_ID, provider: "", core_url: publicUrl(), maintenance: false, owner_epoch: 3, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null });
   }
   if (path === "/nodes") return send(response, 200, { data: state.nodes });
   if (path === "/enrollment-tokens" && request.method === "POST") {
@@ -379,7 +386,7 @@ async function executorCredentialRoute(request, response, projectId, environment
  */
 function registeredNode(nodeId) {
   const limits = state.enrollmentLimits ?? { max_active: 1, max_retained: 1 };
-  return { id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
+  return { id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
 }
 
 /** Test controls: reset state, inject one failure, register or change a node, and read what the browser sent. */
