@@ -126,7 +126,7 @@ function createProjectClient(projectId: string): CoreProjectReader {
     const page = await admin.listSessions(projectId, { after: options.after, limit: options.limit, order: options.order, agentId: options.agentId, signal: options.signal });
     return { ...page, object: "list" as const, first_id: page.first_id ?? null, last_id: page.last_id ?? null };
   };
-  const client = {
+  return {
     listAgents: (options) => admin.listAgents(projectId, options),
     retrieveAgent: (agentId: string) => admin.retrieveAgent(projectId, agentId),
     deleteAgent: (agentId: string) => admin.deleteAgent(projectId, agentId),
@@ -156,8 +156,7 @@ function createProjectClient(projectId: string): CoreProjectReader {
     listItems: (sessionId, options) => admin.listItems(projectId, sessionId, options),
     retrieveRuntimeObservation: (sessionId, options) => admin.retrieveRuntimeObservation(projectId, sessionId, options),
     retrieveRuntimeHistory: (sessionId, query) => admin.retrieveRuntimeHistory(projectId, sessionId, query),
-  } as CoreProjectReader;
-  return client;
+  } satisfies CoreProjectReader;
 }
 
 const clients = new Map<string, ProjectClient>();
