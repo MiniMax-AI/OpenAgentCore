@@ -162,6 +162,9 @@ def wait_connected(remote, environment, key, container, timeout=60):
                     return
                 detail = 'Core reports this Environment disconnected'
             except urllib.error.HTTPError as error:
+                if error.code == 404:
+                    raise InstallError('Core connection check was not found (HTTP 404); route /api/v1 on the Core origin'
+                                       ' directly to Core, not to Web.' + guidance) from None
                 if error.code not in (408, 429, 500, 502, 503, 504):
                     raise InstallError('Core connection check rejected (HTTP ' + str(error.code)
                                        + '); verify the exact Environment and active executor key.' + guidance) from None

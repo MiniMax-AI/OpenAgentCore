@@ -276,14 +276,6 @@ schemes:
   - http
   - https
 securityDefinitions:
-  BearerAuth:
-    in: header
-    name: Authorization
-    type: apiKey
-  DeploymentAdminAuth:
-    in: header
-    name: Authorization
-    type: apiKey
   NodeAuth:
     in: header
     name: Authorization

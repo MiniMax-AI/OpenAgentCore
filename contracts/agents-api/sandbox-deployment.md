@@ -234,15 +234,18 @@ automatically adopt the old database or delete its resources; removing an
 environment variable alone does not complete that migration.
 
 A Web-managed Docker or microsandbox selection saved before specifications has
-the empty migration default. Core loads it for draining only. Retained nodes
-without a recorded digest or generation authenticate while the deployment is in
-this state. GET omits `specification` and `specification_digest`. Fresh hosted
-sandboxes are refused with the same error as during maintenance. Enrollment
-tokens return 409 `sandbox_deployment_conflict`; node configuration reads and
-enrollment are refused.
-The ordinary maintenance, archive and PUT sequence records a specification and
-retires those nodes. Those nodes use the removed `/core/v1/sandbox` node paths, so
-their drain needs a Core release that still serves them. See the
+the empty migration default. Core loads it for draining only. GET omits
+`specification` and `specification_digest`. Fresh hosted sandboxes are refused
+with the same error as during maintenance. Enrollment tokens return 409
+`sandbox_deployment_conflict`; node configuration reads and enrollment are refused.
+Retained nodes without a recorded digest or generation authenticate while the
+deployment is in this state, but those nodes use the removed `/core/v1/sandbox`
+node paths. They can reach only a Core that has this drain mode (pull request
+#114) and still serves those paths. No such release is published: build one from
+main commit `7b66be236a627246c85658722314285e6b39d9b8`, or another commit with
+#114 but without `/api/v1/sandbox-node`. Run the maintenance and archive steps there. On this
+release, the drain mode matters only for the PUT that records a specification after
+draining elsewhere; that PUT retires those nodes. See the
 [operator upgrade notes](../../docs/getting-started/operations.md#data-and-upgrades).
 
 Unit tests, database tests and provider inspection are separate from live

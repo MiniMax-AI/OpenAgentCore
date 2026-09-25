@@ -192,8 +192,9 @@ coverage ledgers and official SDK/raw HTTP tests when changing API behavior.
 Run `make openapi` after handler annotation changes. It reuses the original
 Core-only swaggo v1.16.4 generator, then separates project paths under `/v1` from
 `/core/v1` administration in `sandbox-manager.openapi.yaml` and `/api/v1` machine
-connections in `runtime.openapi.yaml` (both base path `/`). All generated schemas
-remain free of product routes.
+connections in `runtime.openapi.yaml` (both base path `/`), each keeping only the
+security schemes its operations use. All generated schemas remain free of product
+routes.
 
 Core changes must retain the independent build and official-client workflow.
 Native adapter changes require their applicable build/check targets and live provider
@@ -1840,7 +1841,9 @@ WebSocket requests; Web forwards no node or daemon transport. The installer
 mounts only the administrator key into Web and only its digest into Core. The
 browser receives safe capability flags, never that key. The deployment's TLS
 reverse proxy routes `/v1` (applications) and `/api/v1` (nodes and Runtime
-daemons, with their own credentials) directly to Core and everything else to Web.
+daemons, with their own credentials) directly to Core and everything else to Web,
+except the Project-authenticated `/core/v1/environments/*/executor-credentials`
+routes, which also go straight to Core.
 Nodes and Core come from one distribution; older nodes using the removed
 `/core/v1/sandbox` node paths cannot connect and are replaced through the drained
 upgrade and re-enrollment workflow.

@@ -47,6 +47,7 @@ class ConnectionTests(unittest.TestCase):
             self.assertEqual(request.call_count, 1)
             self.assertIn('logs --tail 100 ' + self.container, str(failure.exception))
             self.assertNotIn('private body', str(failure.exception))
+            self.assertEqual('route /api/v1' in str(failure.exception), status == 404)
 
     def test_deadline_retains_container_and_has_retry_guidance(self):
         with patch.object(installer, 'open_connection', return_value=self.response('disconnected')), \

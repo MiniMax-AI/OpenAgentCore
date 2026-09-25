@@ -332,11 +332,14 @@ hostname. Configure your TLS reverse proxy with these routes:
 The project executor-credential API (`/core/v1/environments/{id}/executor-credentials`)
 is the one exception under `/core`: route it to Core as well. Preserve Host and
 support WebSocket upgrades. Web answers 404 on `/v1` and `/api/v1` and never
-forwards them, so a proxy that sends those paths to Web breaks application calls
-and node enrollment. Both the node host and its sandbox guests must reach this
-address. Installation does not
-create DNS records or certificates, nor expose a host port publicly. Without this
-option, the console uses its loopback address for local access. Do not copy a
+forwards them. A proxy that sends those paths to Web breaks application calls,
+node enrollment and every Runtime daemon connection (`/api/v1/agent-daemon/ws`)
+for Docker, microsandbox, self-hosted and E2B sandboxes alike. When upgrading from
+a release whose Web forwarded node and daemon traffic, change this routing as the
+new release goes live; see [Data and upgrades](operations.md#data-and-upgrades).
+Both the node host and its sandbox guests must reach this address. Installation
+does not create DNS records or certificates, nor expose a host port publicly.
+Without this option, the console uses its loopback address for local access. Do not copy a
 localhost download command to a different machine. Running plain `./install.sh`
 is suitable for local console/API inspection; prepare the shared endpoint before
 installing a deployment that will enroll nodes.

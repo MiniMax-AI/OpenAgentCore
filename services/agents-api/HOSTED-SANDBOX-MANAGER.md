@@ -167,9 +167,9 @@ credentials; Web does not forward them and no administrator credential applies:
 | WebSocket `GET /api/v1/sandbox-node/connect?node_id=` | Node credential |
 
 A node and its Core must come from the same distribution. Nodes from releases
-that used the removed `/core/v1/sandbox` node paths cannot connect to this Core;
-upgrade through the drained procedure in
-[Removal and maintenance](#removal-and-maintenance) and enroll new nodes.
+that used the removed `/core/v1/sandbox` node paths cannot connect to this Core:
+drain with the previous release, then upgrade and enroll new nodes, as described
+in [Data and upgrades](../../docs/getting-started/operations.md#data-and-upgrades).
 Manual registration remains available for operator-managed payloads:
 
 Build/install `parsar-sandbox-node` from the same Core release. On the host,

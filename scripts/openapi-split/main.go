@@ -53,6 +53,9 @@ func run(input, projectOutput, managerOutput, runtimeOutput string) error {
 	pruneDefinitions(p)
 	pruneDefinitions(m)
 	pruneDefinitions(rt)
+	// The project document keeps the generator's complete scheme list unchanged.
+	pruneSecurityDefinitions(m)
+	pruneSecurityDefinitions(rt)
 	// Keep unrelated existing project definitions and the generator's formatting.
 	// Only definitions exclusive to the management or machine surfaces are removed.
 	var original yaml.Node
@@ -159,6 +162,33 @@ func pruneDefinitions(root *yaml.Node) {
 		}
 	}
 	definitions.Content = kept
+}
+
+// pruneSecurityDefinitions keeps only the schemes that the document's operations require.
+func pruneSecurityDefinitions(root *yaml.Node) {
+	schemes, paths := field(root, "securityDefinitions"), field(root, "paths")
+	if schemes == nil || paths == nil {
+		return
+	}
+	used := map[string]bool{}
+	for i := 1; i < len(paths.Content); i += 2 {
+		for j := 1; j < len(paths.Content[i].Content); j += 2 {
+			if requirements := field(paths.Content[i].Content[j], "security"); requirements != nil {
+				for _, requirement := range requirements.Content {
+					for k := 0; k < len(requirement.Content); k += 2 {
+						used[requirement.Content[k].Value] = true
+					}
+				}
+			}
+		}
+	}
+	kept := make([]*yaml.Node, 0, len(schemes.Content))
+	for i := 0; i+1 < len(schemes.Content); i += 2 {
+		if used[schemes.Content[i].Value] {
+			kept = append(kept, schemes.Content[i], schemes.Content[i+1])
+		}
+	}
+	schemes.Content = kept
 }
 
 // Preserve the generated project's lexical form while removing whole mappings.
