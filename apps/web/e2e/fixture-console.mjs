@@ -253,7 +253,8 @@ async function sandboxRoute(request, response, path) {
   }
   if (path === "/nodes") return send(response, 200, { data: state.nodes });
   if (path === "/enrollment-tokens" && request.method === "POST") {
-    return send(response, 201, { token: `enroll_fixture_${state.nextId++}`, expires_at: new Date(Date.now() + 15 * 60_000).toISOString() });
+    // As Core: a one-time token valid for ten minutes.
+    return send(response, 201, { token: `enroll_fixture_${state.nextId++}`, expires_at: new Date(Date.now() + 10 * 60_000).toISOString() });
   }
   let m;
   if ((m = path.match(/^\/nodes\/([^/]+)\/allocations$/))) return send(response, 200, { data: state.allocations.filter((entry) => entry.node_id === m[1]) });
@@ -320,7 +321,12 @@ async function executorCredentialRoute(request, response, projectId, environment
   return error(response, 404, "Not found.");
 }
 
-/** Test controls: reset state, inject one failure, and read what the browser sent. */
+/** A node as it first registers with an enrollment command: not yet connected, provider not ready. */
+function registeredNode(nodeId) {
+  return { id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", online: false, provider_ready: false, diagnostic: "", cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, max_active: 2, max_retained: 2, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
+}
+
+/** Test controls: reset state, inject one failure, register or change a node, and read what the browser sent. */
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
@@ -330,6 +336,14 @@ async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {
     state.failNext = await body(request); // { method, path, status, code?, message? }
     return send(response, 200, { ok: true });
+  }
+  if (url.pathname === "/__fixture/node" && request.method === "POST") {
+    // { id, ...fields }: registers the node on first use, then applies the fields (online, provider_ready, diagnostic).
+    const { id: nodeId, ...fields } = await body(request);
+    let node = state.nodes.find((entry) => entry.id === nodeId);
+    if (!node) state.nodes.push(node = registeredNode(nodeId));
+    Object.assign(node, fields);
+    return send(response, 200, node);
   }
   if (url.pathname === "/__fixture/requests") return send(response, 200, { violations: state.violations, writes: state.writes });
   return error(response, 404, "Not found.");

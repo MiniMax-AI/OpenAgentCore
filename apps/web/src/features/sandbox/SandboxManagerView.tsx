@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { InitializeSandboxDeployment, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Pencil, Server, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, HelpTip, RefreshButton } from "../../components/console-ui";
@@ -67,6 +67,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const [revision, setRevision] = useState(0);
   const [removeTarget, setRemoveTarget] = useState<SandboxNode | null>(null);
   const [editTarget, setEditTarget] = useState<SandboxNode | null>(null);
+  // The Add node dialog; it stays mounted with the page so its command survives closing.
+  const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const initialCoreUrl = window.location.origin;
@@ -190,10 +192,13 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     <p>{t("{{name}} will be removed from this deployment.", { name: removeName })}</p>
     <p>{t("Core rejects removal while allocations or retained resources remain.")}</p>
   </ConfirmDialog>;
+  // Rendered first in both the list and a node's page, so an open command outlives the navigation.
+  const enrollment = hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} open={adding} fresh={confirmed} onClose={() => setAdding(false)} onRefresh={refresh} /> : null;
 
   if (params.id && hostedNodes) {
     const back = () => goBack("nodes");
     return <>
+      {enrollment}
       <NodesPageHeader
         back={back}
         title={selected ? selected.name || selected.id : params.id}
@@ -231,9 +236,10 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
 
   const actions = <>
     {refreshButton}
-    {hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || !fresh || snapshot.deployment.maintenance} fresh={confirmed} onRefresh={refresh} /> : null}
+    {hostedNodes && snapshot ? <button type="button" className="button primary" disabled={busy || loading || !fresh || snapshot.deployment.maintenance} onClick={() => setAdding(true)}><Plus size={16} />{t("Add node")}</button> : null}
   </>;
   return <>
+    {enrollment}
     <NodesPageHeader count={hostedNodes ? nodes.length : undefined} actions={actions} cloud={snapshot?.deployment.provider === "e2b"} />
     <div className="console-page-body sandbox-content">
       {status}
