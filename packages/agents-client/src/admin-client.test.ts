@@ -319,10 +319,30 @@ describe("AdminClient project monitoring", () => {
       allocation_created_at: 10, resolved_at: 30, observed_at: 20, started_at: 10,
       cpu: { usage_seconds_total: 0, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
       memory: { usage_bytes: 0, limit_bytes: 1024 },
+      disk: null,
     };
     const value = { object: "list", data: [{ project_id: projectId, observation }], has_more: false, first_id: sessionId, last_id: sessionId };
     expect(await clientWith(value).client.listRuntimeObservations()).toEqual(value);
     await expect(clientWith({ ...value, data: [{ key_id: keyId, observation }] }).client.listRuntimeObservations()).rejects.toMatchObject({ code: "invalid_admin_response" });
+  });
+
+  it("projects E2B utilization and disk on global Runtime observations", async () => {
+    const observation = {
+      id: sessionId, object: "agent.runtime_observation", session_id: sessionId, environment_id: resourceId,
+      mode: "openai_hosted", provider_type: "e2b",
+      instance: { kind: "managed_allocation", allocation_id: resourceId, device_id: keyId, connection_generation: null },
+      lifecycle_state: "active", status: "observed", reason: null,
+      allocation_created_at: 10, resolved_at: 30, observed_at: 20, started_at: 10,
+      cpu: { usage_seconds_total: null, capacity_cores: 2, usage_cores: null, utilization_ratio: 0.1955 },
+      memory: { usage_bytes: 183836672, limit_bytes: 2079141888 },
+      disk: { usage_bytes: 1593188352, limit_bytes: 23511863296 },
+    };
+    const value = { object: "list", data: [{ project_id: projectId, observation }], has_more: false, first_id: sessionId, last_id: sessionId };
+    expect(await clientWith(value).client.listRuntimeObservations()).toEqual(value);
+    const { disk: _, ...older } = observation;
+    expect((await clientWith({ ...value, data: [{ project_id: projectId, observation: older }] }).client.listRuntimeObservations()).data[0]!.observation.disk).toBeNull();
+    const invalid = { ...observation, disk: { usage_bytes: 1, limit_bytes: 0 } };
+    await expect(clientWith({ ...value, data: [{ project_id: projectId, observation: invalid }] }).client.listRuntimeObservations()).rejects.toMatchObject({ code: "invalid_admin_response" });
   });
 });
 

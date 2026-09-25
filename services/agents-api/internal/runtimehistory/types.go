@@ -171,9 +171,10 @@ type Series struct {
 }
 
 // Point represents one server-selected bucket. CPUUtilizationRatio is derived
-// only from ordered cumulative counters within this Series' allocation. A
-// counter regression resets the rate baseline. Memory values are the final
-// observed values in the bucket.
+// from ordered cumulative counters within this Series' allocation; a counter
+// regression resets the rate baseline. A provider without cumulative CPU time
+// (E2B) reports utilization directly, and the bucket holds the mean of those
+// reports. Memory values are the final observed values in the bucket.
 type Point struct {
 	Start, End                            time.Time
 	FirstObservedAt, LastObservedAt       time.Time

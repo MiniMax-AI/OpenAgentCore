@@ -126,6 +126,7 @@ func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input store.Sandbo
 	if err := m.pauseDeployment(ctx); err != nil {
 		return store.RuntimeDeploymentView{}, err
 	}
+	input.SandboxDeploymentSetupRequest = withTemplateBuild(input.SandboxDeploymentSetupRequest, candidate)
 	result, err := m.store.UpdateSandboxDeployment(ctx, m.setupInstallationID, input)
 	if err != nil {
 		return store.RuntimeDeploymentView{}, err

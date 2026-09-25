@@ -1,14 +1,18 @@
-"""Five bounded SDK operations for an already authorized Core allocation."""
+"""Five bounded SDK operations for an already authorized Core allocation, plus
+read-only deployment validation and batch observation."""
+from concurrent.futures import ThreadPoolExecutor
 import json
+import math
 import time
 from datetime import datetime, timezone
 from uuid import UUID
 
 from e2b import Sandbox, SandboxQuery, SandboxState
+from e2b.api.client.models.sandbox_metric import SandboxMetric
 from e2b.exceptions import FileNotFoundException, SandboxNotFoundException
 
-from sdk import connection_material, definitely_rejected, restore, run, validate_deployment
-from state import Failure, Receipt
+from sdk import connection_material, definitely_rejected, read_metrics, restore, run, validate_deployment
+from state import Failure, Receipt, private_root, read_receipt
 
 PREFIX = 'parsar_'
 FIELDS = ('InstallationID', 'TenantID', 'EnvironmentID', 'AllocationID')
@@ -21,16 +25,51 @@ def valid_id(value):
         return False
 
 
+def valid_reference(reference):
+    return (isinstance(reference, dict) and set(reference) == set(FIELDS[1:]) and
+            all(valid_id(v) for v in reference.values()))
+
+
+def utc(value):
+    if not isinstance(value, datetime) or value.tzinfo is None:
+        raise ValueError('timestamp without zone')
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def observed(reference, cloud, point):
+    """Map one metrics point without changing E2B units; malformed points are invalid.
+
+    Disk metrics need a newer envd; without a positive total, disk stays unknown."""
+    try:
+        disk_known = type(point.get('diskTotal')) is int and point['diskTotal'] > 0
+        metric = SandboxMetric.from_dict({'memCache': 0, 'timestampUnix': 0, 'diskUsed': 0, 'diskTotal': 0, **point})
+        cpu_count, cpu_pct = metric.cpu_count, metric.cpu_used_pct
+        values = (metric.mem_used, metric.mem_total, metric.disk_used, metric.disk_total)
+        if (type(cpu_count) is not int or cpu_count < 1 or type(cpu_pct) not in (int, float) or
+                not math.isfinite(cpu_pct) or cpu_pct < 0 or
+                any(type(v) is not int or v < 0 for v in values) or metric.mem_total < 1):
+            raise ValueError('malformed metrics point')
+        return dict(reference, Status='observed', ObservedAt=utc(metric.timestamp), StartedAt=utc(cloud.started_at),
+                    CPUCount=cpu_count, CPUUsedPct=cpu_pct, MemUsed=metric.mem_used, MemTotal=metric.mem_total,
+                    DiskUsed=metric.disk_used if disk_known else None, DiskTotal=metric.disk_total if disk_known else None)
+    except Exception:
+        return dict(reference, Status='invalid')
+
+
 class Provider:
     def __init__(self, request):
         self.q = request
         self.config = request['Config']
         self.reference = request['Reference']
+        self.references = request.get('References') or []
         if (request['Version'] != 1 or request['Operation'] not in
-                ('create', 'inspect', 'renew', 'kill', 'command', 'validate_deployment') or
-                (request['Operation'] != 'validate_deployment' and
-                 (set(self.reference) != set(FIELDS[1:]) or
-                  any(not valid_id(v) for v in self.reference.values()))) or
+                ('create', 'inspect', 'renew', 'kill', 'command', 'validate_deployment', 'observe') or
+                (request['Operation'] not in ('validate_deployment', 'observe') and
+                 not valid_reference(self.reference)) or
+                (request['Operation'] == 'observe' and
+                 (not 1 <= len(self.references) <= 100 or
+                  not all(valid_reference(r) for r in self.references) or
+                  len({tuple(sorted(r.items())) for r in self.references}) != len(self.references))) or
                 not valid_id(self.config['InstallationID'])):
             raise Failure('invalid')
         deadline = datetime.fromisoformat(request['Deadline'].replace('Z', '+00:00'))
@@ -196,11 +235,74 @@ class Provider:
             raise Failure('unconfirmed')
         self.receipt.save(status='killed', settled=True, bootstrap_complete=False, connection=None)
 
-    def execute(self):
-        if self.q['Operation'] == 'validate_deployment':
+    def observe(self):
+        """Latest metrics of owned running sandboxes, without locks, writes or connect.
+
+        Receipts name each allocation's sandbox so that the one batch metrics
+        request runs alongside the labelled listing that confirms it is running."""
+        root = private_root(self.config)
+        statuses, candidates = [], {}
+        for index, reference in enumerate(self.references):
             try:
-                validate_deployment(self.config, self.remaining)
-                return {'Version': 1, 'DeploymentValid': True, 'ErrorCode': ''}
+                record = read_receipt(self.config, root, reference) or {}
+            except Failure as error:
+                statuses.append(error.code)
+                continue
+            except Exception:
+                statuses.append('unavailable')
+                continue
+            ids = record.get('ids', [])
+            if record.get('status') in ('killed', 'rejected'):
+                statuses.append('not_running')
+            elif len(ids) == 1 and isinstance(ids[0], str):
+                statuses.append('unavailable')
+                candidates[index] = ids[0]
+            else:
+                statuses.append('unavailable')
+        if not candidates:
+            return [dict(r, Status=status) for r, status in zip(self.references, statuses)]
+        installation = self.config['InstallationID']
+        # One allocation filters by all its labels; a page lists the installation.
+        metadata = {PREFIX + 'installationid': installation}
+        if len(self.references) == 1:
+            metadata = self.metadata_for(self.references[0])
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            metrics = pool.submit(read_metrics, self.config, sorted(set(candidates.values())), self.remaining)
+            running = {}
+            paginator = Sandbox.list(query=SandboxQuery(metadata=metadata, state=[SandboxState.RUNNING]),
+                                     limit=100, **self.options())
+            while paginator.has_next:
+                for cloud in paginator.next_items(**self.options()):
+                    labels = cloud.metadata or {}
+                    if labels.get(PREFIX + 'installationid') == installation:
+                        key = tuple(labels.get(PREFIX + field.lower()) for field in FIELDS[1:])
+                        running.setdefault(key, []).append(cloud)
+            points = metrics.result()
+        result = []
+        for index, reference in enumerate(self.references):
+            if index not in candidates:
+                result.append(dict(reference, Status=statuses[index]))
+                continue
+            found = running.get(tuple(reference[field] for field in FIELDS[1:]), [])
+            if not found:
+                result.append(dict(reference, Status='not_running'))
+            elif len(found) != 1 or found[0].sandbox_id != candidates[index] or not isinstance(points.get(candidates[index]), dict):
+                result.append(dict(reference, Status='unavailable'))
+            else:
+                result.append(observed(reference, found[0], points[candidates[index]]))
+        return result
+
+    def metadata_for(self, reference):
+        return {PREFIX + field.lower(): value for field, value in
+                dict(reference, InstallationID=self.config['InstallationID']).items()}
+
+    def execute(self):
+        if self.q['Operation'] in ('validate_deployment', 'observe'):
+            try:
+                if self.q['Operation'] == 'observe':
+                    return {'Version': 1, 'Observations': self.observe(), 'ErrorCode': ''}
+                build = validate_deployment(self.config, self.remaining)
+                return {'Version': 1, 'DeploymentValid': True, 'TemplateBuild': build, 'ErrorCode': ''}
             except Failure as error:
                 return {'Version': 1, 'ErrorCode': error.code}
             except Exception:

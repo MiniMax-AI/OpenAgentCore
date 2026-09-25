@@ -130,7 +130,13 @@ export interface AdminSummaryEntry {
   last_active_at: number | null;
 }
 export interface AdminSummary extends AdminPage<AdminSummaryEntry> { next_cursor: string }
-export interface AdminRuntimeObservation { project_id: string; observation: import("./types").RuntimeObservation }
+/** Current disk usage and capacity; E2B reports them, Docker and microsandbox return null. */
+export interface RuntimeDiskObservation { usage_bytes: number | null; limit_bytes: number | null }
+/** The administrator list adds disk to the project observation shape. */
+export interface AdminRuntimeObservation {
+  project_id: string;
+  observation: import("./types").RuntimeObservation & { disk: RuntimeDiskObservation | null };
+}
 
 export interface AdminAuditOptions extends Omit<AdminWriteOperationOptions, "resource_type" | "key_id"> {
   project_id?: string;

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 )
@@ -89,5 +90,38 @@ else:
 	operations, err := os.ReadFile(filepath.Join(state, "operations"))
 	if err != nil || string(operations) != "validate_deployment\ninspect\nkill\n" {
 		t.Fatal("loading or cleanup repeated candidate-template validation", string(operations), err)
+	}
+}
+
+func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
+	state := t.TempDir()
+	if err := os.Chmod(state, 0700); err != nil {
+		t.Fatal(err)
+	}
+	helper := filepath.Join(t.TempDir(), "provider")
+	requests := filepath.Join(state, "requests")
+	script := "#!/bin/sh\ncat >>" + requests + "\necho >>" + requests + "\nprintf '%s' '{\"Version\":1,\"ErrorCode\":\"\",\"DeploymentValid\":true,\"TemplateBuild\":{\"Status\":\"ready\",\"CPUs\":4,\"MemoryMiB\":4096,\"RootDiskMiB\":24063}}'\n"
+	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", helper)
+	t.Setenv("AGENTS_API_E2B_STATE_DIR", state)
+	id := uuid.NewString()
+	s := &managedSetup{installationID: id}
+	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
+	candidate, err := s.prepare(t.Context(), selection)
+	disk := int32(24063)
+	if err != nil || candidate.E2BTemplateBuild == nil || candidate.E2BTemplateBuild.CPUs != 4 || candidate.E2BTemplateBuild.MemoryMiB != 4096 ||
+		*candidate.E2BTemplateBuild.RootDiskMiB != disk || candidate.E2BTemplateBuild.Status != "ready" {
+		t.Fatalf("validated build was not recorded: %+v %v", candidate.E2BTemplateBuild, err)
+	}
+	// The published candidate enforces the adopted resources.
+	if _, err := candidate.Config.Provider.(*e2b.Provider).ValidateDeployment(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	logged, err := os.ReadFile(requests)
+	lines := strings.Split(strings.TrimSpace(string(logged)), "\n")
+	if err != nil || len(lines) != 2 || !strings.Contains(lines[0], `"Resources":null`) || !strings.Contains(lines[1], `"Resources":{"cpus":4,"memory_mib":4096}`) {
+		t.Fatalf("omitted resources were not adopted from the build: %s %v", logged, err)
 	}
 }

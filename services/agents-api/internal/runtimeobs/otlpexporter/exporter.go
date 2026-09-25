@@ -25,6 +25,7 @@ const scopeName = "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal
 const (
 	CPUUsageName       = "agents.runtime.cpu.usage"
 	CPUCapacityName    = "agents.runtime.cpu.capacity"
+	CPUUtilizationName = "agents.runtime.cpu.utilization"
 	MemoryUsageName    = "agents.runtime.memory.usage"
 	MemoryLimitName    = "agents.runtime.memory.limit"
 	SampleName         = "agents.runtime.sample"
@@ -137,6 +138,9 @@ func recordMetrics(record runtimeobs.ExportRecord) ([]metricdata.Metrics, error)
 	if sample.CPUCapacityCores != nil {
 		result = append(result, gaugeMetric(CPUCapacityName, "Configured Runtime CPU capacity", "{core}", *sample.CPUCapacityCores, sample.ObservedAt, attributes))
 	}
+	if sample.CPUUtilizationRatio != nil {
+		result = append(result, gaugeMetric(CPUUtilizationName, "Provider-reported share of Runtime CPU capacity", "1", *sample.CPUUtilizationRatio, sample.ObservedAt, attributes))
+	}
 	if sample.MemoryUsageBytes != nil {
 		result = append(result, gaugeMetric(MemoryUsageName, "Current Runtime memory usage", "By", float64(*sample.MemoryUsageBytes), sample.ObservedAt, attributes))
 	}
@@ -206,6 +210,9 @@ func validateSample(sample *runtimeobs.Sample, resolvedAt time.Time) error {
 	}
 	if sample.CPUCapacityCores != nil && (*sample.CPUCapacityCores <= 0 || math.IsNaN(*sample.CPUCapacityCores) || math.IsInf(*sample.CPUCapacityCores, 0)) {
 		return errors.New("invalid Runtime history CPU capacity")
+	}
+	if sample.CPUUtilizationRatio != nil && (*sample.CPUUtilizationRatio < 0 || math.IsNaN(*sample.CPUUtilizationRatio) || math.IsInf(*sample.CPUUtilizationRatio, 0)) {
+		return errors.New("invalid Runtime history CPU utilization")
 	}
 	const maxSafeInteger = uint64(1<<53 - 1)
 	if sample.MemoryUsageBytes != nil && *sample.MemoryUsageBytes > maxSafeInteger {

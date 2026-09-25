@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sync"
 	"time"
 )
 
@@ -98,83 +99,228 @@ func (s *Service) ObserveSessionForHistory(ctx context.Context, tenantID, sessio
 	return s.observeSession(ctx, tenantID, sessionID, CollectionSourcePeriodic, owner, sourceTimeout)
 }
 
+// PageOptions bounds one page of current reads.
+type PageOptions struct {
+	// Concurrency bounds identity resolution and per-target provider reads.
+	Concurrency int
+	// SourceTimeout bounds each provider read, including one batch read.
+	SourceTimeout time.Duration
+}
+
+// ObserveSessions observes one page of Sessions. Running targets of a source
+// that implements BatchSource share one provider read per MaxBatchTargets;
+// other sources are read per target, exactly as ObserveSession reads them.
+// Results and errors are aligned with sessions.
+func (s *Service) ObserveSessions(ctx context.Context, sessions []SessionIdentity, options PageOptions) ([]Observation, []error) {
+	return s.observeSessions(ctx, sessions, CollectionSourceOnRead, nil, options)
+}
+
+// ObserveSessionsForHistory is the periodic-collection form of ObserveSessions.
+func (s *Service) ObserveSessionsForHistory(ctx context.Context, sessions []SessionIdentity, owner OwnershipChecker, options PageOptions) ([]Observation, []error) {
+	if owner == nil || options.SourceTimeout <= 0 || options.SourceTimeout > 30*time.Second {
+		errs := make([]error, len(sessions))
+		for index := range errs {
+			errs[index] = errors.New("invalid Runtime history page collection")
+		}
+		return make([]Observation, len(sessions)), errs
+	}
+	return s.observeSessions(ctx, sessions, CollectionSourcePeriodic, owner, options)
+}
+
 func (s *Service) observeSession(ctx context.Context, tenantID, sessionID string, collectionSource CollectionSource, owner OwnershipChecker, sourceTimeout time.Duration) (Observation, error) {
+	observations, errs := s.observeSessions(ctx, []SessionIdentity{{TenantID: tenantID, SessionID: sessionID}}, collectionSource, owner, PageOptions{Concurrency: 1, SourceTimeout: sourceTimeout})
+	return observations[0], errs[0]
+}
+
+// sourceRead is a resolved running managed target awaiting its provider sample.
+type sourceRead struct {
+	index        int
+	key          string
+	source       Source
+	target       Target
+	providerType string
+}
+
+func (s *Service) observeSessions(ctx context.Context, sessions []SessionIdentity, collectionSource CollectionSource, owner OwnershipChecker, options PageOptions) ([]Observation, []error) {
+	observations := make([]Observation, len(sessions))
+	errs := make([]error, len(sessions))
+	reads := make([]*sourceRead, len(sessions))
+	parallel(len(sessions), options.Concurrency, func(index int) {
+		observation, read, err := s.resolve(ctx, sessions[index].TenantID, sessions[index].SessionID, owner)
+		if err == nil && read == nil {
+			observation, err = s.finish(ctx, observation, collectionSource, owner)
+		}
+		if read != nil {
+			read.index = index
+			reads[index] = read
+		}
+		observations[index], errs[index] = observation, err
+	})
+	// A provider key selects one source; keep page order within each group.
+	var keys []string
+	groups := map[string][]*sourceRead{}
+	for _, read := range reads {
+		if read == nil {
+			continue
+		}
+		if _, ok := groups[read.key]; !ok {
+			keys = append(keys, read.key)
+		}
+		groups[read.key] = append(groups[read.key], read)
+	}
+	for _, key := range keys {
+		group := groups[key]
+		for start := 0; start < len(group); start += MaxBatchTargets {
+			chunk := group[start:min(start+MaxBatchTargets, len(group))]
+			if s.readBatch(ctx, chunk, observations, errs, collectionSource, owner, options.SourceTimeout) {
+				continue
+			}
+			parallel(len(chunk), options.Concurrency, func(index int) {
+				read := chunk[index]
+				sourceCtx, stop := sourceContext(ctx, options.SourceTimeout)
+				started := time.Now()
+				sample, err := read.source.Observe(sourceCtx, read.target)
+				stop()
+				observations[read.index], errs[read.index] = s.complete(ctx, read, sample, err, time.Since(started), collectionSource, owner)
+			})
+		}
+	}
+	return observations, errs
+}
+
+// readBatch reports false, without results, when the source has no batch read
+// for its current provider.
+func (s *Service) readBatch(ctx context.Context, chunk []*sourceRead, observations []Observation, errs []error, collectionSource CollectionSource, owner OwnershipChecker, sourceTimeout time.Duration) bool {
+	batch, ok := chunk[0].source.(BatchSource)
+	if !ok {
+		return false
+	}
+	targets := make([]Target, len(chunk))
+	for index, read := range chunk {
+		targets[index] = read.target
+	}
+	sourceCtx, stop := sourceContext(ctx, sourceTimeout)
+	started := time.Now()
+	results, ok := batch.ObserveBatch(sourceCtx, targets)
+	stop()
+	if !ok {
+		return false
+	}
+	duration := time.Since(started)
+	for index, read := range chunk {
+		if len(results) != len(chunk) {
+			errs[read.index] = errors.New("Runtime observation batch returned mismatched results")
+			continue
+		}
+		observations[read.index], errs[read.index] = s.complete(ctx, read, results[index].Sample, results[index].Err, duration, collectionSource, owner)
+	}
+	return true
+}
+
+// resolve returns either a finished observation or a pending provider read.
+func (s *Service) resolve(ctx context.Context, tenantID, sessionID string, owner OwnershipChecker) (Observation, *sourceRead, error) {
 	if err := checkHistoryOwnership(ctx, owner); err != nil {
-		return Observation{}, err
+		return Observation{}, nil, err
 	}
 	target, err := s.resolver.Resolve(ctx, tenantID, sessionID)
 	resolvedAt := s.now()
 	if errors.Is(err, ErrUnavailable) {
 		if target.TenantID != tenantID || target.SessionID != sessionID || target.Mode != ModeManaged || target.EnvironmentID == "" {
-			return Observation{}, errors.New("Runtime observation resolver returned invalid pending allocation identity")
+			return Observation{}, nil, errors.New("Runtime observation resolver returned invalid pending allocation identity")
 		}
-		return s.finish(ctx, Observation{Target: target, Status: StatusUnavailable, Reason: "allocation_pending", ResolvedAt: resolvedAt}, collectionSource, owner)
+		return Observation{Target: target, Status: StatusUnavailable, Reason: "allocation_pending", ResolvedAt: resolvedAt}, nil, nil
 	}
 	if err != nil {
-		return Observation{}, err
+		return Observation{}, nil, err
 	}
 	if target.TenantID != tenantID || target.SessionID != sessionID {
-		return Observation{}, errors.New("Runtime observation resolver returned mismatched ownership")
+		return Observation{}, nil, errors.New("Runtime observation resolver returned mismatched ownership")
 	}
 	if (target.Mode == ModeNone && target.EnvironmentID != "") ||
 		((target.Mode == ModeSelfHosted || target.Mode == ModeManaged) && target.EnvironmentID == "") {
-		return Observation{}, errors.New("Runtime observation resolver returned mismatched Environment identity")
+		return Observation{}, nil, errors.New("Runtime observation resolver returned mismatched Environment identity")
 	}
 	if target.Mode == ModeNone || target.Mode == ModeSelfHosted {
-		return s.finish(ctx, Observation{Target: target, Status: StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: resolvedAt}, collectionSource, owner)
+		return Observation{Target: target, Status: StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: resolvedAt}, nil, nil
 	}
 	if target.Mode != ModeManaged || target.Instance.AllocationID == "" || target.Instance.ProviderKey == "" {
-		return Observation{}, errors.New("invalid managed Runtime observation target")
+		return Observation{}, nil, errors.New("invalid managed Runtime observation target")
 	}
 	if !target.Instance.AllocationCreatedAt.IsZero() &&
 		(target.Instance.AllocationCreatedAt.Unix() < 0 || target.Instance.AllocationCreatedAt.After(resolvedAt)) {
-		return Observation{}, errors.New("invalid managed Runtime allocation creation time")
+		return Observation{}, nil, errors.New("invalid managed Runtime allocation creation time")
 	}
 	switch target.Instance.AllocationState {
 	case "creating":
-		return s.finish(ctx, Observation{Target: target, Status: StatusUnavailable, Reason: "allocation_pending", ResolvedAt: resolvedAt}, collectionSource, owner)
+		return Observation{Target: target, Status: StatusUnavailable, Reason: "allocation_pending", ResolvedAt: resolvedAt}, nil, nil
 	case "cleanup_pending", "released":
-		return s.finish(ctx, Observation{Target: target, Status: StatusUnavailable, Reason: "runtime_not_running", ResolvedAt: resolvedAt}, collectionSource, owner)
+		return Observation{Target: target, Status: StatusUnavailable, Reason: "runtime_not_running", ResolvedAt: resolvedAt}, nil, nil
 	case "running":
 	default:
-		return Observation{}, errors.New("invalid managed Runtime allocation state")
+		return Observation{}, nil, errors.New("invalid managed Runtime allocation state")
 	}
 	source, ok := s.sources[target.Instance.ProviderKey]
 	if !ok {
-		return s.finish(ctx, Observation{Target: target, Status: StatusUnavailable, Reason: "source_not_configured", ResolvedAt: resolvedAt}, collectionSource, owner)
+		return Observation{Target: target, Status: StatusUnavailable, Reason: "source_not_configured", ResolvedAt: resolvedAt}, nil, nil
 	}
 	providerType := ""
 	if typed, ok := source.(interface{ ObservationProviderType() string }); ok {
 		providerType = typed.ObservationProviderType()
 		if providerType != "" && !providerTypePattern.MatchString(providerType) {
-			return Observation{}, errors.New("invalid Runtime observation provider type")
+			return Observation{}, nil, errors.New("invalid Runtime observation provider type")
 		}
 	}
-	sourceStarted := time.Now()
-	sourceCtx := ctx
-	stopSource := func() {}
-	if sourceTimeout > 0 {
-		sourceCtx, stopSource = context.WithTimeout(ctx, sourceTimeout)
-	}
-	sample, err := source.Observe(sourceCtx, target)
-	stopSource()
-	sourceDuration := time.Since(sourceStarted)
-	if errors.Is(err, context.DeadlineExceeded) {
-		return s.finish(ctx, Observation{Target: target, Status: StatusUnavailable, Reason: "sample_timeout", ProviderType: providerType, ResolvedAt: s.now(), SourceDuration: sourceDuration}, collectionSource, owner)
-	}
-	if errors.Is(err, ErrNotRunning) {
-		return s.finish(ctx, Observation{Target: target, Status: StatusUnavailable, Reason: "runtime_not_running", ProviderType: providerType, ResolvedAt: s.now(), SourceDuration: sourceDuration}, collectionSource, owner)
-	}
-	if errors.Is(err, ErrUnavailable) {
-		return s.finish(ctx, Observation{Target: target, Status: StatusUnavailable, Reason: "sample_unavailable", ProviderType: providerType, ResolvedAt: s.now(), SourceDuration: sourceDuration}, collectionSource, owner)
-	}
-	if err != nil {
+	return Observation{}, &sourceRead{key: target.Instance.ProviderKey, source: source, target: target, providerType: providerType}, nil
+}
+
+// complete classifies one provider result and hands it to history export.
+func (s *Service) complete(ctx context.Context, read *sourceRead, sample Sample, err error, sourceDuration time.Duration, collectionSource CollectionSource, owner OwnershipChecker) (Observation, error) {
+	observation := Observation{Target: read.target, Status: StatusUnavailable, ProviderType: read.providerType, SourceDuration: sourceDuration}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		observation.Reason = "sample_timeout"
+	case errors.Is(err, ErrNotRunning):
+		observation.Reason = "runtime_not_running"
+	case errors.Is(err, ErrUnavailable):
+		observation.Reason = "sample_unavailable"
+	case err != nil:
 		return Observation{}, fmt.Errorf("observe Runtime: %w", err)
+	default:
+		if err := sample.validate(s.now()); err != nil {
+			return Observation{}, err
+		}
+		observation.Status, observation.Sample = StatusObserved, &sample
 	}
-	if err := sample.validate(s.now()); err != nil {
-		return Observation{}, err
+	observation.ResolvedAt = s.now()
+	return s.finish(ctx, observation, collectionSource, owner)
+}
+
+func sourceContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout > 0 {
+		return context.WithTimeout(ctx, timeout)
 	}
-	return s.finish(ctx, Observation{Target: target, Status: StatusObserved, Sample: &sample, ProviderType: providerType, ResolvedAt: s.now(), SourceDuration: sourceDuration}, collectionSource, owner)
+	return ctx, func() {}
+}
+
+// parallel runs work for every index with at most limit concurrent calls.
+func parallel(count, limit int, work func(int)) {
+	if count == 1 || limit <= 1 {
+		for index := range count {
+			work(index)
+		}
+		return
+	}
+	semaphore := make(chan struct{}, limit)
+	var wait sync.WaitGroup
+	for index := range count {
+		wait.Add(1)
+		semaphore <- struct{}{}
+		go func() {
+			defer func() { <-semaphore; wait.Done() }()
+			work(index)
+		}()
+	}
+	wait.Wait()
 }
 
 func checkHistoryOwnership(ctx context.Context, owner OwnershipChecker) error {

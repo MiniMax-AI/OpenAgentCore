@@ -89,6 +89,9 @@ func (r *Reader) Query(ctx context.Context, query runtimehistory.Query) (runtime
 			if value.CPUCapacityCores != nil {
 				sample.metrics[CPUCapacityName] = *value.CPUCapacityCores
 			}
+			if value.CPUUtilizationRatio != nil {
+				sample.metrics[CPUUtilizationName] = *value.CPUUtilizationRatio
+			}
 			if value.MemoryUsageBytes != nil {
 				sample.metrics[MemoryUsageName] = float64(*value.MemoryUsageBytes)
 			}

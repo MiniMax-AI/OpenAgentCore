@@ -150,7 +150,9 @@ the observation-time delta for two ordered samples of the same incarnation.
 above 1 is retained as provider/accounting evidence and is not interpreted as a
 lifecycle signal. Both derived fields are null after a cache restart or whenever
 either source sample is absent or invalid. The API never derives CPU rate from a
-single sample.
+single sample of cumulative time. A provider that reports only a current share
+of its CPU capacity (E2B) fills `utilization_ratio` with that report and leaves
+`usage_seconds_total` and `usage_cores` null.
 
 ### `RuntimeMemoryObservation`
 

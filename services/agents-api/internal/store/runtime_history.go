@@ -43,6 +43,7 @@ func (s *Store) InsertRuntimeHistorySample(ctx context.Context, record runtimeob
 		}
 		params.CpuUsageSeconds = historyFloat(sample.CPUUsageSecondsTotal)
 		params.CpuCapacityCores = historyFloat(sample.CPUCapacityCores)
+		params.CpuUtilizationRatio = historyFloat(sample.CPUUtilizationRatio)
 		params.MemoryUsageBytes = historyInteger(sample.MemoryUsageBytes)
 		params.MemoryLimitBytes = historyInteger(sample.MemoryLimitBytes)
 	}
@@ -86,7 +87,8 @@ func (s *Store) ListRuntimeHistorySamples(ctx context.Context, tenantID, session
 			record.Sample = &runtimeobs.Sample{
 				ObservedAt:           time.Unix(0, row.ObservedAtNs.Int64).UTC(),
 				CPUUsageSecondsTotal: historyFloatPointer(row.CpuUsageSeconds), CPUCapacityCores: historyFloatPointer(row.CpuCapacityCores),
-				MemoryUsageBytes: historyIntegerPointer(row.MemoryUsageBytes), MemoryLimitBytes: historyIntegerPointer(row.MemoryLimitBytes),
+				CPUUtilizationRatio: historyFloatPointer(row.CpuUtilizationRatio),
+				MemoryUsageBytes:    historyIntegerPointer(row.MemoryUsageBytes), MemoryLimitBytes: historyIntegerPointer(row.MemoryLimitBytes),
 			}
 			if row.StartedAtNs.Valid {
 				value := time.Unix(0, row.StartedAtNs.Int64).UTC()

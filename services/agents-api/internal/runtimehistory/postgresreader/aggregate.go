@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	CPUUsageName    = "cpu_usage_seconds"
-	CPUCapacityName = "cpu_capacity_cores"
-	MemoryUsageName = "memory_usage_bytes"
-	MemoryLimitName = "memory_limit_bytes"
+	CPUUsageName       = "cpu_usage_seconds"
+	CPUCapacityName    = "cpu_capacity_cores"
+	CPUUtilizationName = "cpu_utilization_ratio"
+	MemoryUsageName    = "memory_usage_bytes"
+	MemoryLimitName    = "memory_limit_bytes"
 )
 
 type rawSample struct {
@@ -70,8 +71,12 @@ type pointAggregate struct {
 	coverageAggregate
 	cpuContributors, memoryContributors int
 	cpuUsageDelta, cpuCapacitySeconds   float64
-	cpuCapacity                         *float64
-	memoryUsage, memoryLimit            *uint64
+	// Provider-reported utilization ratios, for sources without counters.
+	cpuReportedSum   float64
+	cpuReportedCount int
+	cpuCapacity      *float64
+	memoryUsage      *uint64
+	memoryLimit      *uint64
 }
 
 type seriesAggregate struct {
@@ -215,6 +220,16 @@ func aggregateSeries(query runtimehistory.Query, samples []*rawSample) ([]runtim
 					point.cpuCapacitySeconds += sample.observedAt.Sub(previousAt).Seconds() * capacity
 					cpuContributed = true
 				}
+				// A provider without cumulative CPU time (E2B) reports its
+				// current utilization; the bucket averages those reports.
+				if reported, ok := sample.metrics[CPUUtilizationName]; ok && !hasUsage {
+					if reported < 0 || math.IsNaN(reported) || math.IsInf(reported, 0) {
+						return nil, errors.New("invalid Runtime history CPU utilization")
+					}
+					point.cpuReportedSum += reported
+					point.cpuReportedCount++
+					cpuContributed = true
+				}
 				if cpuContributed {
 					point.cpuContributors++
 				}
@@ -272,6 +287,9 @@ func aggregateSeries(query runtimehistory.Query, samples []*rawSample) ([]runtim
 		}
 		if value.cpuCapacitySeconds > 0 {
 			ratio := value.cpuUsageDelta / value.cpuCapacitySeconds
+			point.CPUUtilizationRatio = &ratio
+		} else if value.cpuReportedCount > 0 {
+			ratio := value.cpuReportedSum / float64(value.cpuReportedCount)
 			point.CPUUtilizationRatio = &ratio
 		}
 		result = append(result, point)

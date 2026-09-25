@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"sync/atomic"
 	"time"
@@ -67,11 +68,27 @@ func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (e
 		return execution.PreparedRuntimeDeployment{}, err
 	}
 	if provider, ok := candidate.Config.Provider.(*e2b.Provider); ok {
-		if err := provider.ValidateDeployment(ctx); err != nil {
+		build, err := provider.ValidateDeployment(ctx)
+		if err != nil {
 			if errors.Is(err, sandbox.ErrInvalid) {
 				return execution.PreparedRuntimeDeployment{}, &store.SandboxConfigurationError{Message: "E2B configuration was rejected; select a ready fixed template build whose CPU and memory match the deployment specification"}
 			}
 			return execution.PreparedRuntimeDeployment{}, fmt.Errorf("%w: E2B validation could not be confirmed; verify the helper, credential, network and fixed template build before retrying", execution.ErrExecutionUnavailable)
+		}
+		if setup.Specification.Resources == (sandbox.Resources{}) {
+			// Omitted E2B resources take the validated build's CPU and memory.
+			setup.Specification.Resources = sandbox.Resources{CPUs: build.CPUs, MemoryMiB: build.MemoryMiB}
+			if err := setup.Specification.Validate("e2b"); err != nil {
+				return execution.PreparedRuntimeDeployment{}, &store.SandboxConfigurationError{Message: "E2B template build resources are outside the supported sandbox limits; select another build"}
+			}
+			if candidate, err = s.configuration(setup); err != nil {
+				return execution.PreparedRuntimeDeployment{}, err
+			}
+		}
+		candidate.E2BTemplateBuild = &store.SandboxE2BTemplateBuild{Status: build.Status, CPUs: int32(build.CPUs), MemoryMiB: int32(build.MemoryMiB)}
+		if build.RootDiskMiB != nil && *build.RootDiskMiB <= math.MaxInt32 {
+			disk := int32(*build.RootDiskMiB)
+			candidate.E2BTemplateBuild.RootDiskMiB = &disk
 		}
 	}
 	return candidate, nil
@@ -116,6 +133,20 @@ func (s *managedSetup) ObservationProviderType() string {
 	return ""
 }
 
+// ObserveBatch delegates to the selected provider's batch read. It reports
+// ok=false for providers without one, so each target uses Observe instead.
+func (s *managedSetup) ObserveBatch(ctx context.Context, targets []runtimeobs.Target) ([]runtimeobs.BatchResult, bool) {
+	selected, err := s.load(ctx)
+	if err != nil || selected == nil {
+		return nil, false
+	}
+	source, ok := selected.Provider.(runtimeobs.BatchSource)
+	if !ok {
+		return nil, false
+	}
+	return source.ObserveBatch(ctx, targets)
+}
+
 func (s *managedSetup) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
 	selected, err := s.load(ctx)
 	if err != nil {
@@ -148,8 +179,14 @@ func (s *managedSetup) provider(setup store.SandboxSetup) (sandbox.Provider, err
 		if binary == "" {
 			binary = "/opt/parsar/e2b/agents-api-e2b-provider"
 		}
+		// Only a candidate that omitted its resources has none; its validation
+		// reads them from the template build before the candidate is rebuilt.
+		var resources *sandbox.Resources
+		if setup.Specification.Resources != (sandbox.Resources{}) {
+			resources = &setup.Specification.Resources
+		}
 		provider, err := e2b.New(e2b.Config{Binary: binary, StateDir: os.Getenv("AGENTS_API_E2B_STATE_DIR"),
-			Resources: &setup.Specification.Resources, InstallationID: setup.InstallationID, APIKey: setup.E2B.APIKey, Template: setup.E2B.Template, TimeoutSeconds: 3600})
+			Resources: resources, InstallationID: setup.InstallationID, APIKey: setup.E2B.APIKey, Template: setup.E2B.Template, TimeoutSeconds: 3600})
 		if err != nil {
 			return nil, errors.New("E2B provider cannot load; check the installed helper and private state directory")
 		}

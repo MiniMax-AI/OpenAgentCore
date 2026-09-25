@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"testing"
@@ -612,3 +613,57 @@ func TestServiceRejectsMismatchedResolvedOwnership(t *testing.T) {
 }
 
 func float64Pointer(value float64) *float64 { return &value }
+
+type batchSource struct {
+	mu      sync.Mutex
+	batches []int
+	sample  Sample
+}
+
+func (s *batchSource) Observe(context.Context, Target) (Sample, error) {
+	return Sample{}, errors.New("per-target read used for a batch source")
+}
+
+func (s *batchSource) ObserveBatch(ctx context.Context, targets []Target) ([]BatchResult, bool) {
+	s.mu.Lock()
+	s.batches = append(s.batches, len(targets))
+	s.mu.Unlock()
+	results := make([]BatchResult, len(targets))
+	for index, target := range targets {
+		results[index].Sample = s.sample
+		if target.SessionID == "stopped" {
+			results[index].Err = ErrNotRunning
+		}
+	}
+	return results, true
+}
+
+func TestServiceBatchesPageReadsWithinProviderLimit(t *testing.T) {
+	now := time.Date(2026, 9, 25, 1, 0, 0, 0, time.UTC)
+	ratio := 0.25
+	source := &batchSource{sample: Sample{ObservedAt: now, CPUUtilizationRatio: &ratio}}
+	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	service, err := NewService(fixedResolver{target: target}, map[string]Source{"provider": source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.now = func() time.Time { return now }
+	sessions := make([]SessionIdentity, 150)
+	for index := range sessions {
+		sessions[index] = SessionIdentity{TenantID: "tenant", SessionID: fmt.Sprint(index)}
+	}
+	sessions[120].SessionID = "stopped"
+	observations, errs := service.ObserveSessions(t.Context(), sessions, PageOptions{Concurrency: 8, SourceTimeout: time.Second})
+	if len(source.batches) != 2 || source.batches[0] != MaxBatchTargets || source.batches[1] != 50 {
+		t.Fatalf("page was not read in provider-sized batches: %v", source.batches)
+	}
+	for index, observation := range observations {
+		if errs[index] != nil || observation.Target.SessionID != sessions[index].SessionID {
+			t.Fatalf("batch result %d was not aligned: %+v %v", index, observation, errs[index])
+		}
+	}
+	if observations[120].Status != StatusUnavailable || observations[120].Reason != "runtime_not_running" ||
+		observations[0].Status != StatusObserved || *observations[0].Sample.CPUUtilizationRatio != .25 {
+		t.Fatalf("batch results were not classified: %+v %+v", observations[0], observations[120])
+	}
+}

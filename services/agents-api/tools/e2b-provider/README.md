@@ -7,8 +7,19 @@ not implement provider HTTP, envd RPC, a scheduler or a network service.
 
 Managed deployment validation uses a separate read-only helper request, bounded
 to 30 seconds. The pinned SDK reads the selected template's build inventory and
-requires the exact build UUID to be ready with the configured CPU and memory.
-It creates neither compute nor allocation receipts. Actual sandbox information
+requires the exact build UUID to be ready with the configured CPU and memory; a
+selection without resources adopts the ready build's CPU and memory. It returns
+the build's status, CPU, memory and reported disk size for Core to record with
+the selection, and creates neither compute nor allocation receipts.
+
+Runtime observation uses a third read-only request, `observe`, for at most 100
+allocations. It reads each allocation's sandbox ID from its receipt without the
+allocation lock, then runs one `GET /sandboxes/metrics` request and one labelled
+listing of this installation's running sandboxes concurrently, within the
+caller's deadline. Only a sandbox that the listing confirms for exactly that
+allocation is reported, with the listing's start time. It never connects to,
+renews or changes a sandbox and never writes receipts. See
+[Runtime observability](../../../../contracts/agents-api/runtime-observability.md). Actual sandbox information
 is checked before writing bootstrap credentials and on subsequent inspection;
 resource drift still permits ownership-based cleanup. E2B disk capacity is not
 an independently configurable limit. Sandbox inspection does not expose a build

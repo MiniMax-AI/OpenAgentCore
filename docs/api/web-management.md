@@ -72,7 +72,10 @@ Runtime selection. POST initializes it; PUT replaces the complete selection usin
 `runtime`; safe responses return `specification` and `specification_digest`.
 Response `resources.allocations` and `resources.pending` are cleanup counts, not
 CPU, memory or disk settings. E2B accepts a write-only key and exact template build
-instead of a node Runtime release, and provisions without a node installation.
+instead of a node Runtime release, and provisions without a node installation. E2B
+may omit `resources` to adopt the validated build's CPU and memory; responses show
+the build as read at selection time in `e2b.template_build`. Microsandbox responses
+return its idle `suspension` policy; other providers return null.
 
 Provider, resource and Runtime changes all require global maintenance and verified
 cleanup of retained/pending resources. Core validates the candidate before commit;

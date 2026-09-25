@@ -19,7 +19,7 @@ equivalent ownership data. A Session, daemon connection, process, container, and
 native harness Session are different identities and must not be substituted for
 one another.
 
-The current implementation supports managed Docker and microsandbox allocations.
+The current implementation supports managed Docker, microsandbox and E2B allocations.
 `self_hosted` and `none` are recognized but explicitly unsupported. A future self-hosted source must
 use authenticated daemon telemetry fenced by the current connection generation.
 Core must not attribute shared host statistics to an `environment:none` Session.
@@ -32,8 +32,12 @@ One sample contains:
 - `started_at`, the current compute incarnation start time;
 - cumulative CPU usage in seconds;
 - configured CPU capacity in cores, when known;
-- current memory usage in bytes; and
-- configured memory limit in bytes, when known.
+- current memory usage in bytes;
+- configured memory limit in bytes, when known;
+- a provider-reported CPU utilization ratio, only for providers without
+  cumulative CPU time (E2B); and
+- current disk usage and capacity in bytes, only where the provider reports
+  them (E2B). Only the administrator list exposes disk.
 
 Measurements are optional. A present pointer with value zero means the provider
 observed zero. An absent measurement means it was unavailable and must never be
@@ -66,6 +70,27 @@ until their cross-provider semantics and API fields are designed.
 Legacy suspension-disabled allocations without a persisted exact compute receipt
 are also unavailable. A deterministic sandbox name is not an incarnation identity
 and is never used as a sampling fallback.
+
+E2B reports only the latest point of a current CPU percentage, memory and disk,
+through `GET /sandboxes/metrics?sandbox_ids=...`. One helper request reads a whole
+page: at most 100 allocations, one metrics request and, concurrently, one listing
+of this installation's running sandboxes by their allocation labels. The helper
+takes each sandbox ID from its private receipt without the allocation lock; the
+listing confirms that exactly that sandbox is running with the allocation's labels
+and supplies its `started_at`. A listed sandbox without a metrics point, an
+ambiguous listing or an E2B API failure (including a rejected key) is unavailable;
+a sandbox absent from the running listing is `runtime_not_running`. Observation
+never connects to, renews or changes a sandbox and never writes receipts.
+
+The E2B mapping is: `cpuUsedPct / 100` to `cpu.utilization_ratio`, `cpuCount` to
+`cpu.capacity_cores`, `memUsed` and `memTotal` to `memory.usage_bytes` and
+`memory.limit_bytes`, and `diskUsed` and `diskTotal` to the administrator
+`disk.usage_bytes` and `disk.limit_bytes`. E2B has no cumulative CPU time, so
+`usage_seconds_total` and `usage_cores` stay null. A template whose envd predates
+E2B disk metrics reports no disk capacity; disk is then null. `observed_at` is the
+point's E2B timestamp; a point up to 30 seconds ahead of Core's clock is recorded
+at Core's time, and a larger lead is unavailable. Docker disk is null;
+microsandbox disk is null until its disk semantics are designed.
 
 ## Duration boundaries
 
@@ -111,7 +136,9 @@ credentials are excluded from observations.
 
 The internal `runtimehistory` boundary validates Core scope, bucket coverage,
 nullability, time bounds and point limits. One chart series represents an allocation;
-CPU deltas reset across compute incarnations or counter regressions. Core's
+CPU deltas reset across compute incarnations or counter regressions. E2B samples
+store their reported utilization ratio instead, and a bucket holds the mean of the
+ratios sampled in it. Disk is not retained in history. Core's
 measured Session usage (recorded root Turn snapshots, active Turns included)
 supplies independently sampled token counters. History queries survive
 Core restart and browser reload without replaying execution.

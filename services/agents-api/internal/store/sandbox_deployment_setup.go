@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var ErrSandboxDeploymentConflict = errors.New("sandbox deployment is already configured differently")
@@ -146,7 +147,23 @@ func runtimeDeploymentView(d sqlc.RuntimeDeployment) RuntimeDeploymentView {
 		}
 	}
 	if d.ProviderKind == "e2b" {
-		result.E2B = &SandboxE2BView{Template: d.E2bTemplate, CredentialConfigured: len(d.E2bCredential) > 0}
+		result.E2B = &SandboxE2BView{Template: d.E2bTemplate, CredentialConfigured: len(d.E2bCredential) > 0,
+			TemplateBuild: SandboxE2BTemplateBuildView{Resources: SandboxTemplateResources{
+				CPUs: optionalInt32(d.E2bTemplateCpus), MemoryMiB: optionalInt32(d.E2bTemplateMemoryMib), RootDiskMiB: optionalInt32(d.E2bTemplateRootDiskMib)}}}
+		if d.E2bTemplateBuildStatus.Valid {
+			status := d.E2bTemplateBuildStatus.String
+			result.E2B.TemplateBuild.Status = &status
+		}
+	}
+	if d.ProviderKind == "microsandbox" {
+		result.Suspension = &SandboxSuspensionView{IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds}
 	}
 	return result
+}
+
+func optionalInt32(value pgtype.Int4) *int32 {
+	if !value.Valid {
+		return nil
+	}
+	return &value.Int32
 }

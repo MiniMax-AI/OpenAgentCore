@@ -34,16 +34,28 @@ type Request struct {
 	Operation string
 	Config    Config
 	Reference sandbox.Reference
-	Bootstrap *sandbox.Bootstrap `json:",omitempty"`
-	Command   *sandbox.Command   `json:",omitempty"`
-	Deadline  time.Time
+	// References lists the allocations of one read-only observe request.
+	References []sandbox.Reference `json:",omitempty"`
+	Bootstrap  *sandbox.Bootstrap  `json:",omitempty"`
+	Command    *sandbox.Command    `json:",omitempty"`
+	Deadline   time.Time
 }
 type Response struct {
 	Version         int
 	Info            *sandbox.Info          `json:",omitempty"`
 	Command         *sandbox.CommandResult `json:",omitempty"`
 	ErrorCode       string
-	DeploymentValid bool `json:",omitempty"`
+	DeploymentValid bool           `json:",omitempty"`
+	TemplateBuild   *TemplateBuild `json:",omitempty"`
+	Observations    []Observation  `json:",omitempty"`
+}
+
+// TemplateBuild is the fixed build as read by deployment validation.
+// RootDiskMiB is nil when E2B does not report the build's disk size.
+type TemplateBuild struct {
+	Status          string
+	CPUs, MemoryMiB uint32
+	RootDiskMiB     *uint32
 }
 type Caller interface {
 	Call(context.Context, Request) (Response, error)
@@ -51,6 +63,7 @@ type Caller interface {
 type Provider struct {
 	config Config
 	caller Caller
+	now    func() time.Time
 }
 
 var _ sandbox.Provider = (*Provider)(nil)
@@ -99,7 +112,7 @@ func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 		resources := *c.Resources
 		c.Resources = &resources
 	}
-	return &Provider{config: c, caller: caller}, nil
+	return &Provider{config: c, caller: caller, now: time.Now}, nil
 }
 func (p *Provider) call(ctx context.Context, operation string, r sandbox.Reference, b *sandbox.Bootstrap, command *sandbox.Command) (Response, error) {
 	deadline, ok := ctx.Deadline()
@@ -142,20 +155,22 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 
 // ValidateDeployment reads the exact immutable build without creating compute or
 // allocation receipts. Candidate configuration remains unpublished until it passes.
-func (p *Provider) ValidateDeployment(ctx context.Context) error {
-	if p.config.Resources == nil {
-		return sandbox.ErrInvalid
-	}
+// It returns the build as read. Without configured Resources it only requires a
+// ready build, whose CPU and memory the caller then adopts as the selection.
+func (p *Provider) ValidateDeployment(ctx context.Context) (TemplateBuild, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	out, err := p.call(ctx, "validate_deployment", sandbox.Reference{}, nil, nil)
 	if err != nil {
-		return err
+		return TemplateBuild{}, err
 	}
-	if !out.DeploymentValid || out.Info != nil || out.Command != nil {
-		return sandbox.ErrComputeUnconfirmed
+	build := out.TemplateBuild
+	if !out.DeploymentValid || out.Info != nil || out.Command != nil || out.Observations != nil || build == nil || build.Status != "ready" ||
+		build.CPUs == 0 || build.MemoryMiB == 0 || build.RootDiskMiB != nil && *build.RootDiskMiB == 0 ||
+		p.config.Resources != nil && (build.CPUs != p.config.Resources.CPUs || build.MemoryMiB != p.config.Resources.MemoryMiB) {
+		return TemplateBuild{}, sandbox.ErrComputeUnconfirmed
 	}
-	return nil
+	return *build, nil
 }
 func (p *Provider) info(ctx context.Context, operation string, r sandbox.Reference, b *sandbox.Bootstrap) (sandbox.Info, error) {
 	out, err := p.call(ctx, operation, r, b, nil)

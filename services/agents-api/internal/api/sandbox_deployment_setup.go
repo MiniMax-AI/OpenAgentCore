@@ -16,6 +16,8 @@ type SandboxE2BInput struct {
 }
 
 type SandboxDeploymentInput struct {
+	// Per-sandbox limits, required for Docker and microsandbox. E2B may omit
+	// them; Core then uses the validated template build's cpus and memory_mib.
 	Resources sandbox.Resources       `json:"resources"`
 	Runtime   *sandbox.RuntimeRelease `json:"runtime,omitempty"`
 	Provider  string                  `json:"provider"`
@@ -48,7 +50,7 @@ func WithSandboxDeploymentChanges(
 }
 
 // @Summary Initialize the deployment sandbox provider
-// @Description Selects a provider, enforced resource limits, pinned Runtime release and public Core origin. E2B credentials are write-only. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
+// @Description Selects a provider, enforced resource limits, pinned Runtime release and public Core origin. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -80,7 +82,7 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 }
 
 // @Summary Change a fully drained deployment's sandbox configuration
-// @Description Requires maintenance, the current generation and verified cleanup of all old resources. Credentials are write-only. The public Core origin stays unchanged. Historical records are retained; old node credentials and enrollments are retired. Explicitly resume after success. Never automatically retry an uncertain write.
+// @Description Requires maintenance, the current generation and verified cleanup of all old resources. Credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory. The public Core origin stays unchanged. Historical records are retained; old node credentials and enrollments are retired. Explicitly resume after success. Never automatically retry an uncertain write.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth

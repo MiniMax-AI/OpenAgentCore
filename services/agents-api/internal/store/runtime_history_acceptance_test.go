@@ -203,3 +203,27 @@ func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
 		t.Fatal("cancelled query succeeded")
 	}
 }
+
+func TestPostgresRuntimeHistoryKeepsProviderReportedUtilization(t *testing.T) {
+	s, _ := store.NewTestStore(t)
+	scope := historyOwner(t, s)
+	reader := historyBackend(t, s)
+	allocation := uuid.NewString()
+	start := time.Now().UTC().Truncate(time.Minute).Add(-10 * time.Minute)
+	started := start.Add(-time.Minute)
+	for index, ratio := range []float64{.2, .4} {
+		record := historyRecord(scope, allocation, started, start.Add(time.Duration(5+index*15)*time.Second), 0, 1)
+		record.ProviderType = "e2b"
+		record.Sample.CPUUsageSecondsTotal, record.Sample.CPUUtilizationRatio = nil, &ratio
+		if err := reader.Export(t.Context(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := reader.Query(t.Context(), historyQuery(scope, start, start.Add(time.Minute), 2))
+	if err != nil || len(result.Series) != 1 || result.Series[0].Points[0].CPUUtilizationRatio == nil {
+		t.Fatalf("E2B utilization was not retained: %+v %v", result, err)
+	}
+	if ratio := *result.Series[0].Points[0].CPUUtilizationRatio; ratio < .2999 || ratio > .3001 {
+		t.Fatalf("bucket utilization = %v, want the mean of reported ratios", ratio)
+	}
+}

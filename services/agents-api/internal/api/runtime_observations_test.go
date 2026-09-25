@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,10 +26,37 @@ func (f runtimeObservationFixture) ObserveSession(_ context.Context, tenant, ses
 	return value, nil
 }
 
+func (f runtimeObservationFixture) ObserveSessions(ctx context.Context, sessions []runtimeobs.SessionIdentity, _ runtimeobs.PageOptions) ([]runtimeobs.Observation, []error) {
+	return observeEach(ctx, sessions, f.ObserveSession)
+}
+
 type runtimeObservationServiceFunc func(context.Context, string, string) (runtimeobs.Observation, error)
 
 func (f runtimeObservationServiceFunc) ObserveSession(ctx context.Context, tenant, session string) (runtimeobs.Observation, error) {
 	return f(ctx, tenant, session)
+}
+
+func (f runtimeObservationServiceFunc) ObserveSessions(ctx context.Context, sessions []runtimeobs.SessionIdentity, _ runtimeobs.PageOptions) ([]runtimeobs.Observation, []error) {
+	return observeEach(ctx, sessions, f)
+}
+
+func observeEach(ctx context.Context, sessions []runtimeobs.SessionIdentity, observe func(context.Context, string, string) (runtimeobs.Observation, error)) ([]runtimeobs.Observation, []error) {
+	observations, errs := make([]runtimeobs.Observation, len(sessions)), make([]error, len(sessions))
+	for index, session := range sessions {
+		observations[index], errs[index] = observe(ctx, session.TenantID, session.SessionID)
+	}
+	return observations, errs
+}
+
+// runtimeObservationPageRecorder records the page bounds a list route requests.
+type runtimeObservationPageRecorder struct {
+	runtimeObservationServiceFunc
+	options *runtimeobs.PageOptions
+}
+
+func (r runtimeObservationPageRecorder) ObserveSessions(ctx context.Context, sessions []runtimeobs.SessionIdentity, options runtimeobs.PageOptions) ([]runtimeobs.Observation, []error) {
+	*r.options = options
+	return observeEach(ctx, sessions, r.runtimeObservationServiceFunc)
 }
 
 func runtimeObservationRequest(handler http.Handler, path string) *httptest.ResponseRecorder {
@@ -198,18 +225,13 @@ func TestRuntimeObservationListPreservesStoreOrderAndTenantPagination(t *testing
 
 func TestRuntimeObservationListBoundsCollectionConcurrency(t *testing.T) {
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
-	var active, maximum atomic.Int32
-	service := runtimeObservationServiceFunc(func(_ context.Context, _, session string) (runtimeobs.Observation, error) {
-		current := active.Add(1)
-		defer active.Add(-1)
-		for current > maximum.Load() && !maximum.CompareAndSwap(maximum.Load(), current) {
-		}
-		time.Sleep(15 * time.Millisecond)
+	var options runtimeobs.PageOptions
+	service := runtimeObservationPageRecorder{options: &options, runtimeObservationServiceFunc: func(_ context.Context, _, session string) (runtimeobs.Observation, error) {
 		return runtimeobs.Observation{
 			Target: runtimeobs.Target{SessionID: session, Mode: runtimeobs.ModeNone},
 			Status: runtimeobs.StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: now,
 		}, nil
-	})
+	}}
 	handler, saved, _ := testHandler(t, WithRuntimeObservations(service))
 	for range 20 {
 		saved.sessions = append(saved.sessions, store.Session{ID: uuid.NewString(), CreatedAt: now})
@@ -218,8 +240,8 @@ func TestRuntimeObservationListBoundsCollectionConcurrency(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("list returned %d: %s", response.Code, response.Body)
 	}
-	if got := maximum.Load(); got == 0 || got > runtimeObservationConcurrency {
-		t.Fatalf("collection concurrency = %d, want 1..%d", got, runtimeObservationConcurrency)
+	if options.Concurrency != runtimeObservationConcurrency || options.SourceTimeout != runtimeObservationSourceBudget {
+		t.Fatalf("collection bounds = %+v", options)
 	}
 }
 
@@ -245,5 +267,39 @@ func TestRuntimeObservationListRejectsWholePageOnIntegrityFailure(t *testing.T) 
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || len(envelope.Error) == 0 {
 		t.Fatalf("integrity failure leaked a partial page: %s", response.Body)
+	}
+}
+
+func TestAdminRuntimeObservationProjectsReportedUtilizationAndDisk(t *testing.T) {
+	now := time.Date(2026, 9, 25, 10, 31, 37, 0, time.UTC)
+	ratio, cores := .1955, 2.0
+	memoryUsed, memoryTotal, diskUsed, diskTotal := uint64(183836672), uint64(2079141888), uint64(1593188352), uint64(23511863296)
+	observation := runtimeobs.Observation{
+		Target: runtimeobs.Target{SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: runtimeobs.ModeManaged,
+			Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), AllocationState: "running", ComputePhase: "disabled", AllocationCreatedAt: now.Add(-time.Minute)}},
+		Status: runtimeobs.StatusObserved, ProviderType: "e2b", ResolvedAt: now,
+		Sample: &runtimeobs.Sample{ObservedAt: now, StartedAt: timePointer(now.Add(-time.Minute)), CPUUtilizationRatio: &ratio, CPUCapacityCores: &cores,
+			MemoryUsageBytes: &memoryUsed, MemoryLimitBytes: &memoryTotal, DiskUsageBytes: &diskUsed, DiskLimitBytes: &diskTotal},
+	}
+	value, err := adminRuntimeObservationResponse(observation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(value)
+	for _, want := range []string{
+		`"cpu":{"usage_seconds_total":null,"capacity_cores":2,"usage_cores":null,"utilization_ratio":0.1955}`,
+		`"memory":{"usage_bytes":183836672,"limit_bytes":2079141888}`,
+		`"disk":{"usage_bytes":1593188352,"limit_bytes":23511863296}`,
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("E2B observation lacks %s: %s", want, raw)
+		}
+	}
+	public, _ := json.Marshal(value.RuntimeObservation)
+	observation.Sample.DiskUsageBytes, observation.Sample.DiskLimitBytes = nil, nil
+	value, err = adminRuntimeObservationResponse(observation)
+	raw, _ = json.Marshal(value)
+	if err != nil || !strings.Contains(string(raw), `"disk":null`) || strings.Contains(string(public), "disk") {
+		t.Fatalf("unreported disk was not null or reached the project shape: %s %s %v", raw, public, err)
 	}
 }

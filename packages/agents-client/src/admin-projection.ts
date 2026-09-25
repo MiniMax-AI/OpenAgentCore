@@ -2,7 +2,7 @@ import { AgentCoreError, projectAgentSnapshot, projectRuntimeObservation } from 
 import { projectTokenUsage } from "./usage-projection";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourceId } from "./response-projection";
 import type { ListPage, SavedAgent } from "./types";
-import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminCopyResult, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion } from "./admin-types";
+import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminCopyResult, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion } from "./admin-types";
 
 export function invalidAdminResponse(): never {
   throw new AgentCoreError("Core returned an invalid administration response.", 502, "invalid_admin_response");
@@ -165,11 +165,24 @@ export function projectAdminRuntimePage(value: unknown): ListPage<AdminRuntimeOb
   const data = page.data.map((entry) => {
     const item = record(entry, ["project_id", "observation"]);
     strings(item, ["project_id"]);
-    return { project_id: item.project_id as string, observation: projectRuntimeObservation(item.observation) };
+    if (!isRecord(item.observation)) return invalidAdminResponse();
+    // A Core without disk observations omits the field; disk is then unknown.
+    const { disk = null, ...rest } = item.observation;
+    const observation = projectRuntimeObservation(rest);
+    return { project_id: item.project_id as string, observation: { ...observation, disk: projectRuntimeDisk(disk, observation.status === "observed") } };
   });
   if (page.first_id !== (data[0]?.observation.id ?? null) || page.last_id !== (data.at(-1)?.observation.id ?? null) ||
     new Set(data.map((entry) => entry.observation.id)).size !== data.length || (page.has_more && data.length === 0)) return invalidAdminResponse();
   return { object: "list", data, has_more: page.has_more, first_id: page.first_id as string | null, last_id: page.last_id as string | null };
+}
+
+function projectRuntimeDisk(value: unknown, observed: boolean): RuntimeDiskObservation | null {
+  if (value === null) return null;
+  const disk = record(value, ["usage_bytes", "limit_bytes"]);
+  const known = (field: unknown) => field === null || isNonnegativeInteger(field);
+  if (!observed || !known(disk.usage_bytes) || !known(disk.limit_bytes) || disk.limit_bytes === 0 ||
+    (disk.usage_bytes === null && disk.limit_bytes === null)) return invalidAdminResponse();
+  return { usage_bytes: disk.usage_bytes as number | null, limit_bytes: disk.limit_bytes as number | null };
 }
 
 export function projectAdminAudit(value: unknown): AdminAuditPage {

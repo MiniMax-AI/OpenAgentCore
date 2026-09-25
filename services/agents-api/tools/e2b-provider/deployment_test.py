@@ -79,6 +79,17 @@ class BuildValidationTest(unittest.TestCase):
 
     @patch('sdk.get_api_client')
     @patch('sdk.get_templates_template_id.sync_detailed')
+    def test_returns_build_and_adopts_it_when_resources_are_omitted(self, get, client):
+        self.build.disk_size_mb = 24063
+        get.return_value = self.response([self.build])
+        expected = {'Status': 'ready', 'CPUs': 3, 'MemoryMiB': 4096, 'RootDiskMiB': 24063}
+        self.assertEqual(validate_deployment(self.config, lambda: 5), expected)
+        self.config['Resources'] = None
+        self.build.cpu_count = 8
+        self.assertEqual(validate_deployment(self.config, lambda: 5), dict(expected, CPUs=8))
+
+    @patch('sdk.get_api_client')
+    @patch('sdk.get_templates_template_id.sync_detailed')
     def test_rejects_missing_failed_or_mismatched_build(self, get, client):
         for field, value in [('build_id', uuid4()), ('status', TemplateBuildStatus.ERROR),
                              ('cpu_count', 1), ('memory_mb', 2048)]:

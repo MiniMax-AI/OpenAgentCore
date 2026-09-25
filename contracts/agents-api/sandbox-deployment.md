@@ -46,7 +46,7 @@ POST and PUT take the same complete selection. PUT also requires a nonzero
 | --- | --- |
 | `provider` | Exactly one of `docker`, `microsandbox`, `e2b` |
 | `core_url` | Canonical Core origin, without path, credentials, query or fragment |
-| `resources` | Required per-sandbox resource limits described below |
+| `resources` | Per-sandbox resource limits described below; required for Docker/microsandbox, optional for E2B |
 | `runtime` | Required immutable distribution identity for Docker/microsandbox; absent for E2B |
 | `e2b` | Required only for E2B: write-only `api_key` and immutable `template` build selector |
 
@@ -74,7 +74,10 @@ and exact image identity. It does not provide independent hard root or workspace
 disk quotas through this contract. E2B CPU and memory must match the exact ready
 template build; Core validates that build through the pinned SDK before saving.
 E2B disk capacity remains part of its native template. Neither provider silently
-accepts a requested disk quota that it cannot enforce. On restart, Core loads the
+accepts a requested disk quota that it cannot enforce. An E2B selection may omit
+`resources`: Core then validates that the build is ready and stores its CPU count
+and memory as `cpus` and `memory_mib`, returned in `specification.resources`
+without disk fields. The stored specification is complete and validated either way. On restart, Core loads the
 committed E2B selection without repeating template-build validation. Existing
 resource inspection and cleanup use the original credentials and provider
 receipts; new selections still require successful template validation.
@@ -118,9 +121,24 @@ build uses the same drained maintenance transition as changing resources.
 ## Safe response
 
 GET and successful mutations return `installation_id`, `provider`, `core_url`,
-`mode`, `generation`, `owner_epoch`, `maintenance` and resource accounting. A
-configured deployment also returns `specification` and `specification_digest`.
-E2B returns only `e2b.template` and `e2b.credential_configured`.
+`mode`, `generation`, `owner_epoch`, `maintenance`, `suspension` and resource
+accounting. A configured deployment also returns `specification` and
+`specification_digest`. E2B returns only `e2b.template`,
+`e2b.credential_configured` and `e2b.template_build`; the `e2b` object is absent
+for Docker and microsandbox.
+
+`e2b.template_build` is `{status, resources: {cpus, memory_mib, root_disk_mib}}`:
+the fixed build as Core read it through the pinned SDK when the selection was
+saved. GET does not call E2B, so it stays cheap and cannot fail on an E2B outage;
+the values describe the immutable build at selection time. Validation admits only
+a `ready` build whose CPU count and memory equal the selected `cpus` and
+`memory_mib`. `root_disk_mib` is the build's native disk size, which Core does not
+enforce separately. Unknown values are null, including every value of a selection
+saved before Core recorded them; re-saving the selection records them.
+
+`suspension` is `{idle_seconds, retention_seconds}` for microsandbox, the only
+provider Core suspends (currently 300 and 86400). Docker, E2B and unconfigured
+deployments return null.
 
 Two similarly named fields have different purposes:
 

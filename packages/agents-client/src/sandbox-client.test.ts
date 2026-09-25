@@ -95,10 +95,16 @@ describe("Core sandbox credential boundaries", () => {
 describe("hosted provider configuration", () => {
   const e2b = { api_key: "test-only-secret", template: "runtime:00000000-0000-0000-0000-000000000001" };
   it("writes E2B configuration and generation without beta headers or browser credentials", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response({ generation: 2, mode: "direct", resources: { allocations: 0, pending: 0 }, e2b: { template: e2b.template, credential_configured: true } }));
+    const deployment = {
+      generation: 2, mode: "direct", resources: { allocations: 0, pending: 0 }, suspension: null,
+      specification: { resources: { cpus: 2, memory_mib: 2048 } },
+      e2b: { template: e2b.template, credential_configured: true, template_build: { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 24063 } } },
+    };
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response(deployment));
     const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch });
     const controller = new AbortController();
-    await client.initializeDeployment({ provider: "e2b", core_url: "https://core.example", e2b });
+    // Omitted E2B resources are filled from the validated template build.
+    expect(await client.initializeDeployment({ provider: "e2b", core_url: "https://core.example", e2b })).toEqual(deployment);
     await client.updateDeployment({ provider: "e2b", core_url: "https://core.example", e2b, expected_generation: 1 }, { signal: controller.signal });
     await client.setMaintenance({ maintenance: false, expected_generation: 2 });
     expect(fetch.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([

@@ -9,7 +9,8 @@ observation sources. Observation never changes Runtime lifecycle.
 History retains seven days and queries at most 24 hours. Writes use a bounded
 asynchronous queue; failures or overflow create gaps, never execution failures.
 CPU and memory unknowns remain null. CPU counter deltas never bridge compute
-restarts or counter resets. Token snapshots come from canonical Session Usage;
+restarts or counter resets. Providers without cumulative CPU time (E2B) store
+their reported utilization ratio, and a bucket holds the mean of those ratios. Token snapshots come from canonical Session Usage;
 the history table does not become billing or execution authority.
 
 Tenant, Session and Environment scope are mandatory on reads and writes. The

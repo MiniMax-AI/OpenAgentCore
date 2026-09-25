@@ -158,7 +158,13 @@ simultaneous deployment-wide snapshot. Totals are not billing records.
 
 `GET /runtime-observations` uses existing Session creation-order pagination and
 returns `{object:"list", data:[{project_id, observation}], has_more, first_id, last_id}`.
-It reuses the bounded read-only Runtime sampler and never provisions compute.
+It reuses the bounded read-only Runtime sampler and never provisions compute; a
+provider with a batch metrics read (E2B) samples the page in one bounded request.
+Each `observation` is the project Runtime observation plus `disk:
+{usage_bytes, limit_bytes}` with memory's null rules: E2B fills it from its
+reported disk usage and capacity, Docker returns null, and microsandbox returns
+null until its disk semantics are designed. The project-scoped observation
+routes, including the per-Session administrator read, keep their shape.
 `GET /runtime-history/capabilities` and `GET /startup-configuration` reuse the
 existing non-secret project projections.
 

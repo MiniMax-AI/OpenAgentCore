@@ -231,23 +231,27 @@ type RuntimeAllocation struct {
 }
 
 type RuntimeDeployment struct {
-	Singleton          bool               `json:"singleton"`
-	InstallationID     pgtype.UUID        `json:"installation_id"`
-	BackendFingerprint string             `json:"backend_fingerprint"`
-	Maintenance        bool               `json:"maintenance"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-	ProviderKind       string             `json:"provider_kind"`
-	LocalNodeID        pgtype.UUID        `json:"local_node_id"`
-	OwnerEpoch         int64              `json:"owner_epoch"`
-	WebManaged         bool               `json:"web_managed"`
-	CoreUrl            string             `json:"core_url"`
-	IdleSeconds        int64              `json:"idle_seconds"`
-	RetentionSeconds   int64              `json:"retention_seconds"`
-	Generation         int64              `json:"generation"`
-	Mode               string             `json:"mode"`
-	E2bTemplate        string             `json:"e2b_template"`
-	E2bCredential      []byte             `json:"e2b_credential"`
-	Specification      []byte             `json:"specification"`
+	Singleton              bool               `json:"singleton"`
+	InstallationID         pgtype.UUID        `json:"installation_id"`
+	BackendFingerprint     string             `json:"backend_fingerprint"`
+	Maintenance            bool               `json:"maintenance"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ProviderKind           string             `json:"provider_kind"`
+	LocalNodeID            pgtype.UUID        `json:"local_node_id"`
+	OwnerEpoch             int64              `json:"owner_epoch"`
+	WebManaged             bool               `json:"web_managed"`
+	CoreUrl                string             `json:"core_url"`
+	IdleSeconds            int64              `json:"idle_seconds"`
+	RetentionSeconds       int64              `json:"retention_seconds"`
+	Generation             int64              `json:"generation"`
+	Mode                   string             `json:"mode"`
+	E2bTemplate            string             `json:"e2b_template"`
+	E2bCredential          []byte             `json:"e2b_credential"`
+	Specification          []byte             `json:"specification"`
+	E2bTemplateBuildStatus pgtype.Text        `json:"e2b_template_build_status"`
+	E2bTemplateCpus        pgtype.Int4        `json:"e2b_template_cpus"`
+	E2bTemplateMemoryMib   pgtype.Int4        `json:"e2b_template_memory_mib"`
+	E2bTemplateRootDiskMib pgtype.Int4        `json:"e2b_template_root_disk_mib"`
 }
 
 type RuntimeDeviceAuthority struct {
@@ -259,21 +263,22 @@ type RuntimeDeviceAuthority struct {
 }
 
 type RuntimeHistorySample struct {
-	TenantID         pgtype.UUID   `json:"tenant_id"`
-	SessionID        pgtype.UUID   `json:"session_id"`
-	EnvironmentID    pgtype.UUID   `json:"environment_id"`
-	ResolvedAtNs     int64         `json:"resolved_at_ns"`
-	AllocationID     pgtype.UUID   `json:"allocation_id"`
-	ProviderType     string        `json:"provider_type"`
-	Status           string        `json:"status"`
-	ObservedAtNs     pgtype.Int8   `json:"observed_at_ns"`
-	StartedAtNs      pgtype.Int8   `json:"started_at_ns"`
-	CpuUsageSeconds  pgtype.Float8 `json:"cpu_usage_seconds"`
-	CpuCapacityCores pgtype.Float8 `json:"cpu_capacity_cores"`
-	MemoryUsageBytes pgtype.Int8   `json:"memory_usage_bytes"`
-	MemoryLimitBytes pgtype.Int8   `json:"memory_limit_bytes"`
-	InputTokens      pgtype.Int8   `json:"input_tokens"`
-	OutputTokens     pgtype.Int8   `json:"output_tokens"`
+	TenantID            pgtype.UUID   `json:"tenant_id"`
+	SessionID           pgtype.UUID   `json:"session_id"`
+	EnvironmentID       pgtype.UUID   `json:"environment_id"`
+	ResolvedAtNs        int64         `json:"resolved_at_ns"`
+	AllocationID        pgtype.UUID   `json:"allocation_id"`
+	ProviderType        string        `json:"provider_type"`
+	Status              string        `json:"status"`
+	ObservedAtNs        pgtype.Int8   `json:"observed_at_ns"`
+	StartedAtNs         pgtype.Int8   `json:"started_at_ns"`
+	CpuUsageSeconds     pgtype.Float8 `json:"cpu_usage_seconds"`
+	CpuCapacityCores    pgtype.Float8 `json:"cpu_capacity_cores"`
+	MemoryUsageBytes    pgtype.Int8   `json:"memory_usage_bytes"`
+	MemoryLimitBytes    pgtype.Int8   `json:"memory_limit_bytes"`
+	InputTokens         pgtype.Int8   `json:"input_tokens"`
+	OutputTokens        pgtype.Int8   `json:"output_tokens"`
+	CpuUtilizationRatio pgtype.Float8 `json:"cpu_utilization_ratio"`
 }
 
 type RuntimeNode struct {

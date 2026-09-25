@@ -19,17 +19,26 @@ func TestDeploymentValidationIsBoundedAndNeedsExplicitProof(t *testing.T) {
 		t.Fatal(err)
 	}
 	resources.CPUs = 9
+	disk := uint32(24063)
 	caller.response.DeploymentValid = true
-	if err = p.ValidateDeployment(context.Background()); err != nil {
-		t.Fatal(err)
+	caller.response.TemplateBuild = &TemplateBuild{Status: "ready", CPUs: 2, MemoryMiB: 2048, RootDiskMiB: &disk}
+	build, err := p.ValidateDeployment(context.Background())
+	if err != nil || build.CPUs != 2 || build.MemoryMiB != 2048 || build.RootDiskMiB == nil || *build.RootDiskMiB != disk || build.Status != "ready" {
+		t.Fatalf("validated build = %+v %v", build, err)
 	}
 	q := caller.requests[0]
 	if q.Operation != "validate_deployment" || q.Reference != (sandbox.Reference{}) || q.Bootstrap != nil || q.Config.Resources.CPUs != 2 || time.Until(q.Deadline) > 30*time.Second || time.Until(q.Deadline) <= 0 {
 		t.Fatalf("invalid validation request %+v", q)
 	}
-	caller.response.DeploymentValid = false
-	if err = p.ValidateDeployment(t.Context()); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
-		t.Fatal("missing proof accepted", err)
+	for _, response := range []Response{
+		{Version: ProtocolVersion, TemplateBuild: caller.response.TemplateBuild},
+		{Version: ProtocolVersion, DeploymentValid: true},
+		{Version: ProtocolVersion, DeploymentValid: true, TemplateBuild: &TemplateBuild{Status: "ready", CPUs: 4, MemoryMiB: 2048}},
+	} {
+		caller.response = response
+		if _, err = p.ValidateDeployment(t.Context()); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
+			t.Fatal("missing proof accepted", err)
+		}
 	}
 	config.Resources = &sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}
 	if _, err = NewWithCaller(config, caller); !errors.Is(err, sandbox.ErrInvalid) {

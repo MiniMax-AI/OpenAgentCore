@@ -412,7 +412,11 @@ uptime; never subtract rounded uptime from a new wall-clock timestamp. Preserve
 cumulative CPU seconds, memory usage/limit and
 compute uptime semantics across both. Do not use microsandbox's instantaneous CPU
 percent, wake suspended compute, or expose provider-native identifiers to fill a
-common field.
+common field. E2B has no cumulative CPU time: one read-only helper request per
+page of at most 100 allocations reads E2B's batch metrics and confirms each
+receipt's sandbox in a labelled running listing. Its reported CPU share fills
+`utilization_ratio`; disk appears only in the administrator list. Page reads go
+through the Service's optional batch source; do not add a second collector.
 
 Runtime history uses the existing Core PostgreSQL database: one sanitized row per
 periodic observation, seven-day retention and bounded reads. It is best-effort
@@ -420,7 +424,8 @@ operational evidence, not execution or Usage authority. The execution owner samp
 by default every 30 seconds. Core's internal measured Session usage (every
 recorded root Turn snapshot, active Turns included) supplies token snapshots, not
 the public Session usage rule; never aggregate provider counters as model tokens. Preserve missing data
-and reset CPU derivation across compute incarnations or counter regressions.
+and reset CPU derivation across compute incarnations or counter regressions. E2B
+history stores the reported utilization ratio; a bucket holds their mean.
 The bounded asynchronous database writer and optional OTLP exporter have independent
 queues; external telemetry outages must not stall local history or execution.
 Retention cleanup also runs without active Runtimes. The browser queries only Core,
@@ -743,7 +748,8 @@ Docker and E2B accept CPU/memory but reject independent nonzero disk capacities;
 do not claim hard root/workspace disk quotas for them. Docker creation and native
 inspection enforce the declared CPU/memory and exact image. E2B setup verifies the
 exact ready template build and matching CPU/memory through the pinned SDK before
-saving its encrypted account key. Loading a committed selection reconstructs its
+saving its encrypted account key, and records the build as read for the safe view;
+an omitted E2B `resources` adopts that build's CPU and memory. Loading a committed selection reconstructs its
 provider from the original credentials and receipts without repeating candidate
 template validation; a template endpoint outage must not block cleanup of existing
 sandboxes. Creation and instance inspection still enforce the saved resources.

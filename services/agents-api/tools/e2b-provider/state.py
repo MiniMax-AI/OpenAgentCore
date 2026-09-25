@@ -21,14 +21,45 @@ def fsync_directory(path):
         os.close(fd)
 
 
+def private_root(config):
+    root = Path(config['StateDir'])
+    value = root.lstat()
+    if not stat.S_ISDIR(value.st_mode) or value.st_mode & 0o077 or value.st_uid != os.getuid():
+        raise Failure('invalid')
+    return root
+
+
+def receipt_digest(identity):
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
+def load_receipt(path, identity):
+    """Return one committed receipt, or None; os.replace publishes whole versions."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd) as source:
+        value = os.fstat(source.fileno())
+        if not stat.S_ISREG(value.st_mode) or value.st_mode & 0o077 or value.st_uid != os.getuid() or value.st_size > 65536:
+            raise Failure('ownership')
+        data = json.load(source)
+    if data.get('identity') != identity or data.get('version') != 1:
+        raise Failure('ownership')
+    return data
+
+
+def read_receipt(config, root, reference):
+    """Read without the allocation lock. Observation never waits for or writes receipts."""
+    identity = dict(reference, InstallationID=config['InstallationID'])
+    return load_receipt(root / (receipt_digest(identity) + '.json'), identity)
+
+
 class Receipt:
     def __init__(self, request, remaining):
         self.identity = dict(request['Reference'], InstallationID=request['Config']['InstallationID'])
-        self.root = Path(request['Config']['StateDir'])
-        value = self.root.lstat()
-        if not stat.S_ISDIR(value.st_mode) or value.st_mode & 0o077 or value.st_uid != os.getuid():
-            raise Failure('invalid')
-        digest = hashlib.sha256(json.dumps(self.identity, sort_keys=True).encode()).hexdigest()
+        self.root = private_root(request['Config'])
+        digest = receipt_digest(self.identity)
         self.path = self.root / (digest + '.json')
         self.lock = os.open(self.root / (digest + '.lock'), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         self.remaining = remaining
@@ -43,17 +74,7 @@ class Receipt:
                     break
                 except BlockingIOError:
                     time.sleep(min(.05, self.remaining()))
-            try:
-                fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
-            except FileNotFoundError:
-                return self
-            with os.fdopen(fd) as source:
-                value = os.fstat(source.fileno())
-                if not stat.S_ISREG(value.st_mode) or value.st_mode & 0o077 or value.st_uid != os.getuid() or value.st_size > 65536:
-                    raise Failure('ownership')
-                self.data = json.load(source)
-            if self.data.get('identity') != self.identity or self.data.get('version') != 1:
-                raise Failure('ownership')
+            self.data = load_receipt(self.path, self.identity)
             return self
         except BaseException:
             os.close(self.lock)

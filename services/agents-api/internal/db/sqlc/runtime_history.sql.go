@@ -15,32 +15,33 @@ const insertRuntimeHistorySample = `-- name: InsertRuntimeHistorySample :exec
 INSERT INTO runtime_history_samples (
     tenant_id, session_id, environment_id, resolved_at_ns, allocation_id, provider_type,
     status, observed_at_ns, started_at_ns, cpu_usage_seconds, cpu_capacity_cores,
-    memory_usage_bytes, memory_limit_bytes, input_tokens, output_tokens
+    memory_usage_bytes, memory_limit_bytes, input_tokens, output_tokens, cpu_utilization_ratio
 )
 SELECT s.tenant_id, s.id, e.id, $1, $2, $3,
     $4, $5, $6, $7, $8,
-    $9, $10, $11, $12
+    $9, $10, $11, $12, $13
 FROM sessions s JOIN environments e ON e.session_id = s.id
-WHERE s.tenant_id = $13 AND s.id = $14 AND e.id = $15
+WHERE s.tenant_id = $14 AND s.id = $15 AND e.id = $16
 ON CONFLICT (tenant_id, session_id, environment_id, resolved_at_ns) DO NOTHING
 `
 
 type InsertRuntimeHistorySampleParams struct {
-	ResolvedAtNs     int64         `json:"resolved_at_ns"`
-	AllocationID     pgtype.UUID   `json:"allocation_id"`
-	ProviderType     string        `json:"provider_type"`
-	Status           string        `json:"status"`
-	ObservedAtNs     pgtype.Int8   `json:"observed_at_ns"`
-	StartedAtNs      pgtype.Int8   `json:"started_at_ns"`
-	CpuUsageSeconds  pgtype.Float8 `json:"cpu_usage_seconds"`
-	CpuCapacityCores pgtype.Float8 `json:"cpu_capacity_cores"`
-	MemoryUsageBytes pgtype.Int8   `json:"memory_usage_bytes"`
-	MemoryLimitBytes pgtype.Int8   `json:"memory_limit_bytes"`
-	InputTokens      pgtype.Int8   `json:"input_tokens"`
-	OutputTokens     pgtype.Int8   `json:"output_tokens"`
-	TenantID         pgtype.UUID   `json:"tenant_id"`
-	SessionID        pgtype.UUID   `json:"session_id"`
-	EnvironmentID    pgtype.UUID   `json:"environment_id"`
+	ResolvedAtNs        int64         `json:"resolved_at_ns"`
+	AllocationID        pgtype.UUID   `json:"allocation_id"`
+	ProviderType        string        `json:"provider_type"`
+	Status              string        `json:"status"`
+	ObservedAtNs        pgtype.Int8   `json:"observed_at_ns"`
+	StartedAtNs         pgtype.Int8   `json:"started_at_ns"`
+	CpuUsageSeconds     pgtype.Float8 `json:"cpu_usage_seconds"`
+	CpuCapacityCores    pgtype.Float8 `json:"cpu_capacity_cores"`
+	MemoryUsageBytes    pgtype.Int8   `json:"memory_usage_bytes"`
+	MemoryLimitBytes    pgtype.Int8   `json:"memory_limit_bytes"`
+	InputTokens         pgtype.Int8   `json:"input_tokens"`
+	OutputTokens        pgtype.Int8   `json:"output_tokens"`
+	CpuUtilizationRatio pgtype.Float8 `json:"cpu_utilization_ratio"`
+	TenantID            pgtype.UUID   `json:"tenant_id"`
+	SessionID           pgtype.UUID   `json:"session_id"`
+	EnvironmentID       pgtype.UUID   `json:"environment_id"`
 }
 
 func (q *Queries) InsertRuntimeHistorySample(ctx context.Context, arg InsertRuntimeHistorySampleParams) error {
@@ -57,6 +58,7 @@ func (q *Queries) InsertRuntimeHistorySample(ctx context.Context, arg InsertRunt
 		arg.MemoryLimitBytes,
 		arg.InputTokens,
 		arg.OutputTokens,
+		arg.CpuUtilizationRatio,
 		arg.TenantID,
 		arg.SessionID,
 		arg.EnvironmentID,
@@ -65,7 +67,7 @@ func (q *Queries) InsertRuntimeHistorySample(ctx context.Context, arg InsertRunt
 }
 
 const listRuntimeHistorySamples = `-- name: ListRuntimeHistorySamples :many
-SELECT tenant_id, session_id, environment_id, resolved_at_ns, allocation_id, provider_type, status, observed_at_ns, started_at_ns, cpu_usage_seconds, cpu_capacity_cores, memory_usage_bytes, memory_limit_bytes, input_tokens, output_tokens FROM runtime_history_samples
+SELECT tenant_id, session_id, environment_id, resolved_at_ns, allocation_id, provider_type, status, observed_at_ns, started_at_ns, cpu_usage_seconds, cpu_capacity_cores, memory_usage_bytes, memory_limit_bytes, input_tokens, output_tokens, cpu_utilization_ratio FROM runtime_history_samples
 WHERE tenant_id = $1 AND session_id = $2 AND environment_id = $3
   AND resolved_at_ns >= $4 AND resolved_at_ns < $5
 ORDER BY resolved_at_ns
@@ -113,6 +115,7 @@ func (q *Queries) ListRuntimeHistorySamples(ctx context.Context, arg ListRuntime
 			&i.MemoryLimitBytes,
 			&i.InputTokens,
 			&i.OutputTokens,
+			&i.CpuUtilizationRatio,
 		); err != nil {
 			return nil, err
 		}

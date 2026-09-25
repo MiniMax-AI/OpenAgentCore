@@ -11,7 +11,7 @@ export interface SandboxSpecification { resources: SandboxResources; runtime?: S
 export interface InitializeSandboxDeployment {
   provider: SandboxProvider;
   core_url: string;
-  /** Required by Core for new and replacement configurations. */
+  /** Required for Docker/microsandbox. E2B may omit it to adopt its validated template build's CPU and memory. */
   resources?: SandboxResources;
   /** Required for Docker/microsandbox; E2B uses its fixed template build. */
   runtime?: SandboxRuntimeRelease;
@@ -31,7 +31,14 @@ export interface SandboxDeployment {
   generation: number;
   mode: "nodes" | "direct" | "";
   resources: { allocations: number; pending: number };
-  e2b?: { template: string; credential_configured: boolean };
+  e2b?: { template: string; credential_configured: boolean; template_build: SandboxE2BTemplateBuild };
+  /** Idle suspension policy; microsandbox only, otherwise null. */
+  suspension: { idle_seconds: number; retention_seconds: number } | null;
+}
+/** The fixed E2B build as Core read it when the selection was saved; unknown values are null. */
+export interface SandboxE2BTemplateBuild {
+  status: string | null;
+  resources: { cpus: number | null; memory_mib: number | null; root_disk_mib: number | null };
 }
 export interface SandboxNode {
   id: string;

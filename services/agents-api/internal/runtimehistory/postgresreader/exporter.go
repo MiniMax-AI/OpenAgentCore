@@ -28,6 +28,7 @@ func (r *Reader) Export(ctx context.Context, record runtimeobs.ExportRecord) err
 		value := *record.Sample
 		value.CPUUsageSecondsTotal = nil
 		value.CPUCapacityCores = nil
+		value.CPUUtilizationRatio = nil
 		value.MemoryUsageBytes = nil
 		value.MemoryLimitBytes = nil
 		record.Sample = &value
@@ -70,6 +71,9 @@ func validateRecord(record runtimeobs.ExportRecord) error {
 			return invalid
 		}
 		if value.CPUCapacityCores != nil && (!validFloat(*value.CPUCapacityCores) || *value.CPUCapacityCores <= 0) {
+			return invalid
+		}
+		if value.CPUUtilizationRatio != nil && (!validFloat(*value.CPUUtilizationRatio) || *value.CPUUtilizationRatio < 0) {
 			return invalid
 		}
 		if value.MemoryUsageBytes != nil && *value.MemoryUsageBytes > maxSafeInteger {

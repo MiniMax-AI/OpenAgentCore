@@ -108,7 +108,9 @@ nanosecond remainder. CPU utilization is derived from ordered cumulative counter
 inside the allocation. A counter regression resets the baseline, so no interval
 is derived across a compute replacement. Successive valid counter intervals are
 assigned to the bucket containing their right endpoint and combined by CPU-capacity
-time. Memory values are the last observed values in a bucket. Every point contains
+time. E2B reports no cumulative CPU time: each periodic E2B sample stores its
+reported utilization ratio, and the bucket's `utilization_ratio` is the mean of
+the ratios sampled in it, in the same field. Disk observations are not retained. Memory values are the last observed values in a bucket. Every point contains
 observation and contributor counts. Missing values are null and gaps remain gaps.
 Numeric zero is retained as an observed value.
 

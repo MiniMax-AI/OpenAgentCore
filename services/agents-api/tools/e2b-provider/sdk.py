@@ -9,7 +9,9 @@ from e2b.sandbox.commands.command_handle import CommandExitException
 from packaging.version import Version
 
 from e2b.api.client_sync import get_api_client
+from e2b.api.client.api.sandboxes import get_sandboxes_metrics
 from e2b.api.client.api.templates import get_templates_template_id
+from e2b.api.client.models.sandboxes_with_metrics import SandboxesWithMetrics
 from e2b.api.client.models.template_with_builds import TemplateWithBuilds
 from e2b.api.client.types import UNSET
 
@@ -20,9 +22,13 @@ MAX_OUTPUT = 1024 * 1024
 
 
 def validate_deployment(config, remaining):
-    """Read the exact ready build through the pinned SDK, without allocating."""
+    """Read the exact ready build through the pinned SDK, without allocating.
+
+    Returns the build as read, for Core to record with the selection. Without
+    Resources, Core adopts the ready build's CPU and memory as the selection."""
     resources = config.get('Resources')
-    if (not isinstance(resources, dict) or type(resources.get('cpus')) is not int or
+    if resources is not None and (
+            not isinstance(resources, dict) or type(resources.get('cpus')) is not int or
             not 1 <= resources['cpus'] <= 255 or
             type(resources.get('memory_mib')) is not int or
             not 512 <= resources['memory_mib'] <= 1048576 or
@@ -44,10 +50,13 @@ def validate_deployment(config, remaining):
         if matches:
             build = matches[0]
             if (len(matches) != 1 or build.status.value != 'ready' or
-                    type(build.cpu_count) is not int or build.cpu_count != resources['cpus'] or
-                    type(build.memory_mb) is not int or build.memory_mb != resources['memory_mib']):
+                    type(build.cpu_count) is not int or build.cpu_count < 1 or
+                    type(build.memory_mb) is not int or build.memory_mb < 1 or
+                    resources is not None and (build.cpu_count != resources['cpus'] or
+                                               build.memory_mb != resources['memory_mib'])):
                 raise Failure('invalid')
-            return
+            disk = build.disk_size_mb if type(build.disk_size_mb) is int and 0 < build.disk_size_mb < 2 ** 31 else None
+            return {'Status': build.status.value, 'CPUs': build.cpu_count, 'MemoryMiB': build.memory_mb, 'RootDiskMiB': disk}
         cursor = response.headers.get('x-next-token')
         if not cursor:
             raise Failure('invalid')
@@ -55,6 +64,19 @@ def validate_deployment(config, remaining):
             raise Failure('unconfirmed')
         seen.add(cursor)
     raise Failure('unconfirmed')
+
+
+def read_metrics(config, sandbox_ids, remaining):
+    """Latest metrics point per sandbox from one batch request of at most 100 IDs."""
+    if not 1 <= len(sandbox_ids) <= 100:
+        raise Failure('invalid')
+    client = get_api_client(ConnectionConfig(api_key=config['APIKey'], retries=0,
+                                            debug=False, request_timeout=remaining()))
+    response = get_sandboxes_metrics.sync_detailed(client=client, sandbox_ids=sandbox_ids)
+    if (response.status_code != 200 or not isinstance(response.parsed, SandboxesWithMetrics) or
+            not isinstance(response.parsed.sandboxes, dict)):
+        raise Failure('unconfirmed')
+    return response.parsed.sandboxes
 
 
 def connection_material(sandbox):

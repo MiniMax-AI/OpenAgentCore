@@ -32,20 +32,27 @@ func (q *Queries) ClaimWebSandboxDeployment(ctx context.Context, installationID 
 
 const initializeSandboxDeployment = `-- name: InitializeSandboxDeployment :exec
 UPDATE runtime_deployment SET provider_kind=$1, core_url=$2, backend_fingerprint=$3,
-idle_seconds=$4, retention_seconds=$5, generation=$6, mode=$7, e2b_template=$8, e2b_credential=$9, specification=$10, updated_at=clock_timestamp() WHERE singleton=true
+idle_seconds=$4, retention_seconds=$5, generation=$6, mode=$7, e2b_template=$8, e2b_credential=$9, specification=$10,
+e2b_template_build_status=$11, e2b_template_cpus=$12,
+e2b_template_memory_mib=$13, e2b_template_root_disk_mib=$14,
+updated_at=clock_timestamp() WHERE singleton=true
 `
 
 type InitializeSandboxDeploymentParams struct {
-	ProviderKind       string `json:"provider_kind"`
-	CoreUrl            string `json:"core_url"`
-	BackendFingerprint string `json:"backend_fingerprint"`
-	IdleSeconds        int64  `json:"idle_seconds"`
-	RetentionSeconds   int64  `json:"retention_seconds"`
-	Generation         int64  `json:"generation"`
-	Mode               string `json:"mode"`
-	E2bTemplate        string `json:"e2b_template"`
-	E2bCredential      []byte `json:"e2b_credential"`
-	Specification      []byte `json:"specification"`
+	ProviderKind           string      `json:"provider_kind"`
+	CoreUrl                string      `json:"core_url"`
+	BackendFingerprint     string      `json:"backend_fingerprint"`
+	IdleSeconds            int64       `json:"idle_seconds"`
+	RetentionSeconds       int64       `json:"retention_seconds"`
+	Generation             int64       `json:"generation"`
+	Mode                   string      `json:"mode"`
+	E2bTemplate            string      `json:"e2b_template"`
+	E2bCredential          []byte      `json:"e2b_credential"`
+	Specification          []byte      `json:"specification"`
+	E2bTemplateBuildStatus pgtype.Text `json:"e2b_template_build_status"`
+	E2bTemplateCpus        pgtype.Int4 `json:"e2b_template_cpus"`
+	E2bTemplateMemoryMib   pgtype.Int4 `json:"e2b_template_memory_mib"`
+	E2bTemplateRootDiskMib pgtype.Int4 `json:"e2b_template_root_disk_mib"`
 }
 
 func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg InitializeSandboxDeploymentParams) error {
@@ -60,6 +67,10 @@ func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg Initializ
 		arg.E2bTemplate,
 		arg.E2bCredential,
 		arg.Specification,
+		arg.E2bTemplateBuildStatus,
+		arg.E2bTemplateCpus,
+		arg.E2bTemplateMemoryMib,
+		arg.E2bTemplateRootDiskMib,
 	)
 	return err
 }

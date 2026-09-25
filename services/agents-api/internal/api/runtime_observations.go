@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
-	"sync"
 	"time"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
@@ -23,6 +22,19 @@ var runtimeProviderTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
 type RuntimeObservationService interface {
 	ObserveSession(context.Context, string, string) (runtimeobs.Observation, error)
+	ObserveSessions(context.Context, []runtimeobs.SessionIdentity, runtimeobs.PageOptions) ([]runtimeobs.Observation, []error)
+}
+
+// runtimeObservationPage is the bounded fan-out shared by both list routes.
+var runtimeObservationPage = runtimeobs.PageOptions{Concurrency: runtimeObservationConcurrency, SourceTimeout: runtimeObservationSourceBudget}
+
+func firstRuntimeObservationError(errs []error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func WithRuntimeObservations(service RuntimeObservationService) Option {
@@ -91,40 +103,17 @@ func (h *Handler) listRuntimeObservations(w http.ResponseWriter, r *http.Request
 		writeStoreError(w, r, err)
 		return
 	}
-	observations := make([]runtimeobs.Observation, len(page.Sessions))
-	semaphore := make(chan struct{}, runtimeObservationConcurrency)
-	work, stop := context.WithCancel(ctx)
-	defer stop()
-	var wait sync.WaitGroup
-	var once sync.Once
-	var firstErr error
+	sessions := make([]runtimeobs.SessionIdentity, len(page.Sessions))
 	for index, session := range page.Sessions {
-		wait.Add(1)
-		go func(index int, sessionID string) {
-			defer wait.Done()
-			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
-			case <-work.Done():
-				return
-			}
-			sampleCtx, sampleCancel := context.WithTimeout(work, runtimeObservationSourceBudget)
-			defer sampleCancel()
-			value, err := h.runtimeObservations.ObserveSession(sampleCtx, tenantID(r), sessionID)
-			if err != nil {
-				once.Do(func() { firstErr = err; stop() })
-				return
-			}
-			observations[index] = value
-		}(index, session.ID)
+		sessions[index] = runtimeobs.SessionIdentity{TenantID: tenantID(r), SessionID: session.ID}
 	}
-	wait.Wait()
-	if firstErr != nil {
-		writeStoreError(w, r, firstErr)
-		return
-	}
+	observations, errs := h.runtimeObservations.ObserveSessions(ctx, sessions, runtimeObservationPage)
 	if err := ctx.Err(); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Runtime observation collection exceeded its request budget.")
+		return
+	}
+	if err := firstRuntimeObservationError(errs); err != nil {
+		writeStoreError(w, r, err)
 		return
 	}
 	response := v1.RuntimeObservationList{Object: "list", Data: make([]v1.RuntimeObservation, 0, len(observations)), HasMore: page.NextCursor != ""}
@@ -216,8 +205,8 @@ func runtimeObservationResponse(observation runtimeobs.Observation) (v1.RuntimeO
 		startedAt := observation.Sample.StartedAt.Unix()
 		result.StartedAt = &startedAt
 	}
-	if observation.Sample.CPUUsageSecondsTotal != nil || observation.Sample.CPUCapacityCores != nil {
-		result.CPU = &v1.RuntimeCPUObservation{UsageSecondsTotal: observation.Sample.CPUUsageSecondsTotal, CapacityCores: observation.Sample.CPUCapacityCores}
+	if observation.Sample.CPUUsageSecondsTotal != nil || observation.Sample.CPUCapacityCores != nil || observation.Sample.CPUUtilizationRatio != nil {
+		result.CPU = &v1.RuntimeCPUObservation{UsageSecondsTotal: observation.Sample.CPUUsageSecondsTotal, CapacityCores: observation.Sample.CPUCapacityCores, UtilizationRatio: observation.Sample.CPUUtilizationRatio}
 	}
 	if observation.Sample.MemoryUsageBytes != nil || observation.Sample.MemoryLimitBytes != nil {
 		result.Memory = &v1.RuntimeMemoryObservation{UsageBytes: observation.Sample.MemoryUsageBytes, LimitBytes: observation.Sample.MemoryLimitBytes}

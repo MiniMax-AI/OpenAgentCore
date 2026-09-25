@@ -48,15 +48,16 @@ type samplerObserver struct {
 	wait        <-chan struct{}
 }
 
-func (o *samplerObserver) ObserveSessionForHistory(ctx context.Context, tenant, session string, _ OwnershipChecker, sourceTimeout time.Duration) (Observation, error) {
+func (o *samplerObserver) ObserveSessionsForHistory(ctx context.Context, sessions []SessionIdentity, _ OwnershipChecker, options PageOptions) ([]Observation, []error) {
 	o.mu.Lock()
 	o.active++
 	if o.active > o.max {
 		o.max = o.active
 	}
 	o.mu.Unlock()
+	errs := make([]error, len(sessions))
 	if o.wait != nil {
-		sourceCtx, cancel := context.WithTimeout(ctx, sourceTimeout)
+		sourceCtx, cancel := context.WithTimeout(ctx, options.SourceTimeout)
 		defer cancel()
 		select {
 		case <-o.wait:
@@ -64,17 +65,40 @@ func (o *samplerObserver) ObserveSessionForHistory(ctx context.Context, tenant, 
 			o.mu.Lock()
 			o.active--
 			o.mu.Unlock()
-			return Observation{}, sourceCtx.Err()
+			for index := range errs {
+				errs[index] = sourceCtx.Err()
+			}
+			return make([]Observation, len(sessions)), errs
 		}
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.active--
-	o.sessions = append(o.sessions, SessionIdentity{TenantID: tenant, SessionID: session})
-	if o.fail[session] {
-		return Observation{}, errors.New("test failure")
+	for index, session := range sessions {
+		o.sessions = append(o.sessions, session)
+		if o.fail[session.SessionID] {
+			errs[index] = errors.New("test failure")
+		}
 	}
-	return Observation{}, nil
+	return make([]Observation, len(sessions)), errs
+}
+
+// countingSource blocks each per-target read until its source deadline.
+type countingSource struct {
+	mu          sync.Mutex
+	active, max int
+}
+
+func (s *countingSource) Observe(ctx context.Context, _ Target) (Sample, error) {
+	s.mu.Lock()
+	s.active++
+	s.max = max(s.max, s.active)
+	s.mu.Unlock()
+	<-ctx.Done()
+	s.mu.Lock()
+	s.active--
+	s.mu.Unlock()
+	return Sample{}, ctx.Err()
 }
 
 type samplerOwner struct{ err error }
@@ -120,20 +144,25 @@ func TestSamplerSweepsEveryPageAndIsolatesSessionFailures(t *testing.T) {
 }
 
 func TestSamplerBoundsConcurrencyAndSourceDeadline(t *testing.T) {
-	blocked := make(chan struct{})
-	observer := &samplerObserver{wait: blocked}
+	source := &countingSource{}
+	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	service, err := NewService(fixedResolver{target: target}, map[string]Source{"provider": source})
+	if err != nil {
+		t.Fatal(err)
+	}
 	lister := &samplerLister{pages: map[string]SessionPage{
 		"": {Sessions: []SessionIdentity{
 			{TenantID: "t", SessionID: "1"}, {TenantID: "t", SessionID: "2"}, {TenantID: "t", SessionID: "3"},
 		}},
 	}}
-	sampler, err := NewSampler(lister, observer, samplerOwner{}, SamplerOptions{Interval: time.Minute, Concurrency: 2, SourceTimeout: 20 * time.Millisecond})
+	sampler, err := NewSampler(lister, service, samplerOwner{}, SamplerOptions{Interval: time.Minute, Concurrency: 2, SourceTimeout: 20 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
 	result := sampler.sweep(t.Context())
-	if !result.Complete || result.Observed != 0 || result.Failed != 3 || observer.max != 2 {
-		t.Fatalf("unexpected bounded result: result=%+v max=%d", result, observer.max)
+	// Source deadlines are recorded as sample_timeout observations.
+	if !result.Complete || result.Observed != 3 || result.Failed != 0 || source.max != 2 {
+		t.Fatalf("unexpected bounded result: result=%+v max=%d", result, source.max)
 	}
 }
 

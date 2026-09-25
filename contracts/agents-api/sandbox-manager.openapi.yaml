@@ -18,9 +18,110 @@ definitions:
   api.AdminRuntimeObservation:
     properties:
       observation:
-        $ref: '#/definitions/v1.RuntimeObservation'
+        $ref: '#/definitions/api.AdminRuntimeObservationDetail'
       project_id:
         type: string
+    type: object
+  api.AdminRuntimeObservationDetail:
+    properties:
+      allocation_created_at:
+        minimum: 0
+        type: integer
+        x-nullable: true
+      cpu:
+        allOf:
+          - $ref: '#/definitions/v1.RuntimeCPUObservation'
+        x-nullable: true
+      disk:
+        allOf:
+          - $ref: '#/definitions/api.RuntimeDiskObservation'
+        description: |-
+          Current Runtime disk usage and capacity. E2B reports them; Docker and
+          microsandbox observations return null.
+        x-nullable: true
+      environment_id:
+        format: uuid
+        type: string
+        x-nullable: true
+      id:
+        format: uuid
+        type: string
+      instance:
+        $ref: '#/definitions/v1.RuntimeInstance'
+      lifecycle_state:
+        enum:
+          - active
+          - sleeping
+          - transitioning
+          - pending
+          - stopped
+        type: string
+        x-nullable: true
+      memory:
+        allOf:
+          - $ref: '#/definitions/v1.RuntimeMemoryObservation'
+        x-nullable: true
+      mode:
+        enum:
+          - none
+          - self_hosted
+          - openai_hosted
+        type: string
+      object:
+        enum:
+          - agent.runtime_observation
+        type: string
+      observed_at:
+        minimum: 0
+        type: integer
+        x-nullable: true
+      provider_type:
+        type: string
+        x-nullable: true
+      reason:
+        enum:
+          - runtime_mode_not_observable
+          - allocation_pending
+          - runtime_not_running
+          - source_not_configured
+          - sample_timeout
+          - sample_unavailable
+        type: string
+        x-nullable: true
+      resolved_at:
+        minimum: 0
+        type: integer
+      session_id:
+        format: uuid
+        type: string
+      started_at:
+        minimum: 0
+        type: integer
+        x-nullable: true
+      status:
+        enum:
+          - observed
+          - unsupported
+          - unavailable
+        type: string
+    required:
+      - allocation_created_at
+      - cpu
+      - disk
+      - environment_id
+      - id
+      - instance
+      - lifecycle_state
+      - memory
+      - mode
+      - object
+      - observed_at
+      - provider_type
+      - reason
+      - resolved_at
+      - session_id
+      - started_at
+      - status
     type: object
   api.AdminRuntimeObservationList:
     properties:
@@ -118,6 +219,20 @@ definitions:
           $ref: '#/definitions/store.ResourceOwner'
         type: array
     type: object
+  api.RuntimeDiskObservation:
+    properties:
+      limit_bytes:
+        minimum: 1
+        type: integer
+        x-nullable: true
+      usage_bytes:
+        minimum: 0
+        type: integer
+        x-nullable: true
+    required:
+      - limit_bytes
+      - usage_bytes
+    type: object
   api.SandboxAllocationList:
     properties:
       data:
@@ -136,7 +251,11 @@ definitions:
       provider:
         type: string
       resources:
-        $ref: '#/definitions/sandbox.Resources'
+        allOf:
+          - $ref: '#/definitions/sandbox.Resources'
+        description: |-
+          Per-sandbox limits, required for Docker and microsandbox. E2B may omit
+          them; Core then uses the validated template build's cpus and memory_mib.
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'
     type: object
@@ -149,7 +268,11 @@ definitions:
       provider:
         type: string
       resources:
-        $ref: '#/definitions/sandbox.Resources'
+        allOf:
+          - $ref: '#/definitions/sandbox.Resources'
+        description: |-
+          Per-sandbox limits, required for Docker and microsandbox. E2B may omit
+          them; Core then uses the validated template build's cpus and memory_mib.
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'
     type: object
@@ -647,6 +770,11 @@ definitions:
         $ref: '#/definitions/sandbox.DeploymentSpec'
       specification_digest:
         type: string
+      suspension:
+        allOf:
+          - $ref: '#/definitions/store.SandboxSuspensionView'
+        description: Idle suspension policy; microsandbox only, otherwise null.
+        x-nullable: true
     type: object
   store.RuntimeNode:
     properties:
@@ -868,12 +996,25 @@ definitions:
       pending:
         type: integer
     type: object
+  store.SandboxE2BTemplateBuildView:
+    properties:
+      resources:
+        $ref: '#/definitions/store.SandboxTemplateResources'
+      status:
+        description: Build status at selection time; validation admits only ready builds.
+        type: string
+        x-nullable: true
+    type: object
   store.SandboxE2BView:
     properties:
       credential_configured:
         type: boolean
       template:
         type: string
+      template_build:
+        allOf:
+          - $ref: '#/definitions/store.SandboxE2BTemplateBuildView'
+        description: The fixed template build as Core read it when this selection was saved.
     type: object
   store.SandboxMaintenanceRequest:
     properties:
@@ -881,6 +1022,25 @@ definitions:
         type: integer
       maintenance:
         type: boolean
+    type: object
+  store.SandboxSuspensionView:
+    properties:
+      idle_seconds:
+        type: integer
+      retention_seconds:
+        type: integer
+    type: object
+  store.SandboxTemplateResources:
+    properties:
+      cpus:
+        type: integer
+        x-nullable: true
+      memory_mib:
+        type: integer
+        x-nullable: true
+      root_disk_mib:
+        type: integer
+        x-nullable: true
     type: object
   store.WriteOperation:
     properties:
@@ -5306,7 +5466,7 @@ paths:
         - Core Administration
   /core/v1/admin/runtime-observations:
     get:
-      description: Deployment administrator only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning.
+      description: Deployment administrator only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
       parameters:
         - description: Last Session ID from the preceding page
           in: query
@@ -5543,7 +5703,7 @@ paths:
         - Environment Executor
   /core/v1/sandbox/deployment:
     get:
-      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
       produces:
         - application/json
       responses:
@@ -5583,7 +5743,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Selects a provider, enforced resource limits, pinned Runtime release and public Core origin. E2B credentials are write-only. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
+      description: Selects a provider, enforced resource limits, pinned Runtime release and public Core origin. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
       parameters:
         - description: Deployment selection
           in: body
@@ -5626,7 +5786,7 @@ paths:
     put:
       consumes:
         - application/json
-      description: Requires maintenance, the current generation and verified cleanup of all old resources. Credentials are write-only. The public Core origin stays unchanged. Historical records are retained; old node credentials and enrollments are retired. Explicitly resume after success. Never automatically retry an uncertain write.
+      description: Requires maintenance, the current generation and verified cleanup of all old resources. Credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory. The public Core origin stays unchanged. Historical records are retained; old node credentials and enrollments are retired. Explicitly resume after success. Never automatically retry an uncertain write.
       parameters:
         - description: Replacement deployment selection
           in: body

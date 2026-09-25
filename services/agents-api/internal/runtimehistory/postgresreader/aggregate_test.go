@@ -1,10 +1,12 @@
 package postgresreader
 
 import (
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
-	"github.com/google/uuid"
+	"math"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
+	"github.com/google/uuid"
 )
 
 func TestAggregateSeriesUsesProviderObservationOrder(t *testing.T) {
@@ -90,5 +92,28 @@ func TestAggregateIgnoresLookbackOnlySeriesForSeriesLimit(t *testing.T) {
 	}
 	if len(result.Series) != 1 || len(result.Series[0].Points) != 1 {
 		t.Fatalf("lookback-only incarnations consumed returned-series budget: %+v", result.Series)
+	}
+}
+
+func TestAggregateSeriesAveragesProviderReportedUtilization(t *testing.T) {
+	start := time.Date(2026, 9, 25, 8, 0, 0, 0, time.UTC)
+	query := testQuery(start)
+	startedAt := start.Add(-time.Minute)
+	samples := []*rawSample{}
+	for index, ratio := range []float64{.2, .4} {
+		observedAt := start.Add(time.Duration(5+index*15) * time.Second)
+		samples = append(samples, &rawSample{
+			resolvedAt: observedAt, observedAt: &observedAt, allocation: testAllocation, startedAt: &startedAt,
+			provider: "e2b", status: runtimeobs.StatusObserved, hasSample: true,
+			metrics: map[string]float64{CPUUtilizationName: ratio, CPUCapacityName: 2, MemoryUsageName: 100},
+		})
+	}
+	points, err := aggregateSeries(query, samples)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 1 || points[0].CPUUtilizationRatio == nil || math.Abs(*points[0].CPUUtilizationRatio-.3) > 1e-12 ||
+		points[0].CPUContributorCount != 2 || *points[0].CPUCapacityCores != 2 {
+		t.Fatalf("reported utilization was not kept per bucket: %+v", points)
 	}
 }

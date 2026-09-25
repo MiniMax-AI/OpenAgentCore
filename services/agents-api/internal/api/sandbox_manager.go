@@ -57,7 +57,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 }
 
 // @Summary Retrieve sandbox deployment
-// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
+// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth

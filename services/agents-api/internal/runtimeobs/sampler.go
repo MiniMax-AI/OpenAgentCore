@@ -3,7 +3,6 @@ package runtimeobs
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 )
 
@@ -28,8 +27,10 @@ type SessionLister interface {
 	ListRuntimeObservationSessions(context.Context, string, int) (SessionPage, error)
 }
 
+// HistoryObserver reads one listed page, so providers with a batch read can
+// sample the whole page in one bounded request.
 type HistoryObserver interface {
-	ObserveSessionForHistory(context.Context, string, string, OwnershipChecker, time.Duration) (Observation, error)
+	ObserveSessionsForHistory(context.Context, []SessionIdentity, OwnershipChecker, PageOptions) ([]Observation, []error)
 }
 
 type OwnershipChecker interface {
@@ -173,43 +174,27 @@ func (s *Sampler) checkOwnership(ctx context.Context) error {
 }
 
 func (s *Sampler) samplePage(ctx context.Context, sessions []SessionIdentity) (int, int) {
-	semaphore := make(chan struct{}, s.options.Concurrency)
-	var wait sync.WaitGroup
-	var mu sync.Mutex
-	observed, failed := 0, 0
+	valid := make([]SessionIdentity, 0, len(sessions))
 	for _, session := range sessions {
-		if session.TenantID == "" || session.SessionID == "" {
-			failed++
-			continue
+		if session.TenantID != "" && session.SessionID != "" {
+			valid = append(valid, session)
 		}
-		wait.Add(1)
-		go func(session SessionIdentity) {
-			defer wait.Done()
-			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
-			case <-ctx.Done():
-				mu.Lock()
-				failed++
-				mu.Unlock()
-				return
-			}
-			if err := s.checkOwnership(ctx); err != nil {
-				mu.Lock()
-				failed++
-				mu.Unlock()
-				return
-			}
-			_, err := s.observer.ObserveSessionForHistory(ctx, session.TenantID, session.SessionID, s.owner, s.options.SourceTimeout)
-			mu.Lock()
-			if err == nil {
-				observed++
-			} else {
-				failed++
-			}
-			mu.Unlock()
-		}(session)
 	}
-	wait.Wait()
+	failed := len(sessions) - len(valid)
+	if len(valid) == 0 {
+		return 0, failed
+	}
+	if err := s.checkOwnership(ctx); err != nil {
+		return 0, len(sessions)
+	}
+	_, errs := s.observer.ObserveSessionsForHistory(ctx, valid, s.owner, PageOptions{Concurrency: s.options.Concurrency, SourceTimeout: s.options.SourceTimeout})
+	observed := 0
+	for index := range valid {
+		if index < len(errs) && errs[index] == nil {
+			observed++
+		} else {
+			failed++
+		}
+	}
 	return observed, failed
 }
