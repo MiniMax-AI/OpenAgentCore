@@ -13,7 +13,8 @@ function selection(value: unknown, invalid: Invalid): SessionExecutionConfigurat
   return { value: value.value as string | null, source: value.source as ExecutionConfigurationSource };
 }
 
-function safeProvider(value: unknown, invalid: Invalid): ModelProviderView {
+/** A safe provider view: known members only, never a key, and a plain HTTPS endpoint. */
+export function projectModelProviderView(value: unknown, invalid: Invalid): ModelProviderView {
   if (!isRecord(value) || !onlyFields(value, providerFields) ||
     (value.protocol !== "responses" && value.protocol !== "anthropic") ||
     typeof value.base_url !== "string" || typeof value.api_key_configured !== "boolean" ||
@@ -38,8 +39,8 @@ export function projectExecutionConfiguration(value: unknown, sessionId: string,
     !isRecord(value.model_provider) || !exactFields(value.model_provider, new Set(["source", "status", "configuration"]))) return invalid();
   const provider = value.model_provider;
   let configuration: ModelProviderView | null = null;
-  if (provider.status === "available" && (provider.source === "session" || provider.source === "agent")) {
-    configuration = safeProvider(provider.configuration, invalid);
+  if (provider.status === "available" && (provider.source === "session" || provider.source === "agent" || provider.source === "deployment")) {
+    configuration = projectModelProviderView(provider.configuration, invalid);
   } else if (!((provider.status === "redacted" && provider.source === "deployment") ||
     (provider.status === "unavailable" && provider.source === "unknown")) || provider.configuration !== null) return invalid();
   return {

@@ -36,14 +36,13 @@ func sessionExecutionProjection(input sessionRequest, saved *v1.SavedAgent, inhe
 	}
 	selection := v1.ExecutionProviderSelection{Source: "unknown", Status: "unavailable"}
 	if provider != nil {
-		selection.Source, selection.Status = "deployment", "redacted"
+		// Deployment defaults are readable with the same Core key, so new
+		// Sessions record their safe view too; historical rows stay redacted.
+		selection.Source, selection.Status, selection.Configuration = "deployment", "available", provider.SafeView()
 		if input.XAgentsCore != nil && input.XAgentsCore.ModelProvider != nil {
 			selection.Source = "session"
 		} else if inherited != nil {
 			selection.Source = "agent"
-		}
-		if selection.Source != "deployment" {
-			selection.Status, selection.Configuration = "available", provider.SafeView()
 		}
 	}
 	return v1.SessionExecutionConfiguration{

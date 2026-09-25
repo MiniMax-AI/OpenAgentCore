@@ -171,12 +171,12 @@ Node providers use explicit local Unix Docker sockets, ignoring ambient
 socket is mounted in a Runtime. Caller-managed `self_hosted` enrollment retains
 its separate public lifecycle.
 
-For a trusted model endpoint, `AGENTS_API_EXECUTION_OPTIONS_FILE` can supply the
-existing adapter options as a JSON object, including `codex_provider` with `name`,
-`base_url`, `bearer_token` and `wire_api`. Protect this file with mode 0600; it is
-read at startup, copied for each execution and never persisted as public Session
-configuration. Omit it for the adapter's existing model configuration. Changes
-require a Core restart. Do not place credentials in public requests or images.
+Hosted Codex needs a Responses-compatible model provider: either the Session's
+`x_agents_core.model_provider` or the deployment default for `codex`, set with the
+Core key in Web or through `PUT /core/v1/harnesses/codex/model-provider`. Core
+freezes the bundle in the Session's encrypted snapshot and delivers it as the
+adapter's `codex_provider`; a hosted Session without one is rejected with 400
+`model_provider_required`. Do not place credentials in images.
 
 With the qualified Codex image and Docker provider configured, create an idle or
 initial-text Session using `environment: {"type": "openai_hosted"}`. Core commits

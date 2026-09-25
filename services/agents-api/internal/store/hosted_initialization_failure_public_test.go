@@ -111,7 +111,7 @@ func hostedFailureSession(t *testing.T, s *store.Store, tenant string, input sto
 	if input.Initialization.Env == nil {
 		input.Initialization.Env = map[string]string{"SCAN_VALUE": hostedFailureCanary}
 	}
-	session, err := s.CreateSession(t.Context(), tenant, input)
+	session, err := s.CreateSession(t.Context(), tenant, store.WithFixtureModelProvider(input))
 	if err != nil {
 		t.Fatal(err)
 	}

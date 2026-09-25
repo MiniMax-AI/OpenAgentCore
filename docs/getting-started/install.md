@@ -170,8 +170,11 @@ When a Session needs a sandbox, Core asks the
 enabled Provider to create one from the prepared Runtime image and initializes
 the colocated daemon, native harness and workspace.
 
-Once a node is ready, you can [make an API request](quickstart.md). The model
-credentials are supplied with execution requests, not during node installation.
+Once a node is ready, you can [make an API request](quickstart.md). Hosted Sessions
+take their model from the request, a saved Agent or the deployment default model
+provider that you set per harness in Web (System) with the Core key; node
+installation never needs a model credential. Without any of these, hosted Session
+creation fails with 400 `model_provider_required`.
 
 ## Connect a user-managed Runtime
 
@@ -220,8 +223,13 @@ and verifies the matching bootstrap before starting it:
 Use the exact Environment ID and reachable `remote_url` returned by your Session.
 The Linux amd64 host needs Python 3.9+ and Docker access as a non-root user.
 The installer prepares the matched daemon, native harnesses and local workspace
-inside the same isolated Runtime used for hosted execution. No shared node,
-model credential or source build is needed. Model access remains execution input.
+inside the same isolated Runtime used for hosted execution. No shared node or
+source build is needed. The Session itself must carry its model: create it with
+`x_agents_core.model_provider` or from a saved Agent that has one. Deployment
+default model providers do not apply to self-hosted Sessions, and creation without
+a provider fails with 400 `model_provider_required`. Core delivers the frozen
+provider only over this Environment's executor connection; the executor host keeps
+it in the Runtime's harness home, which tools and public Files cannot read.
 
 The command waits for Core to confirm that this Environment and its restricted
 credential are connected. It distinguishes a running container from a connected
@@ -364,8 +372,9 @@ sandboxes without a node installer. Own machines use the existing node command.
 Provider, per-sandbox resources and Runtime changes all require maintenance and
 completed resource cleanup; see
 [provider switching](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
-Session creation supplies the model,
-harness and write-only model credentials. Core owns sandbox preparation and
+Session creation supplies the model and
+harness; model credentials come from the request, a saved Agent or the deployment
+default model provider. Core owns sandbox preparation and
 Runtime startup. Configuration is never injected into a public Agent instruction
 or baked into a Runtime image.
 

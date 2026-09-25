@@ -14,6 +14,11 @@ import httpx2
 from openai import APIStatusError, OpenAI
 
 
+# Self-hosted Sessions carry their own write-only model provider; nothing here calls it.
+PROVIDER = {"x_agents_core": {"model_provider": {"protocol": "responses", "base_url": "https://model.fixture.example/v1",
+                                                 "api_key": "fixture-model-key"}}}
+
+
 def main():
     settings = json.load(sys.stdin)
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
@@ -73,10 +78,10 @@ def main():
         if phase == "create":
             request = {"agent": {"model": "test-model", "instructions": "Controlled cancellation admission."},
                        "environment": {"type": "self_hosted", "workspace_directory": "/workspace"}}
-            main_session = sessions.create(**request)
-            initial = sessions.create(**request, input="Keep this pending initial input.")
-            later = sessions.create(**request)
-            deleted = sessions.create(**request)
+            main_session = sessions.create(**request, extra_body=PROVIDER)
+            initial = sessions.create(**request, input="Keep this pending initial input.", extra_body=PROVIDER)
+            later = sessions.create(**request, extra_body=PROVIDER)
+            deleted = sessions.create(**request, extra_body=PROVIDER)
             sessions.delete(deleted.id)
             result = {"id": main_session.id, "environment_id": main_session.environment.id,
                       "initial_id": initial.id, "later_id": later.id, "deleted_id": deleted.id,

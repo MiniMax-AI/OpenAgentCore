@@ -70,6 +70,14 @@ Any other member of `x_agents_core` is rejected with 400. Deployment, placement,
 credential issuance and operational reads are not part of `/v1`; they belong to
 `/core/v1`, which only the Core key can call (see the [API index](README.md)).
 
+A Session's model provider comes from the Session's `x_agents_core.model_provider`,
+then a saved Agent's, then, for `openai_hosted` only, the deployment default that
+the administrator sets per harness. `openai_hosted` and `self_hosted` Sessions
+must end up with one: otherwise creation returns 400 with code
+`model_provider_required` and param `x_agents_core.model_provider`, and nothing is
+written. `none` Sessions accept only the deployment default. See
+[model execution](../../contracts/agents-api/model-execution.md).
+
 An application reads a Session's model from `agent.model` and an explicitly
 selected harness from `agent.x_agents_core.harness`; a Session on the deployment
 default harness omits `agent.x_agents_core`. `/v1` has no execution-configuration

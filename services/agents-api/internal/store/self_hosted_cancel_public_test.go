@@ -22,7 +22,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewTestStore(t)
+	s, pool := store.NewModelTestStore(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{
@@ -176,7 +176,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 			stop(false)
 			server.Close()
 			pool.Close()
-			s, pool = store.NewTestStore(t)
+			s, pool = store.NewModelTestStore(t)
 			server, stop = serve()
 			settings["base"] = server.URL
 		}

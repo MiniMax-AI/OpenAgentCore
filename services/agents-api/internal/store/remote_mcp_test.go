@@ -26,7 +26,8 @@ func TestSelfHostedServiceMCPRejectedWithoutWrites(t *testing.T) {
 				tool["credential_id"] = credential.ID
 			}
 			tool["required"] = strings.HasPrefix(mode, "required")
-			body := map[string]any{"agent": map[string]any{"model": "model", "tools": []any{tool}}, "environment": map[string]string{"type": "self_hosted", "workspace_directory": "/workspace"}, "vault_ids": []string{vault.ID}}
+			body := map[string]any{"agent": map[string]any{"model": "model", "tools": []any{tool}}, "environment": map[string]string{"type": "self_hosted", "workspace_directory": "/workspace"}, "vault_ids": []string{vault.ID},
+				"x_agents_core": map[string]any{"model_provider": store.FixtureModelProvider("codex")}}
 			switch mode {
 			case "anonymous", "required anonymous", "unattached":
 				body["vault_ids"] = []string{}

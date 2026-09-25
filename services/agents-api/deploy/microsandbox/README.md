@@ -128,8 +128,9 @@ controls. Never repoint a retained backend namespace or overwrite node identity
 to bypass a configuration mismatch.
 
 Use the existing [standalone Core setup](../../README.md) for the database,
-migrations, administrator credentials and encryption key. Model provider settings
-retain the private `AGENTS_API_EXECUTION_OPTIONS_FILE` contract. The saved public
+migrations, administrator credentials and encryption key. Model providers come from
+the Session request, a saved Agent or the deployment default stored in Core; see
+[model execution](../../../../contracts/agents-api/model-execution.md#deployment-defaults). The saved public
 Core origin must be reachable from the guest; `localhost` in a microVM refers to
 the guest itself. Do not configure a Core-local managed-runtimes file.
 

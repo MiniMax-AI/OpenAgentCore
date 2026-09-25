@@ -85,10 +85,6 @@
 
 `GET /core/v1/sandbox/runtime-observations` 为每条观测标明所属项目，但不含 Session 的标题、Agent、状态和用量，所以沙箱监控要按 ID 逐个读取托管 Session（每次刷新最多 100 个）。增加 `expand=session` 选项返回这些字段，就可以省掉这些读取。
 
-### P2：部署配置写入
-
-控制台无法读取或修改各执行引擎的部署默认模型 provider，Core 从 `AGENTS_API_EXECUTION_OPTIONS_FILE` 读取它们。Web API 的写接口（例如 `PUT /core/v1/deployment/model-providers/{harness}`，凭据只写）可以让运维设置部署默认值。优先级必须保持“Session → Agent → 部署”，且绝不返回密钥。
-
 ### P2：密钥
 
 - API 密钥的 `last_used_at` 和按密钥统计的请求数（随上面的 API 请求指标一起提供）。

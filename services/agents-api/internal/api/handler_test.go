@@ -130,7 +130,7 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 		{"invalid auth", "Bearer wrong", "agents=v1", "/v1/agents/sessions", valid, 401},
 		{"missing beta", "Bearer test-api-key", "", "/v1/agents/sessions", valid, 400},
 		{"tenant body", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"tenant_id":"other","agent":`, 1), 400},
-		{"hosted environment without managed deployment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"none"`, `"openai_hosted"`, 1), 503},
+		{"hosted environment without managed deployment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(strings.Replace(valid, `"none"`, `"openai_hosted"`, 1), `"input":`, fixtureSessionProvider+`,"input":`, 1), 503},
 		{"self-hosted environment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"none"`, `"self_hosted"`, 1), 400},
 		{"initial input", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", valid, 503},
 		{"stream unavailable", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"stream":true,"agent":`, 1), 503},

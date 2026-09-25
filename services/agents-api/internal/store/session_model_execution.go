@@ -12,17 +12,18 @@ import (
 )
 
 // The embedded provider preserves the original flat ciphertext format. Native
-// options are private deployment defaults and never enter public configuration.
+// options exist only in historical snapshots frozen from the retired operator
+// options file; they never enter public configuration and are no longer written.
 type sessionModelExecution struct {
 	v1.ModelProviderInput
 	NativeOptions map[string]any `json:"native_options,omitempty"`
 }
 
-func (s *Store) saveSessionModelExecution(ctx context.Context, q *sqlc.Queries, tenant string, session pgtype.UUID, provider *v1.ModelProviderInput, options map[string]any) error {
+func (s *Store) saveSessionModelExecution(ctx context.Context, q *sqlc.Queries, tenant string, session pgtype.UUID, provider *v1.ModelProviderInput) error {
 	if provider == nil {
 		return nil
 	}
-	raw, err := json.Marshal(sessionModelExecution{ModelProviderInput: *provider, NativeOptions: options})
+	raw, err := json.Marshal(sessionModelExecution{ModelProviderInput: *provider})
 	if err != nil {
 		return err
 	}

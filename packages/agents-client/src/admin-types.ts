@@ -147,7 +147,8 @@ export interface AdminAuditEntry {
   admin_credential_id: string;
   actor_label: string;
   action: string;
-  project_id: string;
+  /** Null for deployment-wide writes, such as deployment default model providers. */
+  project_id: string | null;
   resource_type: string;
   resource_id: string;
   /** Non-empty only on historical `copy` entries from the removed copy operation. */

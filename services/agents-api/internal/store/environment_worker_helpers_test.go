@@ -42,7 +42,7 @@ func workerEnvironmentReservation(t *testing.T, h *dispatchHarness) store.Enviro
 
 func unboundWorkerEnvironmentReservation(t *testing.T, h *dispatchHarness) store.EnvironmentInputReservation {
 	t.Helper()
-	session, err := h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
+	session, err := h.s.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)}))
 	if err != nil {
 		t.Fatal(err)
 	}
