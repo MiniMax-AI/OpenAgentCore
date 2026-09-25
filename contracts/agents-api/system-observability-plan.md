@@ -18,7 +18,7 @@ remain unavailable until native per-attempt events are qualified.
 | Model distribution and latency | Native per-attempt evidence is not normalized across harnesses | Unavailable | Do not label configured models, cumulative Usage, or Turns as invoked models |
 | Tool calls and failures | Sanitized `tool_call` completion events | Attempts with an after event; missing before leaves duration null unless native duration exists | Does not count Agent tool declarations or model selection |
 | Sandbox nodes | Deployment administrator node list | Current online, provider-ready, active, retained and capacity fields | A node being online does not prove a Turn can execute |
-| Host, database, queue health | No qualified operator projection | Not available | Keep out of Session-scoped charts |
+| Core process, database, queue, and jobs | Core service metrics projection | Current and bounded process-local history | Service health, not Session-scoped execution evidence |
 
 Current Runtime history has a 30-second default periodic collection interval and
 seven-day retention; the public Web ranges are 1h, 6h, and 24h. Its table is
@@ -71,6 +71,10 @@ The operator migration adds `observability_request_minute_buckets`,
 30 days; model and tool attempts retain seven days. Model attempts remain empty
 until a native per-attempt producer is implemented. The deployment administrator
 summary supports only 1h, 6h, and 24h and returns no tenant or raw identifiers.
+It is served at `/core/v1/admin/observability` through the same administrator
+credential and `AdminClient` transport as Core service metrics. The existing
+`/core/v1/admin/core-metrics` projection supplies queue, database, job, and
+process measurements; this collection does not duplicate those sources.
 
 Use bounded histograms for p50/p95 latency and rates from counters over complete
 time buckets. Keep operational cardinality to route family, outcome, provider
@@ -84,9 +88,9 @@ must be explicit, with history storage/export optional for execution.
 The overview keeps a small current snapshot: Agents, Sessions, active Sandboxes,
 reported tokens, measured CPU/memory capacity, and ready nodes. The Observability
 tab leads with the four existing Runtime trends, followed by request, Turn, tool,
-collector, and node panels. The model panel states that collection is unavailable. The
+collector, node, and Core service panels. The model panel states that collection is unavailable. The
 request rate, error rate, and range latency require complete collector heartbeat
-coverage; otherwise they are unavailable. Request route tables show counts only
+coverage with no recorded drops or export failures; otherwise they are unavailable. Request route tables show counts only
 for covered buckets. Every panel must preserve missing measurements and must not equate
 a configured Sandbox with a completed execution.
 

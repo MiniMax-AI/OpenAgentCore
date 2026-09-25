@@ -16,7 +16,7 @@ func WithRequestMetrics(recorder *observability.RequestRecorder) Option {
 
 func (h *Handler) recordRequestMetrics(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" || strings.HasPrefix(r.URL.Path, "/core/v1/observability/") {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/core/v1/admin/observability" {
 			next.ServeHTTP(w, r)
 			return
 		}

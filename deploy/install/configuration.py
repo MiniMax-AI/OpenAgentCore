@@ -50,7 +50,6 @@ def core_environment(root, state, database_password):
                                      path="/api/v1/agent-daemon/ws").geturl()
     result = {
         "AGENTS_API_DATABASE_URL": f"postgres://agents_api:{database_password}@{database}/agents_api?sslmode=disable",
-        "AGENTS_API_KEYS_FILE": config + "/keys.json",
         "AGENTS_API_CREDENTIAL_KEY_FILE": config + "/credential.key",
         "AGENTS_API_ADDR": f'127.0.0.1:{state["core_port"]}' if native else ":8091",
         "AGENTS_API_ENGINE": "codex", "AGENTS_API_HARNESSES": "codex,claude_sdk,mcode",
@@ -117,11 +116,11 @@ def compose_config(root, state, manifest, database_password):
             "image": manifest["images"]["web"], "user": identity, "restart": "unless-stopped",
             "ports": [f'127.0.0.1:{state["web_port"]}:8080'], "read_only": True,
             "security_opt": ["no-new-privileges:true"],
-            "volumes": [bind(config / "caller.key", "/config/caller.key")],
+            "volumes": [bind(root / "admin/sandbox-admin.key", "/admin/sandbox-admin.key")],
             "environment": {"CORE_CONSOLE_ORIGIN": state.get("public_url") or f'http://127.0.0.1:{state["web_port"]}',
                 "CORE_CONSOLE_UPSTREAM": (f'http://127.0.0.1:{state["core_port"]}' if native
                                           else state.get("core_url") or "http://core:8091"),
-                "CORE_CONSOLE_TOKEN_FILE": "/config/caller.key"},
+                "CORE_CONSOLE_ADMIN_TOKEN_FILE": "/admin/sandbox-admin.key"},
         }
         if state.get("console_auth") == "account":
             services["web"]["volumes"].extend([
@@ -136,11 +135,9 @@ def compose_config(root, state, manifest, database_password):
             services["web"]["environment"]["CORE_CONSOLE_PASSWORD_FILE"] = "/config/console.password"
         if state["mode"] == "all":
             services["web"]["volumes"].extend([
-                bind(root / "admin/sandbox-admin.key", "/admin/sandbox-admin.key"),
                 bind(root / "node-payload", "/node-payload"),
             ])
             services["web"]["environment"].update(
-                CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE="/admin/sandbox-admin.key",
                 CORE_CONSOLE_NODE_PAYLOAD_DIR="/node-payload",
             )
         if state["mode"] == "web-only" or native:

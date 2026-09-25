@@ -99,11 +99,15 @@ func (s *Store) sealTemplateFiles(tenant, id string, files []InitialFile) ([]byt
 
 // ResolveEnvironmentTemplate reads one atomic snapshot; public reads need no decryption key.
 func (s *Store) ResolveEnvironmentTemplate(ctx context.Context, tenant, id string) (EnvironmentTemplate, []InitialFile, error) {
+	return s.resolveEnvironmentTemplate(ctx, s.queries, tenant, id)
+}
+
+func (s *Store) resolveEnvironmentTemplate(ctx context.Context, q *sqlc.Queries, tenant, id string) (EnvironmentTemplate, []InitialFile, error) {
 	lookup, err := deviceLookup(tenant, id)
 	if err != nil {
 		return EnvironmentTemplate{}, nil, ErrNotFound
 	}
-	row, err := s.queries.ResolveEnvironmentTemplate(ctx, sqlc.ResolveEnvironmentTemplateParams{TenantID: lookup.TenantID, ID: lookup.ID})
+	row, err := q.ResolveEnvironmentTemplate(ctx, sqlc.ResolveEnvironmentTemplateParams{TenantID: lookup.TenantID, ID: lookup.ID})
 	value, err := templateFromRow(templateMetadataRow{ID: row.ID, TenantID: row.TenantID, Name: row.Name, NetworkAccess: row.NetworkAccess, NetworkAllowedDomains: row.NetworkAllowedDomains, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Files: row.Files, Packages: row.Packages, Skills: row.Skills, Plugins: row.Plugins, CapabilityDirectories: row.CapabilityDirectories}, err)
 	if err != nil {
 		return value, nil, err

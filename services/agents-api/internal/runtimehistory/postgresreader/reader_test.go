@@ -166,11 +166,11 @@ func TestExporterPersistsOnlyPeriodicAndPreservesUnknownMetrics(t *testing.T) {
 func TestPruneHasBoundedWorkAndSanitizedFailure(t *testing.T) {
 	s := &fakeStore{pruneCount: 256}
 	r := testReader(t, s, time.Now())
-	if err := r.Prune(t.Context()); err != nil || s.pruneCalls != 16 {
+	if count, err := r.Prune(t.Context()); err != nil || s.pruneCalls != 16 || count != 4096 {
 		t.Fatal(err, s.pruneCalls)
 	}
 	s.err = errors.New("secret")
-	if err := r.Prune(t.Context()); err == nil || strings.Contains(err.Error(), "secret") {
+	if count, err := r.Prune(t.Context()); count != 0 || err == nil || strings.Contains(err.Error(), "secret") {
 		t.Fatal(err)
 	}
 }

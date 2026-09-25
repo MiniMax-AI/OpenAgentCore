@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ObservabilityAdminClient,
+  AdminClient,
   type OperatorMetricsRange,
   type OperatorMetricsSummary,
   type RequestMetricBucket,
@@ -9,9 +9,9 @@ import {
 } from "@agents-core-web/agents-client";
 
 import { isLocalProxyBaseUrl } from "../../lib/connection";
-import { sandboxConsoleConfig } from "../sandbox/console-config";
 import { formatDashboardBytes } from "./dashboard-model";
 import { SystemRequestChart } from "./SystemRequestChart";
+import { CoreServiceMetricsContent } from "./CoreServiceMetricsContent";
 
 const latencyBounds = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
 
@@ -50,6 +50,13 @@ function routeSummaries(rows: readonly RequestMetricBucket[]): RouteSummary[] {
   })).sort((left, right) => right.count - left.count);
 }
 
+export function hasCompleteRequestCoverage(summary: OperatorMetricsSummary | null, expectedBuckets: number): boolean {
+  if (summary === null) return false;
+  const requestCollector = summary.collector.filter((row) => row.source === "request");
+  return new Set(requestCollector.map((row) => row.start)).size >= expectedBuckets &&
+    requestCollector.every((row) => row.dropped_count === 0 && row.export_failed_count === 0);
+}
+
 export function SystemObservabilityContent({ coreBaseUrl, nodes }: { coreBaseUrl: string; nodes: SandboxNode[] | null }) {
   const { t, i18n } = useTranslation("dashboard");
   const locale = i18n.resolvedLanguage;
@@ -71,13 +78,8 @@ export function SystemObservabilityContent({ coreBaseUrl, nodes }: { coreBaseUrl
     setState("loading");
     setSummary(null);
     void (async () => {
-      const config = await sandboxConsoleConfig(controller.signal);
-      if (!config?.sandbox_admin) {
-        if (!controller.signal.aborted) setState("unavailable");
-        return;
-      }
-      const metricsClient = new ObservabilityAdminClient({ baseUrl: "/core/v1/observability" });
-      const metrics = await metricsClient.retrieveSummary(range, { signal: controller.signal });
+      const metricsClient = new AdminClient();
+      const metrics = await metricsClient.retrieveObservability(range, { signal: controller.signal });
       if (controller.signal.aborted) return;
       setSummary(metrics);
       setState("ready");
@@ -91,8 +93,9 @@ export function SystemObservabilityContent({ coreBaseUrl, nodes }: { coreBaseUrl
   const p95 = percentile95(summary?.requests ?? []);
   const durationMinutes = range === "1h" ? 60 : range === "6h" ? 360 : 1440;
   const expectedBuckets = durationMinutes / ((summary?.step_seconds ?? 60) / 60);
-  const heartbeatBuckets = new Set((summary?.collector ?? []).filter((row) => row.source === "request").map((row) => row.start)).size;
-  const completeRequestCoverage = summary !== null && heartbeatBuckets >= expectedBuckets;
+  const requestCollector = (summary?.collector ?? []).filter((row) => row.source === "request");
+  const heartbeatBuckets = new Set(requestCollector.map((row) => row.start)).size;
+  const completeRequestCoverage = hasCompleteRequestCoverage(summary, expectedBuckets);
   const requestRate = completeRequestCoverage ? total / durationMinutes : null;
   const errorRate = completeRequestCoverage && total > 0 ? serverErrors / total * 100 : null;
   const collector = summary?.collector ?? [];
@@ -136,5 +139,6 @@ export function SystemObservabilityContent({ coreBaseUrl, nodes }: { coreBaseUrl
         {nodes?.length ? <div className="dashboard-system-table-scroll"><table><thead><tr><th>{t("system.node")}</th><th>{t("system.status")}</th><th>{t("system.active")}</th><th>{t("system.retained")}</th><th>{t("system.cores")}</th><th>{t("system.availableMemory")}</th></tr></thead><tbody>{nodes.map((node) => <tr key={node.id}><th>{node.name}</th><td>{t(node.online && node.provider_ready ? "system.online" : "system.offline")}</td><td>{number(node.active)} / {number(node.max_active)}</td><td>{number(node.retained)}</td><td>{node.cpu_count === null ? unavailable : number(node.cpu_count)}</td><td>{node.available_memory_bytes === null ? unavailable : formatDashboardBytes(node.available_memory_bytes)}</td></tr>)}</tbody></table></div> : <p>{nodes === null ? t("system.nodeUnavailable") : t("system.noNodes")}</p>}
       </section>
     </div>
+    <CoreServiceMetricsContent coreBaseUrl={coreBaseUrl} range={range} refresh={refresh} />
   </section>;
 }

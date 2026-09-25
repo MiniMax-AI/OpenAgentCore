@@ -23,7 +23,7 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 	}
 	s := store.NewWithCredentialCipher(pool, cipher)
 	tenant, token := uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
 	if err != nil {
 		t.Fatal(err)
 	}

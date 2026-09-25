@@ -25,8 +25,10 @@ type AuditAPIKey struct {
 }
 
 type ResourceOwner struct {
-	ResourceID string       `json:"resource_id"`
-	APIKey     *AuditAPIKey `json:"api_key"`
+	ResourceID   string       `json:"resource_id"`
+	APIKey       *AuditAPIKey `json:"api_key"`
+	Source       *string      `json:"source"`
+	AdminAuditID *string      `json:"admin_audit_id"`
 }
 
 type WriteOperation struct {
@@ -83,11 +85,26 @@ func (s *Store) GetResourceOwners(ctx context.Context, tenantID, resourceType st
 	for _, row := range rows {
 		keys[row.ResourceID] = auditAPIKey(row.KeyID, row.KeyName, row.KeyPrefix, row.KeyKind, row.RevokedAt)
 	}
+	adminRows, err := s.queries.GetAdminResourceOwners(ctx, sqlc.GetAdminResourceOwnersParams{TenantID: tenant, ResourceType: resourceType, Column3: resourceIDs})
+	if err != nil {
+		return nil, err
+	}
+	admins := make(map[string]string, len(adminRows))
+	for _, row := range adminRows {
+		admins[row.ResourceID] = uuid.UUID(row.AuditID.Bytes).String()
+	}
 	result := make([]ResourceOwner, 0, len(resourceIDs))
 	for _, id := range resourceIDs {
 		owner := ResourceOwner{ResourceID: id}
 		if key, ok := keys[id]; ok {
 			owner.APIKey = &key
+			source := "api_key"
+			owner.Source = &source
+		}
+		if auditID, ok := admins[id]; ok && owner.APIKey == nil {
+			source := "admin_copy"
+			owner.Source = &source
+			owner.AdminAuditID = &auditID
 		}
 		result = append(result, owner)
 	}

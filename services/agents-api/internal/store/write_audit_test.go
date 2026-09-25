@@ -123,16 +123,17 @@ func TestWriteAuditOwnersIdentityReplayAndRevocation(t *testing.T) {
 	if err != nil || len(page.Data) != 2 || page.Data[0].APIKey.Kind != "console" || page.Data[1].APIKey.ID != a.KeyID {
 		t.Fatalf("request dedup or key identity: %+v %v", page, err)
 	}
-	binding := projectKeyDigest("audit issuer")
-	issued, err := s.CreateProjectAPIKey(t.Context(), binding, principal, uuid.NewString(), "issued key")
+	project := createTestProject(t, s)
+	issued, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), project.ID), project.ID, uuid.NewString(), "issued key")
 	if err != nil {
 		t.Fatal(err)
 	}
+	tenant = project.TenantID
 	c := auditTestSource(tenant)
 	c.KeyID, c.Name, c.Prefix, c.Kind = issued.ID, issued.Name, issued.Prefix, "issued"
 	fileID := "file_" + uuid.NewString()
 	auditTestRecord(t, s, c, "create", "file", fileID, AuditResource{Type: "file", ID: fileID})
-	if err := s.RevokeProjectAPIKey(t.Context(), binding, principal, issued.ID); err != nil {
+	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), project.ID), project.ID, issued.ID); err != nil {
 		t.Fatal(err)
 	}
 	revoked, err := s.GetResourceOwners(t.Context(), tenant, "file", []string{fileID})

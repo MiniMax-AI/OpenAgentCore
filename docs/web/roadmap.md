@@ -1,40 +1,34 @@
-# Web roadmap
+# Frontend handoff and acceptance
 
-Agents Core Web and the reusable TypeScript client are maintained in the same
-repository as Core, but remain separate protocol-facing components. Roadmap work
-must preserve that boundary: browser code consumes the public HTTP/SSE contract;
-it does not reproduce scheduling, execution, secrets, or runtime ownership.
+The backend management service and `AdminClient` are implemented. The frontend team
+owns migration of the React application and development proxy. Existing execution
+pages and their fixture tests do not establish administrator UI acceptance.
 
-## M0 — monorepo integration
+Use the [architecture](architecture.md), [connection guide](core-connection.md) and
+[administrator API contract](../../contracts/agents-api/admin-api.md) as the handoff
+contract. Public Agents API compatibility work is tracked in the
+[public contract documentation](../../contracts/agents-api/README.md).
 
-- build the Web and TypeScript client from the root pnpm workspace;
-- run Web type checks, unit tests, production builds, and Core Doctor from
-  `make check`;
-- keep Core, Web, and operator documentation aligned to one reviewed revision;
-- retain independent deployment of `services/agents-api` and `apps/web`.
+## Remaining frontend work
 
-## M1 — contract co-evolution
+- Connect console login and same-origin `AdminClient` requests without exposing the
+  deployment credential or requiring an application key.
+- Implement Project selection and Project/key lifecycle actions, with one-time key
+  display and explicit handling of uncertain writes.
+- Provide resource inspection, permitted deletion and independent copies. Keep
+  execution, resource editors, Session input and cancellation out of management.
+- Present durable Session history, Runtime observations, summaries and audit using
+  their distinct meanings. Preserve missing data as unknown.
+- Replace the development proxy's public execution path with the console management
+  boundary. Discard stale results when Project selection changes.
 
-- update TypeScript types, fixtures, protocol coverage, and UI states in the same
-  change when a Web-consumed Core resource changes;
-- add raw HTTP fixtures for every response and event variant used by the UI;
-- verify reconnect recovery, cancellation, Function results, pagination, and error
-  presentation against the in-repository Core;
-- keep unsupported capabilities explicit and fail closed.
+## Acceptance before calling the UI complete
 
-## M2 — operator experience
+Verify login, Project isolation, shared access across a Project's keys, revocation,
+archive retention, deletion conflicts, copy results and audit attribution through
+the production console service. Browser acceptance must also cover denied cross-origin
+writes, absent `/v1` proxying, secret handling and uncertain write outcomes.
 
-- qualify repeatable local and production startup paths without exposing Docker or
-  Core credentials to the browser;
-- surface versioned runtime capability and readiness data only when Core publishes
-  a proven public contract;
-- add browser acceptance coverage for supported hosted and self-hosted Environment
-  lifecycle flows;
-- report missing runtime behavior as a Core gap instead of emulating it in Web.
-
-## M3 — optional Web Cloud layer
-
-- introduce a BFF, user sessions, authorization, audit, and secret custody as a
-  separate deployment layer;
-- keep product organization, role, billing, and marketplace behavior outside the
-  open TypeScript client and standalone execution Core.
+A backend test pass is evidence for the service it exercises. UI completion requires
+separate browser evidence for the migrated screens; successful rendering alone is
+insufficient. This handoff does not change native Runtime or application API ownership.

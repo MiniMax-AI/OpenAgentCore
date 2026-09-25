@@ -77,14 +77,13 @@ func TestAccountConfigurationIsExplicitAndPrivate(t *testing.T) {
 	if err := os.Mkdir(state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("CORE_CONSOLE_TOKEN_FILE", token)
+	t.Setenv("CORE_CONSOLE_ADMIN_TOKEN_FILE", token)
 	t.Setenv("CORE_CONSOLE_PASSWORD_FILE", filepath.Join(work, "missing-password"))
 	t.Setenv("CORE_CONSOLE_AUTH_MODE", "account")
 	t.Setenv("CORE_CONSOLE_SETUP_KEY_FILE", filepath.Join(work, "obsolete-missing-setup-key"))
 	t.Setenv("CORE_CONSOLE_STATE_DIR", state)
 	t.Setenv("CORE_CONSOLE_DIST", work)
 	t.Setenv("CORE_CONSOLE_ORIGIN", testOrigin)
-	t.Setenv("CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE", "")
 	if c, err := loadConfig(); err != nil || c.password != "" {
 		t.Fatalf("valid account configuration rejected: %v", err)
 	}

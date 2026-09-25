@@ -9,7 +9,7 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SandboxAdminClient, type AgentSession, type SandboxNode, type SavedAgent } from "@agents-core-web/agents-client";
+import { AdminClient, type AgentSession, type SandboxNode, type SavedAgent } from "@agents-core-web/agents-client";
 
 import { StatusIcon, type StatusKind } from "../../components/StatusIcon";
 import { backendFailureStatus } from "../../lib/core-readiness";
@@ -279,8 +279,8 @@ export function DashboardView({
 		void (async () => {
 			const config = await sandboxConsoleConfig(controller.signal);
 			if (!config?.sandbox_admin) { if (!controller.signal.aborted) setNodes(null); return; }
-			const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" });
-			const result = await client.listNodes({ signal: controller.signal });
+			const client = new AdminClient();
+			const result = await client.listSandboxNodes({ signal: controller.signal });
 			if (!controller.signal.aborted) setNodes(result.data);
 		})().catch(() => { if (!controller.signal.aborted) setNodes(null); });
 		return () => controller.abort();

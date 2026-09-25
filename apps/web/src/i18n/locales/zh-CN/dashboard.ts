@@ -15,6 +15,18 @@ export const dashboard = {
     nodeTable: "Sandbox 节点", node: "节点", status: "状态", active: "活动／容量", retained: "保留", cores: "CPU 核数", availableMemory: "可用内存", online: "就绪", offline: "不可用",
     noRequestSamples: "该时段尚无请求时间桶。", noCollectorSamples: "该时段尚无采集覆盖记录。", noNodes: "尚未注册 Sandbox 节点。", nodeUnavailable: "节点数据不可用。",
   },
+  core: {
+    title: "Core 服务", subtitle: "执行队列、数据库、后台任务与进程状态",
+    status: "服务状态：{{status}}", metricsUnavailable: "Core 服务指标不可用。",
+    slots: "执行名额", executionOwner: "执行所有权：{{status}}", yes: "已取得", no: "未取得",
+    queue: "排队 Turn", runningCount: "运行中 {{value}}", databasePing: "数据库 Ping p95",
+    pool: "连接池占用 {{used}}/{{max}}", processMemory: "进程内存", goroutines: "{{value}} 个 Goroutine",
+    executionTable: "执行队列", queued: "排队中", running: "运行中", waitingDaemon: "等待 Daemon",
+    connectedDaemons: "已连接 Daemon", oldestQueue: "最长排队", queueP95: "排队等待 p95",
+    interrupted: "执行中断", unavailable: "执行不可用", databaseTable: "数据库与进程",
+    pingP50: "Ping p50", pingP95: "Ping p95", poolInUse: "连接池占用", poolIdle: "连接池空闲", databaseSize: "数据库大小",
+    jobsTable: "后台任务", job: "任务", jobStatus: "状态", lastRun: "上次运行", processed: "已处理", failed: "失败",
+  },
   sandbox: {
     title: "Sandbox 诊断", subtitle: "按分配身份查看采样覆盖、生命周期与内存压力",
     current: "当前完整快照", retained: "上次完整快照 · 刷新失败",

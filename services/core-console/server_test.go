@@ -30,7 +30,7 @@ func testConsole(t *testing.T, backend http.Handler) (*httptest.Server, string) 
 	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte("<html>existing web build</html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	handler, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, token: "private-core-token", password: "private-console-password"})
+	handler, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, password: "private-console-password", adminToken: "private-admin-token"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestAuthenticationAndCrossSiteAdmission(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := consoleRequest(t, server, tc.method, "/v1/agents")
+			r := consoleRequest(t, server, tc.method, "/core/v1/admin/projects")
 			tc.change(r)
 			response, body := responseBody(t, server, r)
 			if response.StatusCode != tc.status {
@@ -137,7 +137,7 @@ func TestProxyUsesOnlyConfiguredCoreCredential(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"data":[]}`)
 	}))
-	r := consoleRequest(t, server, "POST", "/v1/agents?limit=5")
+	r := consoleRequest(t, server, "POST", "/core/v1/admin/projects?limit=5")
 	r.Header.Set("Cookie", "browser=private")
 	r.Header.Set("Proxy-Authorization", "Basic browser-secret")
 	r.Header.Set("OpenAI-Beta", "agents=v1")
@@ -153,7 +153,7 @@ func TestProxyUsesOnlyConfiguredCoreCredential(t *testing.T) {
 		}
 	}
 	request := <-observed
-	if request.URL.RequestURI() != "/v1/agents?limit=5" || request.Header.Get("Authorization") != "Bearer private-core-token" || request.Header.Get("OpenAI-Beta") != "agents=v1" {
+	if request.URL.RequestURI() != "/core/v1/admin/projects?limit=5" || request.Header.Get("Authorization") != "Bearer private-admin-token" || request.Header.Get("OpenAI-Beta") != "agents=v1" {
 		t.Fatal("proxy changed the public request or failed to inject the Core token")
 	}
 	for _, name := range []string{"Cookie", "Proxy-Authorization", "Origin", "Referer", "Forwarded", "X-Forwarded-Host"} {
@@ -171,18 +171,18 @@ func TestProxyRejectsRedirectWithoutFollowingOrExposingIt(t *testing.T) {
 	}))
 	defer destination.Close()
 	server, _ := testConsole(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, destination.URL+"/?token=private-core-token", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, destination.URL+"/?token=private-admin-token", http.StatusTemporaryRedirect)
 	}))
-	response, body := responseBody(t, server, consoleRequest(t, server, "GET", "/v1/agents"))
-	if response.StatusCode != 502 || response.Header.Get("Location") != "" || strings.Contains(body, "private-core-token") || destinationCalls.Load() != 0 {
+	response, body := responseBody(t, server, consoleRequest(t, server, "GET", "/core/v1/admin/projects"))
+	if response.StatusCode != 502 || response.Header.Get("Location") != "" || strings.Contains(body, "private-admin-token") || destinationCalls.Load() != 0 {
 		t.Fatal("upstream redirect escaped the fixed proxy")
 	}
 }
 
-func TestProxyFlushesSSEAndCancelsUpstream(t *testing.T) {
+func TestArtifactProxyFlushesContentAndCancelsUpstream(t *testing.T) {
 	cancelled := make(chan struct{})
 	server, _ := testConsole(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = fmt.Fprint(w, "data: first\n\n")
 		w.(http.Flusher).Flush()
 		<-r.Context().Done()
@@ -190,14 +190,14 @@ func TestProxyFlushesSSEAndCancelsUpstream(t *testing.T) {
 	}))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	r := consoleRequest(t, server, "GET", "/v1/agents/sessions/session/events").WithContext(ctx)
+	r := consoleRequest(t, server, "GET", "/core/v1/admin/projects/key/sessions/session/artifacts/artifact/content").WithContext(ctx)
 	response, err := server.Client().Do(r)
 	if err != nil {
 		t.Fatal(err)
 	}
 	line, err := bufio.NewReader(response.Body).ReadString('\n')
 	if err != nil || line != "data: first\n" {
-		t.Fatalf("SSE did not flush: %q %v", line, err)
+		t.Fatalf("artifact content did not flush: %q %v", line, err)
 	}
 	response.Body.Close()
 	cancel()
@@ -234,7 +234,7 @@ func TestStaticAssetsStayInsideDistAndInternalRoutesStayLocal(t *testing.T) {
 		{"/", 200}, {"/sessions/saved", 200}, {"/assets/main.js", 200},
 		{"/assets/", 404}, {"/missing.js", 404}, {"/leak.key", 404},
 		{"/../caller.key", 400}, {"/%2e%2e/caller.key", 400}, {"/%252e%252e/caller.key", 400},
-		{"/v1/../api/v1/agent-daemon/ws", 400}, {"/v1//agents", 400},
+		{"/v1/../api/v1/agent-daemon/ws", 404}, {"/v1//agents", 404},
 		{"/api/v1/agent-daemon/ws", 404},
 	} {
 		t.Run(tc.path, func(t *testing.T) {

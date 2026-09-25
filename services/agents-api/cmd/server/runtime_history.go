@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/coremetrics"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory/postgresreader"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
@@ -43,7 +44,7 @@ type runtimeHistorySetup struct {
 	Exporter       runtimeHistoryExporter
 	Reader         runtimehistory.Reader
 	SampleInterval time.Duration
-	Prune          func(context.Context) error
+	Prune          func(context.Context) (int64, error)
 }
 
 type runtimeHistoryExporter interface {
@@ -121,13 +122,17 @@ func closeRuntimeHistory(ctx context.Context, exporter runtimeHistoryExporter) {
 }
 
 // Retention also runs without active Runtimes. Each bounded pass has its own deadline.
-func runHistoryCleanup(ctx context.Context, prune func(context.Context) error) {
+func runHistoryCleanup(ctx context.Context, prune func(context.Context) (int64, error), metrics *coremetrics.Service) {
+	if metrics != nil {
+		defer metrics.StopJob("history_cleanup")
+	}
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
 		pruneCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		_ = prune(pruneCtx)
+		count, err := prune(pruneCtx)
 		cancel()
+		reportCleanupResult(metrics, "history_cleanup", count, err)
 		select {
 		case <-ctx.Done():
 			return

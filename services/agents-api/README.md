@@ -112,9 +112,9 @@ Session. A supplied key identifies the request within its authenticated tenant.
 Inline retries use normalized effective configuration; new saved-Agent references
 record caller intent independently of later source updates/deletion. Retries do
 not admit initial input again. Every retry must match the original typed creator,
-including across key rotation. Another principal using the same project/key gets
-the local 409 conflict. Records with a known creator but no recorded request intent
-retain resolved-snapshot behavior; records without a creator cannot be retried.
+including across key rotation. Keys in the same Project share the creator principal,
+so rotating a key preserves that retry identity. Records with a known creator but
+no recorded request intent retain resolved-snapshot behavior; records without a creator cannot be retried.
 These retry policies are not verified hosted semantics. See the
 [retry boundary](../../contracts/agents-api/README.md#public-semantics).
 
@@ -154,41 +154,42 @@ incomplete. Durable acceptance is not an exactly-once side-effect guarantee.
 ## Standalone HTTP service
 
 Run migrations first, then `go run ./services/agents-api/cmd/server`. The service
-requires `AGENTS_API_DATABASE_URL` and `AGENTS_API_KEYS_FILE`; it does not read the
-product database or accept product login cookies. The key file is a JSON array:
+uses `AGENTS_API_DATABASE_URL` for its dedicated database; it does not read the
+product database or accept product login cookies. Configure the separate deployment
+administrator credential through `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` at startup to manage
+Projects and keys. Deployment credentials cannot authenticate `/v1`, and application
+API keys cannot authenticate administrator routes.
 
-```json
-[{
-  "tenant_id": "<canonical nonzero UUID>",
-  "organization_id": "<organization ID>",
-  "project_id": "<project ID>",
-  "subject_kind": "service_account",
-  "subject_id": "<stable service-account ID>",
-  "token_sha256": "<SHA-256 hex digest>"
-}]
-```
+Projects and API keys live only in the database. Configuration files contain
+infrastructure settings and deployment credentials, not business identities.
+Installation creates no Project or application key. Using the
+[administrator API](../../contracts/agents-api/admin-api.md), create a Project with
+`POST /core/v1/admin/projects` and issue a named key with
+`POST /core/v1/admin/projects/{project_id}/keys`. Both requests accept a JSON object containing `name`;
+Core generates the identifiers. The Web management screens still need migration;
+see [integration status](../../docs/web/README.md).
 
-Use `subject_kind: "user"` for a user principal. IDs are explicit operator-assigned
-execution identities, not inferred from Parsar users or existing Session records.
-Each key authorizes one project; multiple keys and principals may share that
-project's tenant UUID. Startup atomically verifies the immutable organization/project
-to tenant mapping before serving traffic or starting execution. Conflicts abort
-startup without committing a partial configuration. Removing keys leaves those
-mappings intact. Existing key files must be updated explicitly; incomplete legacy
-bindings are rejected. This does not assign ownership to historical Sessions.
+A Project owns one tenant and one execution principal. All keys in it have equal
+access to its assets and share that principal; write provenance records the actual
+key separately. Issuance returns plaintext once, and the database stores its digest.
+Deliver the secret only to authorized applications. Rotate by issuing another key
+in the same Project and revoking the old one. No secret-reset endpoint or service
+restart is needed. Renaming a Project preserves its ID, principal and assets.
+Archiving disables all its keys but retains assets and already accepted execution.
+Administrators can read or delete retained resources and copy supported assets into
+an active Project.
 
-Provision random bearer keys and share plaintext only with authorized callers;
-keep digests in the server file. Rotate or revoke by changing bindings and
-restarting the service. Keep the same principal IDs when rotating a caller's key.
-Optional `OpenAI-Organization` and `OpenAI-Project` headers must match its binding;
-repeated or conflicting values fail authentication. These identities do not grant
-product-user rights. New Sessions persist the authenticated creator kind/ID
-atomically and never change them on retry. Project resource visibility and mutation
-authorization are unchanged. Historical Sessions keep unknown creators and remain
-readable; no key, metadata or product record can assign their ownership through a
-retry. Retire older API writers before starting this deployment; mixed-version
-creation is unsupported. Executor keys separately match this recorded creator before authorizing an
-Environment connection; they do not inherit general caller API permissions.
+Optional `OpenAI-Organization` and `OpenAI-Project` headers must match the Project's
+execution scope; repeated or conflicting values fail authentication. The catalog
+Project UUID and its external execution-scope identifier are distinct; see the
+administrator contract. These identities grant no product-user rights. New Sessions
+persist the Project principal as creator atomically and never change it on retry.
+Historical Sessions keep unknown creators and remain readable; no key, metadata or
+product record can assign their ownership through a retry. Retire older API writers
+before starting this deployment; mixed-version creation is unsupported. Executor
+credentials separately match this recorded creator before authorizing an Environment
+connection; they do not inherit general caller API permissions. Native Runtime and
+node transport contracts are unchanged.
 
 `AGENTS_API_ADDR` defaults to `127.0.0.1:8091`; use a TLS reverse proxy for remote
 access. `AGENTS_API_ENGINE` defaults to `codex`; use `claude_sdk` for Claude Code
@@ -270,7 +271,9 @@ The basic `openai_hosted` profiles for Codex, Claude Code and MiniMax Code requi
 explicit operator configuration. Select the qualified native image using the
 [engine profile guides](../../contracts/agents-api/README.md#public-engine-profiles),
 then follow the [Docker setup](deploy/codex/README.md#standalone-operator-configuration).
-Core manages Docker only. For user-managed E2B, see
+Core-managed hosting supports deployment-selected E2B, Docker or microsandbox;
+see [Hosted Sandbox Manager](HOSTED-SANDBOX-MANAGER.md). For the separate
+user-managed E2B path, see
 [E2B Runtime packaging](deploy/e2b/README.md).
 Core remains independently deployed with its own database. Public idle and initial
 text Sessions share the existing preparation, execution, Files and recovery paths.
@@ -454,7 +457,7 @@ For installations with pre-Items history:
    across this migration. Devices without this capability are not dispatched.
 
 For step 2, use the pinned Python SDK and the usual private endpoint/key settings,
-repeating with each operator-configured tenant identity:
+repeating with each existing Project and an authorized API key:
 
 ```python
 from openai import OpenAI
@@ -471,10 +474,10 @@ an official SSE replay mechanism.
 ## User-managed Runtime enrollment
 
 V1 uses our daemon as the user-side executor. Deploy daemon, selected harness,
-local tools and protected `/workspace` together using the shared Runtime. Core
-manages Docker-hosted compute only. The user owns local or E2B allocation, renewal
+local tools and protected `/workspace` together using the shared Runtime. For this caller-managed path, the user owns local or E2B allocation, renewal
 and destruction; use the official E2B SDK through the
-[E2B guide](deploy/e2b/README.md), not a Core E2B Provider.
+[E2B guide](deploy/e2b/README.md). Deployment-managed E2B, Docker and microsandbox
+are separate hosted choices in [Hosted Sandbox Manager](HOSTED-SANDBOX-MANAGER.md).
 
 Create a Session with `environment={"type":"self_hosted",
 "workspace_directory":"/workspace"}` and empty/default capability directories.

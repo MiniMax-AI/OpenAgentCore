@@ -15,6 +15,18 @@ export const dashboard = {
     nodeTable: "Sandbox nodes", node: "Node", status: "Status", active: "Active / capacity", retained: "Retained", cores: "CPU cores", availableMemory: "Available memory", online: "Ready", offline: "Unavailable",
     noRequestSamples: "No request buckets collected in this range.", noCollectorSamples: "No collector coverage recorded in this range.", noNodes: "No sandbox nodes registered.", nodeUnavailable: "Node data unavailable.",
   },
+  core: {
+    title: "Core service", subtitle: "Execution queue, database, background jobs, and process state",
+    status: "Service: {{status}}", metricsUnavailable: "Core service metrics unavailable.",
+    slots: "Execution slots", executionOwner: "Execution owner: {{status}}", yes: "Yes", no: "No",
+    queue: "Queued Turns", runningCount: "{{value}} running", databasePing: "Database ping p95",
+    pool: "Pool {{used}}/{{max}} in use", processMemory: "Process memory", goroutines: "{{value}} goroutines",
+    executionTable: "Execution queue", queued: "Queued", running: "In progress", waitingDaemon: "Waiting for daemon",
+    connectedDaemons: "Connected daemons", oldestQueue: "Oldest queued", queueP95: "Queue wait p95",
+    interrupted: "Interrupted", unavailable: "Execution unavailable", databaseTable: "Database and process",
+    pingP50: "Ping p50", pingP95: "Ping p95", poolInUse: "Pool in use", poolIdle: "Pool idle", databaseSize: "Database size",
+    jobsTable: "Background jobs", job: "Job", jobStatus: "Status", lastRun: "Last run", processed: "Processed", failed: "Failed",
+  },
   sandbox: {
     title: "Sandbox diagnostics", subtitle: "Current allocation identity, sampling coverage, and memory pressure",
     current: "Current complete snapshot", retained: "Last complete snapshot · refresh failed",

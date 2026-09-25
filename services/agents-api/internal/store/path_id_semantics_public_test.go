@@ -94,7 +94,7 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	s := store.NewWithCredentialCipher(pool, cipher)
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant := uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-owner", TokenSHA256: device.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-foreign", TokenSHA256: device.HashCredential(foreign), TenantID: uuid.NewString()},
 	})

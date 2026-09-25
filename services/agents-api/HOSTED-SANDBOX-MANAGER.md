@@ -102,9 +102,9 @@ directory across service/container restarts. Do not share it between hosts.
 
 Set `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` to a JSON array of SHA-256 hex digests
 of administrator bearer credentials. Keep the original randomly generated bearer
-credential in the operator's password manager. This file is separate from
-`AGENTS_API_KEYS_FILE`; omitting it disables deployment administration while
-preserving existing local execution. Serve the API through HTTPS for remote
+credential in the operator's password manager. Application keys and Projects live in PostgreSQL. Core requires the deployment
+administrator credential at startup so an empty installation can create Projects
+and issue its first application key. Serve the API through HTTPS for remote
 nodes. The reverse proxy must support the WebSocket endpoint
 `/core/v1/sandbox/node/connect` and preserve Authorization headers.
 

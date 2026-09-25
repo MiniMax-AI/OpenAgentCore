@@ -217,7 +217,7 @@ test("shows operator tables and keeps incomplete request coverage unavailable", 
   } }));
   const end = new Date(Math.floor(Date.now() / 60_000) * 60_000);
   const start = new Date(end.getTime() - 60 * 60_000);
-  await page.route("**/core/v1/observability/summary?range=1h", (route) => route.fulfill({ json: {
+  await page.route("**/core/v1/admin/observability?range=1h", (route) => route.fulfill({ json: {
     generated_at: end.toISOString(), start: start.toISOString(), end: end.toISOString(), step_seconds: 60,
     requests: [{ start: start.toISOString(), route_family: "sessions", outcome: "server_error", count: 2,
       latency_sum_ms: 120, latency_bucket_counts: [0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0] }],
@@ -227,17 +227,29 @@ test("shows operator tables and keeps incomplete request coverage unavailable", 
     tools: [{ start: start.toISOString(), category: "command", outcome: "error", count: 1,
       timed_count: 1, duration_p95_ms: 300 }],
   } }));
+  await page.route("**/core/v1/admin/core-metrics?range=1h", (route) => route.fulfill({ json: {
+    object: "core.metrics", range: { start: start.toISOString(), end: end.toISOString(), resolution_seconds: 60 },
+    service: { status: "healthy", revision: null, started_at: start.toISOString(), execution_owner: true },
+    execution: { slots_in_use: 1, slots_total: 4, queued_turns: 3, waiting_for_daemon: 1,
+      in_progress_turns: 2, oldest_queued_seconds: 12, connected_daemons: 2, interrupted: 0,
+      unavailable: 0, queue_wait_ms: { p50: 20, p95: 50 }, series: [] },
+    database: { ping_ms: { p50: 3, p95: 7 }, pool: { in_use: 2, idle: 4, max: 20 }, size_bytes: 1024, series: [] },
+    jobs: [{ id: "scheduler", status: "running", last_run_at: end.toISOString(), processed: 5, failed: 0 }],
+    process: { memory_bytes: 1048576, goroutines: 42 },
+  } }));
   await page.goto("/");
   await page.getByRole("tab", { name: "Observability" }).click();
-  const system = page.locator(".dashboard-system");
+  const system = page.getByRole("region", { name: "System observability" });
   await expect(system.getByRole("heading", { name: "System observability" })).toBeVisible();
   await expect(system.getByRole("heading", { name: "Terminal Turns" })).toBeVisible();
   await expect(system.getByRole("heading", { name: "Actual model invocations" })).toBeVisible();
   await expect(system.getByRole("heading", { name: "Sandbox nodes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Core service" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Background jobs" })).toBeVisible();
   await expect(system.getByText("Unavailable", { exact: true }).first()).toBeVisible();
   await expect(system.getByRole("rowheader", { name: "sessions" })).toBeVisible();
   await expect(system.getByRole("rowheader", { name: "command" })).toBeVisible();
-  await attachElementScreenshot(system, testInfo, "system-observability-dashboard");
+  await attachElementScreenshot(page.locator(".dashboard-page"), testInfo, "system-observability-dashboard");
 });
 
 test("explains a 502 Core backend failure and opens copyable Docker recovery steps", async ({ page }) => {

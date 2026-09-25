@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
-	"github.com/go-chi/chi/v5"
 )
 
 // WriteAuditStore exposes safe read models, never request bodies or credentials.
@@ -31,17 +30,6 @@ func WithWriteAudit(s WriteAuditStore, auth *DeploymentAuthenticator) Option {
 	}
 }
 
-func (h *Handler) registerWriteAuditRoutes(r chi.Router) {
-	if h.writeAudit == nil || h.deploymentAuth == nil {
-		return
-	}
-	r.Group(func(r chi.Router) {
-		r.Use(h.deploymentAuth.authenticate)
-		r.Get("/core/v1/resource-owners", h.getResourceOwners)
-		r.Get("/core/v1/write-operations", h.listWriteOperations)
-	})
-}
-
 func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowed ...string) (url.Values, string, bool) {
 	values, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
@@ -49,7 +37,7 @@ func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowe
 		return nil, "", false
 	}
 	for name, entries := range values {
-		recognized := name == "binding_digest"
+		recognized := false
 		for _, field := range allowed {
 			if name == field {
 				recognized = true
@@ -60,25 +48,25 @@ func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowe
 			return nil, "", false
 		}
 	}
-	principal, ok := h.auth.staticBinding(values.Get("binding_digest"))
-	if !ok {
+	tenant, ok := r.Context().Value(adminTenantContextKey{}).(string)
+	if !ok || tenant == "" {
 		writeStoreError(w, r, store.ErrNotFound)
 		return nil, "", false
 	}
-	return values, principal.TenantID, true
+	return values, tenant, true
 }
 
 // @Summary Batch lookup resource creation keys
-// @Description Deployment administrator only. A configured binding selects the project. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
+// @Description Deployment administrator only. The key path selects its independent space. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
 // @Tags Write Audit
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param binding_digest query string true "Configured caller SHA-256 binding selector"
+// @Param project_id path string true "Project ID"
 // @Param resource_type query string true "Resource type"
 // @Param resource_ids query string true "Comma-separated public resource IDs, maximum 100"
 // @Success 200 {object} api.ResourceOwnerList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /core/v1/resource-owners [get]
+// @Router /core/v1/admin/projects/{project_id}/resource-owners [get]
 func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 	values, tenant, ok := h.writeAuditScope(w, r, "resource_type", "resource_ids")
 	if !ok {
@@ -107,12 +95,12 @@ func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Query API-key write operations
-// @Description Deployment administrator only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. A configured binding selects the project, never a caller-supplied tenant.
+// @Description Deployment administrator only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. The key path selects its independent space, never a caller-supplied tenant.
 // @Tags Write Audit
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param binding_digest query string true "Configured caller SHA-256 binding selector"
-// @Param key_id query string false "Issued UUID or static key identifier"
+// @Param project_id path string true "Project ID"
+// @Param key_id query string false "Recorded creator key ID"
 // @Param resource_type query string false "Resource type"
 // @Param resource_id query string false "Public resource ID"
 // @Param created_after query string false "Inclusive RFC3339 timestamp"
@@ -121,7 +109,7 @@ func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 // @Param after query string false "Opaque next_cursor from the preceding page"
 // @Success 200 {object} store.WriteOperationPage
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /core/v1/write-operations [get]
+// @Router /core/v1/admin/projects/{project_id}/write-operations [get]
 func (h *Handler) listWriteOperations(w http.ResponseWriter, r *http.Request) {
 	values, tenant, ok := h.writeAuditScope(w, r, "key_id", "resource_type", "resource_id", "created_after", "created_before", "limit", "after")
 	if !ok {

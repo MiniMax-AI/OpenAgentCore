@@ -6,14 +6,12 @@ replacement for a Session's creator identity.
 
 ## Authentication and ownership
 
-Authentication carries the actual issued key UUID, independently of its inherited
-principal. Static configured keys use `static:<lowercase SHA-256 digest>` as a stable,
-non-secret identifier and the digest's first eight characters as the display prefix.
-Optional `name` labels a static key; optional `kind: "console"` identifies a trusted
-console credential (`static` is the default). Newly generated installer bindings use
-`name: "Console", kind: "console"`. These fields describe the credential, not the
-HTTP client: using that same key in an SDK retains its console label. Client headers
-cannot assert a key identity or console origin. Display renaming does not change ID.
+Authentication carries the issued key UUID and its Project's tenant/principal.
+Keys in one Project share assets and permissions; provenance records which key
+performed each write. All business keys live in PostgreSQL. Configuration contains
+no business keys or Projects. Console credentials authenticate only management
+operations and are never public API identities. Client headers cannot assert a
+key identity, and display names do not change an ID.
 
 True creation stores ownership in the same transaction as the resource and operation.
 Updates, retries and successful no-ops never replace it. Initial Skill versions and
@@ -23,9 +21,9 @@ Missing historical or foreign ownership is `null`. No historical resources are b
 
 An issued key's current `revoked_at` comes from its retained key row. Revocation
 prevents new authentication but does not invalidate already admitted work or erase
-history. Removing a static key from configuration stops authentication; there is no
-static-key revocation timestamp, so `revoked_at` remains null. Recorded static key
-name/prefix/kind are immutable snapshots. Deleting a resource does not delete its
+history. Existing audit metadata remains an immutable snapshot, including any
+historical static-key and console-key records; retaining history does not enable static-key
+authentication. Deleting a resource does not delete its
 operation history or creation anchor.
 
 ## Transaction and success boundary
@@ -72,15 +70,14 @@ a separate public write. Public resource IDs retain their existing formats.
 
 ## Console queries
 
-Both endpoints require the deployment Bearer credential used by
-`/core/v1/project-api-keys`. Project keys, including console project credentials,
-cannot call them. Required `binding_digest` selects an existing configured static
-binding and its tenant/project; it does not authenticate. There is no arbitrary
-tenant selector. Two bindings for the same project see the same project history.
+Both endpoints require deployment Bearer authentication under
+`/core/v1/admin/projects/{project_id}`. The path identifies the Project, including an
+archived Project; it does not authenticate. API keys cannot call these
+routes.
 
 ### Batch ownership
 
-`GET /core/v1/resource-owners?binding_digest=...&resource_type=agent&resource_ids=id1,id2`
+`GET /core/v1/admin/projects/{project_id}/resource-owners?resource_type=agent&resource_ids=id1,id2`
 
 `resource_type` is one of `agent`, `session`, `environment`,
 `environment_template`, `skill`, `skill_version`, `file`, `vault`, `credential`,
@@ -88,14 +85,18 @@ tenant selector. Two bindings for the same project see the same project history.
 
 ```json
 {"data":[
-  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null}},
-  {"resource_id":"id2","api_key":null}
+  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null},"source":"api_key","admin_audit_id":null},
+  {"resource_id":"id2","api_key":null,"source":null,"admin_audit_id":null}
 ]}
 ```
 
+Administrator copies have `api_key:null`, `source:"admin_copy"` and a non-null
+`admin_audit_id`. Their ownership anchors and audit mappings commit with the copy.
+They do not fabricate a public API-key write. See [administrator operations](admin-api.md).
+
 ### Operations
 
-`GET /core/v1/write-operations?binding_digest=...&limit=50`
+`GET /core/v1/admin/projects/{project_id}/write-operations?limit=50`
 
 Optional filters: `key_id`, `resource_type`, `resource_id`, `created_after`
 (inclusive RFC3339 timestamp), `created_before` (exclusive RFC3339 timestamp).
@@ -107,7 +108,7 @@ Each operation contains `id`, `created_at`, `api_key`, `action`, `resource_type`
 `resource_id`, `parent_id`, `request_id`, `trace_id`. An absent parent is an empty
 string. Empty pages contain `data: []`.
 
-Malformed/duplicate/unknown query parameters return 400, missing configured binding
+Malformed/duplicate/unknown query parameters return 400, missing Project
 404, invalid deployment authentication 401. These rules belong only to the new
 Core routes and do not alter public list parsing or errors. Creation records remain
 queryable after resource deletion; expired non-creation records do not.

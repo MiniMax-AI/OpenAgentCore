@@ -10,7 +10,7 @@ func publicAPIRequest(r *http.Request) bool {
 }
 
 // Only deployment administration is exposed through the console. Enrollment and
-// node identity/transport calls connect directly to Core with their own credentials.
+// node identity/transport calls use the separate pass-through with their own credentials.
 func sandboxAdminRequest(r *http.Request) bool {
 	const base = "/core/v1/sandbox/"
 	if !strings.HasPrefix(r.URL.Path, base) {
@@ -37,11 +37,6 @@ func sandboxAdminRequest(r *http.Request) bool {
 		return len(parts) == 3 && parts[2] == "allocations" && r.Method == http.MethodGet
 	}
 	return false
-}
-
-// Operator metrics expose only the fixed, read-only deployment summary.
-func observabilityAdminRequest(r *http.Request) bool {
-	return r.URL.Path == "/core/v1/observability/summary" && r.Method == http.MethodGet
 }
 
 func explicitBearer(r *http.Request) bool {

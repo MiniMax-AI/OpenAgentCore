@@ -94,7 +94,7 @@ func selfHostedMCPAdmissionFixture(t *testing.T) (*store.Store, *pgxpool.Pool, s
 
 func selfHostedMCPAdmissionHandler(t *testing.T, s *store.Store, tenant string) http.Handler {
 	t.Helper()
-	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: device.HashCredential("test-token")}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: device.HashCredential("test-token")}})
 	if err != nil {
 		t.Fatal(err)
 	}

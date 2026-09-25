@@ -23,7 +23,7 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
 	s, pool := store.NewManagedTestStore(t)
 	token := uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-owner", TokenSHA256: device.HashCredential(token), TenantID: uuid.NewString()}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-owner", TokenSHA256: device.HashCredential(token), TenantID: uuid.NewString()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 	s, pool := store.NewManagedTestStore(t)
 	token := uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-harness", TokenSHA256: device.HashCredential(token), TenantID: uuid.NewString()}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-harness", TokenSHA256: device.HashCredential(token), TenantID: uuid.NewString()}})
 	if err != nil {
 		t.Fatal(err)
 	}

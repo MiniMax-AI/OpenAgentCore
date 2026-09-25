@@ -34,14 +34,11 @@ func WithOperatorMetrics(s OperatorMetricsStore, auth *DeploymentAuthenticator) 
 }
 
 func (h *Handler) registerOperatorMetricsRoutes(r chi.Router) {
-	if h.operatorMetrics == nil || h.deploymentAuth == nil {
+	if h.operatorMetrics == nil {
 		return
 	}
-	r.Group(func(r chi.Router) {
-		r.Use(h.deploymentAuth.authenticate)
-		r.Get("/core/v1/observability/summary", h.getOperatorMetrics)
-		r.Head("/core/v1/observability/summary", methodNotAllowed)
-	})
+	r.Get("/observability", h.getOperatorMetrics)
+	r.Head("/observability", methodNotAllowed)
 }
 
 // @Summary Retrieve bounded operator observability metrics
@@ -52,7 +49,7 @@ func (h *Handler) registerOperatorMetricsRoutes(r chi.Router) {
 // @Param range query string false "1h, 6h, or 24h (default 1h)"
 // @Success 200 {object} api.OperatorMetricsResponse
 // @Failure 400,401,500,503 {object} v1.ErrorResponse
-// @Router /core/v1/observability/summary [get]
+// @Router /core/v1/admin/observability [get]
 func (h *Handler) getOperatorMetrics(w http.ResponseWriter, r *http.Request) {
 	values := r.URL.Query()
 	for key, entries := range values {

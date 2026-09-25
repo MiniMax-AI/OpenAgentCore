@@ -1,6 +1,3 @@
-import { OpenAIAgentsClient } from "./client";
-import type { ReadOptions } from "./types";
-
 export type OperatorMetricsRange = "1h" | "6h" | "24h";
 
 export interface RequestMetricBucket {
@@ -32,11 +29,4 @@ export interface OperatorMetricsSummary {
   collector: CollectorMetricBucket[];
   turns: Array<{ start: string; status: "completed" | "failed" | "cancelled"; count: number; queue_p95_ms: number | null; execution_p95_ms: number | null }>;
   tools: Array<{ start: string; category: string; outcome: "success" | "error" | "cancelled" | "unknown"; count: number; timed_count: number; duration_p95_ms: number | null }>;
-}
-
-/** Deployment administrator extension; never uses a project credential. */
-export class ObservabilityAdminClient extends OpenAIAgentsClient {
-  retrieveSummary(range: OperatorMetricsRange, options?: ReadOptions): Promise<OperatorMetricsSummary> {
-    return this.request(`/summary?range=${range}`, { signal: options?.signal }, undefined, false);
-  }
 }

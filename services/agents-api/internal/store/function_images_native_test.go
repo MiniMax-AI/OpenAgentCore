@@ -61,7 +61,7 @@ func TestNativeFunctionImagePublicExecution(t *testing.T) {
 		}
 	}()
 	token, foreign := uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: device.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "other", TokenSHA256: device.HashCredential(foreign), TenantID: uuid.NewString()},
 	})

@@ -5,3 +5,6 @@ export type { SSEDecoder, SSEMessage } from "./sse";
 export type * from "./types";
 export * from "./sandbox-client";
 export * from "./observability-client";
+export type { CoreMetricsView } from "./core-metrics-types";
+export { AdminClient } from "./admin-client";
+export type * from "./admin-types";
