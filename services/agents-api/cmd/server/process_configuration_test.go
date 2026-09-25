@@ -39,3 +39,11 @@ func TestRetiredConfigurationRejectedWithoutReadingValues(t *testing.T) {
 		})
 	}
 }
+
+func TestRenamedCoreKeyDigestSettingNamesItsReplacement(t *testing.T) {
+	t.Setenv("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE", "/private/admin/digests.json")
+	err := validateProcessConfiguration()
+	if err == nil || !strings.Contains(err.Error(), "AGENTS_API_CORE_KEY_DIGESTS_FILE") || strings.Contains(err.Error(), "/private/") {
+		t.Fatal(err)
+	}
+}

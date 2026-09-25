@@ -64,9 +64,10 @@ type RuntimeNode struct {
 	CreatedAt      time.Time  `json:"created_at"`
 }
 type RuntimeNodeUpdate struct {
-	Name        string `json:"name"`
-	MaxActive   int    `json:"max_active"`
-	MaxRetained int    `json:"max_retained"`
+	Name      string `json:"name"`
+	MaxActive int    `json:"max_active"`
+	// Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
+	MaxRetained int `json:"max_retained"`
 }
 type SandboxDeploymentResources struct {
 	Allocations int64 `json:"allocations"`
@@ -121,14 +122,16 @@ type RuntimeDeploymentView struct {
 	OwnerEpoch     uint64                 `json:"owner_epoch"`
 }
 type RuntimeNodeAllocation struct {
-	Diagnostic     string    `json:"diagnostic"`
-	ID             string    `json:"id"`
-	NodeID         string    `json:"node_id"`
-	TenantID       string    `json:"tenant_id"`
-	SessionID      string    `json:"session_id"`
-	EnvironmentID  string    `json:"environment_id"`
-	State          string    `json:"state"`
-	ComputePhase   string    `json:"compute_phase"`
-	Initialization string    `json:"initialization"`
-	CreatedAt      time.Time `json:"created_at"`
+	Diagnostic    string `json:"diagnostic"`
+	ID            string `json:"id"`
+	NodeID        string `json:"node_id"`
+	TenantID      string `json:"tenant_id"`
+	SessionID     string `json:"session_id"`
+	EnvironmentID string `json:"environment_id"`
+	State         string `json:"state"`
+	ComputePhase  string `json:"compute_phase"`
+	// The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
+	ComputePhaseChangedAt *time.Time `json:"compute_phase_changed_at" extensions:"x-nullable"`
+	Initialization        string     `json:"initialization"`
+	CreatedAt             time.Time  `json:"created_at"`
 }

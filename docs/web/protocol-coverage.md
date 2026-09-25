@@ -15,14 +15,14 @@ the administrator API are defined by the [administrator API contract](../../cont
 
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`, `/console/auth/{setup,login,logout}`, `/console/config` | Console account (session cookie) or legacy Basic authentication | Sign-in and sign-out; non-secret capability flags such as `sandbox_admin` |
+| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; non-secret capability flags such as `sandbox_admin` |
 | Administrator API | `/core/v1/admin/**` | Deployment administrator credential, added by the console server | Projects, keys, resource reads and deletion, provenance, summaries, Runtime observations |
 | Sandbox administration | `/core/v1/sandbox/**` | Deployment administrator credential, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics |
 | Agents API | `/v1/**` | Project API key | Not used. The first-run screen shows a `curl` example for `/v1/agents` with a `$PROJECT_API_KEY` placeholder; the console never sends it |
 
-Browser requests are same-origin and carry only the console sign-in. The browser
-never holds or sends the deployment credential, an API key or an `OpenAI-Beta`
-header. Responses are validated: a malformed value is reported as a failure, or
+Browser requests are same-origin and carry only the console session. The browser
+sends the Core key once, in the sign-in request body, and never stores it; it never
+holds or sends an API key or an `OpenAI-Beta` header. Responses are validated: a malformed value is reported as a failure, or
 marked as unrecognised where noted below, and never replaced by a guessed or zero
 value.
 
@@ -102,9 +102,9 @@ log (`GET /audit-log`) is not consumed; System shows the sandbox deployment only
 | Maintenance | `PATCH /core/v1/sandbox/deployment/maintenance` | Enter or leave maintenance to change the provider |
 | Nodes | `GET /core/v1/sandbox/nodes` | Nodes page; fleet on Overview; node capacity on Sandbox metrics. An online node's `diagnostic` (`docker_unavailable`, `docker_limits_unsupported`, `runtime_image_unavailable`, `kvm_unavailable`, `microsandbox_artifacts_unavailable`, `capacity_insufficient`, `provider_unavailable`; any other value reads as `provider_unavailable`) marks it degraded and names the reason and fix in the help tip beside its status on each of these and on the node's page |
 | Node detail | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | Sandbox metrics node dialog: the host's CPU busy share and memory from its last heartbeat, and their history over the page's range |
-| Allocations | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes page; Sandbox metrics |
+| Allocations | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes page; Sandbox metrics. Under microsandbox, a node's page shows from `compute_phase_changed_at` how long each allocation has been in its compute phase and, while suspended, about when Core reclaims it (that time plus the deployment's `suspension.retention_seconds`); a null time shows a dash |
 | Enrollment | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**: the administrator sets the node's sandbox limits (`max_active`; `max_retained` only for microsandbox, equal to `max_active` for Docker) before Core issues a single-use token inside a command that verifies the installer checksum |
-| Update node | `PATCH /core/v1/sandbox/nodes/{node_id}` | **Edit node**: the name and sandbox limits together (the retained limit only for microsandbox; Docker keeps its saved one, raised to at least the active limit) |
+| Update node | `PATCH /core/v1/sandbox/nodes/{node_id}` | **Edit node**: the name and sandbox limits together (the retained limit only for microsandbox; under Docker, Core sets it to the active limit) |
 | Remove node | `DELETE /core/v1/sandbox/nodes/{node_id}` | Confirmed node removal; the row goes only after Core acknowledges the deletion |
 
 These pages appear only when `/console/config` reports `sandbox_admin: true`. An E2B

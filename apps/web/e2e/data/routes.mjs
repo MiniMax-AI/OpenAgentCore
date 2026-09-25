@@ -81,10 +81,16 @@ export function buildDemo(now = Math.floor(Date.now() / 1000)) {
     { id: "node-edge", name: "edge-03", provider: "docker", online: false, provider_ready: false, diagnostic: "", cpu_count: 8, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: new Date((now - 5400) * 1000).toISOString(), max_active: 4, max_retained: 8, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date((now - 86400 * 3) * 1000).toISOString() },
   ];
   const hosted = sessions.filter((session) => session.environment.type === "openai_hosted");
-  const allocations = hosted.map((session, index) => ({
-    id: uuid(), node_id: index % 2 ? "node-gpu" : "node-local", tenant_id: "project", session_id: session.id, environment_id: session.environment.id,
-    state: "active", compute_phase: index % 3 === 0 ? "suspended" : "running", diagnostic: "", initialization: "ready", created_at: new Date(session.created_at * 1000).toISOString(),
-  }));
+  const allocations = hosted.map((session, index) => {
+    const suspended = index % 3 === 0;
+    // Running since creation; suspended two hours ago, or at creation when that is later.
+    const changed = suspended ? Math.max(session.created_at, now - 7_200) : session.created_at;
+    return {
+      id: uuid(), node_id: index % 2 ? "node-gpu" : "node-local", tenant_id: "project", session_id: session.id, environment_id: session.environment.id,
+      state: "active", compute_phase: suspended ? "suspended" : "running", compute_phase_changed_at: new Date(changed * 1000).toISOString(),
+      diagnostic: "", initialization: "ready", created_at: new Date(session.created_at * 1000).toISOString(),
+    };
+  });
   const observations = sessions.map((session) => {
     const base = { id: session.id, object: "agent.runtime_observation", session_id: session.id, resolved_at: now };
     if (session.environment.type === "none") return { ...base, environment_id: null, mode: "none", provider_type: null, instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", allocation_created_at: null, observed_at: null, started_at: null, cpu: null, memory: null };

@@ -422,3 +422,59 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 		})
 	}
 }
+
+// compute_phase_changed_at moves only when an allocation enters a different phase.
+func TestRuntimeComputePhaseChangedAt(t *testing.T) {
+	_, w, pool, owner := runtimeSuspensionFixture(t)
+	runtimeSuspensionCompleted(t, pool, owner)
+	changedAt := func() time.Time {
+		t.Helper()
+		var value time.Time
+		if err := pool.QueryRow(t.Context(), "SELECT compute_phase_changed_at FROM runtime_allocations WHERE id=$1", owner.ID).Scan(&value); err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	entered := changedAt()
+	owner, err := w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"updated"}`), nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changedAt().Equal(entered) {
+		t.Fatal("a same-phase update moved the phase time")
+	}
+	until := time.Now().Add(time.Hour)
+	runtimeSuspensionStep(t, w, owner, "quiescing", &until)
+	if !changedAt().After(entered) {
+		t.Fatal("entering a new phase kept the previous phase time")
+	}
+}
+
+// The node allocation list reports the phase time, and null when it is unknown.
+func TestRuntimeComputePhaseChangedAtInNodeAllocations(t *testing.T) {
+	s, w, d := managerFixture(t, 1, 4)
+	tenant := uuid.NewString()
+	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("listed"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	allocation, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, device.HashCredential("runtime"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := func() RuntimeNodeAllocation {
+		t.Helper()
+		items, err := s.ListNodeRuntimeAllocations(t.Context(), d.LocalNodeID)
+		if err != nil || len(items) != 1 || items[0].ID != allocation.ID {
+			t.Fatal(items, err)
+		}
+		return items[0]
+	}
+	if listed().ComputePhaseChangedAt == nil {
+		t.Fatal("a new allocation has no phase time")
+	}
+	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_phase_changed_at=NULL WHERE id=$1", allocation.ID)
+	if encoded, _ := json.Marshal(listed()); !strings.Contains(string(encoded), `"compute_phase_changed_at":null`) {
+		t.Fatal("an unknown phase time was not null", string(encoded))
+	}
+}

@@ -3,45 +3,40 @@ package main
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"mime"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 const sessionCookie = "core_console_session"
 const sessionLifetime = 12 * time.Hour
 
-type consoleSession struct {
-	username string
-	expires  time.Time
-}
+// minimumCoreKeyLength keeps guessing infeasible even though a correct key is
+// never rate limited. Installer-generated keys have 64 characters.
+const minimumCoreKeyLength = 32
 
+// consoleAuth signs the browser in with the Core key. Sessions live only in
+// memory, so a console restart or Core key rotation requires signing in again.
 type consoleAuth struct {
-	store    *accountStore
+	coreKey  [sha256.Size]byte
 	secure   bool
 	mu       sync.Mutex
-	sessions map[[sha256.Size]byte]consoleSession
+	sessions map[[sha256.Size]byte]time.Time
 	attempts int
 	window   time.Time
 	workers  chan struct{}
 }
 
-func newConsoleAuth(c config) (*consoleAuth, error) {
-	store, err := newAccountStore(c.stateDir)
-	if err != nil {
-		return nil, err
-	}
-	return &consoleAuth{store: store,
-		secure: strings.HasPrefix(c.origin, "https://"), sessions: make(map[[sha256.Size]byte]consoleSession),
-		workers: make(chan struct{}, 2)}, nil
+func newConsoleAuth(c config) *consoleAuth {
+	return &consoleAuth{coreKey: sha256.Sum256([]byte(c.coreKey)),
+		secure: strings.HasPrefix(c.origin, "https://"), sessions: make(map[[sha256.Size]byte]time.Time),
+		workers: make(chan struct{}, 2)}
 }
 
 func authJSON(w http.ResponseWriter, status int, value any) {
@@ -69,25 +64,25 @@ func cookieDigest(r *http.Request) ([sha256.Size]byte, bool) {
 	return sha256.Sum256([]byte(value)), true
 }
 
-func (a *consoleAuth) authenticated(r *http.Request) string {
+func (a *consoleAuth) authenticated(r *http.Request) bool {
 	digest, ok := cookieDigest(r)
 	if !ok {
-		return ""
+		return false
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	session, ok := a.sessions[digest]
-	if !ok || !time.Now().Before(session.expires) {
+	expires, ok := a.sessions[digest]
+	if !ok || !time.Now().Before(expires) {
 		delete(a.sessions, digest)
-		return ""
+		return false
 	}
-	return session.username
+	return true
 }
 
-func (a *consoleAuth) setSession(w http.ResponseWriter, r *http.Request, username string) {
+func (a *consoleAuth) setSession(w http.ResponseWriter, r *http.Request) {
 	token := make([]byte, 32)
 	if _, err := rand.Read(token); err != nil {
-		authError(w, http.StatusInternalServerError, "Cannot start a login session")
+		authError(w, http.StatusServiceUnavailable, "Sign-in is unavailable; try again later")
 		return
 	}
 	value := hex.EncodeToString(token)
@@ -96,30 +91,32 @@ func (a *consoleAuth) setSession(w http.ResponseWriter, r *http.Request, usernam
 	if previous, ok := cookieDigest(r); ok {
 		delete(a.sessions, previous)
 	}
-	for key, session := range a.sessions {
-		if !now.Before(session.expires) {
+	for key, expires := range a.sessions {
+		if !now.Before(expires) {
 			delete(a.sessions, key)
 		}
 	}
 	// Keep memory bounded even when clients discard every login cookie.
 	if len(a.sessions) >= 64 {
 		var oldest [sha256.Size]byte
-		expires := now.Add(sessionLifetime + time.Second)
-		for key, session := range a.sessions {
-			if session.expires.Before(expires) {
-				oldest, expires = key, session.expires
+		earliest := now.Add(sessionLifetime + time.Second)
+		for key, expires := range a.sessions {
+			if expires.Before(earliest) {
+				oldest, earliest = key, expires
 			}
 		}
 		delete(a.sessions, oldest)
 	}
-	a.sessions[sha256.Sum256([]byte(value))] = consoleSession{username, now.Add(sessionLifetime)}
+	a.sessions[sha256.Sum256([]byte(value))] = now.Add(sessionLifetime)
 	a.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: value, Path: "/", HttpOnly: true,
 		Secure: a.secure, SameSite: http.SameSiteStrictMode, MaxAge: int(sessionLifetime.Seconds())})
-	authJSON(w, http.StatusOK, map[string]string{"mode": "authenticated", "username": username})
+	authJSON(w, http.StatusOK, map[string]string{"mode": "authenticated"})
 }
 
-func (a *consoleAuth) admitAttempt() bool {
+// admitFailure charges one failed sign-in to the shared budget. Correct keys are
+// never charged, so failed attempts cannot lock out the key holder.
+func (a *consoleAuth) admitFailure() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	now := time.Now()
@@ -135,21 +132,14 @@ func (a *consoleAuth) admitAttempt() bool {
 
 func (a *consoleAuth) serve(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/console/auth" && r.Method == http.MethodGet {
-		account, err := a.store.read()
-		if err != nil {
-			authError(w, http.StatusServiceUnavailable, "Administrator state is unavailable")
-			return
-		}
-		if account == nil {
-			authJSON(w, http.StatusOK, map[string]string{"mode": "setup"})
-		} else if username := a.authenticated(r); username != "" {
-			authJSON(w, http.StatusOK, map[string]string{"mode": "authenticated", "username": username})
+		if a.authenticated(r) {
+			authJSON(w, http.StatusOK, map[string]string{"mode": "authenticated"})
 		} else {
 			authJSON(w, http.StatusOK, map[string]string{"mode": "login"})
 		}
 		return
 	}
-	if r.URL.Path != "/console/auth/setup" && r.URL.Path != "/console/auth/login" && r.URL.Path != "/console/auth/logout" {
+	if r.URL.Path != "/console/auth/login" && r.URL.Path != "/console/auth/logout" {
 		authError(w, http.StatusNotFound, "Unknown authentication route")
 		return
 	}
@@ -174,23 +164,13 @@ func (a *consoleAuth) serve(w http.ResponseWriter, r *http.Request) {
 		authError(w, http.StatusUnsupportedMediaType, "Use application/json")
 		return
 	}
-	var input struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
+	// Decode members by exact name so case variants count as unknown fields.
+	var input map[string]json.RawMessage
+	var coreKey string
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&input) != nil || decoder.Decode(new(any)) != io.EOF {
-		authError(w, http.StatusBadRequest, "Invalid authentication request")
-		return
-	}
-	if !validUsername(input.Username) || len(input.Password) < 12 || len(input.Password) > 72 {
-		authError(w, http.StatusBadRequest, "Use a 1–64 character username (letters, digits, ., _, -) and a 12–72 byte password")
-		return
-	}
-	if !a.admitAttempt() {
-		w.Header().Set("Retry-After", "60")
-		authError(w, http.StatusTooManyRequests, "Too many authentication attempts; try again in one minute")
+	if decoder.Decode(&input) != nil || decoder.Decode(new(any)) != io.EOF || len(input) != 1 ||
+		json.Unmarshal(input["core_key"], &coreKey) != nil || coreKey == "" {
+		authError(w, http.StatusBadRequest, "Send a JSON object with only a non-empty core_key")
 		return
 	}
 	select {
@@ -198,45 +178,21 @@ func (a *consoleAuth) serve(w http.ResponseWriter, r *http.Request) {
 		defer func() { <-a.workers }()
 	default:
 		w.Header().Set("Retry-After", "1")
-		authError(w, http.StatusTooManyRequests, "Authentication is busy; try again shortly")
+		authError(w, http.StatusTooManyRequests, "Sign-in is busy; try again shortly")
 		return
 	}
-	account, err := a.store.read()
-	if err != nil {
-		authError(w, http.StatusServiceUnavailable, "Administrator state is unavailable")
+	// Comparing fixed-size digests keeps the check constant-time for any key length.
+	submitted := sha256.Sum256([]byte(coreKey))
+	if subtle.ConstantTimeCompare(submitted[:], a.coreKey[:]) == 1 {
+		a.setSession(w, r)
 		return
 	}
-	if r.URL.Path == "/console/auth/setup" {
-		if account != nil {
-			authError(w, http.StatusConflict, "Administrator already registered; sign in")
-			return
-		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
-		if err != nil {
-			authError(w, http.StatusInternalServerError, "Cannot register administrator")
-			return
-		}
-		account = &administrator{Version: 1, Username: input.Username, PasswordHash: string(hash)}
-		if err := a.store.create(*account); err != nil {
-			if errors.Is(err, errAccountExists) {
-				authError(w, http.StatusConflict, "Administrator already registered; sign in")
-			} else {
-				authError(w, http.StatusInternalServerError, "Cannot persist administrator; check the private state directory")
-			}
-			return
-		}
-	} else {
-		if account == nil {
-			authError(w, http.StatusConflict, "Register the administrator first")
-			return
-		}
-		passwordErr := bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(input.Password))
-		if passwordErr != nil || input.Username != account.Username {
-			authError(w, http.StatusUnauthorized, "Invalid username or password")
-			return
-		}
+	if !a.admitFailure() {
+		w.Header().Set("Retry-After", "60")
+		authError(w, http.StatusTooManyRequests, "Too many failed sign-in attempts; try again in one minute")
+		return
 	}
-	a.setSession(w, r, account.Username)
+	authError(w, http.StatusUnauthorized, "Invalid Core key")
 }
 
 func publicConsoleAsset(r *http.Request) bool {

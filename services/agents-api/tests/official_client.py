@@ -109,13 +109,13 @@ def main():
     process = None
     credential_canary = secrets.token_hex(32)
     with tempfile.TemporaryDirectory(prefix="agents-api-test-") as directory:
-        admin_digests = Path(directory) / "admin-digests.json"
-        admin_digests.touch(mode=0o600)
-        admin_digests.write_text(json.dumps([hashlib.sha256(admin_token.encode()).hexdigest()]))
+        core_key_digests = Path(directory) / "core-key-digests.json"
+        core_key_digests.touch(mode=0o600)
+        core_key_digests.write_text(json.dumps([hashlib.sha256(admin_token.encode()).hexdigest()]))
         credential_key = Path(directory) / "credential-key.txt"
         credential_key.touch(mode=0o600)
         credential_key.write_text(base64.b64encode(secrets.token_bytes(32)).decode() + "\n")
-        env = dict(os.environ, AGENTS_API_DATABASE_URL=dsn, AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE=str(admin_digests), AGENTS_API_ADDR=f"127.0.0.1:{port}", AGENTS_API_ENGINE="codex")
+        env = dict(os.environ, AGENTS_API_DATABASE_URL=dsn, AGENTS_API_CORE_KEY_DIGESTS_FILE=str(core_key_digests), AGENTS_API_ADDR=f"127.0.0.1:{port}", AGENTS_API_ENGINE="codex")
         env["AGENTS_API_CREDENTIAL_KEY_FILE"] = str(credential_key)
         # Enable the real Worker/gateway admission path without connecting a daemon.
         # Synthetic fixture inputs remain queued; this is not live model acceptance.

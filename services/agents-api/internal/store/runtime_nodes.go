@@ -24,6 +24,15 @@ func validRuntimeDigest(value string) bool {
 	decoded, err := hex.DecodeString(value)
 	return err == nil && len(decoded) == 32 && hex.EncodeToString(decoded) == value
 }
+
+// retainedLimit reports the retained-sandbox limit a provider can use. Docker
+// never suspends a sandbox, so its retained limit always equals its active limit.
+func retainedLimit(provider string, active, retained int) int {
+	if provider == "docker" {
+		return active
+	}
+	return retained
+}
 func validateRuntimeNode(name string, active, retained int) error {
 	if strings.TrimSpace(name) == "" || len(name) > 128 || strings.ContainsAny(name, "\x00\r\n") || active < 1 || retained < active || retained > 1000000 {
 		return ErrInvalidInput
@@ -90,12 +99,13 @@ func runtimeNodeViews(rows []sqlc.ListRuntimeNodesRow) ([]RuntimeNode, error) {
 			return nil, err
 		}
 		health.ProviderReady = n.ProviderReady
-		out = append(out, RuntimeNode{RuntimeNodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: runtimeUUID(n.ID), Name: n.Name, Provider: n.ProviderKind, Online: n.Online, LastSeenAt: seen, MaxActive: int(n.MaxActive), MaxRetained: int(n.MaxRetained), Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt.Time})
+		out = append(out, RuntimeNode{RuntimeNodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: runtimeUUID(n.ID), Name: n.Name, Provider: n.ProviderKind, Online: n.Online, LastSeenAt: seen, MaxActive: int(n.MaxActive), MaxRetained: retainedLimit(n.ProviderKind, int(n.MaxActive), int(n.MaxRetained)), Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt.Time})
 	}
 	return out, nil
 }
 func (s *Store) CreateRuntimeEnrollment(ctx context.Context, capacity RuntimeNodeCapacity) (string, time.Time, error) {
-	if err := validateRuntimeNode("enrollment", capacity.MaxActive, capacity.MaxRetained); err != nil {
+	// The retained limit depends on the provider, so the transaction checks it.
+	if err := validateRuntimeNode("enrollment", capacity.MaxActive, capacity.MaxActive); err != nil {
 		return "", time.Time{}, err
 	}
 	var bytes [32]byte
@@ -105,6 +115,10 @@ func (s *Store) CreateRuntimeEnrollment(ctx context.Context, capacity RuntimeNod
 	token := hex.EncodeToString(bytes[:])
 	var expires time.Time
 	err := s.runtimeManagerTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
+		capacity.MaxRetained = retainedLimit(d.ProviderKind, capacity.MaxActive, capacity.MaxRetained)
+		if err := validateRuntimeNode("enrollment", capacity.MaxActive, capacity.MaxRetained); err != nil {
+			return err
+		}
 		if d.Mode != "nodes" || d.Maintenance || unspecifiedNodeDeployment(d) {
 			return ErrSandboxDeploymentConflict
 		}
@@ -149,7 +163,7 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: receipt.MaxActive, MaxRetained: receipt.MaxRetained, SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration)})
+		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: receipt.MaxActive, MaxRetained: int32(retainedLimit(d.ProviderKind, int(receipt.MaxActive), int(receipt.MaxRetained))), SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration)})
 		if err != nil {
 			return err
 		}
@@ -166,7 +180,7 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 	return result, err
 }
 func nodeIdentity(n sqlc.RuntimeNode, kind string) RuntimeNodeIdentity {
-	return RuntimeNodeIdentity{SpecificationDigest: n.SpecificationDigest, DeploymentGeneration: uint64(n.DeploymentGeneration), NodeID: runtimeUUID(n.ID), InstallationID: runtimeUUID(n.InstallationID), Provider: kind, BackendFingerprint: n.BackendFingerprint, MaxActive: int(n.MaxActive), MaxRetained: int(n.MaxRetained)}
+	return RuntimeNodeIdentity{SpecificationDigest: n.SpecificationDigest, DeploymentGeneration: uint64(n.DeploymentGeneration), NodeID: runtimeUUID(n.ID), InstallationID: runtimeUUID(n.InstallationID), Provider: kind, BackendFingerprint: n.BackendFingerprint, MaxActive: int(n.MaxActive), MaxRetained: retainedLimit(kind, int(n.MaxActive), int(n.MaxRetained))}
 }
 func (s *Store) AuthenticateRuntimeNode(ctx context.Context, nodeID, credential string) (RuntimeNodeIdentity, error) {
 	id, err := parseConnectionGeneration(nodeID)
@@ -203,7 +217,8 @@ func (s *Store) AuthenticateRuntimeNode(ctx context.Context, nodeID, credential 
 	return nodeIdentity(n, d.ProviderKind), nil
 }
 func (s *Store) UpdateRuntimeNode(ctx context.Context, nodeID string, input RuntimeNodeUpdate) error {
-	if err := validateRuntimeNode(input.Name, input.MaxActive, input.MaxRetained); err != nil {
+	// The retained limit depends on the provider, so the transaction checks it.
+	if err := validateRuntimeNode(input.Name, input.MaxActive, input.MaxActive); err != nil {
 		return err
 	}
 	id, err := parseConnectionGeneration(nodeID)
@@ -211,6 +226,10 @@ func (s *Store) UpdateRuntimeNode(ctx context.Context, nodeID string, input Runt
 		return err
 	}
 	return s.runtimeManagerTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
+		input.MaxRetained = retainedLimit(d.ProviderKind, input.MaxActive, input.MaxRetained)
+		if err := validateRuntimeNode(input.Name, input.MaxActive, input.MaxRetained); err != nil {
+			return err
+		}
 		n, err := q.GetRuntimeNode(ctx, id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -266,7 +285,12 @@ func (s *Store) ListNodeRuntimeAllocations(ctx context.Context, nodeID string) (
 	}
 	out := make([]RuntimeNodeAllocation, 0, len(rows))
 	for _, a := range rows {
-		out = append(out, RuntimeNodeAllocation{Diagnostic: a.ObservationError, ID: runtimeUUID(a.ID), NodeID: runtimeUUID(a.NodeID), TenantID: runtimeUUID(a.TenantID), SessionID: runtimeUUID(a.SessionID), EnvironmentID: runtimeUUID(a.EnvironmentID), State: a.State, ComputePhase: a.ComputePhase, Initialization: a.Initialization, CreatedAt: a.CreatedAt.Time})
+		var phaseChanged *time.Time
+		if a.ComputePhaseChangedAt.Valid {
+			value := a.ComputePhaseChangedAt.Time
+			phaseChanged = &value
+		}
+		out = append(out, RuntimeNodeAllocation{Diagnostic: a.ObservationError, ID: runtimeUUID(a.ID), NodeID: runtimeUUID(a.NodeID), TenantID: runtimeUUID(a.TenantID), SessionID: runtimeUUID(a.SessionID), EnvironmentID: runtimeUUID(a.EnvironmentID), State: a.State, ComputePhase: a.ComputePhase, ComputePhaseChangedAt: phaseChanged, Initialization: a.Initialization, CreatedAt: a.CreatedAt.Time})
 	}
 	return out, nil
 }

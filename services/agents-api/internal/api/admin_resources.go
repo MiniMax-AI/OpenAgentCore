@@ -9,7 +9,7 @@ import (
 )
 
 // adminTenantContextKey identifies an explicit management target, not a caller.
-// Only deployment-authenticated, allowlisted resource handlers receive it.
+// Only Core-key-authenticated project resource handlers receive it.
 type adminTenantContextKey struct{}
 
 type AdminManagementStore interface {

@@ -123,10 +123,13 @@ def arguments(argv=None):
     parser.add_argument("--web-port", type=int, default=8080)
     parser.add_argument("--core-url", type=core_target)
     parser.add_argument("--public-url", type=core_target, help="Public HTTPS Core/Web origin behind your TLS reverse proxy")
-    parser.add_argument("--admin-token-file", type=Path)
+    parser.add_argument("--core-key-file", type=Path, help="Web-only: private file containing the existing Core's Core key")
+    parser.add_argument("--admin-token-file", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--status", action="store_true", help="Read installation health; never invoke a model")
     parser.add_argument("--stop", action="store_true", help="Stop installed services; retain all data")
     args = parser.parse_args(argv)
+    if args.admin_token_file:
+        parser.error("--admin-token-file was renamed; use --core-key-file")
     if args.web_only and args.native_core:
         parser.error("--web-only cannot install native Core")
     args.sandbox_provider = args.sandbox_provider == "true"
@@ -151,9 +154,9 @@ def arguments(argv=None):
         parser.error("Ports must be between 1024 and 65535")
     if not args.core_only and not args.web_only and args.core_port == args.web_port:
         parser.error("Core and Web need different ports")
-    if args.web_only and not (args.core_url and args.admin_token_file):
-        parser.error("--web-only requires --core-url and --admin-token-file")
-    if not args.web_only and (args.core_url or args.admin_token_file):
+    if args.web_only and not (args.core_url and args.core_key_file):
+        parser.error("--web-only requires --core-url and --core-key-file")
+    if not args.web_only and (args.core_url or args.core_key_file):
         parser.error("Existing Core connection flags require --web-only")
     return args
 
@@ -239,27 +242,20 @@ def initialize(root, args, manifest):
             if (not directory.is_dir() or directory.is_symlink() or
                     stat.S_IMODE(directory.stat().st_mode) & 0o077):
                 raise InstallError("Private provider receipts are missing or unsafe; restore the retained installation")
-        if state.get("console_auth") == "account":
-            # Never let Compose create replacement bind sources for lost auth
-            # state. An existing install must retain its account directory.
-            directory = root / "state/console"
-            if (not directory.is_dir() or directory.is_symlink() or
-                    stat.S_IMODE(directory.stat().st_mode) & 0o077):
-                raise InstallError("Private console authentication state is missing or unsafe; restore the retained installation")
-            if (directory / "registered").exists() and not (directory / "admin.json").is_file():
-                raise InstallError("Registered console account is missing; restore its private state backup")
         return state
     if root.exists() and any(root.iterdir()):
         raise InstallError("Installation directory is not empty; refusing to overwrite existing state")
     if mode == "web-only":
-        source = args.admin_token_file
+        source = args.core_key_file
         info = source.stat()
         if (not source.is_absolute() or source.is_symlink() or not stat.S_ISREG(info.st_mode)
                 or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > 4096):
-            raise InstallError("Administrator token file must be an absolute, private regular file")
+            raise InstallError("Core key file must be an absolute, private regular file")
         token = source.read_text().strip()
         if not token or any(c.isspace() for c in token) or "\x00" in token:
-            raise InstallError("Invalid administrator token file")
+            raise InstallError("Invalid Core key file")
+        if len(token) < 32:
+            raise InstallError("The Core key must have at least 32 characters")
     if mode != "web-only":
         free_port(args.core_port)
     if mode != "core-only":
@@ -267,11 +263,8 @@ def initialize(root, args, manifest):
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(root, 0o700)
     directories = ["config", "admin"]
-    directories.append("state")
     if mode != "web-only":
-        directories.append("state/e2b")
-    if mode != "core-only":
-        directories.append("state/console")
+        directories += ["state", "state/e2b"]
     for name in directories:
         (root / name).mkdir(mode=0o700)
     state = {"version": 1, "source_commit": manifest["source_commit"], "mode": mode,
@@ -284,13 +277,11 @@ def initialize(root, args, manifest):
     if mode != "web-only":
         private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
         private_write(config / "database.password", secrets.token_hex(32))
-        admin_token = secrets.token_hex(32)
-        private_write(root / "admin/sandbox-admin.key", admin_token)
-        write_json(root / "admin/digests.json", [hashlib.sha256(admin_token.encode()).hexdigest()])
+        core_key = secrets.token_hex(32)
+        private_write(root / "admin/core.key", core_key)
+        write_json(root / "admin/core-key-digests.json", [hashlib.sha256(core_key.encode()).hexdigest()])
     if mode == "web-only":
-        private_write(root / "admin/sandbox-admin.key", token)
-    if mode != "core-only":
-        state["console_auth"] = "account"
+        private_write(root / "admin/core.key", token)
     password = (config / "database.password").read_text() if mode != "web-only" else ""
     if mode != "web-only":
         private_write(config / "core.env", environment_text(core_environment(root, state, password)))
@@ -387,26 +378,14 @@ def main(argv=None):
     if state["mode"] != "core-only":
         url = f'http://127.0.0.1:{state["web_port"]}'
         host = urlsplit(state.get("public_url") or url).netloc
-        if state.get("console_auth") == "account":
-            if not wait_http(url + "/console/auth", {"Host": host}):
-                raise InstallError("Web authentication is unavailable. Inspect private console state")
-            core_url = state.get("core_url") or f'http://127.0.0.1:{state["core_port"]}'
-            token = (root / "admin/sandbox-admin.key").read_text().strip()
-            if not wait_http(core_url + "/core/v1/projects", {"Authorization": "Bearer " + token}):
-                raise InstallError("Core administrator authentication failed. Inspect private configuration; no model was called")
-            print("Console: " + (state.get("public_url") or url))
-            if (root / "state/console/admin.json").exists():
-                print("Sign in with your administrator account. Keep its password and private state backup safe.")
-            else:
-                print("Open Web to register the administrator with your chosen username and password.")
-                print("Keep your administrator username and password safe; there is no email password reset.")
-        else:
-            auth = base64.b64encode(("admin:" + (root / "config/console.password").read_text()).encode()).decode()
-            if not wait_http(url + "/core/v1/projects", {"Authorization": "Basic " + auth,
-                    "Host": host}):
-                raise InstallError("Web could not authenticate to Core. Inspect private configuration; no model was called")
-            print("Console: " + (state.get("public_url") or url) + " (user: admin)")
-            print("Console password file: " + str(root / "config/console.password"))
+        if not wait_http(url + "/console/auth", {"Host": host}):
+            raise InstallError("Web sign-in is unavailable. Use --status and inspect the Web service")
+        core_url = state.get("core_url") or f'http://127.0.0.1:{state["core_port"]}'
+        token = (root / "admin/core.key").read_text().strip()
+        if not wait_http(core_url + "/core/v1/projects", {"Authorization": "Bearer " + token}):
+            raise InstallError("Core key authentication failed. Inspect private configuration; no model was called")
+        print("Console: " + (state.get("public_url") or url))
+        print("Sign in to Web with the Core key. Keep it private; it also authorizes the Core management API.")
     if state["mode"] != "web-only":
         print(f'API: http://127.0.0.1:{state["core_port"]}/v1')
         print("Create a Project and issue its API key through the administrator API before calling the direct Core API.")
@@ -415,7 +394,7 @@ def main(argv=None):
             print("Provider: " + args.provider + ". Local node enrolled; Core provisions Sessions on demand.")
         else:
             print("No execution node was installed by this run. Open Hosted Sandbox Manager to manage providers and nodes.")
-        print("Sandbox administrator key file: " + str(root / "admin/sandbox-admin.key"))
+    print("Core key file: " + str(root / "admin/core.key"))
     print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
 
 

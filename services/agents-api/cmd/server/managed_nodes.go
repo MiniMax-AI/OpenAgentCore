@@ -49,7 +49,7 @@ func configureManagedNodes(s *store.Store, owner func(context.Context) error) (*
 		return nil, err
 	}
 	if setupID != "" && result.admin == nil {
-		return nil, errors.New("Web sandbox setup requires deployment administrator credentials")
+		return nil, errors.New("Web sandbox setup requires AGENTS_API_CORE_KEY_DIGESTS_FILE with the Core key digest")
 	}
 	result.hub = node.NewHub(node.HubOptions{
 		Authenticate: func(ctx context.Context, id, credential string) (node.Identity, error) {
@@ -95,17 +95,17 @@ func (m *managedNodes) close() {
 }
 
 func deploymentAdminAuthenticator() (*api.DeploymentAuthenticator, error) {
-	path := os.Getenv("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE")
+	path := os.Getenv("AGENTS_API_CORE_KEY_DIGESTS_FILE")
 	if path == "" {
 		return nil, nil
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.New("cannot read AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE")
+		return nil, errors.New("cannot read AGENTS_API_CORE_KEY_DIGESTS_FILE")
 	}
 	var digests []string
 	if json.Unmarshal(raw, &digests) != nil || len(digests) == 0 {
-		return nil, errors.New("sandbox administrator configuration must contain an array of SHA-256 digests")
+		return nil, errors.New("AGENTS_API_CORE_KEY_DIGESTS_FILE must contain a JSON array of Core key SHA-256 digests")
 	}
 	return api.NewDeploymentAuthenticator(digests)
 }

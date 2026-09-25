@@ -77,8 +77,8 @@ def core_environment(root, state, database_password):
                                          if native else "/opt/parsar/e2b/agents-api-e2b-provider"),
         "AGENTS_API_E2B_STATE_DIR": str(Path(root) / "state/e2b") if native else "/state/e2b",
     }
-    result["AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"] = (
-        str(Path(root) / "admin/digests.json") if native else "/admin/digests.json")
+    result["AGENTS_API_CORE_KEY_DIGESTS_FILE"] = (
+        str(Path(root) / "admin/core-key-digests.json") if native else "/admin/core-key-digests.json")
     result["AGENTS_API_SANDBOX_INSTALLATION_ID"] = state["installation_id"]
     result["AGENTS_API_CONFIG_FILE"] = config + "/core.env"
     return result
@@ -113,7 +113,7 @@ def compose_config(root, state, manifest, database_password):
             services["database"]["ports"] = [f'127.0.0.1:{state["database_port"]}:5432']
             services.pop("migrate")
         else:
-            core["volumes"].append(bind(root / "admin/digests.json", "/admin/digests.json"))
+            core["volumes"].append(bind(root / "admin/core-key-digests.json", "/admin/core-key-digests.json"))
             core["volumes"].append(bind(root / "state/e2b", "/state/e2b", False))
             services["core"] = core
         doc["volumes"] = {"database": {}}
@@ -122,23 +122,12 @@ def compose_config(root, state, manifest, database_password):
             "image": manifest["images"]["web"], "user": identity, "restart": "unless-stopped",
             "ports": [f'127.0.0.1:{state["web_port"]}:8080'], "read_only": True,
             "security_opt": ["no-new-privileges:true"],
-            "volumes": [bind(root / "admin/sandbox-admin.key", "/admin/sandbox-admin.key")],
+            "volumes": [bind(root / "admin/core.key", "/admin/core.key")],
             "environment": {"CORE_CONSOLE_ORIGIN": state.get("public_url") or f'http://127.0.0.1:{state["web_port"]}',
                 "CORE_CONSOLE_UPSTREAM": (f'http://127.0.0.1:{state["core_port"]}' if native
                                           else state.get("core_url") or "http://core:8091"),
-                "CORE_CONSOLE_ADMIN_TOKEN_FILE": "/admin/sandbox-admin.key"},
+                "CORE_CONSOLE_CORE_KEY_FILE": "/admin/core.key"},
         }
-        if state.get("console_auth") == "account":
-            services["web"]["volumes"].extend([
-                bind(root / "state/console", "/state/console", False),
-            ])
-            services["web"]["environment"].update(
-                CORE_CONSOLE_AUTH_MODE="account",
-                CORE_CONSOLE_STATE_DIR="/state/console",
-            )
-        else:
-            services["web"]["volumes"].append(bind(config / "console.password", "/config/console.password"))
-            services["web"]["environment"]["CORE_CONSOLE_PASSWORD_FILE"] = "/config/console.password"
         services["web"]["volumes"].append(bind(root / "node-payload", "/node-payload"))
         services["web"]["environment"]["CORE_CONSOLE_NODE_PAYLOAD_DIR"] = "/node-payload"
         if state["mode"] == "web-only" or native:

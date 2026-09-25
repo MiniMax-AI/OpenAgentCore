@@ -1,6 +1,7 @@
 -- name: SetRuntimeCompute :one
 UPDATE runtime_allocations
-SET compute_phase = sqlc.arg(phase), compute_state = sqlc.arg(state)::jsonb,
+SET compute_phase_changed_at = CASE WHEN compute_phase = sqlc.arg(phase)::text THEN compute_phase_changed_at ELSE clock_timestamp() END,
+    compute_phase = sqlc.arg(phase), compute_state = sqlc.arg(state)::jsonb,
     compute_revision = compute_revision + 1,
     compute_retained_until = sqlc.narg(retained_until),
     kept_at = CASE WHEN sqlc.arg(phase)::text = 'running' THEN clock_timestamp() ELSE kept_at END

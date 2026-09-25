@@ -9,7 +9,8 @@ described in [DESIGN.md](DESIGN.md) and its product scope in [PRODUCT.md](PRODUC
 
 Browser management requests use same-origin `/core/v1/admin` through `AdminClient`,
 plus the existing sandbox management client for allowed `/core/v1/sandbox` routes.
-The console authenticates the browser and keeps the deployment credential server-side.
+The administrator signs in with the deployment's Core key; the console keeps the key
+server-side and gives the browser only a session cookie.
 Applications use their own Project keys directly against Core's public `/v1` API.
 The production console returns 404 for `/v1`, even with an explicit Bearer token.
 

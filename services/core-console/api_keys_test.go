@@ -8,16 +8,16 @@ import (
 	"testing"
 )
 
-func TestAdminProxyUsesAccountIdentityAndServerCredential(t *testing.T) {
+func TestAdminProxyUsesFixedActorAndServerCoreKey(t *testing.T) {
 	var calls atomic.Int32
-	c := accountConsoleConfig(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c := coreKeyConsoleConfig(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		if r.Header.Get("Authorization") != "Bearer deployment-token" || r.Header.Get("X-Core-Console-Actor") != "owner" || r.Header.Get("Cookie") != "" || r.Header.Get("Origin") != "" {
+		if r.Header.Get("Authorization") != "Bearer "+testCoreKey || r.Header.Get("X-Core-Console-Actor") != "console" || r.Header.Get("Cookie") != "" || r.Header.Get("Origin") != "" {
 			t.Error("admin proxy credential or actor boundary failed")
 		}
 		w.WriteHeader(200)
 	}))
-	h := accountConsole(t, c)
+	h := startConsole(t, c)
 	// Every /core/v1 operation is forwarded; Core alone decides which routes exist.
 	paths := []struct{ method, path string }{{"GET", "/core/v1/projects?limit=5"}, {"POST", "/core/v1/projects"}, {"POST", "/core/v1/projects/project/keys"}, {"POST", "/core/v1/projects/project/archive"}, {"DELETE", "/core/v1/projects/project/keys/key"}, {"GET", "/core/v1/projects/key/sessions/session/artifacts/artifact/content"}, {"DELETE", "/core/v1/projects/key/skills/skill/versions/1"}, {"GET", "/core/v1/summary"}, {"GET", "/core/v1/metrics?range=6h"}, {"GET", "/core/v1/sandbox/runtime-observations"},
 		{"POST", "/core/v1/projects/p/environments/e/executor-credentials"}, {"DELETE", "/core/v1/projects/p/environments/e/executor-credentials/k"}, {"PATCH", "/core/v1/future/operation"}, {"GET", "/core/v1/admin/projects"}}
@@ -26,7 +26,7 @@ func TestAdminProxyUsesAccountIdentityAndServerCredential(t *testing.T) {
 			t.Errorf("unauthenticated %s = %d", tc.path, w.Code)
 		}
 	}
-	cookie := setupAccount(t, h)
+	cookie := signIn(t, h)
 	for _, tc := range paths {
 		r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
 		r.Host = h.host
@@ -53,10 +53,10 @@ func TestAdminProxyUsesAccountIdentityAndServerCredential(t *testing.T) {
 		t.Fatal("a request outside /core/v1 reached Core")
 	}
 }
-func TestConsoleRequiresAdministratorCredential(t *testing.T) {
-	c := accountConsoleConfig(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	c.adminToken = ""
+func TestConsoleRequiresCoreKey(t *testing.T) {
+	c := coreKeyConsoleConfig(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	c.coreKey = ""
 	if _, err := newConsole(c); err == nil {
-		t.Fatal("console started without administrator credential")
+		t.Fatal("console started without the Core key")
 	}
 }

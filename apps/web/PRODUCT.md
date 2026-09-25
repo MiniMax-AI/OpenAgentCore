@@ -40,13 +40,17 @@ workbench.
 
 ## Operating Context
 
-- Paired console (`services/core-console`): a single local administrator account
-  (legacy installations keep Basic authentication). The browser holds only the
-  console sign-in; the console server holds the deployment administrator
-  credential and forwards the Web API (`/core/v1/admin/**`) and sandbox
-  administration (`/core/v1/sandbox/**`). The console never calls `/v1`.
-- The console account is not an Agents API identity. An administrator who wants to
-  call the Agents API issues a key in a project like any other caller.
+- Paired console (`services/core-console`): the administrator signs in with the
+  deployment's Core key, the administration credential the installer writes to
+  `admin/core.key` under the installation directory (by default
+  `~/.parsar/core/admin/core.key`; keeping and rotating it is described in
+  [Core key](../../docs/getting-started/operations.md#core-key)). There are no
+  console accounts or usernames. The browser sends the key only to sign in and
+  keeps only the session cookie; the console server holds the Core key and forwards
+  the Web API (`/core/v1/admin/**`) and sandbox administration
+  (`/core/v1/sandbox/**`). The console never calls `/v1`.
+- The Core key is not an Agents API identity and cannot call `/v1`. An administrator
+  who wants to call the Agents API issues a project API key like any other caller.
 - `/console/config` reports whether sandbox administration is available; without
   it the Nodes page explains that it is not configured and the fleet figures show
   as unavailable.
@@ -83,14 +87,17 @@ workbench.
   or Add node action; a sandbox's dialog adds its disk use.
 - **microsandbox** suspends idle sandboxes into snapshots, so its nodes show how
   many sleep (Core's retained minus active) on the Nodes list, a node's page, Sandbox
-  metrics and Overview; Docker never suspends and shows none of it.
-- **First run**: after the administrator account is created and while no project
-  exists, full-screen steps outside the shell create the first project (default name
-  `Default`) and its first key, show the plaintext once with an example request,
+  metrics and Overview; a node's allocations show how long each has been suspended and
+  about when Core reclaims it. Docker never suspends and shows none of it.
+- **First run**: after signing in with the Core key while no project exists,
+  full-screen steps outside the shell create the first project (default name
+  `Default`) and its first project API key, show the plaintext once with an example request,
   then give a three-chapter tour of the console (Monitor, Resources, Platform)
   before opening it. Signing in uses the same stage.
 - Terminology: API terms stay in English in the Chinese UI (Agent, Session, Turn,
-  Skill, Vault, Credential, API key).
+  Skill, Vault, Credential, API key). The sign-in credential is the Core key
+  ("Core Key"); keys issued in a project for applications are project API keys
+  ("项目 API Key").
 
 ## Capabilities and Constraints
 

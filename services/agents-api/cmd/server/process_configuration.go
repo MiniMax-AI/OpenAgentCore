@@ -23,6 +23,10 @@ func executionConcurrency() (int, error) {
 }
 
 func validateProcessConfiguration() error {
+	// A renamed setting fails instead of being read under its old name.
+	if _, present := os.LookupEnv("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE"); present {
+		return errors.New("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE was renamed; set AGENTS_API_CORE_KEY_DIGESTS_FILE to the Core key digest file instead")
+	}
 	for _, retired := range []string{"AGENTS_API_MANAGED_RUNTIMES_FILE", "AGENTS_API_SANDBOX_NODE_STATE_DIR", "AGENTS_API_SANDBOX_NODE_CORE_URL"} {
 		if _, present := os.LookupEnv(retired); present {
 			return errors.New(retired + " is retired; configure deployment in Core and enroll a separate node")

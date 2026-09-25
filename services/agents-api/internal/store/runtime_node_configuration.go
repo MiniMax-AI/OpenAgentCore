@@ -55,7 +55,7 @@ func (s *Store) RuntimeNodeConfiguration(ctx context.Context, nodeID, token stri
 				return ErrRuntimeSpecificationMismatch
 			}
 		}
-		result = RuntimeNodeConfiguration{MaxActive: int(active), MaxRetained: int(retained), InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, Generation: uint64(d.Generation), Specification: spec, SpecificationDigest: spec.Digest(d.ProviderKind)}
+		result = RuntimeNodeConfiguration{MaxActive: int(active), MaxRetained: retainedLimit(d.ProviderKind, int(active), int(retained)), InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: d.CoreUrl, Generation: uint64(d.Generation), Specification: spec, SpecificationDigest: spec.Digest(d.ProviderKind)}
 		return nil
 	})
 	return result, err

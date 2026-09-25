@@ -8,16 +8,25 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 type config struct {
-	addr, origin, dist, password string
-	adminToken, nodePayloadDir   string
-	authMode, stateDir           string
-	upstream                     *url.URL
+	addr, origin, dist      string
+	coreKey, nodePayloadDir string
+	upstream                *url.URL
 }
 
 func loadConfig() (config, error) {
+	// Renamed and retired settings fail startup instead of being silently ignored.
+	if _, present := os.LookupEnv("CORE_CONSOLE_ADMIN_TOKEN_FILE"); present {
+		return config{}, errors.New("CORE_CONSOLE_ADMIN_TOKEN_FILE was renamed; set CORE_CONSOLE_CORE_KEY_FILE to the Core key file instead")
+	}
+	for _, retired := range []string{"CORE_CONSOLE_AUTH_MODE", "CORE_CONSOLE_STATE_DIR", "CORE_CONSOLE_PASSWORD_FILE"} {
+		if _, present := os.LookupEnv(retired); present {
+			return config{}, errors.New(retired + " is retired; Web signs in with the Core key only, so remove this setting")
+		}
+	}
 	c := config{
 		addr:   envDefault("CORE_CONSOLE_ADDR", ":8080"),
 		origin: envDefault("CORE_CONSOLE_ORIGIN", "http://127.0.0.1:8080"),
@@ -34,31 +43,16 @@ func loadConfig() (config, error) {
 	if !filepath.IsAbs(c.dist) {
 		return config{}, errors.New("CORE_CONSOLE_DIST must be absolute")
 	}
-	c.adminToken, err = readSecret(envDefault("CORE_CONSOLE_ADMIN_TOKEN_FILE", "/admin/sandbox-admin.key"))
+	c.coreKey, err = readSecret(envDefault("CORE_CONSOLE_CORE_KEY_FILE", "/admin/core.key"))
 	if err != nil {
-		return config{}, errors.New("CORE_CONSOLE_ADMIN_TOKEN_FILE must name a private regular file containing one token")
+		return config{}, errors.New("CORE_CONSOLE_CORE_KEY_FILE must name a private regular file containing the Core key")
 	}
-	c.authMode = os.Getenv("CORE_CONSOLE_AUTH_MODE")
-	switch c.authMode {
-	case "":
-		c.password, err = readSecret(envDefault("CORE_CONSOLE_PASSWORD_FILE", "/config/console.password"))
-		if err != nil {
-			return config{}, errors.New("CORE_CONSOLE_PASSWORD_FILE must name a private regular file containing one password")
-		}
-		if c.password == c.adminToken {
-			return config{}, errors.New("console password and administrator credential must differ")
-		}
-	case "account":
-		c.stateDir = os.Getenv("CORE_CONSOLE_STATE_DIR")
-		if err := validateAccountDirectory(c.stateDir); err != nil {
-			return config{}, err
-		}
-	default:
-		return config{}, errors.New("CORE_CONSOLE_AUTH_MODE must be account or unset for legacy Basic authentication")
+	if utf8.RuneCountInString(c.coreKey) < minimumCoreKeyLength {
+		return config{}, errors.New("the Core key in CORE_CONSOLE_CORE_KEY_FILE must have at least 32 characters")
 	}
 	c.nodePayloadDir = os.Getenv("CORE_CONSOLE_NODE_PAYLOAD_DIR")
-	if c.nodePayloadDir != "" && (!filepath.IsAbs(c.nodePayloadDir) || c.adminToken == "") {
-		return config{}, errors.New("node payload requires an absolute directory and paired administrator access")
+	if c.nodePayloadDir != "" && !filepath.IsAbs(c.nodePayloadDir) {
+		return config{}, errors.New("CORE_CONSOLE_NODE_PAYLOAD_DIR must be absolute")
 	}
 	return c, nil
 }

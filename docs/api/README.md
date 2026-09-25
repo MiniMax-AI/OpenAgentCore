@@ -6,7 +6,7 @@ no credential works in another namespace.
 | Namespace | Caller | Credential | Contents | Reference |
 | --- | --- | --- | --- | --- |
 | `/v1` | Applications (business systems, SDKs) | Project API key | Exactly the pinned official Agents API routes. Core-only fields live only in `x_agents_core` (`harness`, `model_provider`) | [Public API](public-agent-api.md) |
-| `/core/v1` | Core Web's server and operator scripts | Core key | Projects and keys, resource reads and deletion, Session archive, credential issuance, metrics, audit, sandbox deployment and nodes | [Core API](#core-api), [Web API](web-management.md), [Core OpenAPI](../../contracts/agents-api/core.openapi.yaml) |
+| `/core/v1` | Core Web's server and operator scripts | [Core key](../getting-started/operations.md#core-key) | Projects and keys, resource reads and deletion, Session archive, credential issuance, metrics, audit, sandbox deployment and nodes | [Core API](#core-api), [Web API](web-management.md), [Core OpenAPI](../../contracts/agents-api/core.openapi.yaml) |
 | `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials issued through `/core/v1` | Machine connections only: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets; each credential works only on its own routes | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [executor credentials](../../contracts/agents-api/environment-executor-credentials.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
 
 A Project API key gets 401 on `/core/v1` and `/api/v1`; the Core key gets 401 on
@@ -18,7 +18,8 @@ deployment configuration.
 The browser talks only to Web's server: `/console/auth` and `/console/config`,
 `/node-install/*`, the static pages, and `/core/v1/*`, which the server forwards
 with the Core key after sign-in and same-origin checks. Users sign in to Web with
-the Core key; the browser never receives it. Core decides which `/core/v1` routes
+the Core key and get an HttpOnly session cookie; the browser never receives the
+key. Core decides which `/core/v1` routes
 exist; Web returns 404 for `/v1` and `/api/v1`, whatever credential a request
 carries.
 

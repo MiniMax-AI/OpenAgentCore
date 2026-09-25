@@ -1,13 +1,14 @@
-import type { SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxAllocation, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
 import { suspendedSandboxes } from "../fleet/fleet-model";
 import { useTranslation } from "react-i18next";
 
 import { EmptyState, HelpTip, Kpi, KpiStrip, Section } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
-import { formatDateTime, formatInteger, formatRelative, MISSING } from "../../lib/format";
+import { formatDateTime, formatInteger, formatRelative, formatSpan, MISSING } from "../../lib/format";
 import { nodeProviderDiagnostic, sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
+import { phaseTiming } from "./allocation-phase";
 import { nodeState, NodeStatus, seconds } from "./NodeList";
 
 /** Why a node is not serving: disconnected, or the reason its provider is not ready. */
@@ -22,7 +23,26 @@ function Diagnostic({ value }: { value: string }) {
   return <span className="node-diagnostic">{message.label}<HelpTip label={message.label}>{message.advice}</HelpTip></span>;
 }
 
-export function NodeDetail({ node, allocations, stale }: { node: SandboxNode; allocations: readonly SandboxAllocation[]; stale: boolean }) {
+/** How long the allocation has been in its compute phase and, while suspended, about when Core reclaims it. */
+function PhaseTime({ allocation, retentionSeconds, now }: { allocation: SandboxAllocation; retentionSeconds: number; now: number }) {
+  const { t, i18n } = useTranslation("sandbox");
+  const locale = i18n.resolvedLanguage;
+  const timing = phaseTiming(allocation.compute_phase, allocation.compute_phase_changed_at, retentionSeconds, now);
+  if (!timing) return <td>{MISSING}</td>;
+  const elapsed = formatSpan(timing.elapsed, locale);
+  const text = timing.reclaimIn === null ? t("Since {{time}}", { time: formatRelative(timing.since, now, locale) })
+    : timing.reclaimIn > 0 ? t("Suspended for {{elapsed}} · reclaimed in about {{remaining}}", { elapsed, remaining: formatSpan(timing.reclaimIn, locale) })
+      : t("Suspended for {{elapsed}} · reclaim due", { elapsed });
+  return <td className="nodes-nowrap" title={formatDateTime(timing.since, locale)}>{text}</td>;
+}
+
+export function NodeDetail({ node, allocations, stale, suspension }: {
+  node: SandboxNode;
+  allocations: readonly SandboxAllocation[];
+  stale: boolean;
+  /** The deployment's idle suspension policy; only microsandbox has one. */
+  suspension: SandboxDeployment["suspension"];
+}) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage;
   const shortLocale = locale?.startsWith("zh") ? "zh" : "en";
@@ -76,6 +96,8 @@ export function NodeDetail({ node, allocations, stale }: { node: SandboxNode; al
                   <th scope="col">{t("Session")}</th>
                   <th scope="col">{t("Recorded state")}</th>
                   <th scope="col">{t("Recorded compute")}</th>
+                  {/* Only microsandbox changes compute phase; under Docker it is always disabled. */}
+                  {suspension ? <th scope="col"><span className="column-help">{t("In this state")}<HelpTip>{t("How long the sandbox has been in its compute state. For a suspended one, the reclaim time is estimated from when it was suspended and the deployment's retention; Core reclaims it around then. Older allocations show a dash until their state next changes.")}</HelpTip></span></th> : null}
                   <th scope="col">{t("Issue")}</th>
                   <th scope="col">{t("Created")}</th>
                 </tr>
@@ -86,6 +108,7 @@ export function NodeDetail({ node, allocations, stale }: { node: SandboxNode; al
                     <th scope="row"><CopyableId id={allocation.session_id} label={t("Session")} /></th>
                     <td>{sandboxStateLabel(allocation.state, shortLocale)}</td>
                     <td>{allocation.compute_phase ? sandboxStateLabel(allocation.compute_phase, shortLocale) : MISSING}</td>
+                    {suspension ? <PhaseTime allocation={allocation} retentionSeconds={suspension.retention_seconds} now={now} /> : null}
                     <td>{allocation.diagnostic ? <Diagnostic value={allocation.diagnostic} /> : MISSING}</td>
                     <td className="nodes-nowrap">{formatDateTime(seconds(allocation.created_at), locale)}</td>
                   </tr>

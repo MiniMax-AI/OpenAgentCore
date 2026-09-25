@@ -12,6 +12,11 @@ import { buildDemo } from "./data/routes.mjs";
 
 const port = Number(process.env.AGENTS_FIXTURE_PORT ?? 18092);
 const SESSION_COOKIE = "core_console=fixture-session";
+/** The deployment's Core key in this fixture; the same value as FIXTURE_CORE_KEY in console.ts. */
+const CORE_KEY = "fixture-core-key-3f9a2c71";
+/** Consecutive wrong keys before sign-in is refused for a while, and for how long (seconds). */
+const LOCKOUT_AFTER = 3;
+const LOCKOUT_SECONDS = 30;
 
 let state;
 const hex = (c) => c.repeat(64);
@@ -30,7 +35,7 @@ function e2bDeployment() {
   return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
 }
 
-function reset(mode = "setup", fresh = false, sandbox = "configured") {
+function reset(mode = "login", fresh = false, sandbox = "configured") {
   const base = buildDemo();
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
@@ -39,7 +44,8 @@ function reset(mode = "setup", fresh = false, sandbox = "configured") {
   if (fresh) admin.projects.splice(0);
   state = {
     ...base, resources, admin,
-    auth: { mode, username: mode === "authenticated" ? "admin" : null, password: mode === "setup" ? null : "correct horse battery" },
+    // "authenticated": the console holds a session for the fixture cookie; "login": it holds none.
+    auth: { mode: mode === "authenticated" ? "authenticated" : "login", failures: 0, lockedUntil: 0 },
     violations: [], writes: [], failNext: null, nextId: 1,
     // "none": the deployment is not configured yet, so the Nodes page offers setup.
     deployment: sandbox === "none" ? null : sandbox === "e2b" ? e2bDeployment() : configuredDeployment(),
@@ -73,31 +79,44 @@ function list(all, url, max = 100) {
 const id = (prefix) => `${prefix}${String(state.nextId++).padStart(8, "0")}`;
 const uuid = () => `00000000-0000-4000-8000-${String(state.nextId++).padStart(12, "0")}`;
 
+/** The console service's authentication errors: `{ "error": message }`. */
+function authError(response, status, message, headers = {}) {
+  send(response, status, { error: message }, headers);
+}
+
+/** Sign-in with the Core key, as the console server does it: the key is compared first, so the right key
+ * always signs in; only wrong keys count, and repeated wrong keys are refused for a while. */
+async function login(request, response) {
+  const auth = state.auth;
+  if (!request.headers["content-type"]?.startsWith("application/json")) return authError(response, 415, "Use application/json");
+  let input;
+  try { input = await body(request); } catch { return authError(response, 400, "Invalid authentication request"); }
+  if (typeof input?.core_key !== "string" || !input.core_key) return authError(response, 400, "Invalid authentication request");
+  if (input.core_key !== CORE_KEY) {
+    const wait = Math.ceil((auth.lockedUntil - Date.now()) / 1000);
+    if (wait > 0) return authError(response, 429, "Too many authentication attempts", { "retry-after": String(wait) });
+    auth.failures += 1;
+    if (auth.failures < LOCKOUT_AFTER) return authError(response, 401, "Invalid Core key");
+    auth.lockedUntil = Date.now() + LOCKOUT_SECONDS * 1000;
+    return authError(response, 429, "Too many authentication attempts", { "retry-after": String(LOCKOUT_SECONDS) });
+  }
+  Object.assign(auth, { mode: "authenticated", failures: 0 });
+  return send(response, 200, { mode: "authenticated" }, { "set-cookie": `${SESSION_COOKIE}; Path=/; HttpOnly; SameSite=Strict` });
+}
+
 async function consoleRoute(request, response, url) {
   const auth = state.auth;
   if (url.pathname === "/console/auth" && request.method === "GET") {
-    if (auth.mode === "authenticated" && request.headers.cookie?.includes(SESSION_COOKIE)) return send(response, 200, { mode: "authenticated", username: auth.username });
-    return send(response, 200, { mode: auth.mode === "setup" ? "setup" : "login" });
+    const signedIn = auth.mode === "authenticated" && request.headers.cookie?.includes(SESSION_COOKIE);
+    return send(response, 200, { mode: signedIn ? "authenticated" : "login" });
   }
-  if (url.pathname === "/console/auth/setup" && request.method === "POST") {
-    if (auth.mode !== "setup") return error(response, 409, "Setup is complete.");
-    const { username, password } = await body(request);
-    if (!username || !password || password.length < 12) return error(response, 400, "Invalid administrator.");
-    Object.assign(auth, { mode: "authenticated", username, password });
-    return send(response, 200, { mode: "authenticated", username }, { "set-cookie": `${SESSION_COOKIE}; Path=/; HttpOnly; SameSite=Strict` });
-  }
-  if (url.pathname === "/console/auth/login" && request.method === "POST") {
-    const { username, password } = await body(request);
-    if (username !== auth.username || password !== auth.password) return error(response, 401, "Sign-in failed.");
-    auth.mode = "authenticated";
-    return send(response, 200, { mode: "authenticated", username }, { "set-cookie": `${SESSION_COOKIE}; Path=/; HttpOnly; SameSite=Strict` });
-  }
+  if (url.pathname === "/console/auth/login" && request.method === "POST") return login(request, response);
   if (url.pathname === "/console/auth/logout" && request.method === "POST") {
     auth.mode = "login";
     return send(response, 200, { mode: "login" }, { "set-cookie": `${SESSION_COOKIE.split("=")[0]}=; Path=/; Max-Age=0` });
   }
   if (url.pathname === "/console/config") {
-    return send(response, 200, { api_keys: true, sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) });
+    return send(response, 200, { node_installer: true, node_installer_sha256: "a".repeat(64) });
   }
   return error(response, 404, "Not found.");
 }
@@ -257,7 +276,7 @@ async function sandboxRoute(request, response, path) {
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "setup", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured");
+    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured");
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {

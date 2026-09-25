@@ -32,22 +32,24 @@ application's caller-managed `self_hosted` Runtime, including its own E2B setup.
 | `CORE_CONSOLE_ADDR` | Console listener address |
 | `CORE_CONSOLE_ORIGIN` | Exact browser-facing origin used for host and origin checks |
 | `CORE_CONSOLE_UPSTREAM` | Core HTTP(S) origin, without credentials, query or resource path |
-| `CORE_CONSOLE_ADMIN_TOKEN_FILE` | Absolute path to a private regular file containing the deployment credential |
-| `CORE_CONSOLE_AUTH_MODE=account` | Enables console account login |
-| `CORE_CONSOLE_STATE_DIR` | Private account state directory (login sessions are process-local) |
+| `CORE_CONSOLE_CORE_KEY_FILE` | Absolute path to the private regular file containing the Core key |
 | `CORE_CONSOLE_DIST` | Absolute directory containing the built Web assets |
 
-Account mode exposes `GET /console/auth` and `POST /console/auth/setup`, `/login`
-and `/logout`. Initial setup registers the console account; subsequent login uses
-a same-origin session cookie. Console accounts do not create Core API users,
-Projects, roles or application keys. `GET /console/config` provides safe console
+The console exposes `GET /console/auth` and `POST /console/auth/login` and
+`/logout`. The administrator signs in with the deployment's Core key, which the
+installer writes to `admin/core.key` under the installation directory (by default
+`~/.parsar/core/admin/core.key`; see [Core key](../getting-started/operations.md#core-key)).
+The server compares it in constant time and answers with a same-origin session
+cookie held only in its memory; the key is never logged or returned, and the
+browser does not store it. A console restart or a Core key rotation requires
+signing in again. There are no console accounts, usernames or setup step, and the
+Core key cannot call `/v1`. `GET /console/config` provides safe console
 configuration to an authenticated browser.
 
 Use TLS for remote browser access and loopback listeners for local development.
 Preserve host/origin checks and the management route allowlist. Browser authorization,
 cookies and actor headers are replaced or removed before forwarding to Core.
-The service reports the authenticated console account as an audit label; a browser
-cannot choose that label. Keep deployment, application, node and provider credentials
+A browser cannot choose the audit actor label the service reports: the console server declares `console`. The label is caller-declared and display only. Keep deployment, application, node and provider credentials
 out of `VITE_*`, browser storage, source files, URLs and logs.
 
 ## Projects and application keys
@@ -70,8 +72,8 @@ work. Ordinary metadata reads cannot recover plaintext.
    browser-to-console and console-to-Core path.
 3. A Project key must work on its public resources and fail on management routes.
    The deployment credential must fail on `/v1`; `/v1` through the console stays 404.
-4. Cross-origin management writes must be rejected. Audit actor labels must reflect
-   the signed-in console account despite a forged browser header.
+4. Cross-origin management writes must be rejected. Audit actor labels must ignore
+   a forged browser header.
 5. Runtime observations and history report execution state separately from startup
    configuration. Neither a login nor a successful configuration read proves model
    or sandbox readiness.

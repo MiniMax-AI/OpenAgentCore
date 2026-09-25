@@ -6,16 +6,18 @@ credential; an unknown `/core/v1` path returns 404 only after authentication.
 They do not change `/v1`, the fixed Python SDK, or native Runtime interfaces.
 Project API keys and machine credentials cannot authenticate these routes; the
 Core key cannot authenticate `/v1` or `/api/v1`. Paths below are relative to
-`/core/v1`. The console server supplies `X-Core-Console-Actor` from its
-signed-in account. Core records it only as an unverified display label.
+`/core/v1`. `X-Core-Console-Actor` is a caller-asserted, display-only label that
+Core records without verifying. Web sends `console`; direct Core key scripts
+normally send none but could set any label. Never use it for authorization or as
+proof of origin.
 
 ## Projects and keys
 
 A Project owns one tenant and shared principal. Its keys have equal access to all
 its assets. Projects and keys are database-owned; deployment configuration defines
 neither. There are no API users, roles or configuration-managed business keys.
-Core requires the Core key, configured separately from Project keys, at startup
-for bootstrap and management.
+Core requires the Core key digest file (`AGENTS_API_CORE_KEY_DIGESTS_FILE`) at
+startup for bootstrap and management.
 
 | Operation | Path | Result |
 | --- | --- | --- |
@@ -157,7 +159,8 @@ no equivalents.
 `resource_type`, `resource_id`, `action`, inclusive `created_after`, exclusive
 `created_before`, `limit=1..100` (default 50), and opaque `after` filters. Response
 is `{data, has_more, next_cursor}`. Each row has `id`, `created_at`,
-`admin_credential_id` (credential digest prefix), `actor_label`, `action`,
+`admin_credential_id` (credential digest prefix), `actor_label` (the caller-asserted
+display label: normally `console` from Web and empty from direct Core key requests), `action`,
 `project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id`,
 `trace_id`. `result_ids` is an empty array except on historical `copy` entries.
 Executor credential writes appear with `resource_type:"executor_credential"`,

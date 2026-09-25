@@ -34,11 +34,21 @@ node enrollment authority.
 
 Node capacity is separate from the deployment specification. The administrator's
 `POST /core/v1/sandbox/enrollment-tokens` accepts optional `max_active` and
-`max_retained`, defaulting to 2 and 8. Core stores that approval with the token and
-copies it to the registered node. Node enrollment cannot submit capacity overrides.
-The existing node configuration/identity reads expose approved limits for that
-credential; node updates remain administrator operations. Local host capacity
-checks may reject a deployment that cannot run safely, but never raise its limits.
+`max_retained`, defaulting to 2 and 8. Microsandbox uses both limits. Docker never
+suspends, so its `max_retained` always equals `max_active`; Core replaces any
+submitted value, here and in `PATCH /core/v1/sandbox/nodes/{node_id}`. Core stores
+that approval with the token and copies it to the registered node. Node enrollment
+cannot submit capacity overrides. The existing node configuration/identity reads
+expose approved limits for that credential; node updates remain administrator
+operations. Local host capacity checks may reject a deployment that cannot run
+safely, but never raise its limits.
+
+`GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased
+allocations. Each item's `compute_phase_changed_at` is the time the allocation
+entered its current `compute_phase`, or null when unknown; an allocation that
+existed before Core recorded it reports null until its next phase change. A
+suspended microsandbox allocation's age, combined with the deployment's snapshot
+retention, tells roughly when Core reclaims it.
 
 ## Selection request
 
@@ -232,6 +242,33 @@ and network policy. Enrollment at `POST /api/v1/sandbox-node/enroll` includes
 token consumption. Retained node authentication checks the same generation and
 digest. A changed local resource setting, Runtime or generation must fail rather
 than rewrite the retained identity or silently use a local default.
+
+## What each field means per sandbox provider
+
+Some fields keep one name across providers but differ in meaning, or do not apply.
+Deployment fields come from `GET /core/v1/sandbox/deployment`; node and allocation
+fields from the administrator node routes; runtime fields from the
+[Runtime observation API](runtime-observability-api.md), with `disk` only in the
+`GET /core/v1/sandbox/runtime-observations`, and the
+[Runtime history API](runtime-history-api.md).
+
+| Field | E2B | Docker | microsandbox |
+| --- | --- | --- | --- |
+| Deployment `specification.resources` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota | `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib` |
+| Deployment `specification.runtime` | Absent; the build is selected by `e2b.template` | The full [release](#runtime-release); nodes match `image_id` or `image_manifest_digest` | The full [release](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` |
+| Deployment `e2b.template_build` | The build as Core read it when the selection was saved | Absent, with the whole `e2b` object | Absent, with the whole `e2b` object |
+| Deployment `suspension` | `null`; Core does not suspend E2B sandboxes | `null` | `{idle_seconds, retention_seconds}` |
+| Deployment `resources.allocations`, `resources.pending` | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes | Totals across all nodes |
+| Enrollment-token `max_active`, `max_retained` | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | `max_retained` always equals `max_active` | Both limits apply |
+| Node list and detail | Empty list; detail returns 404 | Enrolled nodes | Enrolled nodes |
+| Node `retained`, `snapshots`, `max_retained` | Not applicable | Docker never suspends: `retained` equals `active`, `snapshots` is 0 and `max_retained` equals `max_active` | Suspended sandboxes are `retained` minus `active` |
+| Node `diagnostic` | Not applicable | `docker_unavailable`, `docker_limits_unsupported`, `runtime_image_unavailable`, `capacity_insufficient` or `provider_unavailable` | `kvm_unavailable`, `microsandbox_artifacts_unavailable`, `capacity_insufficient` or `provider_unavailable` |
+| Node `host.available_disk_bytes` | Not applicable | Free space on the filesystem of the node state directory, not a container's disk | Free space on the filesystem of the node state directory; sandbox disks have their own quotas |
+| Allocation `compute_phase`, `compute_phase_changed_at` | Not applicable: no node allocations | Always `disabled`, counted as running until release; the time is the allocation's creation | Includes `suspended`; its time plus `suspension.retention_seconds` tells roughly when Core reclaims the snapshot |
+| Runtime observation `cpu`, `memory` | From E2B metrics: `cpu.utilization_ratio` and `capacity_cores`, memory usage and limit; no cumulative CPU time | From Docker stats: `cpu.usage_seconds_total`, CPU and memory limits, memory usage | From the VM: `cpu.usage_seconds_total`, CPU and memory limits, memory usage |
+| Runtime observation `disk` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them | `null`: no disk quota | `null` for now |
+| Runtime observation `lifecycle_state: sleeping` | Never | Never | While suspended |
+| Runtime history CPU | Mean of the utilization ratios E2B reported in each bucket | Derived from cumulative CPU time | Derived from cumulative CPU time |
 
 ## Failure and upgrade boundaries
 

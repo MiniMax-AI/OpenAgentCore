@@ -27,9 +27,9 @@ UID/GID 65532. No model credentials or tenant keys belong in the image.
 
 Use a new private directory for deployment configuration. Create `api.env` with
 `AGENTS_API_DATABASE_URL` pointing to the dedicated execution database and
-`AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE=/run/admin-digests.json`. Create
-`admin-digests.json` as a JSON array of deployment administrator SHA-256 digests.
-Keep the bearer separately and use the [administrator API](../../contracts/agents-api/admin-api.md)
+`AGENTS_API_CORE_KEY_DIGESTS_FILE=/run/core-key-digests.json`. Create
+`core-key-digests.json` as a JSON array of Core key SHA-256 digests.
+Keep the Core key separately and use the [administrator API](../../contracts/agents-api/admin-api.md)
 to create Projects and issue application keys after startup. Keep both
 files private, for example mode 0600 inside a mode 0700 directory. The database
 hostname must be reachable from the container; container localhost is not the host.
@@ -54,7 +54,7 @@ docker run --name agents-api --detach --read-only \
   --user "$(id -u):$(id -g)" \
   --publish 127.0.0.1:8091:8091 \
   --env-file "$config_dir/api.env" \
-  --mount "type=bind,source=$config_dir/admin-digests.json,target=/run/admin-digests.json,readonly" \
+  --mount "type=bind,source=$config_dir/core-key-digests.json,target=/run/core-key-digests.json,readonly" \
   agents-api:dev
 curl --fail http://127.0.0.1:8091/healthz
 docker logs agents-api

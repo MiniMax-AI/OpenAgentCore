@@ -4,7 +4,7 @@ import { sandboxConsoleConfig } from "./console-config";
 afterEach(() => vi.unstubAllGlobals());
 describe("bundled console capabilities", () => {
   it("uses the existing console login without sending a project or admin bearer", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) })));
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ node_installer: true, node_installer_sha256: "a".repeat(64) })));
     vi.stubGlobal("fetch", fetch);
     const controller = new AbortController();
     expect(await sandboxConsoleConfig(controller.signal)).toEqual({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) });
@@ -22,12 +22,8 @@ describe("bundled console capabilities", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Bad gateway", { status: 502 })));
     await expect(sandboxConsoleConfig(new AbortController().signal)).rejects.toThrow();
   });
-  it.each([true, false])("preserves explicit API key management capability %s", async (enabled) => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ api_keys: enabled }))));
-    expect((await sandboxConsoleConfig(new AbortController().signal))?.api_keys).toBe(enabled);
-  });
-  it("keeps an absent or malformed API key capability unknown", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ api_keys: "false" }))));
-    expect((await sandboxConsoleConfig(new AbortController().signal))?.api_keys).toBeUndefined();
+  it("disables sandbox administration only when the console says so", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ sandbox_admin: false }))));
+    expect((await sandboxConsoleConfig(new AbortController().signal))?.sandbox_admin).toBe(false);
   });
 });

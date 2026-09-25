@@ -5,17 +5,20 @@ import { HelpTip } from "../../components/console-ui";
 import { ThemeMenu } from "../../components/ThemeMenu";
 import { useToast } from "../../components/Toast";
 import { setLanguage } from "../../i18n";
+import { projectsQuery, queryClient } from "../../lib/queries";
 import { OnboardingLayout } from "../onboarding/OnboardingLayout";
 import { withTransition } from "../onboarding/view-transition";
 import { changeConsoleAuth, ConsoleAuthError, readConsoleAuth, type ConsoleAuth } from "./auth";
 import "./console-access.css";
 
-const ConsoleAccountContext = createContext<{
-  username: string;
-  logout: () => Promise<void>;
-  /** The administrator account was created in this page: first-run setup follows. */
-  fresh: boolean;
-} | null>(null);
+/**
+ * Where the installer writes the Core key: its file inside the installation
+ * directory, and that file under the default installation directory. The
+ * sign-in help names both.
+ */
+const CORE_KEY_LOCATION = { file: "admin/core.key", defaultPath: "~/.parsar/core/admin/core.key" } as const;
+
+const ConsoleAccountContext = createContext<{ logout: () => Promise<void> } | null>(null);
 export const useConsoleAccount = () => useContext(ConsoleAccountContext);
 
 export function ConsoleLanguage() {
@@ -33,11 +36,20 @@ export function ConsoleAccountMenu() {
   const toast = useToast();
   if (!account) return null;
   return <div className="console-account-menu">
-    <button type="button" title={account.username} disabled={busy} onClick={async () => {
+    <button type="button" disabled={busy} onClick={async () => {
       setBusy(true);
       try { await account.logout(); } catch { setBusy(false); toast.show(t("Could not sign out. Try again."), { tone: "error" }); }
     }}><LogOut size={14} aria-hidden="true" /><span>{t(busy ? "Signing out…" : "Sign out")}</span></button>
   </div>;
+}
+
+/** True when the deployment has no project yet, so first-run setup follows signing in. */
+async function needsFirstProject(): Promise<boolean> {
+  try {
+    return (await queryClient.fetchQuery(projectsQuery)).length === 0;
+  } catch {
+    return false; // The console reports the failed read itself.
+  }
 }
 
 export function ConsoleAccess({ children }: { children: ReactNode }) {
@@ -45,18 +57,14 @@ export function ConsoleAccess({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ConsoleAuth | null>(null);
   const [failed, setFailed] = useState(false);
   const [revision, setRevision] = useState(0);
-  const accountExpected = useRef(false);
-  const [fresh, setFresh] = useState(false);
   const generation = useRef(0);
   const refresh = useCallback(() => setRevision((current) => current + 1), []);
   useEffect(() => {
     const controller = new AbortController();
     const current = ++generation.current;
     setFailed(false);
-    void readConsoleAuth(controller.signal, accountExpected.current).then((value) => {
-      if (generation.current !== current) return;
-      if (value.mode !== "legacy") accountExpected.current = true;
-      setStatus(value);
+    void readConsoleAuth(controller.signal).then((value) => {
+      if (generation.current === current) setStatus(value);
     }).catch(() => { if (!controller.signal.aborted && generation.current === current) setFailed(true); });
     return () => { controller.abort(); generation.current++; };
   }, [revision]);
@@ -67,83 +75,78 @@ export function ConsoleAccess({ children }: { children: ReactNode }) {
     window.addEventListener("focus", check);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", check); };
   }, [status?.mode, refresh]);
-  if (status?.mode === "legacy") return children;
-  if (status?.mode === "authenticated") return <ConsoleAccountContext.Provider value={{ username: status.username, fresh, logout: async () => {
-    const next = await changeConsoleAuth("logout", {});
+  if (status?.mode === "authenticated") return <ConsoleAccountContext.Provider value={{ logout: async () => {
+    const next = await changeConsoleAuth({ action: "logout" });
     generation.current++;
-    setFresh(false);
     setStatus(next);
   } }}>{children}</ConsoleAccountContext.Provider>;
 
-  const setup = status?.mode === "setup";
-  return <OnboardingLayout scene={status ? (setup ? "account" : "login") : null} step={setup ? "account" : undefined} controls={<><ThemeMenu /><ConsoleLanguage /></>}>
-    {status && !failed ? <AccountForm key={`${status.mode}:${revision}`} setup={setup} onAuthenticated={(next, from) => {
-      // Setup continues to the first project on the same stage; signing in reveals the console.
-      withTransition(setup ? "step" : "enter", () => {
+  return <OnboardingLayout scene={status ? "login" : null} controls={<><ThemeMenu /><ConsoleLanguage /></>}>
+    {status && !failed ? <CoreKeyForm key={revision} onAuthenticated={(next, firstRun, from) => {
+      // Without a project, first-run setup continues on the same stage; otherwise the console opens.
+      withTransition(firstRun ? "step" : "enter", () => {
         generation.current++;
-        setFresh(setup);
         setStatus(next);
       }, from);
-    }} onRefresh={refresh} /> :
+    }} /> :
       <div className="console-auth-form" aria-live="polite"><p>{t(failed ? "Could not connect to your console." : "Connecting to your console…")}</p>
         {failed ? <button className="button outline" onClick={refresh}>{t("Try again")}</button> : null}</div>}
   </OnboardingLayout>;
 }
 
-function AccountForm({ setup, onAuthenticated, onRefresh }: {
-  setup: boolean; onAuthenticated: (status: ConsoleAuth, from: HTMLElement | null) => void; onRefresh: () => void;
+function CoreKeyForm({ onAuthenticated }: {
+  onAuthenticated: (status: ConsoleAuth, firstRun: boolean, from: HTMLElement | null) => void;
 }) {
   const { t } = useTranslation("firstRun");
   const id = useId();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [uncertain, setUncertain] = useState(false);
   const pending = useRef(false);
+  const input = useRef<HTMLInputElement>(null);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
+
+  function errorMessage(cause: unknown): string {
+    const status = cause instanceof ConsoleAuthError ? cause.status : 0;
+    if (status === 401) return t("This Core key is not correct. Check it and try again.");
+    if (status === 429) {
+      const seconds = cause instanceof ConsoleAuthError ? cause.retryAfterSeconds : null;
+      return seconds && seconds > 1 ? t("Too many attempts. Try again in {{seconds}} seconds.", { seconds }) : t("Too many attempts. Wait a moment before trying again.");
+    }
+    if (status === 503) return t("The console cannot check the key right now. Try again later.");
+    return t("Could not sign in. Try again.");
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending.current || uncertain) return;
-    const data = new FormData(event.currentTarget);
+    if (pending.current) return;
     const submitter = event.nativeEvent instanceof SubmitEvent && event.nativeEvent.submitter instanceof HTMLElement ? event.nativeEvent.submitter : null;
-    const password = String(data.get("password") ?? "");
-    if (setup && password !== data.get("confirm")) { setError(t("Passwords do not match.")); return; }
-    const bytes = new TextEncoder().encode(password).length;
-    if (setup && (bytes < 12 || bytes > 72)) { setError(t("Use a password between 12 and 72 bytes.")); return; }
+    const coreKey = String(new FormData(event.currentTarget).get("core-key") ?? "").trim();
+    if (!coreKey) return;
     pending.current = true; setBusy(true); setError(null);
     const request = new AbortController(); controller.current = request;
     try {
-      const next = await changeConsoleAuth(setup ? "setup" : "login", {
-        username: String(data.get("username") ?? ""), password,
-      }, request.signal);
-      if (!request.signal.aborted) {
-        onAuthenticated(next, submitter);
-      }
+      const next = await changeConsoleAuth({ action: "login", coreKey }, request.signal);
+      const firstRun = await needsFirstProject();
+      if (!request.signal.aborted) onAuthenticated(next, firstRun, submitter);
     } catch (cause) {
       if (request.signal.aborted) return;
-      const status = cause instanceof ConsoleAuthError ? cause.status : 0;
-      if (status === 401 || status === 400) setError(t(setup ? "Check the account details and try again." : "Check your sign-in details and try again."));
-      else if (status === 429) setError(t("Too many attempts. Wait a moment before trying again."));
-      else {
-        setUncertain(true);
-        setError(t(status === 409 ? "An administrator already exists. Sign in to continue." : "Could not confirm the result. Check the account status before trying again."));
-      }
+      setError(errorMessage(cause));
+      input.current?.select();
     } finally { pending.current = false; if (!request.signal.aborted) setBusy(false); }
   }
+
   return <form className="console-auth-form form-stack" onSubmit={(event) => void submit(event)}>
-    <h2>{t(setup ? "Create your administrator account" : "Welcome back")}</h2>
-    {/* Rules sit behind help tips beside their labels, not as small print under the fields. */}
+    <h2>{t("Sign in to Parsar Core")}</h2>
+    {/* Where the key is and what it can do sit behind the help tip, not as small print under the field. */}
     <div className="field">
-      <span className="field-label-row"><label htmlFor={`${id}-username`}>{t("Administrator username")}</label>{setup ? <HelpTip>{t("Letters, numbers, dots, underscores and hyphens.")}</HelpTip> : null}</span>
-      <input id={`${id}-username`} name="username" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={64} pattern={setup ? "[a-zA-Z0-9._\\-]+" : undefined} disabled={busy || uncertain} />
+      <span className="field-label-row"><label htmlFor={`${id}-key`}>{t("Core key")}</label>
+        <HelpTip>{t("This deployment's Core key. The installer saved it in a private file: {{file}} in the installation directory, by default {{defaultPath}}. It is an administration credential: it cannot call the /v1 Agents API, and the console never keeps it in your browser.", CORE_KEY_LOCATION)}</HelpTip></span>
+      {/* Read-only rather than disabled while signing in, so a refused key can be selected for correction. */}
+      <input ref={input} id={`${id}-key`} name="core-key" type="password" autoComplete="off" autoCapitalize="none" spellCheck={false} required autoFocus
+        readOnly={busy} aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} />
     </div>
-    <div className="field">
-      <span className="field-label-row"><label htmlFor={`${id}-password`}>{t("Password")}</label>{setup ? <HelpTip>{t("12–72 bytes. Keep this password somewhere safe.")}</HelpTip> : null}</span>
-      <input id={`${id}-password`} name="password" type="password" autoComplete={setup ? "new-password" : "current-password"} required disabled={busy || uncertain} />
-    </div>
-    {setup ? <label className="field"><span>{t("Confirm password")}</span><input name="confirm" type="password" autoComplete="new-password" required disabled={busy || uncertain} /></label> : null}
-    {error ? <p className="console-auth-error" role="alert">{error}</p> : null}
-    {uncertain ? <button className="button outline" type="button" onClick={onRefresh}>{t("Check account status")}</button> :
-      <button className="button primary" type="submit" disabled={busy}>{t(busy ? setup ? "Creating account…" : "Signing in…" : setup ? "Create administrator account" : "Sign in")}<ArrowRight size={15} aria-hidden="true" /></button>}
+    {error ? <p className="console-auth-error" id={`${id}-error`} role="alert">{error}</p> : null}
+    <button className="button primary" type="submit" disabled={busy}>{t(busy ? "Signing in…" : "Sign in")}<ArrowRight size={15} aria-hidden="true" /></button>
   </form>;
 }
