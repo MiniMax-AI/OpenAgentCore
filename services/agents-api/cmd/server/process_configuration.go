@@ -33,7 +33,7 @@ func validateProcessConfiguration() error {
 		}
 	}
 	if _, present := os.LookupEnv("AGENTS_API_EXECUTION_OPTIONS_FILE"); present {
-		return errors.New("AGENTS_API_EXECUTION_OPTIONS_FILE is retired. Deployment model providers are stored in Core: set them in Web (System) or with PUT /core/v1/harnesses/{harness}/model-provider. To import the old file once, run `parsar apply` and accept the import; then this setting is removed")
+		return errors.New("AGENTS_API_EXECUTION_OPTIONS_FILE is retired; remove it and set deployment default model providers in Web (System) or with PUT /core/v1/harnesses/{harness}/model-provider")
 	}
 	if path := os.Getenv("AGENTS_API_CONFIG_FILE"); path != "" && !filepath.IsAbs(path) {
 		return errors.New("AGENTS_API_CONFIG_FILE must be an absolute diagnostic path")

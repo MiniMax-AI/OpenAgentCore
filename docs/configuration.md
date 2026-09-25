@@ -73,8 +73,8 @@ Core reports loaded configuration paths on startup, without environment values o
 file contents. The existing history JSON format remains a separate specialized
 file referenced from `core.env`; this change does not introduce a new loader or
 consolidate secrets into one file. The former `AGENTS_API_EXECUTION_OPTIONS_FILE`
-is retired and stops startup; deployment model providers are
-[database-owned](#deployment-model-providers). Internal polling/queue controls
+is retired and stops startup: remove it and set
+[deployment model providers](#deployment-model-providers) in Web or through Core. Internal polling/queue controls
 remain internal. Runtime history retention remains its existing fixed policy.
 
 A process-only change requires restart. In Compose, recreate Core so it rereads

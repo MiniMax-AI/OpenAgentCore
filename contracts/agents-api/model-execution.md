@@ -155,7 +155,8 @@ use the same provider. The execution-configuration read shows the frozen safe vi
 with source `deployment`.
 
 The former `AGENTS_API_EXECUTION_OPTIONS_FILE` is retired: setting it stops Core at
-startup with the replacement named. Only its provider identity (endpoint, key,
+startup with the replacement named; remove it and set the deployment defaults
+in Web (System) or with `PUT /core/v1/harnesses/{harness}/model-provider`. Only its provider identity (endpoint, key,
 protocol and MiniMax Code limits) has a home in the deployment default; its other
 native options (headers, query parameters, environment, MCP servers, feature and
 permission settings) are dropped. Sessions frozen from that file keep their
