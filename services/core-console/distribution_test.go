@@ -67,6 +67,7 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 	}
 	write(filepath.Join(dist, "index.html"), "console")
 	write(filepath.Join(payload, "node-install.pyz"), "bootstrap")
+	write(filepath.Join(payload, "self-hosted-install.pyz"), "executor bootstrap")
 	artifacts := map[string]any{}
 	for logical := range map[string]bool{"native/bin/parsar-sandbox-node": true, "images/runtime.tar.gz": true, "native/microsandbox/msb": true} {
 		name := strings.ReplaceAll(logical, "/", "-")
