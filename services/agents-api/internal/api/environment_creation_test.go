@@ -59,7 +59,7 @@ func environmentCreationHandler(t *testing.T, engine string, options ...Option) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := NewHandler(fixture, auth, engine, options...)
+	handler, err := NewHandler(fixture, auth, engine, append([]Option{withFixtureDeploymentProvider()}, options...)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestSelfHostedEmptyCreationAndStream(t *testing.T) {
 					defer server.Close()
 					ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 					defer cancel()
-					body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"%s},"stream":%t%s}`, capability, stream, input)
+					body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"%s},"stream":%t%s,%s}`, capability, stream, input, fixtureSessionProvider)
 					request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/v1/agents/sessions", strings.NewReader(body))
 					if err != nil {
 						t.Fatal(err)
@@ -200,7 +200,7 @@ func TestSelfHostedCreationRequiresOperatorExecution(t *testing.T) {
 	for _, options := range [][]Option{nil, {WithExecution(&inputRecorder{})}, {WithEnvironmentRemoteURL(environmentOrigin)}} {
 		for _, stream := range []bool{false, true} {
 			handler, fixture := environmentCreationHandler(t, "codex", options...)
-			body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"stream":%t}`, stream)
+			body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"stream":%t,%s}`, stream, fixtureSessionProvider)
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 			request.Header.Set("Authorization", "Bearer key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")

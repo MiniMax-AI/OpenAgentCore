@@ -74,3 +74,13 @@ func TestRenamedCoreKeyDigestSettingNamesItsReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRetiredExecutionOptionsFileNamesItsReplacement(t *testing.T) {
+	for _, value := range []string{"/private/execution-options.json", ""} {
+		t.Setenv("AGENTS_API_EXECUTION_OPTIONS_FILE", value)
+		err := validateProcessConfiguration()
+		if err == nil || !strings.Contains(err.Error(), "remove it") || !strings.Contains(err.Error(), "/core/v1/harnesses/{harness}/model-provider") || strings.Contains(err.Error(), "/private/") {
+			t.Fatal(err)
+		}
+	}
+}

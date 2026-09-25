@@ -23,6 +23,11 @@ def verify_environment(value, environment_id, status=None):
     return value
 
 
+# Self-hosted Sessions carry their own write-only model provider; nothing here calls it.
+PROVIDER = {"x_agents_core": {"model_provider": {"protocol": "responses", "base_url": "https://model.fixture.example/v1",
+                                                 "api_key": "fixture-model-key"}}}
+
+
 def main():
     settings = json.load(sys.stdin)
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
@@ -43,9 +48,9 @@ def main():
         else:
             creation = {"agent": {"model": "test-model"}, "environment": {
                 "type": "self_hosted", "workspace_directory": "/workspace"}}
-            session = api.beta.agents.sessions.create(**creation)
-            removed = api.beta.agents.sessions.create(**creation)
-            other = foreign.beta.agents.sessions.create(**creation)
+            session = api.beta.agents.sessions.create(**creation, extra_body=PROVIDER)
+            removed = api.beta.agents.sessions.create(**creation, extra_body=PROVIDER)
+            other = foreign.beta.agents.sessions.create(**creation, extra_body=PROVIDER)
             result = {"environment_id": session.environment.id, "deleted_environment_id": removed.environment.id,
                       "foreign_environment_id": other.environment.id}
             verify_environment(api.beta.agents.environments.retrieve(removed.environment.id).to_dict(), removed.environment.id, "pending")

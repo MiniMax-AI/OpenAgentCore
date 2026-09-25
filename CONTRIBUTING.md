@@ -2242,18 +2242,29 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   require no key. Validate the merged harness/protocol/limits without reading keys.
   Read safe defaults and ciphertext in one database snapshot for Session creation;
   a complete Session override need not decrypt the inherited bundle.
-- Hosted Session provider selection resolves explicit bundle, saved bundle, then
-  deployment bundle, and freezes it in the existing encrypted Session-owned row.
-  Convert existing native operator options only at server composition, never in
-  scheduling. Retain the complete selected operator options in the private encrypted
-  Session snapshot for deployment fallback, preserving headers, query parameters
-  and native settings; do not reconstruct them from a smaller public input type. Keep runtime dispatch on the common adapter path and fail closed for
-  missing/decryption-failed snapshots. Agent edits/deletion, restart and idle
-  suspend/resume never resolve defaults again. Record caller intent for every new
-  hosted Session before resolving defaults, including inline deployment fallback;
-  matching retries return committed state without replay. No Turn-level overrides,
-  provider catalog or self-hosted/none credential expansion is included. Public
-  input/null semantics and examples live in `contracts/agents-api/model-execution.md`.
+- Session provider selection resolves explicit bundle, saved bundle, then the
+  deployment default of the resolved harness, and freezes it in the existing
+  encrypted Session-owned row. The deployment default is a runtime setting: one
+  complete bundle per harness in PostgreSQL, encrypted with its own
+  harness-bound purpose, managed only with the Core key through
+  `/core/v1/harnesses/{harness}/model-provider`, audited as a deployment-wide
+  write without the key, and never read back. It applies to `openai_hosted` and
+  operator-registered `none` Sessions, never to `self_hosted`, whose executor host
+  belongs to the application. Caller bundles apply to `openai_hosted` and
+  `self_hosted`. Hosted and self-hosted Sessions with no bundle are rejected at
+  creation with `model_provider_required`; legacy rows without a snapshot are
+  rejected at message admission and dispatch, never sent to a harness that would
+  fall back to a built-in endpoint. There is no operator options file: its
+  retirement fails startup, and historical snapshots keep their frozen native
+  options. Keep runtime dispatch on the common adapter path and fail closed for
+  missing/decryption-failed snapshots. Agent edits/deletion, default changes,
+  restart and idle suspend/resume never resolve defaults again. Record caller
+  intent for every new hosted Session before resolving defaults; other inline
+  Sessions keep the resolved-request rule, whose hash leaves out the deployment
+  default. Provider keys enter retry hashes only as keyed fingerprints. Matching
+  retries return committed state without replay. No Turn-level overrides or provider catalog is
+  included. Public input/null semantics and examples live in
+  `contracts/agents-api/model-execution.md`.
 - Session execution-configuration reads use a separate immutable safe projection,
   written with provenance in the same creation transaction as Session resources.
   Read no credential ciphertext and never recompute sources from current Agents
@@ -2489,7 +2500,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   before binding/claiming work. Older peers with only option-based capabilities
   must not receive controls they would ignore. The API sends resolved search and
   text verbosity values; native option names belong to adapters. Codex translates
-  them using its existing validation/catalog path after cloning operator options,
+  them using its existing validation/catalog path after cloning adapter options,
   so explicit controls take precedence without mutating those options. Omitting
   the entire block preserves ordinary product behavior; a supplied block requires
   both valid fields. This internal contract does not add public configuration or
@@ -3297,10 +3308,10 @@ success-dependent limitations remain in the profile. Image-bearing delivery alon
 requires Runtime function-result image support; text results and function
 declarations do not acquire that requirement. These are implementation limits, not changes to the upstream contract.
 Do not bypass them by dropping fields, changing model identity or fabricating usage.
-Operators may configure the daemon provider environment or the existing transient
-`AGENTS_API_EXECUTION_OPTIONS_FILE` with adapter-owned `claude_provider`
-(`base_url` HTTPS and `bearer_token`). Core forwards these opaque options without
-persisting them in Session configuration. The adapter exclusively selects the
+Operators may configure the daemon provider environment or the deployment default
+model provider for `claude_sdk` (HTTPS `base_url` and a write-only key), which Core
+freezes in the Session's encrypted snapshot and delivers as the adapter-owned
+`claude_provider`; it never enters public Session configuration. The adapter exclusively selects the
 provider environment and removes credentials from native tool environments. Product `claude_code` and product execution are unchanged.
 The `none` public profile accepts only
 text, explicit model/system instructions, managed state, exact native resume and

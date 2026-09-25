@@ -40,3 +40,8 @@ WHERE session_id = $1 AND state = 'pending';
 -- name: FailSessionEnvironmentInput :exec
 UPDATE environment_input_reservations SET state = 'failed', settled_at = clock_timestamp()
 WHERE session_id = $1 AND state = 'pending';
+
+-- name: FailEnvironmentInputWithoutModelProvider :execrows
+UPDATE environment_input_reservations
+SET state = 'failed', settled_at = clock_timestamp(), failure_code = 'model_provider_required'
+WHERE session_id = @session_id AND id = @id AND state = 'pending';

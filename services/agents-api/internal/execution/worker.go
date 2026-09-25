@@ -304,6 +304,10 @@ func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
 	if err == nil || errors.Is(err, store.ErrTurnConflict) {
 		return nil
 	}
+	outcome := json.RawMessage(`{"error_code":"execution_unavailable"}`)
+	if errors.Is(err, store.ErrModelProviderRequired) {
+		outcome = json.RawMessage(`{"error_code":"model_provider_required"}`)
+	}
 	finish, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	turn, err := w.dispatcher.Store.GetTurn(finish, item.TenantID, item.SessionID, item.TurnID)
@@ -314,7 +318,7 @@ func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
 		return nil
 	}
 	log.Ctx(ctx).Error("agents-api dispatch did not complete", "turn_id", item.TurnID)
-	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: turn.Status, Status: store.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_unavailable"}`)})
+	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: turn.Status, Status: store.TurnFailed, Outcome: outcome})
 	if errors.Is(err, store.ErrTurnConflict) {
 		return nil
 	}

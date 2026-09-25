@@ -26,7 +26,7 @@ func TestSessionHarnessAdmission(t *testing.T) {
 		{"empty", `,"x_agents_core":{}`, "", `{"type":"none"}`, "", true, 400},
 		{"unknown nested", `,"x_agents_core":{"harness":"codex","model":"wrong"}`, "", `{"type":"none"}`, "", true, 400},
 		{"claude verbosity", `,"x_agents_core":{"harness":"claude_sdk"}`, `,"text":{"verbosity":"high"}`, `{"type":"none"}`, "", true, 400},
-		{"mcode self-hosted requires executor configuration", `,"x_agents_core":{"harness":"mcode"}`, "", `{"type":"self_hosted","workspace_directory":"/workspace"}`, "", true, 503},
+		{"mcode self-hosted requires executor configuration", `,"x_agents_core":{"harness":"mcode"}`, "", `{"type":"self_hosted","workspace_directory":"/workspace"},` + fixtureAnthropicSessionProvider, "", true, 503},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var options []Option

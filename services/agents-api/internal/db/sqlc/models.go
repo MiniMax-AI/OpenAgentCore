@@ -53,6 +53,16 @@ type AgentModelExecution struct {
 	EncryptedConfig []byte      `json:"encrypted_config"`
 }
 
+type DeploymentModelProvider struct {
+	Harness         string             `json:"harness"`
+	Protocol        string             `json:"protocol"`
+	BaseUrl         string             `json:"base_url"`
+	ContextWindow   int32              `json:"context_window"`
+	MaxOutputTokens int32              `json:"max_output_tokens"`
+	EncryptedConfig []byte             `json:"encrypted_config"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Device struct {
 	ID             pgtype.UUID        `json:"id"`
 	TenantID       pgtype.UUID        `json:"tenant_id"`
@@ -113,6 +123,7 @@ type EnvironmentInputReservation struct {
 	Deadline       pgtype.Timestamptz `json:"deadline"`
 	SettledAt      pgtype.Timestamptz `json:"settled_at"`
 	IsInitial      bool               `json:"is_initial"`
+	FailureCode    pgtype.Text        `json:"failure_code"`
 }
 
 type EnvironmentSetup struct {

@@ -28,15 +28,16 @@ describe("frozen execution configuration", () => {
   });
   it.each([
     { status: "redacted", source: "deployment", configuration: null },
+    { status: "available", source: "deployment", configuration: { protocol: "responses", base_url: "https://deployment.example/v1", api_key_configured: true } },
     { status: "unavailable", source: "unknown", configuration: null },
-  ])("preserves explicit $status provider state", async (provider) => {
+  ])("preserves explicit $status $source provider state", async (provider) => {
     const value = { ...snapshot, model_provider: provider };
     expect(await clientReturning(value).retrieveSessionExecutionConfiguration(projectId, id)).toEqual(value);
   });
   it.each([
     (value: any) => { value.model_provider.configuration.api_key = "secret-canary"; },
     (value: any) => { value.model_provider.configuration.headers = { Authorization: "secret-canary" }; },
-    (value: any) => { value.model_provider.source = "deployment"; },
+    (value: any) => { value.model_provider.source = "deployment"; value.model_provider.configuration = null; },
     (value: any) => { value.model_provider.configuration.base_url = "https://user:secret-canary@host/v1"; },
     (value: any) => { value.model_provider.configuration.base_url += "?key=secret-canary"; },
     (value: any) => { value.session_id = "wrong-session"; },

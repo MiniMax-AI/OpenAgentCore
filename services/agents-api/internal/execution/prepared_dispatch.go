@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
@@ -35,6 +36,10 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionI
 	var snapshot Snapshot
 	if json.Unmarshal(session.Configuration, &snapshot) != nil || snapshot.Daemon != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
 		return run, store.ErrInvalidInput
+	}
+	if !snapshot.ModelProviderConfigured && snapshot.Environment != nil && v1.ModelProviderRequired(snapshot.Environment.Type) {
+		// Reserved before providers were required; the caller settles it as failed.
+		return run, store.ErrModelProviderRequired
 	}
 	bound, err := d.Store.GetSessionExecutionBinding(ctx, tenantID, sessionID)
 	if err != nil {

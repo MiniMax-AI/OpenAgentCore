@@ -39,6 +39,9 @@ func validateProcessConfiguration() error {
 			return errors.New(retired + " is retired; configure deployment in Core and enroll a separate node")
 		}
 	}
+	if _, present := os.LookupEnv("AGENTS_API_EXECUTION_OPTIONS_FILE"); present {
+		return errors.New("AGENTS_API_EXECUTION_OPTIONS_FILE is retired; remove it and set deployment default model providers in Web (System) or with PUT /core/v1/harnesses/{harness}/model-provider")
+	}
 	if path := os.Getenv("AGENTS_API_SETTINGS_FILE"); path != "" && !filepath.IsAbs(path) {
 		return errors.New("AGENTS_API_SETTINGS_FILE must be an absolute path")
 	}
@@ -67,7 +70,7 @@ func logConfigurationSources() {
 	} else {
 		log.Bg().Info("Core process configuration loaded from the process environment")
 	}
-	for _, key := range []string{"AGENTS_API_EXECUTION_OPTIONS_FILE", "AGENTS_API_RUNTIME_HISTORY_FILE"} {
+	for _, key := range []string{"AGENTS_API_RUNTIME_HISTORY_FILE"} {
 		if path := os.Getenv(key); path != "" {
 			log.Bg().Info("Core auxiliary configuration", "setting", key, "path", path)
 		}

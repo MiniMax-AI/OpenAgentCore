@@ -27,7 +27,7 @@ func TestExecutionConfigurationSources(t *testing.T) {
 		{"harness reset", `,"agent":{"x_agents_core":null}`, ``, saved, provider, provider, "agent", "deployment", "agent", "available"},
 		{"explicit bundle", ``, `,"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://explicit.example/v1","api_key":"explicit-secret"}}`, saved, nil, provider, "agent", "agent", "session", "available"},
 		{"provider null inherits", ``, `,"x_agents_core":{"model_provider":null}`, saved, provider, provider, "agent", "agent", "agent", "available"},
-		{"inline deployment", `,"agent":{"model":"inline"}`, ``, nil, nil, provider, "session", "deployment", "deployment", "redacted"},
+		{"inline deployment", `,"agent":{"model":"inline"}`, ``, nil, nil, provider, "session", "deployment", "deployment", "available"},
 		{"inline explicit harness", `,"agent":{"model":"inline","x_agents_core":{"harness":"codex"}}`, ``, nil, nil, nil, "session", "session", "unknown", "unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

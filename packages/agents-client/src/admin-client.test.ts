@@ -76,6 +76,10 @@ const routeCases: Array<[string, string, (client: AdminClient) => Promise<unknow
   ["GET", `/projects/${projectId}/environments/${resourceId}/executor-credentials`, (client) => client.listExecutorCredentials(projectId, resourceId)],
   ["POST", `/projects/${projectId}/environments/${resourceId}/executor-credentials`, (client) => client.issueExecutorCredential(projectId, resourceId, { key_id: keyId })],
   ["DELETE", `/projects/${projectId}/environments/${resourceId}/executor-credentials/${keyId}`, (client) => client.revokeExecutorCredential(projectId, resourceId, keyId)],
+  ["GET", "/harnesses", (client) => client.listHarnesses()],
+  ["GET", "/harnesses/codex/model-provider", (client) => client.retrieveHarnessModelProvider("codex")],
+  ["PUT", "/harnesses/codex/model-provider", (client) => client.setHarnessModelProvider("codex", { protocol: "responses", base_url: "https://model.example/v1", api_key: "k" })],
+  ["DELETE", "/harnesses/codex/model-provider", (client) => client.deleteHarnessModelProvider("codex")],
 ];
 
 describe("AdminClient transport boundary", () => {
@@ -140,6 +144,35 @@ describe("AdminClient transport boundary", () => {
     }
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null, { status: 204 }));
     await expect(new AdminClient({ fetch }).revokeExecutorCredential(projectId, resourceId, keyId)).resolves.toBeUndefined();
+  });
+
+  it("manages deployment default model providers without ever reading a key", async () => {
+    const provider = { object: "core.model_provider", harness: "codex", protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true, updated_at: "2026-09-26T08:00:00Z" };
+    const harnesses = { object: "list", data: [
+      { object: "core.harness", id: "claude_sdk", enabled: false, default: false, model_provider: null },
+      { object: "core.harness", id: "codex", enabled: true, default: true, model_provider: provider },
+    ] };
+    expect(await clientWith(harnesses).client.listHarnesses()).toEqual(harnesses);
+    expect(await clientWith(provider).client.retrieveHarnessModelProvider("codex")).toEqual(provider);
+    const { client, fetch } = clientWith(provider);
+    const input = { protocol: "responses", base_url: "https://model.example/v1", api_key: "write-only", context_window: 200000 } as const;
+    expect(await client.setHarnessModelProvider("codex", input)).toEqual(provider);
+    expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual(input);
+    for (const unsafe of [{ ...provider, api_key: "leak" }, { ...provider, harness: "mcode" }, { ...provider, api_key_configured: false }, { ...provider, base_url: "http://model.example/v1" }, { ...provider, extra: 1 }]) {
+      await expect(clientWith(unsafe).client.retrieveHarnessModelProvider("codex")).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
+    for (const unsafe of [{ ...harnesses, data: [{ ...harnesses.data[1], model_provider: { ...provider, api_key: "leak" } }] }, { ...harnesses, data: [harnesses.data[1], harnesses.data[1]] }, { data: harnesses.data }]) {
+      await expect(clientWith(unsafe).client.listHarnesses()).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
+    const deleted = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null, { status: 204 }));
+    await expect(new AdminClient({ fetch: deleted }).deleteHarnessModelProvider("codex")).resolves.toBeUndefined();
+  });
+
+  it("accepts deployment-wide audit entries without a Project", async () => {
+    const entry = { id: "audit", created_at: "2026-09-26T08:00:00Z", admin_credential_id: "digest", actor_label: "console", action: "set", project_id: null, resource_type: "deployment_model_provider", resource_id: "codex", result_ids: [], request_id: "request", trace_id: "trace" };
+    const audit = { data: [entry], has_more: false, next_cursor: "" };
+    expect(await clientWith(audit).client.listAuditLog()).toEqual(audit);
+    await expect(clientWith({ ...audit, data: [{ ...entry, project_id: 1 }] }).client.listAuditLog()).rejects.toMatchObject({ code: "invalid_admin_response" });
   });
 
   it("encodes identifiers and prevents normalized dot path traversal", async () => {

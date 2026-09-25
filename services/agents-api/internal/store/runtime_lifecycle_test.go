@@ -90,7 +90,7 @@ func managedWorkerMode(t *testing.T, s *store.Store, key string, p sandbox.Provi
 func managedSession(t *testing.T, s *store.Store) (string, store.Session, store.Environment) {
 	t.Helper()
 	tenant := uuid.NewString()
-	v, e := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)})
+	v, e := s.CreateSession(t.Context(), tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)}))
 	if e != nil {
 		t.Fatal(e)
 	}

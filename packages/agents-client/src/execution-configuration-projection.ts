@@ -52,7 +52,7 @@ export function projectExecutionConfiguration(value: unknown, sessionId: string,
     !isRecord(value.model_provider) || !exactFields(value.model_provider, new Set(["source", "status", "configuration"]))) return invalid();
   const provider = value.model_provider;
   let configuration: ModelProviderView | null = null;
-  if (provider.status === "available" && (provider.source === "session" || provider.source === "agent")) {
+  if (provider.status === "available" && (provider.source === "session" || provider.source === "agent" || provider.source === "deployment")) {
     configuration = safeProvider(provider.configuration, invalid);
   } else if (!((provider.status === "redacted" && provider.source === "deployment") ||
     (provider.status === "unavailable" && provider.source === "unknown")) || provider.configuration !== null) return invalid();

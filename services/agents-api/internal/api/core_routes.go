@@ -25,5 +25,6 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		h.registerAdminResourceRoutes(r)
 		h.registerExecutorCredentialRoutes(r)
 		h.registerSandboxManagerRoutes(r)
+		h.registerHarnessRoutes(r)
 	})
 }

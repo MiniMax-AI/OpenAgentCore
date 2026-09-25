@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -25,6 +26,10 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 		if err != nil {
 			return proto.PromptRequestPayload{}, err
 		}
+	} else if snapshot.Environment != nil && v1.ModelProviderRequired(snapshot.Environment.Type) {
+		// A Session from before deployment defaults moved into Core. Without a
+		// bundle its harness would fall back to a built-in endpoint and hang.
+		return proto.PromptRequestPayload{}, store.ErrModelProviderRequired
 	} else if d.Options != nil {
 		options, err = d.Options(ctx, session)
 		if err != nil {

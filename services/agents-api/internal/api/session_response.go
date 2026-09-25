@@ -79,8 +79,11 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 		response.Status, response.Error = activity.Status, nil
 		if activity.Status == "failed" {
 			message := "The initial input timed out waiting for the environment connection."
-			if activity.Failure == "environment_unavailable" {
+			switch activity.Failure {
+			case "environment_unavailable":
 				message = "The environment is no longer available for this input."
+			case "model_provider_required":
+				message = "This Session was created without a model provider and cannot run. Create a new Session with x_agents_core.model_provider or an Agent that has one saved."
 			}
 			response.Error = &message
 		}

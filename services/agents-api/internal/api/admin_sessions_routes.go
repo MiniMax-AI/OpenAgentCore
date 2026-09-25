@@ -160,7 +160,7 @@ func (h *Handler) adminSessionArtifactContent(w http.ResponseWriter, r *http.Req
 }
 
 // @Summary Retrieve a Session's frozen execution configuration in a Project
-// @Description Core key only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment provider details remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
+// @Description Core key only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment defaults frozen after they moved into Core show their safe view; older deployment selections remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
 // @Tags Execution configuration
 // @Produce json
 // @Security DeploymentAdminAuth

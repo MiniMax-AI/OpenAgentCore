@@ -12,12 +12,12 @@ import (
 )
 
 const getEnvironmentInputActivity = `-- name: GetEnvironmentInputActivity :one
-SELECT r.state, r.is_initial, r.created_at, r.settled_at, e.id AS environment_id, e.status AS connection_status,
+SELECT r.state, r.is_initial, r.created_at, r.settled_at, r.failure_code, e.id AS environment_id, e.status AS connection_status,
        COALESCE(s.configuration->'environment'->>'type', '')::text AS environment_type
 FROM environments e
 JOIN sessions s ON s.id = e.session_id
 JOIN LATERAL (
-    SELECT id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial FROM environment_input_reservations
+    SELECT id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial, failure_code FROM environment_input_reservations
     WHERE session_id = e.session_id
     ORDER BY created_at DESC, id DESC LIMIT 1
 ) r ON true
@@ -33,6 +33,7 @@ type GetEnvironmentInputActivityRow struct {
 	IsInitial        bool               `json:"is_initial"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	SettledAt        pgtype.Timestamptz `json:"settled_at"`
+	FailureCode      pgtype.Text        `json:"failure_code"`
 	EnvironmentID    pgtype.UUID        `json:"environment_id"`
 	ConnectionStatus string             `json:"connection_status"`
 	EnvironmentType  string             `json:"environment_type"`
@@ -46,6 +47,7 @@ func (q *Queries) GetEnvironmentInputActivity(ctx context.Context, sessionID pgt
 		&i.IsInitial,
 		&i.CreatedAt,
 		&i.SettledAt,
+		&i.FailureCode,
 		&i.EnvironmentID,
 		&i.ConnectionStatus,
 		&i.EnvironmentType,
