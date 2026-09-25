@@ -146,6 +146,28 @@ func TestWriteAuditOwnersIdentityReplayAndRevocation(t *testing.T) {
 	}
 }
 
+// The copy operation was removed; its committed provenance must stay readable.
+func TestHistoricalAdminCopyProvenance(t *testing.T) {
+	s, pool := testStore(t)
+	project := createTestProject(t, s)
+	auditID, agentID := uuid.NewString(), uuid.NewString()
+	if _, err := pool.Exec(t.Context(), `INSERT INTO admin_audit_log(id,tenant_id,project_id,admin_credential_id,actor_label,action,resource_type,resource_id,result_ids,request_id,trace_id)
+		VALUES($1,$2,$3,'digest','admin','copy','agent','source-agent',$4::jsonb,'request','trace')`, auditID, project.TenantID, project.ID, `[{"type":"agent","source_id":"source-agent","target_id":"`+agentID+`"}]`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), "INSERT INTO admin_resource_owners(tenant_id,resource_type,resource_id,audit_id) VALUES($1,'agent',$2,$3)", project.TenantID, agentID, auditID); err != nil {
+		t.Fatal(err)
+	}
+	owners, err := s.GetResourceOwners(t.Context(), project.TenantID, "agent", []string{agentID})
+	if err != nil || len(owners) != 1 || owners[0].APIKey != nil || owners[0].Source == nil || *owners[0].Source != "admin_copy" || owners[0].AdminAuditID == nil || *owners[0].AdminAuditID != auditID {
+		t.Fatalf("historical copy owner: %+v %v", owners, err)
+	}
+	page, err := s.ListAdminAudit(t.Context(), AdminAuditFilter{ProjectID: project.ID, Action: "copy"})
+	if err != nil || len(page.Data) != 1 || page.Data[0].ID != auditID || !strings.Contains(string(page.Data[0].ResultIDs), agentID) {
+		t.Fatalf("historical copy audit: %+v %v", page, err)
+	}
+}
+
 func TestWriteAuditCursorFiltersAndRetention(t *testing.T) {
 	s, pool := testStore(t)
 	tenant := uuid.NewString()

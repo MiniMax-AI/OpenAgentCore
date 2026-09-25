@@ -178,8 +178,7 @@ Deliver the secret only to authorized applications. Rotate by issuing another ke
 in the same Project and revoking the old one. No secret-reset endpoint or service
 restart is needed. Renaming a Project preserves its ID, principal and assets.
 Archiving disables all its keys but retains assets and already accepted execution.
-Administrators can read or delete retained resources and copy supported assets into
-an active Project.
+Administrators can read or delete retained resources.
 
 Optional `OpenAI-Organization` and `OpenAI-Project` headers must match the Project's
 execution scope; repeated or conflicting values fail authentication. The catalog

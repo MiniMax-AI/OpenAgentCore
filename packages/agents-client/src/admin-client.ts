@@ -1,19 +1,19 @@
 import {
-  AgentCoreError, addVaultPageOptions, projectStartupConfiguration, projectAgentSession, projectRuntimeObservation,
+  AgentCoreError, addVaultPageOptions, projectAgentSession, projectRuntimeObservation,
   projectEnvironmentTemplate, projectEnvironmentTemplateList, projectVault, projectVaultList,
   projectVaultCredential, projectVaultCredentialList, projectSourceFile, projectSourceFileDeleted,
 } from "./client";
 import { projectExecutionConfiguration } from "./execution-configuration-projection";
 import { projectAgentTurn, projectSessionItem, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
-import { projectRuntimeHistory, projectRuntimeHistoryCapabilities } from "./runtime-history-projection";
+import { projectRuntimeHistory } from "./runtime-history-projection";
 import { canonicalUuid, isNonnegativeInteger, isRecord } from "./response-projection";
 import {
   invalidAdminResponse, projectAdminProject, projectAdminKey, projectIssuedAdminKey, projectAdminPage, projectAdminDeleted, projectAdminSessionArchive,
-  projectResourcePage, projectSavedAgent, projectSkill, projectSkillVersion, projectArtifact, projectCopyResult, projectSummary, projectAdminRuntimePage, projectResourceOwners, projectWriteOperations, projectAdminAudit,
+  projectResourcePage, projectSavedAgent, projectSkill, projectSkillVersion, projectArtifact, projectSummary, projectAdminRuntimePage, projectResourceOwners, projectWriteOperations, projectAdminAudit,
 } from "./admin-projection";
 import type { PageOptions, ReadOptions, RuntimeHistoryQuery, VaultListOptions } from "./types";
 import type {
-  AdminClientOptions, AdminAuditOptions, AdminCopyInput, AdminContent, AdminWriteOptions, ArchiveAdminSessionInput, CreateAdminProjectInput, RenameAdminProjectInput,
+  AdminClientOptions, AdminAuditOptions, AdminContent, ArchiveAdminSessionInput, CreateAdminProjectInput, RenameAdminProjectInput,
   IssueAdminAPIKeyInput, AdminSummaryOptions, AdminResourceType, AdminResourceOwner, AdminWriteOperationOptions, AdminWriteOperationPage,
 } from "./admin-types";
 
@@ -51,15 +51,11 @@ export class AdminClient {
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
-  async #response(path: string, options?: ReadOptions, method = "GET", body?: unknown, idempotencyKey?: string): Promise<Response> {
+  async #response(path: string, options?: ReadOptions, method = "GET", body?: unknown): Promise<Response> {
     const headers = new Headers({ Accept: "application/json" });
     const token = typeof this.#adminToken === "function" ? this.#adminToken() : this.#adminToken;
     if (token) headers.set("Authorization", `Bearer ${token}`);
     if (body !== undefined) headers.set("Content-Type", "application/json");
-    if (idempotencyKey !== undefined) {
-      if (!idempotencyKey.trim()) throw new TypeError("An Idempotency-Key must not be empty.");
-      headers.set("Idempotency-Key", idempotencyKey);
-    }
     const response = await this.#fetch(`${this.#baseUrl}${path}`, {
       method, headers, signal: options?.signal, credentials: "same-origin", redirect: "error",
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -78,8 +74,8 @@ export class AdminClient {
     }
     return response;
   }
-  async #json(path: string, options?: ReadOptions, method?: string, body?: unknown, idempotencyKey?: string): Promise<unknown> {
-    const response = await this.#response(path, options, method, body, idempotencyKey);
+  async #json(path: string, options?: ReadOptions, method?: string, body?: unknown): Promise<unknown> {
+    const response = await this.#response(path, options, method, body);
     try { return await response.json(); } catch { return invalidAdminResponse(); }
   }
   async #delete<O extends string>(path: string, id: string, object: O, options?: ReadOptions) {
@@ -113,14 +109,6 @@ export class AdminClient {
     if (!isRecord(value) || Object.keys(value).length !== 2 || value.id !== keyId || value.deleted !== true) return invalidAdminResponse();
     return { id: keyId, deleted: true };
   }
-  async copyResources(input: AdminCopyInput, options?: AdminWriteOptions) {
-    const body = {
-      source_project_id: input.source_project_id, target_project_id: input.target_project_id,
-      resource_type: input.resource_type, resource_id: input.resource_id, include_dependencies: input.include_dependencies,
-      ...(input.target_vault_id === undefined ? {} : { target_vault_id: input.target_vault_id }),
-    };
-    return projectCopyResult(await this.#json("/copies", options, "POST", body, options?.idempotencyKey));
-  }
   async retrieveSummary(options?: AdminSummaryOptions) {
     const path = pageQuery("/summary", options, {
       project_id: options?.project_id, group_by: options?.group_by,
@@ -130,12 +118,6 @@ export class AdminClient {
   }
   async listRuntimeObservations(options?: PageOptions) {
     return projectAdminRuntimePage(await this.#json(pageQuery("/runtime-observations", options), options));
-  }
-  async getRuntimeHistoryCapabilities(options?: ReadOptions) {
-    return projectRuntimeHistoryCapabilities(await this.#json("/runtime-history/capabilities", options), invalidAdminResponse);
-  }
-  async retrieveStartupConfiguration(options?: ReadOptions) {
-    return projectStartupConfiguration(await this.#json("/startup-configuration", options));
   }
 
   async listAgents(projectId: string, options?: PageOptions) {

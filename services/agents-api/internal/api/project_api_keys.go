@@ -75,10 +75,6 @@ func setAdminAuditSource(r *http.Request, projectID string) {
 	}
 	*r = *r.WithContext(adminaudit.WithSource(r.Context(), source))
 }
-func (h *Handler) adminAuditContext(r *http.Request, projectID string) context.Context {
-	setAdminAuditSource(r, projectID)
-	return r.Context()
-}
 func adminCatalogPage(r *http.Request) (string, int, bool, error) {
 	values := r.URL.Query()
 	limit := 20

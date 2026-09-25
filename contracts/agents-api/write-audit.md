@@ -90,9 +90,9 @@ routes.
 ]}
 ```
 
-Administrator copies have `api_key:null`, `source:"admin_copy"` and a non-null
-`admin_audit_id`. Their ownership anchors and audit mappings commit with the copy.
-They do not fabricate a public API-key write. See [administrator operations](admin-api.md).
+Resources created by the removed administrator copy operation keep
+`api_key:null`, `source:"admin_copy"` and a non-null `admin_audit_id`. They never
+had a public API-key write. See [historical copy provenance](admin-api.md#historical-copy-provenance).
 
 ### Operations
 

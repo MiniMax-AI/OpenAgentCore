@@ -73,7 +73,7 @@ test("keeps the saved size and Runtime for the same backend, and starts another 
   expect(submitted?.resources).toEqual({ cpus: 2, memory_mib: 4096, root_disk_mib: 8192, environment_disk_mib: 8192 });
   expect(submitted?.runtime).toMatchObject({ source_commit: "c0ffee".padEnd(40, "0") });
 
-  // E2B needs its key again and takes no Runtime or disks.
+  // E2B needs its key again and takes its size from the template build: no size, Runtime or disks.
   await back.click();
   await back.click();
   await back.click();
@@ -81,10 +81,9 @@ test("keeps the saved size and Runtime for the same backend, and starts another 
   await page.getByLabel("E2B API key").fill("fixture-private-key");
   await page.getByLabel("Template build").fill("template:94be54a1-138c-4f30-bc87-b13686272dbe");
   await page.getByRole("button", { name: "Next" }).click();
-  await page.getByRole("button", { name: /^Standard/ }).click();
   await save.click();
   await expect.poll(() => submitted?.provider).toBe("e2b");
-  expect(submitted?.resources).toEqual({ cpus: 2, memory_mib: 2048 });
+  expect(submitted?.resources).toBeUndefined();
   expect(submitted?.runtime).toBeUndefined();
 });
 

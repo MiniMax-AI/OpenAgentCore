@@ -14,7 +14,6 @@ type adminTenantContextKey struct{}
 
 type AdminManagementStore interface {
 	GetManagedSessionArchive(context.Context, string, string) (store.ManagedSessionArchive, error)
-	CopyAssets(context.Context, string, string, store.CopyAssetsInput) (store.CopyAssetsResult, error)
 	ReadAdminSummary(context.Context, string, store.AdminSummaryFilter, func(store.Session, *string) error) (store.AdminAssetCounts, error)
 	ListAdminRuntimeTargets(context.Context, []string, string, int, bool) (store.AdminRuntimeTargetPage, error)
 	ListAdminAudit(context.Context, store.AdminAuditFilter) (store.AdminAuditPage, error)
@@ -41,10 +40,7 @@ func (h *Handler) registerAdminResourceRoutes(router chi.Router) {
 	router.Group(func(r chi.Router) {
 
 		r.Get("/core-metrics", h.getCoreMetrics)
-		r.Get("/startup-configuration", h.adminStartupConfiguration)
-		r.Get("/runtime-history/capabilities", h.adminRuntimeHistoryCapabilities)
 		if h.adminManagement != nil {
-			r.Post("/copies", h.copyAdminAssets)
 			r.Get("/summary", h.adminSummary)
 			r.Get("/runtime-observations", h.adminRuntimeObservations)
 			r.Head("/runtime-observations", methodNotAllowed)
@@ -103,28 +99,4 @@ func (h *Handler) registerAdminResourceRoutes(router chi.Router) {
 			}
 		})
 	})
-}
-
-// @Summary Retrieve deployment startup metadata
-// @Description Deployment administrator only. Returns a secret-free snapshot of supported build capabilities and validated process startup selections. It does not inspect or aggregate daemon heartbeats, Sessions, Environments or Runtime state, and does not prove model-provider reachability, credentials, native readiness, sandbox isolation or successful execution.
-// @Tags Core Administration
-// @Produce json
-// @Security DeploymentAdminAuth
-// @Success 200 {object} v1.CoreStartupConfiguration
-// @Failure 400,401,503 {object} v1.ErrorResponse
-// @Router /core/v1/admin/startup-configuration [get]
-func (h *Handler) adminStartupConfiguration(w http.ResponseWriter, r *http.Request) {
-	h.getStartupConfiguration(w, r)
-}
-
-// @Summary Retrieve durable Runtime history capabilities
-// @Description Deployment administrator only. Advertises only safe backend-neutral durable history availability and bounds. Available is true only when a query Reader and qualified periodic collection are both configured.
-// @Tags Core Administration
-// @Produce json
-// @Security DeploymentAdminAuth
-// @Success 200 {object} v1.RuntimeHistoryCapabilities
-// @Failure 400,401 {object} v1.ErrorResponse
-// @Router /core/v1/admin/runtime-history/capabilities [get]
-func (h *Handler) adminRuntimeHistoryCapabilities(w http.ResponseWriter, r *http.Request) {
-	h.getRuntimeHistoryCapabilities(w, r)
 }

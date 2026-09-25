@@ -19,7 +19,8 @@ describe("sandbox localization", () => {
     expect(sandboxStateLabel("internal-value", "zh")).toBe("未知状态");
   });
   it("localizes all diagnostic labels and advice", () => {
-    for (const code of ["node_unavailable", "resource_missing", "compute_unconfirmed", "ownership_mismatch", "provider_unavailable", "unknown"]) {
+    for (const code of ["node_unavailable", "resource_missing", "compute_unconfirmed", "ownership_mismatch", "provider_unavailable", "docker_unavailable",
+      "docker_limits_unsupported", "runtime_image_unavailable", "kvm_unavailable", "microsandbox_artifacts_unavailable", "capacity_insufficient", "unknown"]) {
       const message = sandboxDiagnosticMessage(code, "zh");
       expect(message?.label).toMatch(/[\u4e00-\u9fff]/);
       expect(message?.advice).toMatch(/[\u4e00-\u9fff]/);

@@ -205,6 +205,12 @@ html[data-theme="dark"] {
   transform: translateY(-100%);
 }
 
+/* A reason named above its explanation, such as a node's diagnostic. */
+.help-tip-title {
+  display: block;
+  font-weight: 600;
+}
+
 @keyframes help-tip-in {
   from { opacity: 0; }
   to { opacity: 1; }

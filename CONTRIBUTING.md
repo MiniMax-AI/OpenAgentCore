@@ -41,19 +41,19 @@ individual key provenance. Projects and keys are database-owned, with no static
 business keys or configuration synchronization. Revocation affects one key;
 archiving a Project revokes all its keys, retaining assets and admitted execution.
 Do not add Core users, roles, memberships or cross-Project sharing. Management
-provides safe reads, public deletion preconditions, explicit hosted Session archive,
-independent copies and Project and key operations; it cannot execute or edit arbitrary assets. Keep administrator
-target scope separate from caller principals. See [design principles](docs/design-principles.md) and the
+provides safe reads, public deletion preconditions, explicit hosted Session archive
+and Project and key operations; it cannot copy, execute or edit arbitrary assets.
+Keep administrator target scope separate from caller principals. See
+[design principles](docs/design-principles.md) and the
 [administrator contract](contracts/agents-api/admin-api.md).
 
 Administrator writes and their audit record share one PostgreSQL transaction.
-Reuse existing resource deletion and serialization code. Copies rebind encrypted
-content and rewrite included dependencies inside the same transaction, including
-large objects, `admin_asset_copies` retry receipts and `admin_resource_owners`
-creation anchors. Never call separately committing resource creators from a copy.
-These anchors identify administrator copies even when API-key provenance is null;
-unknown historical provenance remains unknown. No secrets or request bodies enter
-logs. A forwarded console actor name is only a label, never an authorization input.
+Reuse existing resource deletion and serialization code. Cross-Project copying was
+removed. `admin_resource_owners` alone feeds the historical `source:"admin_copy"`
+provenance read; `admin_asset_copies` is retained only because tables are not
+dropped. Unknown historical provenance remains unknown. No secrets or request
+bodies enter logs. A forwarded console actor name is only a label, never an
+authorization input.
 
 When requirements conflict, object ownership is unclear, or a design would need
 parallel compatibility paths, raise the issue with a concrete recommendation and

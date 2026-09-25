@@ -25,12 +25,15 @@ import { ListToolbar, listSummary, NameCell, SearchField } from "../../component
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatClock, formatCompact, formatCores, formatDateTime, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { projectClient, ProjectName, useProjects } from "../../lib/projects";
+import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, type RuntimeDurableRange } from "../dashboard/runtime-history";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { RUNTIME_SNAPSHOT_REFRESH_MS } from "../dashboard/runtime-snapshot";
+import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { capacitySummary, nodeHealth, suspendedSandboxes, type NodeHealth } from "../fleet/fleet-model";
 import { nodeDetailQuery } from "../fleet/fleet-queries";
 import { fleetSnapshot, useSandboxFleet, type FleetState } from "../fleet/use-sandbox-fleet";
+import { sandboxSize, templateBuildStatus } from "../sandbox/deployment-specification";
 import { formatShare, NodeHostCharts } from "./NodeHostCharts";
 import {
   hostedRuntimeRows,
@@ -148,27 +151,24 @@ export function SandboxMetricsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {fleet.nodes.map((node) => {
-                    const health = nodeHealth(node);
-                    return (
-                      <tr key={node.id} className="clickable-row" onClick={() => setOpenNode(node.id)}>
-                        <th scope="row"><NameCell name={node.name} id={node.id} onOpen={() => setOpenNode(node.id)} openLabel={t("sandbox.nodeDialog.openLabel", { name: node.name || node.id })} /></th>
-                        <td><StatusDot tone={healthTone[health]} label={t(`sandbox.health.${health}`)} /></td>
-                        <td>
-                          <span className="table-meter">
-                            <Meter value={node.active} limit={node.max_active} label={t("sandbox.slotsOf", { name: node.name })} />
-                            <span>{node.active} / {node.max_active}</span>
-                          </span>
-                        </td>
-                        {suspends ? <td className="numeric">{suspendedSandboxes(node)}</td> : null}
-                        <td className="numeric">{node.online ? node.cpu_count ?? MISSING : MISSING}</td>
-                        <td className="numeric">{node.online ? formatBytes(node.available_memory_bytes) : MISSING}</td>
-                        <td className="numeric">{node.online ? formatBytes(node.available_disk_bytes) : MISSING}</td>
-                        <td className={node.cleanup_pending > 0 ? "numeric numeric-warning" : "numeric"}>{node.cleanup_pending}</td>
-                        <td className="numeric">{formatRelative(node.last_seen_at ? Date.parse(node.last_seen_at) / 1000 : null, now, locale)}</td>
-                      </tr>
-                    );
-                  })}
+                  {fleet.nodes.map((node) => (
+                    <tr key={node.id} className="clickable-row" onClick={() => setOpenNode(node.id)}>
+                      <th scope="row"><NameCell name={node.name} id={node.id} onOpen={() => setOpenNode(node.id)} openLabel={t("sandbox.nodeDialog.openLabel", { name: node.name || node.id })} /></th>
+                      <td><NodeHealthStatus node={node} /></td>
+                      <td>
+                        <span className="table-meter">
+                          <Meter value={node.active} limit={node.max_active} label={t("sandbox.slotsOf", { name: node.name })} />
+                          <span>{node.active} / {node.max_active}</span>
+                        </span>
+                      </td>
+                      {suspends ? <td className="numeric">{suspendedSandboxes(node)}</td> : null}
+                      <td className="numeric">{node.online ? node.cpu_count ?? MISSING : MISSING}</td>
+                      <td className="numeric">{node.online ? formatBytes(node.available_memory_bytes) : MISSING}</td>
+                      <td className="numeric">{node.online ? formatBytes(node.available_disk_bytes) : MISSING}</td>
+                      <td className={node.cleanup_pending > 0 ? "numeric numeric-warning" : "numeric"}>{node.cleanup_pending}</td>
+                      <td className="numeric">{formatRelative(node.last_seen_at ? Date.parse(node.last_seen_at) / 1000 : null, now, locale)}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -198,12 +198,31 @@ export function SandboxMetricsPage() {
   );
 }
 
+/** A node's health; a degraded node names the reason its provider is not ready behind the help tip. */
+function NodeHealthStatus({ node }: { node: SandboxNode }) {
+  const { t } = useTranslation("metrics");
+  const health = nodeHealth(node);
+  const diagnostic = health === "degraded" ? nodeProviderDiagnostic(node) : "";
+  return (
+    <span className="status-with-help">
+      <StatusDot tone={healthTone[health]} label={t(`sandbox.health.${health}`)} />
+      {/* The tip opens on its own, not the row's node dialog. */}
+      {diagnostic ? <span className="status-with-help" onClick={(event) => event.stopPropagation()}><DiagnosticTip code={diagnostic} /></span> : null}
+    </span>
+  );
+}
+
 /** An E2B deployment in place of the node table: what runs in its cloud now, and with what. */
 function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
   const { t, i18n } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
   const { navigate } = useConsoleNavigation();
-  const resources = deployment.specification?.resources;
+  // An E2B selection may adopt its template build's size instead of saving one.
+  const resources = sandboxSize(deployment);
+  const build = deployment.e2b?.template_build;
+  const disk = build?.resources.root_disk_mib ?? null;
+  const status = templateBuildStatus(build);
+  const template = deployment.e2b?.template;
   return (
     <Section
       headingId="cloud-heading"
@@ -214,8 +233,22 @@ function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
       <KpiStrip label={t("sandbox.cloud.title")}>
         <Kpi label={t("sandbox.cloud.running")} help={t("sandbox.cloud.runningHelp")} value={formatInteger(deployment.resources.allocations, locale)} />
         <Kpi label={t("sandbox.cloud.pending")} value={formatInteger(deployment.resources.pending, locale)} />
-        <Kpi label={t("sandbox.cloud.size")} value={resources ? `${t("sandbox.cores", { value: formatInteger(resources.cpus, locale) })} · ${formatBytes(resources.memory_mib * 2 ** 20)}` : MISSING} />
-        <Kpi label={t("sandbox.cloud.template")} value={deployment.e2b?.template ? <code className="cloud-template" title={deployment.e2b.template}>{deployment.e2b.template}</code> : MISSING} />
+        <Kpi
+          label={t("sandbox.cloud.size")}
+          value={resources ? <>
+            {t("sandbox.cores", { value: formatInteger(resources.cpus, locale) })} · {formatBytes(resources.memory_mib * 2 ** 20)}
+            {disk !== null ? <span className="kpi-unit">{t("sandbox.cloud.disk", { disk: formatBytes(disk * 2 ** 20) })}</span> : null}
+          </> : MISSING}
+        />
+        <Kpi
+          label={t("sandbox.cloud.template")}
+          help={t("sandbox.cloud.templateHelp")}
+          tone={status === "notReady" ? "warning" : undefined}
+          value={<>
+            {t(`sandbox.cloud.build.${status}`)}
+            {template ? <code className="kpi-unit cloud-template" title={template}>{template}</code> : null}
+          </>}
+        />
       </KpiStrip>
     </Section>
   );
@@ -449,7 +482,7 @@ function NodeDialog({ node, rows, load, range, onClose }: {
       {shown ? (
         <div className="metrics-dialog">
           <dl className="resource-facts" aria-label={t("sandbox.nodeDialog.facts")}>
-            <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={healthTone[nodeHealth(shown)]} label={t(`sandbox.health.${nodeHealth(shown)}`)} /></dd></div>
+            <div><dt>{t("sandbox.status")}</dt><dd><NodeHealthStatus node={shown} /></dd></div>
             <div><dt>{t("sandbox.slots")}</dt><dd>{formatInteger(shown.active, locale)} / {formatInteger(shown.max_active, locale)}</dd></div>
             {shown.provider === "microsandbox" ? <div><dt>{t("sandbox.suspended")}</dt><dd>{formatInteger(suspendedSandboxes(shown), locale)}</dd></div> : null}
             {shown.provider === "microsandbox" ? <div><dt>{t("sandbox.nodeDialog.retainedSlots")}</dt><dd>{formatInteger(shown.retained, locale)} / {formatInteger(shown.max_retained, locale)}</dd></div> : null}
@@ -504,6 +537,8 @@ function RuntimeDialog({ row, showNode, onClose }: { row: HostedRuntimeRow | nul
             {showNode ? <div><dt>{t("sandbox.node")}</dt><dd>{shown.node ? shown.node.name || shown.node.id : MISSING}</dd></div> : null}
             <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={lifecycleTone(shown)} label={lifecycleLabel(shown, t)} /></dd></div>
             <div><dt>{t("sandbox.uptime")}</dt><dd>{formatDuration(shown.uptimeSeconds)}</dd></div>
+            {/* Only E2B reports a sandbox's disk. */}
+            {observation.disk ? <div><dt>{t("sandbox.disk")}</dt><dd>{formatBytes(observation.disk.usage_bytes)} / {formatBytes(observation.disk.limit_bytes)}</dd></div> : null}
           </dl>
           {shown.session
             ? <SessionRuntimeSection projectId={observation.project_id} session={shown.session} active revision={0} refreshToken={0} />

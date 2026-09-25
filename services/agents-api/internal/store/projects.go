@@ -84,8 +84,7 @@ func (s *Store) CreateProject(ctx context.Context, id, name string) (Project, er
 			return err
 		}
 		result = projectBinding(row).Project
-		_, err = recordAdminMutation(ctx, q, result.TenantID, "create", "project", id, nil)
-		return err
+		return recordAdminMutation(ctx, q, result.TenantID, "create", "project", id)
 	})
 	if err != nil {
 		return Project{}, err
@@ -173,8 +172,7 @@ func (s *Store) mutateProject(ctx context.Context, id, name string, archive bool
 			return err
 		}
 		result = projectBinding(row).Project
-		_, err = recordAdminMutation(ctx, q, result.TenantID, action, "project", id, nil)
-		return err
+		return recordAdminMutation(ctx, q, result.TenantID, action, "project", id)
 	})
 	if err != nil {
 		return Project{}, err

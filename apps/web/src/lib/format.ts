@@ -92,6 +92,17 @@ export function shortId(id: string): string {
   return id.length > 14 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
 }
 
+/** A policy period in its largest whole unit, as words: "5 minutes / 5 分钟", "24 hours / 24 小时", "7 days / 7 天". */
+export function formatPeriod(seconds: number | null | undefined, locale?: string): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds < 0) return MISSING;
+  const [amount, unit] = seconds >= 172_800 && seconds % 86_400 === 0 ? [seconds / 86_400, "day"]
+    : seconds >= 3_600 && seconds % 3_600 === 0 ? [seconds / 3_600, "hour"]
+      : seconds >= 60 ? [seconds / 60, "minute"] : [seconds, "second"];
+  const text = new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long", maximumFractionDigits: 1 }).format(amount);
+  // Chinese copy spaces a figure from its unit, as the console's range labels do ("24 小时").
+  return locale?.startsWith("zh") ? text.replace(/^([\d.,]+)(?=[^\d\s.,])/, "$1 ") : text;
+}
+
 /** A chart bucket as words: "1 分钟", "15 minutes", "2 hours". */
 export function formatBucket(seconds: number, locale?: string): string {
   const [amount, unit] = seconds >= 3600 ? [seconds / 3600, "hour"] : [Math.max(1, seconds / 60), "minute"];

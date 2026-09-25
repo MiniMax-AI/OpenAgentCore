@@ -1,4 +1,4 @@
-import type { PageOptions, ReadOptions } from "./types";
+import type { PageOptions } from "./types";
 
 export interface AdminClientOptions {
   baseUrl?: string;
@@ -28,20 +28,6 @@ export interface AdminIssuedAPIKey extends AdminAPIKey { key: string }
 export interface IssueAdminAPIKeyInput { name: string }
 export interface AdminPage<T> { data: T[]; has_more: boolean }
 export interface AdminDeleted<O extends string = string> { id: string; object: O; deleted: true }
-export type AdminCopyResourceType = "agent" | "skill" | "environment_template" | "file" | "vault" | "credential";
-export interface AdminCopyInput {
-  source_project_id: string;
-  target_project_id: string;
-  resource_type: AdminCopyResourceType;
-  resource_id: string;
-  include_dependencies: boolean;
-  target_vault_id?: string;
-}
-export interface AdminCopyResult {
-  mappings: Array<{ type: AdminCopyResourceType | "skill_version"; source_id: string; target_id: string }>;
-  skipped: Array<{ type: AdminCopyResourceType | "skill_version"; source_id: string; reason: string }>;
-}
-export interface AdminWriteOptions extends ReadOptions { idempotencyKey?: string }
 export interface ArchiveAdminSessionInput { expected_generation: number }
 /** Current resource disposition; released does not imply that the active Turn has finalized. */
 export interface AdminSessionArchive {
@@ -78,7 +64,7 @@ export interface SessionArtifact {
   turn_id: string;
 }
 export interface AdminContent { blob: Blob; contentType: string | null; contentDisposition: string | null }
-export type AdminResourceType = AdminCopyResourceType | "session" | "environment" | "skill_version" | "artifact";
+export type AdminResourceType = "agent" | "skill" | "environment_template" | "file" | "vault" | "credential" | "session" | "environment" | "skill_version" | "artifact";
 export interface AdminKeyProvenance {
   id: string;
   name: string;
@@ -143,6 +129,11 @@ export interface AdminAuditOptions extends Omit<AdminWriteOperationOptions, "res
   action?: string;
   resource_type?: string;
 }
+export interface AdminAuditResultID {
+  type: "agent" | "skill" | "skill_version" | "environment_template" | "file" | "vault" | "credential";
+  source_id: string;
+  target_id: string;
+}
 export interface AdminAuditEntry {
   id: string;
   created_at: string;
@@ -152,7 +143,8 @@ export interface AdminAuditEntry {
   project_id: string;
   resource_type: string;
   resource_id: string;
-  result_ids: AdminCopyResult["mappings"];
+  /** Non-empty only on historical `copy` entries from the removed copy operation. */
+  result_ids: AdminAuditResultID[];
   request_id: string;
   trace_id: string;
 }
