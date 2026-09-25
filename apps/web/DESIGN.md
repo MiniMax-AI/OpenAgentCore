@@ -602,9 +602,10 @@ pending, Unknown for a failed read) and one outline action while the step is to
 do: Set up sandboxes, Add node, Open Nodes or Open sandbox backend; Create project
 (which continues to the new project's first key) or Issue key; Projects and keys.
 Add node, Create project and Issue key open their page with the dialog already
-open. Every step done turns it into
-one line, "You're set", with Take the tour and Dismiss, shown once. The choice is
-kept per installation in the browser; Show Getting started, a quiet row above the
+open. Every step done turns it into one line, "You're set", with Take the tour and
+Dismiss; it stays, through the tour, until dismissed, and the checklist does not
+come back on its own. The choice is kept per installation in the browser, also
+while the deployment cannot be read; Show Getting started, a quiet row above the
 sidebar's account controls, opens it again at any time.
 
 ### Sandbox setup
