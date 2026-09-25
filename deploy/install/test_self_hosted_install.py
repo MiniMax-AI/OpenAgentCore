@@ -4,7 +4,9 @@ import io
 import json
 import os
 from pathlib import Path
+import pty
 import tempfile
+import termios
 from types import SimpleNamespace
 
 import distribution
@@ -31,6 +33,7 @@ class SelfHostedInstallTests(unittest.TestCase):
         self.args = argparse.Namespace(source_url='https://core.example', offline_root=None,
             environment_id=self.environment, remote=self.remote, credential_file=str(self.source_key))
         self.wait = patch.object(installer, 'wait_connected').start()
+        self.verdict = patch.object(installer, 'credential_verdict', return_value='accepted').start()
         self.addCleanup(patch.stopall)
         self.manifest = {'source_commit': 'a' * 40, 'platform': 'linux/amd64',
                          'images': {'runtime': 'sha256:' + 'b' * 64},
@@ -110,6 +113,129 @@ class SelfHostedInstallTests(unittest.TestCase):
         self.assertEqual(self.wait.call_count, 2)
         self.wait.assert_called_with(self.remote, self.environment, self.key, name)
         self.assertEqual(original, {name: (self.root/name).read_bytes() for name in original})
+
+    def test_hidden_prompt_reads_pretty_or_compact_credential_without_echo(self):
+        for text in (json.dumps(self.key, indent=2) + '\n', json.dumps(self.key) + '\n'):
+            pid, terminal = pty.fork()
+            if pid == 0:
+                try:
+                    accepted = installer.prompt_credential(self.environment) == self.key
+                    os._exit(0 if accepted and termios.tcgetattr(0)[3] & termios.ECHO else 3)
+                except BaseException:
+                    os._exit(4)
+            output = b''
+            while b'input hidden' not in output:
+                output += os.read(terminal, 1024)
+            os.write(terminal, text.encode())
+            while True:
+                try:
+                    chunk = os.read(terminal, 1024)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                output += chunk
+            os.close(terminal)
+            self.assertEqual(os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]), 0)
+            self.assertNotIn(self.key['executor_token'].encode(), output)
+
+    def launched_runtime(self):
+        """Launch with self.key, then rerun without --credential-file; docker commands in `commands`."""
+        name = 'parsar-selfhost-' + 'c' * 32
+        commands, interrupt = [], []
+        def checked(command, message, timeout=30):
+            commands.append(command)
+            self.assertNotIn('private-token', json.dumps(command))
+            if interrupt and interrupt[0] in command:
+                interrupt.pop(0)
+                raise installer.InstallError(message)
+            if 'container' in command:
+                state = json.loads(installer.private_read(self.root/'installation.json'))
+                labels = {'io.parsar.agents-api.installation': state['installation_id'],
+                          'io.parsar.agents-api.environment': self.environment,
+                          'io.parsar.agents-api.user-owned': 'true'}
+                return json.dumps(labels)+' running '+state['runtime_image']
+            if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
+            if command[1:2] == ['replace-credential']:
+                self.assertEqual(command[2:4], ['--container', name])
+            return json.dumps({'container': name, 'status': 'started'})
+        patch.object(installer, 'load_manifest', return_value=self.manifest).start()
+        patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest).start()
+        patch.object(installer, 'runtime_archive', return_value=self.root/'runtime.tar').start()
+        patch.object(installer, 'checked', side_effect=checked).start()
+        with contextlib.redirect_stdout(io.StringIO()):
+            installer.install(self.args, self.root)
+        self.args.credential_file = None
+        return name, commands, interrupt
+
+    def stored(self):
+        return json.loads(installer.private_read(self.root/'executor-key.json'))
+
+    def rerun(self, pasted):
+        with patch.object(installer, 'prompt_credential', return_value=pasted), contextlib.redirect_stdout(io.StringIO()) as output:
+            installer.install(self.args, self.root)
+        return output.getvalue()
+
+    def test_revoked_credential_is_replaced_only_by_the_same_key_in_the_same_container(self):
+        name, commands, _ = self.launched_runtime()
+        rotated = dict(self.key, executor_token='rotated-private-token')
+        issued = dict(self.key, key_id=str(uuid.uuid4()), executor_token='issued-private-token')
+        # Core's connection check accepts a new key while the revoked bound key has no authority.
+        verdicts = {self.key['executor_token']: 401, rotated['executor_token']: 'accepted', issued['executor_token']: 'accepted'}
+        self.verdict.side_effect = lambda remote, environment, key: verdicts[key['executor_token']]
+        retained = {n: (self.root/n).read_bytes() for n in ('installation.json', 'launch.json', 'started.json')}
+        launched = len(commands)
+        with self.assertRaisesRegex(installer.InstallError, 'not ' + self.key['key_id'] + '.*same credential'):
+            self.rerun(issued)
+        self.assertFalse([c for c in commands[launched:] if 'stop' in c or c[0].endswith('parsar-runtime')])
+        self.assertEqual(self.stored(), self.key)
+        output = self.rerun(rotated)
+        replaced = [c for c in commands[launched:] if 'inspect' not in c]
+        self.assertEqual([(c[-2], c[-1]) if c[0] == 'docker' else c[1] for c in replaced],
+                         [('stop', name), 'replace-credential', ('start', name)])
+        self.assertEqual(len([c for c in commands if c[0].endswith('parsar-runtime') and c[1] != 'replace-credential']), 1)
+        self.assertEqual(self.stored(), rotated)
+        self.assertEqual(retained, {n: (self.root/n).read_bytes() for n in retained})
+        self.assertFalse(list(self.root.glob('.executor-key-*')))
+        self.wait.assert_called_with(self.remote, self.environment, rotated, name)
+        self.assertIn('no longer accepted', output)
+        self.assertNotIn('private-token', output)
+
+    def test_binding_conflict_asks_for_the_credential_first_used(self):
+        self.launched_runtime()
+        self.verdict.side_effect = lambda remote, environment, key: 409
+        other = dict(self.key, key_id=str(uuid.uuid4()), executor_token='other-private-token')
+        with patch.object(installer, 'prompt_credential', return_value=other), contextlib.redirect_stdout(io.StringIO()) as output, \
+                self.assertRaisesRegex(installer.InstallError, 'first used for this Environment') as failure:
+            installer.install(self.args, self.root)
+        self.assertIn('first used for this Environment', output.getvalue())
+        self.assertNotIn('same credential', output.getvalue() + str(failure.exception))
+        self.assertEqual(self.stored(), self.key)
+
+    def test_replacement_interrupted_before_start_or_store_is_finished_by_rerunning(self):
+        rotated = dict(self.key, executor_token='rotated-private-token')
+        name, commands, interrupt = self.launched_runtime()
+        verdicts = {self.key['executor_token']: 401, rotated['executor_token']: 'accepted'}
+        self.verdict.side_effect = lambda remote, environment, key: verdicts[key['executor_token']]
+        replace = os.replace
+        def store_interrupted(source, target):
+            if str(target).endswith('executor-key.json'):
+                raise OSError('interrupted')
+            return replace(source, target)
+        for point in ('start', 'store'):
+            interrupt[:] = ['start'] if point == 'start' else []
+            with self.subTest(point=point), self.assertRaises((installer.InstallError, OSError)), \
+                    patch.object(installer.os, 'replace', side_effect=store_interrupted if point == 'store' else replace):
+                self.rerun(rotated)
+            self.assertEqual(commands[-1][-2:], ['start', name])
+            self.assertEqual(self.stored(), self.key)
+            self.assertFalse(list(self.root.glob('.executor-key-*')))
+        launched = len(commands)
+        self.rerun(rotated)
+        self.assertEqual([c[3] if c[0] == 'docker' else c[1] for c in commands[launched:] if 'inspect' not in c],
+                         ['stop', 'replace-credential', 'start'])
+        self.assertEqual(self.stored(), rotated)
+        self.wait.assert_called_with(self.remote, self.environment, rotated, name)
 
     def test_cached_runtime_avoids_archive_download_and_load(self):
         def checked(command, message, timeout=30):
@@ -204,6 +330,9 @@ class SelfHostedInstallTests(unittest.TestCase):
         with patch.object(installer, 'checked', return_value=json.dumps(labels)+' exited '+state['runtime_image']):
             with self.assertRaisesRegex(installer.InstallError, 'start '+name):
                 installer.inspect_prior_launch(self.root, state)
+        for status in ('exited', 'restarting', 'created'):
+            with patch.object(installer, 'checked', return_value=json.dumps(labels)+' '+status+' '+state['runtime_image']):
+                self.assertEqual(installer.inspect_prior_launch(self.root, state, replacing=True), name)
         with patch.object(installer, 'checked', return_value=json.dumps(labels)+' running sha256:'+'f'*64):
             with self.assertRaisesRegex(installer.InstallError, 'container image does not match'):
                 installer.inspect_prior_launch(self.root, state)

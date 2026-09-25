@@ -124,27 +124,27 @@ func TestExecutorCredentialFile(t *testing.T) {
 		}
 	}
 	write("first-canary")
-	if token, err := executorCredential(path, environment); err != nil || token != "first-canary" {
+	if _, token, err := executorCredential(path, environment); err != nil || token != "first-canary" {
 		t.Fatal("valid key rejected")
 	}
 	write("rotated-canary")
-	if token, err := executorCredential(path, environment); err != nil || token != "rotated-canary" {
+	if _, token, err := executorCredential(path, environment); err != nil || token != "rotated-canary" {
 		t.Fatal("rotation not read")
 	}
-	if _, err := executorCredential(path, uuid.NewString()); err == nil {
+	if _, _, err := executorCredential(path, uuid.NewString()); err == nil {
 		t.Fatal("foreign restriction accepted")
 	}
 	link := filepath.Join(filepath.Dir(path), "link")
 	if err := os.Symlink(path, link); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := executorCredential(link, environment); err == nil {
+	if _, _, err := executorCredential(link, environment); err == nil {
 		t.Fatal("symlink accepted")
 	}
 	if err := os.Chmod(path, 0644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := executorCredential(path, environment); err == nil {
+	if _, _, err := executorCredential(path, environment); err == nil {
 		t.Fatal("public credential accepted")
 	}
 }

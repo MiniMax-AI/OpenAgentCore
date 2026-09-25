@@ -105,6 +105,10 @@ errors, lifecycle edge cases and broader resource semantics remain in the protoc
 coverage ledger.
 
 Runtime workspace and native history must survive restart. Expiry or loss of that
-state cannot authorize silent replacement or replay. A successful disconnect,
+state cannot authorize silent replacement or replay. After a permanent executor
+rejection the daemon parks instead of exiting, so the Docker Runtime keeps its
+`unless-stopped` restart after reboot without a restart loop; rerunning the
+installer with the rotated credential resumes the same container and history
+([executor credentials](environment-executor-credentials.md#revoked-or-rotated-credential)). A successful disconnect,
 revocation or Session deletion is not a guarantee that every native effect has
 stopped; the compute owner remains responsible for termination and cleanup.

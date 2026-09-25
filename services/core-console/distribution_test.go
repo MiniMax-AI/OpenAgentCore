@@ -12,7 +12,7 @@ import (
 
 func TestOfflineArtifactsAreManifestAllowlisted(t *testing.T) {
 	dist, payload := t.TempDir(), t.TempDir()
-	for _, item := range []struct{ root, name, body string }{{dist, "index.html", "console"}, {payload, "node-install.pyz", "bootstrap"}} {
+	for _, item := range []struct{ root, name, body string }{{dist, "index.html", "console"}, {payload, "node-install.pyz", "bootstrap"}, {payload, "self-hosted-install.pyz", "bootstrap"}} {
 		if err := os.WriteFile(filepath.Join(item.root, item.name), []byte(item.body), 0600); err != nil {
 			t.Fatal(err)
 		}

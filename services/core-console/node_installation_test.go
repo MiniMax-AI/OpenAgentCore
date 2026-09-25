@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +26,7 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 	defer upstream.Close()
 	u, _ := url.Parse(upstream.URL)
 	dist, payload := t.TempDir(), t.TempDir()
-	for _, file := range []struct{ path, value string }{{filepath.Join(dist, "index.html"), "console"}, {filepath.Join(payload, "node-install.pyz"), "print('installer')"}, {filepath.Join(payload, "caller.key"), "must-not-be-served"}} {
+	for _, file := range []struct{ path, value string }{{filepath.Join(dist, "index.html"), "console"}, {filepath.Join(payload, "node-install.pyz"), "print('installer')"}, {filepath.Join(payload, "self-hosted-install.pyz"), "print('self-hosted')"}, {filepath.Join(payload, "caller.key"), "must-not-be-served"}} {
 		if err := os.WriteFile(file.path, []byte(file.value), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -71,7 +73,10 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 		if strings.Contains(body, "server-admin") || strings.Contains(body, "project-token") || strings.Contains(body, "must-not-be-served") {
 			t.Fatal("credential leaked")
 		}
+		// Web verifies each downloaded installer against these digests before running it.
+		selfHostedDigest := sha256.Sum256([]byte("print('self-hosted')"))
 		if tc.path == "/console/config" && tc.status == 200 && (!strings.Contains(body, `"node_installer":true`) ||
+			!strings.Contains(body, `"self_hosted_installer":true,"self_hosted_installer_sha256":"`+hex.EncodeToString(selfHostedDigest[:])+`"`) ||
 			strings.Contains(body, "sandbox_admin") || strings.Contains(body, "api_keys")) {
 			t.Fatalf("console configuration = %s", body)
 		}

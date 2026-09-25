@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/auth"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/daemonize"
@@ -58,10 +60,11 @@ func environmentUUID(value string) bool {
 	return err == nil && id != uuid.Nil && id.String() == value
 }
 
-func executorCredential(path, environment string) (string, error) {
+// executorCredential returns the credential's key ID and secret token.
+func executorCredential(path, environment string) (string, string, error) {
 	raw, err := readEnvironmentPrivateFile(path)
 	if err != nil {
-		return "", errors.New("connect: executor credential must be a protected owned JSON file")
+		return "", "", errors.New("connect: executor credential must be a protected owned JSON file")
 	}
 	var key struct {
 		KeyID         string `json:"key_id"`
@@ -69,9 +72,9 @@ func executorCredential(path, environment string) (string, error) {
 		EnvironmentID string `json:"environment_id,omitempty"`
 	}
 	if decodeEnvironmentJSON(raw, &key) != nil || !environmentUUID(key.KeyID) || key.Token == "" || strings.ContainsAny(key.Token, " \t\r\n\x00") || (key.EnvironmentID != "" && key.EnvironmentID != environment) {
-		return "", errors.New("connect: invalid executor credential or Environment restriction")
+		return "", "", errors.New("connect: invalid executor credential or Environment restriction")
 	}
-	return key.Token, nil
+	return key.KeyID, key.Token, nil
 }
 
 func decodeEnvironmentJSON(raw []byte, value any) error {
@@ -100,7 +103,13 @@ func enrollEnvironment(ctx context.Context, client *http.Client, base, environme
 		return out, errors.New("connect: Environment enrollment transport failed")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized:
+		return out, errEnvironmentCredentialRejected
+	case http.StatusConflict:
+		return out, errEnvironmentBindingConflict
+	default:
 		return out, fmt.Errorf("connect: Environment enrollment rejected (HTTP %d)", resp.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024+1))
@@ -121,7 +130,7 @@ func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string)
 	return boot, nil
 }
 
-func runEnvironmentConnect(rc *runContext, profile string, background bool, remote, environment, credentialFile string) error {
+func runEnvironmentConnect(rc *runContext, profile string, background bool, remote, environment, credentialFile string, selfHosted bool) error {
 	base, err := environmentBase(remote)
 	if err != nil {
 		return err
@@ -132,15 +141,24 @@ func runEnvironmentConnect(rc *runContext, profile string, background bool, remo
 	if err = checkEnvironmentTarget(remote, environment); err != nil {
 		return err
 	}
-	credential, err := executorCredential(credentialFile, environment)
+	keyID, credential, err := executorCredential(credentialFile, environment)
 	if err != nil {
+		return err
+	}
+	// The -b parent reports a rejection to its terminal; the process that owns
+	// the connection parks instead.
+	parks := !background || daemonize.IsBackgroundChild()
+	rejected := func(err error) error {
+		if message := environmentRejection(err, keyID, environment, selfHosted); parks && message != "" {
+			return parkEnvironment(rc.stderr, message)
+		}
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), bootstrapTimeout)
 	defer cancel()
 	bound, err := enrollEnvironment(ctx, environmentClient(), base, environment, credential)
 	if err != nil {
-		return err
+		return rejected(err)
 	}
 	if err = bindEnvironmentRuntime(remote, bound, credentialFile); err != nil {
 		return err
@@ -154,5 +172,43 @@ func runEnvironmentConnect(rc *runContext, profile string, background bool, remo
 		return err
 	}
 	prof := auth.Profile{ServerURL: base, RuntimeID: bound.DeviceID, RunnerCredential: credential}
-	return mainLoopRemote(rc, profile, prof, discovery, remote)
+	return rejected(mainLoopRemote(rc, profile, prof, discovery, remote))
+}
+
+var (
+	errEnvironmentCredentialRejected = errors.New("connect: Environment enrollment rejected (HTTP 401)")
+	errEnvironmentBindingConflict    = errors.New("connect: Environment enrollment rejected (HTTP 409)")
+)
+
+// environmentRejection names the fix for a permanent Environment rejection:
+// enrollment 401 or 409, or a permanent WebSocket rejection or close. It returns
+// "" for anything else (transport failures, 5xx, 404), which keeps the ordinary
+// failure exit so the Runtime's restart policy retries it. Only a Runtime the
+// self-hosted installer started names that installer's rerun and container.
+func environmentRejection(err error, keyID, environment string, selfHosted bool) string {
+	reconnect, remove := "install it for this Runtime and restart it", "stop this Runtime"
+	if selfHosted {
+		reconnect, remove = "rerun the self-hosted install command on this host and paste it", "stop this container"
+	}
+	switch {
+	case errors.Is(err, errEnvironmentBindingConflict):
+		return fmt.Sprintf("executor credential %s cannot connect: Environment %s is bound to a different executor credential. This Runtime will not retry. Rotate the credential first used for this Environment instead of issuing a new one, then %s. To remove this Runtime instead, %s.", keyID, environment, reconnect, remove)
+	case errors.Is(err, transport.ErrIncompatibleVersion):
+		return fmt.Sprintf("Core refused this Runtime's daemon version for Environment %s; the Runtime comes from a different Core distribution. This Runtime will not retry; %s.", environment, remove)
+	case errors.Is(err, errEnvironmentCredentialRejected), errors.Is(err, transport.ErrPermanent):
+		return fmt.Sprintf("executor credential %s for Environment %s was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then %s. To remove it instead, %s.", keyID, environment, reconnect, remove)
+	}
+	return ""
+}
+
+// parkEnvironment prints the rejection once, then makes no further requests
+// until SIGINT or SIGTERM and exits successfully. Docker's unless-stopped policy
+// restarts every exit, so an exit would loop; a parked Runtime still restarts
+// after a reboot, makes one enrollment request and parks again.
+func parkEnvironment(stderr io.Writer, message string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	fmt.Fprintln(stderr, "parsar-daemon: "+message)
+	<-ctx.Done()
+	return nil
 }
