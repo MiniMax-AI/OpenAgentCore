@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { InitializeSandboxDeployment, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Server, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, HelpTip, RefreshButton } from "../../components/console-ui";
@@ -17,6 +17,7 @@ import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 import { NodeEnrollment } from "./NodeEnrollment";
 import { NodeList } from "./NodeList";
 import { NodeDetail } from "./NodeDetail";
+import { NodeEditDialog } from "./NodeEditDialog";
 import "./SandboxManagerView.css";
 
 /** Nodes: the deployment provider, the node list and one node's detail (`#nodes?id=…`). */
@@ -65,6 +66,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const [removeTarget, setRemoveTarget] = useState<SandboxNode | null>(null);
+  const [editTarget, setEditTarget] = useState<SandboxNode | null>(null);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const initialCoreUrl = window.location.origin;
@@ -195,6 +197,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         title={selected ? selected.name || selected.id : params.id}
         actions={<>
           {refreshButton}
+          {selected ? <button type="button" className="button outline" disabled={busy || removing} onClick={() => setEditTarget(selected)}><Pencil size={14} aria-hidden="true" />{t("Edit node")}</button> : null}
           {selected ? <button type="button" className="button danger" disabled={busy || removing} onClick={() => askRemove(selected)}><Trash2 size={14} aria-hidden="true" />{t("Remove node")}</button> : null}
         </>}
       />
@@ -206,6 +209,13 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       </div>
       {dialog}
       {writeDialog}
+      <NodeEditDialog
+        key={editTarget?.id ?? "closed"}
+        client={client}
+        node={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSaved={() => { setEditTarget(null); toast.show(t("Node saved"), { tone: "success" }); refresh(); }}
+      />
     </>;
   }
 

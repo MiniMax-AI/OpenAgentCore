@@ -108,6 +108,7 @@ deployment only.
 | Node detail | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | Sandbox metrics node dialog: the host's CPU busy share and memory from its last heartbeat, and their history over the page's range |
 | Allocations | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes page; Sandbox metrics |
 | Enrollment | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**: a single-use token inside a command that verifies the installer checksum |
+| Update node | `PATCH /core/v1/sandbox/nodes/{node_id}` | **Edit node**: the name and sandbox limits together (the retained limit only for microsandbox; Docker keeps its saved one, raised to at least the active limit) |
 | Remove node | `DELETE /core/v1/sandbox/nodes/{node_id}` | Confirmed node removal; the row goes only after Core acknowledges the deletion |
 
 These pages appear only when `/console/config` reports `sandbox_admin: true`. An E2B

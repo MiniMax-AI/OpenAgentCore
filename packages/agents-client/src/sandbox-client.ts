@@ -76,6 +76,12 @@ export interface SandboxNodeDetail extends SandboxNode {
   host: SandboxNodeHost;
   history: { resolution_seconds: number; points: SandboxNodeHostPoint[] };
 }
+/** A node's name and sandbox limits; Core takes all three, with a retained limit of at least the active one. */
+export interface SandboxNodeUpdate {
+  name: string;
+  max_active: number;
+  max_retained: number;
+}
 export interface SandboxAllocation {
   id: string;
   node_id: string;
@@ -140,6 +146,9 @@ export class SandboxAdminClient extends OpenAIAgentsClient {
   }
   createEnrollment(options?: ReadOptions, capacity: { max_active?: number; max_retained?: number } = {}): Promise<{ token: string; expires_at: string }> {
     return this.request("/enrollment-tokens", { method: "POST", body: JSON.stringify(capacity), signal: options?.signal }, undefined, false);
+  }
+  updateNode(nodeId: string, input: SandboxNodeUpdate, options?: ReadOptions): Promise<{ id: string; updated: boolean }> {
+    return this.request(`/nodes/${encodeURIComponent(nodeId)}`, { method: "PATCH", body: JSON.stringify(input), signal: options?.signal }, undefined, false);
   }
   removeNode(nodeId: string, options?: ReadOptions): Promise<{ id: string; deleted: boolean }> {
     return this.request(`/nodes/${encodeURIComponent(nodeId)}`, { method: "DELETE", signal: options?.signal }, undefined, false);

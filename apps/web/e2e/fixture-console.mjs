@@ -243,6 +243,15 @@ async function sandboxRoute(request, response, path) {
     const node = state.nodes.find((entry) => entry.id === m[1]);
     return node ? send(response, 200, nodeDetail(node)) : error(response, 404, "No such node.");
   }
+  if ((m = path.match(/^\/nodes\/([^/]+)$/)) && request.method === "PATCH") {
+    // As Core: name and both limits together, with a retained limit of at least the active one.
+    const input = await body(request);
+    const node = state.nodes.find((entry) => entry.id === m[1]);
+    if (!node) return error(response, 404, "No such node.");
+    if (!input.name?.trim() || !(input.max_active >= 1) || !(input.max_retained >= input.max_active)) return error(response, 400, "Invalid node update.", "invalid_request");
+    Object.assign(node, { name: input.name, max_active: input.max_active, max_retained: input.max_retained });
+    return send(response, 200, { id: node.id, updated: true });
+  }
   if ((m = path.match(/^\/nodes\/([^/]+)$/)) && request.method === "DELETE") {
     const index = state.nodes.findIndex((node) => node.id === m[1]);
     if (index < 0) return error(response, 404, "No such node.");

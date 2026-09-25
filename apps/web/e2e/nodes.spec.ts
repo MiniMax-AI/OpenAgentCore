@@ -96,3 +96,14 @@ test("reports a failed sandbox change in a dialog, then reads the state again", 
   await expect(failed).toBeHidden();
   await expect(page.getByRole("button", { name: "Enter maintenance to change provider" })).toBeEnabled();
 });
+
+test("renames a node and sets how many sandboxes run on it at once", async ({ page, request }) => {
+  await openConsole(page, request, "nodes?id=node-local");
+  await page.getByRole("button", { name: "Edit node" }).click();
+  const edit = page.getByRole("dialog", { name: "Edit node" });
+  await edit.getByLabel("Name").fill("core-01-large");
+  await edit.getByLabel("Sandboxes at once").fill("6");
+  await edit.getByRole("button", { name: "Save" }).click();
+  await expect(edit).toBeHidden();
+  await expect(page.getByRole("heading", { name: "core-01-large", level: 1 })).toBeVisible();
+});
