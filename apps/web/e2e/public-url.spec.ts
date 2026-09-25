@@ -50,7 +50,13 @@ test("lists the startup settings on System with where to change them", async ({ 
   await expect(settings.getByRole("row", { name: /^public_url/ })).toContainText("core, web");
 });
 
-test("warns on Nodes about nodes bound to an old Core address", async ({ page, request }) => {
+test("warns on Nodes about a node bound to an old Core address until it is removed", async ({ page, request }) => {
   await openConsole(page, request, "nodes", { installation: "stale" });
-  await expect(page.getByRole("alert").filter({ hasText: "old Core address" })).toHaveText("1 node is still bound to an old Core address. Add it again.");
+  const warning = page.getByRole("status").filter({ hasText: "old Core address" });
+  await expect(warning).toHaveText("core-01 is still bound to an old Core address. Remove it and add it again.");
+  await page.getByRole("button", { name: "Remove core-01" }).click();
+  await page.getByRole("dialog", { name: "Remove node" }).getByRole("button", { name: "Confirm removal" }).click();
+  await page.getByRole("button", { name: "Refresh sandbox state" }).click();
+  await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("core-01");
+  await expect(warning).toHaveCount(0);
 });

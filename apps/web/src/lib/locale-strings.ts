@@ -299,7 +299,7 @@ export const chinese = {
   "Config file": "配置文件",
   "Then run": "然后运行",
   "Copy path": "复制路径",
-  "1 node is still bound to an old Core address. Add it again.": "有 1 个节点仍绑定在旧的 Core 地址上，需要重新添加。",
-  "{{count}} nodes are still bound to an old Core address. Add them again.": "有 {{count}} 个节点仍绑定在旧的 Core 地址上，需要重新添加。",
+  "{{name}} is still bound to an old Core address. Remove it and add it again.": "{{name}} 仍绑定在旧的 Core 地址上，需要移除后重新添加。",
+  "{{count}} nodes are still bound to an old Core address: {{names}}. Remove them and add them again.": "有 {{count}} 个节点仍绑定在旧的 Core 地址上：{{names}}。需要移除后重新添加。",
 } as const;
 export type MessageKey = keyof typeof chinese;

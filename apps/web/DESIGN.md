@@ -576,7 +576,7 @@ reported in an error toast with the reason. Only when a page or section has noth
 does an error state take the place of its content; errors inside a dialog or a form
 stay beside what they concern. Coverage notes (Margin Gray, Hairline, 12px corners,
 12.5px Graphite) state bounded aggregation. A standing warning that needs action,
-such as nodes still bound to an old Core address on the Nodes page, is an
+such as the Nodes page naming nodes still bound to an old Core address, is an
 amber-tinted line at the top of the page body. Partial-data chips are amber-tinted pills
 with a help tip. Safety notices (a key shown once, a destructive consequence) stay
 visible in body text.

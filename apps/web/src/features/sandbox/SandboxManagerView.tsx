@@ -60,8 +60,6 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const client = sandboxAdmin;
   const queryClient = useQueryClient();
   const query = useQuery(sandboxSnapshotQuery);
-  // Nodes enrolled with an address other than the current public_url must be added again.
-  const staleNodes = useQuery(installationQuery).data?.address_bindings.nodes_on_other_address ?? 0;
   const snapshot: SandboxSnapshot | null = query.data ?? null;
   const loading = query.isFetching;
   // As before a reload clears the last error, a running read hides it.
@@ -87,14 +85,17 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const refresh = useCallback(() => {
     // Each refresh starts a new read (cancelling one in flight) and resets the forms, as a reload did.
     setRevision((value) => value + 1);
+    // The wizard reads the address and config file from the installation.
+    void queryClient.invalidateQueries({ queryKey: installationQuery.queryKey });
     // Settles when the read does; the enrollment dialog waits for it before calling a command expired.
     return refetch();
-  }, [refetch]);
+  }, [queryClient, refetch]);
   const toast = useToast();
   // A refresh the administrator asks for reports its failure even while an earlier one is still unconfirmed;
   // the enrollment dialog's own repeated refreshes do not.
   const refreshByUser = () => {
     setRevision((value) => value + 1);
+    void queryClient.invalidateQueries({ queryKey: installationQuery.queryKey });
     void refetch().then((result) => {
       if (result.isError && result.data) toast.show(t("Refresh failed; showing the last loaded state."), { tone: "error", detail: sandboxRequestError(result.error, locale), key: "sandbox-read" });
     });
@@ -184,6 +185,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     : !snapshot ? (query.isError ? "unavailable" : "wait")
     : hostedNodes && fresh && !snapshot.deployment.maintenance ? "ready" : "unavailable";
   useConsoleIntent("add-node", addNodeReadiness, () => setAdding(true));
+  // A node enrolled with another address than Core's current one (config.json's public_url) gets no new sandboxes until it is added again.
+  const staleNodes = hostedNodes && snapshot ? nodes.filter((node) => node.core_url !== snapshot.deployment.core_url).map((node) => node.name || node.id) : [];
   const selected = params.id ? nodes.find((node) => node.id === params.id) : undefined;
   const refreshButton = <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy || removing} label={t("Refresh sandbox state")} />;
   const readFailure = error !== null ? sandboxRequestError(error, locale) : null;
@@ -262,7 +265,9 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       {snapshot && !snapshot.deployment.provider ? <SandboxSetupWizard key={revision} coreUrl={snapshot.deployment.core_url} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}
       {snapshot?.deployment.provider ? <>
         {snapshot.deployment.maintenance ? <p className="sandbox-maintenance" role="status">{t("Maintenance is enabled. New sandbox placement is paused.")}</p> : null}
-        {hostedNodes && staleNodes > 0 ? <p className="sandbox-maintenance sandbox-address-warning" role="alert">{staleNodes === 1 ? t("1 node is still bound to an old Core address. Add it again.") : t("{{count}} nodes are still bound to an old Core address. Add them again.", { count: staleNodes })}</p> : null}
+        {staleNodes.length ? <p className="sandbox-maintenance sandbox-address-warning" role="status">{staleNodes.length === 1
+          ? t("{{name}} is still bound to an old Core address. Remove it and add it again.", { name: staleNodes[0] })
+          : t("{{count}} nodes are still bound to an old Core address: {{names}}. Remove them and add them again.", { count: staleNodes.length, names: staleNodes.join(", ") })}</p> : null}
         <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
         {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
           {nodes.length
