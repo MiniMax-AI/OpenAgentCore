@@ -382,11 +382,27 @@ test("keeps the API key management page separate from introduction guidance", as
   await mockAccount(page, { mode: "authenticated", username });
   await page.route("**/console/config", (route) => route.fulfill({ json: { api_keys: false, sandbox_admin: false, node_installer: false } }));
   await page.goto("/#api-keys");
+  await expect(page.locator(".api-keys-page > .page-header").getByRole("heading", { name: "API keys" })).toBeVisible();
+  await expect(page.locator(".api-keys-page")).not.toContainText("AGENT CORE /");
   await expect(page.getByRole("heading", { name: "API key management is not enabled", exact: true })).toBeVisible();
   await expect(page.getByText("You can continue the introduction and use your signed-in console connection to create an Agent.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Check again", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "Check again", exact: true })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("fits API key content at desktop and mobile widths", async ({ page }) => {
+  await mockAccount(page, { mode: "authenticated", username });
+  await page.route("**/console/config", (route) => route.fulfill({ json: { api_keys: true, sandbox_admin: false, node_installer: false } }));
+  await page.route("**/console/api-keys", (route) => route.fulfill({ json: { data: [] } }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#api-keys");
+  await expect(page.getByRole("button", { name: "Create API key", exact: true })).toBeVisible();
+  await expect(page.locator(".api-key-example")).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "Create API key", exact: true })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 

@@ -1,10 +1,8 @@
-.api-keys-page { width: 100%; overflow: auto; padding: clamp(26px, 5vw, 72px); }
-.api-keys-intro, .api-keys-layout { width: min(100%, 1160px); margin-inline: auto; }
-.api-keys-intro { margin-bottom: 30px; }
-.api-keys-eyebrow { color: var(--accent); font: 600 11px/1.4 var(--font-mono); letter-spacing: .12em; }
-.api-keys-intro h1 { margin: 9px 0 7px; font-size: clamp(28px, 3vw, 40px); font-weight: 600; letter-spacing: -.045em; }
-.api-keys-intro p { margin: 0; color: var(--fg-muted); font-size: 15px; }
-.api-keys-layout { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(280px, .82fr); gap: 22px; align-items: start; }
+.api-keys-page { display: flex; flex-direction: column; overflow: hidden; }
+.api-keys-body { min-height: 0; flex: 1; overflow: auto; padding: 24px; }
+.api-keys-content { width: min(100%, 1160px); margin-inline: auto; }
+.api-keys-description { margin: 0 0 24px; color: var(--fg-muted); font-size: 13px; line-height: 1.5; }
+.api-keys-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
 .api-key-panel { min-width: 0; padding: 28px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-control); }
 .api-key-heading { display: flex; align-items: center; gap: 11px; }
 .api-key-heading > svg { color: var(--accent); }
@@ -52,5 +50,5 @@
 @keyframes api-example-frame { 0%, 30% { opacity: 1; transform: translateY(0); } 33%, 100% { opacity: 0; transform: translateY(8px); } }
 @keyframes api-example-progress { 0%, 30% { background: var(--accent); } 33%, 100% { background: var(--line-strong); } }
 @media (max-width: 1000px) { .api-keys-layout { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 640px) { .api-keys-page { padding: 22px 16px; } .api-key-panel, .api-key-example { padding: 20px; } .api-key-create { flex-direction: column; align-items: stretch; } }
+@media (max-width: 640px) { .api-keys-body { padding: 20px 16px; } .api-key-panel, .api-key-example { padding: 20px; } .api-key-create { flex-direction: column; align-items: stretch; } }
 @media (prefers-reduced-motion: reduce) { .api-key-example-frame, .api-key-example-progress span { animation: none; } .api-key-example-frame.frame-one { opacity: 1; } .api-key-example-progress span:first-child { background: var(--accent); } }
