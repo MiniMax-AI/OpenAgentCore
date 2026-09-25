@@ -29,6 +29,8 @@ export function NodeDetail({ node, allocations, stale }: { node: SandboxNode; al
   const now = Math.floor(Date.now() / 1000);
   const own = allocations.filter((allocation) => allocation.node_id === node.id);
   const reporting = !stale && node.online;
+  // Only microsandbox suspends sandboxes into snapshots; Docker retains nothing.
+  const suspends = node.provider === "microsandbox";
   const diagnostic = stale ? "" : nodeDiagnostic(node);
   const count = (value: number) => formatInteger(value, locale);
   return (
@@ -55,8 +57,8 @@ export function NodeDetail({ node, allocations, stale }: { node: SandboxNode; al
       <Section headingId="node-capacity-heading" title={t("Capacity")}>
         <KpiStrip label={t("Capacity")}>
           <Kpi label={t("Running")} value={reporting ? count(node.running) : MISSING} />
-          <Kpi label={t("Retained / limit")} value={`${count(node.retained)} / ${count(node.max_retained)}`} />
-          <Kpi label={t("Snapshots")} value={reporting ? count(node.snapshots) : MISSING} />
+          {suspends ? <Kpi label={t("Retained / limit")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}
+          {suspends ? <Kpi label={t("Snapshots")} value={reporting ? count(node.snapshots) : MISSING} /> : null}
           <Kpi label={t("Reserved")} value={count(node.reserved)} />
         </KpiStrip>
       </Section>

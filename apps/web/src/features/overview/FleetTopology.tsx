@@ -29,17 +29,18 @@ export function topologyNodes(nodes: readonly SandboxNode[]): SandboxNode[] {
     .map(({ node }) => node);
 }
 
-/**
- * Core in the middle, sandbox nodes left and right of it. Lines are solid and
- * animated for connected nodes and dashed for offline ones. Core and each node
- * open a popover with a glance at their state and the pages that go deeper.
- */
+/** E2B's cloud in place of machines: what Core holds there. */
 export interface CloudHost {
   running: number;
   pending: number;
   template: string | null;
 }
 
+/**
+ * Core in the middle, sandbox nodes left and right of it. Lines are solid and
+ * animated for connected nodes and dashed for offline ones. Core and each node
+ * open a popover with a glance at their state and the pages that go deeper.
+ */
 export function FleetTopology({ nodes, cloud, coreLabel, coreTone, stale, onOpenNode, onOpenBackend, onOpenSandboxMetrics, onOpenCoreMetrics }: {
   nodes: readonly SandboxNode[];
   /** An E2B deployment: Core links to E2B's cloud instead of to machines. */

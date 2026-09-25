@@ -3,6 +3,7 @@ import { Check, Copy, Plus, Terminal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SandboxAdminClient, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
 import { useTranslation } from "react-i18next";
+import { HelpTip } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
 import { sandboxCoreOrigin } from "./core-origin";
@@ -88,7 +89,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, disab
     {createPortal(<Modal open={open} title={t("Add node")} onClose={close}>
       <div className="sandbox-add-node form-stack">
         {!available ? <p role="status">{t("Node installation is unavailable. Ask the deployment administrator to enable the node installer on this console.")}</p> : <>
-          {!connected ? <p>{t("Run on the host you want to add.")}</p> : null}
+          {/* The host needs what this deployment's backend needs: a Docker engine, or Linux with KVM. */}
+          {!connected ? <p className="sandbox-add-node-intro">{t("Run on the host you want to add.")}<HelpTip>{t(deployment.provider === "microsandbox" ? "The host needs Linux with KVM: /dev/kvm must be available to the node. Each sandbox runs as a small virtual machine with its own disks." : "The host needs Docker Engine that enforces CPU and memory limits, and the node needs access to its socket. Each sandbox runs as a container.")}</HelpTip></p> : null}
           {busy ? <p role="status">{t("Preparing your command…")}</p> : null}
           {error !== null ? <><p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}</p><button className="button outline" type="button" onClick={() => void generate()}>{t("Try again")}</button></> : null}
           {enrollment ? <>

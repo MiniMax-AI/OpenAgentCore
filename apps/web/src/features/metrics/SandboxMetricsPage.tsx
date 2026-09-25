@@ -446,7 +446,7 @@ function NodeDialog({ node, rows, load, range, onClose }: {
           <dl className="resource-facts" aria-label={t("sandbox.nodeDialog.facts")}>
             <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={healthTone[nodeHealth(shown)]} label={t(`sandbox.health.${nodeHealth(shown)}`)} /></dd></div>
             <div><dt>{t("sandbox.slots")}</dt><dd>{formatInteger(shown.active, locale)} / {formatInteger(shown.max_active, locale)}</dd></div>
-            <div><dt>{t("sandbox.nodeDialog.retainedSlots")}</dt><dd>{formatInteger(shown.retained, locale)} / {formatInteger(shown.max_retained, locale)}</dd></div>
+            {shown.provider === "microsandbox" ? <div><dt>{t("sandbox.nodeDialog.retainedSlots")}</dt><dd>{formatInteger(shown.retained, locale)} / {formatInteger(shown.max_retained, locale)}</dd></div> : null}
             <div><dt>{t("sandbox.cpus")}</dt><dd>{cpu}</dd></div>
             <div><dt>{t("sandbox.memory")}</dt><dd>{memory}</dd></div>
             <div><dt>{t("sandbox.freeDiskColumn")}</dt><dd>{online ? formatBytes(shown.available_disk_bytes) : MISSING}</dd></div>

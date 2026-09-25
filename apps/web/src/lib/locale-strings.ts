@@ -3,6 +3,8 @@ export const chinese = {
   ...consoleAuthChinese,
   "Change provider or resources": "修改运行后端或资源",
   "Sandbox backend": "沙箱后端",
+  "The host needs Linux with KVM: /dev/kvm must be available to the node. Each sandbox runs as a small virtual machine with its own disks.": "宿主机需要是 Linux 并支持 KVM：节点要能访问 /dev/kvm。每个沙箱是一台带独立磁盘的小型虚拟机。",
+  "The host needs Docker Engine that enforces CPU and memory limits, and the node needs access to its socket. Each sandbox runs as a container.": "宿主机需要 Docker Engine，并能限制 CPU 和内存；节点要能访问它的 socket。每个沙箱是一个容器。",
   "E2B runs this deployment's sandboxes in its cloud. There are no machines to add.": "这个部署的沙箱由 E2B 在云端运行，不需要添加机器。",
   "Saving does not migrate Sessions or resume placement automatically.": "保存不会迁移 Session，也不会自动恢复分配。",
   "E2B gives each sandbox the CPU and memory of the template build. Choose the size that matches it.": "E2B 按模板构建给每个沙箱分配 CPU 和内存，请选与模板一致的规格。",

@@ -55,3 +55,10 @@
 .nodes-nowrap { white-space: nowrap; }
 .node-status-fact, .node-diagnostic { display: inline-flex; align-items: center; gap: 4px; }
 .sandbox-manager-page .console-section-title h2 .heading-count { margin-left: 6px; }
+
+/* The Add node dialog's first line carries the host requirements behind a help tip. */
+.sandbox-add-node-intro {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
