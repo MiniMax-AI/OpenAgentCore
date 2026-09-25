@@ -13,6 +13,8 @@ contract. Public Agents API compatibility work is tracked in the
 
 - Console login and same-origin `AdminClient` and sandbox management requests; the
   browser holds no deployment credential or application key.
+- First run: administrator setup, the first project and its key shown once, and a
+  short tour of the console before it opens.
 - Projects and keys: create, rename, archive, issue with one-time display, revoke;
   uncertain writes are reported, never replayed.
 - Resource inspection, permitted deletion and independent copies across Projects;

@@ -1,0 +1,25 @@
+/*
+ * Animations the Magic UI components (https://magicui.design, MIT) expect from
+ * their Tailwind theme. Tailwind emits a keyframe only when its animate-*
+ * utility is used, so these cost nothing on pages without the components.
+ * `inline` writes the value into each utility: the orbit's --duration is set
+ * on the orbiting element, so it must resolve there, not on :root.
+ */
+@theme inline {
+  --animate-orbit: orbit calc(var(--duration) * 1s) linear infinite;
+  --animate-shiny-text: shiny-text 8s infinite;
+
+  @keyframes orbit {
+    0% {
+      transform: rotate(calc(var(--angle) * 1deg)) translateY(calc(var(--radius) * 1px)) rotate(calc(var(--angle) * -1deg));
+    }
+    100% {
+      transform: rotate(calc(var(--angle) * 1deg + 360deg)) translateY(calc(var(--radius) * 1px)) rotate(calc((var(--angle) * -1deg) - 360deg));
+    }
+  }
+
+  @keyframes shiny-text {
+    0%, 90%, 100% { background-position: calc(-100% - var(--shiny-width)) 0; }
+    30%, 60% { background-position: calc(100% + var(--shiny-width)) 0; }
+  }
+}

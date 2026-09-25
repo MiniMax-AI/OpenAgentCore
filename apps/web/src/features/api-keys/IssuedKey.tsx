@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 type CopyState = "idle" | "copied" | "failed";
 
-function useCopy(value: string) {
+export function useCopy(value: string) {
   const [state, setState] = useState<CopyState>("idle");
   useEffect(() => {
     if (state !== "copied") return;

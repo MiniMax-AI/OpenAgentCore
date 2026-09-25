@@ -4,8 +4,8 @@ const fixture = `http://127.0.0.1:${process.env.AGENTS_FIXTURE_PORT ?? 18092}`;
 const web = `http://127.0.0.1:${process.env.AGENTS_WEB_PORT ?? 4174}`;
 
 /** Fresh fixture state: "setup" (no administrator yet), "login" or "authenticated". */
-export async function resetFixture(request: APIRequestContext, auth: "setup" | "login" | "authenticated" = "authenticated") {
-  await request.post(`${fixture}/__fixture/reset?auth=${auth}`);
+export async function resetFixture(request: APIRequestContext, auth: "setup" | "login" | "authenticated" = "authenticated", options: { fresh?: boolean } = {}) {
+  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}`);
 }
 
 /** Opens the console already signed in, in English. */

@@ -9,7 +9,11 @@ import { useProjects } from "../../lib/projects";
 import { ConsoleAccountMenu } from "../first-run/ConsoleAccess";
 import { curlExample, isUsableName, keyNameProblem, normalizeName, projectNameProblem, type KeyFlow } from "./key-flows";
 import { FlowErrorMessage, KeyNameField, NameField } from "./KeyFlowDialogs";
-import { CommandBlock, PlaintextKey } from "./IssuedKey";
+import { PlaintextKey } from "./IssuedKey";
+import { ConsoleTour, TOUR_CHAPTERS } from "../onboarding/ConsoleTour";
+import { OnboardingLayout } from "../onboarding/OnboardingLayout";
+import { RequestTerminal } from "../onboarding/RequestTerminal";
+import { withTransition } from "../onboarding/view-transition";
 import { useKeyFlow } from "./use-key-flow";
 import "./api-keys.css";
 
@@ -34,9 +38,10 @@ function canSubmit(flow: Extract<KeyFlow, { step: "issue" }>): boolean {
 
 /**
  * First run: the administrator creates the first project and its first named
- * key, then sees the plaintext once with a request the caller can run. The
- * console never sends that request. The shell leaves this screen only after
- * the operator confirms the key was saved.
+ * key, then sees the plaintext once with a request the caller can run (the
+ * console never sends it), then a short tour of the console. The key is
+ * discarded when the operator confirms it was saved; the shell leaves these
+ * screens only when the tour ends.
  */
 export function FirstProjectSetup({ onDone }: { onDone: () => void }) {
   const { t } = useTranslation("keys");
@@ -47,18 +52,27 @@ export function FirstProjectSetup({ onDone }: { onDone: () => void }) {
   const { flow, dispatch } = controls;
   const coreOrigin = useCoreOrigin();
 
-  useEffect(() => {
-    if (flow.step === "idle") dispatch({ type: "openFirstRun" });
-  }, [dispatch, flow.step]);
+  const [phase, setPhase] = useState<"setup" | "tour">("setup");
+  const [chapter, setChapter] = useState(0);
 
-  const finish = () => {
+  useEffect(() => {
+    if (phase === "setup" && flow.step === "idle") dispatch({ type: "openFirstRun" });
+  }, [dispatch, flow.step, phase]);
+
+  // Confirming the key discards its plaintext and moves on to the tour.
+  const toTour = () => withTransition("step", () => {
     dispatch({ type: "saved" });
+    setPhase("tour");
+  });
+  const enter = (from: HTMLElement | null) => withTransition("enter", () => {
     refresh();
     onDone();
-  };
+  }, from);
 
   let content = null;
-  if (flow.step === "issued") {
+  if (phase === "tour") {
+    content = <ConsoleTour chapter={chapter} onChapter={setChapter} onEnter={enter} />;
+  } else if (flow.step === "issued") {
     content = (
       <>
         <h1 className="first-key-title">{t("firstRun.readyTitle")}</h1>
@@ -71,10 +85,10 @@ export function FirstProjectSetup({ onDone }: { onDone: () => void }) {
             <span>{t("firstRun.tryIt")}</span>
             <HelpTip>{t("firstRun.tryItHelp")}</HelpTip>
           </div>
-          <CommandBlock value={curlExample(coreOrigin)} label={t("firstRun.command")} />
+          <RequestTerminal value={curlExample(coreOrigin)} label={t("firstRun.command")} />
         </div>
         <div className="first-key-actions">
-          <button className="button primary" type="button" onClick={finish}>
+          <button className="button primary" type="button" onClick={toTour}>
             {t("firstRun.continue")}<ArrowRight size={14} aria-hidden="true" />
           </button>
         </div>
@@ -106,7 +120,7 @@ export function FirstProjectSetup({ onDone }: { onDone: () => void }) {
           {flow.project && flow.error?.kind === "rejected" ? <p className="first-key-status" role="status">{t("firstRun.projectCreated", { project: flow.project.name })}</p> : null}
           <div className="first-key-actions">
             {flow.error?.kind === "uncertain" ? (
-              <button className="button outline" type="button" disabled={flow.busy} onClick={() => { refresh(); onDone(); }}>{t("firstRun.check")}</button>
+              <button className="button outline" type="button" disabled={flow.busy} onClick={(event) => enter(event.currentTarget)}>{t("firstRun.check")}</button>
             ) : null}
             <button className="button primary" type="submit" disabled={!canSubmit(flow)}>
               {flow.busy ? t("firstRun.submitting") : flow.project ? t("issueDialog.submit") : t("firstRun.submit")}
@@ -118,23 +132,13 @@ export function FirstProjectSetup({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="first-key-screen">
-      <header className="first-key-top">
-        <span className="brand-lockup">
-          <span className="brand-mark-frame">
-            <img className="brand-mark brand-mark-light" src="/parsar-mark-light.png" width="18" height="18" alt="" aria-hidden="true" />
-            <img className="brand-mark brand-mark-dark" src="/parsar-mark-dark.png" width="18" height="18" alt="" aria-hidden="true" />
-          </span>
-          <span className="brand-name">Parsar Core</span>
-        </span>
-        <span className="first-key-top-actions">
-          <ConsoleAccountMenu />
-          <AppearanceMenu />
-        </span>
-      </header>
-      <main className="first-key-main" id="main-content" tabIndex={-1}>
-        <div className="first-key-column">{content}</div>
-      </main>
-    </div>
+    <OnboardingLayout
+      scene={phase === "tour" ? "tour" : "project"}
+      chapter={TOUR_CHAPTERS[chapter]}
+      step={phase === "tour" ? "tour" : "project"}
+      controls={<><ConsoleAccountMenu /><AppearanceMenu /></>}
+    >
+      <div className="first-key-column">{content}</div>
+    </OnboardingLayout>
   );
 }

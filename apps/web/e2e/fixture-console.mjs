@@ -14,12 +14,15 @@ const port = Number(process.env.AGENTS_FIXTURE_PORT ?? 18092);
 const SESSION_COOKIE = "core_console=fixture-session";
 
 let state;
-function reset(mode = "setup") {
+function reset(mode = "setup", fresh = false) {
   const base = buildDemo();
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
+  const admin = buildAdmin(now, base, resources);
+  // A fresh install: no project yet, so the console starts first-run setup.
+  if (fresh) admin.projects.splice(0);
   state = {
-    ...base, resources, admin: buildAdmin(now, base, resources),
+    ...base, resources, admin,
     auth: { mode, username: mode === "authenticated" ? "admin" : null, password: mode === "setup" ? null : "correct horse battery" },
     violations: [], writes: [], failNext: null, nextId: 1,
   };
@@ -208,7 +211,7 @@ async function sandboxRoute(request, response, path) {
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "setup");
+    reset(url.searchParams.get("auth") ?? "setup", url.searchParams.get("projects") === "none");
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {

@@ -204,7 +204,7 @@ export const keys = {
     tryIt: "Try it",
     tryItHelp: "Run this in a terminal with CORE_API_KEY set to the key above. It lists the project's Agents; a new project has none yet. The console does not send this request.",
     command: "Example request",
-    continue: "I've saved it, open the console",
+    continue: "I've saved it, continue",
     uncertain: "Core did not confirm the result. Open the console and check Projects and keys before trying again, so that no key is issued without you seeing it.",
     check: "Open the console to check",
   },

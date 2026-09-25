@@ -1,12 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowRight, Cloud, LogOut } from "lucide-react";
+import { ArrowRight, LogOut } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ThemeMenu } from "../../components/ThemeMenu";
 import { setLanguage } from "../../i18n";
+import { OnboardingLayout } from "../onboarding/OnboardingLayout";
+import { withTransition } from "../onboarding/view-transition";
 import { changeConsoleAuth, ConsoleAuthError, readConsoleAuth, type ConsoleAuth } from "./auth";
 import "./console-access.css";
 
-const ConsoleAccountContext = createContext<{ username: string; logout: () => Promise<void> } | null>(null);
+const ConsoleAccountContext = createContext<{
+  username: string;
+  logout: () => Promise<void>;
+  /** The administrator account was created in this page: first-run setup follows. */
+  fresh: boolean;
+} | null>(null);
 export const useConsoleAccount = () => useContext(ConsoleAccountContext);
 
 export function ConsoleLanguage() {
@@ -38,6 +45,7 @@ export function ConsoleAccess({ children }: { children: ReactNode }) {
   const [failed, setFailed] = useState(false);
   const [revision, setRevision] = useState(0);
   const accountExpected = useRef(false);
+  const [fresh, setFresh] = useState(false);
   const generation = useRef(0);
   const refresh = useCallback(() => setRevision((current) => current + 1), []);
   useEffect(() => {
@@ -59,30 +67,30 @@ export function ConsoleAccess({ children }: { children: ReactNode }) {
     return () => { window.clearInterval(timer); window.removeEventListener("focus", check); };
   }, [status?.mode, refresh]);
   if (status?.mode === "legacy") return children;
-  if (status?.mode === "authenticated") return <ConsoleAccountContext.Provider value={{ username: status.username, logout: async () => {
+  if (status?.mode === "authenticated") return <ConsoleAccountContext.Provider value={{ username: status.username, fresh, logout: async () => {
     const next = await changeConsoleAuth("logout", {});
     generation.current++;
+    setFresh(false);
     setStatus(next);
   } }}>{children}</ConsoleAccountContext.Provider>;
 
-  return <div className="app-shell console-access">
-    <main className="app-main console-access-main">
-      <header><ThemeMenu /><ConsoleLanguage /></header>
-      <section className="console-access-stage">
-        <div className="console-access-story"><div className="console-cloud-symbol" aria-hidden="true"><Cloud size={34} strokeWidth={1} /></div>
-          <h1>{t("A place for your Agents to work.")}</h1>
-          <p>{t("Connect your machines. Create Agents. Watch work happen.")}</p>
-        </div>
-        {status && !failed ? <AccountForm key={`${status.mode}:${revision}`} setup={status.mode === "setup"} onAuthenticated={(next) => { generation.current++; setStatus(next); }} onRefresh={refresh} /> :
-          <div className="console-auth-form" aria-live="polite"><p>{t(failed ? "Could not connect to your console." : "Connecting to your console…")}</p>
-            {failed ? <button className="button outline" onClick={refresh}>{t("Try again")}</button> : null}</div>}
-      </section>
-    </main>
-  </div>;
+  const setup = status?.mode === "setup";
+  return <OnboardingLayout scene={status ? (setup ? "account" : "login") : null} step={setup ? "account" : undefined} controls={<><ThemeMenu /><ConsoleLanguage /></>}>
+    {status && !failed ? <AccountForm key={`${status.mode}:${revision}`} setup={setup} onAuthenticated={(next, from) => {
+      // Setup continues to the first project on the same stage; signing in reveals the console.
+      withTransition(setup ? "step" : "enter", () => {
+        generation.current++;
+        setFresh(setup);
+        setStatus(next);
+      }, from);
+    }} onRefresh={refresh} /> :
+      <div className="console-auth-form" aria-live="polite"><p>{t(failed ? "Could not connect to your console." : "Connecting to your console…")}</p>
+        {failed ? <button className="button outline" onClick={refresh}>{t("Try again")}</button> : null}</div>}
+  </OnboardingLayout>;
 }
 
 function AccountForm({ setup, onAuthenticated, onRefresh }: {
-  setup: boolean; onAuthenticated: (status: ConsoleAuth) => void; onRefresh: () => void;
+  setup: boolean; onAuthenticated: (status: ConsoleAuth, from: HTMLElement | null) => void; onRefresh: () => void;
 }) {
   const { t } = useTranslation("firstRun");
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +103,7 @@ function AccountForm({ setup, onAuthenticated, onRefresh }: {
     event.preventDefault();
     if (pending.current || uncertain) return;
     const data = new FormData(event.currentTarget);
+    const submitter = event.nativeEvent instanceof SubmitEvent && event.nativeEvent.submitter instanceof HTMLElement ? event.nativeEvent.submitter : null;
     const password = String(data.get("password") ?? "");
     if (setup && password !== data.get("confirm")) { setError(t("Passwords do not match.")); return; }
     const bytes = new TextEncoder().encode(password).length;
@@ -106,7 +115,7 @@ function AccountForm({ setup, onAuthenticated, onRefresh }: {
         username: String(data.get("username") ?? ""), password,
       }, request.signal);
       if (!request.signal.aborted) {
-        onAuthenticated(next);
+        onAuthenticated(next, submitter);
       }
     } catch (cause) {
       if (request.signal.aborted) return;

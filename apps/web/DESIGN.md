@@ -568,6 +568,25 @@ aggregation or a stale view; the error variant tints toward Fault Red. Partial-d
 chips are amber-tinted pills with a help tip. Safety notices (a key shown once, an
 uncertain write, a destructive consequence) stay visible in body text.
 
+### Onboarding
+Signing in and first-run setup share one frame: a dark stage on the left (always
+dark, whatever the theme) and the task panel on the right, which follows the
+theme. The stage is the product's one authored moment: a flickering indigo dot
+grid under slow light rays (Magic UI's flickering grid and light rays), Core as
+the Parsar mark on a tile with a travelling border beam, and two orbits of
+Agents, Sessions, Skills, Vaults, files, templates and machines around it; the
+Parsar mark is itself nodes on a ring. Brand copy sits bottom-left in solid
+ink; it is a paragraph, not a heading, because the panel's title names the task.
+First run is three steps with numbered progress in the panel header: the
+administrator account, the first project and its key (shown once; the example
+request types itself into a terminal), and a three-chapter tour — Monitor,
+Resources, Platform — whose stage shows a real dark screenshot of those pages,
+tilted towards the panel. Steps change inside a View Transition: the stage holds
+still while the panel slides and blurs across; opening the console dissolves
+the onboarding forward and reveals the console in a circle growing from the
+pressed button. With reduced motion the orbits hold their places, the grid is a
+still frame, the request is a plain block and no transition runs.
+
 ### Loading and motion
 The console has no spinners and no "Loading…" lines. Reads are cached (TanStack
 Query) and prefetched on navigation hover, so revisits show data at once and

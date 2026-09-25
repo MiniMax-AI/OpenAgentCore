@@ -239,43 +239,10 @@
 
 /* First run: one calm column ---------------------------------------------- */
 
-.first-key-screen {
-  display: flex;
-  min-height: 100vh;
-  flex-direction: column;
-  color: var(--fg);
-  background: var(--surface);
-}
 
-.first-key-top {
-  display: flex;
-  height: 56px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px 0 12px;
-}
 
-.first-key-top-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
-.first-key-top .appearance-menu-panel {
-  top: calc(100% + 8px);
-  right: 0;
-  bottom: auto;
-  left: auto;
-}
 
-.first-key-main {
-  display: flex;
-  flex: 1 1 auto;
-  justify-content: center;
-  padding: 14vh 24px 64px;
-  outline: none;
-}
 
 .first-key-column {
   display: flex;

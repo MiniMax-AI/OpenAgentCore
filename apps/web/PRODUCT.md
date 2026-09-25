@@ -68,9 +68,11 @@ workbench.
   write history), Nodes (sandbox deployment, the node list with each node's
   capacity, host figures and allocations, enrollment and removal), System (startup
   configuration and the sandbox deployment).
-- **First run**: when no project exists yet, a full-screen step outside the shell
-  creates the first project (default name `Default`) and its first key and shows the
-  plaintext once.
+- **First run**: after the administrator account is created and while no project
+  exists, full-screen steps outside the shell create the first project (default name
+  `Default`) and its first key, show the plaintext once with an example request,
+  then give a three-chapter tour of the console (Monitor, Resources, Platform)
+  before opening it. Signing in uses the same stage.
 - Terminology: API terms stay in English in the Chinese UI (Agent, Session, Turn,
   Skill, Vault, Credential, API key).
 

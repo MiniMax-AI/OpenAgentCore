@@ -1,0 +1,583 @@
+/*
+ * Onboarding: administrator setup, the first project and key, and the tour.
+ * A dark stage (always dark, whatever the theme) holds the brand moment — Core
+ * as the Parsar mark with its orbits, or a screenshot of the console during
+ * the tour; the panel beside it follows the console theme and holds the task.
+ */
+
+.onboarding {
+  --stage-ink: oklch(0.97 0.01 277);
+  --stage-ink-2: oklch(0.8 0.03 277 / 0.72);
+  --stage-accent: oklch(0.72 0.14 277);
+  --stage-line: oklch(1 0 0 / 0.08);
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(440px, 1fr);
+  min-height: 100dvh;
+  background: var(--surface);
+}
+
+/* Stage ------------------------------------------------------------------- */
+
+.onboarding-stage {
+  position: relative;
+  display: grid;
+  min-height: 100dvh;
+  overflow: hidden;
+  color: var(--stage-ink);
+  background:
+    radial-gradient(120% 90% at 50% 38%, oklch(0.2 0.06 277) 0%, oklch(0.13 0.03 277) 45%, oklch(0.09 0.015 277) 100%);
+  color-scheme: dark;
+  isolation: isolate;
+}
+
+.onboarding-backdrop {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+}
+
+.onboarding-grid {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 42%, #000 20%, transparent 100%);
+  mask-image: radial-gradient(70% 60% at 50% 42%, #000 20%, transparent 100%);
+}
+
+.onboarding-glow {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 560px;
+  height: 560px;
+  background: radial-gradient(circle, oklch(0.55 0.2 280 / 0.34) 0%, oklch(0.55 0.2 300 / 0.12) 38%, transparent 70%);
+  transform: translate(-50%, -50%);
+  filter: blur(8px);
+  animation: onboarding-breathe 9s ease-in-out infinite;
+}
+
+@keyframes onboarding-breathe {
+  0%, 100% { opacity: 0.85; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+}
+
+.onboarding-brand {
+  position: absolute;
+  top: 28px;
+  left: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--stage-ink);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Core and its orbits. The orbit component centres its items in a flex box. */
+.onboarding-orbits {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  display: flex;
+  width: 460px;
+  height: 460px;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+}
+
+.onboarding-orbits > svg circle {
+  stroke: oklch(0.8 0.08 277 / 0.16);
+}
+
+.onboarding-chip {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: oklch(0.86 0.07 277);
+  background: oklch(0.17 0.03 277 / 0.92);
+  border: 1px solid oklch(0.72 0.12 277 / 0.28);
+  border-radius: 999px;
+  box-shadow: 0 0 18px oklch(0.6 0.18 277 / 0.28);
+}
+
+.onboarding-core {
+  position: relative;
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(160deg, oklch(0.24 0.05 277), oklch(0.13 0.02 277));
+  border: 1px solid oklch(1 0 0 / 0.1);
+  border-radius: 28px;
+  box-shadow: 0 0 0 10px oklch(0.6 0.18 277 / 0.06), 0 0 70px oklch(0.55 0.2 280 / 0.45);
+}
+
+.onboarding-copy {
+  position: absolute;
+  right: 48px;
+  bottom: 56px;
+  left: 48px;
+}
+
+.onboarding-copy .onboarding-headline {
+  max-width: 520px;
+  margin: 0 0 12px;
+  font-size: clamp(26px, 2.3vw, 32px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  color: var(--stage-ink);
+}
+
+.onboarding-copy p:not(.onboarding-headline) {
+  max-width: 440px;
+  margin: 0;
+  color: var(--stage-ink-2);
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+/* The tour's screenshot, tilted towards the panel. */
+.onboarding-showcase {
+  position: absolute;
+  inset: 72px 28px 40px;
+  display: grid;
+  place-items: center;
+  perspective: 1600px;
+}
+
+.onboarding-shot {
+  position: relative;
+  width: min(100%, 920px);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid oklch(1 0 0 / 0.12);
+  border-radius: 14px;
+  box-shadow: 0 40px 90px -30px oklch(0 0 0 / 0.8), 0 0 80px oklch(0.55 0.2 280 / 0.28);
+  transform-style: preserve-3d;
+}
+
+.onboarding-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Panel ------------------------------------------------------------------- */
+
+.onboarding-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  outline: none;
+}
+
+.onboarding-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 32px;
+}
+
+.onboarding-controls > * {
+  flex-shrink: 0;
+}
+
+.onboarding-controls {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* Below 1180px wide the step names give way to their numbers. */
+@media (max-width: 1180px) {
+  .onboarding-progress li:not(.current) .onboarding-progress-label {
+    display: none;
+  }
+}
+
+.onboarding-panel-body {
+  display: grid;
+  flex: 1;
+  align-content: center;
+  justify-items: center;
+  padding: 24px 40px 56px;
+}
+
+.onboarding-panel-body > * {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* Setup progress: numbered steps; the current one fills with indigo and the fill glides between steps. */
+.onboarding-progress {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-progress li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.onboarding-progress li + li::before {
+  content: "";
+  width: 14px;
+  height: 1px;
+  margin-right: 4px;
+  background: var(--line);
+}
+
+.onboarding-progress li.current,
+.onboarding-progress li.done {
+  color: var(--ink);
+}
+
+.onboarding-progress-mark {
+  position: relative;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.onboarding-progress li.done .onboarding-progress-mark {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 50%, transparent);
+}
+
+.onboarding-progress-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent) 18%, transparent);
+}
+
+.onboarding-progress-number {
+  position: relative;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.onboarding-progress li.current .onboarding-progress-number {
+  color: #fff;
+}
+
+/* The account form and the first project screens inside the panel. */
+.onboarding-panel .console-auth-form,
+.onboarding-panel .first-key-column {
+  width: 100%;
+  max-width: 420px;
+  animation: none;
+}
+
+.onboarding-panel .first-key-title,
+.onboarding-panel .console-auth-form h2 {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.onboarding-preparing {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+/* The example request types itself into a terminal. */
+.onboarding-terminal {
+  position: relative;
+}
+
+.onboarding-terminal > div:first-child {
+  max-width: none;
+  width: 100%;
+  color: oklch(0.9 0.02 277);
+  background: oklch(0.15 0.02 277);
+  border-color: oklch(1 0 0 / 0.08);
+}
+
+.onboarding-terminal pre,
+.onboarding-terminal code {
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre;
+}
+
+.onboarding-terminal-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+/* Tour -------------------------------------------------------------------- */
+
+.onboarding-tour {
+  display: grid;
+  gap: 26px;
+}
+
+.onboarding-tour-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.onboarding-eyebrow {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.onboarding-skip {
+  padding: 4px 8px;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12.5px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+}
+
+.onboarding-skip:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.onboarding-tour-chapter {
+  display: grid;
+  gap: 14px;
+}
+
+.onboarding-chapter-name {
+  justify-self: start;
+  padding: 3px 10px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+  border-radius: 999px;
+}
+
+.onboarding-tour-chapter h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.onboarding-points {
+  display: grid;
+  gap: 12px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-points li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.onboarding-point-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface));
+  border-radius: var(--radius-control);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 18%, transparent);
+}
+
+.onboarding-tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.onboarding-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.onboarding-dot {
+  position: relative;
+  width: 22px;
+  height: 6px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--hover-2);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.onboarding-dot-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.onboarding-tour-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* The last call to action carries a slow sheen. */
+.onboarding-enter {
+  position: relative;
+  overflow: hidden;
+}
+
+.onboarding-enter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, oklch(1 0 0 / 0.32) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: onboarding-sheen 2.8s ease-in-out 0.6s infinite;
+}
+
+@keyframes onboarding-sheen {
+  0% { transform: translateX(-100%); }
+  45%, 100% { transform: translateX(100%); }
+}
+
+/* View transitions ---------------------------------------------------------
+ * `step`: the stage holds still while the panel slides; `enter`: onboarding
+ * dissolves forward and the console is revealed in a circle growing from the
+ * pressed button (--reveal-x/y). Reduced motion never starts a transition. */
+
+html[data-transition="step"] .onboarding-stage {
+  view-transition-name: onboarding-stage;
+}
+
+html[data-transition="step"] .onboarding-panel-body {
+  view-transition-name: onboarding-panel;
+}
+
+html[data-transition="step"]::view-transition-group(onboarding-stage) {
+  animation-duration: 0s;
+}
+
+html[data-transition="step"]::view-transition-old(onboarding-panel) {
+  animation: onboarding-panel-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+html[data-transition="step"]::view-transition-new(onboarding-panel) {
+  animation: onboarding-panel-in 520ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
+}
+
+@keyframes onboarding-panel-out {
+  to { opacity: 0; transform: translateX(-28px); filter: blur(6px); }
+}
+
+@keyframes onboarding-panel-in {
+  from { opacity: 0; transform: translateX(36px); filter: blur(8px); }
+}
+
+html[data-transition="enter"]::view-transition-old(root) {
+  animation: onboarding-dissolve 620ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+html[data-transition="enter"]::view-transition-new(root) {
+  animation: console-reveal 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes onboarding-dissolve {
+  to { opacity: 0; transform: scale(1.06); filter: blur(12px); }
+}
+
+@keyframes console-reveal {
+  from { clip-path: circle(0 at var(--reveal-x, 50%) var(--reveal-y, 50%)); }
+  to { clip-path: circle(150vmax at var(--reveal-x, 50%) var(--reveal-y, 50%)); }
+}
+
+/* Narrow screens: the stage becomes a band above the panel. */
+@media (max-width: 920px) {
+  .onboarding {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+
+  .onboarding-stage {
+    min-height: 300px;
+  }
+
+  .onboarding-orbits {
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.62);
+  }
+
+  .onboarding-copy {
+    display: none;
+  }
+
+  .onboarding-showcase {
+    inset: 64px 20px 20px;
+  }
+
+  .onboarding-panel-head {
+    padding: 16px 20px;
+  }
+
+  .onboarding-progress-label {
+    display: none;
+  }
+
+  .onboarding-panel-body {
+    padding: 16px 20px 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-glow,
+  .onboarding-enter::after {
+    animation: none;
+  }
+
+  /* The orbits hold still at their places instead of snapping to the centre. */
+  .onboarding-orbits .animate-orbit {
+    animation: none !important;
+    transform: rotate(calc(var(--angle) * 1deg)) translateY(calc(var(--radius) * 1px)) rotate(calc(var(--angle) * -1deg));
+  }
+}
+
+/* The console's narrow-screen rule stacks the theme toggle for the rail; in the panel header it stays a row. */
+.onboarding-controls .theme-menu {
+  flex-direction: row;
+}

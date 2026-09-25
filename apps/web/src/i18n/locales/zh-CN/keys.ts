@@ -206,7 +206,7 @@ export const keys: TranslationShape<typeof english> = {
     tryIt: "试一下",
     tryItHelp: "在终端里把 CORE_API_KEY 设为上面的 key 后运行。它会列出项目里的 Agent，新项目还没有 Agent。控制台不会发送这个请求。",
     command: "示例请求",
-    continue: "我已保存，进入控制台",
+    continue: "我已保存，继续",
     uncertain: "Core 未确认结果。请先进入控制台，在“项目与 key”里确认，再决定是否重试，以免签发一个你看不到明文的 key。",
     check: "进入控制台确认",
   },
