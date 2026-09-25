@@ -81,9 +81,9 @@ work. Ordinary metadata reads cannot recover plaintext.
    The Core key must fail on `/v1`; `/v1` through the console stays 404.
 4. Cross-origin management writes must be rejected. Audit actor labels must ignore
    a forged browser header.
-5. Runtime observations and history report execution state separately from startup
-   configuration. Neither a login nor a successful configuration read proves model
-   or sandbox readiness.
+5. Runtime observations and history report execution state separately from the
+   sandbox deployment read (`GET /core/v1/sandbox/deployment`). Neither a login nor
+   a successful deployment read proves model or sandbox readiness.
 
 A console login failure belongs to console authentication. An upstream 401 on a
 management request points to the console's Core key or Core connection. A resource

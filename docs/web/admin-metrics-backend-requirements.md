@@ -14,9 +14,9 @@ the browser work.
 
 ## Two classes of Core interface
 
-1. **Public Agents API** (`/v1/**`): must stay identical to the pinned OpenAI
-   Agents API and its documented Core extensions. Metrics work must not add
-   fields, routes or behavior here.
+1. **Public Agents API** (`/v1/**`): serves only the pinned official OpenAI
+   Agents API routes; Core additions appear only as `x_agents_core` fields.
+   Metrics work must not add fields, routes or behavior here.
 2. **Web API** (`/core/v1/**`, including `/core/v1/sandbox/**` for sandbox
    administration): called by the console server and operator scripts with the
    Core key. Every endpoint proposed below belongs here; `services/core-console`
@@ -130,11 +130,11 @@ reads every hosted Session by ID (bounded at 100 per refresh). An
 
 ### P2 — Deployment configuration writes
 
-The console can only read whether each harness has a model endpoint configured
-at startup. A Web API write (for example
-`PUT /core/v1/deployment/model-providers/{harness}`, write-only credentials)
-would let operators set deployment defaults. It must keep the precedence
-Session → Agent → deployment and never return secrets.
+The console cannot read or change the deployment's per-harness model provider
+defaults; Core takes them from `AGENTS_API_EXECUTION_OPTIONS_FILE`. A Web API
+write (for example `PUT /core/v1/deployment/model-providers/{harness}`,
+write-only credentials) would let operators set deployment defaults. It must
+keep the precedence Session → Agent → deployment and never return secrets.
 
 ### P2 — Keys
 

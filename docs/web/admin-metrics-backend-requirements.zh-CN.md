@@ -6,7 +6,7 @@
 
 ## Core 的两类接口
 
-1. **面向用户的 Agents API**（`/v1/**`）：必须与锁定版本的 OpenAI Agents API 及已记录的 Core 扩展保持一致。指标相关工作不得在这里新增字段、路由或行为。
+1. **面向用户的 Agents API**（`/v1/**`）：只提供锁定版本的 OpenAI Agents API 官方路由；Core 的补充只以 `x_agents_core` 字段出现。指标相关工作不得在这里新增字段、路由或行为。
 2. **Web API**（`/core/v1/**`，包括沙箱管理用的 `/core/v1/sandbox/**`）：由控制台服务端和运维脚本用 Core Key 调用。下文提议的所有接口都属于这一类；`services/core-console` 按前缀转发 `/core/v1/*`，新增接口无需改动代理。
 
 ## 控制台目前如何计算
@@ -87,7 +87,7 @@
 
 ### P2：部署配置写入
 
-控制台目前只能读到每个执行引擎在启动时是否配置了模型端点。Web API 的写接口（例如 `PUT /core/v1/deployment/model-providers/{harness}`，凭据只写）可以让运维设置部署默认值。优先级必须保持“Session → Agent → 部署”，且绝不返回密钥。
+控制台无法读取或修改各执行引擎的部署默认模型 provider，Core 从 `AGENTS_API_EXECUTION_OPTIONS_FILE` 读取它们。Web API 的写接口（例如 `PUT /core/v1/deployment/model-providers/{harness}`，凭据只写）可以让运维设置部署默认值。优先级必须保持“Session → Agent → 部署”，且绝不返回密钥。
 
 ### P2：密钥
 

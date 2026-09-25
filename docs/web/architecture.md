@@ -93,7 +93,8 @@ visible until the administrator checks state and decides how to proceed. Issued
 key plaintext must not enter browser storage or logs. Key issuance recovery
 follows the administrator contract.
 
-Startup configuration describes configured support. It does not prove a reachable
-model, valid provider credentials or execution readiness. Runtime observations,
-usage coverage and audit history must retain the distinctions defined by Core.
+The sandbox deployment read (`GET /core/v1/sandbox/deployment`) describes the saved
+selection. It does not prove a reachable model, valid provider credentials or
+execution readiness. Runtime observations, usage coverage and audit history must
+retain the distinctions defined by Core.
 Native execution ownership remains governed by [CONTRIBUTING.md](../../CONTRIBUTING.md).
