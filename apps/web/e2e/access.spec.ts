@@ -58,8 +58,16 @@ test("opens a fresh install on the Overview's Getting started: a project and its
 
   await step("Create a project and issue a key").getByRole("button", { name: "Create project" }).click();
   await page.getByRole("dialog").getByLabel("Name").fill("My app");
+  // Core's project list answers late: the new project's key dialog must not wait for it.
+  const projectList = /\/core\/v1\/projects(\?.*)?$/;
+  await page.route(projectList, async (route) => {
+    if (route.request().method() === "GET") await new Promise((resolve) => setTimeout(resolve, 5_000));
+    await route.fallback();
+  });
   await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
   const issue = page.getByRole("dialog", { name: "Issue a key for My app" });
+  await expect(issue).toBeVisible({ timeout: 3_000 });
+  await page.unroute(projectList);
   await issue.getByLabel("Key name").fill("my-app");
   await issue.getByRole("button", { name: "Issue key" }).click();
   const issued = page.getByRole("dialog", { name: "Key issued" });

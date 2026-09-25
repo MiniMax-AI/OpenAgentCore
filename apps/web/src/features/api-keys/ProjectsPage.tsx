@@ -16,6 +16,7 @@ import { activeKeyNames, flowError, isAbort, isUsableName, matchesProject, norma
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
 import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
 import { invalidateProjects, projectActivityQuery, projectScope } from "./project-queries";
+import { projectsQuery } from "../../lib/queries";
 import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
 import "./api-keys.css";
@@ -45,7 +46,6 @@ export function ProjectsPage() {
   const queryClient = useQueryClient();
   const { params, navigate, back } = useConsoleNavigation();
   const [selectedId, setSelectedId] = useState<string | null>(params.id ?? null);
-  const [created, setCreated] = useState<Project | null>(null);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [dialogBusy, setDialogBusy] = useState(false);
@@ -70,7 +70,7 @@ export function ProjectsPage() {
   useFailureToast(refreshError, t("page.refreshFailed"), "projects-refresh");
   const names = useMemo(() => projects.map((project) => project.name), [projects]);
   const visible = useMemo(() => projects.filter((project) => matchesProject(project, query)), [projects, query]);
-  const selected = selectedId ? byId.get(selectedId) ?? (created?.id === selectedId ? created : null) : null;
+  const selected = selectedId ? byId.get(selectedId) ?? null : null;
   const keys = useProjectKeys(selected?.id ?? null);
   // The open project's keys and usage; its write operations show their own progress.
   const detailFetching = useIsFetching({ queryKey: projectScope(selectedId ?? ""), predicate: (entry) => entry.queryKey[2] !== "write-operations" }) > 0;
@@ -110,8 +110,9 @@ export function ProjectsPage() {
     try {
       if (current.kind === "create") {
         const project = await createProject(normalizeName(current.name));
-        setCreated(project);
-        // The project page opens anew, so the key dialog follows as its intent.
+        // The project page opens anew and finds the project in the list at once;
+        // the re-read below confirms it. The key dialog follows as its intent.
+        queryClient.setQueryData(projectsQuery.queryKey, (list) => (list && !list.some((entry) => entry.id === project.id) ? [...list, project] : list ?? [project]));
         navigate("projects", { id: project.id }, current.thenIssue ? "issue-key" : undefined);
       } else if (current.kind === "rename") {
         await renameProject(current.project.id, normalizeName(current.name));
