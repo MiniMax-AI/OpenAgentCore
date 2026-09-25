@@ -71,10 +71,11 @@ model, harness or provider. A missing/wrong encryption key fails closed. Retain 
 same deployment credential-encryption key across restarts. V1 has no Turn override,
 provider catalog, Session migration or new execution loop.
 
-Every new request that may use a deployment default (`openai_hosted` and `none`),
-and every request with a saved Agent, template or provider bundle, records caller
-intent before resolving mutable defaults. A retry therefore returns the committed
-Session even after the deployment default was replaced or removed. Matching creation retries
+All new hosted requests record caller intent before resolving mutable defaults,
+including inline requests that use deployment defaults. Other inline requests,
+such as `none`, keep the resolved-request retry rule; that hash leaves out a
+deployment default, so setting, replacing or removing the default does not change
+their retry identity. Matching creation retries
 recover the committed Session before resolving the Agent or provider again and do
 not enqueue another input. Streaming remains outside the retry identity. Existing
 historical rows keep their documented retry limitations; this change does not
@@ -167,7 +168,11 @@ complete private snapshot. Historical `openai_hosted` and `self_hosted` Sessions
 created without any snapshot cannot start new work: message input returns 400
 `model_provider_required`, while cancellation and history reads keep working.
 Input they reserved before the upgrade settles as failed with that reason, and the
-Session reports it, instead of waiting for its deadline.
+Session reports it, instead of waiting for its deadline. A retry of a Session that
+carried its own provider key, first sent before this release, conflicts once after
+the upgrade, because its retry hash now holds a keyed fingerprint instead of the
+key. Key-bearing retries likewise conflict after a credential key change, which is
+not supported anyway.
 Recreate them with a bundle. Run `deploy/install/model_provider_sessions.py`
 against an installation before upgrading to count them; it only reads. Historical
 `none` Sessions that relied on the retired options file now run with the device's

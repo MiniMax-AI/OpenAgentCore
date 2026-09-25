@@ -11,11 +11,12 @@ import (
 )
 
 // sessionCreationRequest records caller intent before mutable sources resolve:
-// saved Agents, templates, credentials and, wherever it may apply, the deployment
-// default model provider. A retry then returns the committed Session even after
-// those sources change.
+// saved Agents, templates, credentials and hosted deployment defaults. A retry
+// then returns the committed Session even after those sources change. Other
+// inline requests keep the resolved-request retry rule; the store leaves the
+// deployment default out of that hash, so it cannot change their identity.
 func sessionCreationRequest(input sessionRequest, initial []store.Input) (json.RawMessage, error) {
-	if (input.Environment == nil || !v1.ModelProviderAllowed(input.Environment.Type, v1.ModelProviderSourceDeployment)) && input.XAgentsCore == nil && input.AgentID == nil && input.templateID == "" && len(input.initialFiles) == 0 && input.initialization.Empty() && !inlineCredentialIntent(input) && input.agentFields["x_agents_core"] == nil {
+	if (input.Environment == nil || input.Environment.Type != "openai_hosted") && input.XAgentsCore == nil && input.AgentID == nil && input.templateID == "" && len(input.initialFiles) == 0 && input.initialization.Empty() && !inlineCredentialIntent(input) && input.agentFields["x_agents_core"] == nil {
 		return nil, nil
 	}
 	agentID := ""

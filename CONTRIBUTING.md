@@ -2245,8 +2245,10 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   options. Keep runtime dispatch on the common adapter path and fail closed for
   missing/decryption-failed snapshots. Agent edits/deletion, default changes,
   restart and idle suspend/resume never resolve defaults again. Record caller
-  intent for every new Session before resolving defaults; matching retries return
-  committed state without replay. No Turn-level overrides or provider catalog is
+  intent for every new hosted Session before resolving defaults; other inline
+  Sessions keep the resolved-request rule, whose hash leaves out the deployment
+  default. Provider keys enter retry hashes only as keyed fingerprints. Matching
+  retries return committed state without replay. No Turn-level overrides or provider catalog is
   included. Public input/null semantics and examples live in
   `contracts/agents-api/model-execution.md`.
 - Session execution-configuration reads use a separate immutable safe projection,

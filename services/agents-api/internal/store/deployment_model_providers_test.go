@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
+	"github.com/google/uuid"
 )
 
 func TestDeploymentModelProviderEncryptedAuditedAndReplaced(t *testing.T) {
@@ -86,5 +88,42 @@ func TestDeploymentModelProviderEncryptedAuditedAndReplaced(t *testing.T) {
 	}
 	if got, _ := s.DeploymentModelProvider(ctx, "codex"); got != nil {
 		t.Fatal("failed audit left the write committed")
+	}
+}
+
+// A provider key enters the retry hashes only through a fingerprint keyed by the
+// credential key: the same request under two credential keys hashes differently,
+// and an intent whose provider cannot be read is rejected, not hashed raw.
+func TestProviderKeyEntersRetryHashesOnlyAsKeyedFingerprint(t *testing.T) {
+	_, pool := testStore(t)
+	provider := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://example.com/v1", APIKey: "hash-key-canary"}
+	intent, err := json.Marshal(map[string]any{"agent": map[string]string{"model": "m"}, "environment": map[string]string{"type": "openai_hosted"}, "x_agents_core": map[string]any{"model_provider": provider}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "same-request", ModelProvider: provider, ModelProviderSource: v1.ModelProviderSourceSession,
+		Configuration: []byte(`{"agent":{"model":"m"},"environment":{"type":"openai_hosted"}}`), CreationRequest: intent}
+	var hashes [2][2]string
+	for index, seed := range []byte{71, 72} {
+		cipher, err := credentialcrypto.New(bytes.Repeat([]byte{seed}, 32))
+		if err != nil {
+			t.Fatal(err)
+		}
+		session, err := NewWithCredentialCipher(pool, cipher).CreateSession(t.Context(), uuid.NewString(), input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(t.Context(), "SELECT request_hash, creation_request_hash FROM sessions WHERE id=$1", session.ID).Scan(&hashes[index][0], &hashes[index][1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if hashes[0][0] == hashes[1][0] || hashes[0][1] == hashes[1][1] {
+		t.Fatal("retry hashes do not depend on the credential key", hashes)
+	}
+	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{71}, 32))
+	unreadable := input
+	unreadable.IdempotencyKey, unreadable.CreationRequest = "unreadable", json.RawMessage(`{"x_agents_core":{"model_provider":"hash-key-canary"}}`)
+	if _, err := NewWithCredentialCipher(pool, cipher).CreateSession(t.Context(), uuid.NewString(), unreadable); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unreadable provider intent was hashed", err)
 	}
 }

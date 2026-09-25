@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -65,7 +66,8 @@ func (c *Cipher) Fingerprint(purpose, secret string) (string, error) {
 	if c == nil || len(c.fingerprint) == 0 {
 		return "", errUnavailable
 	}
-	if purpose == "" || !utf8.ValidString(purpose) {
+	// The purpose is delimited by NUL, so it must not contain one.
+	if purpose == "" || !utf8.ValidString(purpose) || strings.ContainsRune(purpose, 0) {
 		return "", errInvalidBinding
 	}
 	mac := hmac.New(sha256.New, c.fingerprint)

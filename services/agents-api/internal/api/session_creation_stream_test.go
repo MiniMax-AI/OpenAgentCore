@@ -697,11 +697,6 @@ func (eventOnlyStore) ListSessionEvents(context.Context, string, string, int64) 
 	return nil, nil
 }
 
-// A none Session records caller intent, so creation looks it up first.
-func (eventOnlyStore) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (store.SessionCreation, error) {
-	return store.SessionCreation{}, store.ErrNotFound
-}
-
 type countingStreamAdmission struct {
 	inputRecorder
 	calls atomic.Int32

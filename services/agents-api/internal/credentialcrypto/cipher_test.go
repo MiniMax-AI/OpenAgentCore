@@ -166,4 +166,8 @@ func TestFingerprintIsKeyedAndPurposeBound(t *testing.T) {
 	if _, err := (*Cipher)(nil).Fingerprint("model-provider", "secret-canary"); err == nil {
 		t.Fatal("fingerprint without a key")
 	}
+	// Without the NUL rule, ("a\x00b", "c") and ("a", "b\x00c") would collide.
+	if _, err := c.Fingerprint("model-provider\x00x", "secret-canary"); err == nil {
+		t.Fatal("purpose with NUL accepted")
+	}
 }

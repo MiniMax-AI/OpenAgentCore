@@ -180,9 +180,22 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	}
 	worker, stop := startEnvironmentExpiryWorker(t, h.d)
 	defer stop()
+	_, pool := store.NewTestStore(t)
+	reservations := func() int {
+		t.Helper()
+		var count int
+		if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM environment_input_reservations WHERE session_id=$1", legacy.ID).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	before := reservations()
 	message := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"start"}`)}}
 	if _, err := worker.SubmitInputs(t.Context(), h.tenant, legacy.ID, uuid.NewString(), message); !errors.Is(err, store.ErrModelProviderRequired) {
 		t.Fatal("provider-free Session accepted work", err)
+	}
+	if after := reservations(); after != before {
+		t.Fatal("rejected work was queued", before, after)
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "legacy reservation settled", func() bool {
 		got, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, legacy.ID, pending.ID)
@@ -228,9 +241,13 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	create := func(key string) string {
+	create := func(key string, agent ...string) string {
 		t.Helper()
-		r := httptest.NewRequest("POST", "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"hello"}`))
+		body := `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"hello"}`
+		if len(agent) > 0 {
+			body = `{"agent":` + agent[0] + `,"environment":{"type":"none"},"input":"hello"}`
+		}
+		r := httptest.NewRequest("POST", "/v1/agents/sessions", strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer "+token)
 		r.Header.Set("OpenAI-Beta", "agents=v1")
 		r.Header.Set("Content-Type", "application/json")
@@ -250,7 +267,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 		t.Fatal("none Session did not freeze the deployment default", err)
 	}
 	setDefault("rotated-default-key")
-	if create(key) != original {
+	if create(key) != original || create(key, `{"model":"m","text":{"verbosity":"medium"}}`) != original {
 		t.Fatal("retry after rotation created another Session")
 	}
 	if err := st.DeleteDeploymentModelProvider(admin, "codex"); err != nil {

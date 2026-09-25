@@ -132,6 +132,9 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 			return SessionCreation{}, err
 		}
 	}
+	// The retry identity covers the configuration as requested; the marker added
+	// for a deployment default below is not caller input.
+	requested := configuration
 	if input.ModelProvider != nil {
 		if err := input.ModelProvider.ValidateHarness(input.Engine); err != nil {
 			return SessionCreation{}, fmt.Errorf("%w: %s", ErrInvalidInput, err)
@@ -155,9 +158,15 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 	if !input.Initialization.Empty() {
 		initialization = &input.Initialization
 	}
-	// The retry identity carries the provider key only as a keyed fingerprint.
-	fingerprinted, err := s.fingerprintedProvider(input.ModelProvider)
-	if err != nil {
+	// The retry identity carries a caller's provider key only as a keyed
+	// fingerprint. A deployment default is not caller input: leaving it and its
+	// configuration marker out keeps retries equivalent when the default is set,
+	// replaced or removed.
+	var fingerprinted *v1.ModelProviderInput
+	hashed := configuration
+	if input.ModelProviderSource == v1.ModelProviderSourceDeployment {
+		hashed = requested
+	} else if fingerprinted, err = s.fingerprintedProvider(input.ModelProvider); err != nil {
 		return SessionCreation{}, err
 	}
 	// JSON map keys are sorted by encoding/json, so key order does not affect retries.
@@ -169,7 +178,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		InitialInputs  json.RawMessage   `json:",omitempty"`
 		InitialFiles   []InitialFile     `json:",omitempty"`
 		Initialization *EnvironmentSetup `json:",omitempty"`
-	}{fingerprinted, input.Engine, input.Metadata, configuration, encodedInput, input.InitialFiles, initialization})
+	}{fingerprinted, input.Engine, input.Metadata, hashed, encodedInput, input.InitialFiles, initialization})
 	if err != nil {
 		return SessionCreation{}, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
 	}

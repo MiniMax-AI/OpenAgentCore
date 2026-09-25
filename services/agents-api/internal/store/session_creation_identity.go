@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -35,23 +36,46 @@ func (s *Store) fingerprintedProvider(provider *v1.ModelProviderInput) (*v1.Mode
 	return &copy, nil
 }
 
-// withoutProviderKey replaces a caller intent's x_agents_core.model_provider.api_key
-// with its keyed fingerprint. Requests without a key are returned unchanged.
+// withoutProviderKey replaces a caller intent's x_agents_core.model_provider
+// with its typed value carrying a keyed fingerprint instead of the key. It fails
+// closed: an intent whose extension or provider cannot be read is rejected
+// rather than hashed as raw bytes that could carry a key.
 func (s *Store) withoutProviderKey(raw json.RawMessage) (json.RawMessage, error) {
-	var request, extension, provider map[string]json.RawMessage
-	var key string
-	if json.Unmarshal(raw, &request) != nil || json.Unmarshal(request["x_agents_core"], &extension) != nil ||
-		json.Unmarshal(extension["model_provider"], &provider) != nil || json.Unmarshal(provider["api_key"], &key) != nil {
+	var request map[string]json.RawMessage
+	if json.Unmarshal(raw, &request) != nil || request == nil {
+		return nil, ErrInvalidInput
+	}
+	extensionRaw, present := request["x_agents_core"]
+	if !present || jsonNull(extensionRaw) {
 		return raw, nil
 	}
-	fingerprinted, err := s.fingerprintedProvider(&v1.ModelProviderInput{APIKey: key})
+	var extension map[string]json.RawMessage
+	if json.Unmarshal(extensionRaw, &extension) != nil || extension == nil {
+		return nil, ErrInvalidInput
+	}
+	providerRaw, present := extension["model_provider"]
+	if !present || jsonNull(providerRaw) {
+		return raw, nil
+	}
+	var provider v1.ModelProviderInput
+	if json.Unmarshal(providerRaw, &provider) != nil {
+		return nil, ErrInvalidInput
+	}
+	fingerprinted, err := s.fingerprintedProvider(&provider)
 	if err != nil {
 		return nil, err
 	}
-	provider["api_key"], _ = json.Marshal(fingerprinted.APIKey)
-	extension["model_provider"], _ = json.Marshal(provider)
-	request["x_agents_core"], _ = json.Marshal(extension)
+	if extension["model_provider"], err = json.Marshal(fingerprinted); err != nil {
+		return nil, err
+	}
+	if request["x_agents_core"], err = json.Marshal(extension); err != nil {
+		return nil, err
+	}
 	return json.Marshal(request)
+}
+
+func jsonNull(raw json.RawMessage) bool {
+	return string(bytes.TrimSpace(raw)) == "null"
 }
 
 func (s *Store) creationRequestHash(raw json.RawMessage) (pgtype.Text, error) {
