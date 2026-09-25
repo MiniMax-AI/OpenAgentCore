@@ -107,7 +107,7 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 	}))
 	defer model.Close()
 	h.d.Options = func(context.Context, store.Session) (map[string]any, error) {
-		return map[string]any{"enable_features": []any{"multi_agent", "multi_agent_v2"}, "model_verbosity": "high", "web_search": "live", "codex_provider": map[string]any{"base_url": model.URL + "/v1", "bearer_token": "synthetic-test-token"}, "env": map[string]any{"CODEX_EXEC_SERVER_URL": "ws://127.0.0.1:1"}}, nil
+		return map[string]any{"enable_features": []any{"multi_agent", "multi_agent_v2"}, "model_verbosity": "high", "web_search": "live", "codex_provider": map[string]any{"base_url": model.URL + "/v1", "bearer_token": "synthetic-test-token"}}, nil
 	}
 	first := h.message("first", "Return an answer.")
 	h.finished(h.run(ctx, first.TurnID), store.TurnCompleted)
