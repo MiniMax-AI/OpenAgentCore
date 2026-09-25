@@ -7,5 +7,4 @@ export const pages = {
   sessions: { title: "Sessions", subtitle: "Conversations", recover: "Recover durable state" },
   templates: { title: "Environment Templates", subtitle: "Reusable configuration for managed Sessions.", newTemplate: "New Template" },
   vaults: { title: "Vaults", subtitle: "Core-owned static bearer credentials for exact HTTPS MCP destinations.", refresh: "Refresh Vaults", create: "New Vault" },
-  sandbox: { title: "Hosted Sandbox Manager", subtitle: "Deployment provider, runtime nodes and Session allocations.", disconnect: "Disconnect admin" },
 } as const;

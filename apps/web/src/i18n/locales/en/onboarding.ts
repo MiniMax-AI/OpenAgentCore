@@ -42,7 +42,7 @@ export const onboarding = {
         points: [
           "Projects and keys: create projects, issue project API keys shown once, revoke or archive.",
           "Nodes: add your machines with one command and watch their capacity.",
-          "System: the Core build and how it was started.",
+          "System: the sandbox configuration every project shares.",
         ],
       },
     },
