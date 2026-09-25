@@ -132,7 +132,7 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the deployment administrator credential are not accepted. See each operation's security requirements.
+  description: Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the Core key are not accepted. See each operation's security requirements.
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
