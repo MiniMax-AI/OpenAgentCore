@@ -25,6 +25,7 @@ import { capacitySummary, coreStatus, type CoreStatus } from "../fleet/fleet-mod
 import { fleetSnapshot, useSandboxFleet, type FleetSnapshot, type FleetState } from "../fleet/use-sandbox-fleet";
 import { type InProject } from "../metrics/project-sessions";
 import { FleetTopology, TOPOLOGY_LIMIT, type CloudHost } from "./FleetTopology";
+import { GettingStarted } from "./GettingStarted";
 import { type OverviewData } from "./overview-loader";
 import { overviewQuery } from "./overview-queries";
 import {
@@ -139,6 +140,10 @@ export function OverviewPage() {
   const updatedAt = data?.loadedAt ?? fleet?.loadedAt ?? null;
   const attentionTotal = totals ? attentionCount(totals.sessions) : null;
   const truncated = data?.sessions.truncated ?? [];
+  // Whether any Session exists: Core's summary counts them all; without it, any Session read counts.
+  const sessionCount = totals ? totals.sessions.total
+    : sessions?.length ? sessions.length
+    : summaryError !== null || (state.status === "failed" && data === null) ? "failed" : null;
 
   // Each failed read is its own toast, shown once while it lasts.
   useFailureToast(failure !== null, t("errors.load", { reason: failure ?? "" }), "overview-load");
@@ -157,6 +162,7 @@ export function OverviewPage() {
         actions={<RefreshButton refreshing={loading} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={() => { projectsState.refresh(); refresh(); refreshFleet(); }} />}
       />
       <PageBody>
+        <GettingStarted fleet={fleetState} sessions={sessionCount} />
         <div className="overview-tiles" aria-label={t("kpi.label")}>
           <MetricTile
             index={0}

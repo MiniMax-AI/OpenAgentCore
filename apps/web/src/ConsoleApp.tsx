@@ -18,7 +18,7 @@ import { SessionPage } from "./features/sessions/SessionPage";
 import { SkillsPage } from "./features/skills/SkillsPage";
 import { SystemPage } from "./features/system/SystemPage";
 import { VaultsPage } from "./features/vaults/VaultsPage";
-import { consoleDepth, ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type RouteParams } from "./lib/console-navigation";
+import { consoleDepth, ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type ConsoleIntent, type RouteParams } from "./lib/console-navigation";
 import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
 import { ProjectsProvider, useProjects } from "./lib/projects";
 import { collectionQuery, collections, filesCollection, queryClient, type CollectionSpec } from "./lib/queries";
@@ -34,9 +34,9 @@ const prefetchable: Partial<Record<ConsoleView, CollectionSpec<unknown>>> = {
   sessions: collections.sessions,
 };
 
-function readLocation(): { view: ConsoleView; params: RouteParams } {
+function readLocation(): { view: ConsoleView; params: RouteParams; intent: ConsoleIntent | null } {
   const hash = typeof window === "undefined" ? "" : window.location.hash;
-  return { view: consoleViewFromHash(hash), params: routeParamsFromHash(hash) };
+  return { view: consoleViewFromHash(hash), params: routeParamsFromHash(hash), intent: null };
 }
 
 function ConsolePage({ view }: { view: ConsoleView }) {
@@ -76,22 +76,23 @@ function ConsoleShell() {
     };
   }, []);
 
-  const navigate = useCallback((view: ConsoleView, params: RouteParams = {}) => {
+  const navigate = useCallback((view: ConsoleView, params: RouteParams = {}, intent: ConsoleIntent | null = null) => {
     const hash = hashWithParams(consoleHashForView(view), params);
     if (window.location.hash !== hash) {
       // Each entry records how many console pages lie behind it, so `back` knows it can return.
       window.history.pushState({ consoleDepth: consoleDepth() + 1 }, "", hash || window.location.pathname + window.location.search);
     }
-    setLocation({ view, params });
+    setLocation({ view, params, intent });
     document.getElementById("main-content")?.focus({ preventScroll: true });
   }, []);
+  const clearIntent = useCallback(() => setLocation((current) => (current.intent ? { ...current, intent: null } : current)), []);
 
   const back = useCallback((view: ConsoleView, params: RouteParams = {}) => {
     if (consoleDepth() > 0) window.history.back();
     else navigate(view, params);
   }, [navigate]);
 
-  const navigation = useMemo(() => ({ ...location, navigate, back }), [location, navigate, back]);
+  const navigation = useMemo(() => ({ ...location, navigate, back, clearIntent }), [location, navigate, back, clearIntent]);
 
   const prefetch = useCallback((view: ConsoleView) => {
     const spec = prefetchable[view];

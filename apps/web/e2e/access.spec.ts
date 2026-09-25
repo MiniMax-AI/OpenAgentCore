@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { expectManagementBoundary, FIXTURE_CORE_KEY, resetFixture } from "./console";
+import { expectManagementBoundary, FIXTURE_CORE_KEY, openConsole, resetFixture } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
@@ -38,11 +38,54 @@ test("signs in with the Core key, keeps it out of the browser, and signs out and
   expect(await browserStorage(page)).not.toContain(FIXTURE_CORE_KEY);
 });
 
-test("opens a fresh install on the Overview without asking for a project first", async ({ page, request }) => {
+test("opens a fresh install on the Overview's Getting started: a project and its key shown once, then the step is done", async ({ page, request }) => {
   await resetFixture(request, "login", { fresh: true });
   await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));
   await page.goto("/");
   await signIn(page, FIXTURE_CORE_KEY);
+
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
-  expect(await browserStorage(page)).not.toContain(FIXTURE_CORE_KEY);
+  const step = (name: string) => page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: name });
+  // The fixture deployment already has a ready node.
+  await expect(step("Get sandboxes ready")).toContainText("Done");
+  await expect(step("Create a project and issue a key")).toContainText("To do");
+  await expect(step("Run the first Session")).toContainText("To do");
+
+  // The tour stays optional.
+  await page.getByRole("button", { name: "Take the tour" }).click();
+  await expect(page.getByRole("heading", { name: "Is it healthy, and where does it fail?" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip" }).click();
+
+  await step("Create a project and issue a key").getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("dialog").getByLabel("Name").fill("My app");
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  const issue = page.getByRole("dialog", { name: "Issue a key for My app" });
+  await issue.getByLabel("Key name").fill("my-app");
+  await issue.getByRole("button", { name: "Issue key" }).click();
+  const issued = page.getByRole("dialog", { name: "Key issued" });
+  await expect(issued.getByLabel("New key my-app")).toHaveValue(/fixture-secret/);
+  await issued.getByRole("button", { name: "I've saved this key" }).click();
+  await expect(page.getByLabel("New key my-app")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+  await expect(step("Create a project and issue a key")).toContainText("Done");
+  const stored = await browserStorage(page);
+  expect(stored).not.toContain("fixture-secret");
+  expect(stored).not.toContain(FIXTURE_CORE_KEY);
+});
+
+test("shows empty pages on a fresh install and opens Add node from Getting started", async ({ page, request }) => {
+  await openConsole(page, request, "overview", { fresh: true, nodes: "none" });
+  for (const view of ["core-metrics", "agent-metrics", "sandbox-metrics", "sessions", "agents", "templates", "skills", "files", "vaults", "projects", "nodes", "system", "overview"]) {
+    await page.goto(`/#${view}`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    // No failed read: neither an error on the page nor an error toast.
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.locator(".toast-region-assertive")).toBeEmpty();
+  }
+  const step = page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: "Get sandboxes ready" });
+  await expect(step).toContainText("To do");
+  await step.getByRole("button", { name: "Add node" }).click();
+  await expect(page.getByRole("heading", { name: "Nodes", level: 1 })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
 });

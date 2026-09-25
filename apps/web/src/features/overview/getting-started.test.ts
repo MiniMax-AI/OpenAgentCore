@@ -1,0 +1,52 @@
+import type { SandboxDeployment } from "@agents-core-web/agents-client";
+import { describe, expect, it } from "vitest";
+
+import type { FleetState } from "../fleet/use-sandbox-fleet";
+import { checklistView, gettingStartedSteps } from "./getting-started";
+import { node, project } from "./test-fixtures";
+
+const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({
+  installation_id: "i", provider: "docker", core_url: "http://core", maintenance: false, owner_epoch: 1, generation: 1, mode: "nodes",
+  resources: { allocations: 0, pending: 0 }, suspension: null, ...overrides,
+});
+const fleet = (value: SandboxDeployment, nodes = [node("n1")]): FleetState => ({ status: "ready", snapshot: { deployment: value, nodes, allocations: [], loadedAt: 0 }, refreshing: false, error: null });
+const sandboxes = (state: FleetState) => gettingStartedSteps({ fleet: state, projects: [], sessions: 0 }).sandboxes;
+
+describe("Getting started steps", () => {
+  it("counts sandboxes ready only with a saved deployment and a ready node, or a ready E2B template build", () => {
+    expect(sandboxes(fleet(deployment({ provider: "", mode: "" }), []))).toMatchObject({ state: "todo", action: "setup" });
+    expect(sandboxes(fleet(deployment(), []))).toMatchObject({ state: "todo", action: "add-node" });
+    expect(sandboxes(fleet(deployment(), [node("n1", { provider_ready: false }), node("n2", { online: false })]))).toMatchObject({ state: "todo", action: "nodes" });
+    expect(sandboxes(fleet(deployment()))).toMatchObject({ state: "done" });
+    const e2b = (status: string | null) => deployment({ provider: "e2b", mode: "direct", e2b: { template: "t", credential_configured: true, template_build: { status, resources: { cpus: 2, memory_mib: 2048, root_disk_mib: null } } } });
+    expect(sandboxes(fleet(e2b("building"), []))).toMatchObject({ state: "todo", cloud: true });
+    expect(sandboxes(fleet(e2b("ready"), []))).toMatchObject({ state: "done", cloud: true });
+    expect(sandboxes({ status: "loading" }).state).toBeNull();
+    expect(sandboxes({ status: "failed", error: new Error("down") }).state).toBe("unknown");
+  });
+
+  it("needs an active project with an active key, and any Session", () => {
+    const steps = (projects: Parameters<typeof gettingStartedSteps>[0]["projects"], sessions: number | "failed" | null = 0) => gettingStartedSteps({ fleet: { status: "loading" }, projects, sessions });
+    expect(steps([]).key).toEqual({ state: "todo", project: null });
+    const older = project("p1", { active_key_count: 0, created_at: 1 });
+    const newer = project("p2", { active_key_count: 0, created_at: 2 });
+    expect(steps([older, newer, project("p3", { status: "archived", active_key_count: 0, created_at: 3 })]).key).toEqual({ state: "todo", project: newer });
+    expect(steps([older, project("p4")]).key.state).toBe("done");
+    expect(steps(undefined).key.state).toBeNull();
+    expect(steps("failed").key.state).toBe("unknown");
+    expect([steps([], 0).session, steps([], 2).session, steps([], null).session, steps([], "failed").session]).toEqual(["todo", "done", null, "unknown"]);
+  });
+});
+
+describe("Getting started visibility", () => {
+  it("shows while a step is to do, ends with You're set only where it was seen, and stays compact once dismissed", () => {
+    expect(checklistView(["done", "todo", null], null)).toBe("full");
+    expect(checklistView([null, null, null], null)).toBe("hidden");
+    expect(checklistView([null, null, null], "open")).toBe("full");
+    expect(checklistView(["done", "done", "done"], null)).toBe("hidden");
+    expect(checklistView(["done", "done", "done"], "open")).toBe("complete");
+    expect(checklistView(["done", "todo", "todo"], "dismissed")).toBe("compact");
+    expect(checklistView(["done", "done", "done"], "dismissed")).toBe("hidden");
+    expect(checklistView(["todo", "todo", "todo"], "closed")).toBe("hidden");
+  });
+});

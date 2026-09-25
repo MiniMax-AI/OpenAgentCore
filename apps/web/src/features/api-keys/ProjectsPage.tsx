@@ -9,7 +9,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
 import { useFailureToast } from "../../components/Toast";
-import { useConsoleNavigation } from "../../lib/console-navigation";
+import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
 import { activeKeyNames, flowError, isAbort, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
@@ -23,7 +23,8 @@ import { type AdminKey, archiveProject, createProject, type Project, renameProje
 import { TableSkeleton } from "../../components/Skeleton";
 
 type Dialog =
-  | { kind: "create"; name: string }
+  /** `thenIssue`: Getting started continues from the new project to its first key. */
+  | { kind: "create"; name: string; thenIssue?: boolean }
   | { kind: "rename"; project: Project; name: string }
   | { kind: "archive"; project: Project }
   | { kind: "revoke"; project: Project; key: AdminKey; activeCount: number };
@@ -86,6 +87,11 @@ export function ProjectsPage() {
   };
   const openDialog = (next: Dialog) => { setDialogError(null); setDialog(next); };
   const closeDialog = () => { if (!dialogBusy) setDialog(null); };
+  // Getting started opens a dialog on arrival: a new project (then its first key), or a key for an open project.
+  useConsoleIntent("create-project", true, () => openDialog({ kind: "create", name: "", thenIssue: true }));
+  useConsoleIntent("issue-key", Boolean(selected && manageable(selected)) && flow.step === "idle", () => {
+    if (selected) dispatch({ type: "openIssue", project: selected });
+  });
 
   const dialogNameProblem = dialog?.kind === "create"
     ? projectNameProblem(dialog.name, names)
@@ -105,7 +111,8 @@ export function ProjectsPage() {
       if (current.kind === "create") {
         const project = await createProject(normalizeName(current.name));
         setCreated(project);
-        open(project.id);
+        // The project page opens anew, so the key dialog follows as its intent.
+        navigate("projects", { id: project.id }, current.thenIssue ? "issue-key" : undefined);
       } else if (current.kind === "rename") {
         await renameProject(current.project.id, normalizeName(current.name));
       } else if (current.kind === "archive") {

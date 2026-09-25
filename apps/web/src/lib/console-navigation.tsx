@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
 
 import type { ConsoleView } from "./console-routes";
 
@@ -32,16 +32,27 @@ export function hashWithParams(base: string, params: RouteParams = {}): string {
   return `${base || "#overview"}?${suffix}`;
 }
 
+/**
+ * A dialog a link asks its target page to open on arrival, such as Add node
+ * from Getting started. It lives only in memory: a reload, Back or any other
+ * navigation drops it, so the dialog never reopens on its own.
+ */
+export type ConsoleIntent = "add-node" | "create-project" | "issue-key";
+
 export interface ConsoleNavigation {
   view: ConsoleView;
   params: RouteParams;
-  navigate: (view: ConsoleView, params?: RouteParams) => void;
+  /** What the link that opened this page asked it to open, until the page takes it. */
+  intent: ConsoleIntent | null;
+  navigate: (view: ConsoleView, params?: RouteParams, intent?: ConsoleIntent) => void;
   /**
    * Returns to the page the user came from inside the console (a Skill opened
    * from a template goes back to the template); a page opened directly, from a
    * link or a reload, goes to `view` instead.
    */
   back: (view: ConsoleView, params?: RouteParams) => void;
+  /** Drops the intent once its page has acted on it. */
+  clearIntent: () => void;
 }
 
 /** How many console pages lie behind the current history entry. */
@@ -54,10 +65,24 @@ export function consoleDepth(): number {
 export const ConsoleNavigationContext = createContext<ConsoleNavigation>({
   view: "overview",
   params: {},
+  intent: null,
   navigate: () => undefined,
   back: () => undefined,
+  clearIntent: () => undefined,
 });
 
 export function useConsoleNavigation(): ConsoleNavigation {
   return useContext(ConsoleNavigationContext);
+}
+
+/** Runs `act` once when this page was opened with `intent` and it can act on it. */
+export function useConsoleIntent(intent: ConsoleIntent, ready: boolean, act: () => void): void {
+  const { intent: current, clearIntent } = useConsoleNavigation();
+  const action = useRef(act);
+  action.current = act;
+  useEffect(() => {
+    if (current !== intent || !ready) return;
+    clearIntent();
+    action.current();
+  }, [current, intent, ready, clearIntent]);
 }
