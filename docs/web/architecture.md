@@ -35,7 +35,7 @@ The console authenticates the browser, checks the request origin and forwards on
 allowed management routes. It replaces browser authorization and actor headers,
 strips browser cookies, and supplies its server-side deployment credential. Core
 rejects application keys on management routes and deployment credentials on `/v1`.
-The forwarded audit actor label is not Core authorization.
+The forwarded audit actor label is always `console` for console operations (operator scripts calling Core with the Core key directly have none); it is display only, not Core authorization.
 
 Node and daemon connections use `/api/v1` with their own credentials. The reverse
 proxy sends them directly to Core; the console never forwards them, and they do not
