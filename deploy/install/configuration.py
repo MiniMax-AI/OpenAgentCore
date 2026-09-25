@@ -123,6 +123,16 @@ def core_environment(root, config, state):
     return result
 
 
+def retained_digest(retained):
+    if not retained:
+        return None
+    try:
+        return sha256(Path(retained["path"]).read_bytes())
+    except OSError:
+        raise RuntimeError(f'{retained["path"]}, named by AGENTS_API_EXECUTION_OPTIONS_FILE, is missing; '
+                           "restore it") from None
+
+
 def settings_document(root, config, applied_at):
     root = Path(root)
     return {"path": str(root / "config.json"), "apply_command": f"{root / 'parsar'} apply",
@@ -224,7 +234,7 @@ def render(root, config, state, applied_at):
             "settings": sha256(json.dumps([settings["path"], settings["apply_command"], core_settings], sort_keys=True)),
             "runtime-history.json": sha256(files.get("runtime-history.json", "")),
             "credential.key": secrets["credential.key"], "database.password": secrets["database.password"],
-            "execution-options": sha256(Path(retained["path"]).read_bytes()) if retained else None,
+            "execution-options": retained_digest(retained),
         }, sort_keys=True))
         if native:
             unit = native_service.unit_name(state)

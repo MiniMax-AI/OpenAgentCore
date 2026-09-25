@@ -490,14 +490,25 @@ def applied_view(root, state, config):
     """public_url, ports and web.core_url as last applied, which the running services use."""
     values = previous_values(root, state, edited_files(root, state))
     if values is None:
+        if config is None:
+            raise ParsarError("Neither config.json nor the last applied settings can be read")
         return config
-    return {"mode": config["mode"], "public_url": values.get("public_url"),
+    return {"mode": state["mode"], "public_url": values.get("public_url"),
             "ports": {name: values[f"ports.{name}"] for name in ("core", "web", "database") if f"ports.{name}" in values},
             "web": {"core_url": values.get("web.core_url")}}
 
 
+def load_config_or_report(root, out):
+    """config.json, or None after printing why it can't be used; the applied files still can."""
+    try:
+        return load_config(root)
+    except (ParsarError, config_model.ConfigError) as error:
+        out(str(error))
+        return None, None
+
+
 def status(root, out=print):
-    loaded, config_digest = load_config(root)
+    loaded, config_digest = load_config_or_report(root, out)
     state = load_state(root)
     config = applied_view(root, state, loaded)
     mode = config["mode"]
@@ -560,7 +571,7 @@ def status(root, out=print):
 
 def start(root, out=print):
     with locked(root):
-        config, config_digest = load_config(root)
+        config, config_digest = load_config_or_report(root, out)
         state = load_state(root)
         if config_digest != (state.get("applied") or {}).get("config_sha256"):
             out("Warning: config.json has unapplied changes; starting with the last applied files.")
