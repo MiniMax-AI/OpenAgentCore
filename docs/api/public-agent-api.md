@@ -69,6 +69,7 @@ harnesses and accepts custom model access:
 Any other member of `x_agents_core` is rejected with 400. Deployment, placement,
 credential issuance and operational reads are not part of `/v1`; they belong to
 `/core/v1`, which only the Core key can call (see the [API index](README.md)).
+
 An application reads a Session's model from `agent.model` and an explicitly
 selected harness from `agent.x_agents_core.harness`; a Session on the deployment
 default harness omits `agent.x_agents_core`. `/v1` has no execution-configuration
@@ -77,5 +78,8 @@ read.
 `openai_hosted` keeps the official wire name and means Core-managed compute here.
 The deployment chooses E2B or its own Docker/microsandbox nodes. A public
 `self_hosted` Environment uses caller-owned compute and the same colocated
-Runtime. Our daemon transport and the supported native harness differences are
+Runtime. For a `self_hosted` Session, the deployment operator issues the
+Environment's executor credential with the Core key; see
+[executor credentials](../../contracts/agents-api/environment-executor-credentials.md).
+Our daemon transport and the supported native harness differences are
 explicit; they do not imply interoperability with OpenAI's stock executor transport.

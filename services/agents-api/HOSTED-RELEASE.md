@@ -1,7 +1,8 @@
 # Docker-hosted Agents API
 
-This package runs Core on a Linux amd64 host and creates one colocated
-Runtime per Session through Docker. Each Runtime contains the daemon, stock
+This package adds a qualified Linux amd64 Runtime image for Core-managed
+Sessions on Docker. A registered Docker sandbox node, not Core, creates one
+colocated Runtime per Session. Each Runtime contains the daemon, stock
 Codex 0.153.4, local tools and workspace. Core, its PostgreSQL database and
 operator secrets stay outside the Runtime. No source checkout, compiler,
 Parsar service, product database, separate executor or manual daemon enrollment
@@ -30,46 +31,37 @@ docker image inspect @RUNTIME_IMAGE@ --format '{{.Id}} {{.Os}}/{{.Architecture}}
 The result must be `@RUNTIME_IMAGE@ linux/amd64`. The image is selected by this
 immutable ID; no registry pull or mutable tag is required. Package checksums
 establish transferred bytes, not trust in their distributor or safety of another
-image. Keep the package's `runtime/seccomp.json` available to Core.
+image. Keep the package's `runtime/seccomp.json` available to the node service
+(`seccomp_file` in its provider configuration).
 
 ## Configure Core
 
-Run Core as an operator account with access to the explicit local Docker Unix
-socket. Docker access is privileged host authority; keep Core and this socket
-outside agent workspaces. The Provider never mounts it in a Runtime. Retain the
-same Docker backend, provider UUID, database, caller identities and native volumes
-across Core upgrades. Changing a backend needs a new provider UUID; keep the old
-entry until its allocations are reclaimed.
+Core no longer uses a Docker socket or a managed Runtime file; it rejects
+`AGENTS_API_MANAGED_RUNTIMES_FILE` at startup. PostgreSQL owns the hosted
+deployment: provider, per-sandbox resources and one immutable Runtime release,
+selected with the Core key through `POST /core/v1/sandbox/deployment` (see the
+[deployment contract](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/sandbox-deployment.md)).
+A Docker node registered with `bin/parsar-sandbox-node` owns the host's Docker
+socket and creates the Runtimes; see
+[register a host](HOSTED-SANDBOX-MANAGER.md#register-a-host).
 
-For a local deployment, the following uses the Docker bridge gateway so sandbox
-connections can reach Core. Reserve port 8091 and restrict it to intended clients
-and Runtime containers with the host firewall. For external access, terminate TLS
-with your existing proxy and use its reachable HTTPS/WSS addresses instead.
+A Docker Runtime release names all six identities of one matched distribution:
+source commit, image ID, OCI manifest digest, microsandbox reference, Runtime and
+firmware hashes. This package records only the image ID, so it cannot supply that
+release by itself. Use the Core distribution and its
+[installer](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/docs/getting-started/install.md),
+whose manifest carries the complete release and whose Web console adds Docker
+nodes.
+
+For a manual deployment with a complete release, set these in addition to the
+common configuration, using a stable installation UUID and the HTTPS origin that
+nodes and sandbox guests reach through your TLS proxy:
 
 ```sh
 export AGENTS_API_ADDR=0.0.0.0:8091
-RUNTIME_GATEWAY="$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
-export AGENTS_API_DAEMON_WS_URL="ws://$RUNTIME_GATEWAY:8091/api/v1/agent-daemon/ws"
-export AGENTS_API_MANAGED_RUNTIMES_FILE="$PARSAR_HOME/managed-runtimes.json"
+export AGENTS_API_SANDBOX_INSTALLATION_ID="<installation UUID>"
+export AGENTS_API_DAEMON_WS_URL="wss://core.example/api/v1/agent-daemon/ws"
 export AGENTS_API_EXECUTION_OPTIONS_FILE="$PARSAR_HOME/execution-options.json"
-```
-
-Create the private managed configuration with a fresh stable installation UUID. Replace
-`<installation UUID>`, the gateway and the absolute package path:
-
-```json
-{
-  "core_url": "http://<Docker bridge gateway>:8091/api/v1",
-  "provider": "docker",
-  "installation_id": "<installation UUID>",
-  "maintenance": false,
-  "docker": {
-    "host": "unix:///var/run/docker.sock",
-    "image": "@RUNTIME_IMAGE@",
-    "network": "bridge",
-    "seccomp_file": "<absolute package path>/runtime/seccomp.json"
-  }
-}
 ```
 
 Create `execution-options.json` with your trusted native model configuration.
@@ -86,18 +78,22 @@ For a Responses-compatible model endpoint, the existing Codex adapter accepts:
 }
 ```
 
-Keep both files mode 0600 outside the extracted package. The model endpoint must
+Keep it mode 0600 outside the extracted package. The model endpoint must
 be reachable from the Runtime; a host loopback address is not the container's
 host. Core copies these options into trusted execution preparation without storing
 them in public Session configuration. Never put model credentials in Agent
 instructions, public requests, image layers or a workspace. Configuration changes
-require a Core restart. Leave remote executor URLs unset for this hosted profile.
+require a Core restart.
 
 ```sh
-chmod 0600 "$AGENTS_API_CORE_KEY_DIGESTS_FILE" "$AGENTS_API_MANAGED_RUNTIMES_FILE" "$AGENTS_API_EXECUTION_OPTIONS_FILE"
+chmod 0600 "$AGENTS_API_CORE_KEY_DIGESTS_FILE" "$AGENTS_API_EXECUTION_OPTIONS_FILE"
 "$AGENTS_API_BIN_DIR/agents-api-migrate"
 "$AGENTS_API_BIN_DIR/agents-api"
 ```
+
+Then select `docker` with `https://core.example` as `core_url`, the per-sandbox
+resources and the complete Runtime release, and register a node on a host where
+this image is loaded. Hosted admission starts when a ready node has capacity.
 
 Use your existing service supervisor for long-running operation. Migrations are
 explicit. One Core execution worker owns each database; replicas do not provide
@@ -161,16 +157,16 @@ workspace continuation. Do not turn an uncertain interrupted execution into a ne
 request or delete native history to make a retry succeed.
 
 When finished, `client.beta.agents.sessions.delete(session.id)` requests owned
-Runtime cleanup. Core must remain running with the original Provider configured
-until its labelled container and volumes are gone. Public deletion acknowledgment
+Runtime cleanup. Core and the original node must remain running until its
+labelled container and volumes are gone. Public deletion acknowledgment
 is not physical cleanup confirmation. Do not use broad Docker pruning.
 
-To change providers, restart the old configuration with `maintenance: true`,
-explicitly handle or delete old hosted resources and verify cleanup. Restart the
-new provider configuration in maintenance to validate the empty deployment, then
-restart the same identity with `maintenance: false`. Maintenance blocks new compute
-without deleting retained resources. One deployment runs either Docker or
-[microsandbox](deploy/microsandbox/README.md), with no mixed configuration,
+To change providers, resources or Runtime, follow the
+[maintenance procedure](HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance): enter
+maintenance at the current generation, archive retained hosted Sessions and verify
+cleanup, submit the replacement, then resume. Maintenance blocks new compute
+without deleting retained resources. One deployment runs exactly one provider,
+E2B, Docker or [microsandbox](deploy/microsandbox/README.md), with no mixed configuration,
 engine-to-provider routing or automatic Session migration.
 
 Back up the independent PostgreSQL database

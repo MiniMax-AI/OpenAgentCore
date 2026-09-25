@@ -40,38 +40,27 @@ adds comma-separated deployment-supported engines, for example
 remains enabled; unknown names fail startup.
 This setting does not install a harness or qualify a native deployment.
 
-Hosted placement uses one provider per deployment. Set `provider` to `docker` or
-`microsandbox` in `AGENTS_API_MANAGED_RUNTIMES_FILE`, with a stable
-`installation_id`, a `maintenance` boolean and one matching backend object.
-For example:
-
-```json
-{
-  "core_url": "http://core:8091/api/v1",
-  "provider": "docker",
-  "installation_id": "11111111-1111-4111-8111-111111111111",
-  "maintenance": false,
-  "docker": {
-    "host": "unix:///var/run/docker.sock",
-    "image": "sha256:<qualified-runtime-image>",
-    "network": "bridge",
-    "seccomp_file": "/private/seccomp.json",
-    "nested_sandbox": true
-  }
-}
-```
+Hosted placement uses one provider per deployment, saved in PostgreSQL. Web or
+`POST /core/v1/sandbox/deployment` with the Core key selects `docker`,
+`microsandbox` or `e2b`, the per-sandbox resources and one immutable Runtime
+release (an E2B template build for E2B); see the
+[deployment configuration](sandbox-deployment.md). Core needs a stable
+`AGENTS_API_SANDBOX_INSTALLATION_ID` for this; the installer generates it. Docker
+and microsandbox sandboxes run on enrolled nodes, whose files hold only host paths
+and an installed copy of that selection. The former
+`AGENTS_API_MANAGED_RUNTIMES_FILE` is rejected at startup.
 
 There is no engine-to-provider routing or mixed-provider configuration. Enabling
 another harness does not choose another image or backend; the selected Runtime
 image must contain and qualify each enabled harness. Capability checks still
-apply. Legacy `default_provider`, `engine_providers` and provider maps are rejected.
+apply.
 
-Before changing provider or backend namespace, restart the original configuration
-with `maintenance: true`, explicitly settle or delete its hosted resources and
-confirm cleanup is complete. Restart the new provider configuration in maintenance
-to validate the switch, then disable maintenance without changing its identity.
-Switching never migrates Sessions or deletes resources automatically. See the
-[deployment procedure](../../services/agents-api/deploy/microsandbox/README.md#change-the-deployment-provider).
+Before changing provider, resources or Runtime, enter maintenance at the current
+generation, explicitly archive retained hosted Sessions and confirm cleanup is
+complete. Then submit the replacement and explicitly resume with the returned
+generation. Switching never migrates Sessions or deletes resources automatically.
+See the
+[deployment procedure](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
 
 For multiple engines, use an exclusive `by_harness` object in the private
 `AGENTS_API_EXECUTION_OPTIONS_FILE`, with one existing adapter-options object per

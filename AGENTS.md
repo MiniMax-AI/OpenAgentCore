@@ -13,7 +13,7 @@ no credential works in another namespace.
 | --- | --- | --- | --- |
 | `/v1` | Applications | Project API key | Exactly the pinned OpenAI Agents API route set ([upstream.json](contracts/agents-api/upstream.json): SDK 3.13.0, `agents=v1`). Fields the official types lack live only in `x_agents_core` on Agents and Sessions (`harness`, `model_provider`). Nothing about deployment belongs here. |
 | `/core/v1` | Core Web's server and operator scripts | Core key; Core stores its digest | Everything about operating the deployment: Projects and keys, resource reads and deletion, Session archive, credential issuance (node enrollment tokens, executor credentials), observability, audit, sandbox deployment and nodes. |
-| `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials issued through `/core/v1` | Machine connections only; each credential works only on its own routes. |
+| `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials: enrollment tokens and executor credentials issued through `/core/v1`; nodes register their own credential with an enrollment token; Core writes daemon credentials into hosted sandboxes | Machine connections only; each credential works only on its own routes. |
 
 - Core Web calls only `/core/v1`, through the Core clients in
   `packages/agents-client` (`AdminClient`, `SandboxAdminClient`,
