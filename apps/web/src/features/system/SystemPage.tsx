@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
 import { CopyableId } from "../../components/list-ui";
-import { DetailSkeleton } from "../../components/Skeleton";
+import { TableSkeleton } from "../../components/Skeleton";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatPeriod } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
@@ -18,6 +18,20 @@ import "./system.css";
 
 const MIB = 2 ** 20;
 const providerNames: Record<string, string> = { docker: "Docker", microsandbox: "microsandbox" };
+
+/** A facts card before its first read; the page announces its loading once. */
+function FactsSkeleton({ facts }: { facts: number }) {
+  return (
+    <dl className="system-facts" aria-hidden="true">
+      {Array.from({ length: facts }, (_, index) => (
+        <div key={index} className="system-fact">
+          <dt><span className="skeleton-bar" style={{ width: `${40 + (index * 13) % 24}%` }} /></dt>
+          <dd><span className="skeleton-bar" style={{ width: `${30 + (index * 17) % 30}%` }} /></dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 function Fact({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
   return (
@@ -59,7 +73,7 @@ export function SystemPage() {
   if (!data) {
     body = deployment.isError && !deployment.isFetching
       ? <ErrorState title={t("sandbox.deploymentFailed")} onRetry={refresh} />
-      : <DetailSkeleton label={t("loading")} facts={5} />;
+      : <FactsSkeleton facts={5} />;
   } else if (!data.provider) {
     body = (
       <EmptyState
@@ -119,7 +133,9 @@ export function SystemPage() {
     </Section>
   ) : installation.isError && !installation.isFetching
     ? <ErrorState title={t("installation.failed")} onRetry={() => void installation.refetch()} />
-    : <DetailSkeleton label={t("loading")} facts={4} />;
+    : <FactsSkeleton facts={4} />;
+  // One announcement while either first read is still out; each slot shows only its own placeholder.
+  const reading = (!data && !(deployment.isError && !deployment.isFetching)) || (!about && !(installation.isError && !installation.isFetching));
 
   return (
     <section className="page-section console-page system-page" aria-labelledby="system-heading">
@@ -130,9 +146,10 @@ export function SystemPage() {
         actions={<RefreshButton onClick={refresh} refreshing={deployment.isFetching || installation.isFetching} label={t("refresh")} />}
       />
       <PageBody>
+        {reading ? <p className="visually-hidden" role="status">{t("loading")}</p> : null}
         {facts}
         {body}
-        {about ? <StartupSettings configuration={about.configuration} /> : null}
+        {about ? <StartupSettings configuration={about.configuration} /> : installation.isError ? null : <TableSkeleton rows={4} columns={3} />}
       </PageBody>
     </section>
   );

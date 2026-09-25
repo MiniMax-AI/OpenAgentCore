@@ -3,10 +3,12 @@ const widths = [38, 22, 18, 26, 14, 20, 16];
 /**
  * A first-load placeholder in the shape of the table it stands for. It is shown
  * only when nothing is cached yet; refreshes keep the real rows on screen.
+ * Without a label it stays silent, for a page that announces its loading once.
  */
-export function TableSkeleton({ label, rows = 6, columns = 5 }: { label: string; rows?: number; columns?: number }) {
+export function TableSkeleton({ label, rows = 6, columns = 5 }: { label?: string; rows?: number; columns?: number }) {
+  const announce = label ? { role: "status", "aria-label": label, "aria-busy": true } : { "aria-hidden": true };
   return (
-    <div className="table-frame skeleton-table" role="status" aria-label={label} aria-busy="true">
+    <div className="table-frame skeleton-table" {...announce}>
       <TableSkeletonRows rows={rows} columns={columns} />
     </div>
   );
