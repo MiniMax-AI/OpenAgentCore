@@ -222,7 +222,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // Tense tells a step's state: done in the past, the current one waiting, later ones as plain nouns.
   // Readiness from an unconfirmed read still counts as waiting.
   const labels: Record<StepState, string>[] = [
-    { done: node ? `${t("Registered")} · ${node.name}` : t("Registered"), current: t("Waiting for registration"), future: t("Waiting for registration") },
+    { done: t("Registered · {{name}}", { name: node?.name ?? "" }), current: t("Waiting for registration"), future: t("Waiting for registration") },
     { done: t("Connected"), current: t("Waiting to connect"), future: t("Connect") },
     { done: t("{{backend}} ready", { backend }), current: t("Waiting for {{backend}}", { backend }), future: t("{{backend}} check", { backend }) },
   ];
@@ -255,7 +255,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
           {requirements}
         </form>
       ) : <>
-        {command ? <p>{t("Run on the host you want to add.")}</p> : null}
+        {/* Once used, the command only recovers its own node: running it on another host fails. */}
+        {command ? <p>{registered && node ? t("Rerun only on {{name}} if asked", { name: node.name }) : t("Run on the host you want to add.")}</p> : null}
         {command ? <div className="sandbox-command">
           <div className="sandbox-command-heading">
             <span><Terminal size={15} />{t("Terminal")}</span>
@@ -267,7 +268,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         {copyFailed && !ready ? <p role="alert">{t("Select the command above and copy it manually.")}</p> : null}
         {/* One live region for the whole flow; only its contents change, so each change is announced. */}
         <div role="status" aria-label={t("Registration progress")}>
-          {ready && node ? <div className="sandbox-enrollment-status connected"><span className="sandbox-status-dot" />{`${node.name} · ${t("Connected")}`}</div>
+          {ready && node ? <div className="sandbox-enrollment-status connected"><span className="sandbox-status-dot" />{t("{{name}} · Connected", { name: node.name })}</div>
             : expired && !registered ? <div className="sandbox-enrollment-status"><span className="sandbox-status-dot" />{t("Command expired")} · {t("Generate a new command to continue.")}</div>
             : <ol className="sandbox-enrollment-progress">
               {steps.map((step, index) => <li key={index} className={step.state}><StatusDot tone={step.tone} label={step.label} /></li>)}

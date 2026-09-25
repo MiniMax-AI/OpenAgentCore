@@ -60,6 +60,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await page.getByRole("button", { name: "Add node" }).click();
   await expect(progress).toHaveText(/Registered · edge-04.*Waiting to connect.*Docker check/);
   await expect(add.getByText("Command expired")).toHaveCount(0);
+  await expect(add.getByText("Rerun only on edge-04 if asked")).toBeVisible();
   // Past the installer's minute without connecting, the dialog points at the node's log.
   await page.clock.fastForward("01:01");
   const problem = add.getByRole("alert");
