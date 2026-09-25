@@ -8,24 +8,28 @@ on the Core host. Service
 health and provider state are separate from a Session's public execution state.
 
 Use [Configuration](../configuration.md) for the authoritative setting locations,
-defaults and restart instructions. Core process parameters live in `config/core.env`;
-Compose and systemd only launch the process.
+defaults and restart behavior. Process settings live in the installation's
+`config.json` and take effect with `parsar apply`; Compose and systemd only
+launch the processes from the files `apply` generates.
 
 ## Read service health
 
-Run from the extracted bundle:
+Each installation has its own `parsar` command; it does not need the bundle:
 
 ```sh
-./install.sh --status
+~/.parsar/core/parsar status
 # For a separate installation:
-./install.sh --status --install-dir "$HOME/.parsar/core-console"
+~/.parsar/core-console/parsar status
 ```
 
 The command reads only this installation's service status and health endpoints.
 It prints service names, running/exit state, the native Core service state when
-applicable, and available Docker health state;
-it does not print Compose configuration, environment variables, credentials or
-raw application logs. It never creates a Session or calls a model.
+applicable, and available Docker health state. It also prints the public URL, API
+base URL, source commit, the reverse-proxy routes to configure, `config.json`
+changes that are not applied yet and generated files edited by hand. A Web-only
+installation also checks that its Core accepts its Core key. It does not print
+Compose configuration, environment variables, credentials or raw application
+logs. It never creates a Session or calls a model.
 
 Use these observations for distinct questions:
 
@@ -48,8 +52,8 @@ execution truth from Docker or invent a second lifecycle collector. Use Web's
 Settle active work before a planned restart. Then:
 
 ```sh
-./install.sh --stop
-./install.sh  # Use the same component/packaging/port flags as the initial install.
+~/.parsar/core/parsar stop
+~/.parsar/core/parsar start
 ```
 
 This stops the control-plane services and retains the database, Runtime state and
@@ -63,22 +67,27 @@ transparent continuation of an interrupted native tool. Query the same
 Session after reconnecting; do not create a replacement Session to replay uncertain
 work. The official SSE stream is live, and recovery uses durable resource queries.
 
-The generated Compose file is private because it contains database connection
-credentials. Do not paste `docker compose config`, `docker inspect` or raw logs into
-public issue reports. For local diagnosis, use the exact installation file:
+`parsar start` uses the last applied files; it warns about unapplied `config.json`
+changes. The generated Compose file and `core.env` hold no secrets; secrets reach
+the services as read-only file mounts from `secrets/`. Still, do not paste
+`docker compose config`, `docker inspect` or raw logs into public issue reports.
+For local diagnosis, use the exact installation file:
 
 ```sh
-docker compose -f "$HOME/.parsar/core/compose.json" ps --all
+docker compose -f "$HOME/.parsar/core/generated/compose.json" ps --all
 ```
+
+Do not edit files under `generated/`; `parsar apply` refuses to overwrite hand
+edits until you move them into `config.json`.
 
 ## Core key
 
 Each installation has one management credential, the Core key. The installer
-generates a 64-character random key in `<install dir>/admin/core.key` (default
-install dir `~/.parsar/core`) and writes its SHA-256 digest to
-`admin/core-key-digests.json`. Core reads the digest file named by
-`AGENTS_API_CORE_KEY_DIGESTS_FILE` in `config/core.env`; Web reads the key file
-named by `CORE_CONSOLE_CORE_KEY_FILE`. Both read them only at startup.
+generates a 64-character random key in `<install dir>/secrets/core.key` (default
+install dir `~/.parsar/core`). `parsar apply` writes its SHA-256 digest to
+`generated/core-key-digests.json`. Core reads the digest file named by
+`AGENTS_API_CORE_KEY_DIGESTS_FILE`; Web reads the key file named by
+`CORE_CONSOLE_CORE_KEY_FILE`. Both read them only at startup.
 
 A Core key must have at least 32 characters and no whitespace. Web and the
 Web-only installer refuse a shorter key; Core sees only digests, so it cannot
@@ -92,56 +101,43 @@ The Core key:
 - never authorizes `/v1`. Applications use Project API keys, which in turn cannot
   call `/core/v1`.
 
-Keep it private. `admin/` stays mode `0700` and both files `0600`, owned by the
+Keep it private. `secrets/` stays mode `0700` and its files `0600`, owned by the
 installation user. Of the services, only Web reads `core.key`; Core reads only the
 digest file. Don't copy the key into scripts, shell history, logs or issue reports.
 Operator scripts run on the Core host, call Core's loopback port and read the key
 from its file. This example keeps the key off the command line:
 
 ```sh
-curl -fsS -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.parsar/core/admin/core.key")") \
+curl -fsS -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.parsar/core/secrets/core.key")") \
   http://127.0.0.1:8091/core/v1/projects
 ```
 
 ### Rotate the Core key
 
-1. Generate a new 64-character key and replace both files. The subshell keeps
-   `umask 077` and the key variable out of your shell:
+```sh
+~/.parsar/core/parsar rotate-core-key
+```
 
-   ```sh
-   (
-     cd "$HOME/.parsar/core/admin"
-     umask 077
-     key=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
-     printf '%s\n' "$key" > core.key.new
-     printf '["%s"]\n' "$(printf '%s' "$key" | sha256sum | cut -d' ' -f1)" > core-key-digests.json.new
-     mv core.key.new core.key && mv core-key-digests.json.new core-key-digests.json
-   )
-   ```
+The command asks for confirmation (`--yes` skips it), stops Web, writes a new
+64-character key to `secrets/core.key`, regenerates the digest file, restarts Core
+and waits until it is healthy, then starts Web. It checks that Core accepts the
+new key and rejects the old one. The old key stops working at once, and every Web
+sign-in session ends: sign in again with the new key and update your scripts.
 
-2. Restart Core and Web so they read the new files:
-
-   ```sh
-   docker compose -f "$HOME/.parsar/core/compose.json" up -d --no-deps --force-recreate core web
-   ```
-
-   With native Core, run `systemctl --user restart parsar-<id>-core.service`, then
-   the same Compose command with only `web`. A core-only installation has no `web`
-   service: recreate only `core` (or restart the native service). A separate Web
-   installation keeps its own copy in its `admin/core.key`; replace that file and
-   recreate its `web`.
-3. Sign in to Web again with the new key and update your scripts. The restart
-   ends every Web session, and Core rejects the old key.
-
-The digest file is a JSON array, and Core accepts every digest it lists. To give
-scripts time to switch, you can list the old and new digests, restart Core, and
-then remove the old digest and restart Core again. Web holds only one key.
+A separate Web-only installation keeps its own copy of the key. After rotating,
+copy `secrets/core.key` from the Core host to that installation's
+`secrets/core.key` (mode `0600`) and run its `parsar apply`; its `parsar status`
+reports a key that Core rejects. `rotate-core-key` refuses to run on a Web-only
+installation, because Core owns the key.
 
 ### Upgrade an existing installation
 
-Earlier releases used other names for these files and settings. Current Core and
-Web refuse to start while an old setting is present, and the error names the
-replacement. Stop the services, then:
+Installations made before `config.json` move to the current layout with
+[`install.sh --convert`](install.md#convert-an-earlier-installation). Conversion
+expects the Core key names below. Earlier releases used other names for these
+files and settings; current Core and Web refuse to start while an old setting is
+present, and the error names the replacement. For such an installation, stop the
+services and rename them first:
 
 | Old | New | Where |
 | --- | --- | --- |
@@ -178,9 +174,10 @@ Retain together:
 
 - the dedicated PostgreSQL volume, including Projects, API-key digests, provenance
   and large objects;
-- `config/credential.key`, the database-owned deployment specification and installation identity;
-- `admin/`, including on zero-node installations, containing the
-  [Core key](#core-key) and its digest file;
+- the installation directory: `config.json`, `state.json` (installation identity)
+  and `secrets/`, whose `credential.key` must stay with the database and whose
+  `core.key` is the [Core key](#core-key), including on zero-node installations;
+- the database-owned deployment specification;
 - each separately installed node's private configuration and persistent identity
   directory on its host (`~/.parsar/nodes/<installation-id>/` for the Web-generated
   installer), as described in the
@@ -201,8 +198,9 @@ Vault credentials require it. Never prune Docker volumes or delete native histor
 to make a retry pass. Public Session deletion acknowledgement does not prove that
 all physical provider resources have been reclaimed.
 
-This first installer supports fresh installation and same-release restart. It
-refuses automatic replacement of an installed revision. For a reviewed upgrade,
+The installer supports fresh installation, same-release repair and
+[conversion](install.md#convert-an-earlier-installation) of an installation made
+before `config.json`. It refuses automatic replacement of an installed revision. For a reviewed upgrade,
 back up the coordinated state, retain the previous distribution, settle execution,
 apply the existing Core migration workflow and replace matched service/Runtime
 artifacts while retaining identities and backend paths. Qualify recovery before
@@ -225,8 +223,9 @@ Upgrading to a release that serves node connections at `/api/v1/sandbox-node/*`:
    node host, stop the old node service and move `~/.parsar/nodes/<installation-id>/`
    aside as a backup before running the new command from Web.
 
-The installer refuses component/packaging flag changes on an existing installation.
-Rerunning it does not resize sandboxes or replace the database selection. Use Web
+The installer refuses flags on an existing installation; change process settings
+in `config.json` with `parsar apply`. Rerunning it does not resize sandboxes or
+replace the database selection. Use Web
 or the administrator API for the initial selection and all later provider,
 per-sandbox resource or Runtime changes:
 
@@ -322,8 +321,8 @@ into a Web redesign or a complete protocol-compatibility claim.
 ### API-key write history
 
 Core records committed public resource writes and their key ownership for the
-administrator console. Configure `AGENTS_API_WRITE_AUDIT_RETENTION` (Go duration,
-minimum `1h`, default `2160h`) to control non-creation history. Creation ownership
+administrator console. Set `core.write_audit_retention` in `config.json` (Go
+duration, minimum `1h`, default `2160h`) to control non-creation history. Creation ownership
 remains permanently; removing keys or resources does not cascade-delete records.
 Projects and their API keys are database records. Keys within one Project share
 assets and the same execution principal, while provenance identifies the actual
