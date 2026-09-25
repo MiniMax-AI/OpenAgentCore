@@ -188,11 +188,26 @@ credentials are supplied with execution requests, not during node installation.
 ## Connect a user-managed Runtime
 
 A `self_hosted` Session uses your own execution machine; it does not enroll that
-machine as a shared sandbox node. Create the Session through the public API, then
-use your project caller credential to obtain a restricted credential for its
-Environment. The [credential contract](../../contracts/agents-api/environment-executor-credentials.md)
-describes issuance, rotation and revocation. Save the response to an owned,
-mode-0600 file. Keep the project caller key on your application machine.
+machine as a shared sandbox node. The application creates the Session through
+`/v1` with its Project API key. The deployment operator then issues a restricted
+credential for the Session's Environment with the Core key, in Web or with a
+script against Core's loopback port:
+
+```sh
+umask 077
+curl -fsS -X POST \
+  "http://127.0.0.1:8091/core/v1/projects/$PROJECT_ID/environments/$ENVIRONMENT_ID/executor-credentials" \
+  -H "Authorization: Bearer $CORE_KEY" -H "Content-Type: application/json" \
+  -d "{\"key_id\":\"$(python3 -c 'import uuid; print(uuid.uuid4())')\"}" \
+  -o executor-key.json
+```
+
+The response is the credential file; its secret appears only once. If the
+outcome is uncertain, list the credentials and rotate the same `key_id` instead
+of issuing another. The [credential contract](../../contracts/agents-api/environment-executor-credentials.md)
+describes issuance, rotation and revocation. Give the file to the executor host
+as an owned, mode-0600 file. The Core key and the application's
+`$PROJECT_API_KEY` never leave their own machines.
 
 After saving the restricted credential on your execution machine, run one command
 with your Core origin, Environment ID and returned `remote_url`. This downloads
@@ -329,9 +344,9 @@ hostname. Configure your TLS reverse proxy with these routes:
 | `/api/v1/*` | Core (loopback 8091) | Nodes and Runtime daemons, with their own machine credentials |
 | Everything else, including `/core/v1/*` and `/node-install/*` | Web (loopback 8080) | Browsers and the console |
 
-The project executor-credential API (`/core/v1/environments/{id}/executor-credentials`)
-is the one exception under `/core`: route it to Core as well. Preserve Host and
-support WebSocket upgrades. Web answers 404 on `/v1` and `/api/v1` and never
+Web forwards signed-in `/core/v1` requests to Core with the Core key; operator
+scripts call `/core/v1` on Core's loopback port instead of the public entry.
+Preserve Host and support WebSocket upgrades. Web answers 404 on `/v1` and `/api/v1` and never
 forwards them. A proxy that sends those paths to Web breaks application calls,
 node enrollment and every Runtime daemon connection (`/api/v1/agent-daemon/ws`)
 for Docker, microsandbox, self-hosted and E2B sandboxes alike. When upgrading from

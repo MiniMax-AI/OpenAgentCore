@@ -1,9 +1,12 @@
 # Administrator API
 
-This Core extension uses deployment Bearer authentication under `/core/v1/admin`.
-It does not change `/v1`, the fixed Python SDK, or native Runtime interfaces.
-API keys cannot authenticate these routes; the administrator credential cannot
-authenticate `/v1`. The console server supplies `X-Core-Console-Actor` from its
+These routes live under `/core/v1` and are called by Core Web's server and
+operator scripts. Every `/core/v1` route requires the Core key as a Bearer
+credential; an unknown `/core/v1` path returns 404 only after authentication.
+They do not change `/v1`, the fixed Python SDK, or native Runtime interfaces.
+Project API keys and machine credentials cannot authenticate these routes; the
+Core key cannot authenticate `/v1` or `/api/v1`. Paths below are relative to
+`/core/v1`. The console server supplies `X-Core-Console-Actor` from its
 signed-in account. Core records it only as an unverified display label.
 
 ## Projects and keys
@@ -11,8 +14,8 @@ signed-in account. Core records it only as an unverified display label.
 A Project owns one tenant and shared principal. Its keys have equal access to all
 its assets. Projects and keys are database-owned; deployment configuration defines
 neither. There are no API users, roles or configuration-managed business keys.
-Core requires a separate deployment administrator credential at startup for
-bootstrap and management.
+Core requires the Core key, configured separately from Project keys, at startup
+for bootstrap and management.
 
 | Operation | Path | Result |
 | --- | --- | --- |
@@ -23,8 +26,13 @@ bootstrap and management.
 | List keys | `GET /projects/{project_id}/keys` | `{data, has_more}` |
 | Issue key | `POST /projects/{project_id}/keys` with `{name}` | Key metadata and one-time `key`; HTTP 201 |
 | Revoke key | `DELETE /projects/{project_id}/keys/{key_id}` | `{id, deleted: true}` |
+| List executor credentials | `GET /projects/{project_id}/environments/{environment_id}/executor-credentials` | `{data}` metadata only |
+| Issue or rotate executor credential | `POST /projects/{project_id}/environments/{environment_id}/executor-credentials` with `{key_id, rotate}` | One-time credential; HTTP 201 |
+| Revoke executor credential | `DELETE /projects/{project_id}/environments/{environment_id}/executor-credentials/{key_id}` | HTTP 204 |
 
-IDs are server-generated UUIDs. Project metadata contains `id`, `name`,
+Executor credentials apply only to a `self_hosted` Environment of the Project
+whose Session exists; see [executor credentials](environment-executor-credentials.md).
+Project and key IDs are server-generated UUIDs. Project metadata contains `id`, `name`,
 `created_at`, nullable `archived_at`, and `active_key_count`. Key metadata contains
 `id`, `project_id`, `name`, `prefix`, `created_at`, and nullable `revoked_at`.
 Project names contain 1–128 characters; key names contain 1–80. Names are display
@@ -73,7 +81,7 @@ reject HEAD with 405, so HEAD never samples a provider or queries telemetry.
 
 `POST /projects/{project_id}/sessions/{session_id}/archive` takes
 `{"expected_generation": N}`, where N is a positive uint64 from the current
-sandbox deployment. It requires deployment administrator authentication, a
+sandbox deployment. It requires the Core key, a
 Web-managed deployment in maintenance and the current generation. Missing
 maintenance or a stale generation returns 409. Only Core-managed
 `openai_hosted` Sessions are eligible; other environment types return 400. A
@@ -130,7 +138,7 @@ Null public Session usage contributes no tokens but counts in the coverage
 denominator. Each Project is read from one database snapshot; the page is not a
 simultaneous deployment-wide snapshot. Totals are not billing records.
 
-`GET /runtime-observations` uses existing Session creation-order pagination and
+`GET /sandbox/runtime-observations` uses existing Session creation-order pagination and
 returns `{object:"list", data:[{project_id, observation}], has_more, first_id, last_id}`.
 It reuses the bounded read-only Runtime sampler and never provisions compute; a
 provider with a batch metrics read (E2B) samples the page in one bounded request.
@@ -142,6 +150,9 @@ observation read keeps the shape without `disk`. The per-Session execution
 configuration, Runtime observation and Runtime history exist only here; `/v1` has
 no equivalents.
 
+`GET /metrics?range=1h|6h|24h|7d` returns Core's own process metrics; see
+[Core metrics](core-metrics.md).
+
 `GET /audit-log` lists administrator writes newest first with `project_id`,
 `resource_type`, `resource_id`, `action`, inclusive `created_after`, exclusive
 `created_before`, `limit=1..100` (default 50), and opaque `after` filters. Response
@@ -149,19 +160,21 @@ is `{data, has_more, next_cursor}`. Each row has `id`, `created_at`,
 `admin_credential_id` (credential digest prefix), `actor_label`, `action`,
 `project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id`,
 `trace_id`. `result_ids` is an empty array except on historical `copy` entries.
+Executor credential writes appear with `resource_type:"executor_credential"`,
+the key ID as `resource_id` and action `issue`, `rotate` or `revoke`.
 No credential values or request bodies are recorded. Logs and historical copy
 ownership do not cascade away on resource removal or key revocation.
 
 ## Private installation transition
 
 The old configured business keys, inherited-binding issuer and key-space
-management routes are removed. Deployment administrator credentials remain
-separately configured. The
+management routes are removed. The Core key remains separately configured. The
 migration refuses an installation containing old issued key records instead of
 silently changing their ownership or deleting data. Use a clean private deployment,
 or explicitly retire old key records after preserving the assets and evidence you
 need. There is no automatic data migration or historical ownership backfill.
 
-The typed `AdminClient` in `packages/agents-client` uses this management surface.
+The typed `AdminClient`, `SandboxAdminClient` and `CoreMetricsClient` in
+`packages/agents-client` use `/core/v1`.
 Public SDK applications continue to use the existing Agents API client and their
 own API key. See [design principles](../../docs/design-principles.md).

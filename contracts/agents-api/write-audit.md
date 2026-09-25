@@ -70,14 +70,13 @@ a separate public write. Public resource IDs retain their existing formats.
 
 ## Console queries
 
-Both endpoints require deployment Bearer authentication under
-`/core/v1/admin/projects/{project_id}`. The path identifies the Project, including an
+Both endpoints require the Core key under `/core/v1/projects/{project_id}`. The path identifies the Project, including an
 archived Project; it does not authenticate. API keys cannot call these
 routes.
 
 ### Batch ownership
 
-`GET /core/v1/admin/projects/{project_id}/resource-owners?resource_type=agent&resource_ids=id1,id2`
+`GET /core/v1/projects/{project_id}/resource-owners?resource_type=agent&resource_ids=id1,id2`
 
 `resource_type` is one of `agent`, `session`, `environment`,
 `environment_template`, `skill`, `skill_version`, `file`, `vault`, `credential`,
@@ -96,7 +95,7 @@ had a public API-key write. See [historical copy provenance](admin-api.md#histor
 
 ### Operations
 
-`GET /core/v1/admin/projects/{project_id}/write-operations?limit=50`
+`GET /core/v1/projects/{project_id}/write-operations?limit=50`
 
 Optional filters: `key_id`, `resource_type`, `resource_id`, `created_after`
 (inclusive RFC3339 timestamp), `created_before` (exclusive RFC3339 timestamp).

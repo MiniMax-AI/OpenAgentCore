@@ -1,33 +1,8 @@
-# Core startup configuration
+# Core startup configuration (removed)
 
-`GET /core/v1/admin/startup-configuration` returns a read-only snapshot of safe
-configuration facts established when the Core process starts. It is an
-administrator read outside the pinned upstream Agents API. The former project route
-`GET /v1/agents/core/startup-configuration` is removed; `/v1` serves only the
-pinned upstream routes.
-
-The response separates:
-
-- `supported`: harness and managed sandbox provider kinds compiled into this Core
-  build; and
-- `configured`: the default and enabled harnesses, daemon gateway/self-hosted
-  composition, selected managed provider and maintenance state, plus whether an
-  operator-supplied model endpoint is present for each enabled harness.
-
-Model endpoint reporting is boolean. Core never returns the URL, credentials,
-headers, query parameters, raw execution options or their file path. Managed
-sandbox output is limited to `docker`, `microsandbox` or no selected provider; it
-does not expose installation IDs, socket/runtime paths, image references or
-provider-native identifiers.
-
-This snapshot never reads or aggregates daemon heartbeats, Runtime registrations,
-Sessions, Environments or allocations. `configured` does not mean reachable,
-authenticated, ready, isolated or successfully executed. Those observations belong
-to the scoped Session or Environment. A Session may also supply the separate
-[write-only model execution extension](model-execution.md); that private input is
-not reflected in this process-level endpoint.
-
-The response has a fixed `schema_version`. Clients should reject unknown or
-incomplete shapes rather than infer configuration. The endpoint rejects query
-parameters, returns `Cache-Control: no-store`, and requires the deployment
-administrator credential.
+The startup configuration read is removed, with no replacement route. Neither
+`GET /core/v1/admin/startup-configuration` nor the earlier
+`GET /v1/agents/core/startup-configuration` exists; `/v1` serves only the pinned
+upstream routes and `/core/v1` has no equivalent. A Session's committed harness
+and model selection remain available through the administrator
+[execution configuration](execution-configuration.md) read.

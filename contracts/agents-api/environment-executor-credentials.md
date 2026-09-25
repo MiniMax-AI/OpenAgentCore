@@ -1,19 +1,34 @@
 # Environment executor credentials
 
-These Core extensions are outside the pinned upstream Agents API. They use the
-same project caller authentication as Session creation, without `OpenAI-Beta`.
-They require the exact authenticated creator of a live `self_hosted` Session;
-project-shared Session read access does not grant issuance authority.
+An executor credential lets one self-hosted executor host enroll its daemon and
+connect for one `self_hosted` Environment. The application creates the
+`self_hosted` Session with its Project API key; the operator then issues the
+credential with the Core key, through Web or a Core-key script, and gives the
+returned credential file to the executor host. Project API keys cannot issue
+credentials; the former Project-key route
+`/core/v1/environments/{environment_id}/executor-credentials` is removed.
 
-`POST /core/v1/environments/{environment_id}/executor-credentials` accepts:
+## Routes
 
-```json
-{"key_id":"CLIENT_GENERATED_UUID","rotate":false}
-```
+All routes are under
+`/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials`
+and require the Core key. They apply only to a `self_hosted` Environment of that
+Project whose Session exists (is not deleted); any other Project, Environment
+type, missing Environment or deleted Session returns 404.
+
+| Operation | Request | Result |
+| --- | --- | --- |
+| List | `GET …/executor-credentials` | `{"data":[{"key_id","created_at","revoked_at"}]}` |
+| Issue or rotate | `POST …/executor-credentials` with `{"key_id":"UUID","rotate":false}` | 201 credential file, returned once |
+| Revoke | `DELETE …/executor-credentials/{key_id}` | 204 |
+
+The list holds metadata only, oldest first, for the credentials restricted to this
+Environment; `revoked_at` is null while a credential is active. It never contains
+a secret.
 
 `key_id` is a canonical nonzero UUID chosen and retained before the request.
-`rotate` is optional and defaults to false. The 201 response is the existing
-daemon credential-file format:
+`rotate` is optional and defaults to false. The 201 response is the daemon
+credential-file format:
 
 ```json
 {"key_id":"UUID","environment_id":"ENVIRONMENT_UUID","executor_token":"ONE_TIME_SECRET"}
@@ -21,24 +36,31 @@ daemon credential-file format:
 
 Responses use `Cache-Control: no-store`. Save the response directly to an owned
 mode-0600 file; never place it in shell arguments, logs, a workspace or source.
-Only its digest is persisted in Core. The secret authorizes daemon enrollment
-and connection for this exact Environment, never public Session API calls,
-sandbox-node enrollment or project resource operations. The application caller
-key stays on the application machine and is never given to the Runtime.
+Only its digest is persisted in Core. The Project's principal is the credential's
+execution principal. The secret authorizes daemon enrollment and connection
+(`/api/v1/agent-daemon/*`) for this exact Environment only, never `/v1`, `/core/v1`,
+sandbox-node enrollment or project resource operations.
 
-Ordinary issuance with an existing `key_id` returns 409, even after revocation.
-After an uncertain issuance response, explicitly send the same `key_id` with
-`rotate:true` to replace the secret; do not automatically retry a rotation or
-choose another key. Rotation preserves principal and Environment restriction,
-invalidates the previous secret, and can restore an explicitly revoked key.
-Credentials created without an exact Environment restriction by the operator
-CLI cannot be managed through these routes.
+The only write conflict is 409 `executor_credential_exists`: an issuance whose
+`key_id` already exists and does not set `rotate:true`, even after revocation.
+Rotation replaces the secret of an existing key restricted to this Environment,
+keeps that Environment, invalidates the previous secret and restores a revoked
+key; rotating an unknown `key_id` returns 404. Revocation is idempotent and
+returns 204 each time. It denies further enrollment and connection; it does not
+stop executor-owned compute or prove that an existing process has stopped.
 
-`DELETE /core/v1/environments/{environment_id}/executor-credentials/{key_id}`
-returns 204 and revokes the exact caller-owned restricted key. Repeated
-revocation is safe. Other principals, targets and deleted Sessions return 404.
-Revocation denies further authorized connection and dispatch; it does not stop
-user-owned compute or prove that an existing process has stopped.
+After an uncertain result, such as a timeout, do not retry automatically. List
+the credentials, then either rotate the same `key_id` (it was issued but its
+secret was lost) or issue it again (it was not issued).
+
+Issue, rotate and revoke each record an administrator audit entry
+(`resource_type:"executor_credential"`, the key ID as `resource_id`, action
+`issue`, `rotate` or `revoke`) in the same transaction as the write. The audit
+never contains the secret. Credentials issued by the operator CLI
+(`agents-api-environment-key`) without an Environment restriction cannot be
+managed through these routes.
+
+## Executor host
 
 The distribution's `self-hosted-install.pyz` downloads the matching
 `parsar-runtime` launcher, Runtime image and seccomp profile. The local launcher

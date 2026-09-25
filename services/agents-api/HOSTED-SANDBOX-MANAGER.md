@@ -94,8 +94,8 @@ gateway using `AGENTS_API_DAEMON_WS_URL`. Do not also set
 bootstrap and its public daemon WebSocket address; it never uses request Host or
 forwarded headers. Preserve the installation UUID and database together.
 
-The startup configuration API remains a startup snapshot. Use the live sandbox
-deployment response for a selection made after startup.
+Use the live sandbox deployment response (`GET /core/v1/sandbox/deployment`) for
+the current selection, including one made after startup.
 
 ## Resources and Runtime
 
@@ -273,7 +273,7 @@ Provider, resource-limit and Runtime changes share one deployment-wide procedure
    before another write. Saving never automatically deletes compute.
 
 During maintenance, explicitly archive each retained Core-managed hosted Session
-through `POST /core/v1/admin/projects/{project_id}/sessions/{session_id}/archive`
+through `POST /core/v1/projects/{project_id}/sessions/{session_id}/archive`
 with the current `expected_generation`. This requests cancellation and revokes
 Runtime authority; the existing lifecycle releases compute and snapshots after
 provider verification. Poll GET on the same path for `released`, then verify both

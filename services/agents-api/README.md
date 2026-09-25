@@ -166,8 +166,8 @@ Projects and API keys live only in the database. Configuration files contain
 infrastructure settings and deployment credentials, not business identities.
 Installation creates no Project or application key. Using the
 [administrator API](../../contracts/agents-api/admin-api.md), create a Project with
-`POST /core/v1/admin/projects` and issue a named key with
-`POST /core/v1/admin/projects/{project_id}/keys`. Both requests accept a JSON object containing `name`;
+`POST /core/v1/projects` and issue a named key with
+`POST /core/v1/projects/{project_id}/keys`. Both requests accept a JSON object containing `name`;
 Core generates the identifiers. The Web management screens still need migration;
 see [integration status](../../docs/web/README.md).
 
@@ -486,7 +486,12 @@ reuse the same exact binding and `LocalEnvironment` preparation path. Service-or
 HTTP MCP is rejected on this placement; `none` MCP and separately qualified hosted
 Environment Plugin MCP remain available within their own limits.
 
-An operator issues a connect-only principal executor key using the existing issuer:
+An operator issues the Environment's connect-only executor credential with the
+Core key, through Web or
+`POST /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials`
+([executor credentials](../../contracts/agents-api/environment-executor-credentials.md)),
+and gives the returned credential file to the executor host. With direct database
+access, the operator CLI can instead issue a principal executor key:
 
 ```bash
 umask 077

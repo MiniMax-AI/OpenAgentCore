@@ -7,8 +7,8 @@ identity joins. Durable history uses the separate optional
 [Runtime history API](runtime-history-api.md); lifecycle controls remain outside
 this phase.
 
-These are administrator reads under `/core/v1/admin`, authenticated by the
-deployment administrator credential, not upstream OpenAI Agents resources. The
+These are administrator reads under `/core/v1`, authenticated by the Core key,
+not upstream OpenAI Agents resources. The
 former project routes `GET /v1/agents/runtime-observations` and
 `GET /v1/agents/sessions/{session_id}/runtime-observation` are removed.
 
@@ -17,7 +17,7 @@ former project routes `GET /v1/agents/runtime-observations` and
 ### List current Runtime observations
 
 ```http
-GET /core/v1/admin/runtime-observations?after={session_id}&limit=20&order=desc
+GET /core/v1/sandbox/runtime-observations?after={session_id}&limit=20&order=desc
 Authorization: Bearer ...
 ```
 
@@ -84,7 +84,7 @@ before publishing a new Dashboard snapshot.
 ### Retrieve one Session's current Runtime observation
 
 ```http
-GET /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-observation
+GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-observation
 Authorization: Bearer ...
 ```
 
@@ -189,7 +189,7 @@ Use the existing Agents API error envelope.
 | --- | --- | --- |
 | 400 | `invalid_request_error` / `invalid_request_error` | List: a repeated supported query key, or an empty or invalid limit or order, with the shared Beta list messages. Unknown list query keys are ignored. |
 | 400 | `invalid_request_error` / `unsupported_parameter` | Single-Session retrieval with any query parameter. |
-| 401 | `invalid_request_error` / `invalid_admin_key` | Missing or invalid administrator credential. |
+| 401 | `invalid_request_error` / `invalid_admin_key` | Missing or invalid Core key. |
 | 404 | `not_found_error` / `not_found_error` | Missing, malformed or foreign Session/cursor, indistinguishably, as for the [Session list cursor](list-query-semantics.md#list-cursor-errors--september-23-2026). |
 | 500 | `server_error` / `internal_error` | Integrity, ownership, or invalid provider evidence. |
 | 503 | `server_error` / `execution_unavailable` | Required Runtime observation service is not configured, or list collection exceeded its request budget. |

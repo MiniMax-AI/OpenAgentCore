@@ -1,7 +1,7 @@
 # Execution configuration queries
 
-These read-only administrator reads describe configuration, not execution health.
-They require the deployment administrator credential. They never contact a model
+This read-only administrator read describes configuration, not execution health.
+It requires the Core key. They never contact a model
 provider, start a Turn or wake a sandbox. The former project route
 `GET /v1/agents/sessions/{session_id}/execution-configuration` is removed. A
 Session read includes `agent.x_agents_core.harness` only when its Agent selected a
@@ -10,7 +10,7 @@ Agent shape, and no read returns the provider selection.
 
 ## Frozen Session selections
 
-`GET /core/v1/admin/projects/{project_id}/sessions/{session_id}/execution-configuration`
+`GET /core/v1/projects/{project_id}/sessions/{session_id}/execution-configuration`
 returns:
 
 ```json
@@ -64,15 +64,13 @@ secret references, native headers, query parameters and permissions are excluded
 
 ## Discovery boundary
 
-Provider configuration discovery is not exposed. The Core startup-configuration
-read retains its basic supported/configured deployment snapshot and accepts
-no query parameters, including the retired `include=configuration_capabilities`.
-Provider inputs are still validated against internal adapter-owned rules and Core
+Provider configuration discovery is not exposed, and the former Core startup
+configuration read is removed. Provider inputs are still validated against internal adapter-owned rules and Core
 admission policy. Removing discovery does not change the supported inputs or
 create/update/execute behavior.
 
-This Session query and the startup view are administrator reads, not OpenAI Agents
-API operations. Ordinary Agent and Session operations retain their pinned upstream
-contracts. Neither query mutates configuration, rotates keys, migrates Sessions,
+This Session query is an administrator read, not an OpenAI Agents API
+operation. Ordinary Agent and Session operations retain their pinned upstream
+contracts. The query never mutates configuration, rotates keys, migrates Sessions,
 exposes a model catalog or accepts arbitrary native options. See
 [model-execution.md](model-execution.md) for write and inheritance semantics.

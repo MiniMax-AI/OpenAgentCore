@@ -5,13 +5,20 @@ contract follows the repository's pinned upstream baseline; documented native
 harness differences remain explicit. Core extensions must not silently change
 upstream resource shapes or execution semantics.
 
-## Separate data and management APIs
+## Three namespaces, three credentials
 
-Applications use `/v1` with an API key. The administrator console uses
-`/core/v1/admin` and the existing sandbox management API with a deployment
-credential kept on the console server. Core enforces this separation: deployment
-credentials cannot call the Agent API, and API keys cannot call administrator
-operations. Node and daemon transport retain their own credentials.
+Core serves three namespaces, each with one kind of caller and credential:
+
+- `/v1`: applications with a Project API key. Exactly the pinned official routes;
+  Core-only fields live only in `x_agents_core`.
+- `/core/v1`: Core Web's server and operator scripts with the Core key. Everything
+  about operating the deployment, including credential issuance.
+- `/api/v1`: nodes, Runtime daemons and self-hosted executors with machine
+  credentials issued through `/core/v1`; each works only on its own routes.
+
+Core enforces the separation: the Core key cannot call `/v1`, API keys cannot call
+`/core/v1`, and neither works on `/api/v1`. Web calls only `/core/v1` and keeps
+the Core key on its server; users sign in to Web with it.
 
 This is a separation of API authority, not a claim that a deployment administrator
 cannot possess application credentials. An administrator can issue an API key and
@@ -36,7 +43,7 @@ Administrators can still inspect and delete resources in archived Projects.
 Store only API-key digests and necessary metadata. Return plaintext once, on
 issuance, and never replay it after an uncertain response. Project/key mutations
 and administrator audit commit together. Database authentication failures fail
-closed. Deployment administrator credentials remain separately managed.
+closed. The Core key is managed separately, in deployment configuration.
 
 Parsar product identities, workspaces, business permissions and collaboration
 remain outside Core. Parsar is an ordinary API-key holder in a Project.
@@ -50,7 +57,8 @@ and startup settings are deployment infrastructure, not shared business assets.
 
 Administrators can inspect resources and execution history, delete resources under
 the same rules as their public deletion operations, manage Projects and API keys,
-and query operational counts and usage. They cannot use management endpoints to
+issue node enrollment tokens and self-hosted executor credentials, and query
+operational counts and usage. They cannot use management endpoints to
 create, copy or edit arbitrary assets, start a Session, send an event, cancel
 work, or read stored credentials. Project keys share all assets within their
 Project; nothing is shared or copied across Projects.

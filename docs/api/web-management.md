@@ -1,8 +1,9 @@
 # Web management API
 
-Core Web is an administrator console. Resource inspection, Project/key management,
-audit, usage and sandbox operations use management authority. The console has no
-Agent execution, copy or arbitrary asset editing operation.
+Core Web is an administrator console over `/core/v1`, authorized by the Core key:
+resource inspection, Project and key management, credential issuance, audit, usage
+and sandbox operations. It never calls `/v1` or `/api/v1`, and has no Agent
+execution, copy or arbitrary asset editing operation.
 
 ## Browser to console
 
@@ -25,15 +26,18 @@ frontend work.
 
 ## Console to Core
 
-The console server injects its private deployment Bearer credential on allowlisted
-management requests. It removes browser Authorization and forwarding-sensitive
+After sign-in and the same-origin checks, the console server forwards every
+`/core/v1/*` request with its private Core key as the Bearer credential; Core
+alone decides whether the route exists. It removes browser Authorization and forwarding-sensitive
 headers, and supplies the signed-in account name as `X-Core-Console-Actor`.
 Core treats that name as an audit display label, not an authorization input.
 
-Use [AdminClient](../../packages/agents-client/src/admin-client.ts) for the typed
-management client and [the complete administrator reference](../../contracts/agents-api/admin-api.md)
+Web calls Core only through the typed Core clients in `packages/agents-client`:
+[AdminClient](../../packages/agents-client/src/admin-client.ts) (`/core/v1`),
+`SandboxAdminClient` (`/core/v1/sandbox`) and `CoreMetricsClient`
+(`/core/v1/metrics`). See [the complete administrator reference](../../contracts/agents-api/admin-api.md)
 for methods, fields, filters, pagination and response shapes.
-Routes below are relative to `/core/v1/admin`:
+Routes below are relative to `/core/v1`:
 
 | Workflow | Routes |
 | --- | --- |
@@ -42,7 +46,8 @@ Routes below are relative to `/core/v1/admin`:
 | Resource lists/details/deletion | `/projects/{id}/agents`, `/sessions`, `/environment-templates`, `/skills`, `/files`, `/vaults`, including the documented nested reads |
 | Asset ownership | `GET /projects/{id}/resource-owners` with batched resource IDs |
 | Key operation history | `GET /projects/{id}/write-operations` with key/resource/time filters |
-| Usage and health | `GET /summary`, `/runtime-observations` |
+| Executor credentials | `GET/POST /projects/{id}/environments/{environment_id}/executor-credentials`, `DELETE …/executor-credentials/{key_id}` ([contract](../../contracts/agents-api/environment-executor-credentials.md)) |
+| Usage and health | `GET /summary`, `/sandbox/runtime-observations`, `/metrics` |
 | Administrator audit | `GET /audit-log` |
 
 A Project UUID in a management path selects the target; it is not a credential.
@@ -107,12 +112,11 @@ from node configuration and safe deployment views.
 ## Frontend handoff and errors
 
 Frontend screen implementation is owned by the separate frontend task. The
-backend provides the management contract, typed client and console allowlist.
-Existing React screens that call `/v1` must switch before the paired application
-release; backend tests do not qualify those screens.
+backend provides the `/core/v1` contract, the typed Core clients and the console
+proxy; backend tests do not qualify the screens.
 
-The console returns 404 for `/v1`, old `/console/api-keys` routes and application
-executor-credential routes, even with an explicit application Bearer key. Invalid
+The console returns 404 for `/v1`, `/api/v1` and old `/console/api-keys` routes,
+even with an explicit application or machine Bearer credential. Invalid
 Origin/Host requests are rejected; unavailable Core or rejected upstream redirects
 return 502. Console authentication uses its own error envelope. Management resource
 errors and deletion constraints are documented in the administrator reference and
@@ -120,9 +124,9 @@ generated schema; do not interpret every empty or failed read as an absent resou
 
 ## Core metrics
 
-`GET /core/v1/admin/core-metrics?range=1h|6h|24h|7d` returns Core process, execution
-queue/slots, PostgreSQL and background-job measurements. It uses deployment
-administrator authentication, rejects arbitrary query filters and never grants
+`GET /core/v1/metrics?range=1h|6h|24h|7d` returns Core process, execution
+queue/slots, PostgreSQL and background-job measurements. It requires the Core key,
+rejects arbitrary query filters and never grants
 Agent execution access. See the [exact measurement contract](../../contracts/agents-api/core-metrics.md)
 for complete buckets, null values, units and process-local retention. Frontend
 implementation is maintained separately; this backend change does not modify
@@ -130,7 +134,7 @@ Agent metrics or the public Agent API.
 
 ## Node host history
 
-Deployment administrators can read a node and its host history through
+The Core key reads a node and its host history through
 `GET /core/v1/sandbox/nodes/{node_id}?range=1h|6h|24h`. See the
 [node host history contract](../../contracts/agents-api/node-host-history.md)
 for nullable observations, freshness and aggregation. The node list is unchanged.

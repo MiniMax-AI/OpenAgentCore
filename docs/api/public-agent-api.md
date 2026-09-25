@@ -2,7 +2,7 @@
 
 Applications call Core directly with an API key issued inside a Project. They use
 the public API to create and execute Agents, query history, and manage their assets.
-They do not use the console's administrator credential or browser session cookie.
+They never use the Core key or the console's browser session cookie.
 
 ## Authentication and base URL
 
@@ -66,13 +66,15 @@ custom model access:
 | `x_agents_core.harness` | Saved Agent create, update and read; the inline Session `agent`; the Session's effective `agent` | [Harness selection](../../contracts/agents-api/harness-selection.md) |
 | `x_agents_core.model_provider` | Saved Agent create, update and read; Session creation. It takes `protocol`, `base_url`, optional `context_window` and `max_output_tokens`, and a write-only `api_key`; reads return `api_key_configured` instead of the key | [Model execution](../../contracts/agents-api/model-execution.md) |
 
-Any other member of `x_agents_core` is rejected with 400. Deployment, placement
-and operational reads are not part of `/v1`; they belong to the administrator API
-under `/core/v1` (see the [API index](README.md)).
+Any other member of `x_agents_core` is rejected with 400. Deployment, placement,
+credential issuance and operational reads are not part of `/v1`; they belong to
+`/core/v1`, which only the Core key can call (see the [API index](README.md)).
 
-A `self_hosted` Runtime authenticates with an Environment-bound credential issued
-at `/core/v1/environments/{environment_id}/executor-credentials` with the Project
-key; see [executor credentials](../../contracts/agents-api/environment-executor-credentials.md).
+An application creates a `self_hosted` Session with its Project key. The
+deployment operator then issues the Environment's executor credential with the
+Core key under `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials`
+and gives it to the executor host; see
+[executor credentials](../../contracts/agents-api/environment-executor-credentials.md).
 
 `openai_hosted` keeps the official wire name and means Core-managed compute here.
 The deployment chooses E2B or its own Docker/microsandbox nodes. A public

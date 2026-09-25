@@ -73,8 +73,9 @@ docker compose -f "$HOME/.parsar/core/compose.json" ps --all
 
 ## Projects and API keys
 
-Use the [administrator API](../../contracts/agents-api/admin-api.md) to create a
-Project and issue its first key after installation. The Web management migration
+Use Web, or the [Core API](../../contracts/agents-api/admin-api.md) under
+`/core/v1/projects` with the Core key, to create a Project and issue its first key
+after installation. The Web management migration
 is still pending; see [integration status](../web/README.md). No configuration file
 defines Projects or application keys. API-key plaintext is returned once at issuance,
 with only its digest stored in the database.
@@ -193,12 +194,12 @@ persisted Files/Artifacts remain. E2B deployments from that period are not cover
 
 API and console bind to host loopback. With native Core, PostgreSQL publishes an
 installation-specific loopback port; with container Core it has no published port.
-The production Web proxy forwards only allowlisted administrator and sandbox
-management routes after console login. Its deployment credential stays on the
-server. The TLS reverse proxy routes `/v1` (applications) and `/api/v1` (node and
-Runtime daemon connections) directly to Core, together with the project
-executor-credential API under `/core/v1/environments/`. Everything else, including
-console pages, authentication and administration, goes to Web. Web returns 404 for
+After console login and same-origin checks, the production Web proxy forwards every
+`/core/v1` request to Core with the Core key, which stays on the server; Core
+decides which routes exist. The TLS reverse proxy routes `/v1` (applications) and
+`/api/v1` (node and Runtime daemon connections) directly to Core. Everything else,
+including console pages, authentication and `/core/v1`, goes to Web. Operator
+scripts call `/core/v1` with the Core key on Core's loopback port. Web returns 404 for
 `/v1` and `/api/v1`, whatever credential a request carries, and forwards no node or
 daemon traffic. Machine routes keep their own enrollment and connection credentials.
 `/node-install/` serves only the matched non-secret node payload. Web has no Docker

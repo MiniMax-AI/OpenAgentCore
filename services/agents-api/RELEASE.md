@@ -104,6 +104,10 @@ umask 077
   > "$PARSAR_HOME/executor-key.json"
 ```
 
+With the Core key, the same restricted credential can instead be issued through
+`POST /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials`;
+see [executor credentials](../../contracts/agents-api/environment-executor-credentials.md).
+
 Deploy the qualified V1 Runtime containing our daemon, selected native harness,
 local tools and workspace. Transfer only its scoped key into the protected daemon
 state directory as an owned mode-0600 file. Keep API caller and database credentials

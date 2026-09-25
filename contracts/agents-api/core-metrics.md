@@ -1,7 +1,6 @@
 # Core operational metrics
 
-`GET /core/v1/admin/core-metrics?range=1h|6h|24h|7d` is a deployment-administrator
-read. It implements the response shape agreed with Core Web PR #96
+`GET /core/v1/metrics?range=1h|6h|24h|7d` is a Core-key read. It implements the response shape agreed with Core Web PR #96
 (`53dc9d646bc6e3cc2cd9b8bbb353bc53c3513ecf`). It changes neither public `/v1`
 resources nor Agent or Sandbox metrics. Project API keys cannot call it.
 

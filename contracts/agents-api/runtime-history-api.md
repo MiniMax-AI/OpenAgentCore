@@ -3,55 +3,29 @@
 Status: public contract, strict TypeScript client, PostgreSQL history and Core Web
 History ranges implemented. Core uses its existing database; the execution owner
 samples every 30 seconds by default. API-only processes without an execution worker
-advertise on-read collection rather than claiming periodic coverage.
+collect only on read; their Session history read returns
+`503 runtime_history_unavailable` rather than claiming Durable coverage.
 
-These are read-only, backend-neutral administrator reads under `/core/v1/admin`,
-authenticated by the deployment administrator credential. The former project routes
+This is a read-only, backend-neutral administrator read under `/core/v1`,
+authenticated by the Core key. The former project routes
 `GET /v1/agents/runtime-history/capabilities` and
-`GET /v1/agents/sessions/{session_id}/runtime-history` are removed. The browser
-never receives a storage endpoint, OTLP credential, provider-native identity or
-tenant selector.
-
-## Capability discovery
-
-```http
-GET /core/v1/admin/runtime-history/capabilities
-Authorization: Bearer ...
-```
-
-The route accepts no query parameters. An unconfigured Core returns:
-
-```json
-{
-  "object": "agent.runtime_history_capabilities",
-  "available": false,
-  "reason": "not_configured",
-  "collection_mode": null,
-  "sample_interval_seconds": null,
-  "retention_seconds": null,
-  "minimum_step_seconds": null,
-  "maximum_range_seconds": null,
-  "maximum_points": null,
-  "metrics": []
-}
-```
-
-`available=true` requires `collection_mode=periodic`, a qualified positive sample
-interval, a validated Reader, retention and query bounds, and at least one of
-`cpu`, `memory`, or `tokens`. A Reader backed only by request-triggered samples returns
-`reason=periodic_collection_required`; Web must not call that data Durable.
-Malformed capability configuration fails closed as unconfigured. Backend names,
-URLs, credentials, table names, and tenant data are never capability fields.
+`GET /v1/agents/sessions/{session_id}/runtime-history`, and the administrator
+capability read, are removed. History is available only with a validated Reader,
+retention and query bounds and qualified periodic collection; otherwise, or when
+that configuration is malformed, the Session read fails closed with 503. Backend
+names, URLs, credentials, table names and tenant data are never returned. The
+browser never receives a storage endpoint, OTLP credential, provider-native
+identity or tenant selector.
 
 ## Session history
 
 ```http
-GET /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-history?start=1789951200&end=1789954800&max_points=120
+GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history?start=1789951200&end=1789954800&max_points=120
 Authorization: Bearer ...
 ```
 
 `start` is inclusive and `end` is exclusive, both in whole Unix seconds.
-`max_points` defaults to the lower of 120 and the advertised maximum. Core
+`max_points` defaults to the lower of 120 and the configured maximum. Core
 selects an effective whole-second resolution. Unknown parameters, duplicate
 parameters, negative timestamps, invalid ranges, and invalid point limits are
 rejected before a Reader query.
@@ -128,8 +102,7 @@ are measured model usage, not price, cost, or billing records.
 
 Core Web queries each current managed Session through the administrator Session
 route with bounded concurrency and an all-or-nothing target budget, offering 1h,
-6h, and 24h History ranges. Capability discovery exists only on the application
-route above; the administrator API has none. Reloading Web reconstructs the
+6h, and 24h History ranges. Reloading Web reconstructs the
 charts from the backend; Live browser samples and Durable buckets remain explicit
 separate sources and are never silently merged.
 
@@ -138,7 +111,7 @@ separate sources and are never silently merged.
 | HTTP | Code | Meaning |
 | --- | --- | --- |
 | 400 | `unsupported_parameter` or `invalid_request` | Invalid query shape or range. |
-| 401 | `invalid_admin_key` | Missing or invalid administrator credential. |
+| 401 | `invalid_admin_key` | Missing or invalid Core key. |
 | 404 | `not_found` | Missing Project, or a Session outside it. |
 | 409 | `runtime_history_unsupported` | The Session has no supported managed Runtime history scope. |
 | 503 | `runtime_history_unavailable` | Durable history is unconfigured, timed out, unavailable, or returned malformed data. |
@@ -154,7 +127,6 @@ inside the half-open request range, and contain valid safe JSON values.
 
 ```ts
 class AdminClient {
-  getRuntimeHistoryCapabilities(options?: ReadOptions): Promise<RuntimeHistoryCapabilities>;
   retrieveRuntimeHistory(projectId: string, sessionId: string, query: {
     start: number;
     end: number;
@@ -164,7 +136,7 @@ class AdminClient {
 }
 ```
 
-The client validates exact fields, capability consistency, requested-range echo,
+The client validates exact fields, requested-range echo,
 Session identity, half-open bucket ordering, coverage totals, allocation identity,
 contributor counts, token usage ordering, nullability, finite numbers, and response size. Unknown fields
 or malformed data reject the entire response with a 502 `invalid_admin_response` error.
