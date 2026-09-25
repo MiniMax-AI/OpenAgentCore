@@ -59,6 +59,14 @@ Node adds:
   `recommended_max_active`, `selectable_max_active`, `reserved_cpu_cores`,
   `reserved_memory_bytes`, and machine-readable `reasons`.
 
+Capacity reasons are `specification_unavailable`, `specification_mismatch`,
+`deployment_maintenance`, `node_unavailable`, `observation_stale`,
+`host_capacity_unknown`, `insufficient_host_capacity`, `available_memory_unknown`,
+`insufficient_available_memory`, and the advisory `low_observed_disk_space`.
+Check `status` and the saved admission state alongside reasons; low free memory
+can prevent a new activation or increase without invalidating an enabled node's
+saved limits. A name-only edit does not require new capacity.
+
 Existing counts and connectivity fields remain available. `enabled` is saved
 administrator intent; an offline or full enabled node is not pending confirmation.
 A pending node cannot receive automatic or explicit placement. Enrollment payloads
