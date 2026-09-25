@@ -25,7 +25,7 @@ func TestMCPCredentialReferenceIsSchemaNotAuthorization(t *testing.T) {
 func TestSessionVaultTypesAndCreationIntent(t *testing.T) {
 	for _, field := range []string{"", `,"vault_ids":null`, `,"vault_ids":[]`, `,"vault_ids":["vault"]`, `,"vault_ids":[null]`, `,"vault_ids":[3]`, `,"vault_ids":{}`, `,"vault_ids":"vault"`} {
 		var decoded decodedSessionRequest
-		err := json.Unmarshal([]byte(`{"agent":{"model":"model"},"environment":{"type":"none"}`+field+`}`), &decoded)
+		err := json.Unmarshal([]byte(`{"agent":{"model":"model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}`+field+`}`), &decoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -40,6 +40,20 @@ func TestSessionVaultTypesAndCreationIntent(t *testing.T) {
 		intent, err := sessionCreationRequest(input, nil)
 		if err != nil || (len(intent) != 0) != (len(input.VaultIDs) > 0) {
 			t.Fatal("attached inline intent missing or unrelated inline identity changed", err)
+		}
+	}
+	// Where the deployment default may apply, intent is always recorded.
+	for _, environment := range []string{`{"type":"none"}`, `{"type":"openai_hosted"}`} {
+		var decoded decodedSessionRequest
+		if err := json.Unmarshal([]byte(`{"agent":{"model":"model"},"environment":`+environment+`}`), &decoded); err != nil {
+			t.Fatal(err)
+		}
+		input, err := decoded.validated()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if intent, err := sessionCreationRequest(input, nil); err != nil || len(intent) == 0 {
+			t.Fatal("deployment-default intent missing", environment, err)
 		}
 	}
 	var request decodedSessionRequest
