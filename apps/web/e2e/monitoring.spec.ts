@@ -54,6 +54,9 @@ python3 "$d/install.pyz" --source-url 'https://core.example.com' --environment-i
   await section.getByRole("button", { name: "Issue credential" }).click();
   const issued = page.getByRole("dialog", { name: "Executor credential" });
   await expect(issued).toContainText("shown only once");
+  // The command comes with it, so it can be run before the credential is pasted and the dialog closed.
+  await expect(issued).toContainText("Run this command on the host first, then paste the credential below at its prompt and press Done.");
+  await expect(issued.getByLabel("Executor install command")).toContainText("self-hosted-install.pyz");
   // One line of JSON to paste at the installer's hidden prompt; the file is for automation.
   await expect(issued.getByRole("button", { name: "Copy credential" })).toHaveClass(/\bprimary\b/);
   await expect(issued.getByLabel("Executor credential file")).toHaveText(new RegExp(`^\\{"key_id":"[0-9a-f-]{36}","environment_id":"${environmentId}","executor_token":"exec_fixture_\\d+"\\}$`));

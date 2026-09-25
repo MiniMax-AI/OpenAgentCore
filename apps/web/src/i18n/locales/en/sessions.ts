@@ -167,7 +167,12 @@ export const sessions = {
     existsRevoked: "Credential {{id}} already exists and was revoked. Issue again for a new credential.",
     issued: {
       title: "Executor credential",
-      notice: "This credential is shown only once. Copy it now and paste it at the installer's hidden prompt on the host: after you press Done it cannot be shown again.",
+      notice: "This credential is shown only once: after you press Done it cannot be shown again.",
+      next: {
+        inline: "Run this command on the host first, then paste the credential below at its prompt and press Done.",
+        panel: "Run the Connect a host command on the host first, then paste this credential at its prompt and press Done.",
+        save: "Copy it or download the file now, then press Done.",
+      },
       fileLabel: "Executor credential file",
       copy: "Copy credential",
       copied: "Copied",

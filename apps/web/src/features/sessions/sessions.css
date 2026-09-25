@@ -367,7 +367,7 @@
 
 /* The one-time credential file. */
 .modal-card:has(.executor-credential) {
-  width: min(560px, 100%);
+  width: min(640px, 100%);
 }
 
 .executor-credential {
@@ -414,6 +414,13 @@
   color: var(--danger);
   font-size: 12.5px;
   line-height: 18px;
+}
+
+.executor-credential-next {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .executor-credential-hint {

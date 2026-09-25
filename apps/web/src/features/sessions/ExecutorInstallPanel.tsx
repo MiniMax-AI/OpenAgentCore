@@ -7,9 +7,27 @@ import { HelpTip } from "../../components/console-ui";
 import { installationQuery } from "../../lib/installation";
 import { useCopy } from "../api-keys/IssuedKey";
 import { sandboxConsoleConfigQuery } from "../sandbox/sandbox-queries";
-import { executorInstall } from "./executor-install";
+import { executorInstall, type ExecutorInstall } from "./executor-install";
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
+
+/** The install command's state, including the reads it waits for. */
+export type ExecutorInstallRead = ExecutorInstall | { kind: "loading" } | { kind: "failed"; retry: () => void };
+
+/**
+ * Reads what Connect a host needs: the console's self-hosted installer and,
+ * only when it is offered, Core's public address.
+ */
+export function useExecutorInstall(environmentId: string, remoteUrl: string): ExecutorInstallRead {
+  const config = useQuery(sandboxConsoleConfigQuery);
+  const offered = config.data?.self_hosted_installer === true;
+  const installation = useQuery({ ...installationQuery, enabled: offered });
+  if (!offered) return { kind: "unavailable" };
+  if (installation.data === undefined) {
+    return installation.isError && !installation.isFetching ? { kind: "failed", retry: () => void installation.refetch() } : { kind: "loading" };
+  }
+  return executorInstall({ config: config.data, publicUrl: installation.data.public_url, localOnly: installation.data.local_only, environmentId, remoteUrl });
+}
 
 /**
  * Connect a host: the command that installs this Environment's self-hosted
@@ -17,23 +35,18 @@ const DOCKER_SOCKET = "/var/run/docker.sock";
  * for a credential from the section above at a hidden prompt. Shown only when
  * the console serves the self-hosted installer with a verified digest.
  */
-export function ExecutorInstallPanel({ environmentId, remoteUrl, archived }: { environmentId: string; remoteUrl: string; archived: boolean }) {
+export function ExecutorInstallPanel({ install, archived }: { install: ExecutorInstallRead; archived: boolean }) {
   const { t } = useTranslation("sessions");
   const { t: tCommon } = useTranslation("common");
   const headingId = useId();
-  const config = useQuery(sandboxConsoleConfigQuery);
-  const offered = config.data?.self_hosted_installer === true;
-  const installation = useQuery({ ...installationQuery, enabled: offered });
-  if (!offered) return null;
+  if (install.kind === "unavailable") return null;
 
   let body;
-  if (installation.data === undefined) {
-    body = installation.isError && !installation.isFetching
-      ? <p className="executor-install-note" role="alert">{t("executor.install.failed")} <button className="text-action" type="button" onClick={() => void installation.refetch()}>{tCommon("actions.retry")}</button></p>
-      : <div className="executor-install-command executor-install-skeleton" role="status" aria-label={t("executor.install.loading")} aria-busy="true"><span className="skeleton-bar" /><span className="skeleton-bar" /></div>;
+  if (install.kind === "failed") {
+    body = <p className="executor-install-note" role="alert">{t("executor.install.failed")} <button className="text-action" type="button" onClick={install.retry}>{tCommon("actions.retry")}</button></p>;
+  } else if (install.kind === "loading") {
+    body = <div className="executor-install-command executor-install-skeleton" role="status" aria-label={t("executor.install.loading")} aria-busy="true"><span className="skeleton-bar" /><span className="skeleton-bar" /></div>;
   } else {
-    const install = executorInstall({ config: config.data, publicUrl: installation.data.public_url, localOnly: installation.data.local_only, environmentId, remoteUrl });
-    if (install.kind === "unavailable") return null;
     body = install.kind === "no_address" ? <p className="executor-install-note" role="note">{t("executor.install.noAddress")}</p>
       : install.kind === "local_only" ? <p className="executor-install-note" role="note">{t("executor.install.localOnly", { url: install.publicUrl })}</p>
       : install.kind === "not_wss" ? <p className="executor-install-note" role="note">{t("executor.install.notWss", { remote: install.remoteUrl || "—" })}</p>
@@ -63,7 +76,7 @@ export function ExecutorInstallPanel({ environmentId, remoteUrl, archived }: { e
 }
 
 /** The command with its copy button; when the clipboard refuses, the command is selected to copy by hand. */
-function InstallCommand({ value }: { value: string }) {
+export function InstallCommand({ value }: { value: string }) {
   const { t } = useTranslation("sessions");
   const code = useRef<HTMLPreElement>(null);
   const { state, copy } = useCopy(value);

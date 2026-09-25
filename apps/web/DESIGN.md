@@ -514,12 +514,15 @@ request runs.
   red underneath. The issued key appears in a read-only field with a copy button,
   under a notice that it is shown once; only "I've saved this key" dismisses it.
   Closing the dialog moves the key into a pending notice card on the page.
-- **Executor credential dialog**: the same shown-once notice over the credential
-  as one line of JSON (wrapped, never pretty-printed), then Copy credential
-  (primary: it is pasted at the installer's hidden prompt) and Download
-  credential file (outline), with a Graphite
-  hint for automation (`chmod 600`, `--credential-file`). Done is outline and
-  forgets the credential; closing the dialog keeps it in a pending card.
+- **Executor credential dialog** (640px): the shown-once notice, then one line
+  saying what to do in order. With Connect a host available, the install
+  command's Terminal block comes first, so it is copied and run before the
+  credential is pasted and Done pressed. Then the credential as one line of JSON
+  (wrapped, never pretty-printed), Copy credential (primary: it is pasted at the
+  installer's hidden prompt) and Download credential file (outline), with a
+  Graphite hint for automation (`chmod 600`, `--credential-file`). Done is
+  outline and forgets the credential; closing the dialog keeps it in a pending
+  card, which points to the Connect a host command below.
 - **How to call**: wherever a new key is shown, a card under it gives three
   copyable samples, each a Margin Gray block with a Hairline and its label and copy
   button in a header row: a Shell block exporting `OPENAI_BASE_URL` (the

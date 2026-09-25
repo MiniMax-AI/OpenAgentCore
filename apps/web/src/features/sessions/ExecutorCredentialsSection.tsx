@@ -16,7 +16,7 @@ import { formatDateTime, shortId } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
 import { useCopy } from "../api-keys/IssuedKey";
 import { saveBlob } from "../skills/skill-operations";
-import { ExecutorInstallPanel } from "./ExecutorInstallPanel";
+import { ExecutorInstallPanel, InstallCommand, useExecutorInstall } from "./ExecutorInstallPanel";
 import { executorCredentialsQuery } from "./session-queries";
 
 /** An issuance that gets no answer in this time has an unknown outcome. */
@@ -89,6 +89,9 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   const toast = useToast();
   const { byId, refresh: refreshProjects } = useProjects();
   const archived = byId.get(projectId)?.status === "archived";
+  const install = useExecutorInstall(environmentId, remoteUrl);
+  // The one-time dialog repeats the command, so it is copied and run before the credential is pasted.
+  const command = install.kind === "ready" ? install.command : null;
   const query = useQuery(executorCredentialsQuery(projectId, sessionId, environmentId));
   const credentials = query.data ?? null;
   const { refetch } = query;
@@ -293,19 +296,19 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       {archived ? <p className="coverage-note">{t("executor.archived")}</p> : null}
       {shown && !shown.open && !shown.done ? (
         <section className="executor-credential-pending" aria-label={t("executor.issued.title")}>
-          <CredentialFile credential={shown.credential} />
+          <CredentialFile credential={shown.credential} next={command ? "panel" : "save"} />
           <div><button className="button outline" type="button" onClick={finishShown}>{t("executor.issued.done")}</button></div>
         </section>
       ) : null}
       {body}
-      <ExecutorInstallPanel environmentId={environmentId} remoteUrl={remoteUrl} archived={archived} />
+      <ExecutorInstallPanel install={install} archived={archived} />
       <Modal
         open={shown?.open ?? false}
         title={t("executor.issued.title")}
         onClose={dismissShown}
         footer={<button className="button outline" type="button" onClick={finishShown}>{t("executor.issued.done")}</button>}
       >
-        {shown ? <CredentialFile credential={shown.credential} /> : null}
+        {shown ? <CredentialFile credential={shown.credential} next={command ? "inline" : "save"} command={command} /> : null}
       </Modal>
       <ErrorDialog
         open={uncertain?.open ?? false}
@@ -356,9 +359,12 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
 
 /**
  * The one-time credential: copied to paste at the installer's hidden prompt,
- * or downloaded as a file for automation (`--credential-file`).
+ * or downloaded as a file for automation (`--credential-file`). What to do
+ * next comes first: in the dialog, run the install command shown with it; on
+ * the page, run the Connect a host command below; without the installer, save
+ * the credential.
  */
-function CredentialFile({ credential }: { credential: IssuedExecutorCredential }) {
+function CredentialFile({ credential, next, command = null }: { credential: IssuedExecutorCredential; next: "inline" | "panel" | "save"; command?: string | null }) {
   const { t } = useTranslation("sessions");
   const text = credentialText(credential);
   const { state, copy } = useCopy(text);
@@ -366,6 +372,8 @@ function CredentialFile({ credential }: { credential: IssuedExecutorCredential }
   return (
     <div className="executor-credential">
       <p className="executor-credential-notice">{t("executor.issued.notice")}</p>
+      <p className="executor-credential-next">{t(`executor.issued.next.${next}`)}</p>
+      {command ? <InstallCommand value={command} /> : null}
       <pre className="executor-credential-file" aria-label={t("executor.issued.fileLabel")} tabIndex={0}><code>{text}</code></pre>
       <div className="executor-credential-actions">
         <button className="button primary" type="button" onClick={() => void copy()}>
