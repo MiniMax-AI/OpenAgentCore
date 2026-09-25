@@ -97,9 +97,10 @@ workbench.
   about when Core reclaims it. Docker never suspends and shows none of it.
 - **Getting started**: signing in opens the console on the Overview; nothing is
   forced first. While a step is to do, a Getting started checklist on the Overview
-  shows three steps, in any order, each with its state and one action: sandboxes
+  shows four steps, in any order, each with its state and one action: sandboxes
   ready (a saved deployment and a node online and ready, or a saved E2B deployment
-  whose template build is not reported as not ready),
+  whose template build is not reported as not ready), a default model on the default
+  harness (on any enabled harness when none is default),
   a project with an active key, and a first Session. Completion comes from reads the
   console already makes. It can be hidden; Show Getting started in the sidebar
   opens it again, and it ends with a brief "You're set". The optional

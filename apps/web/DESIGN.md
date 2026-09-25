@@ -607,15 +607,15 @@ orbits hold their places, the grid is a still frame and no transition runs.
 
 ### Getting started
 The first card on the Overview while any step is to do: a card header ("Getting
-started", "n of 3 done", a help tip, then a ghost Take the tour button and an icon
-button that hides it) over three rows split by Faint Rules. Each row has a 22px
+started", "n of 4 done", a help tip, then a ghost Take the tour button and an icon
+button that hides it) over four rows split by Faint Rules. Each row has a 22px
 numbered ring (a check on the tile wash when done), a 13px/600 title over one
 12.5px Graphite line, a status dot (Done in green, To do in Idle Gray, Checking
 pending, Unknown for a failed read) and one outline action while the step is to
-do: Set up sandboxes, Add node, Open Nodes or Open sandbox backend; Create project
-(which continues to the new project's first key) or Issue key; Projects and keys.
-Add node, Create project and Issue key open their page with the dialog already
-open. Every step done turns it into one line, "You're set", with Take the tour and
+do: Set up sandboxes, Add node, Open Nodes or Open sandbox backend; Open System;
+Create project (which continues to the new project's first key) or Issue key;
+Projects and keys. Add node, Create project and Issue key open their page with the
+dialog already open; Open System focuses the default harness's Set or Replace. Every step done turns it into one line, "You're set", with Take the tour and
 Dismiss; it stays, through the tour, until dismissed, and the checklist does not
 come back on its own. The choice is kept per installation in the browser, also
 while the deployment cannot be read; Show Getting started, a quiet row above the
