@@ -15,7 +15,7 @@ import "net/http"
 // @Success 200 {object} v1.VaultList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/vaults [get]
+// @Router /core/v1/projects/{project_id}/vaults [get]
 func (h *Handler) adminListVaults(w http.ResponseWriter, r *http.Request) {
 	h.listVaults(w, r)
 }
@@ -29,7 +29,7 @@ func (h *Handler) adminListVaults(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.Vault
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/vaults/{vault_id} [get]
+// @Router /core/v1/projects/{project_id}/vaults/{vault_id} [get]
 func (h *Handler) adminGetVault(w http.ResponseWriter, r *http.Request) {
 	h.getVault(w, r)
 }
@@ -43,7 +43,7 @@ func (h *Handler) adminGetVault(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.VaultDeleted
 // @Failure 400,401,404,413,500 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/vaults/{vault_id} [delete]
+// @Router /core/v1/projects/{project_id}/vaults/{vault_id} [delete]
 func (h *Handler) adminDeleteVault(w http.ResponseWriter, r *http.Request) {
 	h.deleteVault(w, r)
 }
@@ -62,7 +62,7 @@ func (h *Handler) adminDeleteVault(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.CredentialList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/vaults/{vault_id}/credentials [get]
+// @Router /core/v1/projects/{project_id}/vaults/{vault_id}/credentials [get]
 func (h *Handler) adminListCredentials(w http.ResponseWriter, r *http.Request) {
 	h.listCredentials(w, r)
 }
@@ -77,7 +77,7 @@ func (h *Handler) adminListCredentials(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.Credential
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id} [get]
+// @Router /core/v1/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id} [get]
 func (h *Handler) adminGetCredential(w http.ResponseWriter, r *http.Request) {
 	h.getCredential(w, r)
 }
@@ -92,7 +92,7 @@ func (h *Handler) adminGetCredential(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.CredentialDeleted
 // @Failure 400,401,404,413,500 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id} [delete]
+// @Router /core/v1/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id} [delete]
 func (h *Handler) adminDeleteCredential(w http.ResponseWriter, r *http.Request) {
 	h.deleteCredential(w, r)
 }

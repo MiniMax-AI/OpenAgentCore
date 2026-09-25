@@ -3,33 +3,101 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// IssueEnvironmentExecutorCredential exposes only exact self-hosted targets to
-// project callers. The operator issuer remains available for broader principals.
-func (s *Store) IssueEnvironmentExecutorCredential(ctx context.Context, principal identity.Principal, environment, keyID string, rotate bool) (IssuedExecutorCredential, error) {
-	if err := s.selfHostedExecutorTarget(ctx, principal, environment); err != nil {
+// ExecutorCredential is the metadata of one Environment executor credential.
+// Its secret is returned only when issued or rotated.
+type ExecutorCredential struct {
+	KeyID     string     `json:"key_id" format:"uuid"`
+	CreatedAt time.Time  `json:"created_at"`
+	RevokedAt *time.Time `json:"revoked_at" extensions:"x-nullable"`
+}
+
+// The Project* methods serve Core-key executor credential management. project
+// is the Project's own principal, which becomes the credential's execution
+// principal; the target must be a self_hosted Environment of that Project whose
+// Session is not deleted, and only credentials restricted to it are managed.
+
+func (s *Store) ListProjectExecutorCredentials(ctx context.Context, project identity.Principal, environment string) ([]ExecutorCredential, error) {
+	if err := s.selfHostedExecutorTarget(ctx, project, environment); err != nil {
+		return nil, err
+	}
+	tenant, err := parseID(project.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.queries.ListEnvironmentExecutorCredentials(ctx, sqlc.ListEnvironmentExecutorCredentialsParams{
+		TenantID: tenant, EnvironmentID: parsePathID(environment),
+		SubjectKind: pgtype.Text{String: project.SubjectKind, Valid: true}, SubjectID: pgtype.Text{String: project.SubjectID, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ExecutorCredential, 0, len(rows))
+	for _, row := range rows {
+		credential := ExecutorCredential{KeyID: uuid.UUID(row.KeyID.Bytes).String(), CreatedAt: row.CreatedAt.Time}
+		if row.RevokedAt.Valid {
+			revoked := row.RevokedAt.Time
+			credential.RevokedAt = &revoked
+		}
+		result = append(result, credential)
+	}
+	return result, nil
+}
+
+// IssueProjectExecutorCredential issues a new key or, with rotate, replaces the
+// secret of an existing key restricted to the Environment. The administrator
+// audit entry commits in the same transaction and never contains the secret.
+func (s *Store) IssueProjectExecutorCredential(ctx context.Context, project identity.Principal, environment, keyID string, rotate bool) (IssuedExecutorCredential, error) {
+	if err := s.selfHostedExecutorTarget(ctx, project, environment); err != nil {
 		return IssuedExecutorCredential{}, err
 	}
 	if !rotate {
-		return s.IssueExecutorCredential(ctx, principal, keyID, environment)
+		return s.issueExecutorCredential(ctx, project, keyID, environment, executorCredentialAudit(project, "issue", keyID))
 	}
-	if err := s.exactExecutorRestriction(ctx, principal, environment, keyID); err != nil {
+	if err := s.exactExecutorRestriction(ctx, project, environment, keyID); err != nil {
 		return IssuedExecutorCredential{}, err
 	}
-	return s.RotateExecutorCredential(ctx, principal, keyID)
+	return s.rotateExecutorCredential(ctx, project, keyID, executorCredentialAudit(project, "rotate", keyID))
 }
 
-func (s *Store) RevokeEnvironmentExecutorCredential(ctx context.Context, principal identity.Principal, environment, keyID string) error {
-	if err := s.selfHostedExecutorTarget(ctx, principal, environment); err != nil {
+// RevokeProjectExecutorCredential is idempotent; each successful request is audited.
+func (s *Store) RevokeProjectExecutorCredential(ctx context.Context, project identity.Principal, environment, keyID string) error {
+	if err := s.selfHostedExecutorTarget(ctx, project, environment); err != nil {
 		return err
 	}
-	if err := s.exactExecutorRestriction(ctx, principal, environment, keyID); err != nil {
+	if err := s.exactExecutorRestriction(ctx, project, environment, keyID); err != nil {
 		return err
 	}
-	return s.RevokeExecutorCredential(ctx, principal, keyID)
+	tenant, id, err := executorCredentialIdentity(project, keyID)
+	if err != nil {
+		return err
+	}
+	record := executorCredentialAudit(project, "revoke", keyID)
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		n, err := q.RevokeExecutorCredential(ctx, sqlc.RevokeExecutorCredentialParams{KeyID: id, TenantID: tenant, SubjectKind: pgtype.Text{String: project.SubjectKind, Valid: true}, SubjectID: pgtype.Text{String: project.SubjectID, Valid: true}})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+		return record(ctx, q)
+	})
+}
+
+func executorCredentialAudit(project identity.Principal, action, keyID string) func(context.Context, *sqlc.Queries) error {
+	return func(ctx context.Context, q *sqlc.Queries) error {
+		return recordAdminMutation(ctx, q, project.TenantID, action, "executor_credential", keyID)
+	}
 }
 
 func (s *Store) selfHostedExecutorTarget(ctx context.Context, principal identity.Principal, environment string) error {
@@ -59,8 +127,8 @@ func (s *Store) exactExecutorRestriction(ctx context.Context, principal identity
 	if err != nil {
 		return err
 	}
-	// Restrictions and principals are immutable, so checking before the existing
-	// rotation/revocation transaction cannot authorize a different target.
+	// Restrictions and principals are immutable, so checking before the
+	// rotation or revocation transaction cannot authorize a different target.
 	if !actual.Valid || actual != want {
 		return ErrNotFound
 	}

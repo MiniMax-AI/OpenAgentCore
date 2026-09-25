@@ -40,7 +40,7 @@ func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {
 		}
 		return w
 	}
-	base := "/core/v1/admin/projects"
+	base := "/core/v1/projects"
 	response := call("POST", base, adminToken, `{"name":"Default"}`, 201)
 	var p store.Project
 	if json.Unmarshal(response.Body.Bytes(), &p) != nil || p.ID == "" {

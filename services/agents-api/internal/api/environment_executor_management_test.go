@@ -3,11 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
@@ -17,78 +18,98 @@ type executorManagementFixture struct {
 	ResourceStore
 	principal        identity.Principal
 	environment, key string
-	rotate           bool
+	rotate, audited  bool
 	calls            int
 	err              error
 }
 
-func (f *executorManagementFixture) IssueEnvironmentExecutorCredential(_ context.Context, principal identity.Principal, environment, key string, rotate bool) (store.IssuedExecutorCredential, error) {
-	f.principal, f.environment, f.key, f.rotate = principal, environment, key, rotate
+func (f *executorManagementFixture) record(ctx context.Context, principal identity.Principal, environment, key string) {
+	f.principal, f.environment, f.key = principal, environment, key
+	_, f.audited = adminaudit.FromContext(ctx)
 	f.calls++
+}
+func (f *executorManagementFixture) ListProjectExecutorCredentials(ctx context.Context, principal identity.Principal, environment string) ([]store.ExecutorCredential, error) {
+	f.record(ctx, principal, environment, "")
+	return []store.ExecutorCredential{{KeyID: "listed", CreatedAt: time.Unix(1, 0).UTC()}}, f.err
+}
+func (f *executorManagementFixture) IssueProjectExecutorCredential(ctx context.Context, principal identity.Principal, environment, key string, rotate bool) (store.IssuedExecutorCredential, error) {
+	f.record(ctx, principal, environment, key)
+	f.rotate = rotate
 	return store.IssuedExecutorCredential{KeyID: key, EnvironmentID: environment, Token: "synthetic-connect-only"}, f.err
 }
-func (f *executorManagementFixture) RevokeEnvironmentExecutorCredential(_ context.Context, principal identity.Principal, environment, key string) error {
-	f.principal, f.environment, f.key = principal, environment, key
-	f.calls++
+func (f *executorManagementFixture) RevokeProjectExecutorCredential(ctx context.Context, principal identity.Principal, environment, key string) error {
+	f.record(ctx, principal, environment, key)
 	return f.err
 }
 
-func TestEnvironmentExecutorManagementHTTP(t *testing.T) {
+func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 	f := &executorManagementFixture{}
-	tenant, environment, keyID := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := NewAuthenticator([]APIKey{{TokenSHA256: device.HashCredential("caller"), TenantID: tenant, OrganizationID: "org", ProjectID: "project", SubjectKind: "user", SubjectID: "creator"}})
+	key := callerBinding()
+	auth, err := NewAuthenticator([]APIKey{key})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := NewHandler(f, auth, "codex")
+	admin, err := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := "/core/v1/environments/" + environment + "/executor-credentials"
-	request := func(method, path, body, token string) *httptest.ResponseRecorder {
-		t.Helper()
-		r := httptest.NewRequest(method, path, strings.NewReader(body))
-		r.Header.Set("Authorization", "Bearer "+token)
-		r.Header.Set("Content-Type", "application/json")
-		r.Header.Set("X-Tenant-ID", "untrusted")
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, r)
-		return w
+	h, err := NewHandler(f, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin))
+	if err != nil {
+		t.Fatal(err)
 	}
+	environment, keyID := uuid.NewString(), uuid.NewString()
+	path := "/core/v1/projects/" + managementProjectID + "/environments/" + environment + "/executor-credentials"
 	body := `{"key_id":"` + keyID + `"}`
-	for _, token := range []string{"", "synthetic-connect-only", "admin"} {
-		if w := request("POST", path, body, token); w.Code != 401 || f.calls != 0 {
-			t.Fatal("non-caller authority accepted", w.Code)
+	// Only the Core key authorizes; the Project API key and the old route are refused.
+	for _, token := range []string{"", "caller", "synthetic-connect-only"} {
+		if w := projectKeyHTTP(h, "POST", path, token, body); w.Code != 401 || f.calls != 0 {
+			t.Fatal("non-Core credential accepted", w.Code)
 		}
 	}
-	w := request("POST", path, body, "caller")
+	if w := projectKeyHTTP(h, "POST", "/core/v1/environments/"+environment+"/executor-credentials", "caller", body); w.Code != 401 || f.calls != 0 {
+		t.Fatal("old Project-key route", w.Code)
+	}
+	if w := projectKeyHTTP(h, "POST", "/core/v1/environments/"+environment+"/executor-credentials", "admin", body); w.Code != 404 || f.calls != 0 {
+		t.Fatal("old route still served", w.Code)
+	}
+	if w := projectKeyHTTP(h, "GET", "/core/v1/projects/"+uuid.NewString()+"/environments/"+environment+"/executor-credentials", "admin", ""); w.Code != 404 || f.calls != 0 {
+		t.Fatal("unknown Project", w.Code)
+	}
+
+	w := projectKeyHTTP(h, "GET", path, "admin", "")
+	if w.Code != 200 || w.Body.String() != `{"data":[{"key_id":"listed","created_at":"1970-01-01T00:00:01Z","revoked_at":null}]}`+"\n" {
+		t.Fatal("list", w.Code, w.Body)
+	}
+	w = projectKeyHTTP(h, "POST", path, "admin", body)
 	var got map[string]string
 	if w.Code != 201 || w.Header().Get("Cache-Control") != "no-store" || json.Unmarshal(w.Body.Bytes(), &got) != nil || len(got) != 3 || got["environment_id"] != environment || got["key_id"] != keyID || got["executor_token"] != "synthetic-connect-only" {
-		t.Fatal("credential response", w.Code)
+		t.Fatal("credential response", w.Code, w.Body)
 	}
-	if f.principal.TenantID != tenant || f.principal.SubjectID != "creator" || f.rotate {
-		t.Fatal("authority not derived from caller")
+	// The Project's principal, not a caller, owns the credential; the write is audited.
+	if f.principal.TenantID != key.TenantID || f.principal.SubjectID != key.SubjectID || f.environment != environment || f.rotate || !f.audited {
+		t.Fatal("credential not bound to the Project")
 	}
-	w = request("POST", path, `{"key_id":"`+keyID+`","rotate":true}`, "caller")
-	if w.Code != 201 || !f.rotate {
+	if w := projectKeyHTTP(h, "POST", path, "admin", `{"key_id":"`+keyID+`","rotate":true}`); w.Code != 201 || !f.rotate {
 		t.Fatal("explicit rotation", w.Code)
 	}
 	for _, body := range []string{`{}`, `{"key_id":"invalid"}`, `{"key_id":null}`, `{"key_id":"` + keyID + `","environment_id":"other"}`, `{"key_id":"` + keyID + `","executor_token":"import"}`, `{"key_id":"` + keyID + `","rotate":null}`} {
 		before := f.calls
-		if w := request("POST", path, body, "caller"); w.Code != 400 || before != f.calls {
+		if w := projectKeyHTTP(h, "POST", path, "admin", body); w.Code != 400 || before != f.calls {
 			t.Fatal("invalid request accepted", w.Code, body)
 		}
 	}
 	f.err = store.ErrExecutorCredentialExists
-	if w := request("POST", path, body, "caller"); w.Code != 409 || strings.Contains(w.Body.String(), "synthetic-connect-only") {
-		t.Fatal("uncertain retry", w.Code)
+	if w := projectKeyHTTP(h, "POST", path, "admin", body); w.Code != 409 || !strings.Contains(w.Body.String(), `"code":"executor_credential_exists"`) || strings.Contains(w.Body.String(), "synthetic-connect-only") {
+		t.Fatal("uncertain retry", w.Code, w.Body)
 	}
 	f.err = store.ErrNotFound
-	if w := request("DELETE", path+"/"+keyID, "", "caller"); w.Code != 404 {
+	if w := projectKeyHTTP(h, "DELETE", path+"/"+keyID, "admin", ""); w.Code != 404 {
 		t.Fatal("foreign revocation", w.Code)
 	}
 	f.err = nil
-	if w := request("DELETE", path+"/"+keyID, "", "caller"); w.Code != 204 || w.Body.Len() != 0 {
-		t.Fatal("revocation", w.Code)
+	for range 2 {
+		if w := projectKeyHTTP(h, "DELETE", path+"/"+keyID, "admin", ""); w.Code != 204 || w.Body.Len() != 0 || f.key != keyID {
+			t.Fatal("revocation", w.Code)
+		}
 	}
 }

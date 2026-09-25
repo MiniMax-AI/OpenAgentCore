@@ -12,7 +12,7 @@ import "net/http"
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillList
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/skills [get]
+// @Router /core/v1/projects/{project_id}/skills [get]
 func (h *Handler) adminListSkills(w http.ResponseWriter, r *http.Request) {
 	h.listSkills(w, r)
 }
@@ -25,7 +25,7 @@ func (h *Handler) adminListSkills(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {object} v1.Skill
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id} [get]
+// @Router /core/v1/projects/{project_id}/skills/{skill_id} [get]
 func (h *Handler) adminGetSkill(w http.ResponseWriter, r *http.Request) {
 	h.getSkill(w, r)
 }
@@ -38,7 +38,7 @@ func (h *Handler) adminGetSkill(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {object} v1.SkillDeleted
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id} [delete]
+// @Router /core/v1/projects/{project_id}/skills/{skill_id} [delete]
 func (h *Handler) adminDeleteSkill(w http.ResponseWriter, r *http.Request) {
 	h.deleteSkill(w, r)
 }
@@ -51,7 +51,7 @@ func (h *Handler) adminDeleteSkill(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {file} binary
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/content [get]
+// @Router /core/v1/projects/{project_id}/skills/{skill_id}/content [get]
 func (h *Handler) adminSkillContent(w http.ResponseWriter, r *http.Request) {
 	h.skillContent(w, r)
 }
@@ -67,7 +67,7 @@ func (h *Handler) adminSkillContent(w http.ResponseWriter, r *http.Request) {
 // @Param order query string false "Version order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillVersionList
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions [get]
+// @Router /core/v1/projects/{project_id}/skills/{skill_id}/versions [get]
 func (h *Handler) adminListSkillVersions(w http.ResponseWriter, r *http.Request) {
 	h.listSkillVersions(w, r)
 }
@@ -81,7 +81,7 @@ func (h *Handler) adminListSkillVersions(w http.ResponseWriter, r *http.Request)
 // @Param version path string true "Concrete version number"
 // @Success 200 {object} v1.SkillVersion
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version} [get]
+// @Router /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version} [get]
 func (h *Handler) adminGetSkillVersion(w http.ResponseWriter, r *http.Request) {
 	h.getSkillVersion(w, r)
 }
@@ -95,7 +95,7 @@ func (h *Handler) adminGetSkillVersion(w http.ResponseWriter, r *http.Request) {
 // @Param version path string true "Concrete version number"
 // @Success 200 {object} v1.SkillVersionDeleted
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version} [delete]
+// @Router /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version} [delete]
 func (h *Handler) adminDeleteSkillVersion(w http.ResponseWriter, r *http.Request) {
 	h.deleteSkillVersion(w, r)
 }
@@ -109,7 +109,7 @@ func (h *Handler) adminDeleteSkillVersion(w http.ResponseWriter, r *http.Request
 // @Param version path string true "Concrete version number"
 // @Success 200 {file} binary
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version}/content [get]
+// @Router /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version}/content [get]
 func (h *Handler) adminSkillVersionContent(w http.ResponseWriter, r *http.Request) {
 	h.skillVersionContent(w, r)
 }

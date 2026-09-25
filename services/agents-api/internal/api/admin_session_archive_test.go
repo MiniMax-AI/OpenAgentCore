@@ -44,7 +44,7 @@ func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := "/core/v1/admin/projects/" + managementProjectID + "/sessions/11111111-1111-4111-8111-111111111111/archive"
+	path := "/core/v1/projects/" + managementProjectID + "/sessions/11111111-1111-4111-8111-111111111111/archive"
 	for _, body := range []string{`{}`, `{"expected_generation":null}`, `{"expected_generation":0}`, `{"expected_generation":-1}`, `{"expected_generation":1.5}`, `{"expected_generation":"1"}`, `{"Expected_Generation":1}`} {
 		if w := projectKeyHTTP(h, http.MethodPost, path, "admin", body); w.Code != 400 {
 			t.Fatalf("invalid archive body accepted: %s: %d %s", body, w.Code, w.Body)

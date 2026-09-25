@@ -105,7 +105,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	}
 	request := func(method, session string) *httptest.ResponseRecorder {
 		t.Helper()
-		r := httptest.NewRequest(method, "/core/v1/admin/projects/"+projectID+"/sessions/"+session+"/archive", strings.NewReader(`{"expected_generation":1}`))
+		r := httptest.NewRequest(method, "/core/v1/projects/"+projectID+"/sessions/"+session+"/archive", strings.NewReader(`{"expected_generation":1}`))
 		r.Header.Set("Authorization", "Bearer archive-administrator")
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()

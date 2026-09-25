@@ -23,7 +23,7 @@ import (
 // @Param after query string false "Opaque next_cursor from the preceding page"
 // @Success 200 {object} store.AdminAuditPage
 // @Failure 400,401,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/audit-log [get]
+// @Router /core/v1/audit-log [get]
 func (h *Handler) listAdminAudit(w http.ResponseWriter, r *http.Request) {
 	values, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {

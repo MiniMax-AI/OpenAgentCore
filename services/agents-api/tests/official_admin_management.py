@@ -75,7 +75,7 @@ def main():
             return response.json()
 
         def project_path(key):
-            return "/core/v1/admin/projects/" + key["project_id"]
+            return "/core/v1/projects/" + key["project_id"]
 
         def project_metadata(response):
             value = safe(response)
@@ -85,7 +85,7 @@ def main():
             return value
 
         def issue(project, name):
-            key = request("POST", "/core/v1/admin/projects/" + project["id"] + "/keys",
+            key = request("POST", "/core/v1/projects/" + project["id"] + "/keys",
                           expected=201, json={"name": name}).json()
             keys.append(key)
             secret_values.append(key["key"])
@@ -137,7 +137,7 @@ def main():
 
         try:
             for name in ("source", "target"):
-                created = request("POST", "/core/v1/admin/projects", expected=201, json={"name": "admin-proof-" + name})
+                created = request("POST", "/core/v1/projects", expected=201, json={"name": "admin-proof-" + name})
                 project = created.json()
                 projects.append(project)
                 project_metadata(created)
@@ -150,7 +150,7 @@ def main():
                     http_client=DefaultHttpxClient(trust_env=False), _strict_response_validation=True))
             a, b, a_peer = clients
             assert source["id"] != peer["id"] and source["project_id"] == peer["project_id"] != target["project_id"]
-            catalog = safe(request("GET", "/core/v1/admin/projects", params={"limit": 100}))
+            catalog = safe(request("GET", "/core/v1/projects", params={"limit": 100}))
             assert isinstance(catalog["has_more"], bool)
             assert {project["id"] for project in projects} <= {project["id"] for project in catalog["data"]}
             for key, count in ((source, 2), (target, 1)):
@@ -159,7 +159,7 @@ def main():
                 assert all("key" not in item and item["project_id"] == key["project_id"] for item in listed["data"])
             for path in PUBLIC_PATHS.values():
                 assert safe(request("GET", "/v1/" + path, token=target["key"]))["data"] == []
-            request("GET", "/core/v1/admin/projects", expected=401, token=source["key"])
+            request("GET", "/core/v1/projects", expected=401, token=source["key"])
             request("GET", "/v1/agents", expected=401, headers={"OpenAI-Beta": "agents=v1"})
 
             file = a.files.create(file=("copy-source.txt", private.encode()), purpose="user_data")
@@ -317,7 +317,7 @@ def main():
                             {"role": "user", "content": [{"type": "input_text", "text": "foreign"}]}]}]})
                 assert owner(source, "session", session_id)["api_key"]["id"] == creation_key
                 assert {creation_key, replacement["id"]} <= {item["api_key"]["id"] for item in operations(source, "session", session_id)}
-                key_summary = safe(request("GET", "/core/v1/admin/summary", params={
+                key_summary = safe(request("GET", "/core/v1/summary", params={
                     "group_by": "key", "project_id": source["project_id"]}))["data"]
                 assert sum(row["sessions"]["total"] for row in key_summary) == 1
                 group = next(row for row in key_summary if row["key_id"] == creation_key)
@@ -345,17 +345,17 @@ def main():
                 assert request("GET", admin_resource(source, kind, resource)).content == before_archive[kind]
             request("POST", project_path(source) + "/keys", expected=409, json={"name": "archived"})
             for group_by in ("project", "agent", "key"):
-                summary = safe(request("GET", "/core/v1/admin/summary", params={
+                summary = safe(request("GET", "/core/v1/summary", params={
                     "group_by": group_by, "project_id": target["project_id"]}))
                 assert all(row["project_id"] == target["project_id"] for row in summary["data"])
-            safe(request("GET", "/core/v1/admin/audit-log", params={"project_id": target["project_id"]}))
+            safe(request("GET", "/core/v1/audit-log", params={"project_id": target["project_id"]}))
             print("Project rename, archive and retained reads passed.", flush=True)
         finally:
             failures = []
             if session_id is not None:
                 # Read through the administrator route; cancel only with a key this run
                 # has not revoked, in a Project that is not archived.
-                session_path = base + f"/core/v1/admin/projects/{projects[0]['id']}/sessions/{session_id}"
+                session_path = base + f"/core/v1/projects/{projects[0]['id']}/sessions/{session_id}"
                 try:
                     state = http.get(session_path, headers=admin).json()["status"]
                     if state == "in_progress":
@@ -376,14 +376,14 @@ def main():
             priority = {kind: index for index, kind in enumerate(("session", "agent", "environment_template", "skill", "vault", "file"))}
             for project_id, kind, resource in sorted(owned, key=lambda value: priority[value[1]]):
                 try:
-                    response = http.delete(base + f"/core/v1/admin/projects/{project_id}/{ADMIN_PATHS[kind]}/{resource}", headers=admin)
+                    response = http.delete(base + f"/core/v1/projects/{project_id}/{ADMIN_PATHS[kind]}/{resource}", headers=admin)
                     if response.status_code not in (200, 204, 404):
                         failures.append(kind)
                 except httpx.HTTPError:
                     failures.append(kind)
             for project in projects:
                 if project["archived_at"] is None:
-                    response = http.post(base + "/core/v1/admin/projects/" + project["id"] + "/archive", headers=admin)
+                    response = http.post(base + "/core/v1/projects/" + project["id"] + "/archive", headers=admin)
                     if response.status_code != 200:
                         failures.append("project_archive")
             for key in keys:

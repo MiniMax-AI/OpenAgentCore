@@ -40,7 +40,7 @@ func WithProjectAPIKeys(s ProjectAPIKeyStore, auth *DeploymentAuthenticator) Opt
 	}
 }
 func (h *Handler) registerProjectAPIKeyRoutes(r chi.Router) {
-	if h.projectKeys == nil || h.deploymentAuth == nil {
+	if h.projectKeys == nil {
 		return
 	}
 	r.Get("/projects", h.listProjects)
@@ -109,7 +109,7 @@ func adminCatalogPage(r *http.Request) (string, int, bool, error) {
 // @Param order query string false "asc or desc by Project ID"
 // @Success 200 {object} store.ProjectPage
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/projects [get]
+// @Router /core/v1/projects [get]
 func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
 	after, limit, ascending, err := adminCatalogPage(r)
 	if err != nil {
@@ -132,7 +132,7 @@ func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
 // @Param body body api.ProjectRequest true "Project display name"
 // @Success 201 {object} store.Project
 // @Failure 400,401,409,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/projects [post]
+// @Router /core/v1/projects [post]
 func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBodyLimit(w, r, 4096, "Project request is too large.")
 	if !ok {
@@ -162,7 +162,7 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 // @Param body body api.ProjectRequest true "Project display name"
 // @Success 200 {object} store.Project
 // @Failure 400,401,404,409,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/projects/{project_id} [post]
+// @Router /core/v1/projects/{project_id} [post]
 func (h *Handler) renameProject(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
 	if !ok {
@@ -192,7 +192,7 @@ func (h *Handler) renameProject(w http.ResponseWriter, r *http.Request) {
 // @Param project_id path string true "Project UUID"
 // @Success 200 {object} store.Project
 // @Failure 401,404,409,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/projects/{project_id}/archive [post]
+// @Router /core/v1/projects/{project_id}/archive [post]
 func (h *Handler) archiveProject(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
 	if !ok {
@@ -216,7 +216,7 @@ func (h *Handler) archiveProject(w http.ResponseWriter, r *http.Request) {
 // @Param order query string false "asc or desc by key ID"
 // @Success 200 {object} store.ProjectAPIKeyPage
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/projects/{project_id}/keys [get]
+// @Router /core/v1/projects/{project_id}/keys [get]
 func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
 	if !ok {
@@ -244,7 +244,7 @@ func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Param body body api.ProjectAPIKeyRequest true "Key display name"
 // @Success 201 {object} store.IssuedProjectAPIKey
 // @Failure 400,401,404,409,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/projects/{project_id}/keys [post]
+// @Router /core/v1/projects/{project_id}/keys [post]
 func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
 	if !ok {
@@ -275,7 +275,7 @@ func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 // @Param key_id path string true "API key UUID"
 // @Success 200 {object} api.SandboxMutationResponse
 // @Failure 401,404,409,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/projects/{project_id}/keys/{key_id} [delete]
+// @Router /core/v1/projects/{project_id}/keys/{key_id} [delete]
 func (h *Handler) revokeProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
 	if !ok {

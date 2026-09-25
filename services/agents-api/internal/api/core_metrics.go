@@ -25,7 +25,7 @@ func WithCoreMetrics(service CoreMetricsService) Option {
 // @Param range query string false "Time range (default 1h)" Enums(1h,6h,24h,7d)
 // @Success 200 {object} coremetrics.View
 // @Failure 400,401,503 {object} v1.ErrorResponse
-// @Router /core/v1/admin/core-metrics [get]
+// @Router /core/v1/metrics [get]
 func (h *Handler) getCoreMetrics(w http.ResponseWriter, r *http.Request) {
 	values, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil || len(values) > 1 || (len(values) == 1 && len(values["range"]) != 1) {

@@ -28,7 +28,7 @@ type AdminSessionArchiveRequest struct {
 // @Param body body api.AdminSessionArchiveRequest true "Current deployment generation"
 // @Success 200 {object} store.ManagedSessionArchive
 // @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
-// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/archive [post]
+// @Router /core/v1/projects/{project_id}/sessions/{session_id}/archive [post]
 func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBodyLimit(w, r, 4096, "Archive request is too large.")
 	if !ok {
@@ -60,7 +60,7 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} store.ManagedSessionArchive
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /core/v1/admin/projects/{project_id}/sessions/{session_id}/archive [get]
+// @Router /core/v1/projects/{project_id}/sessions/{session_id}/archive [get]
 func (h *Handler) adminGetSessionArchive(w http.ResponseWriter, r *http.Request) {
 	result, err := h.adminManagement.GetManagedSessionArchive(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {

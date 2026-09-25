@@ -38,7 +38,7 @@ func (s *adminRuntimeTargets) ListAdminRuntimeTargets(_ context.Context, tenants
 	return s.page, nil
 }
 
-const adminRuntimeObservationsPath = "/core/v1/admin/runtime-observations"
+const adminRuntimeObservationsPath = "/core/v1/sandbox/runtime-observations"
 
 // adminRuntimeFixture serves the administrator observation list over one
 // Project per tenant and the given Session targets.

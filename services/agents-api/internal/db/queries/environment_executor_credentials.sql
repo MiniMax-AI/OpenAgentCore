@@ -50,3 +50,10 @@ JOIN sessions s ON s.id = e.session_id
 WHERE c.token_sha256 = sqlc.arg(token_sha256) AND c.revoked_at IS NULL
     AND c.tenant_id = s.tenant_id AND c.subject_kind = s.creator_kind AND c.subject_id = s.creator_id
     AND (c.environment_id IS NULL OR c.environment_id = e.id) AND s.deleted_at IS NULL;
+
+-- name: ListEnvironmentExecutorCredentials :many
+SELECT key_id, created_at, revoked_at
+FROM environment_executor_credentials
+WHERE tenant_id = sqlc.arg(tenant_id) AND environment_id = sqlc.arg(environment_id)
+    AND subject_kind = sqlc.arg(subject_kind) AND subject_id = sqlc.arg(subject_id)
+ORDER BY created_at, key_id;

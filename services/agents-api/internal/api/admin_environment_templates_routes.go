@@ -13,7 +13,7 @@ import "net/http"
 // @Success 200 {object} v1.EnvironmentTemplateList
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/environment-templates [get]
+// @Router /core/v1/projects/{project_id}/environment-templates [get]
 func (h *Handler) adminListEnvironmentTemplates(w http.ResponseWriter, r *http.Request) {
 	h.listEnvironmentTemplates(w, r)
 }
@@ -27,7 +27,7 @@ func (h *Handler) adminListEnvironmentTemplates(w http.ResponseWriter, r *http.R
 // @Success 200 {object} v1.EnvironmentTemplate
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/environment-templates/{environment_template_id} [get]
+// @Router /core/v1/projects/{project_id}/environment-templates/{environment_template_id} [get]
 func (h *Handler) adminGetEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	h.getEnvironmentTemplate(w, r)
 }
@@ -41,7 +41,7 @@ func (h *Handler) adminGetEnvironmentTemplate(w http.ResponseWriter, r *http.Req
 // @Success 200 {object} v1.EnvironmentTemplateDeleted
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/environment-templates/{environment_template_id} [delete]
+// @Router /core/v1/projects/{project_id}/environment-templates/{environment_template_id} [delete]
 func (h *Handler) adminDeleteEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	h.deleteEnvironmentTemplate(w, r)
 }

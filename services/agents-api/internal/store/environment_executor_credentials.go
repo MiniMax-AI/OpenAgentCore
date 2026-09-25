@@ -24,6 +24,11 @@ type IssuedExecutorCredential struct {
 
 // IssueExecutorCredential returns a new connect-only secret once, without replacing an existing ID.
 func (s *Store) IssueExecutorCredential(ctx context.Context, principal identity.Principal, keyID, environment string) (IssuedExecutorCredential, error) {
+	return s.issueExecutorCredential(ctx, principal, keyID, environment, nil)
+}
+
+// issueExecutorCredential runs record, when given, in the issuing transaction.
+func (s *Store) issueExecutorCredential(ctx context.Context, principal identity.Principal, keyID, environment string, record func(context.Context, *sqlc.Queries) error) (IssuedExecutorCredential, error) {
 	tenant, id, err := executorCredentialIdentity(principal, keyID)
 	if err != nil {
 		return IssuedExecutorCredential{}, err
@@ -59,6 +64,9 @@ func (s *Store) IssueExecutorCredential(ctx context.Context, principal identity.
 			return err
 		}
 		result = issuedExecutorCredential(row.KeyID, row.EnvironmentID, token)
+		if record != nil {
+			return record(ctx, q)
+		}
 		return nil
 	})
 	if err != nil {
@@ -68,6 +76,11 @@ func (s *Store) IssueExecutorCredential(ctx context.Context, principal identity.
 }
 
 func (s *Store) RotateExecutorCredential(ctx context.Context, principal identity.Principal, keyID string) (IssuedExecutorCredential, error) {
+	return s.rotateExecutorCredential(ctx, principal, keyID, nil)
+}
+
+// rotateExecutorCredential runs record, when given, in the rotating transaction.
+func (s *Store) rotateExecutorCredential(ctx context.Context, principal identity.Principal, keyID string, record func(context.Context, *sqlc.Queries) error) (IssuedExecutorCredential, error) {
 	tenant, id, err := executorCredentialIdentity(principal, keyID)
 	if err != nil {
 		return IssuedExecutorCredential{}, err
@@ -90,6 +103,9 @@ func (s *Store) RotateExecutorCredential(ctx context.Context, principal identity
 			return err
 		}
 		result = issuedExecutorCredential(row.KeyID, row.EnvironmentID, token)
+		if record != nil {
+			return record(ctx, q)
+		}
 		return nil
 	})
 	if err != nil {

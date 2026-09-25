@@ -156,7 +156,7 @@ def main():
 
             try:
                 process = start()
-                with httpx2.Client(base_url=base + "/core/v1/admin/", trust_env=False, timeout=10,
+                with httpx2.Client(base_url=base + "/core/v1/", trust_env=False, timeout=10,
                                    headers={"Authorization": "Bearer " + admin_token}) as admin:
                     def issue_key(project_id, name):
                         response = admin.post(f"projects/{project_id}/keys", json={"name": name})

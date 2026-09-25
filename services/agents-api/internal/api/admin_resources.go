@@ -34,16 +34,15 @@ func (h *Handler) adminResourceScope(next http.Handler) http.Handler {
 }
 
 func (h *Handler) registerAdminResourceRoutes(router chi.Router) {
-	if h.deploymentAuth == nil || h.projectKeys == nil {
+	if h.projectKeys == nil {
 		return
 	}
 	router.Group(func(r chi.Router) {
-
-		r.Get("/core-metrics", h.getCoreMetrics)
+		r.Get("/metrics", h.getCoreMetrics)
 		if h.adminManagement != nil {
 			r.Get("/summary", h.adminSummary)
-			r.Get("/runtime-observations", h.adminRuntimeObservations)
-			r.Head("/runtime-observations", methodNotAllowed)
+			r.Get("/sandbox/runtime-observations", h.adminRuntimeObservations)
+			r.Head("/sandbox/runtime-observations", methodNotAllowed)
 			r.Get("/audit-log", h.listAdminAudit)
 		}
 		r.Group(func(r chi.Router) {

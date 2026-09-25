@@ -694,7 +694,7 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse((self.root / "config/keys.json").exists())
         self.assertEqual([call.args[0] for call in health.call_args_list], [
             "http://127.0.0.1:8091/healthz", "http://127.0.0.1:8080/console/auth",
-            "http://127.0.0.1:8091/core/v1/admin/projects",
+            "http://127.0.0.1:8091/core/v1/projects",
         ])
         admin_token = (self.root / "admin/sandbox-admin.key").read_text()
         self.assertEqual(health.call_args_list[-1].args[1], {"Authorization": "Bearer " + admin_token})
@@ -723,7 +723,7 @@ class InstallerTests(unittest.TestCase):
         imports = [call for call in calls if call[:2] == ["docker", "load"]]
         self.assertEqual(imports, [["docker", "load", "--input", str(bundle / "images/web.tar")]])
         self.assertFalse(any(call[:2] == ["docker", "run"] for call in calls))
-        self.assertEqual([call.args[0] for call in health.call_args_list], ["http://127.0.0.1:8080/console/auth", "http://127.0.0.1:9091/core/v1/admin/projects"])
+        self.assertEqual([call.args[0] for call in health.call_args_list], ["http://127.0.0.1:8080/console/auth", "http://127.0.0.1:9091/core/v1/projects"])
         self.assertEqual(health.call_args_list[-1].args[1], {"Authorization": "Bearer " + source.read_text()})
         self.assertNotIn(source.read_text(), output.getvalue())
         services = self.document("compose.json")["services"]

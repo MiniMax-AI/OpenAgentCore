@@ -136,6 +136,52 @@ func (q *Queries) IssueExecutorCredential(ctx context.Context, arg IssueExecutor
 	return i, err
 }
 
+const listEnvironmentExecutorCredentials = `-- name: ListEnvironmentExecutorCredentials :many
+SELECT key_id, created_at, revoked_at
+FROM environment_executor_credentials
+WHERE tenant_id = $1 AND environment_id = $2
+    AND subject_kind = $3 AND subject_id = $4
+ORDER BY created_at, key_id
+`
+
+type ListEnvironmentExecutorCredentialsParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	SubjectKind   pgtype.Text `json:"subject_kind"`
+	SubjectID     pgtype.Text `json:"subject_id"`
+}
+
+type ListEnvironmentExecutorCredentialsRow struct {
+	KeyID     pgtype.UUID        `json:"key_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+}
+
+func (q *Queries) ListEnvironmentExecutorCredentials(ctx context.Context, arg ListEnvironmentExecutorCredentialsParams) ([]ListEnvironmentExecutorCredentialsRow, error) {
+	rows, err := q.db.Query(ctx, listEnvironmentExecutorCredentials,
+		arg.TenantID,
+		arg.EnvironmentID,
+		arg.SubjectKind,
+		arg.SubjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEnvironmentExecutorCredentialsRow{}
+	for rows.Next() {
+		var i ListEnvironmentExecutorCredentialsRow
+		if err := rows.Scan(&i.KeyID, &i.CreatedAt, &i.RevokedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeExecutorCredential = `-- name: RevokeExecutorCredential :execrows
 UPDATE environment_executor_credentials SET revoked_at = COALESCE(revoked_at, clock_timestamp())
 WHERE key_id = $1 AND tenant_id = $2

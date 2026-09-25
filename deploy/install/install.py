@@ -392,7 +392,7 @@ def main(argv=None):
                 raise InstallError("Web authentication is unavailable. Inspect private console state")
             core_url = state.get("core_url") or f'http://127.0.0.1:{state["core_port"]}'
             token = (root / "admin/sandbox-admin.key").read_text().strip()
-            if not wait_http(core_url + "/core/v1/admin/projects", {"Authorization": "Bearer " + token}):
+            if not wait_http(core_url + "/core/v1/projects", {"Authorization": "Bearer " + token}):
                 raise InstallError("Core administrator authentication failed. Inspect private configuration; no model was called")
             print("Console: " + (state.get("public_url") or url))
             if (root / "state/console/admin.json").exists():
@@ -402,7 +402,7 @@ def main(argv=None):
                 print("Keep your administrator username and password safe; there is no email password reset.")
         else:
             auth = base64.b64encode(("admin:" + (root / "config/console.password").read_text()).encode()).decode()
-            if not wait_http(url + "/core/v1/admin/projects", {"Authorization": "Basic " + auth,
+            if not wait_http(url + "/core/v1/projects", {"Authorization": "Basic " + auth,
                     "Host": host}):
                 raise InstallError("Web could not authenticate to Core. Inspect private configuration; no model was called")
             print("Console: " + (state.get("public_url") or url) + " (user: admin)")

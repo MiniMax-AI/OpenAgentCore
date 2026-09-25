@@ -1,82 +1,95 @@
 package store
 
 import (
+	"context"
 	"errors"
+	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/google/uuid"
 )
 
 func TestProjectEnvironmentExecutorManagement(t *testing.T) {
-	s, _ := testStore(t)
+	s, pool := testStore(t)
 	ctx := t.Context()
-	p := FixtureExecutorPrincipal(t, s, uuid.NewString())
-	create := func(principal identity.Principal, kind string) (Session, Environment) {
+	project := createTestProject(t, s)
+	binding, err := s.GetProject(ctx, project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := binding.Principal
+	foreignProject := createTestProject(t, s)
+	foreign, err := s.GetProject(ctx, foreignProject.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each administrator request has its own request ID.
+	admin := func() context.Context { return keyAdminContext(ctx, project.ID) }
+	create := func(kind string) (Session, Environment) {
 		t.Helper()
 		input := environmentInput(uuid.NewString(), kind, "/workspace")
-		input.Creator = principal.Subject()
-		session, err := s.CreateSession(ctx, principal.TenantID, input)
+		input.Creator = p.Subject()
+		session, err := s.CreateSession(ctx, p.TenantID, input)
 		if err != nil {
 			t.Fatal(err)
 		}
-		environment, err := s.GetSessionEnvironment(ctx, principal.TenantID, session.ID)
+		environment, err := s.GetSessionEnvironment(ctx, p.TenantID, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return session, environment
 	}
-	session, one := create(p, "self_hosted")
-	_, two := create(p, "self_hosted")
-	_, hosted := create(p, "openai_hosted")
+	session, one := create("self_hosted")
+	_, two := create("self_hosted")
+	_, hosted := create("openai_hosted")
 	keyID := uuid.NewString()
-	issued, err := s.IssueEnvironmentExecutorCredential(ctx, p, one.ID, keyID, false)
-	if err != nil || issued.EnvironmentID != one.ID {
+
+	// The audit entry commits with the write: without an audit source nothing is issued.
+	if _, err := s.IssueProjectExecutorCredential(ctx, p, one.ID, keyID, false); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unaudited issue", err)
+	}
+	issued, err := s.IssueProjectExecutorCredential(admin(), p, one.ID, keyID, false)
+	if err != nil || issued.KeyID != keyID || issued.EnvironmentID != one.ID || issued.Token == "" {
 		t.Fatal("issue", err)
 	}
+	if _, err := s.AuthenticateEnvironmentExecutor(ctx, one.ID, executorDigest(issued.Token)); err != nil {
+		t.Fatal("issued credential does not authenticate", err)
+	}
 	// A lost issuance response must not cause a new key or replace the old secret.
-	if _, err := s.IssueEnvironmentExecutorCredential(ctx, p, one.ID, keyID, false); !errors.Is(err, ErrExecutorCredentialExists) {
+	if _, err := s.IssueProjectExecutorCredential(admin(), p, one.ID, keyID, false); !errors.Is(err, ErrExecutorCredentialExists) {
 		t.Fatal("uncertain retry", err)
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, one.ID, executorDigest(issued.Token)); err != nil {
-		t.Fatal("retry changed credential", err)
+	listed, err := s.ListProjectExecutorCredentials(ctx, p, one.ID)
+	if err != nil || len(listed) != 1 || listed[0].KeyID != keyID || listed[0].CreatedAt.IsZero() || listed[0].RevokedAt != nil {
+		t.Fatal("list", listed, err)
 	}
-	other := p
-	other.SubjectID = "different-creator"
-	foreign := FixtureExecutorPrincipal(t, s, uuid.NewString())
-	for _, principal := range []identity.Principal{other, foreign} {
-		if _, err := s.IssueEnvironmentExecutorCredential(ctx, principal, one.ID, uuid.NewString(), false); !errors.Is(err, ErrNotFound) {
-			t.Fatal("foreign issue", err)
-		}
-		if _, err := s.IssueEnvironmentExecutorCredential(ctx, principal, one.ID, keyID, true); !errors.Is(err, ErrNotFound) {
-			t.Fatal("foreign rotate", err)
-		}
-		if err := s.RevokeEnvironmentExecutorCredential(ctx, principal, one.ID, keyID); !errors.Is(err, ErrNotFound) {
-			t.Fatal("foreign revoke", err)
-		}
+	if listed, err := s.ListProjectExecutorCredentials(ctx, p, two.ID); err != nil || len(listed) != 0 {
+		t.Fatal("other Environment list", listed, err)
+	}
+
+	// Another Project, a hosted or unknown Environment and a key restricted elsewhere are not found.
+	if _, err := s.ListProjectExecutorCredentials(ctx, foreign.Principal, one.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign list", err)
+	}
+	if _, err := s.IssueProjectExecutorCredential(keyAdminContext(ctx, foreignProject.ID), foreign.Principal, one.ID, uuid.NewString(), false); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign issue", err)
 	}
 	for _, environment := range []string{two.ID, hosted.ID, uuid.NewString()} {
-		if _, err := s.IssueEnvironmentExecutorCredential(ctx, p, environment, keyID, true); !errors.Is(err, ErrNotFound) {
+		if _, err := s.IssueProjectExecutorCredential(admin(), p, environment, keyID, true); !errors.Is(err, ErrNotFound) {
 			t.Fatal("wrong target rotate", err)
 		}
-		if err := s.RevokeEnvironmentExecutorCredential(ctx, p, environment, keyID); !errors.Is(err, ErrNotFound) {
+		if err := s.RevokeProjectExecutorCredential(admin(), p, environment, keyID); !errors.Is(err, ErrNotFound) {
 			t.Fatal("wrong target revoke", err)
 		}
 	}
-	if _, err := s.IssueEnvironmentExecutorCredential(ctx, p, hosted.ID, uuid.NewString(), false); !errors.Is(err, ErrNotFound) {
+	if _, err := s.IssueProjectExecutorCredential(admin(), p, hosted.ID, uuid.NewString(), false); !errors.Is(err, ErrNotFound) {
 		t.Fatal("hosted issuance", err)
 	}
-	broad, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), "")
-	if err != nil {
-		t.Fatal(err)
+	if _, err := s.IssueProjectExecutorCredential(admin(), p, one.ID, uuid.NewString(), true); !errors.Is(err, ErrNotFound) {
+		t.Fatal("unknown key rotation", err)
 	}
-	if _, err := s.IssueEnvironmentExecutorCredential(ctx, p, one.ID, broad.KeyID, true); !errors.Is(err, ErrNotFound) {
-		t.Fatal("broad rotation", err)
-	}
-	if err := s.RevokeEnvironmentExecutorCredential(ctx, p, one.ID, broad.KeyID); !errors.Is(err, ErrNotFound) {
-		t.Fatal("broad revocation", err)
-	}
-	rotated, err := s.IssueEnvironmentExecutorCredential(ctx, p, one.ID, keyID, true)
+
+	rotated, err := s.IssueProjectExecutorCredential(admin(), p, one.ID, keyID, true)
 	if err != nil || rotated.Token == issued.Token {
 		t.Fatal("rotation", err)
 	}
@@ -84,20 +97,49 @@ func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 		t.Fatal("old secret", err)
 	}
 	for range 2 {
-		if err := s.RevokeEnvironmentExecutorCredential(ctx, p, one.ID, keyID); err != nil {
+		if err := s.RevokeProjectExecutorCredential(admin(), p, one.ID, keyID); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if _, err := s.AuthenticateEnvironmentExecutor(ctx, one.ID, executorDigest(rotated.Token)); !errors.Is(err, ErrNotFound) {
 		t.Fatal("revoked secret", err)
 	}
-	if _, err := s.IssueEnvironmentExecutorCredential(ctx, p, one.ID, keyID, false); !errors.Is(err, ErrExecutorCredentialExists) {
+	if listed, err := s.ListProjectExecutorCredentials(ctx, p, one.ID); err != nil || len(listed) != 1 || listed[0].RevokedAt == nil {
+		t.Fatal("revoked list", listed, err)
+	}
+	if _, err := s.IssueProjectExecutorCredential(admin(), p, one.ID, keyID, false); !errors.Is(err, ErrExecutorCredentialExists) {
 		t.Fatal("resurrected secret", err)
 	}
+
+	var actions []string
+	rows, err := pool.Query(ctx, "SELECT action, row_to_json(a)::text FROM admin_audit_log a WHERE resource_type='executor_credential' AND resource_id=$1 ORDER BY created_at", keyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var action, row string
+		if err := rows.Scan(&action, &row); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(row, issued.Token) || strings.Contains(row, rotated.Token) {
+			t.Fatal("audit contains a secret")
+		}
+		actions = append(actions, action)
+	}
+	if rows.Err() != nil || strings.Join(actions, ",") != "issue,rotate,revoke,revoke" {
+		t.Fatal("audit actions", actions, rows.Err())
+	}
+
 	if err := s.DeleteSession(ctx, p.TenantID, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.IssueEnvironmentExecutorCredential(ctx, p, one.ID, keyID, true); !errors.Is(err, ErrNotFound) {
-		t.Fatal("deleted target", err)
+	if _, err := s.ListProjectExecutorCredentials(ctx, p, one.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("deleted target list", err)
+	}
+	if _, err := s.IssueProjectExecutorCredential(admin(), p, one.ID, keyID, true); !errors.Is(err, ErrNotFound) {
+		t.Fatal("deleted target rotate", err)
+	}
+	if err := s.RevokeProjectExecutorCredential(admin(), p, one.ID, keyID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("deleted target revoke", err)
 	}
 }

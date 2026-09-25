@@ -183,9 +183,17 @@ definitions:
   api.EnvironmentExecutorCredentialRequest:
     properties:
       key_id:
+        format: uuid
         type: string
       rotate:
         type: boolean
+    type: object
+  api.ExecutorCredentialList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/store.ExecutorCredential'
+        type: array
     type: object
   api.ProjectAPIKeyRequest:
     properties:
@@ -586,6 +594,17 @@ definitions:
         type: string
       revoked_at:
         type: string
+    type: object
+  store.ExecutorCredential:
+    properties:
+      created_at:
+        type: string
+      key_id:
+        format: uuid
+        type: string
+      revoked_at:
+        type: string
+        x-nullable: true
     type: object
   store.IssuedExecutorCredential:
     properties:
@@ -2791,7 +2810,7 @@ info:
   title: Core Extensions
   version: "1"
 paths:
-  /core/v1/admin/audit-log:
+  /core/v1/audit-log:
     get:
       description: Deployment administrator only. Newest-first cursor pagination of safe metadata. Actor labels are unverified console labels, not authorization identities. Request bodies and secrets are never recorded.
       parameters:
@@ -2854,7 +2873,7 @@ paths:
       summary: Query committed administrator mutations
       tags:
         - Core Administration
-  /core/v1/admin/core-metrics:
+  /core/v1/metrics:
     get:
       description: Deployment administrator only. Complete UTC buckets; unknown measurements are null. Samples are process-local and are not backfilled after a restart.
       parameters:
@@ -2891,7 +2910,7 @@ paths:
       summary: Retrieve Core operational metrics
       tags:
         - Core Administration
-  /core/v1/admin/projects:
+  /core/v1/projects:
     get:
       parameters:
         - description: Project ID cursor
@@ -2972,7 +2991,7 @@ paths:
       summary: Create an empty independent Project
       tags:
         - Administrator Projects
-  /core/v1/admin/projects/{project_id}:
+  /core/v1/projects/{project_id}:
     post:
       consumes:
         - application/json
@@ -3020,7 +3039,7 @@ paths:
       summary: Rename a Project
       tags:
         - Administrator Projects
-  /core/v1/admin/projects/{project_id}/agents:
+  /core/v1/projects/{project_id}/agents:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -3075,7 +3094,7 @@ paths:
       summary: List reusable Agents in a managed key space
       tags:
         - Agents
-  /core/v1/admin/projects/{project_id}/agents/{agent_id}:
+  /core/v1/projects/{project_id}/agents/{agent_id}:
     delete:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -3162,7 +3181,7 @@ paths:
       summary: Retrieve a reusable Agent in a managed key space
       tags:
         - Agents
-  /core/v1/admin/projects/{project_id}/archive:
+  /core/v1/projects/{project_id}/archive:
     post:
       parameters:
         - description: Project UUID
@@ -3198,7 +3217,7 @@ paths:
       summary: Archive a Project and revoke all its keys while retaining assets
       tags:
         - Administrator Projects
-  /core/v1/admin/projects/{project_id}/environment-templates:
+  /core/v1/projects/{project_id}/environment-templates:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -3253,7 +3272,7 @@ paths:
       summary: List Environment Templates in a managed key space
       tags:
         - Environment Templates
-  /core/v1/admin/projects/{project_id}/environment-templates/{environment_template_id}:
+  /core/v1/projects/{project_id}/environment-templates/{environment_template_id}:
     delete:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -3336,7 +3355,137 @@ paths:
       summary: Retrieve an Environment Template in a managed key space
       tags:
         - Environment Templates
-  /core/v1/admin/projects/{project_id}/files:
+  /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials:
+    get:
+      description: Core key only. Returns metadata of the credentials restricted to this Environment, oldest first; secrets are never listed. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404.
+      parameters:
+        - description: Project UUID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Environment UUID
+          in: path
+          name: environment_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ExecutorCredentialList'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List a self_hosted Environment's executor credentials
+      tags:
+        - Executor Credentials
+    post:
+      consumes:
+        - application/json
+      description: Core key only. Returns a connect-only secret once, restricted to daemon enrollment and connection for this Environment, with the Project's principal as its execution principal. Repeating an issuance key_id returns 409 executor_credential_exists; after an uncertain response, list the credentials and rotate that key_id explicitly. Rotation keeps the key's Environment, invalidates the old secret and restores a revoked key; rotating an unknown key_id returns 404. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404. Each write records an administrator audit entry without the secret.
+      parameters:
+        - description: Project UUID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Environment UUID
+          in: path
+          name: environment_id
+          required: true
+          type: string
+        - description: Request
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.EnvironmentExecutorCredentialRequest'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/store.IssuedExecutorCredential'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Issue or explicitly rotate a self_hosted Environment executor credential
+      tags:
+        - Executor Credentials
+  /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials/{key_id}:
+    delete:
+      description: Core key only. Revokes one credential restricted to this Environment; repeated revocation is safe. Revocation denies future enrollment and connection but does not stop executor-owned compute. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404.
+      parameters:
+        - description: Project UUID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Environment UUID
+          in: path
+          name: environment_id
+          required: true
+          type: string
+        - description: Executor key UUID
+          in: path
+          name: key_id
+          required: true
+          type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Revoke a self_hosted Environment executor credential
+      tags:
+        - Executor Credentials
+  /core/v1/projects/{project_id}/files:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -3400,7 +3549,7 @@ paths:
       summary: List source files in a managed key space
       tags:
         - Files
-  /core/v1/admin/projects/{project_id}/files/{file_id}:
+  /core/v1/projects/{project_id}/files/{file_id}:
     delete:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -3491,7 +3640,7 @@ paths:
       summary: Retrieve source file metadata in a managed key space
       tags:
         - Files
-  /core/v1/admin/projects/{project_id}/keys:
+  /core/v1/projects/{project_id}/keys:
     get:
       parameters:
         - description: Project UUID
@@ -3586,7 +3735,7 @@ paths:
       summary: Issue an independent secret in an existing Project
       tags:
         - Administrator Projects
-  /core/v1/admin/projects/{project_id}/keys/{key_id}:
+  /core/v1/projects/{project_id}/keys/{key_id}:
     delete:
       parameters:
         - description: Project UUID
@@ -3627,7 +3776,7 @@ paths:
       summary: Revoke one Project key while retaining shared assets
       tags:
         - Administrator Projects
-  /core/v1/admin/projects/{project_id}/resource-owners:
+  /core/v1/projects/{project_id}/resource-owners:
     get:
       description: Deployment administrator only. The key path selects its independent space. Returns null for resources without recorded creation provenance, including historical and foreign resources. No key secret is returned.
       parameters:
@@ -3674,7 +3823,7 @@ paths:
       summary: Batch lookup resource creation keys
       tags:
         - Write Audit
-  /core/v1/admin/projects/{project_id}/sessions:
+  /core/v1/projects/{project_id}/sessions:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -3733,7 +3882,7 @@ paths:
       summary: List execution Sessions in a managed key space
       tags:
         - Sessions
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}:
+  /core/v1/projects/{project_id}/sessions/{session_id}:
     delete:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -3824,7 +3973,7 @@ paths:
       summary: Retrieve an execution Session in a managed key space
       tags:
         - Sessions
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/archive:
+  /core/v1/projects/{project_id}/sessions/{session_id}/archive:
     get:
       description: Deployment administrator only. Reports actual resource disposition, including expiry and failure cleanup. This is not archive provenance and does not assert active Turn settlement. Read this after an uncertain archive response; never infer released from a missing sandbox alone.
       parameters:
@@ -3931,7 +4080,7 @@ paths:
       summary: Release a managed Session's execution resources while retaining history
       tags:
         - Core Administration
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts:
+  /core/v1/projects/{project_id}/sessions/{session_id}/artifacts:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4000,7 +4149,7 @@ paths:
       summary: List immutable Session artifacts in a managed key space
       tags:
         - Artifacts
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}:
+  /core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}:
     delete:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4101,7 +4250,7 @@ paths:
       summary: Retrieve immutable artifact metadata in a managed key space
       tags:
         - Artifacts
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}/content:
+  /core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}/content:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4152,7 +4301,7 @@ paths:
       summary: Download immutable artifact bytes in a managed key space
       tags:
         - Artifacts
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/execution-configuration:
+  /core/v1/projects/{project_id}/sessions/{session_id}/execution-configuration:
     get:
       description: Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment provider details remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
       parameters:
@@ -4198,7 +4347,7 @@ paths:
       summary: Retrieve frozen Session execution configuration in a managed key space
       tags:
         - Core extensions
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/items:
+  /core/v1/projects/{project_id}/sessions/{session_id}/items:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4258,7 +4407,7 @@ paths:
       summary: List persisted execution Items in a managed key space
       tags:
         - Items
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-history:
+  /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history:
     get:
       description: Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session. End is exclusive; the server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
       parameters:
@@ -4324,7 +4473,7 @@ paths:
       summary: Retrieve Session Runtime history in a managed key space
       tags:
         - Runtime history
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/runtime-observation:
+  /core/v1/projects/{project_id}/sessions/{session_id}/runtime-observation:
     get:
       description: Deployment administrator only; the Project ID selects the target space and does not authenticate. Returns one read-only current Runtime observation. It never provisions, renews, restarts, pauses or stops compute.
       parameters:
@@ -4370,7 +4519,7 @@ paths:
       summary: Retrieve a Session Runtime observation in a managed key space
       tags:
         - Runtime observations
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/turns:
+  /core/v1/projects/{project_id}/sessions/{session_id}/turns:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4431,7 +4580,7 @@ paths:
       summary: List execution Turns in a managed key space
       tags:
         - Turns
-  /core/v1/admin/projects/{project_id}/sessions/{session_id}/turns/{turn_id}:
+  /core/v1/projects/{project_id}/sessions/{session_id}/turns/{turn_id}:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4478,7 +4627,7 @@ paths:
       summary: Retrieve an execution Turn in a managed key space
       tags:
         - Turns
-  /core/v1/admin/projects/{project_id}/skills:
+  /core/v1/projects/{project_id}/skills:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4517,7 +4666,7 @@ paths:
       summary: List Skills in a managed key space
       tags:
         - Skills
-  /core/v1/admin/projects/{project_id}/skills/{skill_id}:
+  /core/v1/projects/{project_id}/skills/{skill_id}:
     delete:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4568,7 +4717,7 @@ paths:
       summary: Retrieve Skill metadata in a managed key space
       tags:
         - Skills
-  /core/v1/admin/projects/{project_id}/skills/{skill_id}/content:
+  /core/v1/projects/{project_id}/skills/{skill_id}/content:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4594,7 +4743,7 @@ paths:
       summary: Download Skill content in a managed key space
       tags:
         - Skills
-  /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions:
+  /core/v1/projects/{project_id}/skills/{skill_id}/versions:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4638,7 +4787,7 @@ paths:
       summary: List Skill versions in a managed key space
       tags:
         - Skills
-  /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version}:
+  /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version}:
     delete:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4699,7 +4848,7 @@ paths:
       summary: Retrieve Skill version metadata in a managed key space
       tags:
         - Skills
-  /core/v1/admin/projects/{project_id}/skills/{skill_id}/versions/{version}/content:
+  /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version}/content:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4730,7 +4879,7 @@ paths:
       summary: Download immutable Skill version content in a managed key space
       tags:
         - Skills
-  /core/v1/admin/projects/{project_id}/vaults:
+  /core/v1/projects/{project_id}/vaults:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4801,7 +4950,7 @@ paths:
       summary: List Vaults in a managed key space
       tags:
         - Vaults
-  /core/v1/admin/projects/{project_id}/vaults/{vault_id}:
+  /core/v1/projects/{project_id}/vaults/{vault_id}:
     delete:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4888,7 +5037,7 @@ paths:
       summary: Retrieve a Vault in a managed key space
       tags:
         - Vaults
-  /core/v1/admin/projects/{project_id}/vaults/{vault_id}/credentials:
+  /core/v1/projects/{project_id}/vaults/{vault_id}/credentials:
     get:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -4964,7 +5113,7 @@ paths:
       summary: List safe Vault Credential metadata in a managed key space
       tags:
         - Credentials
-  /core/v1/admin/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id}:
+  /core/v1/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id}:
     delete:
       description: Deployment administrator only. Reuses the public resource projection and operation rules; the key selects the target space and does not authenticate.
       parameters:
@@ -5061,7 +5210,7 @@ paths:
       summary: Retrieve safe Vault Credential metadata in a managed key space
       tags:
         - Credentials
-  /core/v1/admin/projects/{project_id}/write-operations:
+  /core/v1/projects/{project_id}/write-operations:
     get:
       description: Deployment administrator only. Reverse chronological keyset pagination over committed writes. Creation records remain; other records follow configured retention. The key path selects its independent space, never a caller-supplied tenant.
       parameters:
@@ -5126,220 +5275,6 @@ paths:
       summary: Query API-key write operations
       tags:
         - Write Audit
-  /core/v1/admin/runtime-observations:
-    get:
-      description: Deployment administrator only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
-      parameters:
-        - description: Last Session ID from the preceding page
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Page size
-          in: query
-          maximum: 100
-          minimum: 1
-          name: limit
-          type: integer
-        - default: desc
-          description: Session creation order
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AdminRuntimeObservationList'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List Runtime observations across managed Projects
-      tags:
-        - Core Administration
-  /core/v1/admin/summary:
-    get:
-      description: Administrator only. after/limit/order paginate Projects. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each Project is read in a consistent database snapshot. Totals are not billing records.
-      parameters:
-        - description: One API Project
-          in: query
-          name: project_id
-          type: string
-        - default: project
-          description: Grouping
-          enum:
-            - project
-            - agent
-            - key
-          in: query
-          name: group_by
-          type: string
-        - description: Inclusive RFC3339 Session creation time
-          in: query
-          name: created_after
-          type: string
-        - description: Exclusive RFC3339 Session creation time
-          in: query
-          name: created_before
-          type: string
-        - description: Last Project ID in preceding page
-          in: query
-          name: after
-          type: string
-        - default: 20
-          description: Number of Projects
-          in: query
-          maximum: 100
-          minimum: 1
-          name: limit
-          type: integer
-        - default: desc
-          description: Project order
-          enum:
-            - asc
-            - desc
-          in: query
-          name: order
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.AdminSummaryResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: Summarize resource counts and Session usage by Project, Agent or creator key
-      tags:
-        - Core Administration
-  /core/v1/environments/{environment_id}/executor-credentials:
-    post:
-      consumes:
-        - application/json
-      description: Core extension, not an upstream Agents API operation. Uses the project caller key and exact live self_hosted Session creator. Returns a connect-only secret once, restricted to this Environment. Repeating an issuance key_id returns 409; after an uncertain response explicitly rotate that same key_id. Rotation retains immutable ownership and invalidates the old secret. No Session API authority is granted.
-      parameters:
-        - description: Environment UUID
-          in: path
-          name: environment_id
-          required: true
-          type: string
-        - description: Request
-          in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/api.EnvironmentExecutorCredentialRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/store.IssuedExecutorCredential'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - BearerAuth: []
-      summary: Issue or explicitly rotate an Environment executor credential
-      tags:
-        - Environment Executor
-  /core/v1/environments/{environment_id}/executor-credentials/{key_id}:
-    delete:
-      description: Core extension authenticated by the project caller key. Revokes only the caller's exact Environment-restricted credential. Repeated revocation is safe. Revocation denies future enrollment and dispatch but does not stop caller-owned compute or prove process quiescence.
-      parameters:
-        - description: Environment UUID
-          in: path
-          name: environment_id
-          required: true
-          type: string
-        - description: Executor key UUID
-          in: path
-          name: key_id
-          required: true
-          type: string
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - BearerAuth: []
-      summary: Revoke an Environment executor credential
-      tags:
-        - Environment Executor
   /core/v1/sandbox/deployment:
     get:
       description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
@@ -5786,14 +5721,137 @@ paths:
       summary: List retained allocations on a sandbox node
       tags:
         - Sandbox Manager
+  /core/v1/sandbox/runtime-observations:
+    get:
+      description: Deployment administrator only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
+      parameters:
+        - description: Last Session ID from the preceding page
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Page size
+          in: query
+          maximum: 100
+          minimum: 1
+          name: limit
+          type: integer
+        - default: desc
+          description: Session creation order
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AdminRuntimeObservationList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List Runtime observations across managed Projects
+      tags:
+        - Core Administration
+  /core/v1/summary:
+    get:
+      description: Administrator only. after/limit/order paginate Projects. Agent grouping returns groups within those spaces. Date bounds filter Session creation, not current asset counts. Usage sums only non-null public Session usage; coverage includes every selected Session. Each Project is read in a consistent database snapshot. Totals are not billing records.
+      parameters:
+        - description: One API Project
+          in: query
+          name: project_id
+          type: string
+        - default: project
+          description: Grouping
+          enum:
+            - project
+            - agent
+            - key
+          in: query
+          name: group_by
+          type: string
+        - description: Inclusive RFC3339 Session creation time
+          in: query
+          name: created_after
+          type: string
+        - description: Exclusive RFC3339 Session creation time
+          in: query
+          name: created_before
+          type: string
+        - description: Last Project ID in preceding page
+          in: query
+          name: after
+          type: string
+        - default: 20
+          description: Number of Projects
+          in: query
+          maximum: 100
+          minimum: 1
+          name: limit
+          type: integer
+        - default: desc
+          description: Project order
+          enum:
+            - asc
+            - desc
+          in: query
+          name: order
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AdminSummaryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Summarize resource counts and Session usage by Project, Agent or creator key
+      tags:
+        - Core Administration
 schemes:
   - http
   - https
 securityDefinitions:
-  BearerAuth:
-    in: header
-    name: Authorization
-    type: apiKey
   DeploymentAdminAuth:
     in: header
     name: Authorization

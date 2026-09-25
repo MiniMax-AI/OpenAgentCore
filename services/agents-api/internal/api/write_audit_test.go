@@ -56,7 +56,7 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owners := "/core/v1/admin/projects/" + key.ProjectID + "/resource-owners?resource_type=agent&resource_ids=first,second"
+	owners := "/core/v1/projects/" + key.ProjectID + "/resource-owners?resource_type=agent&resource_ids=first,second"
 	for _, token := range []string{"", "caller", "foreign"} {
 		w := projectKeyHTTP(h, "GET", owners, token, "")
 		if w.Code != 401 || queries.calls != 0 {
@@ -70,7 +70,7 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"api_key":null`) {
 		t.Fatalf("history must be null: %s", w.Body)
 	}
-	history := "/core/v1/admin/projects/" + key.ProjectID + "/write-operations?"
+	history := "/core/v1/projects/" + key.ProjectID + "/write-operations?"
 	w = projectKeyHTTP(h, "GET", history+"key_id=some-key&resource_type=credential&resource_id=resource&limit=2&after=cursor&created_after=2026-01-01T00:00:00Z&created_before=2026-02-01T00:00:00Z", "admin", "")
 	if w.Code != 200 || queries.filter.Limit != 2 || queries.filter.KeyID != "some-key" || queries.filter.After != "cursor" || queries.filter.CreatedAfter == nil || queries.filter.CreatedBefore == nil {
 		t.Fatalf("history %d %s filter%+v", w.Code, w.Body, queries.filter)

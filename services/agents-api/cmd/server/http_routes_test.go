@@ -136,7 +136,7 @@ func TestServerHandlerRawPathsKeepEncodedSeparators(t *testing.T) {
 		{"/v1/\xc3\xa9/..%2F..%2Fapi/v1/sandbox-node/connect", "400"},
 		{"/v1/x{/..%2F..%2Fcore/v1/sandbox/nodes", "400"},
 		{"/v1/x{/..%2F..%2Fcore/v1/project-api-keys/x", "400"},
-		{"/v1/x{/../../core/v1/admin/api-keys/x", "401"},
+		{"/v1/x{/../../core/v1/api-keys/x", "401"},
 		{"/v1/x\\/..%5C..%5Capi/v1/agent-daemon/ws", "400"},
 		{"http://example.test/v1/x{/..%252F..%252Fapi/v1/agent-daemon/enroll", "400"},
 		{"/v1/x{/../../api/v1/agent-daemon/enroll", "204"},
@@ -170,7 +170,7 @@ func FuzzServerHandlerRoutesLikeCanonicalForm(f *testing.F) {
 	for _, seed := range []string{"v1//agents", "v1/x{/..%2F..%2Fapi/v1/agent-daemon/enroll", "api/v1/agent-daemon%2Fenroll",
 		"v1/\xc3\xa9/../../api/v1/agent-daemon/ws", "api/v1/sandbox-node/%2E%2E/sandbox-node/connect", "0\"%2F", "api/v1/agent-daemon",
 		"v1/x\\/..%5C..%5Capi/v1/agent-daemon/connection", "v1/agents/%252F%2e%2E/x", "v1/x{/..%2F..%2Fcore/v1/project-api-keys/x",
-		"core/v1/admin/api-keys/x/%2E%2E/%2E%2E/%2E%2E/%2E%2E/api/v1/agent-daemon/enroll"} {
+		"core/v1/projects/x/%2E%2E/%2E%2E/%2E%2E/%2E%2E/api/v1/agent-daemon/enroll"} {
 		f.Add(seed)
 	}
 	handler := daemonComposition(f)

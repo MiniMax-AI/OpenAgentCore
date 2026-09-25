@@ -31,31 +31,34 @@ type SandboxEnrollmentTokenRequest struct {
 func WithSandboxManager(s *store.Store, auth *DeploymentAuthenticator) Option {
 	return func(h *Handler) { h.sandboxStore = s; h.deploymentAuth = auth }
 }
+
+// registerSandboxNodeRoutes serves node machine connections. They authenticate
+// with an enrollment token or node credential, never the Core key.
+func (h *Handler) registerSandboxNodeRoutes(r chi.Router) {
+	if h.sandboxStore == nil {
+		return
+	}
+	r.Post("/api/v1/sandbox-node/enroll", h.enrollSandboxNode)
+	r.Get("/api/v1/sandbox-node/identity", h.sandboxNodeIdentity)
+	r.Get("/api/v1/sandbox-node/configuration", h.sandboxNodeConfiguration)
+}
+
+// registerSandboxManagerRoutes adds sandbox deployment and node administration
+// to the Core-key-authenticated /core/v1 router.
 func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 	if h.sandboxStore == nil {
 		return
 	}
-	// Machine connections authenticate with an enrollment token or node
-	// credential, never the Core key.
-	r.Post("/api/v1/sandbox-node/enroll", h.enrollSandboxNode)
-	r.Get("/api/v1/sandbox-node/identity", h.sandboxNodeIdentity)
-	r.Get("/api/v1/sandbox-node/configuration", h.sandboxNodeConfiguration)
-	if h.deploymentAuth == nil {
-		return
-	}
-	r.Route("/core/v1/sandbox", func(r chi.Router) {
-		r.Use(h.deploymentAuth.authenticate)
-		r.Get("/deployment", h.sandboxDeployment)
-		r.Post("/deployment", h.initializeSandboxDeployment)
-		r.Put("/deployment", h.updateSandboxDeployment)
-		r.Patch("/deployment/maintenance", h.setSandboxMaintenance)
-		r.Get("/nodes", h.sandboxNodes)
-		r.Get("/nodes/{node_id}", h.sandboxNodeDetail)
-		r.Patch("/nodes/{node_id}", h.updateSandboxNode)
-		r.Delete("/nodes/{node_id}", h.removeSandboxNode)
-		r.Get("/nodes/{node_id}/allocations", h.sandboxAllocations)
-		r.Post("/enrollment-tokens", h.createSandboxEnrollment)
-	})
+	r.Get("/sandbox/deployment", h.sandboxDeployment)
+	r.Post("/sandbox/deployment", h.initializeSandboxDeployment)
+	r.Put("/sandbox/deployment", h.updateSandboxDeployment)
+	r.Patch("/sandbox/deployment/maintenance", h.setSandboxMaintenance)
+	r.Get("/sandbox/nodes", h.sandboxNodes)
+	r.Get("/sandbox/nodes/{node_id}", h.sandboxNodeDetail)
+	r.Patch("/sandbox/nodes/{node_id}", h.updateSandboxNode)
+	r.Delete("/sandbox/nodes/{node_id}", h.removeSandboxNode)
+	r.Get("/sandbox/nodes/{node_id}/allocations", h.sandboxAllocations)
+	r.Post("/sandbox/enrollment-tokens", h.createSandboxEnrollment)
 }
 
 // @Summary Retrieve sandbox deployment

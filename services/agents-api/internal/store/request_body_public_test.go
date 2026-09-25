@@ -221,16 +221,6 @@ func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
 	if status, response := client.do(token, http.MethodPost, "/v1/skills/"+skill.ID, "text/plain", []byte(`{"default_version":`)); status != http.StatusBadRequest || gated(response) {
 		t.Fatalf("malformed Skills update: %d %s", status, response)
 	}
-	// Executor credential issuance keeps its own reader and errors.
-	environment := "/core/v1/environments/" + uuid.NewString() + "/executor-credentials"
-	for _, request := range []struct {
-		contentType, body string
-		status            int
-	}{{"", `{"key_id":"` + uuid.NewString() + `"}`, http.StatusNotFound}, {"text/plain", `{"key_id":`, http.StatusBadRequest}, {"", "", http.StatusBadRequest}} {
-		if status, response := client.do(token, http.MethodPost, environment, request.contentType, []byte(request.body)); status != request.status || gated(response) || !strings.Contains(response, `"error"`) {
-			t.Errorf("executor credential %q: %d %s", request.body, status, response)
-		}
-	}
 	// DELETE keeps its empty-body rule and needs no Content-Type.
 	agent := client.created(token, "/v1/agents", `{"model":"excluded-model"}`)
 	vault := client.created(token, "/v1/vaults", `{"name":"excluded"}`)

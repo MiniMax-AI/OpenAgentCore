@@ -33,7 +33,7 @@ func TestCoreMetricsAdministratorContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := "/core/v1/admin/core-metrics"
+	path := "/core/v1/metrics"
 	for _, token := range []string{"", "unknown", "caller"} {
 		w := projectKeyHTTP(h, "GET", path, token, "")
 		if w.Code != 401 || f.calls != 0 {

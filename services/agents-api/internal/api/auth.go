@@ -98,9 +98,9 @@ func (h *Handler) authenticate(next http.Handler) http.Handler {
 	})
 }
 
-// authenticateProject guards Files, Skills and Core project extensions, which
-// ignore OpenAI-Beta. As observed on Files and Skills (HP-07), a 401 has a null
-// code without a Bearer credential and invalid_api_key for a rejected one.
+// authenticateProject guards Files and Skills, which ignore OpenAI-Beta. As
+// observed on them (HP-07), a 401 has a null code without a Bearer credential
+// and invalid_api_key for a rejected one.
 func (h *Handler) authenticateProject(next http.Handler) http.Handler {
 	return h.authenticateCaller(next, true)
 }

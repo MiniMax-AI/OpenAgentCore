@@ -115,11 +115,11 @@ func TestAdministratorCredentialSeparation(t *testing.T) {
 }
 func TestAdminCatalogPageLimits(t *testing.T) {
 	for _, query := range []string{"limit=101", "limit=0", "limit=bad", "limit=1&limit=2", "order=sideways", "order=asc&order=desc", "after=a&after=b"} {
-		if _, _, _, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/admin/projects?"+query, nil)); err == nil {
+		if _, _, _, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/projects?"+query, nil)); err == nil {
 			t.Errorf("invalid page accepted: %s", query)
 		}
 	}
-	_, limit, ascending, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/admin/projects?limit=100&order=asc", nil))
+	_, limit, ascending, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/projects?limit=100&order=asc", nil))
 	if err != nil || limit != 100 || !ascending {
 		t.Fatal("valid maximum page rejected", err)
 	}

@@ -14,7 +14,7 @@ import "net/http"
 // @Success 200 {object} v1.SourceFileList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/files [get]
+// @Router /core/v1/projects/{project_id}/files [get]
 func (h *Handler) adminListSourceFiles(w http.ResponseWriter, r *http.Request) {
 	h.listSourceFiles(w, r)
 }
@@ -28,7 +28,7 @@ func (h *Handler) adminListSourceFiles(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SourceFile
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/files/{file_id} [get]
+// @Router /core/v1/projects/{project_id}/files/{file_id} [get]
 func (h *Handler) adminGetSourceFile(w http.ResponseWriter, r *http.Request) {
 	h.getSourceFile(w, r)
 }
@@ -42,7 +42,7 @@ func (h *Handler) adminGetSourceFile(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SourceFileDeleted
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Param project_id path string true "Project ID"
-// @Router /core/v1/admin/projects/{project_id}/files/{file_id} [delete]
+// @Router /core/v1/projects/{project_id}/files/{file_id} [delete]
 func (h *Handler) adminDeleteSourceFile(w http.ResponseWriter, r *http.Request) {
 	h.deleteSourceFile(w, r)
 }

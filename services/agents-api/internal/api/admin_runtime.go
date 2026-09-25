@@ -45,7 +45,7 @@ type AdminRuntimeObservationList struct {
 // @Param order query string false "Session creation order" Enums(asc,desc) default(desc)
 // @Success 200 {object} api.AdminRuntimeObservationList
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /core/v1/admin/runtime-observations [get]
+// @Router /core/v1/sandbox/runtime-observations [get]
 func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Request) {
 	if h.runtimeObservations == nil {
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Runtime observation is not configured on this service.")

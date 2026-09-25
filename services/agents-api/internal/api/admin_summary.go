@@ -67,7 +67,7 @@ func adminSummaryTime(r *http.Request, name string) (*time.Time, error) {
 // @Param order query string false "Project order" Enums(asc,desc) default(desc)
 // @Success 200 {object} api.AdminSummaryResponse
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /core/v1/admin/summary [get]
+// @Router /core/v1/summary [get]
 func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 	options, ok := readPage(w, r, "project_id", "group_by", "created_after", "created_before")
 	if !ok {

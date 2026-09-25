@@ -58,7 +58,7 @@ func adminTestHandler(t *testing.T, options ...Option) (http.Handler, *recording
 	return h, s, key.TenantID
 }
 
-const adminSessionsPath = "/core/v1/admin/projects/" + managementProjectID + "/sessions/"
+const adminSessionsPath = "/core/v1/projects/" + managementProjectID + "/sessions/"
 
 type adminReadFixture struct {
 	ResourceStore
@@ -90,7 +90,7 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := "/core/v1/admin/projects/" + managementProjectID
+	base := "/core/v1/projects/" + managementProjectID
 	for _, test := range []struct {
 		method, path string
 		status       int
@@ -112,7 +112,7 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 	if resources.seenTenant != key.TenantID || !resources.administrative || resources.impersonated {
 		t.Fatal("administrator target became a caller or lost audit scope")
 	}
-	for _, path := range []string{base + "/agents", "/core/v1/admin/not-an-operation"} {
+	for _, path := range []string{base + "/agents", "/core/v1/not-an-operation"} {
 		for _, token := range []string{"caller", "issued-project-key", ""} {
 			if w := projectKeyHTTP(h, "GET", path, token, ""); w.Code != 401 {
 				t.Fatalf("unauthorized management path returned %d", w.Code)
@@ -154,7 +154,7 @@ func TestAdminSummaryUsesPublicStateAndNullUsageCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := "/core/v1/admin/summary?project_id=" + managementProjectID + "&created_after=1970-01-01T00:00:00Z&created_before=2030-01-01T00:00:00Z"
+	base := "/core/v1/summary?project_id=" + managementProjectID + "&created_after=1970-01-01T00:00:00Z&created_before=2030-01-01T00:00:00Z"
 	for _, group := range []string{"project", "key", "agent"} {
 		w := projectKeyHTTP(h, http.MethodGet, base+"&group_by="+group, "admin", "")
 		var response AdminSummaryResponse
