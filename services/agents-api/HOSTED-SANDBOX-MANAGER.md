@@ -345,14 +345,18 @@ reported value, so check `online` first.
 | `kvm_unavailable` | The node cannot open `/dev/kvm` for reading and writing, or the host is not Linux | Enable hardware virtualization and give the service account KVM access, for example through the `kvm` group |
 | `microsandbox_artifacts_unavailable` | The pinned Runtime or firmware is missing or fails its SHA-256 check, or the helper is missing or not executable | Rerun the node installer from the matched release |
 | `capacity_insufficient` | The host has fewer CPUs or less memory than one sandbox of the deployment specification | Use a larger host, or change the per-sandbox resources through the maintenance procedure |
-| `provider_unavailable` | Any other failure, such as a missing private microsandbox state directory, and every failure reported by an older node | Inspect the node configuration and its service journal |
+| `provider_unavailable` | Any other failure, such as a missing private microsandbox state directory, and every failure reported by an older node | Read the local error in the node's service journal warning and fix that cause |
 
 A node reports only its first failed check. Checks run from the provider platform
 (Docker daemon or KVM), through Docker limit support and host capacity, to the
 installed Runtime content. An unreachable Docker daemon therefore hides a missing
 image, and missing KVM hides missing artifacts or insufficient capacity. After a
-fix, the next heartbeat (about ten seconds) clears or replaces the code.
-`parsar-sandbox-node register` prints the same code with its local failure.
+fix, the next heartbeat (about ten seconds) checks again and clears or replaces
+the code. Repaired Runtime artifacts, a pulled image or a started Docker daemon
+recover this way. A new Docker or KVM group membership applies only to a new
+process: restart the node with `systemctl --user restart
+parsar-node-<installation_id>.service`. The service journal's warning includes
+the local error behind the code; that text never leaves the host.
 
 Only the code crosses the node connection. Probe errors can name host paths or
 contain daemon messages; they are not sent to Core, stored or returned. Core stores

@@ -2,7 +2,7 @@ import { AgentCoreError, OpenAIAgentsClient } from "./client";
 import type { ReadOptions } from "./types";
 
 export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "compute_unconfirmed" | "ownership_mismatch" | "provider_unavailable";
-/** Fixed reason a node's provider is not ready; empty while ready. Treat an unknown future value as provider_unavailable. */
+/** Fixed reason a node's provider is not ready. Core omits the field while the provider is ready, so read it as falsy (undefined) then. Treat an unknown future value as provider_unavailable. */
 export type SandboxNodeDiagnostic =
   | ""
   | "provider_unavailable"

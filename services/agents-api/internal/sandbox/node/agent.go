@@ -140,16 +140,22 @@ func Run(ctx context.Context, config AgentConfig) error {
 	}
 }
 func (a *agent) health(ctx context.Context, host *hostHealthSampler) (Health, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	h, e := a.config.Probe(ctx)
+	h, e := a.config.Probe(probeCtx)
 	h.ProviderReady = e == nil
 	// Only the fixed code leaves this process; the probe error may name host paths.
 	h.Diagnostic = sandbox.NodeDiagnostic(e)
-	wasReady := a.ready.Swap(h.ProviderReady)
-	seen := a.healthSeen.Swap(true)
-	if e != nil && ctx.Err() == nil && (!seen || wasReady) {
-		log.Ctx(ctx).Warn("sandbox node provider unavailable; check local runtime configuration and permissions", "node_id", a.config.Identity.NodeID, "diagnostic", h.Diagnostic)
+	if e != nil && ctx.Err() != nil {
+		// A closing connection cancelled the probe; that says nothing about the provider.
+		h.Diagnostic = sandbox.NodeProviderUnavailable
+	} else {
+		wasReady := a.ready.Swap(h.ProviderReady)
+		seen := a.healthSeen.Swap(true)
+		if e != nil && probeCtx.Err() == nil && (!seen || wasReady) {
+			// The local error stays in this host's journal; it may name host paths.
+			log.Ctx(ctx).Warn("sandbox node provider unavailable; check local runtime configuration and permissions", "node_id", a.config.Identity.NodeID, "diagnostic", h.Diagnostic, "error", e)
+		}
 	}
 	h.ObservedAt = time.Now().UTC()
 	h.ActiveOperations = int(a.active.Load())

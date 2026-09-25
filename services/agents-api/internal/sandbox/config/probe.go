@@ -53,11 +53,13 @@ func dockerProbe(c *client.Client, image string, resources sandbox.Resources) fu
 	}
 }
 
-// Runtime checks are cached by immutable configuration. Availability checks run
-// on each heartbeat; lifecycle calls still verify the exact artifact themselves.
+// A successful Runtime integrity check is cached for this immutable
+// configuration. A failure is checked again on the next heartbeat, so repaired
+// artifacts recover without a restart. Lifecycle calls still verify the exact
+// artifact themselves.
 func microsandboxProbe(entry Microsandbox, resources sandbox.Resources) func(context.Context) error {
-	var once sync.Once
-	var integrityErr error
+	var integrity sync.Mutex
+	verified := false
 	return func(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -73,25 +75,15 @@ func microsandboxProbe(entry Microsandbox, resources sandbox.Resources) func(con
 		if err := hostCapacity(resources); err != nil {
 			return err
 		}
-		once.Do(func() {
-			for _, artifact := range []struct{ path, hash string }{{entry.RuntimePath, entry.RuntimeSHA256}, {entry.FirmwarePath, entry.FirmwareSHA256}} {
-				f, err := os.Open(artifact.path)
-				if err != nil {
-					integrityErr = sandbox.ErrMicrosandboxArtifactsUnavailable
-					return
-				}
-				h := sha256.New()
-				_, err = io.Copy(h, f)
-				_ = f.Close()
-				if err != nil || hex.EncodeToString(h.Sum(nil)) != artifact.hash {
-					integrityErr = fmt.Errorf("%w: artifact integrity check failed", sandbox.ErrMicrosandboxArtifactsUnavailable)
-					return
-				}
+		integrity.Lock()
+		if !verified {
+			if err := verifyMicrosandboxArtifacts(entry); err != nil {
+				integrity.Unlock()
+				return err
 			}
-		})
-		if integrityErr != nil {
-			return integrityErr
+			verified = true
 		}
+		integrity.Unlock()
 		helper, err := os.Stat(entry.HelperPath)
 		if err != nil || !helper.Mode().IsRegular() || helper.Mode().Perm()&0111 == 0 {
 			return fmt.Errorf("%w: microsandbox helper is unavailable", sandbox.ErrMicrosandboxArtifactsUnavailable)
@@ -102,4 +94,20 @@ func microsandboxProbe(entry Microsandbox, resources sandbox.Resources) func(con
 		}
 		return nil
 	}
+}
+
+func verifyMicrosandboxArtifacts(entry Microsandbox) error {
+	for _, artifact := range []struct{ path, hash string }{{entry.RuntimePath, entry.RuntimeSHA256}, {entry.FirmwarePath, entry.FirmwareSHA256}} {
+		f, err := os.Open(artifact.path)
+		if err != nil {
+			return sandbox.ErrMicrosandboxArtifactsUnavailable
+		}
+		h := sha256.New()
+		_, err = io.Copy(h, f)
+		_ = f.Close()
+		if err != nil || hex.EncodeToString(h.Sum(nil)) != artifact.hash {
+			return fmt.Errorf("%w: artifact integrity check failed", sandbox.ErrMicrosandboxArtifactsUnavailable)
+		}
+	}
+	return nil
 }

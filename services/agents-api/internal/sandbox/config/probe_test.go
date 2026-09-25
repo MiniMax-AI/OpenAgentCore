@@ -186,3 +186,28 @@ func TestDockerProbeDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+// A failed integrity check is repeated, so repaired artifacts recover without a restart.
+func TestMicrosandboxProbeRecoversRepairedArtifacts(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("microsandbox requires Linux")
+	}
+	useKVM(t, true)
+	dir := t.TempDir()
+	content := []byte("runtime")
+	digest := sha256.Sum256(content)
+	artifact, home := filepath.Join(dir, "artifact"), filepath.Join(dir, "runtime")
+	if err := os.Mkdir(home, 0700); err != nil {
+		t.Fatal(err)
+	}
+	probe := microsandboxProbe(Microsandbox{HelperPath: artifact, RuntimePath: artifact, FirmwarePath: artifact, RuntimeSHA256: hex.EncodeToString(digest[:]), FirmwareSHA256: hex.EncodeToString(digest[:]), RuntimeHome: home}, smallSandbox)
+	if got := sandbox.NodeDiagnostic(probe(t.Context())); got != "microsandbox_artifacts_unavailable" {
+		t.Fatalf("missing artifact diagnostic = %q", got)
+	}
+	if err := os.WriteFile(artifact, content, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := probe(t.Context()); err != nil {
+		t.Fatalf("repaired artifact stayed unavailable: %v", err)
+	}
+}
