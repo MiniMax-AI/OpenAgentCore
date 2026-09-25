@@ -11,7 +11,7 @@ import { useCopy } from "../api-keys/IssuedKey";
 import { sandboxCoreOrigin, sandboxSetupOrigin } from "./core-origin";
 import type { SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand, nodeLogCommand } from "./enrollment-command";
-import { enrolledNode, enrollmentProgress, formatCountdown, hostPrerequisites, progressSteps, type StepState } from "./node-enrollment";
+import { enrolledNode, enrollmentProgress, formatCountdown, hostPrerequisites, progressSteps, type EnrollmentTarget, type StepState } from "./node-enrollment";
 
 /** The host requirements open by default until this browser has shown them once. */
 const REQUIREMENTS_SEEN = "agents-core-web.node-requirements-seen";
@@ -22,11 +22,10 @@ function rememberRequirementsSeen() {
   try { window.localStorage.setItem(REQUIREMENTS_SEEN, "1"); } catch { /* Storage can be unavailable; the list then opens each time. */ }
 }
 
-interface Enrollment {
+/** A command, with the nodes registered before it and the limits it approved, which identify its node. */
+interface Enrollment extends EnrollmentTarget {
   token: string;
   expires_at: string;
-  /** Nodes registered before the command was issued; a new one is the node it enrolls. */
-  known: ReadonlySet<string>;
 }
 
 /**
@@ -83,7 +82,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     : !inRange(retainedLimit) ? t("Enter a whole number from 1 to 1,000,000.")
     : inRange(activeLimit) && retainedLimit < activeLimit ? t("Enter at least the number of sandboxes at once.") : null;
   const limitsReady = !activeProblem && !retainedProblem;
-  const node = enrollment ? enrolledNode(nodes, enrollment.known) : null;
+  const node = enrollment ? enrolledNode(nodes, enrollment, suspends) : null;
   const progress = enrollmentProgress(node, node && appeared?.id === node.id ? appeared.at : undefined, now);
   // Registration uses the token, so from then on its expiry no longer matters; rerunning
   // the command on that host resumes with the node's retained identity.
@@ -141,7 +140,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       const known = new Set(current.data.map((entry) => entry.id));
       const result = await client.createEnrollment({ signal: controller.signal }, capacity);
       if (!controller.signal.aborted) {
-        setEnrollment({ token: result.token, expires_at: result.expires_at, known }); setAppeared(null); setNow(Date.now());
+        setEnrollment({ token: result.token, expires_at: result.expires_at, known, ...capacity }); setAppeared(null); setNow(Date.now());
         // Seen with the limits; the command comes first now.
         setRequirementsOpen(false);
       }

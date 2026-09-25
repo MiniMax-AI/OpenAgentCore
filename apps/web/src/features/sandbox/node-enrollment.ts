@@ -60,11 +60,24 @@ export function formatCountdown(milliseconds: number): string {
   return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
 }
 
-/** The newest node that was not registered when the command was issued. */
-export function enrolledNode(nodes: readonly SandboxNode[], known: ReadonlySet<string>): SandboxNode | null {
+/** What identifies the node a command enrolls: nodes that existed before it, and the limits it approved. */
+export interface EnrollmentTarget {
+  known: ReadonlySet<string>;
+  max_active: number;
+  max_retained: number;
+}
+
+/**
+ * The newest node registered since the command was issued with the command's
+ * limits, which Core copies onto the node it enrolls
+ * (services/agents-api/internal/store/runtime_nodes.go:166); a node from another
+ * command with other limits is not this one. Only microsandbox keeps its own
+ * retained limit; Core sets Docker's to the active one.
+ */
+export function enrolledNode(nodes: readonly SandboxNode[], target: EnrollmentTarget, suspends: boolean): SandboxNode | null {
   let newest: SandboxNode | null = null;
   for (const node of nodes) {
-    if (known.has(node.id)) continue;
+    if (target.known.has(node.id) || node.max_active !== target.max_active || (suspends && node.max_retained !== target.max_retained)) continue;
     if (!newest || Date.parse(node.created_at) > Date.parse(newest.created_at)) newest = node;
   }
   return newest;
