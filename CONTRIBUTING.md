@@ -175,7 +175,7 @@ split oversized components before extending them. Use `internal/obs/log` for log
 
 Run `make check` before completion. The standalone gate includes all daemon/shared
 Go tests, Core contract/client/service tests, Core Web and TypeScript client
-checks (including fixture-only Playwright acceptance), a real dedicated PostgreSQL test
+checks (including production-console Playwright acceptance with a synthetic Core upstream), a real dedicated PostgreSQL test
 database, byte-for-byte sqlc regeneration checks, standalone API builds, Claude SDK
 tests and packaging, MiniMax companion checks, and Rust filesystem-helper
 tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing. The test database role
