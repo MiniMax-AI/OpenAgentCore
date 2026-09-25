@@ -20,6 +20,7 @@ export const navigation = {
     vaults: "Vaults",
     projects: "Projects and keys",
     nodes: "Nodes",
+    sandboxBackend: "Sandbox backend",
     system: "System",
   },
   gettingStarted: "Getting started",

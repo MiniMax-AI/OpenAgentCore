@@ -14,6 +14,8 @@ export const overview = {
     summaryUnavailable: "Usage summary unavailable",
     slots: "Sandbox capacity",
     slotsHelp: "Active sandboxes against the active limit of online hosts.",
+    cloudRunning: "Running sandboxes",
+    cloudRunningHelp: "Sandboxes Core currently holds in E2B's cloud. E2B sets no limit Core can read.",
     attention: "Needs attention",
   },
   tiles: {
@@ -21,6 +23,7 @@ export const overview = {
     failuresLastHour: "Failed Sessions in the last hour: {{count}}",
     sessionSplit: "{{total}} total, {{idle}} idle",
     nodesOnline: "{{online}} / {{total}} nodes online",
+    cloudPending: "{{count}} starting or changing",
     attentionSplit: "{{failed}} failed, {{waiting}} waiting",
   },
   errors: {
@@ -87,6 +90,15 @@ export const overview = {
     stale: "Refresh failed; showing the nodes from the last load.",
     addNode: "Add node",
     manageNodes: "Manage nodes",
+    cloud: {
+      name: "E2B cloud",
+      open: "E2B cloud, {{running}} running sandboxes",
+      running: "{{count}} running",
+      runningLabel: "Running sandboxes",
+      pending: "Starting or changing",
+      template: "Template build",
+      openBackend: "Sandbox backend",
+    },
   },
   projects: {
     title: "By project",

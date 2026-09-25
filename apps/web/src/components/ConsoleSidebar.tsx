@@ -1,6 +1,7 @@
 import {
   Activity,
   Bot,
+  Cloud,
   Cpu,
   FileText,
   FolderKanban,
@@ -18,6 +19,7 @@ import * as m from "motion/react-m";
 import { useTranslation } from "react-i18next";
 
 import { consoleNavGroups, type ConsoleView } from "../lib/console-routes";
+import { useSandboxProvider } from "../features/sandbox/sandbox-queries";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { ConsoleAccountMenu } from "../features/first-run/ConsoleAccess";
 
@@ -49,6 +51,7 @@ export function ConsoleSidebar({
   onIntent?: (view: ConsoleView) => void;
 }) {
   const { t } = useTranslation("navigation");
+  const provider = useSandboxProvider();
   return (
     <aside className="app-sidebar">
       <div className="brand-lockup">
@@ -67,22 +70,25 @@ export function ConsoleSidebar({
               {t(`groups.${group.id}`)}
             </p>
             {group.views.map((view) => {
-              const Icon = viewIcons[view];
+              // An E2B deployment has no machines: its Nodes entry is the sandbox backend.
+              const cloud = view === "nodes" && provider === "e2b";
+              const Icon = cloud ? Cloud : viewIcons[view];
+              const label = cloud ? t("views.sandboxBackend") : t(`views.${view}`);
               return (
                 <button
                   type="button"
                   key={view}
                   className={active === view ? "active" : undefined}
                   aria-current={active === view ? "page" : undefined}
-                  aria-label={t(`views.${view}`)}
-                  title={t(`views.${view}`)}
+                  aria-label={label}
+                  title={label}
                   onClick={() => onSelect(view)}
                   onPointerEnter={() => onIntent?.(view)}
                   onFocus={() => onIntent?.(view)}
                 >
                   {active === view ? <m.span className="nav-active-chip" layoutId="console-nav-active" aria-hidden="true" /> : null}
                   <Icon size={15} strokeWidth={1.5} aria-hidden="true" />
-                  <span>{t(`views.${view}`)}</span>
+                  <span>{label}</span>
                 </button>
               );
             })}

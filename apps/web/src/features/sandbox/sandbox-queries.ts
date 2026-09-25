@@ -1,5 +1,5 @@
-import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode } from "@agents-core-web/agents-client";
-import { queryOptions } from "@tanstack/react-query";
+import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode, type SandboxProvider } from "@agents-core-web/agents-client";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 
 import { sandboxConsoleConfig } from "./console-config";
 
@@ -28,6 +28,17 @@ export const sandboxDeploymentQuery = queryOptions({
   queryKey: [...sandboxScope, "deployment"],
   queryFn: ({ signal }) => sandboxAdmin.retrieveDeployment({ signal }),
 });
+
+/**
+ * The deployment's sandbox provider from the cached deployment read: "" before
+ * setup, null while unknown or when this console has no sandbox administration.
+ * Pages that differ for E2B (no machines) and own nodes read it.
+ */
+export function useSandboxProvider(): SandboxProvider | "" | null {
+  const config = useQuery(sandboxConsoleConfigQuery);
+  const deployment = useQuery({ ...sandboxDeploymentQuery, enabled: config.data?.sandbox_admin === true });
+  return deployment.data?.provider ?? null;
+}
 
 export interface SandboxSnapshot {
   deployment: SandboxDeployment;

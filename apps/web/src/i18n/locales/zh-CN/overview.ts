@@ -14,6 +14,8 @@ export const overview = {
     summaryUnavailable: "用量汇总不可用",
     slots: "沙箱容量",
     slotsHelp: "活跃沙箱数，相对于在线宿主机的活跃上限。",
+    cloudRunning: "运行中的沙箱",
+    cloudRunningHelp: "Core 当前在 E2B 云端占用的沙箱。E2B 没有可供 Core 读取的上限。",
     attention: "需要处理",
   },
   tiles: {
@@ -21,6 +23,7 @@ export const overview = {
     failuresLastHour: "最近 1 小时失败的 Session：{{count}}",
     sessionSplit: "共 {{total}} 个，空闲 {{idle}}",
     nodesOnline: "{{online}} / {{total}} 个节点在线",
+    cloudPending: "{{count}} 个启动或切换中",
     attentionSplit: "失败 {{failed}}，等待操作 {{waiting}}",
   },
   errors: {
@@ -87,6 +90,15 @@ export const overview = {
     stale: "刷新失败，显示的是上次加载的节点。",
     addNode: "添加节点",
     manageNodes: "管理节点",
+    cloud: {
+      name: "E2B 云端",
+      open: "E2B 云端，{{running}} 个运行中的沙箱",
+      running: "{{count}} 个运行中",
+      runningLabel: "运行中的沙箱",
+      pending: "启动或切换中",
+      template: "模板构建",
+      openBackend: "沙箱后端",
+    },
   },
   projects: {
     title: "按项目",

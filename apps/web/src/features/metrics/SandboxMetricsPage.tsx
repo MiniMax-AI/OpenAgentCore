@@ -7,6 +7,8 @@ import type { TFunction } from "i18next";
 import {
   EmptyState,
   HelpTip,
+  Kpi,
+  KpiStrip,
   Meter,
   PageBody,
   PageHeader,
@@ -44,7 +46,7 @@ import "./MetricsView.css";
 import { RuntimeCharts } from "./RuntimeCharts";
 import { hostedRuntimesQuery } from "./metrics-queries";
 import { SessionRuntimeSection } from "../sessions/SessionRuntimeSection";
-import type { SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
 
 const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
 
@@ -101,6 +103,8 @@ export function SandboxMetricsPage() {
   const [openNode, setOpenNode] = useState<string | null>(null);
   const [openRuntime, setOpenRuntime] = useState<string | null>(null);
   const rows = useMemo(() => (runtimeState.load ? hostedRuntimeRows(runtimeState.load, "", fleet) : []), [fleet, runtimeState.load]);
+  // E2B runs sandboxes in its cloud: no machines, so no node table, node column or node dialog.
+  const cloud = fleet?.deployment.provider === "e2b";
 
   return (
     <section className="page-section console-page metrics-page" aria-labelledby="sandbox-metrics-heading">
@@ -119,7 +123,7 @@ export function SandboxMetricsPage() {
         </>}
       />
       <PageBody>
-        <Section
+        {cloud && fleet ? <CloudSection deployment={fleet.deployment} /> : <Section
           headingId="node-capacity-heading"
           title={t("sandbox.node")}
           help={t("sandbox.nodesSectionDetail")}
@@ -174,7 +178,7 @@ export function SandboxMetricsPage() {
           ) : fleetState.status === "checking" || fleetState.status === "loading"
             ? <TableSkeleton label={message} rows={3} columns={8} />
             : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}
-        </Section>
+        </Section>}
 
         <HostedRuntimeSection state={runtimeState} stale={runtimeStale} fleet={fleet} range={range} onOpen={setOpenRuntime} />
       </PageBody>
@@ -185,8 +189,31 @@ export function SandboxMetricsPage() {
         range={range}
         onClose={() => setOpenNode(null)}
       />
-      <RuntimeDialog row={rows.find((row) => row.observation.session_id === openRuntime) ?? null} onClose={() => setOpenRuntime(null)} />
+      <RuntimeDialog row={rows.find((row) => row.observation.session_id === openRuntime) ?? null} showNode={!cloud} onClose={() => setOpenRuntime(null)} />
     </section>
+  );
+}
+
+/** An E2B deployment in place of the node table: what runs in its cloud now, and with what. */
+function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
+  const { t, i18n } = useTranslation("metrics");
+  const locale = i18n.resolvedLanguage;
+  const { navigate } = useConsoleNavigation();
+  const resources = deployment.specification?.resources;
+  return (
+    <Section
+      headingId="cloud-heading"
+      title={t("sandbox.cloud.title")}
+      help={t("sandbox.cloud.help")}
+      actions={<button className="button outline" type="button" onClick={() => navigate("nodes")}>{t("sandbox.cloud.manage")}</button>}
+    >
+      <KpiStrip label={t("sandbox.cloud.title")}>
+        <Kpi label={t("sandbox.cloud.running")} help={t("sandbox.cloud.runningHelp")} value={formatInteger(deployment.resources.allocations, locale)} />
+        <Kpi label={t("sandbox.cloud.pending")} value={formatInteger(deployment.resources.pending, locale)} />
+        <Kpi label={t("sandbox.cloud.size")} value={resources ? `${t("sandbox.cores", { value: formatInteger(resources.cpus, locale) })} · ${formatBytes(resources.memory_mib * 2 ** 20)}` : MISSING} />
+        <Kpi label={t("sandbox.cloud.template")} value={deployment.e2b?.template ? <code className="cloud-template" title={deployment.e2b.template}>{deployment.e2b.template}</code> : MISSING} />
+      </KpiStrip>
+    </Section>
   );
 }
 
@@ -231,7 +258,7 @@ function HostedRuntimeSection({ state, stale, fleet, range, onOpen }: { state: R
         {durable ? <RuntimeCharts samples={durable.samples} resolutionSeconds={durable.resolutionSeconds} />
           : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: history.error instanceof Error ? history.error.message : "" })}</p>
             : history.isFetched ? <p className="page-status">{t("sandbox.charts.historyUnavailable")}</p> : null}
-        <RuntimeTable rows={hostedRuntimeRows(load, "", fleet)} showProject onOpen={onOpen} />
+        <RuntimeTable rows={hostedRuntimeRows(load, "", fleet)} showProject showNode={fleet?.deployment.provider !== "e2b"} onOpen={onOpen} />
       </>
     );
   }
@@ -279,7 +306,7 @@ function lifecycleLabel(row: HostedRuntimeRow, t: TFunction<"metrics">): string 
   return t(`sandbox.lifecycle.${row.observation.lifecycle_state ?? "stopped"}`);
 }
 
-function RuntimeTable({ rows, showProject, onOpen }: { rows: HostedRuntimeRow[]; showProject: boolean; onOpen: (sessionId: string) => void }) {
+function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRuntimeRow[]; showProject: boolean; showNode: boolean; onOpen: (sessionId: string) => void }) {
   const { t, i18n } = useTranslation("metrics");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
@@ -289,7 +316,7 @@ function RuntimeTable({ rows, showProject, onOpen }: { rows: HostedRuntimeRow[];
   return (
     <div className="runtime-list">
       <ListToolbar label={t("sandbox.runtimeList")} summary={listSummary(tCommon, visible.length, rows.length, { locale })}>
-        <SearchField value={query} onChange={setQuery} placeholder={t("sandbox.searchPlaceholder")} label={t("sandbox.search")} />
+        <SearchField value={query} onChange={setQuery} placeholder={t(showNode ? "sandbox.searchPlaceholder" : "sandbox.searchPlaceholderCloud")} label={t("sandbox.search")} />
       </ListToolbar>
       <div className="table-frame">
         <table className="data-table" aria-label={t("sandbox.runtimeList")}>
@@ -297,7 +324,7 @@ function RuntimeTable({ rows, showProject, onOpen }: { rows: HostedRuntimeRow[];
             <tr>
               <th scope="col">{t("sandbox.session")}</th>
               {showProject ? <th scope="col">{tCommon("project.column")}</th> : null}
-              <th scope="col">{t("sandbox.node")}</th>
+              {showNode ? <th scope="col">{t("sandbox.node")}</th> : null}
               <th scope="col">{t("sandbox.status")}</th>
               <th scope="col">{t("sandbox.cpu")}</th>
               <th scope="col">{t("sandbox.memory")}</th>
@@ -318,7 +345,7 @@ function RuntimeTable({ rows, showProject, onOpen }: { rows: HostedRuntimeRow[];
                     <NameCell name={sessionTitle(session)} id={observation.session_id} fallback={t("sandbox.untitled")} onOpen={open} openLabel={t("sandbox.runtimeDialog.openLabel", { name: sessionTitle(session) ?? observation.session_id })} />
                   </th>
                   {showProject ? <td><ProjectName project={byId.get(observation.project_id)} /></td> : null}
-                  <td>{row.node ? row.node.name || row.node.id : <span className="table-muted">{MISSING}</span>}</td>
+                  {showNode ? <td>{row.node ? row.node.name || row.node.id : <span className="table-muted">{MISSING}</span>}</td> : null}
                   <td><StatusDot tone={lifecycleTone(row)} label={lifecycleLabel(row, t)} /></td>
                   <td>
                     {cpu?.usage_cores != null ? (
@@ -449,7 +476,7 @@ function NodeDialog({ node, rows, load, range, onClose }: {
 }
 
 /** A hosted sandbox in a dialog: where it runs, and its Session's Runtime state and history. */
-function RuntimeDialog({ row, onClose }: { row: HostedRuntimeRow | null; onClose: () => void }) {
+function RuntimeDialog({ row, showNode, onClose }: { row: HostedRuntimeRow | null; showNode: boolean; onClose: () => void }) {
   const { t } = useTranslation("metrics");
   const { t: tCommon } = useTranslation("common");
   const { navigate } = useConsoleNavigation();
@@ -468,7 +495,7 @@ function RuntimeDialog({ row, onClose }: { row: HostedRuntimeRow | null; onClose
         <div className="metrics-dialog">
           <dl className="resource-facts" aria-label={t("sandbox.runtimeDialog.facts")}>
             <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={byId.get(observation.project_id)} /></dd></div>
-            <div><dt>{t("sandbox.node")}</dt><dd>{shown.node ? shown.node.name || shown.node.id : MISSING}</dd></div>
+            {showNode ? <div><dt>{t("sandbox.node")}</dt><dd>{shown.node ? shown.node.name || shown.node.id : MISSING}</dd></div> : null}
             <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={lifecycleTone(shown)} label={lifecycleLabel(shown, t)} /></dd></div>
             <div><dt>{t("sandbox.uptime")}</dt><dd>{formatDuration(shown.uptimeSeconds)}</dd></div>
           </dl>

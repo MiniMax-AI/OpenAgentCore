@@ -53,3 +53,11 @@
   display: grid;
   gap: 24px;
 }
+
+/* An E2B template build is long: it wraps inside its figure instead of widening the strip. */
+.cloud-template {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}

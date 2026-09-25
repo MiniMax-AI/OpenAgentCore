@@ -2,6 +2,10 @@ import { consoleAuthChinese } from "./console-auth-strings";
 export const chinese = {
   ...consoleAuthChinese,
   "Change provider or resources": "修改运行后端或资源",
+  "Sandbox backend": "沙箱后端",
+  "E2B runs this deployment's sandboxes in its cloud. There are no machines to add.": "这个部署的沙箱由 E2B 在云端运行，不需要添加机器。",
+  "Saving does not migrate Sessions or resume placement automatically.": "保存不会迁移 Session，也不会自动恢复分配。",
+  "E2B gives each sandbox the CPU and memory of the template build. Choose the size that matches it.": "E2B 按模板构建给每个沙箱分配 CPU 和内存，请选与模板一致的规格。",
   "This console address cannot be used by sandbox guests. Enter the HTTPS Core address that your nodes and guests can reach.": "沙箱无法使用此控制台地址。请输入节点和沙箱都能访问的 HTTPS Core 地址。",
   "Use an HTTPS Core origin reachable from every node and sandbox guest, without a path or credentials. The console URL may be different.": "请输入所有节点和沙箱都能访问的 HTTPS Core 源地址，不含路径或凭据。此地址可能与控制台地址不同。",
   "Enter a non-loopback HTTPS origin, such as https://core.example.": "请输入非回环的 HTTPS 源地址，例如 https://core.example。",

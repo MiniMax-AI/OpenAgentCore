@@ -28,14 +28,15 @@ export function SandboxManagerView() {
   </section>;
 }
 
-function NodesPageHeader({ title, count, back, actions }: { title?: ReactNode; count?: number; back?: () => void; actions?: ReactNode }) {
+/** The page header; an E2B deployment has no machines, so the page is its sandbox backend. */
+function NodesPageHeader({ title, count, back, actions, cloud = false }: { title?: ReactNode; count?: number; back?: () => void; actions?: ReactNode; cloud?: boolean }) {
   const { t } = useTranslation("sandbox");
   return <header className="page-header">
     <div className="console-page-heading">
       {back ? <button type="button" className="icon-button ghost back-button" aria-label={t("Back")} title={t("Back")} onClick={back}><ArrowLeft size={16} strokeWidth={1.6} aria-hidden="true" /></button> : null}
-      <h1>{title ?? t("Nodes")}</h1>
+      <h1>{title ?? t(cloud ? "Sandbox backend" : "Nodes")}</h1>
       {count === undefined ? null : <span className="heading-count">{count}</span>}
-      {back ? null : <HelpTip>{t("Your hosts for running sandboxes.")}</HelpTip>}
+      {back ? null : <HelpTip>{t(cloud ? "E2B runs this deployment's sandboxes in its cloud. There are no machines to add." : "Your hosts for running sandboxes.")}</HelpTip>}
     </div>
     {actions ? <div className="page-actions">{actions}</div> : null}
   </header>;
@@ -213,7 +214,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     {hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || !fresh || snapshot.deployment.maintenance} fresh={confirmed} onRefresh={refresh} /> : null}
   </>;
   return <>
-    <NodesPageHeader count={hostedNodes ? nodes.length : undefined} actions={actions} />
+    <NodesPageHeader count={hostedNodes ? nodes.length : undefined} actions={actions} cloud={snapshot?.deployment.provider === "e2b"} />
     <div className="console-page-body sandbox-content">
       {status}
       {snapshot && !snapshot.deployment.provider ? <SandboxSetupWizard key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}

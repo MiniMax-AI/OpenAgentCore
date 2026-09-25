@@ -20,6 +20,7 @@ export const navigation = {
     vaults: "Vault",
     projects: "项目与 key",
     nodes: "节点",
+    sandboxBackend: "沙箱后端",
     system: "系统",
   },
   gettingStarted: "新手引导",

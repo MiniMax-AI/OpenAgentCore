@@ -22,9 +22,9 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatCompact, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { ProjectName, useProjects } from "../../lib/projects";
 import { capacitySummary, coreStatus, type CoreStatus } from "../fleet/fleet-model";
-import { fleetSnapshot, useSandboxFleet, type FleetState } from "../fleet/use-sandbox-fleet";
+import { fleetSnapshot, useSandboxFleet, type FleetSnapshot, type FleetState } from "../fleet/use-sandbox-fleet";
 import { type InProject } from "../metrics/project-sessions";
-import { FleetTopology, TOPOLOGY_LIMIT } from "./FleetTopology";
+import { FleetTopology, TOPOLOGY_LIMIT, type CloudHost } from "./FleetTopology";
 import { type OverviewData } from "./overview-loader";
 import { overviewQuery } from "./overview-queries";
 import {
@@ -104,6 +104,8 @@ export function OverviewPage() {
   const activity = useMemo(() => (sessions ? sessionActivity(sessions.map((entry) => entry.value), now) : null), [now, sessions]);
   const attention = useMemo(() => (sessions ? attentionSessions(sessions, ATTENTION_LIMIT) : null), [sessions]);
   const capacity = fleet ? capacitySummary(fleet.nodes) : null;
+  // An E2B deployment has no machines: capacity is what Core holds in E2B's cloud.
+  const cloud = cloudHost(fleet);
   const failuresLastHour = sessions ? recentFailures(sessions.map((entry) => entry.value), now) : null;
 
   const summaryError = data?.summary.status === "failed" ? data.summary.error : null;
@@ -170,13 +172,23 @@ export function OverviewPage() {
             value={totals ? <LiveNumber value={totals.sessions.in_progress} /> : MISSING}
             sub={totals ? t("tiles.sessionSplit", { idle: formatInteger(totals.sessions.idle, locale), total: formatInteger(totals.sessions.total, locale) }) : t("kpi.summaryUnavailable")}
           />
-          <MetricTile
-            index={2}
-            label={t("kpi.slots")}
-            help={t("kpi.slotsHelp")}
-            value={capacity ? <><LiveNumber value={capacity.active} /><span className="kpi-unit">/ {formatInteger(capacity.maxActive, locale)}</span></> : MISSING}
-            sub={capacity ? t("tiles.nodesOnline", { online: capacity.online, total: capacity.nodes }) : fleetDetail(fleetState, t)}
-          />
+          {cloud ? (
+            <MetricTile
+              index={2}
+              label={t("kpi.cloudRunning")}
+              help={t("kpi.cloudRunningHelp")}
+              value={<LiveNumber value={cloud.running} />}
+              sub={t("tiles.cloudPending", { count: cloud.pending })}
+            />
+          ) : (
+            <MetricTile
+              index={2}
+              label={t("kpi.slots")}
+              help={t("kpi.slotsHelp")}
+              value={capacity ? <><LiveNumber value={capacity.active} /><span className="kpi-unit">/ {formatInteger(capacity.maxActive, locale)}</span></> : MISSING}
+              sub={capacity ? t("tiles.nodesOnline", { online: capacity.online, total: capacity.nodes }) : fleetDetail(fleetState, t)}
+            />
+          )}
           <MetricTile
             index={3}
             label={t("kpi.attention")}
@@ -273,12 +285,18 @@ function fleetDetail(state: FleetState, t: TFunction<"overview">): string {
   return t("fleet.loading");
 }
 
-/** Core and its sandbox nodes as a topology; each opens a popover with the way onward. */
+function cloudHost(fleet: FleetSnapshot | null): CloudHost | null {
+  if (fleet?.deployment.provider !== "e2b") return null;
+  return { running: fleet.deployment.resources.allocations, pending: fleet.deployment.resources.pending, template: fleet.deployment.e2b?.template || null };
+}
+
+/** Core and its sandbox nodes (or E2B's cloud) as a topology; each opens a popover with the way onward. */
 function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreStatus }) {
   const { t } = useTranslation("overview");
   const { navigate } = useConsoleNavigation();
   const fleet = fleetSnapshot(fleetState);
-  const hosts = fleet?.nodes ?? [];
+  const cloud = cloudHost(fleet);
+  const hosts = cloud ? [] : fleet?.nodes ?? [];
   const hidden = Math.max(0, hosts.length - TOPOLOGY_LIMIT);
   useFailureToast(fleetState.status === "ready" && Boolean(fleetState.error), t("fleet.stale"), "overview-fleet-refresh");
   return (
@@ -289,12 +307,14 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
           <HelpTip>{t("fleet.help")}</HelpTip>
         </div>
         {fleetState.status === "ready" ? (
-          <button className="button outline" type="button" onClick={() => navigate("nodes")}>{hosts.length ? t("fleet.manageNodes") : t("fleet.addNode")}</button>
+          <button className="button outline" type="button" onClick={() => navigate("nodes")}>{cloud ? t("fleet.cloud.openBackend") : hosts.length ? t("fleet.manageNodes") : t("fleet.addNode")}</button>
         ) : null}
       </header>
       <div className="overview-card-body fleet-body">
         <FleetTopology
           nodes={hosts}
+          cloud={cloud}
+          onOpenBackend={() => navigate("nodes")}
           coreLabel={t(`coreStatus.${core}`)}
           coreTone={coreTone[core]}
           stale={fleetState.status === "ready" && fleetState.error !== null}
@@ -303,7 +323,7 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
           onOpenCoreMetrics={() => navigate("core-metrics")}
         />
         {hidden ? <button className="text-action fleet-more" type="button" onClick={() => navigate("nodes")}>{t("fleet.more", { n: hidden })}</button> : null}
-        <FleetFooter state={fleetState} empty={fleet ? hosts.length === 0 : false} />
+        <FleetFooter state={fleetState} empty={fleet && !cloud ? hosts.length === 0 : false} />
       </div>
     </section>
   );

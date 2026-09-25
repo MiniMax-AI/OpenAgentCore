@@ -283,6 +283,13 @@ button.fleet-core:disabled {
   white-space: nowrap;
 }
 
+/* E2B's cloud stands where the machines would: its name carries the cloud icon. */
+.fleet-node-name svg {
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--ink-2);
+}
+
 .fleet-node-foot {
   display: flex;
   min-width: 0;

@@ -46,3 +46,13 @@ test("opens a node and a sandbox in dialogs from Sandbox metrics", async ({ page
   await sandbox.getByRole("button", { name: "Open Session" }).click();
   await expect(page.getByRole("list", { name: "Conversation" }).or(page.getByText("No Items yet"))).toBeVisible();
 });
+
+test("shows E2B's cloud instead of machines", async ({ page, request }) => {
+  await openConsole(page, request, "sandbox-metrics", { sandbox: "e2b" });
+  await expect(page.getByRole("heading", { name: "E2B cloud" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add node" })).toHaveCount(0);
+  await expect(page.getByRole("columnheader", { name: "Node", exact: true })).toHaveCount(0);
+
+  await page.getByRole("navigation").getByRole("button", { name: "Sandbox backend" }).click();
+  await expect(page.getByRole("heading", { name: "Sandbox backend", level: 1 })).toBeVisible();
+});

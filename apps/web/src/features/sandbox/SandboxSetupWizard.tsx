@@ -181,7 +181,7 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
     const kept = saved && provider && presetOf(provider, saved.resources) === null ? saved.resources : null;
     const disks = (value: SandboxResources) => (provider === "microsandbox" ? diskLabel(value) : undefined);
     page = (
-      <Question title={t("How big is each sandbox?")} help={t("Every sandbox of this deployment gets these limits. How many run at once on a machine is set per node.")}>
+      <Question title={t("How big is each sandbox?")} help={t(provider === "e2b" ? "E2B gives each sandbox the CPU and memory of the template build. Choose the size that matches it." : "Every sandbox of this deployment gets these limits. How many run at once on a machine is set per node.")}>
         <div className={kept ? "wizard-choices wizard-choices-4" : "wizard-choices wizard-choices-3"}>
           {kept ? <Choice title={t("Current")} value={sizeLabel(kept)} detail={disks(kept)} selected={size === "current"} onClick={() => { setSize("current"); setResources(kept); setStep("review"); }} /> : null}
           {(Object.keys(options) as Preset[]).map((key) => (

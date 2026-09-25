@@ -53,7 +53,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onMaint
         />
         <span className="sandbox-provider-actions">
           <button type="button" className="button outline" disabled={disabled} onClick={() => setChanging(false)}>{t("Cancel")}</button>
-          <HelpTip>{t("Saving retires old node identities and enrollment credentials. It does not migrate Sessions or resume placement automatically.")}</HelpTip>
+          <HelpTip>{t(deployment.provider === "e2b" ? "Saving does not migrate Sessions or resume placement automatically." : "Saving retires old node identities and enrollment credentials. It does not migrate Sessions or resume placement automatically.")}</HelpTip>
         </span>
       </>}
       <span className="sandbox-provider-actions">

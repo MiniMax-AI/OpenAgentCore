@@ -1,6 +1,6 @@
 import type { SandboxNode } from "@agents-core-web/agents-client";
 import { useQuery } from "@tanstack/react-query";
-import { Network } from "lucide-react";
+import { Cloud, Network } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -34,8 +34,17 @@ export function topologyNodes(nodes: readonly SandboxNode[]): SandboxNode[] {
  * animated for connected nodes and dashed for offline ones. Core and each node
  * open a popover with a glance at their state and the pages that go deeper.
  */
-export function FleetTopology({ nodes, coreLabel, coreTone, stale, onOpenNode, onOpenSandboxMetrics, onOpenCoreMetrics }: {
+export interface CloudHost {
+  running: number;
+  pending: number;
+  template: string | null;
+}
+
+export function FleetTopology({ nodes, cloud, coreLabel, coreTone, stale, onOpenNode, onOpenBackend, onOpenSandboxMetrics, onOpenCoreMetrics }: {
   nodes: readonly SandboxNode[];
+  /** An E2B deployment: Core links to E2B's cloud instead of to machines. */
+  cloud?: CloudHost | null;
+  onOpenBackend?: () => void;
   coreLabel: string;
   coreTone: Tone;
   /** The last refresh failed: keep the picture, stop implying live traffic. */
@@ -46,7 +55,7 @@ export function FleetTopology({ nodes, coreLabel, coreTone, stale, onOpenNode, o
 }) {
   const { t, i18n } = useTranslation("overview");
   const locale = i18n.resolvedLanguage;
-  const shown = topologyNodes(nodes);
+  const shown = cloud ? [] : topologyNodes(nodes);
   const leftCount = Math.ceil(shown.length / 2);
   const rightCount = shown.length - leftCount;
   const height = Math.max(216, leftCount * ROW + 24);
@@ -60,6 +69,12 @@ export function FleetTopology({ nodes, coreLabel, coreTone, stale, onOpenNode, o
   return (
     <div className={stale ? "fleet-topology fleet-topology-stale" : "fleet-topology"} style={{ height }}>
       <svg className="fleet-topology-lines" viewBox={`0 0 1000 ${height}`} preserveAspectRatio="none" aria-hidden="true">
+        {cloud ? (
+          <g className="fleet-link fleet-link-available">
+            <path d={`M 500 ${middle} L 700 ${middle}`} className="fleet-link-edge" />
+            <path d={`M 500 ${middle} L 700 ${middle}`} className="fleet-link-flow" />
+          </g>
+        ) : null}
         {placed.map(({ node, left, y, health }) => {
           const end = left ? 300 : 700;
           const bend = left ? 380 : 620;
@@ -85,6 +100,35 @@ export function FleetTopology({ nodes, coreLabel, coreTone, stale, onOpenNode, o
       >
         <CoreGlance label={coreLabel} tone={coreTone} />
       </ConsolePopover>
+      {cloud ? (
+        <ConsolePopover
+          side="left"
+          trigger={(
+            <button
+              type="button"
+              className="fleet-node fleet-node-right"
+              style={{ top: middle }}
+              aria-label={t("fleet.cloud.open", { running: formatInteger(cloud.running, locale) })}
+            >
+              <strong className="fleet-node-name"><Cloud size={14} strokeWidth={1.5} aria-hidden="true" />{t("fleet.cloud.name")}</strong>
+              <span className="fleet-node-foot">
+                <StatusDot tone="ok" label={t("fleet.cloud.running", { count: cloud.running })} />
+              </span>
+            </button>
+          )}
+          title={t("fleet.cloud.name")}
+          actions={<>
+            <button className="text-action" type="button" onClick={onOpenSandboxMetrics}>{t("fleet.openSandboxMetrics")}</button>
+            {onOpenBackend ? <button className="text-action" type="button" onClick={onOpenBackend}>{t("fleet.cloud.openBackend")}</button> : null}
+          </>}
+        >
+          <Facts>
+            <Fact label={t("fleet.cloud.runningLabel")}>{formatInteger(cloud.running, locale)}</Fact>
+            <Fact label={t("fleet.cloud.pending")}>{formatInteger(cloud.pending, locale)}</Fact>
+            <Fact label={t("fleet.cloud.template")}>{cloud.template ? <code>{cloud.template}</code> : MISSING}</Fact>
+          </Facts>
+        </ConsolePopover>
+      ) : null}
       {placed.map(({ node, left, y, health }) => {
         const name = node.name || node.id;
         const state = t(`nodeHealth.${health}`);
