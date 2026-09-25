@@ -17,7 +17,7 @@ are defined by the [administrator API contract](../../contracts/agents-api/admin
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
 | Console server | `/console/auth`, `/console/auth/{setup,login,logout}`, `/console/config` | Console account (session cookie) or legacy Basic authentication | Sign-in and sign-out; non-secret capability flags such as `sandbox_admin` |
-| Administrator API | `/core/v1/admin/**` | Deployment administrator credential, added by the console server | Projects, keys, resource reads and deletion, copies, provenance, summaries, Runtime observations, startup configuration |
+| Administrator API | `/core/v1/admin/**` | Deployment administrator credential, added by the console server | Projects, keys, resource reads and deletion, copies, provenance, summaries, Runtime observations |
 | Sandbox administration | `/core/v1/sandbox/**` | Deployment administrator credential, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics |
 | Agents API | `/v1/**` | Project API key | Not used. The first-run screen shows a `curl` example for `/v1/agents` with a `$CORE_API_KEY` placeholder; the console never sends it |
 
@@ -89,13 +89,14 @@ Resource-specific boundaries:
 | Copies | `POST /copies` with `Idempotency-Key` | **Copy to…** on Agents, Environment templates, Skills, Files, Vaults and Credentials |
 | Runtime observations | `GET /runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project |
 | Core metrics | `GET /core-metrics?range=` | Core metrics page; the Core popover on Overview. A Core without the route (404) is shown as not reporting; the popover then shows only Core's status. Measurements are defined in the [Core metrics contract](../../contracts/agents-api/core-metrics.md); the Process section's CPU and resident memory are a [requested extension](core-process-metrics-requirements.md) and show as missing until Core reports them |
-| Startup configuration | `GET /startup-configuration` | System: harnesses, default harness, model endpoint presence, managed sandbox, daemon gateway and self-hosted execution |
 
 Summary figures are cumulative per Session and are not billing records. Sessions
 without reported usage count toward coverage but not toward token sums, and the
 console shows missing values as missing, never as zero. The administrator audit
-log (`GET /audit-log`) and Runtime history capabilities
-(`GET /runtime-history/capabilities`) are not consumed.
+log (`GET /audit-log`), Runtime history capabilities
+(`GET /runtime-history/capabilities`) and startup configuration
+(`GET /startup-configuration`) are not consumed; System shows the sandbox
+deployment only.
 
 ## Sandbox administration
 

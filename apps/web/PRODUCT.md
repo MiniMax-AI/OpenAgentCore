@@ -69,8 +69,9 @@ workbench.
   write history), Nodes (sandbox setup as pages — where sandboxes run, the
   backend or E2B account, the size of each sandbox, a review, and advanced settings
   with the complete form — then the node list with each node's capacity, host
-  figures and allocations, enrollment and removal), System (startup configuration
-  and the sandbox deployment, including each sandbox's size and the Runtime).
+  figures and allocations, enrollment and removal), System (only the sandbox
+  configuration every project shares: where sandboxes run, each sandbox's size, the
+  Runtime or E2B template, the Core address and maintenance).
 - **First run**: after the administrator account is created and while no project
   exists, full-screen steps outside the shell create the first project (default name
   `Default`) and its first key, show the plaintext once with an example request,

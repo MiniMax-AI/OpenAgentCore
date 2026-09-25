@@ -8,7 +8,6 @@
   box-shadow: var(--shadow-card);
 }
 
-/* The label column matches the first column of the harness table, so values line up. */
 .system-fact {
   display: grid;
   min-height: 44px;
@@ -42,30 +41,11 @@
   color: var(--fg);
 }
 
-.system-harnesses th[scope="row"],
-.system-harnesses thead th:first-child {
-  width: 240px;
-}
-
-.system-harness {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-}
-
-/* The default harness carries a quiet pill. */
-.system-flag {
-  display: inline-flex;
-  height: 20px;
-  align-items: center;
-  padding: 0 7px;
+/* A second line under a fact, such as microsandbox's disks. */
+.system-sub {
+  display: block;
   color: var(--ink-2);
-  font-size: 11.5px;
-  font-weight: 500;
-  background: var(--field);
-  border-radius: 999px;
-  box-shadow: var(--shadow-hairline);
+  font-size: 12.5px;
 }
 
 .system-code {
