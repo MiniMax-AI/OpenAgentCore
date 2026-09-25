@@ -53,11 +53,41 @@ func adminRuntimeFixture(t *testing.T, projects []store.Project, targets []store
 		t.Fatal(err)
 	}
 	management := &adminRuntimeTargets{page: store.AdminRuntimeTargetPage{Data: targets, HasMore: true}}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(adminRuntimeProjects{projects: projects}, admin), WithAdminManagement(management), WithRuntimeObservations(service))
+	options := []Option{WithProjectAPIKeys(adminRuntimeProjects{ProjectAPIKeyStore: managementProjectStore(callerBinding()), projects: projects}, admin), WithAdminManagement(management)}
+	if service != nil {
+		options = append(options, WithRuntimeObservations(service))
+	}
+	h, err := NewHandler(&recordingStore{}, auth, "codex", options...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return h, management
+}
+
+func TestAdminRuntimeObservationListRequiresConfiguredService(t *testing.T) {
+	handler, _ := adminRuntimeFixture(t, nil, nil, nil)
+	if response := runtimeObservationRequest(handler, adminRuntimeObservationsPath); response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unconfigured service returned %d: %s", response.Code, response.Body)
+	}
+}
+
+// HEAD never samples Runtime or queries history on the administrator routes.
+func TestAdminRuntimeRoutesRejectHead(t *testing.T) {
+	calls := 0
+	service := runtimeObservationServiceFunc(func(context.Context, string, string) (runtimeobs.Observation, error) {
+		calls++
+		return runtimeobs.Observation{}, errors.New("sampled")
+	})
+	handler, _ := adminRuntimeFixture(t, nil, nil, service)
+	for _, path := range []string{adminRuntimeObservationsPath, adminSessionsPath + uuid.NewString() + "/runtime-observation", adminSessionsPath + uuid.NewString() + "/runtime-history?start=1&end=2"} {
+		response := serve(handler, http.MethodHead, path, "", withHeaders([]string{"Authorization", "Bearer admin"}))
+		if response.Code != http.StatusMethodNotAllowed || response.Header().Get("Allow") != "GET" || response.Header().Get("Content-Type") != "application/json" {
+			t.Errorf("HEAD %s = %d %q", path, response.Code, response.Header().Get("Allow"))
+		}
+	}
+	if calls != 0 {
+		t.Fatal("HEAD sampled a Runtime")
+	}
 }
 
 func unsupportedObservation(session string, at time.Time) runtimeobs.Observation {

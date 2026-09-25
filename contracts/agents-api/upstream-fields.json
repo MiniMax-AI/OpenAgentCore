@@ -5,118 +5,148 @@
   "operations": {
     "DELETE /agents/environments/templates/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.environments.environment_template_deleted.EnvironmentTemplateDeleted"
       ]
     },
     "DELETE /agents/sessions/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agent_session_deleted.AgentSessionDeleted"
       ]
     },
     "DELETE /agents/sessions/{}/artifacts/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.sessions.session_artifact_deleted.SessionArtifactDeleted"
       ]
     },
     "DELETE /agents/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agent_deleted.AgentDeleted"
       ]
     },
     "DELETE /files/{}": {
       "request": [],
+      "query": [],
       "response": [
         "file_deleted.FileDeleted"
       ]
     },
     "DELETE /skills/{}": {
       "request": [],
+      "query": [],
       "response": [
         "deleted_skill.DeletedSkill"
       ]
     },
     "DELETE /skills/{}/versions/{}": {
       "request": [],
+      "query": [],
       "response": [
         "skills.deleted_skill_version.DeletedSkillVersion"
       ]
     },
     "DELETE /vaults/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.vault_deleted.VaultDeleted"
       ]
     },
     "DELETE /vaults/{}/credentials/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.vaults.credential_deleted.CredentialDeleted"
       ]
     },
     "GET /agents": {
       "request": [],
+      "query": [
+        "beta.agent_list_params.AgentListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agent.Agent]"
       ]
     },
     "GET /agents/environments/templates": {
       "request": [],
+      "query": [
+        "beta.agents.environments.template_list_params.TemplateListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agents.environments.environment_template.EnvironmentTemplate]"
       ]
     },
     "GET /agents/environments/templates/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.environments.environment_template.EnvironmentTemplate"
       ]
     },
     "GET /agents/environments/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.environment_info.EnvironmentInfo"
       ]
     },
     "GET /agents/environments/{}/files": {
       "request": [],
+      "query": [
+        "beta.agents.environments.file_list_params.FileListParams"
+      ],
       "response": [
         "pagination.SyncTokenPage[beta.agents.environments.environment_file.EnvironmentFile]"
       ]
     },
     "GET /agents/sessions": {
       "request": [],
+      "query": [
+        "beta.agents.session_list_params.SessionListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agent_session.AgentSession]"
       ]
     },
     "GET /agents/sessions/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agent_session.AgentSession"
       ]
     },
     "GET /agents/sessions/{}/artifacts": {
       "request": [],
+      "query": [
+        "beta.agents.sessions.artifact_list_params.ArtifactListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agents.sessions.session_artifact.SessionArtifact]"
       ]
     },
     "GET /agents/sessions/{}/artifacts/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.sessions.session_artifact.SessionArtifact"
       ]
     },
     "GET /agents/sessions/{}/artifacts/{}/content": {
       "request": [],
+      "query": [],
       "response": []
     },
     "GET /agents/sessions/{}/events": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agent_output_command_execution_output_delta_event.AgentOutputCommandExecutionOutputDeltaEvent",
         "beta.agent_session_created_event.AgentSessionCreatedEvent",
@@ -152,132 +182,177 @@
     },
     "GET /agents/sessions/{}/items": {
       "request": [],
+      "query": [
+        "beta.agents.sessions.item_list_params.ItemListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agent_close_subagent_call_item.AgentCloseSubagentCallItem | beta.agent_command_execution_item.AgentCommandExecutionItem | beta.agent_create_subagent_call_item.AgentCreateSubagentCallItem | beta.agent_function_call_item.AgentFunctionCallItem | beta.agent_interrupt_subagent_call_item.AgentInterruptSubagentCallItem | beta.agent_mcp_call_item.AgentMcpCallItem | beta.agent_reasoning_item.AgentReasoningItem | beta.agent_resume_subagent_call_item.AgentResumeSubagentCallItem | beta.agent_send_subagent_input_call_item.AgentSendSubagentInputCallItem | beta.agent_session_item.AgentMessageItemResource | beta.agent_session_item.FunctionCallOutputItemResource | beta.agent_session_message.AgentSessionMessage | beta.agent_wait_for_subagents_call_item.AgentWaitForSubagentsCallItem | beta.agent_web_search_call_item.AgentWebSearchCallItem]"
       ]
     },
     "GET /agents/sessions/{}/subagents": {
       "request": [],
+      "query": [
+        "beta.agents.sessions.subagent_list_params.SubagentListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.subagent.Subagent]"
       ]
     },
     "GET /agents/sessions/{}/subagents/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.subagent.Subagent"
       ]
     },
     "GET /agents/sessions/{}/subagents/{}/items": {
       "request": [],
+      "query": [
+        "beta.agents.sessions.subagents.item_list_params.ItemListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agent_close_subagent_call_item.AgentCloseSubagentCallItem | beta.agent_command_execution_item.AgentCommandExecutionItem | beta.agent_create_subagent_call_item.AgentCreateSubagentCallItem | beta.agent_function_call_item.AgentFunctionCallItem | beta.agent_interrupt_subagent_call_item.AgentInterruptSubagentCallItem | beta.agent_mcp_call_item.AgentMcpCallItem | beta.agent_reasoning_item.AgentReasoningItem | beta.agent_resume_subagent_call_item.AgentResumeSubagentCallItem | beta.agent_send_subagent_input_call_item.AgentSendSubagentInputCallItem | beta.agent_session_item.AgentMessageItemResource | beta.agent_session_item.FunctionCallOutputItemResource | beta.agent_session_message.AgentSessionMessage | beta.agent_wait_for_subagents_call_item.AgentWaitForSubagentsCallItem | beta.agent_web_search_call_item.AgentWebSearchCallItem]"
       ]
     },
     "GET /agents/sessions/{}/subagents/{}/turns": {
       "request": [],
+      "query": [
+        "beta.agents.sessions.subagents.turn_list_params.TurnListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agents.sessions.turn.Turn]"
       ]
     },
     "GET /agents/sessions/{}/subagents/{}/turns/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.sessions.turn.Turn"
       ]
     },
     "GET /agents/sessions/{}/subagents/{}/turns/{}/items": {
       "request": [],
+      "query": [
+        "beta.agents.sessions.subagents.turns.item_list_params.ItemListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agent_close_subagent_call_item.AgentCloseSubagentCallItem | beta.agent_command_execution_item.AgentCommandExecutionItem | beta.agent_create_subagent_call_item.AgentCreateSubagentCallItem | beta.agent_function_call_item.AgentFunctionCallItem | beta.agent_interrupt_subagent_call_item.AgentInterruptSubagentCallItem | beta.agent_mcp_call_item.AgentMcpCallItem | beta.agent_reasoning_item.AgentReasoningItem | beta.agent_resume_subagent_call_item.AgentResumeSubagentCallItem | beta.agent_send_subagent_input_call_item.AgentSendSubagentInputCallItem | beta.agent_session_item.AgentMessageItemResource | beta.agent_session_item.FunctionCallOutputItemResource | beta.agent_session_message.AgentSessionMessage | beta.agent_wait_for_subagents_call_item.AgentWaitForSubagentsCallItem | beta.agent_web_search_call_item.AgentWebSearchCallItem]"
       ]
     },
     "GET /agents/sessions/{}/turns": {
       "request": [],
+      "query": [
+        "beta.agents.sessions.turn_list_params.TurnListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agents.sessions.turn.Turn]"
       ]
     },
     "GET /agents/sessions/{}/turns/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.sessions.turn.Turn"
       ]
     },
     "GET /agents/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agent.Agent"
       ]
     },
     "GET /files": {
       "request": [],
+      "query": [
+        "file_list_params.FileListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[file_object.FileObject]"
       ]
     },
     "GET /files/{}": {
       "request": [],
+      "query": [],
       "response": [
         "file_object.FileObject"
       ]
     },
     "GET /files/{}/content": {
       "request": [],
+      "query": [],
       "response": []
     },
     "GET /skills": {
       "request": [],
+      "query": [
+        "skill_list_params.SkillListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[skill.Skill]"
       ]
     },
     "GET /skills/{}": {
       "request": [],
+      "query": [],
       "response": [
         "skill.Skill"
       ]
     },
     "GET /skills/{}/content": {
       "request": [],
+      "query": [],
       "response": []
     },
     "GET /skills/{}/versions": {
       "request": [],
+      "query": [
+        "skills.version_list_params.VersionListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[skills.skill_version.SkillVersion]"
       ]
     },
     "GET /skills/{}/versions/{}": {
       "request": [],
+      "query": [],
       "response": [
         "skills.skill_version.SkillVersion"
       ]
     },
     "GET /skills/{}/versions/{}/content": {
       "request": [],
+      "query": [],
       "response": []
     },
     "GET /vaults": {
       "request": [],
+      "query": [
+        "beta.agents.vault_list_params.VaultListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agents.vault.Vault]"
       ]
     },
     "GET /vaults/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.vault.Vault"
       ]
     },
     "GET /vaults/{}/credentials": {
       "request": [],
+      "query": [
+        "beta.agents.vaults.credential_list_params.CredentialListParams"
+      ],
       "response": [
         "pagination.SyncCursorPage[beta.agents.vaults.credential.Credential]"
       ]
     },
     "GET /vaults/{}/credentials/{}": {
       "request": [],
+      "query": [],
       "response": [
         "beta.agents.vaults.credential.Credential"
       ]
@@ -286,6 +361,7 @@
       "request": [
         "beta.agent_create_params.AgentCreateParams"
       ],
+      "query": [],
       "response": [
         "beta.agent.Agent"
       ]
@@ -294,6 +370,7 @@
       "request": [
         "beta.agents.environments.template_create_params.TemplateCreateParams"
       ],
+      "query": [],
       "response": [
         "beta.agents.environments.environment_template.EnvironmentTemplate"
       ]
@@ -302,6 +379,7 @@
       "request": [
         "beta.agents.environments.template_update_params.TemplateUpdateParams"
       ],
+      "query": [],
       "response": [
         "beta.agents.environments.environment_template.EnvironmentTemplate"
       ]
@@ -311,6 +389,7 @@
         "beta.agents.environments.file_create_params.HostedEnvironmentFileParamFileID",
         "beta.agents.environments.file_create_params.HostedEnvironmentFileParamInline"
       ],
+      "query": [],
       "response": [
         "beta.agents.environments.environment_file.EnvironmentFile"
       ]
@@ -320,6 +399,7 @@
         "beta.agents.session_create_params.SessionCreateParamsNonStreaming",
         "beta.agents.session_create_params.SessionCreateParamsStreaming"
       ],
+      "query": [],
       "response": [
         "beta.agent_session.AgentSession"
       ]
@@ -328,6 +408,7 @@
       "request": [
         "beta.agents.session_update_params.SessionUpdateParams"
       ],
+      "query": [],
       "response": [
         "beta.agent_session.AgentSession"
       ]
@@ -336,12 +417,14 @@
       "request": [
         "beta.agents.sessions.event_create_params.EventCreateParams"
       ],
+      "query": [],
       "response": []
     },
     "POST /agents/{}": {
       "request": [
         "beta.agent_update_params.AgentUpdateParams"
       ],
+      "query": [],
       "response": [
         "beta.agent.Agent"
       ]
@@ -350,6 +433,7 @@
       "request": [
         "file_create_params.FileCreateParams"
       ],
+      "query": [],
       "response": [
         "file_object.FileObject"
       ]
@@ -358,6 +442,7 @@
       "request": [
         "skill_create_params.SkillCreateParams"
       ],
+      "query": [],
       "response": [
         "skill.Skill"
       ]
@@ -366,6 +451,7 @@
       "request": [
         "skill_update_params.SkillUpdateParams"
       ],
+      "query": [],
       "response": [
         "skill.Skill"
       ]
@@ -374,6 +460,7 @@
       "request": [
         "skills.version_create_params.VersionCreateParams"
       ],
+      "query": [],
       "response": [
         "skills.skill_version.SkillVersion"
       ]
@@ -382,6 +469,7 @@
       "request": [
         "beta.agents.vault_create_params.VaultCreateParams"
       ],
+      "query": [],
       "response": [
         "beta.agents.vault.Vault"
       ]
@@ -390,6 +478,7 @@
       "request": [
         "beta.agents.vaults.credential_create_params.CredentialCreateParams"
       ],
+      "query": [],
       "response": [
         "beta.agents.vaults.credential.Credential"
       ]
@@ -398,6 +487,7 @@
       "request": [
         "beta.agents.vaults.credential_update_params.CredentialUpdateParams"
       ],
+      "query": [],
       "response": [
         "beta.agents.vaults.credential.Credential"
       ]
@@ -511,6 +601,11 @@
       "status": [],
       "turn_id": [],
       "type": []
+    },
+    "beta.agent_list_params.AgentListParams": {
+      "after": [],
+      "limit": [],
+      "order": []
     },
     "beta.agent_mcp_call_item.AgentMcpCallItem": {
       "arguments": [],
@@ -1258,6 +1353,12 @@
       "path": [],
       "type": []
     },
+    "beta.agents.environments.file_list_params.FileListParams": {
+      "limit": [],
+      "order": [],
+      "page": [],
+      "path": []
+    },
     "beta.agents.environments.template_create_params.Network": {
       "access": [],
       "allowed_domains": []
@@ -1291,6 +1392,11 @@
         "beta.hosted_skill_param.HostedSkillParamInline",
         "beta.hosted_skill_param.HostedSkillParamSkillReference"
       ]
+    },
+    "beta.agents.environments.template_list_params.TemplateListParams": {
+      "after": [],
+      "limit": [],
+      "order": []
     },
     "beta.agents.environments.template_update_params.Network": {
       "access": [],
@@ -1381,8 +1487,20 @@
       "stream": [],
       "vault_ids": []
     },
+    "beta.agents.session_list_params.SessionListParams": {
+      "after": [],
+      "agent_id": [],
+      "limit": [],
+      "order": []
+    },
     "beta.agents.session_update_params.SessionUpdateParams": {
       "metadata": []
+    },
+    "beta.agents.sessions.artifact_list_params.ArtifactListParams": {
+      "after": [],
+      "environment_id": [],
+      "limit": [],
+      "order": []
     },
     "beta.agents.sessions.event_create_params.EventCreateParams": {
       "Idempotency-Key": [],
@@ -1391,6 +1509,11 @@
         "beta.agent_session_input_param.SessionInputParamAgentSessionInputMessage",
         "beta.agent_session_input_param.SessionInputParamAgentSessionInputToolResult"
       ]
+    },
+    "beta.agents.sessions.item_list_params.ItemListParams": {
+      "after": [],
+      "limit": [],
+      "order": []
     },
     "beta.agents.sessions.session_artifact.SessionArtifact": {
       "created_at": [],
@@ -1406,6 +1529,30 @@
       "deleted": [],
       "id": [],
       "object": []
+    },
+    "beta.agents.sessions.subagent_list_params.SubagentListParams": {
+      "after": [],
+      "limit": [],
+      "order": []
+    },
+    "beta.agents.sessions.subagents.item_list_params.ItemListParams": {
+      "after": [],
+      "limit": [],
+      "order": [],
+      "session_id": []
+    },
+    "beta.agents.sessions.subagents.turn_list_params.TurnListParams": {
+      "after": [],
+      "limit": [],
+      "order": [],
+      "session_id": []
+    },
+    "beta.agents.sessions.subagents.turns.item_list_params.ItemListParams": {
+      "after": [],
+      "limit": [],
+      "order": [],
+      "session_id": [],
+      "subagent_id": []
     },
     "beta.agents.sessions.turn.Turn": {
       "agent_id": [],
@@ -1424,6 +1571,11 @@
         "beta.token_usage.TokenUsage"
       ]
     },
+    "beta.agents.sessions.turn_list_params.TurnListParams": {
+      "after": [],
+      "limit": [],
+      "order": []
+    },
     "beta.agents.vault.Vault": {
       "created_at": [],
       "id": [],
@@ -1439,6 +1591,12 @@
       "deleted": [],
       "id": [],
       "object": []
+    },
+    "beta.agents.vault_list_params.VaultListParams": {
+      "after": [],
+      "limit": [],
+      "order": [],
+      "status": []
     },
     "beta.agents.vaults.credential.Credential": {
       "auth": [
@@ -1532,6 +1690,12 @@
       "deleted": [],
       "id": [],
       "object": []
+    },
+    "beta.agents.vaults.credential_list_params.CredentialListParams": {
+      "after": [],
+      "limit": [],
+      "order": [],
+      "status": []
     },
     "beta.agents.vaults.credential_update_params.CredentialUpdateParams": {
       "auth": [
@@ -1980,6 +2144,12 @@
       "id": [],
       "object": []
     },
+    "file_list_params.FileListParams": {
+      "after": [],
+      "limit": [],
+      "order": [],
+      "purpose": []
+    },
     "file_object.FileObject": {
       "bytes": [],
       "created_at": [],
@@ -2095,6 +2265,11 @@
     "skill_create_params.SkillCreateParams": {
       "files": []
     },
+    "skill_list_params.SkillListParams": {
+      "after": [],
+      "limit": [],
+      "order": []
+    },
     "skill_update_params.SkillUpdateParams": {
       "default_version": []
     },
@@ -2116,6 +2291,11 @@
     "skills.version_create_params.VersionCreateParams": {
       "default": [],
       "files": []
+    },
+    "skills.version_list_params.VersionListParams": {
+      "after": [],
+      "limit": [],
+      "order": []
     }
   }
 }

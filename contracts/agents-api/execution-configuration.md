@@ -2,9 +2,11 @@
 
 These read-only administrator reads describe configuration, not execution health.
 They require the deployment administrator credential. They never contact a model
-provider, start a Turn or wake a sandbox. Applications read a Session's effective
-harness from its `agent.x_agents_core`; the former project route
-`GET /v1/agents/sessions/{session_id}/execution-configuration` is removed.
+provider, start a Turn or wake a sandbox. The former project route
+`GET /v1/agents/sessions/{session_id}/execution-configuration` is removed. A
+Session read includes `agent.x_agents_core.harness` only when its Agent selected a
+harness, inline or saved; Sessions on the deployment default keep the official
+Agent shape, and no read returns the provider selection.
 
 ## Frozen Session selections
 

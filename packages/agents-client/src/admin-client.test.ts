@@ -324,6 +324,13 @@ describe("AdminClient project monitoring", () => {
     const value = { object: "list", data: [{ project_id: projectId, observation }], has_more: false, first_id: sessionId, last_id: sessionId };
     expect(await clientWith(value).client.listRuntimeObservations()).toEqual(value);
     await expect(clientWith({ ...value, data: [{ key_id: keyId, observation }] }).client.listRuntimeObservations()).rejects.toMatchObject({ code: "invalid_admin_response" });
+    for (const invalid of [
+      { ...value, first_id: resourceId },
+      { ...value, data: [value.data[0], value.data[0]] },
+      { ...value, data: [], has_more: true, first_id: null, last_id: null },
+    ]) {
+      await expect(clientWith(invalid).client.listRuntimeObservations()).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
   });
 
   it("projects E2B utilization and disk on global Runtime observations", async () => {

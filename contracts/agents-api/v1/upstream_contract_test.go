@@ -97,6 +97,18 @@ var fieldPlacementPending = map[string]string{
 // do not declare.
 var listEnvelopeFields = []string{"object", "first_id", "last_id"}
 
+// Core fields live only inside x_agents_core on these Agent and Session
+// definitions, and only as these members.
+var (
+	coreExtensionOwners  = []string{"v1.Agent", "v1.InlineAgent", "v1.SavedAgent", "v1.CreateAgentRequest", "v1.UpdateAgentRequest", "v1.Session", "v1.CreateSessionRequest"}
+	coreExtensionMembers = []string{"harness", "model_provider"}
+)
+
+type upstreamFields struct {
+	Operations map[string]struct{ Request, Query, Response []string } `json:"operations"`
+	Types      map[string]map[string][]string                         `json:"types"`
+}
+
 type fieldAudit struct {
 	definitions map[string]any
 	types       map[string]map[string][]string
@@ -104,20 +116,16 @@ type fieldAudit struct {
 	violations  map[string][]string
 }
 
-func TestPublicOpenAPIFieldsAreOfficialOrCoreExtensions(t *testing.T) {
-	var pinned struct {
-		Operations map[string]struct{ Request, Response []string } `json:"operations"`
-		Types      map[string]map[string][]string                  `json:"types"`
-	}
-	readContractJSON(t, "upstream-fields.json", &pinned)
-	operations, definitions := publicOperations(t)
+// auditPublicFields returns every public property, query parameter or
+// extension member that the pinned SDK types do not have, keyed by schema.field.
+func auditPublicFields(operations map[string]map[string]any, definitions map[string]any, pinned upstreamFields) map[string][]string {
 	audit := fieldAudit{definitions: definitions, types: pinned.Types, visited: map[string]bool{}, violations: map[string][]string{}}
 	for route, operation := range operations {
 		official, ok := pinned.Operations[route]
 		if !ok {
 			continue // The route set test reports it.
 		}
-		form := map[string]any{}
+		form, query := map[string]any{}, map[string]any{}
 		for _, parameter := range asSlice(operation["parameters"]) {
 			parameter := parameter.(map[string]any)
 			switch parameter["in"] {
@@ -125,10 +133,16 @@ func TestPublicOpenAPIFieldsAreOfficialOrCoreExtensions(t *testing.T) {
 				audit.compare(route+" body", parameter["schema"].(map[string]any), official.Request)
 			case "formData":
 				form[parameter["name"].(string)] = map[string]any{}
+			case "query":
+				// The SDK sends list parameters with brackets, as status[].
+				query[strings.TrimSuffix(parameter["name"].(string), "[]")] = map[string]any{}
 			}
 		}
 		if len(form) != 0 {
 			audit.compare(route+" form", map[string]any{"properties": form}, official.Request)
+		}
+		if len(query) != 0 {
+			audit.compare(route+" query", map[string]any{"properties": query}, official.Query)
 		}
 		for code, response := range asMap(operation["responses"]) {
 			if schema, ok := asMap(response)["schema"].(map[string]any); ok && strings.HasPrefix(code, "2") {
@@ -136,14 +150,54 @@ func TestPublicOpenAPIFieldsAreOfficialOrCoreExtensions(t *testing.T) {
 			}
 		}
 	}
-	for field, sources := range audit.violations {
+	return audit.violations
+}
+
+func TestPublicOpenAPIFieldsAreOfficialOrCoreExtensions(t *testing.T) {
+	var pinned upstreamFields
+	readContractJSON(t, "upstream-fields.json", &pinned)
+	var routes struct {
+		Routes []string `json:"routes"`
+	}
+	readContractJSON(t, "upstream-routes.json", &routes)
+	var extracted []string
+	for route := range pinned.Operations {
+		extracted = append(extracted, route)
+	}
+	sort.Strings(extracted)
+	if !slices.Equal(extracted, routes.Routes) {
+		t.Fatalf("upstream-fields.json operations %v differ from the pinned routes %v", extracted, routes.Routes)
+	}
+	operations, definitions := publicOperations(t)
+	violations := auditPublicFields(operations, definitions, pinned)
+	for field, sources := range violations {
 		if _, ok := fieldPlacementPending[field]; !ok {
 			t.Errorf("%s is not an official field of %v; put Core-only fields inside x_agents_core", field, sources)
 		}
 	}
 	for field := range fieldPlacementPending {
-		if audit.violations[field] == nil {
+		if violations[field] == nil {
 			t.Errorf("resolved field %s is still listed in fieldPlacementPending", field)
+		}
+	}
+}
+
+// The audit rejects a Core field outside x_agents_core, a new x_agents_core
+// member and x_agents_core on another resource.
+func TestPublicFieldAuditRejectsMisplacedCoreFields(t *testing.T) {
+	var pinned upstreamFields
+	readContractJSON(t, "upstream-fields.json", &pinned)
+	for _, test := range []struct {
+		definition, property, want string
+	}{
+		{"v1.SessionExecutionInput", "sandbox_node_id", "v1.CreateSessionRequest.x_agents_core.sandbox_node_id"},
+		{"v1.AgentsCore", "sandbox_node_id", "v1.Agent.x_agents_core.sandbox_node_id"},
+		{"v1.Vault", "x_agents_core", "v1.Vault.x_agents_core"},
+	} {
+		operations, definitions := publicOperations(t)
+		asMap(asMap(definitions[test.definition])["properties"])[test.property] = map[string]any{"type": "string"}
+		if violations := auditPublicFields(operations, definitions, pinned); violations[test.want] == nil {
+			t.Errorf("%s.%s was not reported as %s; got %v", test.definition, test.property, test.want, violations)
 		}
 	}
 }
@@ -174,7 +228,14 @@ func (a *fieldAudit) compare(name string, schema map[string]any, official []stri
 		case known && len(children) != 0:
 			sort.Strings(children)
 			a.compare(name+"."+property, value, children)
-		case known || property == "x_agents_core":
+		case known:
+		case property == "x_agents_core" && slices.Contains(coreExtensionOwners, name):
+			_, extension := a.resolve(name+"."+property, value)
+			for member := range a.properties(extension) {
+				if !slices.Contains(coreExtensionMembers, member) {
+					a.violations[name+".x_agents_core."+member] = coreExtensionMembers
+				}
+			}
 		case slices.Contains(listEnvelopeFields, property) && slices.ContainsFunc(official, func(typeName string) bool { return strings.HasPrefix(typeName, "pagination.") }):
 		default:
 			a.violations[name+"."+property] = official

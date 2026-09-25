@@ -65,8 +65,9 @@ Source File content, Session events/SSE, arbitrary creation/update and execution
 operations are deliberately absent. Session deletion still requires idle state;
 management deletion never cancels implicitly. Deleting a Credential does not revoke
 its provider authorization. Deleting a default Skill version retains the public
-constraint. Skill and Artifact downloads and Runtime reads reject HEAD just as the
-corresponding project operations do.
+constraint. Skill and Artifact downloads reject HEAD like the corresponding project
+operations; the Runtime observation (single and list) and Runtime history reads also
+reject HEAD with 405, so HEAD never samples a provider or queries telemetry.
 
 ## Administrative Session archive
 

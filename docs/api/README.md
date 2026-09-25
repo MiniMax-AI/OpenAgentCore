@@ -7,6 +7,7 @@ routes; its only Core additions are the `x_agents_core` fields described in the
 | Surface | Caller and credential | Entry point | Reference |
 | --- | --- | --- | --- |
 | Public Agents API | Applications; a database-issued Project API key | Direct Core `/v1` | [Public API](public-agent-api.md) |
+| Self-hosted Runtime credential issuance | Applications; the Project API key (until it moves under `/core/v1/projects`) | Core `/core/v1/environments/{environment_id}/executor-credentials` | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) |
 | Administrator resources | Web's server or administrative automation; deployment credential | Core `/core/v1/admin` | [Management contract](../../contracts/agents-api/admin-api.md) |
 | Hosted sandbox administration | Web's server or administrative automation; deployment credential | Core `/core/v1/sandbox` management routes | [Web API](web-management.md#sandbox-administration) |
 | Console authentication | Browser; local console sign-in and session cookie | Console `/console/auth` | [Web API](web-management.md#browser-to-console) |

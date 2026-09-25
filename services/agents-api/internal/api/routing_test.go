@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -355,6 +356,26 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 		if !found {
 			t.Errorf("self-authenticated route %s is no longer registered", route)
 		}
+	}
+	// /v1 serves exactly the pinned official method and path set.
+	var pinned struct {
+		Routes []string `json:"routes"`
+	}
+	raw, err := os.ReadFile("../../../../contracts/agents-api/upstream-routes.json")
+	if err != nil || json.Unmarshal(raw, &pinned) != nil || len(pinned.Routes) == 0 {
+		t.Fatal("read pinned routes", err)
+	}
+	served := []string{}
+	for route := range walked {
+		method, path, _ := strings.Cut(route, " ")
+		if method != http.MethodHead && strings.HasPrefix(path, "/v1/") {
+			served = append(served, method+" "+regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(strings.TrimPrefix(path, "/v1"), "{}"))
+		}
+	}
+	slices.Sort(served)
+	slices.Sort(pinned.Routes)
+	if !slices.Equal(served, pinned.Routes) {
+		t.Errorf("/v1 routes differ from the pinned set:\nserved %v\npinned %v", served, pinned.Routes)
 	}
 	if routes < 73 || len(s.lookups) != 0 || len(s.updates) != 0 {
 		t.Fatalf("walked %d routes; store lookups %v updates %v", routes, s.lookups, s.updates)

@@ -19,9 +19,9 @@ credentials are supplied through the existing write-only API extension.
 
 Hosted deployments select E2B cloud or one provider across their own local/remote
 nodes (Docker or microsandbox). The
-Hosted Sandbox Manager shows node health, capacity and Session placement. New
-Sessions use automatic placement by default or an explicitly selected node;
-existing Sessions retain their node across disconnects and resume.
+Hosted Sandbox Manager shows node health, capacity and Session placement. Core
+places new Sessions automatically; existing Sessions retain their node across
+disconnects and resume.
 
 ## Start here
 

@@ -827,8 +827,8 @@ The [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md) is a
 deployment-level admin surface, separate from Project credentials. The paired
 console's administrator token stays on its server. Enrollment credentials authorize
 initial node configuration reads and registration; durable node credentials authorize
-retained configuration reads and node transport. Project keys can read a narrow node
-directory and their own Session placement, never global allocations.
+retained configuration reads and node transport. Project keys cannot read nodes,
+placement or allocations.
 
 One execution owner manages local and remote nodes through the same finite
 Provider protocol. Local opt-in uses the same standalone node installer and

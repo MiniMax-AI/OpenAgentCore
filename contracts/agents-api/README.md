@@ -13,8 +13,10 @@ and streaming helpers define the compatibility target. This directory records
 the boundary; it does not imply that every upstream feature is implemented.
 `upstream-routes.json` and `upstream-fields.json` are extracted from that SDK by
 `scripts/extract-agents-api-upstream.py` (run it with the pinned SDK installed).
-Contract tests require `openapi.yaml` to have exactly those method and path pairs
-and to keep every non-official field inside `x_agents_core`.
+Contract tests require `openapi.yaml` and the live router to have exactly those
+method and path pairs, every query parameter to be official, and every other
+field to sit inside `x_agents_core` on Agents and Sessions, whose only members are
+`harness` and `model_provider`.
 
 Parsar owns product Agents and Teams. This service owns upstream execution
 resources, including reusable Agents and protocol subagents. The OpenAI Agents

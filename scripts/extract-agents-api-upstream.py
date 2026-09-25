@@ -15,7 +15,8 @@ Skills (``openai.resources.skills``); see docs/api/public-agent-api.md.
 
 Routes come from each synchronous resource method's ``self._get``/``_post``/
 ``_delete``/``_get_api_list`` call, with path parameters normalised to ``{}``.
-Field names come from the request params TypedDicts (``body=maybe_transform``)
+Field names come from the request params TypedDicts (``body=maybe_transform``),
+the query params TypedDicts (``make_request_options(query=maybe_transform(...))``)
 and the response models (``cast_to`` or ``page``) of the same calls, followed
 through nested models, TypedDicts, lists and unions. JSON names use the SDK's
 wire alias. Page wrappers are the SDK's hand-written classes, not generated
@@ -109,10 +110,19 @@ def fields(value):
     return {field.alias or name: field.annotation for name, field in value.model_fields.items()}
 
 
-def request_types(call, namespace):
-    body = next((keyword.value for keyword in call.keywords if keyword.arg == "body"), None)
+def keyword_value(call, name):
+    return next((keyword.value for keyword in call.keywords if keyword.arg == name), None)
+
+
+def request_types(call, namespace, name="body"):
+    """Return the params types transformed into the call's body, or its query."""
+    value = keyword_value(call, "body") if name == "body" else None
+    if name == "query":
+        options = keyword_value(call, "options")
+        if isinstance(options, ast.Call):
+            value = keyword_value(options, "query")
     found = []
-    for node in ast.walk(body) if body is not None else []:
+    for node in ast.walk(value) if value is not None else []:
         if isinstance(node, ast.Call) and getattr(node.func, "id", "").endswith("maybe_transform") and len(node.args) == 2:
             for candidate in ast.walk(node.args[1]):
                 if isinstance(candidate, ast.Attribute):
@@ -144,8 +154,10 @@ def operations():
                         and getattr(call.func.value, "id", None) == "self"):
                     continue
                 route = f"{HTTP_CALLS[call.func.attr]} {literal_path(call.args[0])}"
-                entry = found.setdefault(route, {"request": [], "response": []})
-                for key, values in (("request", request_types(call, vars(module))), ("response", response_types(call, vars(module)))):
+                entry = found.setdefault(route, {"request": [], "query": [], "response": []})
+                namespace = vars(module)
+                for key, values in (("request", request_types(call, namespace)), ("query", request_types(call, namespace, "query")),
+                                    ("response", response_types(call, namespace))):
                     entry[key].extend(value for value in values if value not in entry[key])
     return found
 
@@ -158,7 +170,7 @@ def main():
         sys.exit(f"installed openai {openai.__version__} does not match pinned {pin['sdk_version']}")
     found = operations()
     header = {"sdk_version": pin["sdk_version"], "commit": pin["commit"], "generator": "scripts/extract-agents-api-upstream.py"}
-    types, pending = {}, [value for entry in found.values() for key in ("request", "response") for value in entry[key]]
+    types, pending = {}, [value for entry in found.values() for key in ("request", "query", "response") for value in entry[key]]
     while pending:
         value = pending.pop()
         if type_id(value) in types:
@@ -172,7 +184,7 @@ def main():
     output = Path(sys.argv[2])
     routes = {**header, "resources": list(RESOURCE_PACKAGES), "routes": sorted(found)}
     (output / "upstream-routes.json").write_text(json.dumps(routes, indent=2) + "\n", encoding="utf-8")
-    operation_types = {route: {key: sorted(type_id(value) for value in entry[key]) for key in ("request", "response")} for route, entry in sorted(found.items())}
+    operation_types = {route: {key: sorted(type_id(value) for value in entry[key]) for key in ("request", "query", "response")} for route, entry in sorted(found.items())}
     document = {**header, "operations": operation_types, "types": dict(sorted(types.items()))}
     (output / "upstream-fields.json").write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
