@@ -9,6 +9,7 @@ import pathlib
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 
@@ -91,6 +92,33 @@ class DistributionTests(unittest.TestCase):
         for line in (self.bundle / "SHA256SUMS").read_text().splitlines():
             digest, name = line.split("  ", 1)
             self.assertEqual(digest, distribution.sha256(self.bundle / name))
+
+    def test_built_image_records_the_id_each_docker_store_resolves(self):
+        config, manifest, other = ("sha256:" + digit * 64 for digit in "123")
+        metadata = self.stage / "build.json"
+        both = {"containerimage.config.digest": config, "containerimage.digest": manifest}
+        # Classic stores resolve the config digest, containerd stores the manifest digest. A digest
+        # resolving to another image, or metadata without a config digest, identifies nothing.
+        cases = ((dict(both, **{"containerimage.digest": config}), {config: config}, config),
+                 (both, {manifest: manifest}, manifest),
+                 (both, {config: other}, "does not identify"),
+                 ({"containerimage.digest": manifest}, {manifest: manifest}, "lacks valid image digests"))
+        for build, store, expected in cases:
+            with self.subTest(build=build, store=store):
+                metadata.write_text(json.dumps(build))
+                inspect = lambda command, **_: mock.Mock(returncode=0 if command[-1] in store else 1,
+                                                         stdout=store.get(command[-1], "") + "\n")
+                with mock.patch.object(distribution.subprocess, "run", side_effect=inspect), \
+                        mock.patch.object(distribution, "verify_image") as verify, \
+                        mock.patch("builtins.print") as output:
+                    if expected.startswith("sha256:"):
+                        distribution.built_image(metadata)
+                        verify.assert_called_once_with(expected)
+                        output.assert_called_once_with(expected)
+                    else:
+                        with self.assertRaisesRegex(ValueError, expected):
+                            distribution.built_image(metadata)
+                        verify.assert_not_called()
 
     def test_containerd_build_ids_still_publish_archive_config_ids(self):
         for name, identity in self.identities.items():

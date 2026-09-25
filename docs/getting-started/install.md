@@ -121,17 +121,18 @@ Choose English or Chinese through the System language selector.
 
 ## Add nodes after a default installation
 
-1. Log in to the bundled Web console and open **Hosted Sandbox Manager**.
+1. Log in to the bundled Web console and open **Nodes**.
    The paired installation needs no second key or Core connection setup.
 2. Choose **E2B cloud** or **Own machines**. Own machines use Docker or
    microsandbox; select their per-sandbox resources and matched immutable Runtime
-   release. E2B uses an account key and exact ready template build whose CPU/memory
-   match the requested limits, with no node installation. The paired console address is used
-   automatically. If your network requires a different address for nodes and
-   guests, change it under advanced network settings during initial setup. When
+   release. E2B uses an account key and an exact ready template build, with no node
+   installation; each sandbox gets the build's CPU and memory, so setup asks for no
+   size. The paired console address is used automatically. If your network requires
+   a different address for nodes and guests, change it under advanced network
+   settings during initial setup. When
    opening the console on localhost or an HTTP address, setup requires a
    non-loopback HTTPS address that nodes and sandbox guests can reach.
-3. Select **Initialize sandbox deployment**. It takes effect without restarting Core and remains in
+3. Select **Save configuration**. It takes effect without restarting Core and remains in
    PostgreSQL across restarts. The provider, limits and Runtime are one saved
    specification; node files cannot override it. Later changes require global
    maintenance and completed cleanup. Microsandbox uses a five-minute idle timeout
@@ -357,8 +358,8 @@ preparation is described in the [E2B guide](../../services/agents-api/deploy/e2b
 Start with an optional [API request](quickstart.md). The read-only example works
 with the default installation. The execution example requires an installation
 with either E2B configured through Web or a connected, ready Docker/microsandbox node.
-The Hosted Sandbox Manager selects one scheme for the whole deployment. E2B uses
-an account API key and a qualified immutable Runtime template; Core provisions
+Sandbox setup on the **Nodes** page selects one scheme for the whole deployment.
+E2B uses an account API key and a qualified immutable Runtime template; Core provisions
 sandboxes without a node installer. Own machines use the existing node command.
 Provider, per-sandbox resources and Runtime changes all require maintenance and
 completed resource cleanup; see
@@ -416,7 +417,7 @@ gh workflow run core-release --repo MiniMax-AI/parsar-core --ref main \
 ```
 
 The workflow uploads the matched files as an Actions artifact and creates a draft
-Release whose tag is that full SHA. The manifest records the same tag in every
+Release tagged `build-<full SHA>`. The manifest records the same tag in every
 asset URL. Do not mix files across releases or resolve individual components
 through `latest`. The node command comes from its connected Core, which selects
 the matching release automatically.
@@ -427,9 +428,11 @@ publishing the draft. A workflow build alone is not live acceptance. Retain the
 exact tested assets when publishing; do not rebuild or replace files under the
 same release identity. Publishing a Release does not change repository visibility.
 
-For an offline installation, provide the extracted matching archive through the
-existing `--offline-root` option where supported. Remote node commands use the
-manifest's release URL; use the explicitly configured console-hosted offline
-build described above when node hosts cannot access that URL. Download access
-errors should be fixed at the distribution source, without passing repository
-credentials into Runtime or changing its executor authorization.
+For an offline installation, extract the matching `-offline.tar.gz` archive and run
+its `install.sh`, which copies the bundled assets into the console's node payload.
+`install.sh` has no `--offline-root` option; only `self-hosted-install.pyz` accepts
+one, for an executor host. Remote node commands use the manifest's release URL; use
+the explicitly configured console-hosted offline build described above when node
+hosts cannot access that URL. Download access errors should be fixed at the
+distribution source, without passing repository credentials into Runtime or
+changing its executor authorization.

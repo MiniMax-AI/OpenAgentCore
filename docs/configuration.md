@@ -106,13 +106,14 @@ request shapes, immutable identities and provider validation.
 | Setting | Initial Web proposal | Meaning |
 | --- | --- | --- |
 | `resources.cpus` | `2` | Integer vCPUs per sandbox, 1 through 255 |
-| `resources.memory_mib` | Docker/E2B `2048`, microsandbox `4096` | MiB per sandbox, 512 through 1048576 |
+| `resources.memory_mib` | Docker `2048`, microsandbox `4096` | MiB per sandbox, 512 through 1048576 |
 | `resources.root_disk_mib`, `environment_disk_mib` | Microsandbox `8192` each | At least 1024 MiB; omitted for Docker/E2B |
 | `runtime` | Matching distribution manifest | Source revision, exact image ID/manifest/ref and runtime/firmware hashes; no mutable tags |
 | Idle interval / snapshot retention | `300` / `86400` seconds | Database-owned microsandbox policy; no node-file override |
 
-E2B also requires CPU/memory. Core verifies them against the ready immutable
-`template-id:build-uuid`; omit `runtime`. Its account key is encrypted and write-only.
+E2B resources are optional, and Web sends none: Core then adopts the CPU and memory
+of the ready immutable `template-id:build-uuid`. Supplied values must match that
+build. Omit `runtime`. The E2B account key is encrypted and write-only.
 E2B template storage remains native; Docker has no independent hard disk quota.
 A submitted limit must be enforceable by its provider.
 

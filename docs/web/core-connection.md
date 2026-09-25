@@ -62,7 +62,9 @@ and display only. Keep deployment, application, node and provider credentials ou
 ## Projects and application keys
 
 Installation creates no Project or application key. An administrator creates a
-Project and issues named keys using the [administrator API](../../contracts/agents-api/admin-api.md).
+Project and issues named keys on the console's **Projects and keys** page, which
+uses the [administrator API](../../contracts/agents-api/admin-api.md), or with that
+API directly.
 The Project owns one tenant and one principal; its keys share assets and permissions.
 Writes retain each key's provenance. All Projects and application keys live in
 PostgreSQL, independently of deployment configuration.

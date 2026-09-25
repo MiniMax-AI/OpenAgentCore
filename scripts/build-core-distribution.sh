@@ -44,15 +44,28 @@ case "$build_network" in
   default|host|none) ;;
   *) printf 'CORE_DISTRIBUTION_BUILD_NETWORK must be default, host, or none\n' >&2; exit 1 ;;
 esac
+# Build one Linux amd64 image and write the ID the local image store gives it to
+# $stage/NAME.id. BuildKit's --iidfile reports the config digest, which is the
+# image ID only in Docker's classic store; the containerd store (Docker 29's
+# default) uses the manifest digest and cannot resolve the config digest. The
+# build metadata carries both, and built-image keeps the one the store resolves.
+# Without provenance attestations each image is one platform manifest in both
+# stores, as the archive verifier requires.
 build_image() {
+  local name="$1"
+  shift
   # Docker's predefined proxy arguments are build-only; no Dockerfile ARG or ENV
   # declaration persists the operator's network configuration in the images.
-  docker build --network "$build_network" \
+  # The metadata file omits build provenance, so it does not record them either.
+  BUILDX_METADATA_PROVENANCE=disabled docker build --network "$build_network" \
+    --platform linux/amd64 --provenance=false --metadata-file "$stage/$name.build.json" \
+    --label "org.opencontainers.image.revision=$revision" \
     --build-arg HTTP_PROXY --build-arg HTTPS_PROXY --build-arg ALL_PROXY --build-arg NO_PROXY \
     --build-arg "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" \
     --build-arg "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" \
     --build-arg "all_proxy=${all_proxy:-${ALL_PROXY:-}}" \
     --build-arg "no_proxy=${no_proxy:-${NO_PROXY:-}}" "$@"
+  python3 scripts/core-distribution-manifest.py built-image "$stage/$name.build.json" > "$stage/$name.id"
 }
 
 require_clean_source() {
@@ -127,8 +140,7 @@ tar -xzf "$stage/e2b-build/agents-api-e2b-provider-linux-amd64.tar.gz" \
   --strip-components=1 -C "$stage/core/e2b"
 cp -R "$stage/core/e2b" "$bundle/native/e2b"
 cp deploy/distribution/Dockerfile "$stage/core/Dockerfile"
-build_image --platform linux/amd64 --iidfile "$stage/core.id" \
-  --label "org.opencontainers.image.revision=$revision" "$stage/core"
+build_image core "$stage/core"
 core_image="$(cat "$stage/core.id")"
 # Fail at packaging time if the helper or runtime requires unavailable host libraries.
 docker run --rm --network none --entrypoint /bin/sh \
@@ -142,8 +154,7 @@ pnpm install --frozen-lockfile
 AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS=1 AGENTS_CORE_WEB_ENVIRONMENT_FILES=1 pnpm build:web
 cp -R apps/web/dist "$stage/web/dist"
 cp services/core-console/Dockerfile "$stage/web/Dockerfile"
-build_image --platform linux/amd64 --iidfile "$stage/web.id" \
-  --label "org.opencontainers.image.revision=$revision" "$stage/web"
+build_image web "$stage/web"
 
 export AGENTS_EXECUTOR_BUILD_DIR="$stage/helpers"
 scripts/build-agents-executor.sh
@@ -167,8 +178,7 @@ else
     script="scripts/build-$harness-runtime.sh"
     if [[ "$harness" == codex ]]; then script=scripts/build-agents-runtime.sh; fi
     AGENTS_RUNTIME_BUILD_DIR="$stage/$harness" bash "$script"
-    build_image --platform linux/amd64 --iidfile "$stage/$harness.id" \
-      --label "org.opencontainers.image.revision=$revision" "$stage/$harness"
+    build_image "$harness" "$stage/$harness"
   done
   codex_image="$(cat "$stage/codex.id")"
   claude_image="$(cat "$stage/claude.id")"
@@ -186,12 +196,14 @@ for harness in codex claude mcode; do
 done
 mkdir "$stage/combined"
 cp deploy/distribution/Runtime.Dockerfile "$stage/combined/Dockerfile"
-build_image --platform linux/amd64 --iidfile "$stage/runtime.id" \
-  --label "org.opencontainers.image.revision=$revision" \
+build_image runtime \
   --build-arg "CODEX_IMAGE=${image_tags[0]}" --build-arg "CLAUDE_IMAGE=${image_tags[1]}" \
   --build-arg "MCODE_IMAGE=${image_tags[2]}" "$stage/combined"
 
-database_image="${CORE_DISTRIBUTION_DATABASE_IMAGE:-postgres:16-alpine}"
+# Pin the linux/amd64 platform manifest, not the multi-platform tag: the
+# containerd store keeps a pulled tag's whole index, whose export holds every
+# platform. A platform manifest stays one image in both stores.
+database_image="${CORE_DISTRIBUTION_DATABASE_IMAGE:-postgres:16-alpine@sha256:1a66d744c1b459e13b05a8fca341da84cb63383e99ce262210efee5a319d4551}"
 if [[ ! "$database_image" =~ ^sha256:[0-9a-f]{64}$ ]]; then
   docker pull --platform linux/amd64 "$database_image"
 fi

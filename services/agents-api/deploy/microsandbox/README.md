@@ -51,7 +51,7 @@ removing an environment variable does not migrate its configuration ownership.
 Use a dedicated service account with access to `/dev/kvm`, a C compiler and the
 repository's Go version for source builds. The node's helper requires glibc and
 the standard Linux dynamic libraries. Core remains a CGO-disabled build. Its
-`distroless/static` image does not run the helper; the standalone native node does.
+Debian slim container image does not run the helper; the standalone native node does.
 Use the matched distribution's ordinary node installer for an operator installation.
 
 Build from the repository root:

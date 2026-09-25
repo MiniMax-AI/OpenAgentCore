@@ -41,7 +41,7 @@ Container liveness alone is not a healthy native harness or an available model.
 Use public Session, Turn, Items, Environment and Usage reads for execution. Reuse
 Core's Runtime observations for sandbox details when available; do not infer
 execution truth from Docker or invent a second lifecycle collector. Use Web's
-**Hosted Sandbox Manager** for node connection, provider readiness and placement.
+**Nodes** page for node connection, provider readiness and placement.
 
 ## Stop and restart
 

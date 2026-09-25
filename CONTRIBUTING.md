@@ -1678,8 +1678,8 @@ module manifests and trimmed paths. It requires no Node, Docker or product setup
 and the dedicated CI workflow enforce the same boundary. CI exercises the built
 migration command and uses the built server for official-client HTTP checks.
 `make docker-build-agents-api` reuses that build for Linux amd64 and sends only
-its four executables and `services/agents-api/Dockerfile` to Docker. The pinned
-Distroless runtime runs without root, a shell, product assets or an embedded
+its executables, the E2B helper and `services/agents-api/Dockerfile` to Docker. The
+digest-pinned Debian slim runtime runs without root, product assets or an embedded
 harness. Keep runtime credentials outside the image and migrations explicit.
 `make check-agents-api-container` runs the existing official-client suite against
 the image with a read-only root filesystem; it requires Linux Docker, a non-root
@@ -1741,8 +1741,14 @@ Distribution `images` records each exported image's config digest;
 both from the same archive, including its referenced config and layer bytes, and
 require the build host's selected image ID to match one of them. Docker's classic
 store identifies images by config, while its containerd store uses the OCI
-descriptor. Core, node and self-hosted installers share one resolver for these
-required identities: confirm Linux amd64 and the returned immutable local ID,
+descriptor. The builder therefore selects the digest from BuildKit's build metadata
+that the local store resolves, never the `--iidfile` config digest alone, and
+disables provenance attestations so each image and archive holds one platform
+manifest in both stores. For the same reason the default PostgreSQL input is pinned
+by its linux/amd64 platform manifest digest: a pulled multi-platform tag keeps its
+whole index in the containerd store, and that export holds every platform. Core,
+node and self-hosted installers share one resolver
+for these required identities: confirm Linux amd64 and the returned immutable local ID,
 then use that ID in service/provider configuration and Runtime launches. Tags do
 not replace identity verification. The microsandbox-qualified `runtime_ref`
 remains independent of Docker's local store identity.
@@ -1821,15 +1827,15 @@ preserves resident microVM/helper processes across a node-service restart. User 
 access and the Linux runtime libraries are prerequisites for microsandbox; both node
 providers require a systemd user session with linger. Do not add another launcher,
 scheduler or recovery path for local installation.
-The basic distroless API image and binary builds remain independent artifacts.
+The basic API image and binary builds remain independent artifacts.
 The standalone API release and Core distribution both include the Hosted Sandbox
 Manager guide at the relative path used by their packaged README. Include the
 guide in each artifact checksum list so extracted documentation matches its build.
 The node asset includes the sandbox-node binary. Local opt-in initializes an empty
 deployment through the same administrator API, then invokes the ordinary node
-installer. Its initial default is 2 CPUs and 4096 MiB; microsandbox also requests
-8192 MiB for each disk. An existing database selection is never overwritten by
-installer defaults. Node configuration and identity live under
+installer. Its initial size matches Web's setup proposal: 2 CPUs with 2048 MiB for
+Docker, or 4096 MiB and 8192 MiB for each disk for microsandbox. An existing
+database selection is never overwritten by installer defaults. Node configuration and identity live under
 `~/.parsar/nodes/<installation-id>/`; microsandbox uses its separate short private
 Runtime home. Zero-node installs create no node identity state but retain the paired
 Core key for first setup.

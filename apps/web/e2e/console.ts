@@ -24,6 +24,11 @@ export async function failNext(request: APIRequestContext, failure: { method: st
   await request.post(`${fixture}/__fixture/fail-next`, { data: failure });
 }
 
+/** Registers a node, or changes one, as a host running an enrollment command would. */
+export async function setNode(request: APIRequestContext, node: { id: string; name?: string; online?: boolean; provider_ready?: boolean; diagnostic?: string }) {
+  await request.post(`${fixture}/__fixture/node`, { data: node });
+}
+
 /** Archives a project behind the console's back, as another administrator would. */
 export async function archiveProject(request: APIRequestContext, projectId: string) {
   await request.post(`${fixture}/core/v1/projects/${projectId}/archive`, { headers: { cookie: "core_console=fixture-session" } });

@@ -56,9 +56,31 @@
 .node-status-fact, .node-diagnostic { display: inline-flex; align-items: center; gap: 4px; }
 .sandbox-manager-page .console-section-title h2 .heading-count { margin-left: 6px; }
 
-/* The Add node dialog's first line carries the host requirements behind a help tip. */
-.sandbox-add-node-intro {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+/* Add node: the countdown sits beside Copy; requirements fold away once seen. */
+.sandbox-command-heading .sandbox-command-expiry { margin-left: auto; color: var(--fg-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sandbox-add-node-warning,
+.sandbox-enrollment-problem {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  background: color-mix(in srgb, var(--warning) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warning) 26%, var(--line));
+  border-radius: 8px;
 }
+.sandbox-add-node .sandbox-add-node-warning { display: flex; gap: 8px; align-items: flex-start; color: var(--fg); }
+.sandbox-add-node-warning svg { flex-shrink: 0; margin-top: 3px; color: var(--warning); }
+.sandbox-enrollment-problem { display: grid; gap: 6px; }
+.sandbox-add-node .sandbox-enrollment-problem p { color: var(--fg); }
+.sandbox-log-hint { display: grid; gap: 4px; color: var(--fg-muted); font-size: 12px; }
+.sandbox-enrollment-progress { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; }
+.sandbox-enrollment-progress .future .status-dot { color: var(--fg-muted); }
+.sandbox-host-requirements { border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; }
+.sandbox-host-requirements summary { padding: 9px 12px; color: var(--fg); cursor: pointer; }
+.sandbox-host-requirements ul { display: grid; gap: 8px; margin: 0; padding: 0 12px 0 30px; color: var(--fg-muted); line-height: 1.5; list-style: disc; }
+.sandbox-host-requirements li { display: list-item; }
+.sandbox-host-requirements li .sandbox-copy-command { margin-top: 4px; }
+.sandbox-host-requirements-note { display: grid; gap: 4px; padding: 8px 12px 10px; }
+.sandbox-add-node .sandbox-host-requirements-note p { font-size: 12px; }
+.sandbox-copy-command { display: grid; justify-items: start; gap: 2px; max-width: 100%; }
+.sandbox-copy-command-row { display: flex; align-items: flex-start; gap: 2px; max-width: 100%; }
+.sandbox-copy-command code { min-width: 0; padding: 2px 6px; color: var(--fg); font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-subtle); border-radius: 5px; overflow-wrap: anywhere; }
+.sandbox-copy-command .icon-button { width: 24px; height: 24px; flex-basis: 24px; }

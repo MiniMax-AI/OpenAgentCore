@@ -18,10 +18,9 @@ you are ready. Core creates each required sandbox from the shared Runtime image.
 credentials are supplied through the existing write-only API extension.
 
 Hosted deployments select E2B cloud or one provider across their own local/remote
-nodes (Docker or microsandbox). The
-Hosted Sandbox Manager shows node health, capacity and Session placement. Core
-places new Sessions automatically; existing Sessions retain their node across
-disconnects and resume.
+nodes (Docker or microsandbox). Web's **Nodes** page shows node health, capacity
+and Session placement. Core places new Sessions automatically; existing Sessions
+retain their node across disconnects and resume.
 
 ## Start here
 
@@ -40,17 +39,18 @@ disconnects and resume.
 2. **Sign in to Web.** Open the console address printed by the installer and
    sign in with the [Core key](docs/getting-started/operations.md#core-key) from
    `~/.parsar/core/admin/core.key`. Keep it private. The console connects to Core
-   automatically. Create a Project in Web, then
+   automatically. Create a Project on the **Projects and keys** page, then
    issue a key within it for your application. Save the one-time plaintext
    response privately; Core stores its digest. Rotate by issuing another key in the
    same Project and revoking the old one.
-3. **Add a node.** Open **Hosted Sandbox Manager** and choose E2B cloud or
-   your own machines with Docker/microsandbox. E2B needs its account credentials and
-   qualified Runtime template, with no node installation. For your own machines,
-   initialize the deployment. The paired console address is used by default;
-   advanced network settings allow a different reachable HTTPS origin. Select
-   **Add node**, then copy and run the command on a prepared Linux host. Web shows when the node is online
-   and its provider is ready. All nodes in a deployment use the same provider.
+3. **Add a node.** Open **Nodes** and choose E2B cloud or your own machines with
+   Docker/microsandbox. E2B needs its account credentials and qualified Runtime
+   template, with no node installation; your own machines also need a sandbox size.
+   Either way, finish setup with **Save configuration**. The paired console address
+   is used by default; advanced network settings allow a different reachable HTTPS
+   origin. For your own machines, then select **Add node**, and copy and run the
+   command on a prepared Linux host. Web shows when the node is online and its
+   provider is ready. All nodes in a deployment use the same provider.
 
 Installation and node enrollment do not call a model. Once a node is ready,
 run an optional API example with your own model credentials.
@@ -69,13 +69,14 @@ run an optional API example with your own model credentials.
 Run these from an extracted distribution. The plain command uses loopback for
 local console/API access. For node enrollment, use the reachable origin described
 above; the installer does not change an existing installation's public URL.
-Installing a local provider is optional, and is not required for adding nodes in Web.
+Installing a local provider is optional, needs that HTTPS `--public-url`, and is not
+required for adding nodes in Web.
 
 ```sh
 ./install.sh                    # Core + Web + PostgreSQL, loopback access, zero nodes
 ./install.sh --core-only        # Core + PostgreSQL, zero nodes
-./install.sh --sandbox-provider true --provider microsandbox
-./install.sh --sandbox-provider true --provider docker
+./install.sh --sandbox-provider true --provider microsandbox --public-url https://core.example
+./install.sh --sandbox-provider true --provider docker --public-url https://core.example
 ```
 
 Web-only installation connects the console server to an existing Core; see the
