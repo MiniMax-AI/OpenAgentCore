@@ -375,26 +375,39 @@ def main(argv=None):
         raise InstallError("Core did not become healthy. Use --status; retained state has not been removed")
     if args.provider:
         local_node.install(root, dict(state, provider=args.provider), manifest, bundle, run)
+    public_url = state.get("public_url")
     if state["mode"] != "core-only":
         url = f'http://127.0.0.1:{state["web_port"]}'
-        host = urlsplit(state.get("public_url") or url).netloc
+        host = urlsplit(public_url or url).netloc
         if not wait_http(url + "/console/auth", {"Host": host}):
             raise InstallError("Web sign-in is unavailable. Use --status and inspect the Web service")
         core_url = state.get("core_url") or f'http://127.0.0.1:{state["core_port"]}'
         token = (root / "admin/core.key").read_text().strip()
         if not wait_http(core_url + "/core/v1/projects", {"Authorization": "Bearer " + token}):
             raise InstallError("Core key authentication failed. Inspect private configuration; no model was called")
-        print("Console: " + (state.get("public_url") or url))
-        print("Sign in to Web with the Core key. Keep it private; it also authorizes the Core management API.")
+        # The console accepts only its configured origin, so a public URL has no loopback console.
+        print("Console: " + (public_url or url + " (local only)"))
     if state["mode"] != "web-only":
-        print(f'API: http://127.0.0.1:{state["core_port"]}/v1')
-        print("Create a Project and issue its API key through the administrator API before calling the direct Core API.")
+        api = f'http://127.0.0.1:{state["core_port"]}/v1'
+        if public_url:
+            print("API base URL: " + public_url + "/v1")
+            print("Local-only API on this host: " + api)
+        else:
+            print("API base URL: " + api + " (local only)")
+    core_key = root / "admin/core.key"
+    if state["mode"] == "core-only":
+        print(f"Next: create a Project and its API key through the Core management API (/core/v1) with the Core key in {core_key}.")
+    else:
+        print(f"Next: sign in to Web with the Core key in {core_key}, then create a Project and its API key on the Projects and keys page.")
+    print("Keep the Core key private; it also authorizes the Core management API.")
+    if state["mode"] != "web-only":
         print("Core configuration file: " + str(root / "config/core.env"))
         if args.provider:
             print("Provider: " + args.provider + ". Local node enrolled; Core provisions Sessions on demand.")
+        elif state["mode"] == "all":
+            print("No execution node was installed by this run. Choose a sandbox backend and add nodes on the Nodes page in Web.")
         else:
-            print("No execution node was installed by this run. Open Hosted Sandbox Manager to manage providers and nodes.")
-    print("Core key file: " + str(root / "admin/core.key"))
+            print("No execution node was installed by this run.")
     print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
 
 

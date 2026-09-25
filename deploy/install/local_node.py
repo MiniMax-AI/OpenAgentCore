@@ -43,9 +43,10 @@ def install(root, state, manifest, bundle, run):
     if current.get("installation_id") != state["installation_id"]:
         raise LocalNodeError("Core deployment identity differs; preserve its installation state")
     if not current.get("provider"):
-        resources = {"cpus": 2, "memory_mib": 4096}
+        # The same initial size that Web's sandbox setup proposes for this provider.
+        resources = {"cpus": 2, "memory_mib": 2048}
         if state["provider"] == "microsandbox":
-            resources.update(root_disk_mib=8192, environment_disk_mib=8192)
+            resources.update(memory_mib=4096, root_disk_mib=8192, environment_disk_mib=8192)
         current = request(core, admin, "POST", "deployment", {
             "provider": state["provider"], "core_url": state["public_url"],
             "resources": resources, "runtime": node_spec.release(manifest)})

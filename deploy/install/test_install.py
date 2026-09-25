@@ -600,8 +600,10 @@ class InstallerTests(unittest.TestCase):
                             mock.patch.object(install.native_service, "prepare"), \
                             mock.patch.object(install.native_service, "start"), \
                             mock.patch.object(install.local_node, "install") as enroll, \
-                            contextlib.redirect_stdout(io.StringIO()):
+                            contextlib.redirect_stdout(io.StringIO()) as output:
                         install.main([*flags, "--sandbox-provider", "true", "--provider", provider])
+                        self.assertIn("Console: https://core.example\nAPI base URL: https://core.example/v1\n"
+                                      "Local-only API on this host: http://127.0.0.1:8091/v1\n", output.getvalue())
                         enroll.assert_called_once()
                         self.assertEqual(enroll.call_args.args[1]["provider"], provider)
                         state = self.document("installation.json")
@@ -665,8 +667,10 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("No execution node was installed by this run", output.getvalue())
         self.assertIn("Core configuration file: " + str(self.root / "config/core.env"), output.getvalue())
         self.assertNotIn((self.root / "config/database.password").read_text(), output.getvalue())
-        self.assertIn("Sign in to Web with the Core key.", output.getvalue())
-        self.assertIn("Core key file: " + str(self.root / "admin/core.key"), output.getvalue())
+        self.assertIn("Console: http://127.0.0.1:8080 (local only)", output.getvalue())
+        self.assertIn("API base URL: http://127.0.0.1:8091/v1 (local only)", output.getvalue())
+        self.assertIn("sign in to Web with the Core key in " + str(self.root / "admin/core.key") +
+                      ", then create a Project and its API key on the Projects and keys page", output.getvalue())
         self.assertFalse((self.root / "config/keys.json").exists())
         self.assertEqual([call.args[0] for call in health.call_args_list], [
             "http://127.0.0.1:8091/healthz", "http://127.0.0.1:8080/console/auth",
@@ -675,7 +679,6 @@ class InstallerTests(unittest.TestCase):
         admin_token = (self.root / "admin/core.key").read_text()
         self.assertEqual(health.call_args_list[-1].args[1], {"Authorization": "Bearer " + admin_token})
         self.assertNotIn(admin_token, output.getvalue())
-        self.assertIn("Create a Project and issue its API key through the administrator API", output.getvalue())
 
     def test_main_web_only_never_imports_runtime_or_leaks_administrator_token(self):
         source = self.administrator_file()

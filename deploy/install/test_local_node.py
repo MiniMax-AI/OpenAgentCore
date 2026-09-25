@@ -28,14 +28,21 @@ class LocalNodeTests(unittest.TestCase):
         self.run = mock.Mock()
 
     def test_first_install_saves_spec_and_launches_ordinary_node_without_secret_arguments(self):
-        empty = dict(self.current, provider="")
-        with mock.patch.object(local_node, "request", side_effect=[empty, self.current, {"token": "one-time"}]) as request, \
-                mock.patch.object(local_node.Path, "home", return_value=self.root):
-            local_node.install(self.root, self.state, self.manifest, self.root / "bundle", self.run)
-        self.assertEqual([(call.args[2], call.args[3]) for call in request.call_args_list],
-                         [("GET", "deployment"), ("POST", "deployment"), ("POST", "enrollment-tokens")])
-        setup = request.call_args_list[1].args[4]
-        self.assertEqual(setup["resources"], {"cpus": 2, "memory_mib": 4096, "root_disk_mib": 8192, "environment_disk_mib": 8192})
+        # Web's sandbox setup proposes the same initial sizes.
+        for provider, resources in (("docker", {"cpus": 2, "memory_mib": 2048}),
+                                    ("microsandbox", {"cpus": 2, "memory_mib": 4096, "root_disk_mib": 8192,
+                                                      "environment_disk_mib": 8192})):
+            with self.subTest(provider=provider):
+                self.run.reset_mock()
+                state, current = dict(self.state, provider=provider), dict(self.current, provider=provider)
+                empty = dict(current, provider="")
+                with mock.patch.object(local_node, "request", side_effect=[empty, current, {"token": "one-time"}]) as request, \
+                        mock.patch.object(local_node.Path, "home", return_value=self.root):
+                    local_node.install(self.root, state, self.manifest, self.root / "bundle", self.run)
+                self.assertEqual([(call.args[2], call.args[3]) for call in request.call_args_list],
+                                 [("GET", "deployment"), ("POST", "deployment"), ("POST", "enrollment-tokens")])
+                setup = request.call_args_list[1].args[4]
+                self.assertEqual(setup["resources"], resources)
         self.assertEqual(setup["runtime"]["image_id"], self.manifest["images"]["runtime"])
         self.assertNotIn("one-time", str(self.run.call_args.args))
         self.assertEqual(self.run.call_args.kwargs["env"]["PARSAR_NODE_ENROLLMENT_TOKEN"], "one-time")
