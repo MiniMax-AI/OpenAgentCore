@@ -24,7 +24,7 @@ export const overview = {
     },
     model: {
       title: "设置默认模型",
-      body: "托管 Session 需要模型服务。应用也可以在请求里传入模型，或保存在 Agent 上；这里只设置默认值。",
+      body: "Core 托管的 Session 和没有环境的 Session 需要模型服务。应用也可以在每个请求里传入，或保存在 Agent 上；这里只设置默认值。",
       open: "打开系统",
     },
     key: {

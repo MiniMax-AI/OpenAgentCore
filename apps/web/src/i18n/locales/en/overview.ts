@@ -24,7 +24,7 @@ export const overview = {
     },
     model: {
       title: "Set a default model",
-      body: "Hosted Sessions need a model provider. Apps can also pass a model in each request or save one on the Agent; this only sets the default.",
+      body: "Core-hosted Sessions and Sessions without an environment need a model provider. Apps can also pass one in each request or save one on the Agent; this only sets the default.",
       open: "Open System",
     },
     key: {
