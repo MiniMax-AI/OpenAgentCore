@@ -91,6 +91,7 @@ export function AppearanceMenu({ withAccount = false, coreState, onConfigureCore
       aria-haspopup="menu"
       aria-expanded={open}
       aria-label={t(showAccount ? "accountAndAppearance" : "appearanceSettings")}
+      aria-description={showConsole ? coreStatus : undefined}
       title={t(showAccount ? "accountAndAppearance" : "appearanceSettings")}
       onClick={(event) => {
         const nextOpen = !open;
@@ -105,12 +106,12 @@ export function AppearanceMenu({ withAccount = false, coreState, onConfigureCore
         focusMenuItem(event.key === "ArrowDown" ? "first" : "last");
       }}
     >
-      {showConsole ? <>{showAccount ? <CircleUserRound size={20} strokeWidth={1.5} aria-hidden="true" /> : <Settings2 size={20} strokeWidth={1.5} aria-hidden="true" />}<span className="appearance-console-identity"><strong>{account?.username ?? "Agent Core"}</strong><small><i className={`appearance-core-dot appearance-core-dot-${coreState}`} />{showAccount ? "Agent Core · " : ""}{coreStatus}</small></span><ChevronDown size={13} strokeWidth={1.5} aria-hidden="true" /></> : <><Languages size={14} strokeWidth={1.5} aria-hidden="true" /><span>{language === "en" ? "EN" : "中"}</span><ThemeIcon size={14} strokeWidth={1.5} aria-hidden="true" /><ChevronDown size={12} strokeWidth={1.5} aria-hidden="true" /></>}
+      {showConsole ? <>{showAccount ? <CircleUserRound size={20} strokeWidth={1.5} aria-hidden="true" /> : <Settings2 size={20} strokeWidth={1.5} aria-hidden="true" />}<span className="appearance-console-identity">{showAccount ? <><strong>{account?.username}</strong><small><i className={`appearance-core-dot appearance-core-dot-${coreState}`} />Agent Core{coreState === "ready" ? null : ` · ${coreStatus}`}</small></> : <><strong><i className={`appearance-core-dot appearance-core-dot-${coreState}`} />Agent Core</strong>{coreState === "ready" ? null : <small>{coreStatus}</small>}</>}</span><ChevronDown size={13} strokeWidth={1.5} aria-hidden="true" /></> : <><Languages size={14} strokeWidth={1.5} aria-hidden="true" /><span>{language === "en" ? "EN" : "中"}</span><ThemeIcon size={14} strokeWidth={1.5} aria-hidden="true" /><ChevronDown size={12} strokeWidth={1.5} aria-hidden="true" /></>}
     </button>
     {open ? <div className={`appearance-menu-panel${showConsole ? " appearance-account-panel" : ""}`} role="menu" aria-label={t(showAccount ? "accountAndAppearance" : "appearanceSettings")}>
       {showConsole ? <>
         {showAccount ? <div className="appearance-account-header"><span className="appearance-account-avatar" aria-hidden="true">{account?.username.slice(0, 1).toUpperCase()}</span><div><strong>{account?.username}</strong><small>{t("account")}</small></div></div> : null}
-        <div className="appearance-core-action"><button type="button" role="menuitem" aria-label={t("configureCore")} onClick={() => { close(); onConfigureCore?.(); }}><span><i className={`appearance-core-dot appearance-core-dot-${coreState}`} /><span><strong>Agent Core</strong><small>{coreStatus}</small></span></span><Settings2 size={15} aria-hidden="true" /></button></div>
+        <div className="appearance-core-action"><button type="button" role="menuitem" aria-label={t("configureCore")} aria-description={coreStatus} onClick={() => { close(); onConfigureCore?.(); }}><span><i className={`appearance-core-dot appearance-core-dot-${coreState}`} /><span><strong>Agent Core</strong>{coreState === "ready" ? null : <small>{coreStatus}</small>}</span></span><Settings2 size={15} aria-hidden="true" /></button></div>
         <div className="appearance-account-actions">
           <button ref={languageRef} type="button" role="menuitem" aria-haspopup="true" aria-expanded={languageOpen} onClick={() => setLanguageOpen((value) => !value)}><span><Languages size={16} aria-hidden="true" />{t("language")}</span><span className="appearance-account-value">{language === "en" ? "English" : "简体中文"}<ChevronDown size={13} aria-hidden="true" /></span></button>
           {languageOpen ? <div className="appearance-language-options" role="group" aria-label={t("language")}>

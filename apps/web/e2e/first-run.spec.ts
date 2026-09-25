@@ -412,9 +412,14 @@ test("keeps account, language and theme in one reachable sidebar menu", async ({
   await expect(accountMenu).toBeVisible();
   await expect(page.locator(".sidebar-footer .appearance-menu-trigger")).toHaveCount(1);
   await expect(accountMenu).toContainText("Agent Core");
+  await expect(accountMenu).not.toContainText("API ready");
+  await expect(accountMenu.locator(".appearance-core-dot-ready")).toHaveCount(1);
   await accountMenu.click();
-  await expect(page.getByRole("menuitem", { name: "Configure Agent Core connection" })).toBeVisible();
-  await page.getByRole("menuitem", { name: "Configure Agent Core connection" }).click();
+  const coreSettings = page.getByRole("menuitem", { name: "Configure Agent Core connection" });
+  await expect(coreSettings).toBeVisible();
+  await expect(coreSettings).not.toContainText("API ready");
+  await expect(coreSettings.locator(".appearance-core-dot-ready")).toHaveCount(1);
+  await coreSettings.click();
   const connectionDialog = page.getByRole("dialog", { name: "Connect an Agent Core" });
   await expect(connectionDialog).toBeVisible();
   await connectionDialog.getByRole("button", { name: "Close dialog" }).click();
