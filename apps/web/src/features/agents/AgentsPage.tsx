@@ -116,7 +116,7 @@ function AgentsList() {
                       <th scope="row"><NameCell name={agent.name} id={agent.id} fallback={untitled} onOpen={open} openLabel={t("view.open", { name })} /></th>
                       {showProject ? <td><ProjectName project={byId.get(row.project.id) ?? row.project} /></td> : null}
                       <td><code className="agent-table-model" title={agent.model}>{agent.model}</code></td>
-                      <td className={harness ? undefined : "table-muted"}>{harness ? harnessLabel(harness) : MISSING}</td>
+                      <td className={harness ? undefined : "table-muted"}>{harness ? harnessLabel(harness) : t("view.coreDefault")}</td>
                       <td className="numeric">{formatInteger(agent.tools.length, locale)}</td>
                       <td className="numeric" title={formatDateTime(summary?.last_active_at, locale)}>{summary?.last_active_at ? formatRelative(summary.last_active_at, now, locale) : MISSING}</td>
                       <td><CreatorCell creator={creators.creatorOf(row.project.id, agent.id)} /></td>
@@ -238,7 +238,7 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
               <div><dt>{t("view.id")}</dt><dd><CopyableId id={agent.id} /></dd></div>
               <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={project} /></dd></div>
               <div><dt>{t("view.columns.model")}</dt><dd><code>{agent.model}</code></dd></div>
-              <div><dt>{t("view.columns.harness")}</dt><dd>{agent.x_agents_core?.harness ? harnessLabel(agent.x_agents_core.harness) : MISSING}</dd></div>
+              <div><dt>{t("view.columns.harness")}</dt><dd>{agent.x_agents_core?.harness ? harnessLabel(agent.x_agents_core.harness) : t("view.coreDefault")}</dd></div>
               <div><dt><CreatorHeading /></dt><dd><CreatorCell creator={creators.creatorOf(projectId, agent.id)} /></dd></div>
               <div><dt>{t("view.created")}</dt><dd>{formatDateTime(agent.created_at, locale)}</dd></div>
               <div><dt>{t("view.updated")}</dt><dd>{formatDateTime(agent.updated_at, locale)}</dd></div>

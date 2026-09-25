@@ -34,7 +34,7 @@ test("reads an Agent saved with a model provider and no harness, without its key
   await expect(open).toBeVisible();
   await expect(page.getByText(/Could not load/)).toHaveCount(0);
   // With one project shown, the cells are model, harness, …
-  await expect(page.getByRole("row").filter({ has: open }).getByRole("cell").nth(1)).toHaveText("—");
+  await expect(page.getByRole("row").filter({ has: open }).getByRole("cell").nth(1)).toHaveText("Core default");
 
   await open.click();
   await expect(page.getByRole("heading", { name: "Spec drafter", level: 1 })).toBeVisible();
