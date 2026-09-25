@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, openConsole } from "./console";
+import { expectManagementBoundary, openConsole, writes } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
@@ -15,7 +15,9 @@ test("sets up sandboxes with Core's address read-only, never sending it", async 
   await expect(review).toContainText("Set by public_url in config.json");
   await expect(page.getByRole("textbox", { name: "Core address" })).toHaveCount(0);
   await page.getByRole("button", { name: "Save configuration" }).click();
-  await expect(page.getByText("c0ffee000000")).toBeVisible();
+  // Saved: own machines continue straight to Add node.
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
+  expect(await writes(request)).toEqual(["POST /core/v1/sandbox/deployment"]);
   expect(bodies.some((entry) => entry.includes("core_url"))).toBe(false);
 });
 
@@ -61,7 +63,6 @@ test("warns on Nodes about a node bound to an old Core address until it is remov
   await expect(warning).toHaveText("core-01 is still bound to an old Core address. Remove it and add it again.");
   await page.getByRole("button", { name: "Remove core-01" }).click();
   await page.getByRole("dialog", { name: "Remove node" }).getByRole("button", { name: "Confirm removal" }).click();
-  await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("core-01");
   await expect(warning).toHaveCount(0);
 });

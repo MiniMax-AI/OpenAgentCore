@@ -60,10 +60,10 @@ function installation() {
         secret("database_url", ["core"]),
       ],
     },
-    // As Core counts them: the allocations held on the nodes, and the unrevoked executor credentials.
+    // As Core counts them: the deployment's retained and pending hosted sandboxes, and the unrevoked executor credentials.
     address_bindings: {
       nodes: nodes.length, nodes_on_other_address: nodes.filter((node) => node.core_url !== publicUrl()).length,
-      hosted_sandboxes: nodes.length ? state.allocations.length : 0,
+      hosted_sandboxes: (state.deployment?.resources.allocations ?? 0) + (state.deployment?.resources.pending ?? 0),
       self_hosted_executors: [...state.executorCredentials.values()].flat().filter((credential) => credential.revoked_at === null).length,
     },
   };
@@ -288,10 +288,10 @@ async function sandboxRoute(request, response, path) {
   if (path === "/deployment" && (request.method === "POST" || request.method === "PUT")) {
     const input = await body(request);
     const initialize = request.method === "POST";
+    // As Core, before any state check: the address is config.json's public_url and read-only.
+    if ("core_url" in input) return error(response, 400, "core_url is derived from the installation public URL (public_url in config.json, AGENTS_API_PUBLIC_URL for Core) and cannot be set here. Remove it.", "invalid_request_error", "core_url");
     if (initialize && state.deployment) return error(response, 409, "The sandbox deployment is already configured.", "sandbox_deployment_conflict");
     if (!initialize && !state.deployment) return error(response, 409, "The sandbox deployment is not configured.", "sandbox_deployment_conflict");
-    // As Core: the address is config.json's public_url and read-only.
-    if ("core_url" in input) return error(response, 400, "core_url is derived from the installation public URL (public_url in config.json, AGENTS_API_PUBLIC_URL for Core) and cannot be set here. Remove it.", "invalid_request_error", "core_url");
     const e2b = input.provider === "e2b";
     if (!e2b && (!input.resources || !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
     // As Core (ErrSandboxPublicURLUnreachable): E2B sandboxes reach Core over the internet, which a loopback public_url cannot serve.
@@ -305,7 +305,7 @@ async function sandboxRoute(request, response, path) {
       ...(e2b ? { e2b: { template: input.e2b?.template ?? "", credential_configured: true, template_build: templateBuild } } : {}),
       suspension: input.provider === "microsandbox" ? { idle_seconds: 300, retention_seconds: 86400 } : null,
     };
-    return send(response, initialize ? 201 : 200, state.deployment);
+    return send(response, 200, state.deployment);
   }
   if (path === "/deployment") {
     return send(response, 200, state.deployment ?? { installation_id: INSTALLATION_ID, provider: "", core_url: publicUrl(), maintenance: false, owner_epoch: 3, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null });
