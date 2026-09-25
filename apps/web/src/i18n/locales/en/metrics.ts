@@ -288,6 +288,9 @@ export const metrics = {
       historyFailed: "Runtime history could not be read. {{reason}}",
     },
     runtimeMeta: "{{n}} · CPU {{cpu}} · memory {{memory}}",
+    runtimeMetaSuspended: "{{n}} · {{sleeping}} suspended · CPU {{cpu}} · memory {{memory}}",
+    suspended: "Suspended",
+    suspendedHelp: "Sandboxes the node holds as snapshots; they resume on their Session's next Turn and count toward the retained limit, not the active one.",
     reason: {
       allocation_pending: "Allocation pending",
       runtime_not_running: "Not running",

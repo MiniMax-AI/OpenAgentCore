@@ -1,4 +1,5 @@
 import type { SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
+import { suspendedSandboxes } from "../fleet/fleet-model";
 import { useTranslation } from "react-i18next";
 
 import { EmptyState, HelpTip, Kpi, KpiStrip, Section } from "../../components/console-ui";
@@ -57,7 +58,8 @@ export function NodeDetail({ node, allocations, stale }: { node: SandboxNode; al
       <Section headingId="node-capacity-heading" title={t("Capacity")}>
         <KpiStrip label={t("Capacity")}>
           <Kpi label={t("Running")} value={reporting ? count(node.running) : MISSING} />
-          {suspends ? <Kpi label={t("Retained / limit")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}
+          {suspends ? <Kpi label={t("Suspended")} help={t("Suspended sandboxes keep their state as a snapshot on the node and resume on the Session's next Turn. They count toward the retained limit, not the active one.")} value={count(suspendedSandboxes(node))} /> : null}
+          {suspends ? <Kpi label={t("Retained / limit")} help={t("Sandboxes this node holds, active and suspended, against its retained limit.")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}
           {suspends ? <Kpi label={t("Snapshots")} value={reporting ? count(node.snapshots) : MISSING} /> : null}
           <Kpi label={t("Reserved")} value={count(node.reserved)} />
         </KpiStrip>

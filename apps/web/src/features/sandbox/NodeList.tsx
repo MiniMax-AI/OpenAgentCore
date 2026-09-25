@@ -1,11 +1,11 @@
 import type { SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
 import { useTranslation } from "react-i18next";
 
-import { StatusDot, type Tone } from "../../components/console-ui";
+import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { NameCell, RowActions } from "../../components/list-ui";
 import { formatDateTime, formatRelative } from "../../lib/format";
 import type { MessageKey } from "../../lib/locale-strings";
-import { nodeHealth } from "../fleet/fleet-model";
+import { nodeHealth, suspendedSandboxes } from "../fleet/fleet-model";
 
 export type NodeState = "unconfirmed" | "offline" | "degraded" | "attention" | "available";
 
@@ -38,8 +38,10 @@ export function seconds(value: string | null): number | null {
   return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000);
 }
 
-export function NodeList({ nodes, allocations, stale, disabled, onOpen, onRemove }: {
+export function NodeList({ nodes, allocations, stale, disabled, suspends = false, onOpen, onRemove }: {
   nodes: readonly SandboxNode[];
+  /** microsandbox: sandboxes sleep as snapshots, so the list shows active and suspended counts. */
+  suspends?: boolean;
   allocations: readonly SandboxAllocation[];
   stale: boolean;
   disabled: boolean;
@@ -56,6 +58,8 @@ export function NodeList({ nodes, allocations, stale, disabled, onOpen, onRemove
           <tr>
             <th scope="col">{t("Node")}</th>
             <th scope="col">{t("Status")}</th>
+            {suspends ? <th scope="col" className="numeric">{t("Active / limit")}</th> : null}
+            {suspends ? <th scope="col" className="numeric"><span className="column-help">{t("Suspended")}<HelpTip>{t("Suspended sandboxes keep their state as a snapshot on the node and resume on the Session's next Turn. They count toward the retained limit, not the active one.")}</HelpTip></span></th> : null}
             <th scope="col" className="numeric">{t("Last seen")}</th>
             <th scope="col">{t("Added")}</th>
             <th scope="col"><span className="visually-hidden">{t("Actions")}</span></th>
@@ -70,6 +74,8 @@ export function NodeList({ nodes, allocations, stale, disabled, onOpen, onRemove
                   <NameCell name={node.name} id={node.id} onOpen={() => onOpen(node)} openLabel={t("Open {{name}}", { name })} idLabel={t("Node ID")} />
                 </th>
                 <td><NodeStatus state={nodeState(node, allocations, stale)} /></td>
+                {suspends ? <td className="numeric">{node.active} / {node.max_active}</td> : null}
+                {suspends ? <td className="numeric">{suspendedSandboxes(node)}</td> : null}
                 <td className="numeric" title={node.last_seen_at ? formatDateTime(seconds(node.last_seen_at), locale) : undefined}>
                   {node.last_seen_at ? formatRelative(seconds(node.last_seen_at), now, locale) : t("Never")}
                 </td>

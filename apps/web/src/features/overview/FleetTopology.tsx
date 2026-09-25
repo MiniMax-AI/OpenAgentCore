@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { ConsolePopover } from "../../components/console-popover";
 import { StatusDot, type Tone } from "../../components/console-ui";
 import { formatBytes, formatDateTime, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
-import { nodeHealth, type NodeHealth } from "../fleet/fleet-model";
+import { nodeHealth, suspendedSandboxes, type NodeHealth } from "../fleet/fleet-model";
 import { coreMetricsQuery } from "../metrics/metrics-queries";
 import { seconds } from "../sandbox/NodeList";
 
@@ -187,6 +187,7 @@ function NodeGlance({ node, health }: { node: SandboxNode; health: NodeHealth })
       <Fact label={t("fleet.facts.status")}><StatusDot tone={healthTone[health]} label={t(`nodeHealth.${health}`)} /></Fact>
       <Fact label={t("fleet.facts.lastSeen")}><span title={seen === null ? undefined : formatDateTime(seen, locale)}>{seen === null ? t("fleet.facts.never") : formatRelative(seen, now, locale)}</span></Fact>
       <Fact label={t("fleet.facts.active")}>{count(node.active)}<span className="kpi-unit">/ {count(node.max_active)}</span></Fact>
+      {node.provider === "microsandbox" ? <Fact label={t("fleet.facts.suspended")}>{count(suspendedSandboxes(node))}</Fact> : null}
       <Fact label={t("fleet.facts.cpu")}>{node.cpu_count === null ? MISSING : t("fleet.facts.cores", { count: node.cpu_count })}</Fact>
       <Fact label={t("fleet.facts.memory")}>{formatBytes(node.available_memory_bytes)}</Fact>
       <Fact label={t("fleet.facts.disk")}>{formatBytes(node.available_disk_bytes)}</Fact>

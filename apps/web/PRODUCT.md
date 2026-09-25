@@ -76,6 +76,9 @@ workbench.
   and Overview and Sandbox metrics show the sandboxes Core holds in E2B's cloud
   (running, starting, size, template) instead of node capacity, with no node column
   or Add node action.
+- **microsandbox** suspends idle sandboxes into snapshots, so its nodes show how
+  many sleep (Core's retained minus active) on the Nodes list, a node's page, Sandbox
+  metrics and Overview; Docker never suspends and shows none of it.
 - **First run**: after the administrator account is created and while no project
   exists, full-screen steps outside the shell create the first project (default name
   `Default`) and its first key, show the plaintext once with an example request,

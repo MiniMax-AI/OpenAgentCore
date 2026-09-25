@@ -243,7 +243,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
         {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
           {nodes.length
-            ? <NodeList nodes={nodes} allocations={allocations} stale={!confirmed} disabled={busy || loading || removing} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
+            ? <NodeList nodes={nodes} allocations={allocations} stale={!confirmed} disabled={busy || loading || removing} suspends={snapshot.deployment.provider === "microsandbox"} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
             : <EmptyState icon={Server} title={t("Add your first node")} hint={t("No nodes registered. Add a node to provide hosted capacity.")} />}
         </section> : null}
       </> : null}

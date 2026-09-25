@@ -186,7 +186,11 @@ export function OverviewPage() {
               label={t("kpi.slots")}
               help={t("kpi.slotsHelp")}
               value={capacity ? <><LiveNumber value={capacity.active} /><span className="kpi-unit">/ {formatInteger(capacity.maxActive, locale)}</span></> : MISSING}
-              sub={capacity ? t("tiles.nodesOnline", { online: capacity.online, total: capacity.nodes }) : fleetDetail(fleetState, t)}
+              sub={capacity
+                ? fleet?.deployment.provider === "microsandbox"
+                  ? t("tiles.nodesOnlineSuspended", { online: capacity.online, total: capacity.nodes, suspended: capacity.suspended })
+                  : t("tiles.nodesOnline", { online: capacity.online, total: capacity.nodes })
+                : fleetDetail(fleetState, t)}
             />
           )}
           <MetricTile

@@ -28,7 +28,7 @@ import { projectClient, ProjectName, useProjects } from "../../lib/projects";
 import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, type RuntimeDurableRange } from "../dashboard/runtime-history";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { RUNTIME_SNAPSHOT_REFRESH_MS } from "../dashboard/runtime-snapshot";
-import { capacitySummary, nodeHealth, type NodeHealth } from "../fleet/fleet-model";
+import { capacitySummary, nodeHealth, suspendedSandboxes, type NodeHealth } from "../fleet/fleet-model";
 import { nodeDetailQuery } from "../fleet/fleet-queries";
 import { fleetSnapshot, useSandboxFleet, type FleetState } from "../fleet/use-sandbox-fleet";
 import { formatShare, NodeHostCharts } from "./NodeHostCharts";
@@ -105,6 +105,8 @@ export function SandboxMetricsPage() {
   const rows = useMemo(() => (runtimeState.load ? hostedRuntimeRows(runtimeState.load, "", fleet) : []), [fleet, runtimeState.load]);
   // E2B runs sandboxes in its cloud: no machines, so no node table, node column or node dialog.
   const cloud = fleet?.deployment.provider === "e2b";
+  // Only microsandbox suspends sandboxes into snapshots; its nodes also show how many sleep.
+  const suspends = fleet?.deployment.provider === "microsandbox";
 
   return (
     <section className="page-section console-page metrics-page" aria-labelledby="sandbox-metrics-heading">
@@ -137,6 +139,7 @@ export function SandboxMetricsPage() {
                     <th scope="col">{t("sandbox.node")}</th>
                     <th scope="col">{t("sandbox.status")}</th>
                     <th scope="col">{t("sandbox.slots")}</th>
+                    {suspends ? <th scope="col" className="numeric"><span className="column-help">{t("sandbox.suspended")}<HelpTip>{t("sandbox.suspendedHelp")}</HelpTip></span></th> : null}
                     <th scope="col" className="numeric">{t("sandbox.cpus")}</th>
                     <th scope="col" className="numeric">{t("sandbox.freeMemory")}</th>
                     <th scope="col" className="numeric">{t("sandbox.freeDiskColumn")}</th>
@@ -157,6 +160,7 @@ export function SandboxMetricsPage() {
                             <span>{node.active} / {node.max_active}</span>
                           </span>
                         </td>
+                        {suspends ? <td className="numeric">{suspendedSandboxes(node)}</td> : null}
                         <td className="numeric">{node.online ? node.cpu_count ?? MISSING : MISSING}</td>
                         <td className="numeric">{node.online ? formatBytes(node.available_memory_bytes) : MISSING}</td>
                         <td className="numeric">{node.online ? formatBytes(node.available_disk_bytes) : MISSING}</td>
@@ -176,7 +180,7 @@ export function SandboxMetricsPage() {
               action={<button className="button primary" type="button" onClick={() => navigate("nodes")}>{t("sandbox.addNode")}</button>}
             />
           ) : fleetState.status === "checking" || fleetState.status === "loading"
-            ? <TableSkeleton label={message} rows={3} columns={8} />
+            ? <TableSkeleton label={message} rows={3} columns={suspends ? 9 : 8} />
             : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}
         </Section>}
 
@@ -270,8 +274,9 @@ function HostedRuntimeSection({ state, stale, fleet, range, onOpen }: { state: R
         {t("sandbox.runtimeSection")}
         {usage?.hosted ? (
           <span className="section-meta">
-            {t("sandbox.runtimeMeta", {
+            {t(fleet?.deployment.provider === "microsandbox" ? "sandbox.runtimeMetaSuspended" : "sandbox.runtimeMeta", {
               n: formatInteger(usage.hosted, locale),
+              sleeping: formatInteger(usage.sleeping, locale),
               cpu: usage.cpuUsageCores === null ? MISSING : t("sandbox.cores", { value: formatCores(usage.cpuUsageCores, locale) }),
               memory: usage.memoryUsageBytes === null ? MISSING : formatBytes(usage.memoryUsageBytes),
             })}
@@ -446,6 +451,7 @@ function NodeDialog({ node, rows, load, range, onClose }: {
           <dl className="resource-facts" aria-label={t("sandbox.nodeDialog.facts")}>
             <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={healthTone[nodeHealth(shown)]} label={t(`sandbox.health.${nodeHealth(shown)}`)} /></dd></div>
             <div><dt>{t("sandbox.slots")}</dt><dd>{formatInteger(shown.active, locale)} / {formatInteger(shown.max_active, locale)}</dd></div>
+            {shown.provider === "microsandbox" ? <div><dt>{t("sandbox.suspended")}</dt><dd>{formatInteger(suspendedSandboxes(shown), locale)}</dd></div> : null}
             {shown.provider === "microsandbox" ? <div><dt>{t("sandbox.nodeDialog.retainedSlots")}</dt><dd>{formatInteger(shown.retained, locale)} / {formatInteger(shown.max_retained, locale)}</dd></div> : null}
             <div><dt>{t("sandbox.cpus")}</dt><dd>{cpu}</dd></div>
             <div><dt>{t("sandbox.memory")}</dt><dd>{memory}</dd></div>

@@ -24,6 +24,17 @@ export interface CapacitySummary {
   maxRetained: number;
   reserved: number;
   cleanupPending: number;
+  /** Sandboxes held suspended (microsandbox only): placed, but not counted as active. */
+  suspended: number;
+}
+
+/**
+ * Sandboxes a node holds suspended: Core counts every unreleased placement as
+ * retained and only the ones not suspended as active, so the difference is
+ * what sleeps as a snapshot. Only microsandbox suspends; elsewhere it is 0.
+ */
+export function suspendedSandboxes(node: SandboxNode): number {
+  return Math.max(0, node.retained - node.active);
 }
 
 /** Slots in use and their limits count online nodes only, so a used share never mixes in an offline node's stale figures. */
@@ -39,6 +50,7 @@ export function capacitySummary(nodes: readonly SandboxNode[]): CapacitySummary 
     maxRetained: online.reduce((sum, node) => sum + node.max_retained, 0),
     reserved: nodes.reduce((sum, node) => sum + node.reserved, 0),
     cleanupPending: nodes.reduce((sum, node) => sum + node.cleanup_pending, 0),
+    suspended: nodes.reduce((sum, node) => sum + suspendedSandboxes(node), 0),
   };
 }
 

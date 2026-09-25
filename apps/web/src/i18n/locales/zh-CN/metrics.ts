@@ -288,6 +288,9 @@ export const metrics = {
       historyFailed: "无法读取运行时历史。{{reason}}",
     },
     runtimeMeta: "{{n}} 个 · CPU {{cpu}} · 内存 {{memory}}",
+    runtimeMetaSuspended: "{{n}} 个 · {{sleeping}} 个挂起 · CPU {{cpu}} · 内存 {{memory}}",
+    suspended: "挂起",
+    suspendedHelp: "节点以快照保存的沙箱；Session 的下一个 Turn 时恢复，占用保留上限，不占用同时运行上限。",
     reason: {
       allocation_pending: "等待分配",
       runtime_not_running: "未运行",
