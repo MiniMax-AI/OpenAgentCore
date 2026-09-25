@@ -94,7 +94,7 @@ class InstallerTests(unittest.TestCase):
             for path in [self.root, *self.root.rglob("*")]
         }
 
-    def administrator_file(self, contents="synthetic-existing-admin-token", mode=0o600):
+    def administrator_file(self, contents="synthetic-existing-core-key-0123456789", mode=0o600):
         path = self.work / "existing-admin.key"
         path.write_text(contents)
         path.chmod(mode)
@@ -453,7 +453,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_web_only_rejects_exposed_or_malformed_administrator_files(self):
         for contents, mode in (("synthetic-token", 0o644), ("", 0o600), ("two tokens", 0o600),
-                               ("token\x00", 0o600), ("x" * 4097, 0o600)):
+                               ("token\x00", 0o600), ("x" * 4097, 0o600), ("x" * 31, 0o600)):
             with self.subTest(contents=contents, mode=mode):
                 source = self.administrator_file(contents, mode)
                 with self.assertRaises(install.InstallError):

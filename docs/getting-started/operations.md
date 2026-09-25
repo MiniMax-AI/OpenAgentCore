@@ -74,11 +74,15 @@ docker compose -f "$HOME/.parsar/core/compose.json" ps --all
 ## Core key
 
 Each installation has one management credential, the Core key. The installer
-generates it in `<install dir>/admin/core.key` (default install dir
-`~/.parsar/core`) and writes its SHA-256 digest to `admin/core-key-digests.json`.
-Core reads the digest file named by `AGENTS_API_CORE_KEY_DIGESTS_FILE` in
-`config/core.env`; Web reads the key file named by `CORE_CONSOLE_CORE_KEY_FILE`.
-Both read them only at startup.
+generates a 64-character random key in `<install dir>/admin/core.key` (default
+install dir `~/.parsar/core`) and writes its SHA-256 digest to
+`admin/core-key-digests.json`. Core reads the digest file named by
+`AGENTS_API_CORE_KEY_DIGESTS_FILE` in `config/core.env`; Web reads the key file
+named by `CORE_CONSOLE_CORE_KEY_FILE`. Both read them only at startup.
+
+A Core key must have at least 32 characters and no whitespace. Web and the
+Web-only installer refuse a shorter key; Core sees only digests, so it cannot
+check the length. Web limits failed sign-ins, but the correct key always signs in.
 
 The Core key:
 
@@ -101,27 +105,31 @@ curl -fsS -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.parsar/core/a
 
 ### Rotate the Core key
 
-1. Generate a new key and replace both files:
+1. Generate a new 64-character key and replace both files. The subshell keeps
+   `umask 077` and the key variable out of your shell:
 
    ```sh
-   cd "$HOME/.parsar/core/admin"
-   umask 077
-   key=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
-   printf '%s\n' "$key" > core.key.new
-   printf '["%s"]\n' "$(printf '%s' "$key" | sha256sum | cut -d' ' -f1)" > core-key-digests.json.new
-   mv core.key.new core.key && mv core-key-digests.json.new core-key-digests.json
-   unset key
+   (
+     cd "$HOME/.parsar/core/admin"
+     umask 077
+     key=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+     printf '%s\n' "$key" > core.key.new
+     printf '["%s"]\n' "$(printf '%s' "$key" | sha256sum | cut -d' ' -f1)" > core-key-digests.json.new
+     mv core.key.new core.key && mv core-key-digests.json.new core-key-digests.json
+   )
    ```
 
 2. Restart Core and Web so they read the new files:
 
    ```sh
-   docker compose -f "$HOME/.parsar/core/compose.json" up -d --force-recreate core web
+   docker compose -f "$HOME/.parsar/core/compose.json" up -d --no-deps --force-recreate core web
    ```
 
    With native Core, run `systemctl --user restart parsar-<id>-core.service`, then
-   the same Compose command with only `web`. A separate Web installation keeps its
-   own copy in its `admin/core.key`; replace that file and recreate its `web`.
+   the same Compose command with only `web`. A core-only installation has no `web`
+   service: recreate only `core` (or restart the native service). A separate Web
+   installation keeps its own copy in its `admin/core.key`; replace that file and
+   recreate its `web`.
 3. Sign in to Web again with the new key and update your scripts. The restart
    ends every Web session, and Core rejects the old key.
 
@@ -161,7 +169,7 @@ To rotate, issue another key within the same Project, update the application, th
 revoke the old key. Renaming a Project or revoking a key preserves its assets and
 execution principal. Archiving a Project disables all its keys while retaining
 assets and already accepted execution. Administrators may inspect or delete retained
-resources; they cannot execute them using the deployment credential.
+resources; they cannot execute them using the Core key.
 
 ## Data and upgrades
 

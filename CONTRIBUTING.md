@@ -1897,8 +1897,9 @@ startup. Cookie sessions are in memory, bounded, HttpOnly, SameSite Strict and
 Secure for HTTPS origins; a restart or Core key rotation requires sign-in again.
 Unauthenticated access is limited to the static login UI, finite console
 authentication routes and the static node installation payload. Sign-in uses
-same-origin JSON POSTs with bounded bodies, attempt limiting and bounded
-concurrent work. See the
+same-origin JSON POSTs with bounded bodies and bounded concurrent work. Only
+failed attempts are rate limited, so the correct key always signs in; Web and the
+installer therefore require Core keys of at least 32 characters. See the
 [Core key operations guide](docs/getting-started/operations.md#core-key).
 
 Projects and application API keys live in Core PostgreSQL. Project creation owns

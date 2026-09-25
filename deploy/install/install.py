@@ -254,6 +254,8 @@ def initialize(root, args, manifest):
         token = source.read_text().strip()
         if not token or any(c.isspace() for c in token) or "\x00" in token:
             raise InstallError("Invalid Core key file")
+        if len(token) < 32:
+            raise InstallError("The Core key must have at least 32 characters")
     if mode != "web-only":
         free_port(args.core_port)
     if mode != "core-only":

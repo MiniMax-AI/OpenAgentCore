@@ -15,7 +15,7 @@ pip install openai==3.13.0
 The deployment administrator first creates a Project through
 `POST /core/v1/admin/projects` with `{"name":"Default"}`, then issues a key through
 `POST /core/v1/admin/projects/{project_id}/keys` with a descriptive `{"name":"..."}`.
-These requests use the separate deployment credential. The management UI has not
+These requests use the [Core key](operations.md#core-key) as their Bearer credential. The management UI has not
 yet migrated; see [integration status](../web/README.md).
 
 Obtain that key through a private channel and supply it as `PARSAR_API_KEY` in your

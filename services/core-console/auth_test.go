@@ -208,15 +208,20 @@ func TestCoreKeySignInRejectsMalformedAndCrossOriginRequests(t *testing.T) {
 	if w.Code != 403 {
 		t.Fatal("sign-in without browser origin evidence was accepted")
 	}
+}
+
+func TestFailedSignInsNeverLockOutTheCoreKey(t *testing.T) {
+	h := startConsole(t, coreKeyConsoleConfig(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})))
 	for attempt := 0; attempt < 10; attempt++ {
 		if w := authRequest(h, "POST", "/console/auth/login", coreKeyInput("incorrect"), nil); w.Code != 401 {
 			t.Fatalf("attempt %d unexpectedly returned %d", attempt, w.Code)
 		}
 	}
-	limited := authRequest(h, "POST", "/console/auth/login", coreKeyInput(testCoreKey), nil)
+	limited := authRequest(h, "POST", "/console/auth/login", coreKeyInput("incorrect"), nil)
 	if limited.Code != 429 || limited.Header().Get("Retry-After") != "60" || len(limited.Result().Cookies()) != 0 {
-		t.Fatal("sign-in rate limit was not enforced")
+		t.Fatal("failed sign-ins were not limited")
 	}
+	signIn(t, h)
 }
 
 func TestSecureCookieExpiry(t *testing.T) {
