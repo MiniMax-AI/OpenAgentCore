@@ -45,7 +45,7 @@ export const chinese = {
   "Change limits": "修改上限",
   "Add another node": "添加另一个节点",
   "Host requirements": "主机要求",
-  "Linux amd64 with Python 3.9+, curl and sha256sum, and a non-root user for the node": "Linux amd64，装有 Python 3.9+、curl 和 sha256sum，并有一个运行节点的非 root 用户",
+  "Linux amd64 with Python 3.9+, curl and sha256sum, and a non-root user to run the node (NODE_USER below)": "Linux amd64，装有 Python 3.9+、curl 和 sha256sum，并有一个运行节点的非 root 用户（即下文的 NODE_USER）",
   "Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits": "该用户能使用 /var/run/docker.sock 上的 Docker，且 Docker 能限制 CPU 和内存",
   "Read and write access to /dev/kvm for that user": "该用户能读写 /dev/kvm",
   "The shared libraries microsandbox needs, on a glibc system": "microsandbox 需要的共享库（glibc 系统）",

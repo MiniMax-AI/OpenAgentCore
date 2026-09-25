@@ -12,7 +12,7 @@ export const NODE_READY_WAIT_MS = 60_000;
 
 export interface HostPrerequisite {
   label: MessageKey;
-  /** A root command that prepares the host; `<user>` stands for the node's user. */
+  /** A root command that prepares the host; NODE_USER stands for the node's user (`<user>` would be shell redirection). */
   command?: string;
 }
 
@@ -45,25 +45,25 @@ export interface HostPrerequisite {
  */
 export function hostPrerequisites(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
   const access: HostPrerequisite = provider === "docker"
-    ? { label: "Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits", command: "sudo usermod -aG docker <user>" }
-    : { label: "Read and write access to /dev/kvm for that user", command: "sudo usermod -aG kvm <user>" };
+    ? { label: "Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits", command: "sudo usermod -aG docker NODE_USER" }
+    : { label: "Read and write access to /dev/kvm for that user", command: "sudo usermod -aG kvm NODE_USER" };
   const microsandbox: HostPrerequisite[] = provider === "microsandbox" ? [
     { label: "The shared libraries microsandbox needs, on a glibc system" },
     { label: "A home directory of 25 bytes or less, such as /home/parsar" },
   ] : [];
   return [
-    { label: "Linux amd64 with Python 3.9+, curl and sha256sum, and a non-root user for the node" },
+    { label: "Linux amd64 with Python 3.9+, curl and sha256sum, and a non-root user to run the node (NODE_USER below)" },
     access,
-    { label: "systemd lingering for that user, enabled after the group change", command: "sudo loginctl enable-linger <user>" },
+    { label: "systemd lingering for that user, enabled after the group change", command: "sudo loginctl enable-linger NODE_USER" },
     ...microsandbox,
     { label: sized ? "CPUs and memory for at least one sandbox: {{size}}" : "CPUs and memory for at least one sandbox" },
-    { label: "Run the command signed in as that user: over SSH, or with", command: "sudo machinectl shell <user>@" },
+    { label: "Run the command signed in as that user: over SSH, or with", command: "sudo machinectl shell NODE_USER@" },
     { label: "Can reach {{console}}, {{core}} and the release downloads; sandboxes must reach {{core}}" },
   ];
 }
 
 /** Restarts a user's systemd manager, so its services pick up a group change. */
-export const USER_MANAGER_RESTART = "sudo systemctl restart user@$(id -u <user>).service";
+export const USER_MANAGER_RESTART = "sudo systemctl restart user@$(id -u NODE_USER).service";
 
 /** Time left as m:ss (h:mm:ss from an hour), rounded up so it reads 0:00 only once expired. */
 export function formatCountdown(milliseconds: number): string {
