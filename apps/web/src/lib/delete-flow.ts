@@ -12,13 +12,15 @@ export interface DeleteFlow<T> {
 
 /**
  * Confirmed deletion through the Web API. A definite rejection keeps the dialog
- * open with Core's reason; an unconfirmed outcome is never retried silently —
- * the list refreshes so the operator sees what actually happened.
+ * open with Core's reason. An unconfirmed outcome is never retried silently: the
+ * dialog stays open with the uncertain message while the view is re-read
+ * (`messages.reread`, or `onSettled` where settling only refreshes a list), so a
+ * detail page does not navigate away as if the deletion had succeeded.
  */
 export function useDeleteFlow<T>(
   run: (target: T) => Promise<unknown>,
   onSettled: () => void,
-  messages: { uncertain: string },
+  messages: { uncertain: string; reread?: () => void },
 ): DeleteFlow<T> {
   const [target, setTarget] = useState<T | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,12 +42,12 @@ export function useDeleteFlow<T>(
         setError(caught.message);
       } else {
         setError(messages.uncertain);
-        onSettled();
+        (messages.reread ?? onSettled)();
       }
     } finally {
       setBusy(false);
     }
-  }, [busy, messages.uncertain, onSettled, run, target]);
+  }, [busy, messages, onSettled, run, target]);
   return {
     target,
     busy,

@@ -232,6 +232,8 @@ describe("review regressions", () => {
     expect(load.coverage.failedSessions).toBe(2);
     expect(agentMetricsOutcome(metrics)).toBe("failed");
     expect(agentMetricsOutcome(aggregateAgentMetrics(window, [], { ...coverage, loadedSessions: 0, failedSessions: 0 }))).toBe("empty");
+    // A failed Session list means runs may be missing: never claim "no runs".
+    expect(agentMetricsOutcome(aggregateAgentMetrics(window, [], { ...coverage, loadedSessions: 0, failedSessions: 0 }), 1)).toBe("failed");
   });
 
   it("times out a stalled Session read and keeps loading the others", async () => {

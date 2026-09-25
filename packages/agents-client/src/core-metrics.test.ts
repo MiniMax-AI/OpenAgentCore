@@ -20,7 +20,17 @@ describe("Core metrics projection", () => {
     expect(metrics.process).toEqual({ memory_bytes: null, goroutines: null });
   });
 
-  it("rejects a response that is not Core metrics", () => {
+  it("never shows an unrecognised service status as running", () => {
+    const metrics = projectCoreMetrics({
+      object: "core.metrics",
+      range: { start: "2026-09-24T00:00:00Z", end: "2026-09-24T01:00:00Z", resolution_seconds: 60 },
+      service: { status: "draining" },
+    });
+    expect(metrics.service.status).toBe("unknown");
+  });
+
+  it("rejects a response that is not Core metrics or has no resolution", () => {
     expect(() => projectCoreMetrics({ object: "list" })).toThrow();
+    expect(() => projectCoreMetrics({ object: "core.metrics", range: { start: "", end: "" }, service: { status: "running" } })).toThrow();
   });
 });

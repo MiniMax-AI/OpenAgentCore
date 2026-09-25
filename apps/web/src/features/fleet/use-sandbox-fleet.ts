@@ -23,7 +23,9 @@ export const FLEET_REFRESH_MS = 30_000;
  */
 export function useSandboxFleet({ poll = true, allocations = false }: { poll?: boolean; allocations?: boolean } = {}) {
   const config = useQuery(consoleConfigQuery);
-  const adminAvailable = config.isPending ? null : config.data?.sandbox_admin === true;
+  // A failed configuration read is a failure, not "no sandbox administration".
+  const configFailed = config.isError && config.data === undefined;
+  const adminAvailable = config.isPending || configFailed ? null : config.data?.sandbox_admin === true;
   const fleet = useQuery({
     ...fleetQuery(allocations),
     enabled: adminAvailable === true,
@@ -32,7 +34,8 @@ export function useSandboxFleet({ poll = true, allocations = false }: { poll?: b
   });
 
   let state: FleetState;
-  if (adminAvailable === null) state = { status: "checking" };
+  if (configFailed) state = config.isFetching ? { status: "checking" } : { status: "failed", error: config.error };
+  else if (adminAvailable === null) state = { status: "checking" };
   else if (!adminAvailable) state = { status: "unconfigured" };
   else if (fleet.data) state = { status: "ready", snapshot: fleet.data, refreshing: fleet.isFetching, error: fleet.isError && !fleet.isFetching ? fleet.error : null };
   else if (fleet.isError && !fleet.isFetching) state = { status: "failed", error: fleet.error };

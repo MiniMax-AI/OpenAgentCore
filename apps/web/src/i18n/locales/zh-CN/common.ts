@@ -74,7 +74,7 @@ export const common = {
     loaded: "已加载 {{n}} 个",
     loadedMore: "已加载 {{n}} 个，还有更多",
     noMatches: "没有匹配项",
-    deleteUncertain: "未能确认删除结果。列表已刷新，请先确认再决定是否重试。",
+    deleteUncertain: "未能确认删除结果，Core 可能已删除，也可能没有。页面已重新读取，请先确认再决定是否重试。",
     noMatchesDescription: "没有符合当前搜索或筛选条件的结果。",
   },
 } as const;

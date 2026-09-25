@@ -99,9 +99,15 @@ export function FirstProjectSetup({ onDone }: { onDone: () => void }) {
             disabled={flow.busy || flow.project !== null}
           />
           <KeyNameField flow={flow} controls={controls} taken={[]} autoFocus />
-          <FlowErrorMessage error={flow.error} name={flow.project ? normalizeName(flow.name) : normalizeName(flow.projectName)} />
-          {flow.project && flow.error ? <p className="first-key-status" role="status">{t("firstRun.projectCreated", { project: flow.project.name })}</p> : null}
+          {flow.error?.kind === "uncertain"
+            // This screen has no list to refresh: check in the console instead of issuing a second key unseen.
+            ? <p className="key-flow-error" role="alert">{t("firstRun.uncertain")}</p>
+            : <FlowErrorMessage error={flow.error} name={flow.project ? normalizeName(flow.name) : normalizeName(flow.projectName)} />}
+          {flow.project && flow.error?.kind === "rejected" ? <p className="first-key-status" role="status">{t("firstRun.projectCreated", { project: flow.project.name })}</p> : null}
           <div className="first-key-actions">
+            {flow.error?.kind === "uncertain" ? (
+              <button className="button outline" type="button" disabled={flow.busy} onClick={() => { refresh(); onDone(); }}>{t("firstRun.check")}</button>
+            ) : null}
             <button className="button primary" type="submit" disabled={!canSubmit(flow)}>
               {flow.busy ? t("firstRun.submitting") : flow.project ? t("issueDialog.submit") : t("firstRun.submit")}
             </button>

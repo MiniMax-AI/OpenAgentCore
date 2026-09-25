@@ -194,10 +194,14 @@ export function OverviewPage() {
                 <span className="overview-card-meta">{t("activity.range")}</span>
                 <HelpTip>{t("activity.help")}</HelpTip>
               </div>
-              {truncated.length ? (
+              {truncated.length || readFailures.length ? (
                 <span className="partial-chip">
                   <StatusDot tone="warning" label={t("activity.partial")} />
-                  <HelpTip>{t("activity.partialHelp", { names: truncated.map((project) => project.name).join(", ") })}</HelpTip>
+                  <HelpTip>
+                    {readFailures.length ? t("activity.unreadHelp", { names: readFailures.map((failure) => failure.project.name).join(", ") }) : null}
+                    {readFailures.length && truncated.length ? " " : null}
+                    {truncated.length ? t("activity.partialHelp", { names: truncated.map((project) => project.name).join(", ") }) : null}
+                  </HelpTip>
                 </span>
               ) : null}
             </header>
@@ -235,7 +239,7 @@ export function OverviewPage() {
             </div>
             <button className="text-action" type="button" onClick={() => navigate("sessions")}>{t("attention.viewLog")}</button>
           </header>
-          <AttentionTable sessions={attention} now={now} onOpen={openSession} />
+          <AttentionTable sessions={attention} expected={attentionTotal} unread={readFailures.map((failure) => failure.project.name)} now={now} onOpen={openSession} />
         </section>
 
         <section className="overview-card overview-table-card" aria-labelledby="projects-heading">
@@ -392,12 +396,36 @@ function sessionTitle(session: AgentSession): string | null {
   return session.agent?.name?.trim() ? session.agent.name : null;
 }
 
-function AttentionTable({ sessions, now, onOpen }: { sessions: InProject<AgentSession>[] | null; now: number; onOpen: (entry: InProject<AgentSession>) => void }) {
+/**
+ * Sessions needing attention. "Nothing needs attention" is claimed only when
+ * every Session list was read and Core's summary agrees; otherwise the empty
+ * table says the Sessions could not be listed.
+ */
+function AttentionTable({ sessions, expected, unread, now, onOpen }: {
+  sessions: InProject<AgentSession>[] | null;
+  /** Sessions needing attention by Core's summary, when it was read. */
+  expected: number | null;
+  /** Projects whose Session list could not be read. */
+  unread: string[];
+  now: number;
+  onOpen: (entry: InProject<AgentSession>) => void;
+}) {
   const { t, i18n } = useTranslation("overview");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
   if (sessions === null) return <TableSkeleton label={t("attention.loading")} rows={4} columns={5} />;
-  if (!sessions.length) return <div className="overview-card-body"><EmptyState title={t("attention.emptyTitle")} description={t("attention.emptyDescription")} /></div>;
+  if (!sessions.length) {
+    const description = unread.length
+      ? t("attention.unreadDescription", { names: unread.join(", ") })
+      : expected
+        ? t("attention.unlistedDescription", { count: expected })
+        : null;
+    return (
+      <div className="overview-card-body">
+        {description ? <EmptyState title={t("attention.unlistedTitle")} description={description} /> : <EmptyState title={t("attention.emptyTitle")} description={t("attention.emptyDescription")} />}
+      </div>
+    );
+  }
   return (
     <div className="overview-table-scroll">
       <table className="data-table">

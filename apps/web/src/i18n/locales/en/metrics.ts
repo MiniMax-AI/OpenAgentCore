@@ -35,7 +35,7 @@ export const metrics = {
   },
   agent: {
     readsFailedTitle: "Agent runs could not be read",
-    readsFailedDescription: "Reading Turns failed for all {{count}} active Sessions. Check the connection to Core and refresh.",
+    readsFailedDescription: "Some Session lists or Turns could not be read, so the page cannot tell whether any Agent ran. Check the connection to Core and refresh.",
     errorFormula: "Error rate = failed ÷ finished (completed + failed + cancelled) Turns.",
     tokenCoverage: "{{reported}} of {{total}} Turns reported usage.",
     tokensUnreported: "No Turn in this range reported token usage.",
@@ -111,7 +111,7 @@ export const metrics = {
     kpiLabel: "Core summary",
     meta: "{{status}} · {{revision}} · up {{uptime}}",
     notOwner: "Does not hold the execution lease",
-    status: { running: "Running", maintenance: "Maintenance", degraded: "Degraded" },
+    status: { running: "Running", maintenance: "Maintenance", degraded: "Degraded", unknown: "Unknown status" },
     slots: "Execution slots",
     slotsHelp: "Sessions Core runs at the same time at most. Turns, environment input and file reads and writes share these slots.",
     queued: "Queued Turns",

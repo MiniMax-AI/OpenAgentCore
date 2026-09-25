@@ -19,7 +19,7 @@ test("creates a project, shows a new key once, revokes it and archives the proje
   const secret = await issued.getByLabel("New key ci").inputValue();
   await issued.getByRole("button", { name: "I've saved this key" }).click();
   await expect(page.getByRole("table", { name: "Keys of Acceptance" })).toContainText("ci");
-  await expect(page.locator("input[readonly]")).toHaveCount(0);
+  await expect(page.getByLabel("New key ci")).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("table", { name: "Keys of Acceptance" })).toContainText("ci");
   expect(await page.content()).not.toContain(secret);

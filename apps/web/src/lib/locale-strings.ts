@@ -86,6 +86,7 @@ export const chinese = {
   "The selected sandbox node is unavailable or has no capacity.": "所选沙箱节点不可用或容量不足。",
   "Sign in to the console again to access sandbox management.": "请重新登录控制台以访问沙箱管理。",
   "Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.": "此控制台尚未配置沙箱管理权限。请联系部署管理员配置。",
+  "The console configuration could not be read. Refresh to try again.": "无法读取控制台配置。请刷新重试。",
   "The sandbox request was rejected. Refresh to check the current state.": "沙箱请求被拒绝。请刷新并检查当前状态。",
   "The sandbox service is unavailable. Refresh to check the current state.": "沙箱服务不可用。请刷新并检查当前状态。",
   "Disabled": "已禁用",

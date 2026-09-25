@@ -35,7 +35,7 @@ export const metrics = {
   },
   agent: {
     readsFailedTitle: "无法读取 Agent 运行记录",
-    readsFailedDescription: "{{count}} 个活跃 Session 的 Turn 全部读取失败。请检查与 Core 的连接后刷新。",
+    readsFailedDescription: "部分 Session 列表或 Turn 读取失败，无法判断这段时间是否有 Agent 运行。请检查与 Core 的连接后刷新。",
     errorFormula: "错误率 = 失败 ÷ 已结束（完成 + 失败 + 取消）的 Turn。",
     tokenCoverage: "{{total}} 个 Turn 中有 {{reported}} 个上报了用量。",
     tokensUnreported: "该时间范围内没有 Turn 上报 Token 用量。",
@@ -111,7 +111,7 @@ export const metrics = {
     kpiLabel: "Core 概况",
     meta: "{{status}} · {{revision}} · 已运行 {{uptime}}",
     notOwner: "未持有执行归属",
-    status: { running: "运行中", maintenance: "维护中", degraded: "降级" },
+    status: { running: "运行中", maintenance: "维护中", degraded: "降级", unknown: "状态未知" },
     slots: "执行槽位",
     slotsHelp: "Core 同时最多执行的 Session 数。Turn、环境输入和文件读写共用这些槽位。",
     queued: "排队 Turn",

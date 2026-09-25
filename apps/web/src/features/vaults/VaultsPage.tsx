@@ -169,7 +169,7 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
   const removeVault = useDeleteFlow<Vault>(
     useCallback((vault: Vault) => projectClient(projectId).deleteVault(vault.id), [projectId]),
     useCallback(() => { back(); forget(); }, [back, forget]),
-    { uncertain: tCommon("list.deleteUncertain") },
+    { uncertain: tCommon("list.deleteUncertain"), reread: refresh },
   );
   const removeCredential = useDeleteFlow<VaultCredential>(
     useCallback((credential: VaultCredential) => projectClient(projectId).deleteVaultCredential(vaultId, credential.id), [projectId, vaultId]),

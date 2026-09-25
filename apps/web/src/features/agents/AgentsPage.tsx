@@ -194,7 +194,7 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
   const remove = useDeleteFlow<SavedAgent>(
     useCallback((agent: SavedAgent) => projectClient(projectId).deleteAgent(agent.id), [projectId]),
     useCallback(() => { back(); forget(); }, [back, forget]),
-    { uncertain: tCommon("list.deleteUncertain") },
+    { uncertain: tCommon("list.deleteUncertain"), reread: () => void read.refetch() },
   );
 
   const agent = read.data ?? null;

@@ -16,7 +16,7 @@ const RANGES: readonly CoreMetricsRange[] = ["1h", "6h", "24h", "7d"];
 const REFRESH_MS = 30_000;
 
 const jobTone: Record<CoreJobStatus, Tone> = { ok: "ok", failing: "danger", stopped: "warning", unknown: "neutral" };
-const statusTone: Record<CoreMetrics["service"]["status"], Tone> = { running: "ok", maintenance: "warning", degraded: "warning" };
+const statusTone: Record<CoreMetrics["service"]["status"], Tone> = { running: "ok", maintenance: "warning", degraded: "warning", unknown: "neutral" };
 
 function seconds(value: string | null): number | null {
   if (!value) return null;
@@ -200,7 +200,8 @@ function CoreMetricsBody({ metrics, stale }: { metrics: CoreMetrics; stale: stri
               bucketSeconds={bucketSeconds}
               series={[
                 { id: "in-use", label: t("core.database.inUse"), color: "var(--series-1)", values: database.series.map((entry) => entry.pool_in_use) },
-                { id: "max", label: t("core.database.max"), color: "var(--ink-3)", values: database.series.map(() => database.pool.max) },
+                // The limit is drawn only where Core observed the pool.
+                { id: "max", label: t("core.database.max"), color: "var(--ink-3)", values: database.series.map((entry) => (entry.pool_in_use === null ? null : database.pool.max)) },
               ]}
               formatValue={integer}
             />

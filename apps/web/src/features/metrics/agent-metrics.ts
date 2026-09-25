@@ -404,10 +404,12 @@ export function aggregateAgentMetrics(
 export type AgentMetricsOutcome = "failed" | "empty" | "ready";
 
 /**
- * What the page may claim. When every Session read failed, "no runs" would be
- * a false statement during an incident, so the load is reported as failed.
+ * What the page may claim. "No runs" is claimed only when every read
+ * succeeded: with no requests counted and any Session list or Turn read
+ * failed, it would be a false statement during an incident, so the load is
+ * reported as failed.
  */
-export function agentMetricsOutcome(metrics: AgentMetrics): AgentMetricsOutcome {
-  if (metrics.coverage.loadedSessions === 0 && metrics.coverage.failedSessions > 0) return "failed";
-  return metrics.totals.requests ? "ready" : "empty";
+export function agentMetricsOutcome(metrics: AgentMetrics, failedLists = 0): AgentMetricsOutcome {
+  if (metrics.totals.requests) return "ready";
+  return metrics.coverage.failedSessions > 0 || failedLists > 0 ? "failed" : "empty";
 }

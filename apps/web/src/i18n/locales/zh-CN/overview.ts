@@ -29,6 +29,7 @@ export const overview = {
     projects: "无法加载项目：{{reason}}",
   },
   activity: {
+    unreadHelp: "{{names}} 的 Session 列表读取失败，图中缺少这些 Session。",
     title: "Session 活动",
     range: "最近 24 小时",
     help: "所有项目每小时新建的 Session。悬停柱子时同时显示失败的 Session（按最近活跃时间归入小时）。",
@@ -115,6 +116,9 @@ export const overview = {
     coverageDetail: "{{total}} 个 Session 中有 {{reported}} 个上报了用量",
   },
   attention: {
+    unlistedTitle: "无法列出需要处理的 Session",
+    unreadDescription: "{{names}} 的 Session 列表读取失败。请刷新，或打开 Session 日志查看。",
+    unlistedDescription: "Core 统计有 {{count}} 个 Session 需要处理，但不在已读取的 Session 中。请打开 Session 日志查看。",
     title: "需要处理",
     subtitle: "所有项目中失败的 Session，以及等待必要操作的 Session。",
     viewLog: "Session 日志",

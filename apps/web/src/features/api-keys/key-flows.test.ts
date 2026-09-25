@@ -54,9 +54,9 @@ describe("project and key names", () => {
 });
 
 describe("write outcomes", () => {
-  it("separates rejected, conflicting and uncertain results", () => {
+  it("separates rejected and uncertain results, keeping Core's reason on a conflict", () => {
     expect(flowError(new AgentCoreError("Name is invalid.", 400))).toEqual({ kind: "rejected", status: 400, message: "Name is invalid." });
-    expect(flowError(new AgentCoreError("Exists.", 409))).toEqual({ kind: "conflict" });
+    expect(flowError(new AgentCoreError("The target Project is archived.", 409))).toEqual({ kind: "rejected", status: 409, message: "The target Project is archived." });
     // A timeout, a server error or a lost connection may have written anyway.
     expect(flowError(new AgentCoreError("Timeout.", 408))).toEqual({ kind: "uncertain" });
     expect(flowError(new AgentCoreError("Down.", 502))).toEqual({ kind: "uncertain" });
@@ -96,8 +96,8 @@ describe("issuing a key", () => {
     const busy = run([{ type: "openIssue", project }, { type: "setName", name: "bob" }, { type: "started" }]);
     expect(keyFlowReducer(busy, { type: "cancel" })).toBe(busy);
     expect(keyFlowReducer(busy, { type: "setName", name: "changed" })).toBe(busy);
-    const failed = keyFlowReducer(busy, { type: "failed", error: { kind: "conflict" } });
-    expect(failed).toMatchObject({ step: "issue", busy: false, error: { kind: "conflict" }, name: "bob" });
+    const failed = keyFlowReducer(busy, { type: "failed", error: { kind: "rejected", status: 409, message: "The target Project is archived." } });
+    expect(failed).toMatchObject({ step: "issue", busy: false, error: { kind: "rejected", status: 409 }, name: "bob" });
     expect(keyFlowReducer(failed, { type: "setName", name: "bob-2" })).toMatchObject({ name: "bob-2", error: null });
     expect(keyFlowReducer(failed, { type: "cancel" })).toEqual(idleFlow);
   });

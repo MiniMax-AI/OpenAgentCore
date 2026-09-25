@@ -17,7 +17,7 @@ export const sandboxConsoleConfigQuery = queryOptions({
   queryKey: ["console-config"],
   queryFn: async ({ signal }) => {
     const config = await sandboxConsoleConfig(signal);
-    // A cancelled read reports "not configured"; never cache that.
+    // Never cache a result read after cancellation.
     signal.throwIfAborted();
     return config;
   },
