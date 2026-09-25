@@ -101,9 +101,10 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     const controller = new AbortController(); lifetime.current = controller;
     return () => { controller.abort(); lifetime.current = null; };
   }, []);
-  async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>) {
+  /** Whether Core confirmed the change. */
+  async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>): Promise<boolean> {
     const controller = lifetime.current;
-    if (!controller || busy || loading || setupNeedsRefresh || !fresh) return;
+    if (!controller || busy || loading || setupNeedsRefresh || !fresh) return false;
     setBusy(true); setWriteFailure(null);
     try {
       const deployment = await operation(controller.signal);
@@ -118,6 +119,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         void queryClient.invalidateQueries({ queryKey: sandboxDeploymentQuery.queryKey });
         // Overview and Sandbox metrics read the fleet separately and lay out by provider.
         void queryClient.invalidateQueries({ queryKey: ["sandbox-fleet"] });
+        return true;
       }
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -126,15 +128,17 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
       }
     } finally { if (!controller.signal.aborted) setBusy(false); }
+    return false;
   }
-  function initialize(input: InitializeSandboxDeployment) {
-    return changeDeployment((signal) => client.initializeDeployment(input, { signal }));
+  /** First setup; own machines continue straight to adding the first node. */
+  async function initialize(input: InitializeSandboxDeployment) {
+    if (await changeDeployment((signal) => client.initializeDeployment(input, { signal })) && input.provider !== "e2b") setAdding(true);
   }
-  function update(input: InitializeSandboxDeployment) {
-    return changeDeployment((signal) => client.updateDeployment({ ...input, core_url: snapshot!.deployment.core_url, expected_generation: snapshot!.deployment.generation }, { signal }));
+  async function update(input: InitializeSandboxDeployment) {
+    await changeDeployment((signal) => client.updateDeployment({ ...input, core_url: snapshot!.deployment.core_url, expected_generation: snapshot!.deployment.generation }, { signal }));
   }
-  function maintenance(maintenance: boolean) {
-    return changeDeployment((signal) => client.setMaintenance({ maintenance, expected_generation: snapshot!.deployment.generation }, { signal }));
+  async function maintenance(maintenance: boolean) {
+    await changeDeployment((signal) => client.setMaintenance({ maintenance, expected_generation: snapshot!.deployment.generation }, { signal }));
   }
   const writeDialog = <ErrorDialog
     open={writeFailure?.open ?? false}

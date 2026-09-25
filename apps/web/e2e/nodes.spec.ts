@@ -85,7 +85,8 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
 
   // The saved specification carries the Runtime read from the console's manifest.
   await expect(page.getByText("c0ffee000000")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add node" })).toBeVisible();
+  // Own machines continue straight to adding the first node.
+  await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
 });
 
 test("keeps the saved size and Runtime for the same backend, and starts another from its defaults", async ({ page, request }) => {
