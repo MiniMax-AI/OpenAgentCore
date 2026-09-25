@@ -28,3 +28,21 @@ func TestPublicAPINeverPassesThroughConsole(t *testing.T) {
 		}
 	}
 }
+
+func TestManagedSessionArchiveAllowlist(t *testing.T) {
+	path := "/core/v1/admin/projects/project/sessions/session/archive"
+	for _, test := range []struct {
+		method, path string
+		allowed      bool
+	}{
+		{"GET", path, true}, {"HEAD", path, true}, {"POST", path, true},
+		{"DELETE", path, false}, {"PUT", path, false}, {"PATCH", path, false},
+		{"POST", path + "/extra", false},
+		{"POST", "/core/v1/admin/projects/project/sessions/session/events", false},
+		{"POST", "/v1/agents/sessions/session/archive", false},
+	} {
+		if got := adminAPIRequest(httptest.NewRequest(test.method, test.path, nil)); got != test.allowed {
+			t.Errorf("%s %s: allowed=%v", test.method, test.path, got)
+		}
+	}
+}

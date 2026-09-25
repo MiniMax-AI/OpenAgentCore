@@ -73,6 +73,9 @@ func adminAPIRequest(r *http.Request) bool {
 		}
 		return len(parts) == 6 && parts[4] == "credentials" && (read || remove)
 	case "sessions":
+		if len(parts) == 5 && parts[4] == "archive" {
+			return read || r.Method == http.MethodPost
+		}
 		if len(parts) == 5 {
 			switch parts[4] {
 			case "turns", "items", "artifacts", "execution-configuration", "runtime-observation", "runtime-history":
