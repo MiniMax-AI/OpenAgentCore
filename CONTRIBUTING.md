@@ -227,7 +227,7 @@ intervals and restart gaps. Do not substitute host usage for process usage.
 
 Administrator node detail adds host observations and history as documented in
 [node-host-history.md](contracts/agents-api/node-host-history.md). Keep the node
-list unchanged. Reuse authenticated heartbeat ownership, the Runtime sampling
+list unchanged apart from the address each node enrolled with (`core_url`). Reuse authenticated heartbeat ownership, the Runtime sampling
 sweep and PostgreSQL retention cleanup; node observations have their own table
 because they do not belong to a Project, Session or Environment. History is
 best-effort telemetry, never scheduling truth. No read-triggered sampling or
@@ -1652,8 +1652,8 @@ execution concurrency bounds simultaneous work, not attempt frequency. Managed-p
 polling retains its separate five-second interval. Unknown promotion results or
 errors after admission retain the existing no-replay settlement rules.
 
-`AGENTS_API_DAEMON_WS_URL` enables the private gateway and supplies the unchanged
-public `remote_url`. `AGENTS_API_HARNESSES` explicitly adds deployment-supported
+`AGENTS_API_PUBLIC_URL` enables the private gateway; Core derives the public
+`remote_url` from it. `AGENTS_API_HARNESSES` explicitly adds deployment-supported
 engines to the default engine and configured managed profiles; advertising a
 heartbeat alone does not enable an engine. The three native profiles share enrollment
 at `/workspace`. Their new user-managed public chain requires fixed-client/raw HTTP,
@@ -1791,14 +1791,15 @@ Environment/key binding and current authenticated connection; it never enrolls,
 allocates, wakes a sandbox or grants project resource access. It is an `/api/v1`
 machine route that reaches Core directly, never through the console. Bounded
 polling and reruns retain the original container and history; timeout is a
-diagnostic failure, not permission to relaunch. An explicit installer
-`--public-url` supplies both the console origin and the advertised daemon `wss`
-origin. Keep local managed Provider routing separate; do not return an internal
-Compose hostname to a user-managed Runtime when an external origin was supplied. Bootstrap routing uses the
-node bound to the authenticated device's persisted allocation, never request Host
-or caller-supplied placement fields. Local and remote managed nodes use the saved
-public Core origin. Self-hosted devices retain the deployment's advertised public
-address. This does
+diagnostic failure, not permission to relaunch. The installation public URL
+(`AGENTS_API_PUBLIC_URL`, from the installer's `--public-url`) is the one origin for
+applications, nodes, sandbox guests and self-hosted executors, and also the console
+origin. Core derives the daemon `wss` URL, the self-hosted `remote_url`, hosted
+Runtime bootstrap and the deployment's read-only `core_url` from it; the deployment
+API does not accept a Core address, and no deployment row stores one. Bootstrap
+never uses request Host or caller-supplied placement fields. Each node records the
+address it enrolled with; after the public URL changes, it receives no new
+sandboxes until re-added. This does
 not widen sandbox network policies or change credential admission.
 
 The distribution build sets umask 022 for non-root-readable payloads; installation
@@ -2404,7 +2405,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   tenant ownership and a credential digest. Their internal daemon gateway uses
   `/api/v1/agent-daemon/*`, separately from the official `/v1/agents/*` surface;
   device credentials grant no Session API or product permissions. The optional
-  `AGENTS_API_DAEMON_WS_URL` enables that gateway. It is a single-process registry,
+  `AGENTS_API_PUBLIC_URL` enables that gateway. It is a single-process registry,
   not a claim of multi-pod execution or stock `exec-server` interoperability.
   Self-hosted enrollment uses this gateway with an exact Environment binding.
   Session/device bindings are tenant-scoped and immutable. Revocation denies new
@@ -2775,7 +2776,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   including after terminal or later Turns. Omitted/null input is permitted only
   for non-streaming hosted creation and self-hosted creation.
   Creation streaming uses the shared live path above; non-text messages remain a gap.
-- Enabling `AGENTS_API_DAEMON_WS_URL` also starts a bounded execution worker. Select
+- Enabling daemon transport with `AGENTS_API_PUBLIC_URL` also starts a bounded execution worker. Select
   only connected, capable devices owned by the authenticated tenant; bind once and
   preserve native continuity. Metadata cannot select a device. Offline work stays
   queued and can be cancelled. An engine host is not a self-hosted environment.

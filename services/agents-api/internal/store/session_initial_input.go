@@ -96,7 +96,7 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 				return err
 			}
 			if placement.Environment.Type == "openai_hosted" {
-				if err := reserveRuntimePlacement(ctx, q, row.ID); err != nil {
+				if err := reserveRuntimePlacement(ctx, q, row.ID, s.publicURL); err != nil {
 					return err
 				}
 			}

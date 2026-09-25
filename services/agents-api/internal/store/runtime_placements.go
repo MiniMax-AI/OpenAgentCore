@@ -8,8 +8,9 @@ import (
 )
 
 // reserveRuntimePlacement shares the deployment lock with restore and node removal.
-// A Session creation retry never reaches this function.
-func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
+// A Session creation retry never reaches this function. A node enrolled with
+// another Core address receives no new sandbox; restores still reach it.
+func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, publicURL string) error {
 	d, err := q.LockRuntimeDeployment(ctx)
 	if err != nil {
 		return err
@@ -36,7 +37,7 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 	var chosen *sqlc.ListRuntimeNodesRow
 	for i := range rows {
 		n := &rows[i]
-		if !n.Online || !n.ProviderReady || n.Active >= int64(n.MaxActive) || n.Retained >= int64(n.MaxRetained) {
+		if !n.Online || !n.ProviderReady || n.Active >= int64(n.MaxActive) || n.Retained >= int64(n.MaxRetained) || (d.WebManaged && n.CoreUrl != publicURL) {
 			continue
 		}
 		if chosen == nil || n.Active < chosen.Active {

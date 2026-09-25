@@ -121,6 +121,15 @@ def origin_port(value):
     return parsed.port or (443 if parsed.scheme == "https" else 80)
 
 
+def public_origin(value):
+    # Core accepts only a canonical origin: lowercase scheme and host, no IPv6 literal.
+    value = core_target(value)
+    parsed = urlsplit(value)
+    if "[" in parsed.netloc:
+        raise argparse.ArgumentTypeError("Public URL must use a host name or IPv4 address")
+    return parsed._replace(scheme=parsed.scheme.lower(), netloc=parsed.netloc.lower()).geturl()
+
+
 def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
@@ -135,7 +144,7 @@ def arguments(argv=None):
     parser.add_argument("--core-port", type=int, default=8091)
     parser.add_argument("--web-port", type=int, default=8080)
     parser.add_argument("--core-url", type=core_target)
-    parser.add_argument("--public-url", type=core_target, help="Public HTTPS Core/Web origin behind your TLS reverse proxy")
+    parser.add_argument("--public-url", type=public_origin, help="Public HTTPS Core/Web origin behind your TLS reverse proxy")
     parser.add_argument("--core-key-file", type=Path, help="Web-only: private file containing the existing Core's Core key")
     parser.add_argument("--admin-token-file", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--status", action="store_true", help="Read installation health; never invoke a model")
@@ -292,7 +301,7 @@ def initialize(root, args, manifest):
         private_write(root / "admin/core.key", token)
     password = (config / "database.password").read_text() if mode != "web-only" else ""
     if mode != "web-only":
-        private_write(config / "core.env", environment_text(core_environment(root, state, password)))
+        private_write(config / "core.env", environment_text(core_environment(root, state)))
     write_json(root / "compose.json", compose_config(root, state, manifest, password))
     write_json(root / "installation.json", state)
     return state

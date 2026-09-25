@@ -11,13 +11,13 @@ import { CoreRequester } from "./core-request";
 import {
   invalidAdminResponse, projectAdminProject, projectAdminKey, projectIssuedAdminKey, projectAdminPage, projectAdminDeleted, projectAdminSessionArchive,
   projectResourcePage, projectSavedAgent, projectSkill, projectSkillVersion, projectArtifact, projectSummary, projectAdminRuntimePage, projectResourceOwners, projectWriteOperations, projectAdminAudit,
-  projectExecutorCredentials, projectIssuedExecutorCredential,
+  projectExecutorCredentials, projectIssuedExecutorCredential, projectInstallation,
 } from "./admin-projection";
 import type { PageOptions, ReadOptions, RuntimeHistoryQuery, SkillList, SkillVersionDeleted, SkillVersionList, SourceFileList, VaultListOptions } from "./types";
 import type {
   AdminClientOptions, AdminAuditOptions, AdminContent, ArchiveAdminSessionInput, CreateAdminProjectInput, RenameAdminProjectInput,
   IssueAdminAPIKeyInput, AdminSummaryOptions, AdminResourceType, AdminResourceOwner, AdminWriteOperationOptions, AdminWriteOperationPage,
-  ExecutorCredential, IssueExecutorCredentialInput, IssuedExecutorCredential,
+  ExecutorCredential, IssueExecutorCredentialInput, IssuedExecutorCredential, CoreInstallation,
 } from "./admin-types";
 
 function segment(value: string): string {
@@ -67,6 +67,10 @@ export class AdminClient {
     return { blob: await response.blob(), contentType: response.headers.get("Content-Type"), contentDisposition: response.headers.get("Content-Disposition") };
   }
 
+  /** Installation facts and process settings; readable before any sandbox deployment exists. */
+  async retrieveInstallation(options?: ReadOptions): Promise<CoreInstallation> {
+    return projectInstallation(await this.#json("/installation", options));
+  }
   async listProjects(options?: PageOptions) {
     return projectAdminPage(await this.#json(pageQuery("/projects", options), options), (value) => projectAdminProject(value));
   }

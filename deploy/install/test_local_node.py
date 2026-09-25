@@ -44,6 +44,7 @@ class LocalNodeTests(unittest.TestCase):
                 setup = request.call_args_list[1].args[4]
                 self.assertEqual(setup["resources"], resources)
         self.assertEqual(setup["runtime"]["image_id"], self.manifest["images"]["runtime"])
+        self.assertNotIn("core_url", setup)  # Core derives it from its public URL.
         self.assertNotIn("one-time", str(self.run.call_args.args))
         self.assertEqual(self.run.call_args.kwargs["env"]["PARSAR_NODE_ENROLLMENT_TOKEN"], "one-time")
         self.assertIn("--bundle", self.run.call_args.args[0])

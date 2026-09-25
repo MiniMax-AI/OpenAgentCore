@@ -60,7 +60,7 @@ nodes and sandbox guests reach through your TLS proxy:
 ```sh
 export AGENTS_API_ADDR=0.0.0.0:8091
 export AGENTS_API_SANDBOX_INSTALLATION_ID="<installation UUID>"
-export AGENTS_API_DAEMON_WS_URL="wss://core.example/api/v1/agent-daemon/ws"
+export AGENTS_API_PUBLIC_URL="https://core.example"
 export AGENTS_API_EXECUTION_OPTIONS_FILE="$PARSAR_HOME/execution-options.json"
 ```
 
@@ -91,8 +91,8 @@ chmod 0600 "$AGENTS_API_CORE_KEY_DIGESTS_FILE" "$AGENTS_API_EXECUTION_OPTIONS_FI
 "$AGENTS_API_BIN_DIR/agents-api"
 ```
 
-Then select `docker` with `https://core.example` as `core_url`, the per-sandbox
-resources and the complete Runtime release, and register a node on a host where
+Then select `docker`, the per-sandbox resources and the complete Runtime release
+(the deployment's `core_url` comes from `AGENTS_API_PUBLIC_URL`), and register a node on a host where
 this image is loaded. Hosted admission starts when a ready node has capacity.
 
 Use your existing service supervisor for long-running operation. Migrations are

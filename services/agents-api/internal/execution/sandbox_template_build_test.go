@@ -8,7 +8,7 @@ import (
 )
 
 func TestOmittedE2BResourcesComeFromValidatedTemplateBuild(t *testing.T) {
-	request := store.SandboxDeploymentSetupRequest{Provider: "e2b", CoreURL: "https://core.example", E2B: &store.SandboxE2BConfiguration{APIKey: "key", Template: "runtime:build"}}
+	request := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "key", Template: "runtime:build"}}
 	build := &store.SandboxE2BTemplateBuild{Status: "ready", CPUs: 4, MemoryMiB: 4096}
 	saved := withTemplateBuild(request, PreparedRuntimeDeployment{E2BTemplateBuild: build})
 	if saved.Resources != (sandbox.Resources{CPUs: 4, MemoryMiB: 4096}) || saved.E2B.TemplateBuild == nil || *saved.E2B.TemplateBuild != *build {

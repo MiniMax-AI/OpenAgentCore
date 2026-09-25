@@ -17,6 +17,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/databaseurl"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -33,7 +34,10 @@ func run() error {
 	serverURL := flag.String("url", "", "Agents API HTTP base URL")
 	revoke := flag.String("revoke", "", "revoke this device UUID instead of provisioning")
 	flag.Parse()
-	dsn := os.Getenv("AGENTS_API_DATABASE_URL")
+	dsn, err := databaseurl.FromEnvironment()
+	if err != nil {
+		return err
+	}
 	if dsn == "" || *tenant == "" || flag.NArg() != 0 {
 		return errors.New("AGENTS_API_DATABASE_URL and --tenant are required")
 	}

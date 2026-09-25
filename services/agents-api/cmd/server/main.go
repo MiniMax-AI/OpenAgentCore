@@ -34,6 +34,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/coremetrics"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/databaseurl"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
@@ -53,7 +54,12 @@ func main() {
 }
 
 func run() error {
+	log.Init(log.ConfigFromEnv())
 	if err := validateProcessConfiguration(); err != nil {
+		return err
+	}
+	public, err := publicURL()
+	if err != nil {
 		return err
 	}
 	concurrency, err := executionConcurrency()
@@ -61,7 +67,10 @@ func run() error {
 		return err
 	}
 	logConfigurationSources()
-	databaseURL := os.Getenv("AGENTS_API_DATABASE_URL")
+	databaseURL, err := databaseurl.FromEnvironment()
+	if err != nil {
+		return err
+	}
 	if databaseURL == "" {
 		return errors.New("AGENTS_API_DATABASE_URL is required")
 	}
@@ -98,6 +107,11 @@ func run() error {
 		return err
 	}
 	executionStore := store.NewWithCredentialCipherAndOAuthRefresh(pool, credentialKey, oauthClient)
+	executionStore.SetPublicURL(public)
+	installation, err := installationFacts(public)
+	if err != nil {
+		return err
+	}
 	metricsSource := &coreMetricsSource{store: executionStore, pool: pool}
 	metrics := coremetrics.New(processStartedAt, buildRevision, metricsSource)
 	auth, err := api.NewDatabaseAuthenticator(executionStore)
@@ -117,7 +131,7 @@ func run() error {
 	defer func() { cancelAuditCleanup(); <-auditCleanupDone }()
 	var workerDone chan error
 	var worker *execution.Worker
-	managedNodes, err := configureManagedNodes(executionStore, func(ctx context.Context) error {
+	managedNodes, err := configureManagedNodes(executionStore, public, func(ctx context.Context) error {
 		if worker == nil {
 			return errors.New("sandbox execution owner is unavailable")
 		}
@@ -143,7 +157,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	history, err := runtimeHistory(ctx, executionStore, os.Getenv("AGENTS_API_DAEMON_WS_URL") != "")
+	history, err := runtimeHistory(ctx, executionStore, public != "")
 	if err != nil {
 		return err
 	}
@@ -187,7 +201,8 @@ func run() error {
 	if err := api.ValidateCredentialSeparation(ctx, keyAdmin, executionStore); err != nil {
 		return err
 	}
-	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin), api.WithWriteAudit(executionStore, keyAdmin), api.WithAdminManagement(executionStore))
+	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin), api.WithWriteAudit(executionStore, keyAdmin), api.WithAdminManagement(executionStore),
+		api.WithInstallation(installation, executionStore.AddressBindings))
 	if history.Reader != nil {
 		historyResolver, resolverErr := historystoreresolver.NewResolver(executionStore)
 		if resolverErr != nil {
@@ -201,7 +216,11 @@ func run() error {
 	}
 	var daemonHandler http.Handler
 	var registry *gateway.Registry
-	if wsURL := os.Getenv("AGENTS_API_DAEMON_WS_URL"); wsURL != "" {
+	if public != "" {
+		wsURL, err := runtimeWebSocketURL(public)
+		if err != nil {
+			return err
+		}
 		daemonHandler, registry, err = runtime.NewGatewayWithURLResolver(executionStore, wsURL, managedNodes.webSocketURL(wsURL))
 		if err != nil {
 			return err

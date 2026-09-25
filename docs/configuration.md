@@ -50,18 +50,19 @@ flags. Changing `core.env` does not require editing those launcher files.
 
 | Parameter | Default / unit | Restrictions and effect |
 | --- | --- | --- |
-| `AGENTS_API_DATABASE_URL` | Required PostgreSQL connection string; generated for the dedicated database | Includes pool settings; keep credentials private |
+| `AGENTS_API_DATABASE_URL` | Required PostgreSQL connection string; generated for the dedicated database without a password | Includes pool settings; with `AGENTS_API_DATABASE_PASSWORD_FILE`, the password comes only from that file |
 | Pool options in the URL | Existing pgx defaults: `pool_max_conns=max(4, CPU count)`, `pool_min_conns=0`, `pool_max_conn_lifetime=1h`, `pool_max_conn_idle_time=30m`, `pool_health_check_period=1m` | For example append `&pool_max_conns=16`; counts are integers and times are Go durations; no separate pool env layer |
 | `AGENTS_API_ADDR` | Binary: `127.0.0.1:8091`; installer: container `:8091` or native loopback installation port | Listen address; container port publishing and reverse-proxy routing are deployment wiring and must match |
 | `AGENTS_API_EXECUTION_CONCURRENCY` | `4` concurrent execution work units | Integer `1..1024`; explicit empty/invalid values fail startup; unrelated to node sandbox capacity |
-| `PARSAR_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `PARSAR_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`; Web reads the same three logging settings |
 | `PARSAR_LOG_FORMAT` | Automatic for the output destination | `text` or `json` |
 | `PARSAR_LOG_ADD_SOURCE` | Disabled | `1` enables source locations; `0` disables |
 | `AGENTS_API_WRITE_AUDIT_RETENTION` | `2160h` (90 days) | Go duration, minimum `1h`; permanent creation ownership is retained |
 | `AGENTS_API_ENGINE` | `codex` | Default harness; accepted Session choices remain frozen |
 | `AGENTS_API_HARNESSES` | Binary: default harness; installer: `codex,claude_sdk,mcode` | Comma-separated supported harness IDs; unknown IDs fail startup |
-| `AGENTS_API_DAEMON_WS_URL` | Installer-generated reachable WebSocket URL | Enables daemon transport and advertises self-hosted connectivity; hosted bootstrap uses the saved deployment origin |
-| `AGENTS_API_CONFIG_FILE` | Installer-generated absolute loaded-file path | Diagnostic marker only, not a loader; preserve it |
+| `AGENTS_API_PUBLIC_URL` | Installer: `--public-url`, or `http://127.0.0.1:<core port>` without one | The one origin applications, nodes, sandbox guests and self-hosted executors use: canonical HTTPS origin without path, or HTTP only for a loopback host. Enables daemon transport; Core derives the daemon WebSocket URL, self-hosted `remote_url`, hosted bootstrap and the deployment's read-only `core_url` from it. Required with `AGENTS_API_SANDBOX_INSTALLATION_ID`. The retired `AGENTS_API_DAEMON_WS_URL` fails startup |
+| `AGENTS_API_DATABASE_PASSWORD_FILE` | Installer: private `database.password` path | The database password, which `AGENTS_API_DATABASE_URL` then must not contain; also read by migrations and the maintenance commands |
+| `AGENTS_API_SETTINGS_FILE` | Unset | The installer's non-secret settings snapshot, reported by `GET /core/v1/installation`; Core does not act on it. The retired `AGENTS_API_CONFIG_FILE` fails startup |
 | `AGENTS_API_SANDBOX_INSTALLATION_ID` | Installer-generated canonical UUID | Stable identity pinned to the database, not provider selection; preserve it |
 | `AGENTS_API_CORE_KEY_DIGESTS_FILE` | Generated private `admin/core-key-digests.json` path | JSON array of [Core key](getting-started/operations.md#core-key) SHA-256 digests that authorize `/core/v1`; the key itself stays in Web's `CORE_CONSOLE_CORE_KEY_FILE`. The old name `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` fails startup |
 | `AGENTS_API_CREDENTIAL_KEY_FILE` | Generated private encryption-key path | Preserve with the database; never regenerate to repair credentials |
@@ -137,7 +138,8 @@ Microsandbox uses both limits. Docker never suspends, so its `max_retained` alwa
 equals `max_active`; Core replaces any submitted value.
 
 The generated private `provider.json` includes the provider, installation identity,
-Core address, generation, approved specification copy and one adapter object:
+Core address (the installation public URL when the node enrolled), generation,
+approved specification copy and one adapter object:
 
 - Docker: explicit Unix `host`, locally imported `image`, `network`, `extra_hosts`
   and absolute `seccomp_file`, with the existing nested-sandbox security settings.
@@ -156,7 +158,9 @@ Keep the private identity/state directory and backend storage together. Do not
 copy node identities, replace a backend directory, or delete snapshots to fix a
 connection problem. Reinstall retains local configuration and identity; changes
 in provider, installation, Core address or release are refused. This is not an
-upgrade or cross-provider migration tool.
+upgrade or cross-provider migration tool. Core records the address each node
+enrolled with. After the installation public URL changes, such a node receives no
+new sandboxes: remove it in Web and add it again with a fresh state directory.
 
 ## Daemon and identity
 

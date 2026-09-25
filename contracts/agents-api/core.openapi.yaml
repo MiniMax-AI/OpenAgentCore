@@ -195,6 +195,78 @@ definitions:
           $ref: '#/definitions/store.ExecutorCredential'
         type: array
     type: object
+  api.Installation:
+    properties:
+      address_bindings:
+        $ref: '#/definitions/store.AddressBindings'
+      api_base_url:
+        description: public_url followed by /v1; null when public_url is null.
+        type: string
+        x-nullable: true
+      configuration:
+        allOf:
+          - $ref: '#/definitions/api.InstallationConfiguration'
+        description: The installer's settings snapshot (AGENTS_API_SETTINGS_FILE); null when the installer did not start Core.
+        x-nullable: true
+      installation_id:
+        description: AGENTS_API_SANDBOX_INSTALLATION_ID; null when Core runs without the sandbox manager.
+        type: string
+        x-nullable: true
+      local_only:
+        description: True when public_url names a loopback host, reachable only from the Core host.
+        type: boolean
+      object:
+        enum:
+          - core.installation
+        type: string
+      public_url:
+        description: 'AGENTS_API_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.'
+        type: string
+        x-nullable: true
+      source_commit:
+        description: Full source commit Core was built from; null for development builds.
+        type: string
+        x-nullable: true
+    type: object
+  api.InstallationConfiguration:
+    properties:
+      applied_at:
+        type: string
+      apply_command:
+        description: Command that applies config.json changes.
+        type: string
+      path:
+        description: Absolute host path of the installation's config.json.
+        type: string
+      settings:
+        items:
+          $ref: '#/definitions/api.InstallationSetting'
+        type: array
+    type: object
+  api.InstallationSetting:
+    properties:
+      changeable:
+        description: False for settings fixed at installation.
+        type: boolean
+      configured:
+        description: 'Present only for a sensitive setting: whether it has a value.'
+        type: boolean
+      default:
+        x-nullable: true
+      key:
+        description: Dotted config.json key, such as ports.core.
+        type: string
+      restarts:
+        description: Services that restart when the setting changes.
+        items:
+          type: string
+        type: array
+      sensitive:
+        type: boolean
+      value:
+        description: Applied value; always null for a sensitive setting.
+        x-nullable: true
+    type: object
   api.ProjectAPIKeyRequest:
     properties:
       name:
@@ -235,8 +307,6 @@ definitions:
     type: object
   api.SandboxDeploymentChangeInput:
     properties:
-      core_url:
-        type: string
       e2b:
         $ref: '#/definitions/api.SandboxE2BInput'
       expected_generation:
@@ -254,8 +324,6 @@ definitions:
     type: object
   api.SandboxDeploymentInput:
     properties:
-      core_url:
-        type: string
       e2b:
         $ref: '#/definitions/api.SandboxE2BInput'
       provider:
@@ -530,6 +598,17 @@ definitions:
       source_commit:
         type: string
     type: object
+  store.AddressBindings:
+    properties:
+      hosted_sandboxes:
+        type: integer
+      nodes:
+        type: integer
+      nodes_on_other_address:
+        type: integer
+      self_hosted_executors:
+        type: integer
+    type: object
   store.AdminAssetCounts:
     properties:
       agents:
@@ -725,6 +804,7 @@ definitions:
   store.RuntimeDeploymentView:
     properties:
       core_url:
+        description: 'Read-only: the installation public URL (AGENTS_API_PUBLIC_URL), which nodes and sandboxes use to reach Core. The deployment API does not accept it.'
         type: string
       e2b:
         $ref: '#/definitions/store.SandboxE2BView'
@@ -762,6 +842,11 @@ definitions:
         type: integer
       cleanup_pending:
         type: integer
+      core_url:
+        description: |-
+          The Core address this node enrolled with. A node whose address differs
+          from the installation public URL receives no new sandboxes; re-add it.
+        type: string
       cpu_count:
         type: integer
       created_at:
@@ -839,6 +924,11 @@ definitions:
         type: integer
       cleanup_pending:
         type: integer
+      core_url:
+        description: |-
+          The Core address this node enrolled with. A node whose address differs
+          from the installation public URL receives no new sandboxes; re-add it.
+        type: string
       cpu_count:
         type: integer
       created_at:
@@ -2877,6 +2967,29 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: Query committed administrator mutations
+      tags:
+        - Core Administration
+  /core/v1/installation:
+    get:
+      description: Core key only; available before any sandbox deployment exists. Reports the public URL that applications, nodes, sandboxes and self-hosted executors use, the API base URL, Core's source commit and installation ID, the installer's settings snapshot with where to change it, and what is bound to the current public URL. Sensitive settings report only whether they are configured.
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.Installation'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve installation facts and process settings
       tags:
         - Core Administration
   /core/v1/metrics:
@@ -5323,7 +5436,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Selects a provider, enforced resource limits, pinned Runtime release and public Core origin. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
+      description: Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
       parameters:
         - description: Deployment selection
           in: body
@@ -5366,7 +5479,7 @@ paths:
     put:
       consumes:
         - application/json
-      description: Requires maintenance, the current generation and verified cleanup of all old resources. Credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory. The public Core origin stays unchanged. Historical records are retained; old node credentials and enrollments are retired. Explicitly resume after success. Never automatically retry an uncertain write.
+      description: Requires maintenance, the current generation and verified cleanup of all old resources. Credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory. A core_url member is rejected with 400; the address comes from the installation public URL. Historical records are retained; old node credentials and enrollments are retired. Explicitly resume after success. Never automatically retry an uncertain write.
       parameters:
         - description: Replacement deployment selection
           in: body

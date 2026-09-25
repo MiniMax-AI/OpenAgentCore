@@ -27,8 +27,7 @@ class NativeServiceTests(unittest.TestCase):
             path = self.bundle / "native" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"\x7fELFfixture-" + name.encode())
-        self.environment.update(AGENTS_API_SANDBOX_INSTALLATION_ID=self.state["installation_id"],
-                                AGENTS_API_CONFIG_FILE=str(self.root / "config/core.env"))
+        self.environment.update(AGENTS_API_SANDBOX_INSTALLATION_ID=self.state["installation_id"])
         (self.root / "config").mkdir(parents=True, mode=0o700)
         (self.root / "config/core.env").write_text(environment_text(self.environment))
         (self.root / "config/core.env").chmod(0o600)

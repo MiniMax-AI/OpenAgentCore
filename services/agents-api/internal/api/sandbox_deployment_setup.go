@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"net/http"
 
@@ -21,7 +22,6 @@ type SandboxDeploymentInput struct {
 	Resources sandbox.Resources       `json:"resources"`
 	Runtime   *sandbox.RuntimeRelease `json:"runtime,omitempty"`
 	Provider  string                  `json:"provider"`
-	CoreURL   string                  `json:"core_url"`
 	E2B       *SandboxE2BInput        `json:"e2b,omitempty"`
 }
 
@@ -31,11 +31,25 @@ type SandboxDeploymentChangeInput struct {
 }
 
 func (v SandboxDeploymentInput) request() store.SandboxDeploymentSetupRequest {
-	input := store.SandboxDeploymentSetupRequest{Provider: v.Provider, CoreURL: v.CoreURL, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Runtime: v.Runtime}}
+	input := store.SandboxDeploymentSetupRequest{Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Runtime: v.Runtime}}
 	if v.E2B != nil {
 		input.E2B = &store.SandboxE2BConfiguration{APIKey: v.E2B.APIKey, Template: v.E2B.Template}
 	}
 	return input
+}
+
+// rejectCoreURL names the retired member instead of reporting a generic unknown
+// member: Core derives core_url from the installation public URL.
+func rejectCoreURL(w http.ResponseWriter, raw json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil {
+		return false
+	}
+	if _, present := fields["core_url"]; !present {
+		return false
+	}
+	writeError(w, http.StatusBadRequest, "invalid_request_error", "core_url is derived from the installation public URL (public_url in config.json, AGENTS_API_PUBLIC_URL for Core) and cannot be set here. Remove it.", "core_url")
+	return true
 }
 
 func WithSandboxDeploymentSetup(initialize func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)) Option {
@@ -50,7 +64,7 @@ func WithSandboxDeploymentChanges(
 }
 
 // @Summary Initialize the deployment sandbox provider
-// @Description Selects a provider, enforced resource limits, pinned Runtime release and public Core origin. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
+// @Description Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Exact retries return the existing selection; differing selections and file-managed deployments reject. This does not create compute or execute work.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -64,8 +78,11 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	if rejectCoreURL(w, raw) {
+		return
+	}
 	var input SandboxDeploymentInput
-	if decodeInputObject(raw, &input, "provider", "core_url", "e2b", "resources", "runtime") != nil {
+	if decodeInputObject(raw, &input, "provider", "e2b", "resources", "runtime") != nil {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
@@ -82,7 +99,7 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 }
 
 // @Summary Change a fully drained deployment's sandbox configuration
-// @Description Requires maintenance, the current generation and verified cleanup of all old resources. Credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory. The public Core origin stays unchanged. Historical records are retained; old node credentials and enrollments are retired. Explicitly resume after success. Never automatically retry an uncertain write.
+// @Description Requires maintenance, the current generation and verified cleanup of all old resources. Credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory. A core_url member is rejected with 400; the address comes from the installation public URL. Historical records are retained; old node credentials and enrollments are retired. Explicitly resume after success. Never automatically retry an uncertain write.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -96,8 +113,11 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	if rejectCoreURL(w, raw) {
+		return
+	}
 	var input SandboxDeploymentChangeInput
-	if decodeInputObject(raw, &input, "provider", "core_url", "e2b", "resources", "runtime", "expected_generation") != nil || input.ExpectedGeneration == 0 {
+	if decodeInputObject(raw, &input, "provider", "e2b", "resources", "runtime", "expected_generation") != nil || input.ExpectedGeneration == 0 {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}

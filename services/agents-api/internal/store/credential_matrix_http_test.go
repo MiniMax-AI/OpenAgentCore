@@ -93,9 +93,9 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, BackendFingerprint: setup.BackendFingerprint, CoreURL: setup.CoreURL + "/api/v1", Provider: provider}, nil
+		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, BackendFingerprint: setup.BackendFingerprint, CoreURL: "https://core.example/api/v1", Provider: provider}, nil
 	}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
-		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, Maintenance: setup.Maintenance, CoreURL: setup.CoreURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
+		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, Maintenance: setup.Maintenance, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
 	})
 	worker, err := execution.StartWorker(ctx, &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: runtimes})
 	if err != nil {
@@ -110,7 +110,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 		})
 	})
 	specification := store.SandboxDeploymentTestSpec("docker")
-	if _, err := worker.InitializeSandboxDeployment(ctx, store.SandboxDeploymentSetupRequest{DeploymentSpec: specification, Provider: "docker", CoreURL: "https://core.example"}); err != nil {
+	if _, err := worker.InitializeSandboxDeployment(ctx, store.SandboxDeploymentSetupRequest{DeploymentSpec: specification, Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
 	var enrollment api.SandboxEnrollmentToken

@@ -3,7 +3,6 @@ import os
 import re
 import stat
 from pathlib import Path
-from urllib.parse import urlsplit
 
 
 def environment_text(values):
@@ -45,11 +44,8 @@ def read_core_environment(root, state=None):
         if not match or match[1] in result:
             raise RuntimeError("Core configuration requires unique names and double-quoted literal values")
         result[match[1]] = re.sub(r'\\([\\"$])', r'\1', match[2])
-    if state is not None:
-        expected = str(path) if state["native_core"] else "/config/core.env"
-        if (result.get("AGENTS_API_SANDBOX_INSTALLATION_ID") != state["installation_id"]
-                or result.get("AGENTS_API_CONFIG_FILE") != expected):
-            raise RuntimeError("Core configuration installation identity or file path differs")
+    if state is not None and result.get("AGENTS_API_SANDBOX_INSTALLATION_ID") != state["installation_id"]:
+        raise RuntimeError("Core configuration installation identity differs")
     return result
 
 
@@ -57,22 +53,20 @@ def bind(source, target, readonly=True):
     return {"type": "bind", "source": str(source).replace("$", "$$"), "target": target, "read_only": readonly}
 
 
-def core_environment(root, state, database_password):
+def core_environment(root, state):
     native = state["native_core"]
     config = str(Path(root) / "config") if native else "/config"
     database = f'127.0.0.1:{state["database_port"]}' if native else "database:5432"
-    daemon_host = f'127.0.0.1:{state["core_port"]}' if native else "core:8091"
-    daemon_url = f"ws://{daemon_host}/api/v1/agent-daemon/ws"
-    if state.get("public_url"):
-        origin = urlsplit(state["public_url"])
-        daemon_url = origin._replace(scheme="wss" if origin.scheme == "https" else "ws",
-                                     path="/api/v1/agent-daemon/ws").geturl()
     result = {
-        "AGENTS_API_DATABASE_URL": f"postgres://agents_api:{database_password}@{database}/agents_api?sslmode=disable",
+        # The password stays in its own file; the URL never carries it.
+        "AGENTS_API_DATABASE_URL": f"postgres://agents_api@{database}/agents_api?sslmode=disable",
+        "AGENTS_API_DATABASE_PASSWORD_FILE": config + "/database.password",
         "AGENTS_API_CREDENTIAL_KEY_FILE": config + "/credential.key",
         "AGENTS_API_ADDR": f'127.0.0.1:{state["core_port"]}' if native else ":8091",
         "AGENTS_API_ENGINE": "codex", "AGENTS_API_HARNESSES": "codex,claude_sdk,mcode",
-        "AGENTS_API_DAEMON_WS_URL": daemon_url,
+        # The one origin applications, nodes, sandboxes and self-hosted executors
+        # use. Without a public URL, only this host reaches Core's loopback port.
+        "AGENTS_API_PUBLIC_URL": state.get("public_url") or f'http://127.0.0.1:{state["core_port"]}',
         "AGENTS_API_E2B_PROVIDER_BIN": (str(Path(root) / "native/e2b/agents-api-e2b-provider")
                                          if native else "/opt/parsar/e2b/agents-api-e2b-provider"),
         "AGENTS_API_E2B_STATE_DIR": str(Path(root) / "state/e2b") if native else "/state/e2b",
@@ -80,7 +74,6 @@ def core_environment(root, state, database_password):
     result["AGENTS_API_CORE_KEY_DIGESTS_FILE"] = (
         str(Path(root) / "admin/core-key-digests.json") if native else "/admin/core-key-digests.json")
     result["AGENTS_API_SANDBOX_INSTALLATION_ID"] = state["installation_id"]
-    result["AGENTS_API_CONFIG_FILE"] = config + "/core.env"
     return result
 
 

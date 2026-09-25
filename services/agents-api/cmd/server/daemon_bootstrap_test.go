@@ -26,7 +26,6 @@ func (s bootstrapCredentialStore) GetDeviceCredential(context.Context, string) (
 
 func TestBootstrapAddressFollowsAuthenticatedAllocation(t *testing.T) {
 	const publicURL = "wss://private-proxy.example/api/v1/agent-daemon/ws"
-	const selectedURL = "wss://selected-node-entry.example/api/v1/agent-daemon/ws"
 	local := &managedNodes{runtime: &execution.RuntimeProvider{LocalNodeID: "local-node", CoreURL: "http://host.microsandbox.internal:8091/api/v1"}}
 	remote := &managedNodes{setup: &managedSetup{store: &setupStore{value: store.SandboxSetup{Provider: "docker", Generation: 1}}}}
 	remote.setup.selected.Store(&execution.RuntimeProvider{CoreURL: "https://selected-node-entry.example/api/v1", Generation: 1})
@@ -38,7 +37,8 @@ func TestBootstrapAddressFollowsAuthenticatedAllocation(t *testing.T) {
 		{"embedded managed", "local-node", "ws://host.microsandbox.internal:8091/api/v1/agent-daemon/ws", local},
 		{"remote managed beside embedded node", "remote-node", publicURL, local},
 		{"self-hosted beside embedded node", "", publicURL, local},
-		{"remote managed after Web setup", "remote-node", selectedURL, remote},
+		// Every placed daemon uses the one address derived from the public URL.
+		{"remote managed after Web setup", "remote-node", publicURL, remote},
 		{"self-hosted after Web setup", "", publicURL, remote},
 		{"self-hosted before Web setup", "", publicURL, zero},
 		{"standalone self-hosted", "", publicURL, nil},
@@ -75,15 +75,5 @@ func TestEmbeddedBootstrapDoesNotFallbackWhenInternalAddressIsInvalid(t *testing
 	h.Bootstrap(response, request)
 	if response.Code != http.StatusServiceUnavailable || strings.Contains(response.Body.String(), "public.example") {
 		t.Fatalf("bootstrap fell back after route failure: %d %s", response.Code, response.Body.String())
-	}
-}
-
-func TestCloudBootstrapUsesAuthenticatedAllocationWithoutNode(t *testing.T) {
-	s := &managedSetup{store: &setupStore{value: store.SandboxSetup{Provider: "e2b", Generation: 1}}}
-	s.selected.Store(&execution.RuntimeProvider{ProviderKind: "e2b", Generation: 1, CoreURL: "https://cloud-entry.example/api/v1"})
-	m := &managedNodes{setup: s}
-	got, err := m.webSocketURL("wss://original.example/api/v1/agent-daemon/ws")(t.Context(), gateway.AuthenticatedRuntime{DeviceID: "device", RuntimeAllocationID: "allocation"})
-	if err != nil || got != "wss://cloud-entry.example/api/v1/agent-daemon/ws" {
-		t.Fatal("cloud allocation lost configured bootstrap address", err)
 	}
 }

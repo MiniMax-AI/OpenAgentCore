@@ -62,6 +62,9 @@ type RuntimeNode struct {
 	Retained       int64      `json:"retained"`
 	CleanupPending int64      `json:"cleanup_pending"`
 	CreatedAt      time.Time  `json:"created_at"`
+	// The Core address this node enrolled with. A node whose address differs
+	// from the installation public URL receives no new sandboxes; re-add it.
+	CoreURL string `json:"core_url"`
 }
 type RuntimeNodeUpdate struct {
 	Name      string `json:"name"`
@@ -115,11 +118,12 @@ type RuntimeDeploymentView struct {
 	E2B                 *SandboxE2BView            `json:"e2b,omitempty"`
 	// Idle suspension policy; microsandbox only, otherwise null.
 	Suspension     *SandboxSuspensionView `json:"suspension" extensions:"x-nullable"`
-	CoreURL        string                 `json:"core_url"`
 	InstallationID string                 `json:"installation_id"`
 	Provider       string                 `json:"provider"`
 	Maintenance    bool                   `json:"maintenance"`
 	OwnerEpoch     uint64                 `json:"owner_epoch"`
+	// Read-only: the installation public URL (AGENTS_API_PUBLIC_URL), which nodes and sandboxes use to reach Core. The deployment API does not accept it.
+	CoreURL string `json:"core_url"`
 }
 type RuntimeNodeAllocation struct {
 	Diagnostic    string `json:"diagnostic"`

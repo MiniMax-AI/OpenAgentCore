@@ -6,7 +6,7 @@ no credential works in another namespace.
 | Namespace | Caller | Credential | Contents | Reference |
 | --- | --- | --- | --- | --- |
 | `/v1` | Applications (business systems, SDKs) | Project API key | Exactly the pinned official Agents API routes. Core-only fields live only in `x_agents_core` (`harness`, `model_provider`) | [Public API](public-agent-api.md) |
-| `/core/v1` | Core Web's server and operator scripts | [Core key](../getting-started/operations.md#core-key) | Projects and keys, resource reads and deletion, Session archive, credential issuance, metrics, audit, sandbox deployment and nodes | [Core API](#core-api), [Web API](web-management.md), [Core OpenAPI](../../contracts/agents-api/core.openapi.yaml) |
+| `/core/v1` | Core Web's server and operator scripts | [Core key](../getting-started/operations.md#core-key) | Installation facts, Projects and keys, resource reads and deletion, Session archive, credential issuance, metrics, audit, sandbox deployment and nodes | [Core API](#core-api), [Web API](web-management.md), [Core OpenAPI](../../contracts/agents-api/core.openapi.yaml) |
 | `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials: node enrollment tokens and executor credentials issued through `/core/v1`, node credentials registered with an enrollment token, and daemon credentials Core writes into hosted sandboxes | Machine connections only: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets; each credential works only on its own routes | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [executor credentials](../../contracts/agents-api/environment-executor-credentials.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
 
 A Project API key gets 401 on `/core/v1` and `/api/v1`; the Core key gets 401 on
@@ -49,6 +49,7 @@ with the Core key.
 | `projects/{project_id}/sessions/{session_id}/runtime-history` | Stored Runtime history | [Runtime history](../../contracts/agents-api/runtime-history-api.md) |
 | `projects/{project_id}/{resource-owners,write-operations}`, `audit-log`, `summary` | Provenance, write history, administrator audit and usage summary | [Write audit](../../contracts/agents-api/write-audit.md), [administrator contract](../../contracts/agents-api/admin-api.md) |
 | `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | Executor credentials for a self-hosted Environment | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) |
+| `installation` | Public URL, API base URL, source commit, the installer's process settings and what is bound to the public URL; available before any deployment | [Installation](../../contracts/agents-api/installation.md) |
 | `metrics` | Core's own process metrics | [Core metrics](../../contracts/agents-api/core-metrics.md) |
 | `sandbox/deployment[/maintenance]`, `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Sandbox deployment, node enrollment tokens and nodes | [Sandbox deployment](../../contracts/agents-api/sandbox-deployment.md), [node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md), [node host history](../../contracts/agents-api/node-host-history.md) |
 

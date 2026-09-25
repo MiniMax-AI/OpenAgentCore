@@ -24,6 +24,7 @@ function clientWith(value: unknown) {
 const page = (data: Array<{ id: string }>) => ({ object: "list", data, has_more: false, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null });
 
 const routeCases: Array<[string, string, (client: AdminClient) => Promise<unknown>]> = [
+  ["GET", "/installation", (client) => client.retrieveInstallation()],
   ["GET", "/projects", (client) => client.listProjects()],
   ["POST", "/projects", (client) => client.createProject({ name: "Research" })],
   ["POST", `/projects/${projectId}`, (client) => client.renameProject(projectId, { name: "Renamed" })],
@@ -278,6 +279,32 @@ describe("AdminClient deployment read models", () => {
   it("requires the project wrapper for global Runtime observations", async () => {
     expect(await clientWith(page([])).client.listRuntimeObservations()).toEqual(page([]));
     await expect(clientWith({ ...page([]), data: [{ project_id: projectId, observation: { id: sessionId, token: "leak" } }] }).client.listRuntimeObservations()).rejects.toBeInstanceOf(AgentCoreError);
+  });
+});
+
+describe("AdminClient installation", () => {
+  const port = { key: "ports.core", value: 8091, default: 8091, changeable: true, sensitive: false, restarts: ["core"] };
+  const headers = { key: "core.runtime_history.headers", value: null, default: null, configured: true, changeable: true, sensitive: true, restarts: ["core"] };
+  const installation = {
+    object: "core.installation", installation_id: resourceId, public_url: "https://core.example", api_base_url: "https://core.example/v1",
+    local_only: false, source_commit: "a".repeat(40),
+    configuration: { path: "/home/alice/.parsar/core/config.json", apply_command: "/home/alice/.parsar/core/parsar apply", applied_at: "2026-09-25T09:30:00Z", settings: [port, headers] },
+    address_bindings: { nodes: 2, nodes_on_other_address: 1, hosted_sandboxes: 3, self_hosted_executors: 1 },
+  };
+  it("reads installation facts before any deployment and rejects inconsistent snapshots", async () => {
+    expect(await clientWith(installation).client.retrieveInstallation()).toEqual(installation);
+    expect(await clientWith({ ...installation, installation_id: null, public_url: null, api_base_url: null, source_commit: null, configuration: null }).client.retrieveInstallation()).toMatchObject({ public_url: null });
+    const configuration = (settings: unknown[]) => ({ ...installation, configuration: { ...installation.configuration, settings } });
+    for (const invalid of [
+      configuration([port, { ...headers, value: { authorization: "leak" } }]),
+      configuration([port, { key: headers.key, value: null, default: null, changeable: true, sensitive: true, restarts: ["core"] }]),
+      configuration([port, port]),
+      { ...installation, address_bindings: { ...installation.address_bindings, nodes_on_other_address: 3 } },
+      { ...installation, token: "leak" },
+      configuration([{ ...port, configured: true }]),
+    ]) {
+      await expect(clientWith(invalid).client.retrieveInstallation()).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
   });
 });
 
