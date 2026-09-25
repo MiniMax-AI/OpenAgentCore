@@ -1,4 +1,4 @@
-import { AgentCoreError, type IssuedExecutorCredential } from "@agents-core-web/agents-client";
+import { AgentCoreError, type ExecutorCredential, type IssuedExecutorCredential } from "@agents-core-web/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, Download, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -54,6 +54,10 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error ?? "");
 }
 
+function sameKey(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
 function seconds(value: string | null): number | null {
   return value === null ? null : Math.floor(Date.parse(value) / 1000);
 }
@@ -62,11 +66,13 @@ function seconds(value: string | null): number | null {
  * Executor credentials of a self-hosted Session's environment: Core issues,
  * rotates and revokes them with the deployment's Core key. An issued
  * credential is shown once, lives only in this component's state and is
- * forgotten when its dialog closes. Writes are never retried automatically:
- * an issuance with an unknown outcome keeps its key ID, and after the list is
- * refreshed the administrator rotates it (issued, secret lost) or issues it
- * again (not issued). An archived project's credentials are listed and
- * revoked but neither issued nor rotated.
+ * forgotten when the administrator presses Done; dismissing the dialog keeps
+ * it on the page. Writes are never retried automatically: an issuance with an
+ * unknown outcome keeps its key ID, and after the list is refreshed the
+ * administrator rotates it (issued, secret lost) or issues it again (not
+ * issued). A kept key ID that is listed is never sent again: its row's actions
+ * own it. An archived project's credentials are listed and revoked but neither
+ * issued nor rotated.
  */
 export function ExecutorCredentialsSection({ projectId, sessionId, environmentId }: { projectId: string; sessionId: string; environmentId: string }) {
   const { t, i18n } = useTranslation("sessions");
@@ -80,48 +86,66 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   const reread = () => { void refetch(); };
   useFailureToast(credentials && failedLast(query) ? message(query.error) : null, t("executor.refreshFailed"), "executor-credentials-read");
 
-  // The key ID of an issuance in flight or with an unknown outcome; the next Issue sends it again.
+  // The key ID of an issuance in flight or with an unknown outcome; the next Issue sends it again unless it is listed.
   const [kept, setKept] = useState<string | null>(null);
+  const forget = (keyId: string) => setKept((current) => (current !== null && sameKey(current, keyId) ? null : current));
   const [issuing, setIssuing] = useState(false);
   // The unknown-outcome dialog; the key ID stays for its closing animation.
   const [uncertain, setUncertain] = useState<{ keyId: string; open: boolean } | null>(null);
   const [rotation, setRotation] = useState<{ keyId: string; lost: boolean } | null>(null);
   const [rotating, setRotating] = useState(false);
   const [rotationError, setRotationError] = useState<string | null>(null);
-  const [shown, setShown] = useState<{ credential: IssuedExecutorCredential; open: boolean } | null>(null);
+  // The credential shown once: in its dialog, or on the page once the dialog is dismissed, until Done.
+  const [shown, setShown] = useState<{ credential: IssuedExecutorCredential; open: boolean; done: boolean } | null>(null);
   const revoke = useDeleteFlow<string>(
-    (keyId) => admin.revokeExecutorCredential(projectId, environmentId, keyId),
+    (keyId) => admin.revokeExecutorCredential(projectId, environmentId, keyId).then(() => forget(keyId)),
     reread,
     { uncertain: t("executor.revokeDialog.uncertain") },
   );
-  const busy = issuing || rotating || revoke.busy;
+  const held = shown !== null && !shown.done;
+  // A held credential also blocks writes: another issuance would replace it.
+  const busy = issuing || rotating || revoke.busy || held;
 
-  // Closing the dialog forgets the credential once the dialog has faded out.
+  // Done forgets the credential once its dialog has faded out.
+  const done = shown?.done ?? false;
   useEffect(() => {
-    if (!shown || shown.open) return;
+    if (!done) return;
     const timer = window.setTimeout(() => setShown(null), 250);
     return () => window.clearTimeout(timer);
-  }, [shown]);
+  }, [done]);
   // A reload or a closed tab would lose a credential that is shown only once.
-  const showing = shown?.open ?? false;
   useEffect(() => {
-    if (!showing) return;
+    if (!held) return;
     const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); };
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
-  }, [showing]);
+  }, [held]);
 
   const openRotation = (keyId: string, lost: boolean) => { setRotationError(null); setRotation({ keyId, lost }); };
 
+  // Reads the list again and finds a key ID in it; undefined when the read failed.
+  const findListed = async (keyId: string): Promise<ExecutorCredential | null | undefined> => {
+    const result = await refetch();
+    if (!result.data || result.isError) return undefined;
+    return result.data.find((credential) => sameKey(credential.key_id, keyId)) ?? null;
+  };
+  // An issued key ID whose secret never arrived is rotated for a fresh one, if it is still active.
+  const recoverLost = (found: ExecutorCredential): boolean => {
+    const rotatable = found.revoked_at === null && !archived;
+    if (rotatable) openRotation(found.key_id, true);
+    return rotatable;
+  };
+
   const issue = async () => {
     if (busy) return;
-    const keyId = kept ?? newKeyId();
+    // A listed key ID is managed from its row; reusing it would recover a credential that was since rotated or revoked.
+    const keyId = kept !== null && !credentials?.some((credential) => sameKey(credential.key_id, kept)) ? kept : newKeyId();
     setKept(keyId);
     setIssuing(true);
     try {
       const credential = await admin.issueExecutorCredential(projectId, environmentId, { key_id: keyId, rotate: false }, { signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) });
       setKept(null);
-      setShown({ credential, open: true });
+      setShown({ credential, open: true, done: false });
       reread();
     } catch (error) {
       const failure = writeFailure(error);
@@ -130,13 +154,18 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
         return;
       }
       setKept(null);
+      if (failure.code === "executor_credential_exists") {
+        // An earlier attempt with this key ID may have been issued after all, its secret lost.
+        const found = await findListed(keyId);
+        if (!found || !recoverLost(found)) {
+          toast.show(t("executor.issueRejected"), { tone: "error", detail: found?.revoked_at ? t("executor.existsRevoked", { id: shortId(keyId) }) : failure.message });
+        }
+        return;
+      }
       if (failure.code === "project_archived") {
         // Archived meanwhile: read the project again so issuing and rotating disappear.
         toast.show(t("executor.issueRejected"), { tone: "error", detail: t("executor.archived") });
         refreshProjects();
-      } else if (failure.code === "executor_credential_exists") {
-        // An earlier attempt with this key ID was issued after all; its secret never arrived.
-        openRotation(keyId, true);
       } else {
         toast.show(t("executor.issueRejected"), { tone: "error", detail: failure.message });
       }
@@ -148,15 +177,14 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
 
   // After an unknown outcome: issued (rotate it for a fresh secret) or not (the next Issue reuses the key ID).
   const checkKept = async (keyId: string) => {
-    const result = await refetch();
-    if (!result.data || result.isError) return;
-    const found = result.data.find((credential) => credential.key_id.toLowerCase() === keyId.toLowerCase());
-    if (!found) {
+    const found = await findListed(keyId);
+    if (found === undefined) return;
+    if (found === null) {
       toast.show(t("executor.notIssued", { id: shortId(keyId) }), { tone: "info" });
       return;
     }
     setKept(null);
-    if (found.revoked_at === null && !archived) openRotation(found.key_id, true);
+    recoverLost(found);
   };
 
   const rotate = async () => {
@@ -166,7 +194,8 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
     try {
       const credential = await admin.issueExecutorCredential(projectId, environmentId, { key_id: rotation.keyId, rotate: true }, { signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) });
       setRotation(null);
-      setShown({ credential, open: true });
+      forget(rotation.keyId);
+      setShown({ credential, open: true, done: false });
     } catch (error) {
       const failure = writeFailure(error);
       if (failure.kind === "rejected" && failure.code === "project_archived") {
@@ -193,7 +222,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       ? <EmptyState title={t("executor.loadFailed")} description={message(query.error)} action={<button className="button outline" type="button" onClick={reread}>{t("detail.retry")}</button>} />
       : <TableSkeleton label={t("executor.loading")} rows={2} columns={4} />;
   } else if (!credentials.length) {
-    body = <EmptyState title={t("executor.empty")} action={issueButton} />;
+    body = <EmptyState title={t("executor.empty")} />;
   } else {
     body = (
       <div className="table-frame">
@@ -201,7 +230,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
           <thead>
             <tr>
               <th scope="col">{t("executor.columns.credential")}</th>
-              <th scope="col">{t("executor.columns.issued")}</th>
+              <th scope="col">{t("executor.columns.created")}</th>
               <th scope="col">{t("executor.columns.status")}</th>
               <th scope="col"><span className="visually-hidden">{t("log.actions")}</span></th>
             </tr>
@@ -243,17 +272,25 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
     );
   }
 
-  const hideShown = () => setShown((current) => current && { ...current, open: false });
+  // Dismissing the dialog keeps the credential on the page; only Done forgets it.
+  const dismissShown = () => setShown((current) => current && { ...current, open: false });
+  const finishShown = () => setShown((current) => current && { ...current, open: false, done: true });
 
   return (
     <Section headingId="session-executor-heading" title={t("executor.title")} help={t("executor.help")} actions={issueButton}>
       {archived ? <p className="coverage-note">{t("executor.archived")}</p> : null}
+      {shown && !shown.open && !shown.done ? (
+        <section className="executor-credential-pending" aria-label={t("executor.issued.title")}>
+          <CredentialFile credential={shown.credential} />
+          <div><button className="button primary" type="button" onClick={finishShown}>{t("executor.issued.done")}</button></div>
+        </section>
+      ) : null}
       {body}
       <Modal
-        open={showing}
+        open={shown?.open ?? false}
         title={t("executor.issued.title")}
-        onClose={hideShown}
-        footer={<button className="button primary" type="button" onClick={hideShown}>{t("executor.issued.done")}</button>}
+        onClose={dismissShown}
+        footer={<button className="button primary" type="button" onClick={finishShown}>{t("executor.issued.done")}</button>}
       >
         {shown ? <CredentialFile credential={shown.credential} /> : null}
       </Modal>

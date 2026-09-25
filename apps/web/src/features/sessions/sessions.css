@@ -413,3 +413,13 @@
   font-size: 12.5px;
   line-height: 18px;
 }
+
+/* A credential whose dialog was dismissed stays on the page until Done. */
+.executor-credential-pending {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--frame-radius);
+}
