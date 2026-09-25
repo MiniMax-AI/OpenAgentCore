@@ -157,19 +157,19 @@ incomplete. Durable acceptance is not an exactly-once side-effect guarantee.
 
 Run migrations first, then `go run ./services/agents-api/cmd/server`. The service
 uses `AGENTS_API_DATABASE_URL` for its dedicated database; it does not read the
-product database or accept product login cookies. Configure the Core key digest
-file through `AGENTS_API_CORE_KEY_DIGESTS_FILE` at startup to manage Projects and
-keys. The Core key cannot authenticate `/v1`, and application API keys cannot
-authenticate administrator routes.
+product database or accept product login cookies. It requires the Core key digest
+file named by `AGENTS_API_CORE_KEY_DIGESTS_FILE` at startup; the Core key
+authenticates `/core/v1`, where Projects and keys are managed. The Core key cannot
+authenticate `/v1`, and application API keys cannot authenticate `/core/v1`.
 
 Projects and API keys live only in the database. Configuration files contain
 infrastructure settings and deployment credentials, not business identities.
 Installation creates no Project or application key. Using the
 [administrator API](../../contracts/agents-api/admin-api.md), create a Project with
 `POST /core/v1/projects` and issue a named key with
-`POST /core/v1/projects/{project_id}/keys`. Both requests accept a JSON object containing `name`;
-Core generates the identifiers. The Web management screens still need migration;
-see [integration status](../../docs/web/README.md).
+`POST /core/v1/projects/{project_id}/keys`, or use Core Web's **Projects and
+keys** page. Both requests accept a JSON object containing `name`; Core generates
+the identifiers.
 
 A Project owns one tenant and one execution principal. All keys in it have equal
 access to its assets and share that principal; write provenance records the actual

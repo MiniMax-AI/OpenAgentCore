@@ -51,11 +51,10 @@ Keep administrator target scope separate from caller principals. See
 
 Administrator writes and their audit record share one PostgreSQL transaction.
 Reuse existing resource deletion and serialization code. Cross-Project copying was
-removed. `admin_resource_owners` alone feeds the historical `source:"admin_copy"`
-provenance read; `admin_asset_copies` is retained only because tables are not
-dropped. Unknown historical provenance remains unknown. No secrets or request
-bodies enter logs. The console's fixed actor label (`console`) is only an audit
-display label, never an authorization input.
+removed; only the historical `source:"admin_copy"` provenance read remains, fed by
+`admin_resource_owners`. Unknown historical provenance remains unknown. No secrets
+or request bodies enter logs. The console's fixed actor label (`console`) is only
+an audit display label, never an authorization input.
 
 When requirements conflict, object ownership is unclear, or a design would need
 parallel compatibility paths, raise the issue with a concrete recommendation and
@@ -193,8 +192,8 @@ coverage ledgers and official SDK/raw HTTP tests when changing API behavior.
 Run `make openapi` after handler annotation changes. It reuses the original
 Core-only swaggo v1.16.4 generator, then splits the result by namespace: `/v1`
 into `openapi.yaml`, `/core/v1` into `core.openapi.yaml` and `/api/v1` into
-`runtime.openapi.yaml` (the last two with base path `/`), each keeping only the
-security schemes its operations use. All generated schemas remain free of product
+`runtime.openapi.yaml`; the last two use base path `/` and keep only the security
+schemes their operations use. All generated schemas remain free of product
 routes.
 
 Core changes must retain the independent build and official-client workflow.
@@ -780,9 +779,9 @@ A locally unavailable provider dependency keeps hosted admission closed while th
 existing scan waits for repair; administrator recovery remains available, including
 on restart. Database and ownership errors remain failures. Unconfigured hosted
 admission creates no Session state. Derive Runtime bootstrap and daemon WebSocket
-addresses from the saved validated origin, never inbound Host headers. Use the live
-deployment API for selections made after startup; the startup configuration API
-remains a startup snapshot.
+addresses from the saved validated origin, never inbound Host headers. Read the
+current selection from the live deployment API; there is no startup configuration
+read.
 
 Provider, resources and Runtime changes require maintenance, the current generation
 and verified zero retained or pending resources. The Core origin remains unchanged
@@ -1861,9 +1860,9 @@ Nodes and Core come from one distribution; older nodes using the removed
 `/core/v1/sandbox` node paths cannot connect and are replaced through the drained
 upgrade and re-enrollment workflow.
 
-The Web manager offers no manual Core key entry outside sign-in. A console without
-paired management configuration shows setup guidance; direct remote project API
-connections do not silently administer the console's configured deployment.
+The Web manager offers no manual Core key entry outside sign-in, and Web refuses
+to start without its Core key file. It holds no Project API key and never calls
+`/v1`.
 Chinese/English sandbox text, status and diagnostic formatting live in the shared
 `apps/web/src/lib/` locale modules. A persisted explicit language preference wins
 before the first browser language; unrelated product surfaces are outside this
@@ -2237,9 +2236,9 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   written with provenance in the same creation transaction as Session resources.
   Read no credential ciphertext and never recompute sources from current Agents
   or operator defaults. Model/harness sources are independent; provider bundles
-  retain one source. Project reads redact all deployment provider details. Old
-  Sessions expose persisted model/harness with unknown sources and unavailable
-  provider metadata, without backfill. Projection metadata does not alter retry
+  retain one source. The read is Core-key only, under `/core/v1`; `/v1` has no
+  execution-configuration read. Old Sessions expose persisted model/harness with
+  unknown sources and unavailable provider metadata, without backfill. Projection metadata does not alter retry
   identity; retries cannot replace it. Keep this administrator query separate from
   runtime observations and do not touch activity or wake sandboxes. The versioned
   contract is `contracts/agents-api/execution-configuration.md`.
@@ -2247,9 +2246,9 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Keep one internal registry for protocol and token-limit validation; Core owns
   credential environment and endpoint admission policy. These rules are not a
   public discovery API or Runtime registration descriptor. Operation qualification
-  and live readiness retain their existing owners. The Core startup view keeps its
-  basic supported/configured deployment snapshot and accepts no query parameters.
-  Session frozen execution-configuration reads remain a separate administrator read.
+  and live readiness retain their existing owners. There is no startup
+  configuration read; Session frozen execution-configuration reads remain a
+  separate administrator read.
 - Public Agent updates use `POST /v1/agents/{agent_id}` with the same tenant/Beta
   boundary and shared saved-field validation. Preserve omission separately from
   null; only supplied fields replace saved values. Metadata is a separate whole-map
@@ -2352,12 +2351,14 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   and verify supported behavior using the official client. Track current coverage
   in `contracts/agents-api/README.md`; SDK workflow objects are not this contract.
 - Shared supported wire types live in `contracts/agents-api/v1`. `make openapi`
-  separately generates the product spec and `contracts/agents-api/openapi.yaml`;
-  never mix their routes or authentication schemes. CI checks both for drift.
+  writes `openapi.yaml` (`/v1`), `core.openapi.yaml` (`/core/v1`) and
+  `runtime.openapi.yaml` (`/api/v1`); never mix their routes or authentication
+  schemes. Review the generated diffs; contract tests hold `openapi.yaml` to the
+  pinned routes and fields.
 - The standalone service uses `AGENTS_API_DATABASE_URL`. PostgreSQL stores Projects,
   their immutable execution scopes and API-key digests. Keys in the same Project
   resolve to one shared service-account principal and tenant. Project/key writes
-  are managed through deployment-authenticated APIs, not configuration files.
+  go through Core-key `/core/v1` routes, not configuration files.
   Optional `OpenAI-Organization` and `OpenAI-Project` headers must match the key;
   repeated/conflicting values fail authentication. Metadata, forwarded identities
   and product session cookies grant no access. Issue/revoke operations take effect
@@ -3480,7 +3481,7 @@ queue. A failed audit must roll back the write. Internal lifecycle/refresh work 
 not acquire public provenance. Retries never replace ownership. Environment uploads
 persist safe request origin before dispatch and record success with the confirmed
 receipt, not the native filesystem call. Never put payloads, paths or secrets in
-audit metadata. Read models are deployment-authenticated `/core/v1` extensions;
-keep `/v1` wire contracts unchanged. See
+audit metadata. Read models are Core-key `/core/v1` routes; keep `/v1` wire
+contracts unchanged. See
 [write-audit.md](contracts/agents-api/write-audit.md) for coverage, retention and
 console integration. Do not confuse key identity with Session creator identity.

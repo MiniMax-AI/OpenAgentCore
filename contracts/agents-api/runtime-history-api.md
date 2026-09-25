@@ -1,6 +1,6 @@
 # Runtime history API
 
-Status: public contract, strict TypeScript client, PostgreSQL history and Core Web
+Status: Core-key contract, strict TypeScript client, PostgreSQL history and Core Web
 History ranges implemented. Core uses its existing database; the execution owner
 samples every 30 seconds by default. API-only processes without an execution worker
 collect only on read; their Session history read returns
@@ -144,7 +144,7 @@ or malformed data reject the entire response with a 502 `invalid_admin_response`
 ## Explicit boundaries
 
 - The routes never sample a live provider, provision compute, or mutate lifecycle.
-- The public contract does not expose a storage backend.
+- The contract does not expose a storage backend.
 - History availability does not imply current Runtime readiness.
 - Current observations and Durable history have separate freshness and retention
   semantics and must remain separately labelled in Web.

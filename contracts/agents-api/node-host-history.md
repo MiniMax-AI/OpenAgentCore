@@ -1,8 +1,8 @@
 # Administrator node host observations
 
-`GET /core/v1/sandbox/nodes/{node_id}?range=1h|6h|24h` requires deployment
-administrator authentication. Core Web forwards it through its authenticated
-server; Project, enrollment and node credentials do not authorize this read.
+`GET /core/v1/sandbox/nodes/{node_id}?range=1h|6h|24h` requires the Core key.
+Core Web forwards it with the Core key after console sign-in; Project, enrollment
+and node credentials do not authorize this read.
 The omitted range defaults to `1h`. Invalid, repeated or unknown query parameters
 return the existing invalid-input response; missing or removed nodes return 404.
 

@@ -1,7 +1,7 @@
 # Runtime observation API
 
 Status: Phase 2 and initial Core Web consumption implemented. The current-snapshot routes, strict
-`packages/agents-client` projection, and generated `openapi.yaml` contract are
+`packages/agents-client` projection, and generated `core.openapi.yaml` contract are
 implemented and consumed by the Dashboard through complete Session/observation
 identity joins. Durable history uses the separate optional
 [Runtime history API](runtime-history-api.md); lifecycle controls remain outside

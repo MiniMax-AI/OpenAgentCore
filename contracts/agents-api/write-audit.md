@@ -9,8 +9,8 @@ replacement for a Session's creator identity.
 Authentication carries the issued key UUID and its Project's tenant/principal.
 Keys in one Project share assets and permissions; provenance records which key
 performed each write. All business keys live in PostgreSQL. Configuration contains
-no business keys or Projects. Console credentials authenticate only management
-operations and are never public API identities. Client headers cannot assert a
+no business keys or Projects. The Core key authenticates only `/core/v1` and is
+never a public API identity. Client headers cannot assert a
 key identity, and display names do not change an ID.
 
 True creation stores ownership in the same transaction as the resource and operation.

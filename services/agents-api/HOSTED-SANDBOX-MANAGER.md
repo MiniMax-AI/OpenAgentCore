@@ -8,15 +8,14 @@ Docker/microsandbox nodes must match its installation, generation and specificat
 are distinct from user-managed `self_hosted` Environments, whose provisioning
 remains the user's responsibility.
 
-The Web console's **Hosted Sandbox Manager** page uses deployment administrator
-authority, separate from project credentials. In a paired distribution, the
-console server reads the Core key and forwards it only on sandbox management
-routes after console login. The Core key never reaches the browser. There is no
-second login or manual key form. Management uses the
-same-origin paired console connection; direct remote project connections do not
-grant deployment access. An unpaired console shows setup guidance. For manual or
-Web-only deployments, an operator configures the matching private `0600` Core key
-file server-side through `CORE_CONSOLE_CORE_KEY_FILE`.
+The Web console's **Hosted Sandbox Manager** page uses the Core key, separate from
+Project API keys. After console sign-in, the console server forwards the page's
+`/core/v1/sandbox` requests, like every other `/core/v1` request, with the Core
+key it reads from its private file. The Core key never reaches the browser. There
+is no second login or manual key form. For manual or Web-only deployments, an
+operator configures the matching private `0600` Core key file server-side through
+`CORE_CONSOLE_CORE_KEY_FILE`; Web refuses to start without it. Core serves the
+deployment and node routes only when `AGENTS_API_SANDBOX_INSTALLATION_ID` is set.
 
 The sandbox page and its setup, enrollment, status and diagnostic controls support
 Chinese and English. Choose a language in System navigation; the preference is
@@ -40,11 +39,12 @@ then choose Docker or microsandbox. Supply the per-sandbox resources and matched
 Runtime release as part of initial setup. E2B takes an account API key, CPU/memory
 limits and a qualified immutable Runtime template build (`template-id:build-uuid`);
 its exact ready build must match those limits before the selection can be saved. The key is write-only,
-encrypted by Core and never returned to the browser. E2B needs no node installation. It defaults to the
-paired console origin, which forwards the required Core API and WebSocket routes.
-Use advanced network settings only when nodes and guests need a different public
-HTTPS origin. When the inferred address is loopback or is not HTTPS, setup
-opens the network field and requires a non-loopback HTTPS origin before saving.
+encrypted by Core and never returned to the browser. E2B needs no node installation.
+The saved Core origin defaults to the paired console's public origin, where the
+reverse proxy sends `/api/v1`, including WebSocket upgrades, directly to Core; Web
+does not forward it. Use advanced network settings only when nodes and guests need
+a different public HTTPS origin. When the inferred address is loopback or is not
+HTTPS, setup opens the network field and requires a non-loopback HTTPS origin before saving.
 The API still accepts HTTP loopback for explicit local development; a guest's
 loopback address cannot reach its Core host.
 

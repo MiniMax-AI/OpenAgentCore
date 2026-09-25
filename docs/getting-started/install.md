@@ -67,9 +67,6 @@ retains that URL for remote node downloads; it does not silently change mirrors.
 
 ## Sign in to Web
 
-The management backend and client require the corresponding Web screen migration
-before release. See [console integration status](../web/README.md).
-
 Installation creates private configuration under `~/.parsar/core`, a dedicated
 PostgreSQL volume and a credential encryption key. Installation creates no Project
 or application API key. Projects and their keys are managed in the database;
@@ -83,9 +80,9 @@ the example above) and sign in with the Core key from
 one role: administrator, with access to every console operation. The paired
 console already connects to Core with the same key on the server side.
 
-Use the administrator API to create a Project, then issue a named API key within
-it and save the one-time plaintext response privately. Core stores only its digest.
-The corresponding Web management screens remain pending. Multiple keys in a Project
+Use Web's **Projects and keys** page or the administrator API to create a Project,
+then issue a named API key within it and save the one-time plaintext response
+privately. Core stores only its digest. Multiple keys in a Project
 share its assets and execution principal; writes record the actual key separately.
 Rotate by issuing another key in that Project and revoking the old one. Archiving
 the Project disables all its keys and retains assets for inspection and deletion.
@@ -109,8 +106,8 @@ Use exactly the displayed console address; the production proxy validates its
 configured origin. Sign-in sessions live in the console's memory. They expire after
 12 hours, and you sign in again after a console restart or a Core key rotation.
 Sign-in, status and sign-out use private `/console/auth` routes and do not extend
-the public Agent API. The console rejects every `/v1` request, including requests
-carrying an explicit Bearer token; it holds no caller key.
+the public Agent API. The console rejects every `/v1` and `/api/v1` request,
+including requests carrying an explicit Bearer token; it holds no caller key.
 
 Core loads the Core key digest from `AGENTS_API_CORE_KEY_DIGESTS_FILE`. Only the
 Core container mounts the digest file, read-only. The bundled Web server reads the

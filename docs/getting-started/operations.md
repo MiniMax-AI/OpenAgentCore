@@ -149,6 +149,7 @@ replacement. Stop the services, then:
 | `admin/digests.json` | `admin/core-key-digests.json` | File; Core bind mount in `compose.json` |
 | `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` | `AGENTS_API_CORE_KEY_DIGESTS_FILE` | `config/core.env`; its value names the renamed file |
 | `CORE_CONSOLE_ADMIN_TOKEN_FILE` | `CORE_CONSOLE_CORE_KEY_FILE` | Web `environment` in `compose.json` |
+| `--admin-token-file` | `--core-key-file` | `install.sh --web-only` flag; the installer rejects the old flag |
 
 Also remove `CORE_CONSOLE_AUTH_MODE`, `CORE_CONSOLE_STATE_DIR` and
 `CORE_CONSOLE_PASSWORD_FILE` from Web's environment, with their `state/console`
@@ -161,8 +162,7 @@ backup. Then start the services and sign in with the Core key.
 
 Use Web, or the [Core API](../../contracts/agents-api/admin-api.md) under
 `/core/v1/projects` with the Core key, to create a Project and issue its first key
-after installation. The Web management migration
-is still pending; see [integration status](../web/README.md). No configuration file
+after installation. No configuration file
 defines Projects or application keys. API-key plaintext is returned once at issuance,
 with only its digest stored in the database.
 

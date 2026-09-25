@@ -7,7 +7,7 @@ no credential works in another namespace.
 | --- | --- | --- | --- | --- |
 | `/v1` | Applications (business systems, SDKs) | Project API key | Exactly the pinned official Agents API routes. Core-only fields live only in `x_agents_core` (`harness`, `model_provider`) | [Public API](public-agent-api.md) |
 | `/core/v1` | Core Web's server and operator scripts | [Core key](../getting-started/operations.md#core-key) | Projects and keys, resource reads and deletion, Session archive, credential issuance, metrics, audit, sandbox deployment and nodes | [Core API](#core-api), [Web API](web-management.md), [Core OpenAPI](../../contracts/agents-api/core.openapi.yaml) |
-| `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials issued through `/core/v1` | Machine connections only: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets; each credential works only on its own routes | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [executor credentials](../../contracts/agents-api/environment-executor-credentials.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
+| `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials: node enrollment tokens and executor credentials issued through `/core/v1`, node credentials registered with an enrollment token, and daemon credentials Core writes into hosted sandboxes | Machine connections only: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets; each credential works only on its own routes | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [executor credentials](../../contracts/agents-api/environment-executor-credentials.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
 
 A Project API key gets 401 on `/core/v1` and `/api/v1`; the Core key gets 401 on
 `/v1` and `/api/v1`. Projects own assets. Multiple equally privileged keys share
@@ -27,9 +27,18 @@ The deployment's reverse proxy sends `/v1`, `/v1/*` and `/api/v1/*` to Core and
 every other path, including `/core/v1/*`, to Web. Operator scripts call `/core/v1`
 with the Core key on Core's loopback port, not through the public entry.
 
+## Public API
+
+Applications call every `/v1` route with a Project API key. The routes are exactly
+the 58 method and path pairs in
+[upstream-routes.json](../../contracts/agents-api/upstream-routes.json); the
+[Public API guide](public-agent-api.md) groups them by resource. `/v1` has no
+Core-only route.
+
 ## Core API
 
-All routes are under `/core/v1` and require the Core key.
+All routes are under `/core/v1`. Core Web's server and operator scripts call them
+with the Core key.
 
 | Routes | Contents | Contract |
 | --- | --- | --- |
@@ -42,6 +51,19 @@ All routes are under `/core/v1` and require the Core key.
 | `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | Executor credentials for a self-hosted Environment | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) |
 | `metrics` | Core's own process metrics | [Core metrics](../../contracts/agents-api/core-metrics.md) |
 | `sandbox/deployment[/maintenance]`, `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Sandbox deployment, node enrollment tokens and nodes | [Sandbox deployment](../../contracts/agents-api/sandbox-deployment.md), [node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md), [node host history](../../contracts/agents-api/node-host-history.md) |
+
+## Machine connection API
+
+These routes are under `/api/v1`. Each accepts only the credential listed, never
+the Core key or a Project API key.
+
+| Routes | Caller | Credential | Contract |
+| --- | --- | --- | --- |
+| `POST sandbox-node/enroll` | Node installer | One-use enrollment token from `POST /core/v1/sandbox/enrollment-tokens` | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
+| `GET sandbox-node/configuration` | Node installer and node | Enrollment token, or node credential with `X-Parsar-Node-ID` | [Sandbox deployment](../../contracts/agents-api/sandbox-deployment.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
+| `GET sandbox-node/identity`, WebSocket `GET sandbox-node/connect` | Node | Node credential registered at enrollment | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host) |
+| `POST agent-daemon/enroll`, `GET agent-daemon/connection` | Self-hosted executor and its installer | Executor credential from `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) |
+| WebSocket `GET agent-daemon/ws`, `POST agent-daemon/bootstrap`, `GET agent-daemon/device-status` | Runtime daemons | Daemon credential: Core writes one into each hosted sandbox it prepares; a self-hosted executor uses its executor credential | [Runtime enrollment](../../services/agents-api/README.md#user-managed-runtime-enrollment) |
 
 ## Contract sources
 

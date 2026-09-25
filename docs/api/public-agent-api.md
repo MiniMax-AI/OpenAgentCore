@@ -54,12 +54,12 @@ SSE is live, not a historical replay service. After a disconnect, query the Sess
 Turns and Items to reconcile state. An accepted request is not proof of completed
 native execution. Do not automatically replay uncertain tool or file effects.
 
-## Core extensions
+## Core extension fields
 
 The `/v1` route set is exactly the pinned SDK's operations, listed in
-[upstream-routes.json](../../contracts/agents-api/upstream-routes.json). Core adds
-fields only inside `x_agents_core`, because it runs several harnesses and accepts
-custom model access:
+[upstream-routes.json](../../contracts/agents-api/upstream-routes.json); Core adds
+no route. It adds fields only inside `x_agents_core`, because it runs several
+harnesses and accepts custom model access:
 
 | Field | Where | Reference |
 | --- | --- | --- |
@@ -69,12 +69,10 @@ custom model access:
 Any other member of `x_agents_core` is rejected with 400. Deployment, placement,
 credential issuance and operational reads are not part of `/v1`; they belong to
 `/core/v1`, which only the Core key can call (see the [API index](README.md)).
-
-An application creates a `self_hosted` Session with its Project key. The
-deployment operator then issues the Environment's executor credential with the
-Core key under `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials`
-and gives it to the executor host; see
-[executor credentials](../../contracts/agents-api/environment-executor-credentials.md).
+An application reads a Session's model from `agent.model` and an explicitly
+selected harness from `agent.x_agents_core.harness`; a Session on the deployment
+default harness omits `agent.x_agents_core`. `/v1` has no execution-configuration
+read.
 
 `openai_hosted` keeps the official wire name and means Core-managed compute here.
 The deployment chooses E2B or its own Docker/microsandbox nodes. A public

@@ -12,11 +12,10 @@ python3 -m venv .venv
 pip install openai==3.13.0
 ```
 
-The deployment administrator first creates a Project through
-`POST /core/v1/projects` with `{"name":"Default"}`, then issues a key through
+The deployment administrator first creates a Project and issues a key within it,
+on Web's **Projects and keys** page or with the [Core key](operations.md#core-key)
+as Bearer credential: `POST /core/v1/projects` with `{"name":"Default"}`, then
 `POST /core/v1/projects/{project_id}/keys` with a descriptive `{"name":"..."}`.
-These requests use the [Core key](operations.md#core-key) as their Bearer credential. The management UI has not
-yet migrated; see [integration status](../web/README.md).
 
 Obtain that key through a private channel and supply it as `PARSAR_API_KEY` in your
 application configuration. Its plaintext appears only at issuance; Core stores a

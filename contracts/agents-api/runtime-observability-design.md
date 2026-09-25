@@ -4,7 +4,7 @@ Status: provider abstraction with Docker and microsandbox sampling, the
 current-snapshot API/client contract, and Core Web Live and capability-gated
 Durable Dashboard sources are implemented. Phase 4 includes the bounded sanitized
 exporter seam, optional OTLP/HTTP transport, execution-owner singleton background
-sampling, PostgreSQL history, public history API, and 1h/6h/24h Web ranges.
+sampling, PostgreSQL history, the Core-key history read, and 1h/6h/24h Web ranges.
 History uses the existing Core database by default. Other provider sources are not implemented.
 Microsandbox idle suspension is a separate durable lifecycle feature; it does
 not consume this telemetry as authority.
@@ -51,7 +51,7 @@ evidence. They must not become execution or lifecycle authority.
 
 | Concern | Authority | Notes |
 | --- | --- | --- |
-| Tenant and Session ownership | Core database | Every public read is tenant-scoped. |
+| Tenant and Session ownership | Core database | Every read is scoped to the tenant of the Project in its `/core/v1` path. |
 | Environment placement | Session configuration and Environment row | `none`, `self_hosted`, or `openai_hosted`. |
 | Observation resource identity | Session ID | One current observation resource exists per tenant-owned Session. |
 | Managed Runtime identity | `runtime_allocations` | Allocation and provider key identify the compute incarnation. |
@@ -258,8 +258,8 @@ Core reuses its PostgreSQL database for bounded recent Runtime history. The
 provider-neutral observation service hands each sanitized periodic result to a
 bounded asynchronous writer. One typed row contains the observation and optional
 measured Session usage snapshot (recorded root Turn snapshots, active Turns
-included, not the public Session usage rule). The public API resolves caller ownership before
-issuing bounded queries; Web never queries storage directly.
+included, not the public Session usage rule). The `/core/v1` read resolves the Project's
+Session before issuing bounded queries; Web never queries storage directly.
 
 External OTLP export remains optional. Each destination has an independent queue,
 so a Collector outage cannot delay local persistence. Neither history nor export

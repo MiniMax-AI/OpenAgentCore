@@ -127,7 +127,7 @@ PostgreSQL database. The execution owner samples every 30 seconds by default,
 using bounded pages, concurrency and source deadlines. Collection never wakes or
 mutates compute. The worker lease is checked during the sweep and before each
 handoff. Only periodic samples populate durable history; current API reads cannot
-inflate cadence coverage. Retention is seven days; public queries span at most
+inflate cadence coverage. Retention is seven days; history reads span at most
 24 hours and have explicit input and output limits.
 
 `AGENTS_API_RUNTIME_HISTORY_FILE` optionally changes sampling and adds OTLP/HTTP
