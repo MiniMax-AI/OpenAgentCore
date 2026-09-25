@@ -57,6 +57,10 @@ readiness. To prepare the qualified E2B Runtime build, use
 [the E2B build guide](deploy/e2b/README.md); it is not a public Environment Template.
 Microsandbox suspends eligible idle Sessions after 300 seconds and retains their
 snapshots for 86400 seconds. Docker and E2B have no memory snapshot policy.
+A node's allocation list reports `compute_phase_changed_at`, the time each
+allocation entered its current `compute_phase`; it is null for allocations created
+before Core recorded it. A suspended allocation's age, combined with this retention,
+tells roughly when Core reclaims it.
 
 For source/manual deployments using E2B, install the packaged helper and set
 `AGENTS_API_E2B_PROVIDER_BIN` to its absolute executable path. Set

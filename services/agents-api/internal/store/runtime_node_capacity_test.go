@@ -9,7 +9,7 @@ import (
 )
 
 func TestRuntimeEnrollmentApprovedCapacity(t *testing.T) {
-	s, _, view, _ := webSpecificationFixture(t, "docker")
+	s, _, view, _ := webSpecificationFixture(t, "microsandbox")
 	for _, capacity := range []RuntimeNodeCapacity{{0, 8}, {3, 2}, {1, 1000001}} {
 		if _, _, err := s.CreateRuntimeEnrollment(t.Context(), capacity); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal("invalid capacity accepted", err)
@@ -23,7 +23,7 @@ func TestRuntimeEnrollmentApprovedCapacity(t *testing.T) {
 	if err != nil || config.MaxActive != 1 || config.MaxRetained != 3 {
 		t.Fatal("bootstrap lost approved capacity", config, err)
 	}
-	input := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "approved", Credential: strings.Repeat("a", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), SpecificationDigest: view.SpecificationDigest, DeploymentGeneration: view.Generation}
+	input := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "approved", Credential: strings.Repeat("a", 64), Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), SpecificationDigest: view.SpecificationDigest, DeploymentGeneration: view.Generation}
 	identity, err := s.EnrollRuntimeNode(t.Context(), token, input)
 	if err != nil || identity.MaxActive != 1 || identity.MaxRetained != 3 {
 		t.Fatal("enrollment did not apply token capacity", identity, err)
@@ -41,5 +41,25 @@ func TestRuntimeEnrollmentApprovedCapacity(t *testing.T) {
 	config, err = s.RuntimeNodeConfiguration(t.Context(), input.NodeID, input.Credential)
 	if err != nil || config.MaxActive != 2 || config.MaxRetained != 5 {
 		t.Fatal("configuration read ignored admin update", config, err)
+	}
+}
+
+// Docker never suspends a sandbox, so its retained limit always equals its active limit.
+func TestDockerRetainedLimitFollowsActive(t *testing.T) {
+	s, _, view, _ := webSpecificationFixture(t, "docker")
+	token, _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 3, MaxRetained: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "Docker", Credential: strings.Repeat("d", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), SpecificationDigest: view.SpecificationDigest, DeploymentGeneration: view.Generation}
+	if identity, err := s.EnrollRuntimeNode(t.Context(), token, input); err != nil || identity.MaxRetained != 3 {
+		t.Fatal("enrollment kept a separate Docker retained limit", identity, err)
+	}
+	if err := s.UpdateRuntimeNode(t.Context(), input.NodeID, RuntimeNodeUpdate{Name: "Docker", MaxActive: 5, MaxRetained: 12}); err != nil {
+		t.Fatal(err)
+	}
+	nodes, err := s.ListRuntimeNodes(t.Context())
+	if err != nil || len(nodes) != 1 || nodes[0].MaxActive != 5 || nodes[0].MaxRetained != 5 {
+		t.Fatal("node update kept a separate Docker retained limit", nodes, err)
 	}
 }

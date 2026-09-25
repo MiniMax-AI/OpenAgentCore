@@ -93,7 +93,7 @@ export interface SandboxNodeDetail extends SandboxNode {
   host: SandboxNodeHost;
   history: { resolution_seconds: number; points: SandboxNodeHostPoint[] };
 }
-/** A node's name and sandbox limits; Core takes all three, with a retained limit of at least the active one. */
+/** A node's name and sandbox limits; Core takes all three, with a retained limit of at least the active one. Under Docker, Core sets the retained limit to the active one. */
 export interface SandboxNodeUpdate {
   name: string;
   max_active: number;
@@ -107,6 +107,8 @@ export interface SandboxAllocation {
   environment_id: string;
   state: string;
   compute_phase: string;
+  /** When the allocation entered compute_phase; null when it predates this record. */
+  compute_phase_changed_at: string | null;
   diagnostic: SandboxDiagnostic;
   initialization: string;
   created_at: string;

@@ -354,7 +354,7 @@ func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodePa
 }
 
 const listLegacyRuntimeAllocations = `-- name: ListLegacyRuntimeAllocations :many
-SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.kept_at, a.released_at, a.initialization, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, e.session_id, s.tenant_id, s.deleted_at
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.kept_at, a.released_at, a.initialization, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, e.session_id, s.tenant_id, s.deleted_at
 FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN sessions s ON s.id=e.session_id
 WHERE a.node_id IS NULL AND a.state<>'released' AND a.id>$1 ORDER BY a.id LIMIT 32 FOR UPDATE OF a
 `
@@ -394,6 +394,7 @@ func (q *Queries) ListLegacyRuntimeAllocations(ctx context.Context, id pgtype.UU
 			&i.RuntimeAllocation.ComputeRetainedUntil,
 			&i.RuntimeAllocation.NodeID,
 			&i.RuntimeAllocation.ObservationError,
+			&i.RuntimeAllocation.ComputePhaseChangedAt,
 			&i.SessionID,
 			&i.TenantID,
 			&i.DeletedAt,
@@ -409,22 +410,23 @@ func (q *Queries) ListLegacyRuntimeAllocations(ctx context.Context, id pgtype.UU
 }
 
 const listNodeRuntimeAllocations = `-- name: ListNodeRuntimeAllocations :many
-SELECT a.id,a.node_id,a.observation_error,a.state,a.compute_phase,a.initialization,a.created_at,a.environment_id,e.session_id,s.tenant_id
+SELECT a.id,a.node_id,a.observation_error,a.state,a.compute_phase,a.compute_phase_changed_at,a.initialization,a.created_at,a.environment_id,e.session_id,s.tenant_id
 FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN sessions s ON s.id=e.session_id
 WHERE a.node_id=$1 AND a.state<>'released' ORDER BY a.created_at,a.id LIMIT 1000
 `
 
 type ListNodeRuntimeAllocationsRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	NodeID           pgtype.UUID        `json:"node_id"`
-	ObservationError string             `json:"observation_error"`
-	State            string             `json:"state"`
-	ComputePhase     string             `json:"compute_phase"`
-	Initialization   string             `json:"initialization"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	EnvironmentID    pgtype.UUID        `json:"environment_id"`
-	SessionID        pgtype.UUID        `json:"session_id"`
-	TenantID         pgtype.UUID        `json:"tenant_id"`
+	ID                    pgtype.UUID        `json:"id"`
+	NodeID                pgtype.UUID        `json:"node_id"`
+	ObservationError      string             `json:"observation_error"`
+	State                 string             `json:"state"`
+	ComputePhase          string             `json:"compute_phase"`
+	ComputePhaseChangedAt pgtype.Timestamptz `json:"compute_phase_changed_at"`
+	Initialization        string             `json:"initialization"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	EnvironmentID         pgtype.UUID        `json:"environment_id"`
+	SessionID             pgtype.UUID        `json:"session_id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
 }
 
 func (q *Queries) ListNodeRuntimeAllocations(ctx context.Context, nodeID pgtype.UUID) ([]ListNodeRuntimeAllocationsRow, error) {
@@ -442,6 +444,7 @@ func (q *Queries) ListNodeRuntimeAllocations(ctx context.Context, nodeID pgtype.
 			&i.ObservationError,
 			&i.State,
 			&i.ComputePhase,
+			&i.ComputePhaseChangedAt,
 			&i.Initialization,
 			&i.CreatedAt,
 			&i.EnvironmentID,

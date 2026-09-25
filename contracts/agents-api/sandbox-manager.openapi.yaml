@@ -295,6 +295,7 @@ definitions:
       max_active:
         type: integer
       max_retained:
+        description: Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
         type: integer
     type: object
   api.SandboxMutationResponse:
@@ -830,6 +831,10 @@ definitions:
     properties:
       compute_phase:
         type: string
+      compute_phase_changed_at:
+        description: When the allocation entered its current compute_phase; null for allocations created before it was recorded. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
+        type: string
+        x-nullable: true
       created_at:
         type: string
       diagnostic:
@@ -929,6 +934,7 @@ definitions:
       max_active:
         type: integer
       max_retained:
+        description: Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
         type: integer
       name:
         type: string

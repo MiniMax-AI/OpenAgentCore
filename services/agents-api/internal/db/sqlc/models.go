@@ -210,24 +210,25 @@ type PublicExecutionTurn struct {
 }
 
 type RuntimeAllocation struct {
-	ID                   pgtype.UUID        `json:"id"`
-	EnvironmentID        pgtype.UUID        `json:"environment_id"`
-	DeviceID             pgtype.UUID        `json:"device_id"`
-	ProviderKey          pgtype.UUID        `json:"provider_key"`
-	State                string             `json:"state"`
-	CreateSettled        bool               `json:"create_settled"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	KeptAt               pgtype.Timestamptz `json:"kept_at"`
-	ReleasedAt           pgtype.Timestamptz `json:"released_at"`
-	Initialization       string             `json:"initialization"`
-	ComputePhase         string             `json:"compute_phase"`
-	ComputeRevision      int64              `json:"compute_revision"`
-	ComputeState         []byte             `json:"compute_state"`
-	ComputeActivityAt    pgtype.Timestamptz `json:"compute_activity_at"`
-	ComputeWakeRequested bool               `json:"compute_wake_requested"`
-	ComputeRetainedUntil pgtype.Timestamptz `json:"compute_retained_until"`
-	NodeID               pgtype.UUID        `json:"node_id"`
-	ObservationError     string             `json:"observation_error"`
+	ID                    pgtype.UUID        `json:"id"`
+	EnvironmentID         pgtype.UUID        `json:"environment_id"`
+	DeviceID              pgtype.UUID        `json:"device_id"`
+	ProviderKey           pgtype.UUID        `json:"provider_key"`
+	State                 string             `json:"state"`
+	CreateSettled         bool               `json:"create_settled"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	KeptAt                pgtype.Timestamptz `json:"kept_at"`
+	ReleasedAt            pgtype.Timestamptz `json:"released_at"`
+	Initialization        string             `json:"initialization"`
+	ComputePhase          string             `json:"compute_phase"`
+	ComputeRevision       int64              `json:"compute_revision"`
+	ComputeState          []byte             `json:"compute_state"`
+	ComputeActivityAt     pgtype.Timestamptz `json:"compute_activity_at"`
+	ComputeWakeRequested  bool               `json:"compute_wake_requested"`
+	ComputeRetainedUntil  pgtype.Timestamptz `json:"compute_retained_until"`
+	NodeID                pgtype.UUID        `json:"node_id"`
+	ObservationError      string             `json:"observation_error"`
+	ComputePhaseChangedAt pgtype.Timestamptz `json:"compute_phase_changed_at"`
 }
 
 type RuntimeDeployment struct {

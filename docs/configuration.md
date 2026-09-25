@@ -131,6 +131,8 @@ approves capacity when issuing its enrollment token: defaults are **2 active** a
 **8 retained** sandboxes. An administrator may update capacity later through the
 node API. `max_retained >= max_active >= 1`; reservations and uncertain cleanup
 also consume capacity. Lowering a limit does not kill existing resources.
+Microsandbox uses both limits. Docker never suspends, so its `max_retained` always
+equals `max_active`; Core replaces any submitted value.
 
 The generated private `provider.json` includes the provider, installation identity,
 Core address, generation, approved specification copy and one adapter object:

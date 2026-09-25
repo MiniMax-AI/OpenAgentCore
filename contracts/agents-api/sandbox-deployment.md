@@ -34,11 +34,20 @@ does not grant node enrollment authority.
 
 Node capacity is separate from the deployment specification. The administrator's
 `POST /core/v1/sandbox/enrollment-tokens` accepts optional `max_active` and
-`max_retained`, defaulting to 2 and 8. Core stores that approval with the token and
-copies it to the registered node. Node enrollment cannot submit capacity overrides.
-The existing node configuration/identity reads expose approved limits for that
-credential; node updates remain administrator operations. Local host capacity
-checks may reject a deployment that cannot run safely, but never raise its limits.
+`max_retained`, defaulting to 2 and 8. Microsandbox uses both limits. Docker never
+suspends, so its `max_retained` always equals `max_active`; Core replaces any
+submitted value, here and in `PATCH /core/v1/sandbox/nodes/{node_id}`. Core stores
+that approval with the token and copies it to the registered node. Node enrollment
+cannot submit capacity overrides. The existing node configuration/identity reads
+expose approved limits for that credential; node updates remain administrator
+operations. Local host capacity checks may reject a deployment that cannot run
+safely, but never raise its limits.
+
+`GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased
+allocations. Each item's `compute_phase_changed_at` is the time the allocation
+entered its current `compute_phase`, or null for allocations created before Core
+recorded it. A suspended microsandbox allocation's age, combined with the
+deployment's snapshot retention, tells roughly when Core reclaims it.
 
 ## Selection request
 

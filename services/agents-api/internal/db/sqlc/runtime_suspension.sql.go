@@ -130,7 +130,8 @@ func (q *Queries) SessionHasRuntimeNode(ctx context.Context, sessionID pgtype.UU
 
 const setRuntimeCompute = `-- name: SetRuntimeCompute :one
 UPDATE runtime_allocations
-SET compute_phase = $1, compute_state = $2::jsonb,
+SET compute_phase_changed_at = CASE WHEN compute_phase = $1::text THEN compute_phase_changed_at ELSE clock_timestamp() END,
+    compute_phase = $1, compute_state = $2::jsonb,
     compute_revision = compute_revision + 1,
     compute_retained_until = $3,
     kept_at = CASE WHEN $1::text = 'running' THEN clock_timestamp() ELSE kept_at END
@@ -138,7 +139,7 @@ WHERE id = $4 AND compute_revision = $5
     AND state = 'running' AND initialization = 'complete'
     AND ((compute_phase IN ('disabled','running') AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour'))
       OR (compute_phase NOT IN ('disabled','running') AND compute_retained_until > clock_timestamp()))
-RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, initialization, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error
+RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, initialization, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at
 `
 
 type SetRuntimeComputeParams struct {
@@ -177,6 +178,7 @@ func (q *Queries) SetRuntimeCompute(ctx context.Context, arg SetRuntimeComputePa
 		&i.ComputeRetainedUntil,
 		&i.NodeID,
 		&i.ObservationError,
+		&i.ComputePhaseChangedAt,
 	)
 	return i, err
 }

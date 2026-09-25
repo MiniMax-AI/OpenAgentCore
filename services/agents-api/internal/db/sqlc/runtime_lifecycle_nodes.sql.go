@@ -50,7 +50,7 @@ func (q *Queries) GetRuntimeLifecyclePlacement(ctx context.Context, arg GetRunti
 }
 
 const listRuntimeAllocationsForNode = `-- name: ListRuntimeAllocationsForNode :many
-SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.kept_at, a.released_at, a.initialization, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, e.session_id, s.tenant_id, s.deleted_at, (CASE WHEN a.compute_phase NOT IN ('disabled', 'running') THEN a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp() ELSE a.node_id IS NULL AND (SELECT mode FROM runtime_deployment) <> 'direct' AND a.kept_at <= clock_timestamp() - interval '1 hour' END)::boolean AS expired
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.kept_at, a.released_at, a.initialization, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, e.session_id, s.tenant_id, s.deleted_at, (CASE WHEN a.compute_phase NOT IN ('disabled', 'running') THEN a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp() ELSE a.node_id IS NULL AND (SELECT mode FROM runtime_deployment) <> 'direct' AND a.kept_at <= clock_timestamp() - interval '1 hour' END)::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id=a.environment_id
 JOIN sessions s ON s.id=e.session_id
@@ -100,6 +100,7 @@ func (q *Queries) ListRuntimeAllocationsForNode(ctx context.Context, arg ListRun
 			&i.RuntimeAllocation.ComputeRetainedUntil,
 			&i.RuntimeAllocation.NodeID,
 			&i.RuntimeAllocation.ObservationError,
+			&i.RuntimeAllocation.ComputePhaseChangedAt,
 			&i.SessionID,
 			&i.TenantID,
 			&i.DeletedAt,

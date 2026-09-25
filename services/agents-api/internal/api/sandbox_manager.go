@@ -24,7 +24,8 @@ type SandboxMutationResponse struct {
 	Updated bool   `json:"updated,omitempty"`
 }
 type SandboxEnrollmentTokenRequest struct {
-	MaxActive   *int `json:"max_active,omitempty"`
+	MaxActive *int `json:"max_active,omitempty"`
+	// Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
 	MaxRetained *int `json:"max_retained,omitempty"`
 }
 

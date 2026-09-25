@@ -88,8 +88,6 @@ func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 	}
 	for _, test := range []struct{ path, token, body string }{
 		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_active":0}`},
-		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_active":9,"max_retained":8}`},
-		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_retained":1000001}`},
 		{"/api/v1/sandbox-node/enroll", "one-use", `{"max_active":100}`},
 		{"/api/v1/sandbox-node/enroll", "one-use", `{"max_retained":100}`},
 	} {

@@ -422,3 +422,30 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 		})
 	}
 }
+
+// compute_phase_changed_at moves only when an allocation enters a different phase.
+func TestRuntimeComputePhaseChangedAt(t *testing.T) {
+	_, w, pool, owner := runtimeSuspensionFixture(t)
+	runtimeSuspensionCompleted(t, pool, owner)
+	changedAt := func() time.Time {
+		t.Helper()
+		var value time.Time
+		if err := pool.QueryRow(t.Context(), "SELECT compute_phase_changed_at FROM runtime_allocations WHERE id=$1", owner.ID).Scan(&value); err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	entered := changedAt()
+	owner, err := w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"updated"}`), nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changedAt().Equal(entered) {
+		t.Fatal("a same-phase update moved the phase time")
+	}
+	until := time.Now().Add(time.Hour)
+	runtimeSuspensionStep(t, w, owner, "quiescing", &until)
+	if !changedAt().After(entered) {
+		t.Fatal("entering a new phase kept the previous phase time")
+	}
+}
