@@ -1,4 +1,4 @@
-import type { CoreHarnessKind, ModelProviderView, SavedAgent } from "@agents-core-web/agents-client";
+import type { SavedAgent } from "@agents-core-web/agents-client";
 import { ArrowLeft, Bot, ListTree, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { CopyableId, ListToolbar, listSummary, NameCell, RowActions, SearchField
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatCompact, formatDateTime, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
+import { harnessNames, protocolNames } from "../../lib/harness-labels";
 import { admin, CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
 import "./AgentCatalog.css";
 import { type ProjectSummary } from "../../lib/admin-view";
@@ -18,14 +19,6 @@ import { collections } from "../../lib/queries";
 import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useAgentDetail } from "../resources/detail-queries";
 
-export function harnessLabel(harness: CoreHarnessKind): string {
-  if (harness === "claude_sdk") return "Claude SDK";
-  if (harness === "mcode") return "MiniMax Code";
-  return "Codex";
-}
-
-/** Provider protocols by their product names, the same in every language. */
-const protocolNames: Record<ModelProviderView["protocol"], string> = { anthropic: "Anthropic Messages", responses: "OpenAI Responses" };
 
 function coverage(summary: ProjectSummary | undefined, locale?: string): string {
   if (!summary || summary.coverage.sessions === 0) return MISSING;
@@ -116,7 +109,7 @@ function AgentsList() {
                       <th scope="row"><NameCell name={agent.name} id={agent.id} fallback={untitled} onOpen={open} openLabel={t("view.open", { name })} /></th>
                       {showProject ? <td><ProjectName project={byId.get(row.project.id) ?? row.project} /></td> : null}
                       <td><code className="agent-table-model" title={agent.model}>{agent.model}</code></td>
-                      <td className={harness ? undefined : "table-muted"}>{harness ? harnessLabel(harness) : t("view.coreDefault")}</td>
+                      <td className={harness ? undefined : "table-muted"}>{harness ? harnessNames[harness] : t("view.coreDefault")}</td>
                       <td className="numeric">{formatInteger(agent.tools.length, locale)}</td>
                       <td className="numeric" title={formatDateTime(summary?.last_active_at, locale)}>{summary?.last_active_at ? formatRelative(summary.last_active_at, now, locale) : MISSING}</td>
                       <td><CreatorCell creator={creators.creatorOf(row.project.id, agent.id)} /></td>
@@ -238,7 +231,7 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
               <div><dt>{t("view.id")}</dt><dd><CopyableId id={agent.id} /></dd></div>
               <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={project} /></dd></div>
               <div><dt>{t("view.columns.model")}</dt><dd><code>{agent.model}</code></dd></div>
-              <div><dt>{t("view.columns.harness")}</dt><dd>{agent.x_agents_core?.harness ? harnessLabel(agent.x_agents_core.harness) : t("view.coreDefault")}</dd></div>
+              <div><dt>{t("view.columns.harness")}</dt><dd>{agent.x_agents_core?.harness ? harnessNames[agent.x_agents_core.harness] : t("view.coreDefault")}</dd></div>
               <div><dt><CreatorHeading /></dt><dd><CreatorCell creator={creators.creatorOf(projectId, agent.id)} /></dd></div>
               <div><dt>{t("view.created")}</dt><dd>{formatDateTime(agent.created_at, locale)}</dd></div>
               <div><dt>{t("view.updated")}</dt><dd>{formatDateTime(agent.updated_at, locale)}</dd></div>

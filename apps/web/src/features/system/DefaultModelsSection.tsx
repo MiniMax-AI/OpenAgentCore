@@ -11,6 +11,7 @@ import { TableSkeleton } from "../../components/Skeleton";
 import { failedLast, useFailureToast, useToast } from "../../components/Toast";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime, formatInteger } from "../../lib/format";
+import { harnessNames, protocolNames } from "../../lib/harness-labels";
 import { admin } from "../../lib/projects";
 import { Fact } from "./Fact";
 import { harnessesQuery } from "./harness-queries";
@@ -19,8 +20,6 @@ import { harnessesQuery } from "./harness-queries";
 const WRITE_TIMEOUT_MS = 30_000;
 
 type Protocol = ModelProviderInput["protocol"];
-const harnessNames: Record<CoreHarnessKind, string> = { codex: "Codex", claude_sdk: "Claude SDK", mcode: "MiniMax Code" };
-const protocolNames: Record<Protocol, string> = { anthropic: "Anthropic Messages", responses: "OpenAI Responses" };
 /** Where a new provider's protocol starts: the one each harness speaks. Core validates the choice. */
 const usualProtocol: Record<CoreHarnessKind, Protocol> = { codex: "responses", claude_sdk: "anthropic", mcode: "anthropic" };
 
