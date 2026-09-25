@@ -2302,12 +2302,12 @@ export function App() {
           showTemplates={__AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS__}
         />
 
-        <ConsoleNavigation showIntroduction={showIntroduction} introductionAvailable={introduction.available} keysAvailable={isLocalProxyBaseUrl(connection.baseUrl)} activeView={view}
-          onIntroduction={() => { introduction.replay(); setView("dashboard"); }} onKeys={() => setView("api-keys")} />
+        <ConsoleNavigation keysAvailable={isLocalProxyBaseUrl(connection.baseUrl)} activeView={view} onKeys={() => setView("api-keys")} />
         <SystemNavigation active={view === "system" || view === "sandbox" ? view : null} onSelect={setView} />
 
         <div className="sidebar-footer">
-          <AppearanceMenu withAccount coreState={coreState} onConfigureCore={() => setConnectionOpen(true)} />
+          <AppearanceMenu withAccount coreState={coreState} onConfigureCore={() => setConnectionOpen(true)}
+            onReplayIntroduction={introduction.available ? () => { introduction.replay(); setView("dashboard"); } : undefined} />
         </div>
       </aside>
 

@@ -419,6 +419,7 @@ html[data-theme="dark"] .brand-mark-dark {
 .appearance-account-actions > button, .appearance-account-signout > button { display: flex; width: 100%; min-height: 36px; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border: 0; border-radius: 6px; background: transparent; color: var(--fg); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .appearance-account-actions > button > span, .appearance-account-value { display: inline-flex; align-items: center; gap: 9px; }
 .appearance-account-actions > button > span:first-child { font-weight: 550; }
+.appearance-account-actions > .appearance-guide-action { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); border-radius: 0; }
 .appearance-account-value { min-width: 0; color: var(--fg-muted); font-size: 11px; white-space: nowrap; }
 .appearance-account-actions > button:hover, .appearance-account-actions > button:focus-visible, .appearance-account-signout > button:hover, .appearance-account-signout > button:focus-visible, .appearance-language-options button:hover, .appearance-language-options button:focus-visible { background: var(--surface-subtle); outline: none; }
 .appearance-language-options { display: grid; gap: 1px; margin: 2px 0 4px 25px; padding-left: 7px; border-left: 1px solid var(--line); }

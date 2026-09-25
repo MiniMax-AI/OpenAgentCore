@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CircleUserRound, Languages, LogOut, Moon, Settings2, Sun } from "lucide-react";
+import { Check, ChevronDown, CircleUserRound, Languages, LogOut, Moon, Settings2, Sparkles, Sun } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -8,10 +8,11 @@ import { useConsoleAccount } from "../features/first-run/ConsoleAccess";
 
 type CoreState = "connecting" | "ready" | "failed";
 
-export function AppearanceMenu({ withAccount = false, coreState, onConfigureCore }: {
+export function AppearanceMenu({ withAccount = false, coreState, onConfigureCore, onReplayIntroduction }: {
   withAccount?: boolean;
   coreState?: CoreState;
   onConfigureCore?: () => void;
+  onReplayIntroduction?: () => void;
 }) {
   const { i18n, t } = useTranslation("navigation");
   const { t: tAuth } = useTranslation("firstRun");
@@ -119,6 +120,7 @@ export function AppearanceMenu({ withAccount = false, coreState, onConfigureCore
             <button type="button" role="menuitemradio" aria-checked={language === "zh-CN"} onClick={() => chooseLanguage("zh-CN")}>简体中文{language === "zh-CN" ? <Check size={14} aria-hidden="true" /> : null}</button>
           </div> : null}
           <button type="button" role="menuitem" aria-label={t(resolvedTheme === "dark" ? "switchToLightTheme" : "switchToDarkTheme")} onClick={toggleTheme}><span><ThemeIcon size={16} aria-hidden="true" />{t("theme")}</span><span className="appearance-account-value">{t(resolvedTheme === "dark" ? "darkMode" : "lightMode")}</span></button>
+          {onReplayIntroduction ? <button className="appearance-guide-action" type="button" role="menuitem" onClick={() => { close(); onReplayIntroduction(); }}><span><Sparkles size={16} aria-hidden="true" />{tAuth("Replay introduction")}</span></button> : null}
         </div>
         {showAccount ? <div className="appearance-account-signout"><button type="button" role="menuitem" disabled={signingOut} onClick={async () => {
           if (!account) return;

@@ -105,7 +105,9 @@ test("remembers the introduction step and dismissal across reloads and sign-in, 
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("button", { name: "Account, language and appearance", exact: true })).toBeVisible();
   await expect(page.locator(".first-run-home")).toHaveCount(0);
-  await page.getByRole("button", { name: "Getting started", exact: true }).click();
+  await expect(page.locator(".app-sidebar").getByRole("button", { name: "Getting started", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Account, language and appearance", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Replay introduction", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Keep your sign-in details." })).toBeVisible();
   expect(writes.map(({ action }) => action)).toEqual(["logout", "login"]);
 });
@@ -435,6 +437,7 @@ test("keeps account, language and theme in one reachable sidebar menu", async ({
   await expect(page.getByRole("button", { name: "账号、语言和外观" })).toBeVisible();
   await page.getByRole("button", { name: "账号、语言和外观" }).click();
   await expect(page.getByRole("menuitem", { name: "退出登录" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "再次查看引导" })).toBeVisible();
   await page.getByRole("menuitem", { name: /语言/ }).click();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menuitemradio", { name: "English" })).toHaveCount(0);
