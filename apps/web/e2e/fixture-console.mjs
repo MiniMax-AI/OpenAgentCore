@@ -84,16 +84,17 @@ function authError(response, status, message, headers = {}) {
   send(response, status, { error: message }, headers);
 }
 
-/** Sign-in with the Core key: a wrong key is refused, and repeated wrong keys lock sign-in for a while. */
+/** Sign-in with the Core key, as the console server does it: the key is compared first, so the right key
+ * always signs in; only wrong keys count, and repeated wrong keys are refused for a while. */
 async function login(request, response) {
   const auth = state.auth;
   if (!request.headers["content-type"]?.startsWith("application/json")) return authError(response, 415, "Use application/json");
   let input;
   try { input = await body(request); } catch { return authError(response, 400, "Invalid authentication request"); }
   if (typeof input?.core_key !== "string" || !input.core_key) return authError(response, 400, "Invalid authentication request");
-  const wait = Math.ceil((auth.lockedUntil - Date.now()) / 1000);
-  if (wait > 0) return authError(response, 429, "Too many authentication attempts", { "retry-after": String(wait) });
   if (input.core_key !== CORE_KEY) {
+    const wait = Math.ceil((auth.lockedUntil - Date.now()) / 1000);
+    if (wait > 0) return authError(response, 429, "Too many authentication attempts", { "retry-after": String(wait) });
     auth.failures += 1;
     if (auth.failures < LOCKOUT_AFTER) return authError(response, 401, "Invalid Core key");
     auth.lockedUntil = Date.now() + LOCKOUT_SECONDS * 1000;
