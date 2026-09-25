@@ -109,44 +109,14 @@ func Build(config Config) (*Built, func(), error) {
 			return nil, func() {}, errors.New("invalid managed Docker provider configuration")
 		}
 		result.Provider = provider
-		result.Probe = func(ctx context.Context) error {
-			_, err := c.Ping(ctx, client.PingOptions{})
-			if err != nil {
-				return errors.New("Docker daemon is unavailable")
-			}
-			host, err := c.Info(ctx, client.InfoOptions{})
-			if err != nil {
-				return errors.New("cannot inspect Docker host resource support")
-			}
-			if !host.Info.MemoryLimit || !host.Info.CPUCfsQuota {
-				return errors.New("Docker host does not enforce CPU and memory limits")
-			}
-			if host.Info.MemTotal <= 0 {
-				return errors.New("Docker host memory capacity is unavailable")
-			}
-			if err := checkCapacity(config.Specification.Resources, host.Info.NCPU, uint64(host.Info.MemTotal)); err != nil {
-				return err
-			}
-			_, err = c.ImageInspect(ctx, entry.Image)
-			if err != nil {
-				return errors.New("pinned Docker image is unavailable")
-			}
-			return nil
-		}
+		result.Probe = dockerProbe(c, entry.Image, config.Specification.Resources)
 		result.BackendFingerprint = BackendFingerprint(config.Provider, entry.Host)
 	case "microsandbox":
 		if config.Microsandbox == nil || !hasMicrosandbox || hasDocker {
 			return nil, closeProvider, errors.New("managed microsandbox requires only the microsandbox configuration object")
 		}
-		if err := configureMicrosandbox(*config.Microsandbox, result); err != nil {
+		if err := configureMicrosandbox(*config.Microsandbox, config.Specification.Resources, result); err != nil {
 			return nil, closeProvider, err
-		}
-		probe := result.Probe
-		result.Probe = func(ctx context.Context) error {
-			if err := hostCapacity(config.Specification.Resources); err != nil {
-				return err
-			}
-			return probe(ctx)
 		}
 	default:
 		return nil, closeProvider, errors.New("managed provider must be docker or microsandbox")

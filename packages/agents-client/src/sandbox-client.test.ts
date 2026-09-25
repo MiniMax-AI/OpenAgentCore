@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { SandboxAdminClient, SandboxProjectClient } from "./sandbox-client";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { SandboxAdminClient, SandboxProjectClient, type SandboxNode } from "./sandbox-client";
 
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
 
@@ -12,6 +12,12 @@ describe("Core sandbox credential boundaries", () => {
     expect(fetch.mock.calls[0]?.[0]).toBe("/core/v1/sandbox/nodes");
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).has("Authorization")).toBe(false);
     expect(fetch.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+  });
+  it("returns the node's fixed readiness diagnostic unchanged", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ data: [{ id: "node", provider_ready: false, diagnostic: "kvm_unavailable" }] }));
+    const { data } = await new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch }).listNodes();
+    expect(data[0]?.diagnostic).toBe("kvm_unavailable");
+    expectTypeOf<SandboxNode["diagnostic"]>().toEqualTypeOf<"" | "provider_unavailable" | "docker_unavailable" | "docker_limits_unsupported" | "runtime_image_unavailable" | "kvm_unavailable" | "microsandbox_artifacts_unavailable" | "capacity_insufficient">();
   });
   it("does not retry an enrollment write with an uncertain outcome", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Network failed"));

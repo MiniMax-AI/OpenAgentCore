@@ -144,14 +144,12 @@ func (a *agent) health(ctx context.Context, host *hostHealthSampler) (Health, er
 	defer cancel()
 	h, e := a.config.Probe(ctx)
 	h.ProviderReady = e == nil
+	// Only the fixed code leaves this process; the probe error may name host paths.
+	h.Diagnostic = sandbox.NodeDiagnostic(e)
 	wasReady := a.ready.Swap(h.ProviderReady)
 	seen := a.healthSeen.Swap(true)
 	if e != nil && ctx.Err() == nil && (!seen || wasReady) {
-		log.Ctx(ctx).Warn("sandbox node provider unavailable; check local runtime configuration and permissions", "node_id", a.config.Identity.NodeID)
-	}
-	h.Diagnostic = ""
-	if e != nil {
-		h.Diagnostic = "provider_unavailable"
+		log.Ctx(ctx).Warn("sandbox node provider unavailable; check local runtime configuration and permissions", "node_id", a.config.Identity.NodeID, "diagnostic", h.Diagnostic)
 	}
 	h.ObservedAt = time.Now().UTC()
 	h.ActiveOperations = int(a.active.Load())

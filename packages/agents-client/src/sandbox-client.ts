@@ -2,6 +2,16 @@ import { AgentCoreError, OpenAIAgentsClient } from "./client";
 import type { ReadOptions } from "./types";
 
 export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "compute_unconfirmed" | "ownership_mismatch" | "provider_unavailable";
+/** Fixed reason a node's provider is not ready; empty while ready. Treat an unknown future value as provider_unavailable. */
+export type SandboxNodeDiagnostic =
+  | ""
+  | "provider_unavailable"
+  | "docker_unavailable"
+  | "docker_limits_unsupported"
+  | "runtime_image_unavailable"
+  | "kvm_unavailable"
+  | "microsandbox_artifacts_unavailable"
+  | "capacity_insufficient";
 
 export type SandboxProvider = "docker" | "microsandbox" | "e2b";
 /** CPU and MiB limits for each sandbox, not node concurrency. */
@@ -39,7 +49,7 @@ export interface SandboxNode {
   provider: string;
   online: boolean;
   provider_ready: boolean;
-  diagnostic: "" | "provider_unavailable";
+  diagnostic: SandboxNodeDiagnostic;
   cpu_count: number | null;
   available_memory_bytes: number | null;
   available_disk_bytes: number | null;

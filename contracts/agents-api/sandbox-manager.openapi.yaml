@@ -663,6 +663,15 @@ definitions:
       created_at:
         type: string
       diagnostic:
+        description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
+        enum:
+          - provider_unavailable
+          - docker_unavailable
+          - docker_limits_unsupported
+          - runtime_image_unavailable
+          - kvm_unavailable
+          - microsandbox_artifacts_unavailable
+          - capacity_insufficient
         type: string
       id:
         type: string
@@ -746,6 +755,15 @@ definitions:
       created_at:
         type: string
       diagnostic:
+        description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
+        enum:
+          - provider_unavailable
+          - docker_unavailable
+          - docker_limits_unsupported
+          - runtime_image_unavailable
+          - kvm_unavailable
+          - microsandbox_artifacts_unavailable
+          - capacity_insufficient
         type: string
       history:
         $ref: '#/definitions/store.NodeHostHistory'

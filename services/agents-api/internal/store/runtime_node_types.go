@@ -38,12 +38,13 @@ type RuntimeNodeEnrollment struct {
 	BackendFingerprint   string `json:"backend_fingerprint"`
 }
 type RuntimeNodeHealth struct {
-	Host                 *RuntimeNodeHost `json:"-"`
-	Diagnostic           string           `json:"diagnostic,omitempty"`
-	ProviderReady        bool             `json:"provider_ready"`
-	CPUCount             *int64           `json:"cpu_count"`
-	AvailableMemoryBytes *int64           `json:"available_memory_bytes"`
-	AvailableDiskBytes   *int64           `json:"available_disk_bytes"`
+	Host *RuntimeNodeHost `json:"-"`
+	// Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
+	Diagnostic           string `json:"diagnostic,omitempty" enums:"provider_unavailable,docker_unavailable,docker_limits_unsupported,runtime_image_unavailable,kvm_unavailable,microsandbox_artifacts_unavailable,capacity_insufficient"`
+	ProviderReady        bool   `json:"provider_ready"`
+	CPUCount             *int64 `json:"cpu_count"`
+	AvailableMemoryBytes *int64 `json:"available_memory_bytes"`
+	AvailableDiskBytes   *int64 `json:"available_disk_bytes"`
 }
 type RuntimeNode struct {
 	RuntimeNodeHealth

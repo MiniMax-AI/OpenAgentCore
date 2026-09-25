@@ -329,6 +329,38 @@ cancels opening and live connections without waiting for database callbacks.
 A node's connection reservation remains held until its fenced disconnect cleanup
 finishes; a slow database must not allow a competing connection to take its place.
 
+## Node readiness diagnostics
+
+Each heartbeat reports whether the node's local provider is ready. When it is
+not, the node list and node detail (`GET /core/v1/sandbox/nodes` and
+`GET /core/v1/sandbox/nodes/{node_id}`) carry one fixed `diagnostic` code. The
+field is absent while the provider is ready. An offline node keeps its last
+reported value, so check `online` first.
+
+| Code | Cause detected by the node | Action |
+| --- | --- | --- |
+| `docker_unavailable` | The configured Docker socket is unreachable or not accessible, or the daemon fails its info or image request | Start Docker and give the node service account access to the configured socket |
+| `docker_limits_unsupported` | Docker reports no CPU quota or memory limit support | Use a Docker host whose cgroups enforce CPU quotas and memory limits |
+| `runtime_image_unavailable` | Docker does not have the pinned Runtime image | Rerun the node installer, or import the image from the matched release |
+| `kvm_unavailable` | The node cannot open `/dev/kvm` for reading and writing, or the host is not Linux | Enable hardware virtualization and give the service account KVM access, for example through the `kvm` group |
+| `microsandbox_artifacts_unavailable` | The pinned Runtime or firmware is missing or fails its SHA-256 check, or the helper is missing or not executable | Rerun the node installer from the matched release |
+| `capacity_insufficient` | The host has fewer CPUs or less memory than one sandbox of the deployment specification | Use a larger host, or change the per-sandbox resources through the maintenance procedure |
+| `provider_unavailable` | Any other failure, such as a missing private microsandbox state directory, and every failure reported by an older node | Inspect the node configuration and its service journal |
+
+A node reports only its first failed check. Checks run from the provider platform
+(Docker daemon or KVM), through Docker limit support and host capacity, to the
+installed Runtime content. An unreachable Docker daemon therefore hides a missing
+image, and missing KVM hides missing artifacts or insufficient capacity. After a
+fix, the next heartbeat (about ten seconds) clears or replaces the code.
+`parsar-sandbox-node register` prints the same code with its local failure.
+
+Only the code crosses the node connection. Probe errors can name host paths or
+contain daemon messages; they are not sent to Core, stored or returned. Core stores
+any other reported value as `provider_unavailable`. Nodes from older releases send
+`provider_unavailable` or no code and keep working unchanged. Upgrade Core before
+its nodes: an older Core rejects the new codes and closes an unready newer node's
+connection until its provider is ready again.
+
 ## Runtime observations
 
 The existing Runtime observation and history APIs route managed reads to the

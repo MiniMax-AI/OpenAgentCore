@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	sandboxmicro "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
 )
 
@@ -38,7 +39,7 @@ type Rule struct {
 	Port        string `json:"port"`
 }
 
-func configureMicrosandbox(entry Microsandbox, result *Built) error {
+func configureMicrosandbox(entry Microsandbox, resources sandbox.Resources, result *Built) error {
 	if !filepath.IsAbs(entry.RuntimeHome) || filepath.Clean(entry.RuntimeHome) != entry.RuntimeHome {
 		return errors.New("managed microsandbox runtime_home must be a canonical absolute path")
 	}
@@ -55,7 +56,7 @@ func configureMicrosandbox(entry Microsandbox, result *Built) error {
 		return errors.New("invalid managed microsandbox provider configuration")
 	}
 	result.Provider = provider
-	result.Probe = microsandboxProbe(entry)
+	result.Probe = microsandboxProbe(entry, resources)
 	result.BackendFingerprint = BackendFingerprint("microsandbox", entry.RuntimeHome)
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	providerconfig "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/config"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 )
@@ -96,7 +97,7 @@ func run(ctx context.Context, args []string) error {
 		_, err = probe(probeCtx)
 		stopProbe()
 		if err != nil {
-			return fmt.Errorf("local provider readiness check failed: %w", err)
+			return fmt.Errorf("local provider readiness check failed (%s): %w", sandbox.NodeDiagnostic(err), err)
 		}
 		stored, err := node.Enroll(ctx, *coreURL, *stateDir, token, node.EnrollmentRequest{Name: *name})
 		if err != nil {

@@ -197,3 +197,37 @@ func TestRuntimeNodePresenceDisconnectWaitsForCommit(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeNodeDiagnosticReachesListAndDetail(t *testing.T) {
+	s, _, d := managerFixture(t, 1, 1)
+	connection := onlineManagerNode(t, s, d.LocalNodeID)
+	epoch := managerEpoch(t, s)
+	for _, tc := range []struct {
+		reported, want string
+		ready          bool
+	}{
+		{reported: "docker_unavailable", want: "docker_unavailable"},
+		{reported: "capacity_insufficient", want: "capacity_insufficient"},
+		// Older nodes send provider_unavailable or nothing; unknown text is never stored.
+		{reported: "provider_unavailable", want: "provider_unavailable"},
+		{reported: "", want: ""},
+		{reported: "dial unix /var/run/docker.sock: permission denied", want: "provider_unavailable"},
+		{reported: "kvm_unavailable", want: "", ready: true},
+	} {
+		if err := s.HeartbeatRuntimeNode(t.Context(), d.LocalNodeID, connection, epoch, RuntimeNodeHealth{ProviderReady: tc.ready, Diagnostic: tc.reported}); err != nil {
+			t.Fatal(tc.reported, err)
+		}
+		list, err := s.ListRuntimeNodes(t.Context())
+		if err != nil || len(list) != 1 || list[0].Diagnostic != tc.want {
+			t.Fatal(tc.reported, list, err)
+		}
+		detail, err := s.GetRuntimeNodeDetail(t.Context(), d.LocalNodeID, "1h")
+		if err != nil || detail.Diagnostic != tc.want {
+			t.Fatal(tc.reported, detail.Diagnostic, err)
+		}
+		var stored string
+		if err := s.pool.QueryRow(t.Context(), "SELECT health::text FROM runtime_nodes WHERE id=$1", d.LocalNodeID).Scan(&stored); err != nil || strings.Contains(stored, "/var/run") {
+			t.Fatal("raw diagnostic stored", stored, err)
+		}
+	}
+}

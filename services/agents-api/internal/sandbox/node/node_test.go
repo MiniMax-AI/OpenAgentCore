@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -286,6 +287,26 @@ func TestCoreURLRejectsRemotePlaintextAndCredentials(t *testing.T) {
 	for _, raw := range []string{"https://core.example.test:9443", "http://127.0.0.1:8080", "http://[::1]:8080"} {
 		if _, err := endpoint(raw, "/core/v1/sandbox/enroll"); err != nil {
 			t.Fatalf("rejected %q: %v", raw, err)
+		}
+	}
+}
+
+func TestHealthSendsOnlyFixedDiagnosticCode(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("%w: dial unix /home/operator/private/docker.sock", sandbox.ErrDockerUnavailable), "docker_unavailable"},
+		{errors.New("open /home/operator/private/runtime: permission denied"), "provider_unavailable"},
+		{nil, ""},
+	} {
+		a := &agent{config: AgentConfig{StateDirectory: stateDir(t), Identity: identity(), Probe: func(context.Context) (Health, error) {
+			return Health{Diagnostic: "/home/operator/private"}, tc.err
+		}}}
+		h, _ := a.health(t.Context(), new(hostHealthSampler))
+		raw, err := json.Marshal(frame{Type: "heartbeat", Health: &h})
+		if err != nil || h.Diagnostic != tc.want || h.ProviderReady != (tc.err == nil) || strings.Contains(string(raw), "private") {
+			t.Fatalf("heartbeat = %s, %v", raw, err)
 		}
 	}
 }

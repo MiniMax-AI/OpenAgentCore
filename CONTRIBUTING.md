@@ -841,7 +841,10 @@ cleanup first locks the node row by identity, then applies the connection/epoch
 fence with a fresh READ COMMITTED statement so an in-flight commit cannot be
 missed. These transactions must not acquire the deployment-wide manager lock.
 Heartbeats establish provider readiness and
-last-observed host metrics, never Session activity. Transport reconnects use
+last-observed host metrics, never Session activity. An unready provider reports
+one fixed diagnostic code, classified by typed probe errors where the node detects
+the cause; probe text and host paths stay on the node, and Core stores unknown
+codes as `provider_unavailable`. Keep that set closed. Transport reconnects use
 bounded backoff. Send relative operation budgets, anchored to the node clock at
 receipt and consumed while queued; clocks on different hosts need not agree. Core
 still bounds its own response wait. Do not replay mutations after a timeout or

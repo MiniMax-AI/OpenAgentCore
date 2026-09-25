@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -40,8 +41,11 @@ func (s *Store) HeartbeatRuntimeNode(ctx context.Context, nodeID, connectionID s
 	if err != nil {
 		return err
 	}
-	if health.Diagnostic != "" && health.Diagnostic != "provider_unavailable" {
-		return ErrInvalidInput
+	// A diagnostic explains unreadiness only. Unknown node values, including
+	// arbitrary text, are stored as provider_unavailable; empty stays empty.
+	health.Diagnostic = sandbox.NormalizeNodeDiagnostic(health.Diagnostic)
+	if health.ProviderReady {
+		health.Diagnostic = ""
 	}
 	for _, value := range []*int64{health.CPUCount, health.AvailableMemoryBytes, health.AvailableDiskBytes} {
 		if value != nil && *value < 0 {

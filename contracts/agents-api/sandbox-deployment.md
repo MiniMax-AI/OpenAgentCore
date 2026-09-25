@@ -222,6 +222,18 @@ node credentials return 401 `invalid_node_credential`. Unavailable provider
 preparation returns 503 `execution_unavailable`. Storage and credential failures
 remain errors; an empty or failed read is not evidence of cleanup.
 
+The administrator node list and node detail report an unready provider with one
+fixed `diagnostic` code: `docker_unavailable`, `docker_limits_unsupported`,
+`runtime_image_unavailable`, `kvm_unavailable`,
+`microsandbox_artifacts_unavailable`, `capacity_insufficient` or
+`provider_unavailable`. It is absent while the provider is ready. The node
+classifies the first failed readiness check and sends only the code; Core stores
+any other value as `provider_unavailable` and never stores or returns probe error
+text or host paths. Older nodes remain compatible, but an older Core rejects the
+new codes, so upgrade Core first. See
+[Node readiness diagnostics](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#node-readiness-diagnostics)
+for causes, precedence and operator actions.
+
 Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`. A node provider file remains an
 installed copy of the database selection, not a Core startup configuration source.
 For an older file-managed deployment, use the previous release and original
