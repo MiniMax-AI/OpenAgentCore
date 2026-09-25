@@ -40,17 +40,30 @@ func validateRuntimeNode(name string, active, retained int) error {
 	return nil
 }
 func (s *Store) runtimeManagerTransaction(ctx context.Context, apply func(*sqlc.Queries, sqlc.RuntimeDeployment) error) error {
+	return s.runtimeDeploymentTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
+		if !runtimeDeploymentInitialized(d) {
+			return ErrRuntimeNodeUnavailable
+		}
+		return apply(q, d)
+	})
+}
+
+// runtimeDeploymentTransaction locks the deployment whether or not it is
+// initialized. Node machine routes use it to authenticate their credential
+// before reporting any deployment state, including an uninitialized one.
+func (s *Store) runtimeDeploymentTransaction(ctx context.Context, apply func(*sqlc.Queries, sqlc.RuntimeDeployment) error) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		deployment, err := q.LockRuntimeDeployment(ctx)
 		if err != nil {
 			return err
 		}
-		if !deployment.InstallationID.Valid || deployment.ProviderKind == "" {
-			return ErrRuntimeNodeUnavailable
-		}
 		return apply(q, deployment)
 	})
+}
+
+func runtimeDeploymentInitialized(d sqlc.RuntimeDeployment) bool {
+	return d.InstallationID.Valid && d.ProviderKind != ""
 }
 func (s *Store) GetRuntimeDeployment(ctx context.Context) (RuntimeDeploymentView, error) {
 	return getRuntimeDeploymentView(ctx, s.queries)
@@ -140,7 +153,7 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		return RuntimeNodeIdentity{}, err
 	}
 	var result RuntimeNodeIdentity
-	err = s.runtimeManagerTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
+	err = s.runtimeDeploymentTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
 		receipt, err := q.GetRuntimeEnrollment(ctx, runtimeTokenDigest(token))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrRuntimeNodeCredential
@@ -148,8 +161,14 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		if err != nil {
 			return ErrRuntimeNodeUnavailable
 		}
-		if receipt.ConsumedAt.Valid || !receipt.ExpiresAt.Time.After(time.Now()) || receipt.InstallationID != d.InstallationID {
+		if receipt.ConsumedAt.Valid || !receipt.ExpiresAt.Time.After(time.Now()) {
 			return ErrRuntimeNodeCredential
+		}
+		if d.InstallationID.Valid && receipt.InstallationID != d.InstallationID {
+			return ErrRuntimeNodeCredential
+		}
+		if !runtimeDeploymentInitialized(d) {
+			return ErrRuntimeNodeUnavailable
 		}
 		if d.Mode != "nodes" || d.Maintenance || input.Provider != d.ProviderKind {
 			return ErrInvalidInput

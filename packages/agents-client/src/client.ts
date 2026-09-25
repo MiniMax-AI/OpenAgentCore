@@ -2,6 +2,7 @@ import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegative
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
 import { projectOpenAIHostedSessionEnvironment } from "./session-environment-projection";
+import { safeProvider } from "./execution-configuration-projection";
 import { createSSEDecoder } from "./sse";
 import { projectVaultCredentialAuth, validCredentialURL } from "./vault-credential-auth";
 import {
@@ -28,6 +29,8 @@ import {
 } from "./skill-projection";
 import type {
   AgentCore,
+  AgentsCoreSelection,
+  AgentSnapshot,
   AgentDeleted,
   AgentEnvironmentInput,
   AgentEnvironmentResource,
@@ -58,6 +61,7 @@ import type {
   PageOrder,
   ReadOptions,
   SavedAgent,
+  SavedAgentCore,
   SessionDeleted,
   SessionEvent,
   SessionListOptions,
@@ -256,6 +260,8 @@ const agentSnapshotFields = new Set([
   "service_tier", "text", "tools",
 ]);
 const agentSnapshotAcceptedFields = new Set([...agentSnapshotFields, "x_agents_core"]);
+const sessionAgentCoreFields = new Set(["harness"]);
+const savedAgentCoreFields = new Set(["harness", "model_provider"]);
 const multiAgentFields = new Set(["enabled", "max_concurrent_subagents"]);
 const reasoningFields = new Set(["effort", "summary"]);
 const textFields = new Set(["format", "verbosity"]);
@@ -595,12 +601,53 @@ function invalidSessionResource(message = "Agent Core returned an invalid Sessio
   throw new AgentCoreError(message, 502, "invalid_session_resource");
 }
 
+type AgentConfiguration<Core> = Omit<AgentSnapshot, "x_agents_core"> & { x_agents_core?: Core | null };
+
+/** A Session's effective Agent reports only its persisted harness. */
+function projectSessionAgentCore(value: unknown): AgentsCoreSelection | null | undefined {
+  if (value === undefined || value === null) return value;
+  if (!isRecord(value) || !exactFields(value, sessionAgentCoreFields) || !isHarnessKind(value.harness)) {
+    return invalidSessionResource();
+  }
+  return { harness: value.harness };
+}
+
+/**
+ * Saved Agent defaults: an optional harness and an optional safe provider view.
+ * Either may be absent, so an empty object is valid. The API key is write-only.
+ */
+function projectSavedAgentCore(value: unknown): SavedAgentCore | null | undefined {
+  if (value === undefined || value === null) return value;
+  if (
+    !isRecord(value) || !onlyFields(value, savedAgentCoreFields) ||
+    (hasOwn(value, "harness") && !isHarnessKind(value.harness))
+  ) return invalidSessionResource();
+  return {
+    ...(hasOwn(value, "harness") ? { harness: value.harness as CoreHarnessKind } : {}),
+    ...(hasOwn(value, "model_provider")
+      ? { model_provider: safeProvider(value.model_provider, invalidSessionResource) }
+      : {}),
+  };
+}
+
 export function projectAgentSnapshot(value: unknown): AgentSession["agent"] {
+  return projectAgentConfiguration(value, projectSessionAgentCore);
+}
+
+/** Projects a saved Agent's configuration members, without its resource fields. */
+export function projectSavedAgentConfiguration(value: unknown): AgentConfiguration<SavedAgentCore> {
+  return projectAgentConfiguration(value, projectSavedAgentCore);
+}
+
+function projectAgentConfiguration<Core>(
+  value: unknown,
+  projectCore: (value: unknown) => Core | null | undefined,
+): AgentConfiguration<Core> {
   if (
     !isRecord(value) || !onlyFields(value, agentSnapshotAcceptedFields) ||
     [...agentSnapshotFields].some((field) => !hasOwn(value, field))
   ) return invalidSessionResource();
-  const agentsCore = value.x_agents_core;
+  const agentsCore = projectCore(value.x_agents_core);
   const multiAgent = value.multi_agent;
   const reasoning = value.reasoning;
   const text = value.text;
@@ -609,9 +656,6 @@ export function projectAgentSnapshot(value: unknown): AgentSession["agent"] {
     typeof value.model !== "string" || value.model.trim() === "" ||
     !(value.name === null || typeof value.name === "string") ||
     !(value.instructions === null || typeof value.instructions === "string") ||
-    !(agentsCore === undefined || agentsCore === null || (
-      isRecord(agentsCore) && exactFields(agentsCore, new Set(["harness"])) && isHarnessKind(agentsCore.harness)
-    )) ||
     !isRecord(multiAgent) || !exactFields(multiAgent, multiAgentFields) ||
     typeof multiAgent.enabled !== "boolean" ||
     !(multiAgent.max_concurrent_subagents === null ||
@@ -635,9 +679,7 @@ export function projectAgentSnapshot(value: unknown): AgentSession["agent"] {
 
   return {
     id: value.id,
-    ...(agentsCore === undefined
-      ? {}
-      : { x_agents_core: agentsCore === null ? null : { harness: agentsCore.harness as CoreHarnessKind } }),
+    ...(agentsCore === undefined ? {} : { x_agents_core: agentsCore }),
     model: value.model,
     name: value.name,
     instructions: value.instructions,

@@ -273,8 +273,9 @@ func TestSandboxSpecificationInitialCredentialRemainsPrivate(t *testing.T) {
 	if err := s.pool.QueryRow(t.Context(), "SELECT e2b_credential FROM runtime_deployment").Scan(&stored); err != nil || len(stored) == 0 || bytes.Contains(stored, []byte(input.E2B.APIKey)) {
 		t.Fatal("private credential was not encrypted", err)
 	}
-	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", input.E2B.APIKey); err == nil {
-		t.Fatal("cloud key authorized node bootstrap")
+	// The credential is rejected before the cloud deployment mode is reported.
+	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", input.E2B.APIKey); !errors.Is(err, ErrRuntimeNodeCredential) {
+		t.Fatal("cloud key authorized node bootstrap", err)
 	}
 }
 

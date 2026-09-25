@@ -276,9 +276,16 @@ Malformed selections return 400; validated configuration diagnostics use
 `invalid_sandbox_configuration`. Stale generations, retained resources or an
 incompatible deployment return 409 `sandbox_deployment_conflict`. A node
 configuration mismatch returns 409 `sandbox_specification_mismatch`; rejected
-node credentials return 401 `invalid_node_credential`. Unavailable provider
-preparation returns 503 `execution_unavailable`. Storage and credential failures
-remain errors; an empty or failed read is not evidence of cleanup.
+node credentials return 401 `invalid_node_credential`. Node machine routes check
+the credential before any deployment state, so a missing or rejected credential,
+including one issued for another installation, gets that 401 even before
+initialization or under E2B. Until the deployment is initialized,
+`GET /api/v1/sandbox-node/configuration` and `POST /api/v1/sandbox-node/enroll`
+answer an otherwise accepted credential with 503 `runtime_node_unavailable`;
+`GET /api/v1/sandbox-node/identity` and the node connection answer 401 for any
+credential. Unavailable provider preparation returns 503 `execution_unavailable`.
+Storage and credential failures remain errors; an empty or failed read is not
+evidence of cleanup.
 
 The administrator node list and node detail report an unready provider with one
 fixed `diagnostic` code: `docker_unavailable`, `docker_limits_unsupported`,

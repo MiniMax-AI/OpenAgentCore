@@ -1,4 +1,4 @@
-import type { CoreHarnessKind, SavedAgent } from "@agents-core-web/agents-client";
+import type { CoreHarnessKind, ModelProviderView, SavedAgent } from "@agents-core-web/agents-client";
 import { ArrowLeft, Bot, ListTree, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,6 +23,9 @@ export function harnessLabel(harness: CoreHarnessKind): string {
   if (harness === "mcode") return "MiniMax Code";
   return "Codex";
 }
+
+/** Provider protocols by their product names, the same in every language. */
+const protocolNames: Record<ModelProviderView["protocol"], string> = { anthropic: "Anthropic Messages", responses: "OpenAI Responses" };
 
 function coverage(summary: ProjectSummary | undefined, locale?: string): string {
   if (!summary || summary.coverage.sessions === 0) return MISSING;
@@ -201,6 +204,7 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
   const name = agent ? agent.name || t("catalog.untitled") : agentId;
   const tools = agent ? toolRows(agent) : [];
   const metadata = agent ? Object.entries(agent.metadata ?? {}) : [];
+  const provider = agent?.x_agents_core?.model_provider;
   return (
     <section className="page-section console-page agents-list-page" aria-labelledby="agent-detail-heading">
       <PageHeader
@@ -267,6 +271,19 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
                 </div>
               ) : <p className="table-muted">{t("view.noTools")}</p>}
             </Section>
+
+            {provider ? (
+              <Section headingId="agent-provider-heading" title={t("view.provider.title")} help={t("view.provider.help")}>
+                {/* The read view has no key, only whether one is saved. */}
+                <dl className="resource-facts">
+                  <div><dt>{t("view.provider.protocol")}</dt><dd>{protocolNames[provider.protocol]}</dd></div>
+                  <div className="agent-provider-url"><dt>{t("view.provider.baseUrl")}</dt><dd><code>{provider.base_url}</code></dd></div>
+                  <div><dt>{t("view.provider.apiKey")}</dt><dd>{provider.api_key_configured ? t("view.provider.keyConfigured") : t("view.provider.keyNotConfigured")}</dd></div>
+                  {provider.context_window !== undefined ? <div><dt>{t("view.provider.contextWindow")}</dt><dd>{formatInteger(provider.context_window, locale)}</dd></div> : null}
+                  {provider.max_output_tokens !== undefined ? <div><dt>{t("view.provider.maxOutputTokens")}</dt><dd>{formatInteger(provider.max_output_tokens, locale)}</dd></div> : null}
+                </dl>
+              </Section>
+            ) : null}
 
             <Section headingId="agent-generation-heading" title={t("view.generation")}>
               <dl className="resource-facts">

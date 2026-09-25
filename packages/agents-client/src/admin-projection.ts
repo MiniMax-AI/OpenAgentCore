@@ -1,6 +1,6 @@
-import { AgentCoreError, projectAgentSnapshot, projectRuntimeObservation } from "./client";
+import { AgentCoreError, projectRuntimeObservation, projectSavedAgentConfiguration } from "./client";
 import { projectTokenUsage } from "./usage-projection";
-import { projectModelProviderView } from "./execution-configuration-projection";
+import { safeProvider } from "./execution-configuration-projection";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, onlyFields, sameResourceId } from "./response-projection";
 import type { CoreHarness, CoreHarnessKind, HarnessModelProvider, ListPage, SavedAgent } from "./types";
 import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminAuditResultID, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion, ExecutorCredential, IssuedExecutorCredential } from "./admin-types";
@@ -70,7 +70,7 @@ export function projectAdminSessionArchive(value: unknown, sessionId: string): A
 export function projectSavedAgent(value: unknown, expectedId?: string): SavedAgent {
   if (!isRecord(value)) return invalidAdminResponse();
   const { object, metadata, created_at, updated_at, ...snapshot } = value;
-  const agent = projectAgentSnapshot(snapshot);
+  const agent = projectSavedAgentConfiguration(snapshot);
   if (object !== "agent" || !isRecord(metadata) || Object.values(metadata).some((entry) => typeof entry !== "string") ||
     !isNonnegativeInteger(created_at) || !isNonnegativeInteger(updated_at) || updated_at < created_at ||
     (expectedId !== undefined && !sameResourceId(agent.id, expectedId))) return invalidAdminResponse();
@@ -223,7 +223,7 @@ export function projectHarnessModelProvider(value: unknown, harness?: CoreHarnes
   const { object, harness: kind, updated_at, ...view } = value;
   if (object !== "core.model_provider" || typeof kind !== "string" || !harnessKinds.has(kind) || (harness !== undefined && kind !== harness) ||
     typeof updated_at !== "string" || !date(updated_at)) return invalidAdminResponse();
-  const provider = projectModelProviderView(view, invalidAdminResponse);
+  const provider = safeProvider(view, invalidAdminResponse);
   if (!provider.api_key_configured) return invalidAdminResponse();
   return { object, harness: kind as CoreHarnessKind, ...provider, updated_at };
 }
