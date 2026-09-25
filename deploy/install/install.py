@@ -188,14 +188,22 @@ def seed_config(args, document):
         "ports.database": database_port() if native else None})
 
 
+def loopback_origin(value):
+    hostname = urlsplit(value or "").hostname
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return hostname == "localhost"
+
+
+def origin_port(value):
+    parsed = urlsplit(value)
+    return parsed.port or (443 if parsed.scheme == "https" else 80)
+
+
 def check_public_url(config, provider):
     if provider:
-        endpoint = urlsplit(config["public_url"] or "")
-        try:
-            loopback = ipaddress.ip_address(endpoint.hostname).is_loopback
-        except ValueError:
-            loopback = endpoint.hostname == "localhost"
-        if endpoint.scheme != "https" or loopback:
+        if urlsplit(config["public_url"] or "").scheme != "https" or loopback_origin(config["public_url"]):
             raise InstallError("Local sandbox installation requires public_url with HTTPS reachable from sandbox "
                                "guests; loopback origins cannot be used")
 
@@ -346,19 +354,40 @@ def finish(root, bundle, manifest, provider=None):
     if provider:
         local_node.install(root, dict(state, provider=provider, core_port=config["ports"]["core"],
                                       public_url=config["public_url"]), manifest, bundle, run)
-    public_url = config["public_url"]
+    summary(root, config, provider)
+
+
+def summary(root, config, provider):
+    mode, public_url, ports = config["mode"], config["public_url"], config["ports"]
     if mode != "core-only":
-        url = f'http://127.0.0.1:{config["ports"]["web"]}'
-        print("Console: " + (public_url or url + " (local only)"))
+        # The console accepts only its configured origin, so a public URL has no loopback console.
+        console = public_url or f'http://127.0.0.1:{ports["web"]}'
+        print("Console: " + console + (" (local only)" if loopback_origin(console) else ""))
     if mode != "web-only":
-        print("API base URL: " + configuration.local_public_url(config) + "/v1" + ("" if public_url else " (local only)"))
-    print(f"Core key: {root / 'secrets/core.key'}. Keep it private; it also authorizes the Core management API.")
+        api = f'http://127.0.0.1:{ports["core"]}/v1'
+        if public_url and not loopback_origin(public_url):
+            print("API base URL: " + public_url + "/v1")
+            print("Local-only API on this host: " + api)
+        elif public_url and origin_port(public_url) != ports.get("web"):
+            print("API base URL: " + public_url + "/v1 (local only)")
+        else:
+            # Web answers 404 on /v1, so only Core's own port serves the API locally.
+            print("API base URL: " + api + " (local only)")
+    core_key = root / "secrets/core.key"
+    if mode == "core-only":
+        print(f'Next: create a Project and its API key through the Core management API at '
+              f'http://127.0.0.1:{ports["core"]}/core/v1 (local only) with the Core key in {core_key}.')
+    else:
+        print(f"Next: sign in to Web with the Core key in {core_key}, then create a Project and its API key on the Projects and keys page.")
+    print("Keep the Core key private; it also authorizes the Core management API.")
     print(f"Settings: {root / 'config.json'}. Edit it, then run {root / 'parsar'} apply.")
     print(f"Manage the services with {root / 'parsar'} status, start and stop.")
-    if mode != "web-only" and not provider:
-        print("No execution node was installed by this run. Choose a sandbox backend and add nodes in Web.")
-    elif provider:
+    if provider:
         print("Provider: " + provider + ". Local node enrolled; Core provisions Sessions on demand.")
+    elif mode == "all":
+        print("No execution node was installed by this run. Choose a sandbox backend and add nodes on the Nodes page in Web.")
+    elif mode == "core-only":
+        print("No execution node was installed by this run.")
     print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
 
 

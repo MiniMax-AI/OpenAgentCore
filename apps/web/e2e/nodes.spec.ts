@@ -1,21 +1,97 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, openConsole } from "./console";
+import { expectManagementBoundary, openConsole, setNode, writes } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
-test("prepares a one-time node command for the limits set first, and removes a node after confirmation", async ({ page, request }) => {
+test("adds a node: host requirements, a countdown, the same command after closing, a new one after expiry, then registration", async ({ page, request }) => {
+  await page.clock.install();
+  // Core counts a token's ten minutes on its own clock; the page's clock stands in for it, so fast-forwarding expires a command.
+  await page.route("**/core/v1/sandbox/enrollment-tokens", async (route) => {
+    const response = await route.fetch();
+    const now = await page.evaluate(() => Date.now());
+    await route.fulfill({ response, json: { ...await response.json(), expires_at: new Date(now + 10 * 60_000).toISOString() } });
+  });
   await openConsole(page, request, "nodes");
   await page.getByRole("button", { name: "Add node" }).click();
   const add = page.getByRole("dialog", { name: "Add node" });
+  // What a Docker host needs, with the root commands that prepare it.
+  await expect(add.getByText("Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits")).toBeVisible();
+  await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeVisible();
+  await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB")).toBeVisible();
+  await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
+  // The fixture console runs on loopback, where another machine can't download from it.
+  await expect(add.getByRole("note")).toContainText("other machines can't reach");
   await add.getByLabel("Sandboxes at once").fill("3");
-  const issued = page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
+  const tokenRequest = () => page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
+  const issued = tokenRequest();
   await add.getByRole("button", { name: "Generate command" }).click();
   // Docker never suspends, so it retains exactly the sandboxes it runs.
   expect((await issued).postDataJSON()).toEqual({ max_active: 3, max_retained: 3 });
-  await expect(add.getByLabel("One-time enrollment command")).toHaveValue(/enroll_fixture_/);
-  await add.getByRole("button", { name: "Close dialog" }).click();
+  const field = add.getByLabel("One-time enrollment command");
+  await expect(field).toHaveValue(/enroll_fixture_/);
+  await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
+  const progress = add.getByRole("status", { name: "Registration progress" });
+  await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
 
+  // Closing keeps the command for the next opening.
+  const first = await field.inputValue();
+  await add.getByRole("button", { name: "Close dialog" }).click();
+  await expect(add).toBeHidden();
+  await page.getByRole("button", { name: "Add node" }).click();
+  await expect(field).toHaveValue(first);
+
+  // Once expired, a new command is issued only on request, for the same limits.
+  await page.clock.fastForward("10:30");
+  await expect(progress).toContainText("Command expired");
+  await expect(field).toBeHidden();
+  const reissued = tokenRequest();
+  await add.getByRole("button", { name: "Generate new command" }).click();
+  expect((await reissued).postDataJSON()).toEqual({ max_active: 3, max_retained: 3 });
+  await expect(field).toHaveValue(/enroll_fixture_/);
+  await expect(field).not.toHaveValue(first);
+
+  // The node registers while the dialog is closed and the command lapses: reopening reads the
+  // node list, and the command's node outranks its expiry.
+  await add.getByRole("button", { name: "Close dialog" }).click();
+  await expect(add).toBeHidden();
+  await setNode(request, { id: "node-new", name: "edge-04" });
+  await page.clock.fastForward("10:30");
+  // Every render from the reopening on is watched, so even a brief "Command expired" would count.
+  await page.evaluate(() => {
+    const watch = window as unknown as { expiredShown: boolean; expiredWatch: MutationObserver };
+    watch.expiredShown = false;
+    watch.expiredWatch = new MutationObserver(() => { if (document.body.textContent?.includes("Command expired")) watch.expiredShown = true; });
+    watch.expiredWatch.observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  await page.getByRole("button", { name: "Add node" }).click();
+  await expect(progress).toHaveText(/Registered · edge-04.*Waiting to connect.*Docker check/);
+  expect(await page.evaluate(() => {
+    const watch = window as unknown as { expiredShown: boolean; expiredWatch: MutationObserver };
+    watch.expiredWatch.disconnect();
+    return watch.expiredShown;
+  })).toBe(false);
+  await expect(add.getByText("Rerun only on edge-04 if asked")).toBeVisible();
+  // Past the installer's minute without connecting, the dialog points at the node's log.
+  await page.clock.fastForward("01:01");
+  const problem = add.getByRole("alert");
+  await expect(problem).toContainText("Not connected yet");
+  await expect(problem).toContainText("journalctl --user -u parsar-node-7f3c2a90-fixture.service");
+  // Connected, it reports why Docker isn't ready; once ready, the node is connected.
+  await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
+  await expect(problem).toContainText("Docker limits unsupported");
+  await expect(progress).toContainText("Waiting for Docker");
+  await setNode(request, { id: "node-new", provider_ready: true, diagnostic: "" });
+  await expect(progress).toHaveText("edge-04 · Connected");
+  await add.getByRole("button", { name: "Done" }).click();
+  await expect(add).toBeHidden();
+  // A finished flow leaves no limits behind: the next node starts from the defaults.
+  await page.getByRole("button", { name: "Add node" }).click();
+  await expect(add.getByLabel("Sandboxes at once")).toHaveValue("2");
+});
+
+test("removes a node after confirmation", async ({ page, request }) => {
+  await openConsole(page, request, "nodes");
   await page.getByRole("button", { name: "Remove edge-03" }).click();
   const confirm = page.getByRole("dialog", { name: "Remove node" });
   await confirm.getByRole("button", { name: "Confirm removal" }).click();
@@ -35,7 +111,24 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
 
   // The saved specification carries the Runtime read from the console's manifest.
   await expect(page.getByText("c0ffee000000")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add node" })).toBeVisible();
+  // Own machines continue straight to adding the first node, at its limits: no command is issued yet.
+  await expect(page.getByRole("dialog", { name: "Add node" }).getByLabel("Sandboxes at once")).toBeVisible();
+  // None is requested within a second of opening, and Core saw only the deployment write.
+  const tokenRequested = await page.waitForRequest((sent) => sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"), { timeout: 1000 }).then(() => true, () => false);
+  expect(tokenRequested).toBe(false);
+  expect(await writes(request)).toEqual(["POST /core/v1/sandbox/deployment"]);
+});
+
+test("saves E2B without opening Add node, as it has no machines", async ({ page, request }) => {
+  await openConsole(page, request, "nodes", { sandbox: "none" });
+  await page.getByRole("button", { name: "E2B cloud" }).click();
+  await page.getByLabel("E2B API key").fill("fixture-private-key");
+  await page.getByLabel("Template build").fill("template:94be54a1-138c-4f30-bc87-b13686272dbe");
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByLabel("Core address").fill("https://core.example.com");
+  await page.getByRole("button", { name: "Save configuration" }).click();
+  await expect(page.getByRole("heading", { name: "Sandbox backend", level: 1 })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("keeps the saved size and Runtime for the same backend, and starts another from its defaults", async ({ page, request }) => {

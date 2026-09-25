@@ -16,12 +16,12 @@ AGENTS_API_IMAGE=agents-api:local make docker-build-agents-api
 ```
 
 The target needs Go, Docker and access to pinned Go modules and the base image.
-It reuses the isolated binary build and sends only those executables and the image
-recipe to Docker. Linux amd64 is the current runtime target; other architectures
-and registry publication are not included. The pinned
-[Distroless static runtime](https://github.com/GoogleContainerTools/distroless)
-contains CA certificates and no shell or package manager. The default user is
-UID/GID 65532. No model credentials or tenant keys belong in the image.
+It reuses the isolated binary build and sends only those executables, the E2B helper
+and the image recipe to Docker. Linux amd64 is the current runtime target; other architectures
+and registry publication are not included. The runtime base is the digest-pinned
+`debian:bookworm-slim` image, with CA certificates and the glibc/libgcc runtime that
+the bundled E2B helper needs. It keeps Debian's shell and package manager. The default
+user is UID/GID 65532. No model credentials or tenant keys belong in the image.
 
 ## Configure and run
 

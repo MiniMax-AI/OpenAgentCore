@@ -8,8 +8,9 @@ and a daemon execution worker. Public execution supports qualified Codex, Claude
 (`claude_sdk`) and MiniMax Code (`mcode`) profiles through the shared Runtime contract.
 The three-harness Linux amd64 Docker V1 MVP has accepted evidence. V1 user-managed
 Runtime enrollment has [recorded real acceptance](../../contracts/agents-api/user-managed-runtime-v1.md)
-with explicit deployment coverage. [E2B deployment](deploy/e2b/README.md) is user-managed;
-its earlier Core-managed qualification remains historical evidence.
+with explicit deployment coverage. [E2B](deploy/e2b/README.md) can back Core-managed
+hosted sandboxes, selected in Web's sandbox setup, or application-managed
+`self_hosted` Environments.
 It builds and runs with its own PostgreSQL database and credentials;
 Parsar's product service, frontend and database are not required.
 

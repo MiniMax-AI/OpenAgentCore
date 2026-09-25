@@ -25,7 +25,7 @@ key in constant time and never logs or returns it. Only failed attempts count
 toward the limit; the correct key signs in even while failures are limited. The
 console refuses to start with a Core key shorter than 32 characters. Sessions live only in the console's memory; a console restart
 or Core key rotation requires signing in again. There are no console accounts,
-usernames, passwords, first-run setup or Basic authentication.
+usernames, passwords, account setup or Basic authentication.
 
 Use same-origin browser requests and cookies. Mutations require the same-origin
 request checks; never put the Core key in JavaScript or browser storage.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { InitializeSandboxDeployment, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Pencil, Server, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, HelpTip, RefreshButton } from "../../components/console-ui";
@@ -67,6 +67,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const [revision, setRevision] = useState(0);
   const [removeTarget, setRemoveTarget] = useState<SandboxNode | null>(null);
   const [editTarget, setEditTarget] = useState<SandboxNode | null>(null);
+  // The Add node dialog; it stays mounted with the page so its command survives closing.
+  const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const initialCoreUrl = window.location.origin;
@@ -83,7 +85,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const refresh = useCallback(() => {
     // Each refresh starts a new read (cancelling one in flight) and resets the forms, as a reload did.
     setRevision((value) => value + 1);
-    void refetch();
+    // Settles when the read does; the enrollment dialog waits for it before calling a command expired.
+    return refetch();
   }, [refetch]);
   const toast = useToast();
   // A refresh the administrator asks for reports its failure even while an earlier one is still unconfirmed;
@@ -99,9 +102,10 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     const controller = new AbortController(); lifetime.current = controller;
     return () => { controller.abort(); lifetime.current = null; };
   }, []);
-  async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>) {
+  /** Whether Core confirmed the change. */
+  async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>): Promise<boolean> {
     const controller = lifetime.current;
-    if (!controller || busy || loading || setupNeedsRefresh || !fresh) return;
+    if (!controller || busy || loading || setupNeedsRefresh || !fresh) return false;
     setBusy(true); setWriteFailure(null);
     try {
       const deployment = await operation(controller.signal);
@@ -116,6 +120,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         void queryClient.invalidateQueries({ queryKey: sandboxDeploymentQuery.queryKey });
         // Overview and Sandbox metrics read the fleet separately and lay out by provider.
         void queryClient.invalidateQueries({ queryKey: ["sandbox-fleet"] });
+        return true;
       }
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -124,15 +129,17 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
       }
     } finally { if (!controller.signal.aborted) setBusy(false); }
+    return false;
   }
-  function initialize(input: InitializeSandboxDeployment) {
-    return changeDeployment((signal) => client.initializeDeployment(input, { signal }));
+  /** First setup; own machines continue straight to adding the first node. */
+  async function initialize(input: InitializeSandboxDeployment) {
+    if (await changeDeployment((signal) => client.initializeDeployment(input, { signal })) && input.provider !== "e2b") setAdding(true);
   }
-  function update(input: InitializeSandboxDeployment) {
-    return changeDeployment((signal) => client.updateDeployment({ ...input, core_url: snapshot!.deployment.core_url, expected_generation: snapshot!.deployment.generation }, { signal }));
+  async function update(input: InitializeSandboxDeployment) {
+    await changeDeployment((signal) => client.updateDeployment({ ...input, core_url: snapshot!.deployment.core_url, expected_generation: snapshot!.deployment.generation }, { signal }));
   }
-  function maintenance(maintenance: boolean) {
-    return changeDeployment((signal) => client.setMaintenance({ maintenance, expected_generation: snapshot!.deployment.generation }, { signal }));
+  async function maintenance(maintenance: boolean) {
+    await changeDeployment((signal) => client.setMaintenance({ maintenance, expected_generation: snapshot!.deployment.generation }, { signal }));
   }
   const writeDialog = <ErrorDialog
     open={writeFailure?.open ?? false}
@@ -190,10 +197,13 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     <p>{t("{{name}} will be removed from this deployment.", { name: removeName })}</p>
     <p>{t("Core rejects removal while allocations or retained resources remain.")}</p>
   </ConfirmDialog>;
+  // Rendered first in both the list and a node's page, so an open command outlives the navigation.
+  const enrollment = hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} open={adding} fresh={confirmed} onClose={() => setAdding(false)} onRefresh={refresh} /> : null;
 
   if (params.id && hostedNodes) {
     const back = () => goBack("nodes");
     return <>
+      {enrollment}
       <NodesPageHeader
         back={back}
         title={selected ? selected.name || selected.id : params.id}
@@ -231,9 +241,10 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
 
   const actions = <>
     {refreshButton}
-    {hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || !fresh || snapshot.deployment.maintenance} fresh={confirmed} onRefresh={refresh} /> : null}
+    {hostedNodes && snapshot ? <button type="button" className="button primary" disabled={busy || loading || !fresh || snapshot.deployment.maintenance} onClick={() => setAdding(true)}><Plus size={16} />{t("Add node")}</button> : null}
   </>;
   return <>
+    {enrollment}
     <NodesPageHeader count={hostedNodes ? nodes.length : undefined} actions={actions} cloud={snapshot?.deployment.provider === "e2b"} />
     <div className="console-page-body sandbox-content">
       {status}

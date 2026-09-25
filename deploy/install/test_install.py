@@ -78,8 +78,31 @@ class InstallerTests(unittest.TestCase):
         output = self.output.getvalue()
         for name in ("core.key", "credential.key", "database.password"):
             self.assertNotIn((self.root / "secrets" / name).read_text(), output)
-        self.assertIn("Console: https://core.example", output)
+        self.assertIn("Console: https://core.example\nAPI base URL: https://core.example/v1\n"
+                      "Local-only API on this host: http://127.0.0.1:8091/v1\n", output)
         self.assertIn(f"Settings: {self.root / 'config.json'}. Edit it, then run {self.root / 'parsar'} apply.", output)
+
+    def test_output_labels_public_and_local_addresses(self):
+        key = "{root}/secrets/core.key"
+        cases = {
+            "default": ([], ["Console: http://127.0.0.1:8080 (local only)\n",
+                             "API base URL: http://127.0.0.1:8091/v1 (local only)\n",
+                             f"Next: sign in to Web with the Core key in {key}, then create a Project and its API key "
+                             "on the Projects and keys page.",
+                             "Choose a sandbox backend and add nodes on the Nodes page in Web."]),
+            "core-only": (["--core-only"], ["API base URL: http://127.0.0.1:8091/v1 (local only)\n",
+                                            "Next: create a Project and its API key through the Core management API at "
+                                            f"http://127.0.0.1:8091/core/v1 (local only) with the Core key in {key}."]),
+            # Web answers 404 on /v1, so a loopback public URL on its port points to Core's API.
+            "loopback": (["--public-url", "http://localhost:8080"], ["Console: http://localhost:8080 (local only)\n",
+                                                                     "API base URL: http://127.0.0.1:8091/v1 (local only)\n"]),
+        }
+        for name, (flags, expected) in cases.items():
+            with self.subTest(name=name):
+                self.root, self.output = self.work / name, io.StringIO()
+                self.install(*flags)
+                for line in expected:
+                    self.assertIn(line.format(root=self.root), self.output.getvalue())
 
     def test_rerun_reads_config_json_rejects_flags_and_repairs(self):
         self.install()
@@ -127,6 +150,9 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(set(self.document("generated/compose.json")["services"]), {"web"})
         self.assertEqual((web["network_mode"], web["environment"]["CORE_CONSOLE_UPSTREAM"]), ("host", "http://127.0.0.1:9091"))
         self.assertNotIn(source.read_text(), self.output.getvalue())
+        self.assertIn("Console: http://127.0.0.1:8080 (local only)\nNext: sign in to Web with the Core key in "
+                      + str(self.root / "secrets/core.key") + ", then create a Project", self.output.getvalue())
+        self.assertNotIn("API base URL", self.output.getvalue())
         self.assertFalse(any(command[:2] == ["docker", "load"] and not command[-1].endswith("web.tar")
                              for command in self.host.commands))
 
