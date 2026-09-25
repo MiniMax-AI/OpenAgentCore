@@ -191,8 +191,9 @@ there is no product swaggo contract in this repository. Preserve its pinned type
 coverage ledgers and official SDK/raw HTTP tests when changing API behavior.
 Run `make openapi` after handler annotation changes. It reuses the original
 Core-only swaggo v1.16.4 generator, then separates project paths under `/v1` from
-`/core/v1/sandbox` administration in `sandbox-manager.openapi.yaml` (base path `/`).
-Both generated schemas remain free of product routes.
+`/core/v1` administration in `sandbox-manager.openapi.yaml` and `/api/v1` machine
+connections in `runtime.openapi.yaml` (both base path `/`). All generated schemas
+remain free of product routes.
 
 Core changes must retain the independent build and official-client workflow.
 Native adapter changes require their applicable build/check targets and live provider
@@ -727,8 +728,9 @@ Default installation includes Core, Web and PostgreSQL but no execution node.
 It always creates a separate deployment administrator credential. Core receives
 only its digest; the paired console server receives the private token and injects
 it only on approved management routes after console login and same-origin checks.
-The browser never receives that token. Node/daemon transport routes instead
-forward their own credentials unchanged to Core. Zero-node Core receives neither the Docker socket nor KVM.
+The browser never receives that token. Node and daemon connections use `/api/v1`
+with their own credentials; the reverse proxy sends them directly to Core, never
+through Web. Zero-node Core receives neither the Docker socket nor KVM.
 The Web and deployment administrator API select one provider, public Core origin,
 per-sandbox resources and immutable Runtime release. PostgreSQL owns this complete,
 generation-tagged selection under the existing execution lease and deployment lock.
@@ -805,7 +807,7 @@ deployment. Harness selection and public/self-hosted contracts remain unchanged.
 
 The paired console serves only matched, non-secret distribution artifacts for node
 installation. Never serve private installation files or arbitrary paths. Installation
-reads `GET /core/v1/sandbox/node/configuration` using an unconsumed enrollment token,
+reads `GET /api/v1/sandbox-node/configuration` using an unconsumed enrollment token,
 or a retained node credential with `X-Parsar-Node-ID`. Reads never consume enrollment;
 registered nodes can read their matching configuration during maintenance. Validate
 installation, generation, specification digest and release before writing node files,
@@ -1761,18 +1763,17 @@ credentials to installed node/Runtime configuration to bypass download access.
 Project-authenticated executor-credential extensions remain outside the upstream
 API namespace and reuse the existing restricted issuer. They require the exact
 creator of a live self-hosted Environment; deployment administrator authority and
-shared Session read access do not grant credential issuance. The console preserves
-explicit caller credentials on these routes and never substitutes its administrator
-key. Self-hosted installation reuses Docker Runtime isolation, owns no sandbox
-node or Core allocation, and retains user-owned native history after uncertain
-launches. Report started, connected and real execution success separately.
+shared Session read access do not grant credential issuance. The console does not
+serve these routes; callers reach Core directly. Self-hosted installation reuses
+Docker Runtime isolation, owns no sandbox node or Core allocation, and retains
+user-owned native history after uncertain launches. Report started, connected and real execution success separately.
 Self-hosted installation confirms connection through the private daemon transport
 using only its restricted executor credential. The read checks the exact live
 Environment/key binding and current authenticated connection; it never enrolls,
-allocates, wakes a sandbox or grants project resource access. Console forwarding
-preserves this credential without replacing it with an administrator or project
-key. Bounded polling and reruns retain the original container and history;
-timeout is a diagnostic failure, not permission to relaunch. An explicit installer
+allocates, wakes a sandbox or grants project resource access. It is an `/api/v1`
+machine route that reaches Core directly, never through the console. Bounded
+polling and reruns retain the original container and history; timeout is a
+diagnostic failure, not permission to relaunch. An explicit installer
 `--public-url` supplies both the console origin and the advertised daemon `wss`
 origin. Keep local managed Provider routing separate; do not return an internal
 Compose hostname to a user-managed Runtime when an external origin was supplied. Bootstrap routing uses the
@@ -1834,11 +1835,15 @@ must not change on a repeated install.
 `services/core-console` serves the production Web build and proxies only finite
 administrator and sandbox-management routes after console login. It requires a
 private `CORE_CONSOLE_ADMIN_TOKEN_FILE` and holds no project caller credential.
-Every `/v1` request returns 404, including explicit Bearer requests. The installer
+Every `/v1` and `/api/v1` request returns 404, including explicit Bearer and
+WebSocket requests; Web forwards no node or daemon transport. The installer
 mounts only the administrator key into Web and only its digest into Core. The
-browser receives safe capability flags, never that key. Node/daemon transport
-keeps its own authenticated finite routes and credentials. External API clients
-reach Core directly through the deployment's TLS routing.
+browser receives safe capability flags, never that key. The deployment's TLS
+reverse proxy routes `/v1` (applications) and `/api/v1` (nodes and Runtime
+daemons, with their own credentials) directly to Core and everything else to Web.
+Nodes and Core come from one distribution; older nodes using the removed
+`/core/v1/sandbox` node paths cannot connect and are replaced through the drained
+upgrade and re-enrollment workflow.
 
 The Web manager offers no manual administrator-key fallback. A console without
 paired management configuration shows setup guidance; direct remote project API
@@ -1877,9 +1882,9 @@ account record stores a password hash; corruption or missing registered account
 state must never reopen registration. Account creation is race-safe. Cookie sessions are
 bounded, HttpOnly, SameSite Strict and Secure for HTTPS origins; a restart requires
 sign-in again, without deleting the account. Unauthenticated access is limited to
-the static login UI, finite console authentication routes and the existing
-independently authenticated node/project transports. Authentication requests use
-same-origin JSON POSTs with bounded bodies and bounded password-hash work.
+the static login UI, finite console authentication routes and the static node
+installation payload. Authentication requests use same-origin JSON POSTs with
+bounded bodies and bounded password-hash work.
 
 Projects and application API keys live in Core PostgreSQL. Project creation owns
 its scope and shared principal; key issuance, revocation and Project archive share

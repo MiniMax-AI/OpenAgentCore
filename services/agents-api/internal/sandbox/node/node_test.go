@@ -227,7 +227,7 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 	enrollments := 0
 	registered := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/core/v1/sandbox/node/identity" {
+		if r.URL.Path == "/api/v1/sandbox-node/identity" {
 			if !registered || r.Header.Get("Authorization") != "Bearer "+stored.Credential {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
@@ -235,7 +235,7 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(EnrollmentResponse{NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8})
 			return
 		}
-		if r.URL.Path != "/core/v1/sandbox/enroll" || r.Header.Get("Authorization") != "Bearer enrollment" {
+		if r.URL.Path != "/api/v1/sandbox-node/enroll" || r.Header.Get("Authorization") != "Bearer enrollment" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -279,12 +279,12 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 
 func TestCoreURLRejectsRemotePlaintextAndCredentials(t *testing.T) {
 	for _, raw := range []string{"http://example.com", "https://user:pass@example.com", "https://example.com/?token=x", "https://example.com/path"} {
-		if _, err := endpoint(raw, "/core/v1/sandbox/enroll"); err == nil {
+		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll"); err == nil {
 			t.Fatalf("accepted %q", raw)
 		}
 	}
 	for _, raw := range []string{"https://core.example.test:9443", "http://127.0.0.1:8080", "http://[::1]:8080"} {
-		if _, err := endpoint(raw, "/core/v1/sandbox/enroll"); err != nil {
+		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll"); err != nil {
 			t.Fatalf("rejected %q: %v", raw, err)
 		}
 	}

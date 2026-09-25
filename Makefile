@@ -28,7 +28,7 @@ openapi:
 	    --output "$$output" \
 	    --outputTypes yaml --parseInternal; \
 	python3 scripts/patch-agents-openapi.py "$$output/swagger.yaml"; \
-	go run ./scripts/openapi-split "$$output/swagger.yaml" contracts/agents-api/openapi.yaml contracts/agents-api/sandbox-manager.openapi.yaml
+	go run ./scripts/openapi-split "$$output/swagger.yaml" contracts/agents-api/openapi.yaml contracts/agents-api/sandbox-manager.openapi.yaml contracts/agents-api/runtime.openapi.yaml
 
 check-sqlc:
 	python3 scripts/check-sqlc.py

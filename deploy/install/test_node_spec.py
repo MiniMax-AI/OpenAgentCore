@@ -32,7 +32,7 @@ class SpecificationTests(unittest.TestCase):
         opener = mock.Mock(return_value=self.response())
         self.assertEqual(node_spec.fetch(self.args, "once", None, opener), self.data)
         req = opener.call_args.args[0]
-        self.assertEqual(req.full_url, self.args.core_url + "/core/v1/sandbox/node/configuration")
+        self.assertEqual(req.full_url, self.args.core_url + "/api/v1/sandbox-node/configuration")
         self.assertEqual(dict(req.header_items()), {"Authorization": "Bearer once"})
         self.assertEqual(req.get_method(), "GET")
 

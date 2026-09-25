@@ -78,14 +78,9 @@ func newConsole(c config) (*console, error) {
 			r.Out.Header.Del("Cookie")
 			r.Out.Header.Del("Origin")
 			r.Out.Header.Del("Referer")
-			r.Out.Header.Del("X-Core-Console-Actor")
-			if nodeTransportRequest(r.In) {
-				r.Out.Header.Set("Authorization", r.In.Header.Get("Authorization"))
-			} else {
-				r.Out.Header.Set("Authorization", "Bearer "+c.adminToken)
-				actor, _ := r.In.Context().Value(consoleActorContextKey{}).(string)
-				r.Out.Header.Set("X-Core-Console-Actor", actor)
-			}
+			r.Out.Header.Set("Authorization", "Bearer "+c.adminToken)
+			actor, _ := r.In.Context().Value(consoleActorContextKey{}).(string)
+			r.Out.Header.Set("X-Core-Console-Actor", actor)
 		},
 		ModifyResponse: func(r *http.Response) error {
 			// Never send a browser to a different origin with its cached login.
@@ -128,16 +123,8 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok\n")
 		return
 	}
-	if publicAPIRequest(r) || r.URL.Path == "/console/api-keys" || strings.HasPrefix(r.URL.Path, "/console/api-keys/") || strings.HasPrefix(r.URL.Path, "/core/v1/environments/") {
+	if coreDirectRequest(r) || r.URL.Path == "/console/api-keys" || strings.HasPrefix(r.URL.Path, "/console/api-keys/") || strings.HasPrefix(r.URL.Path, "/core/v1/environments/") {
 		http.NotFound(w, r)
-		return
-	}
-	if nodeTransportRequest(r) {
-		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() || !explicitBearer(r) || !h.validOriginHeaders(r) {
-			http.Error(w, "Invalid node transport request", http.StatusForbidden)
-			return
-		}
-		h.proxy.ServeHTTP(w, r)
 		return
 	}
 	if h.nodePayload != nil && strings.HasPrefix(r.URL.Path, "/node-install/") {

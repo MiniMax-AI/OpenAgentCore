@@ -106,17 +106,3 @@ func (h *console) serveConsoleConfiguration(w http.ResponseWriter, _ *http.Reque
 		NodeInstallerSHA256 string `json:"node_installer_sha256"`
 	}{h.adminToken != "", h.adminToken != "", h.nodePayload != nil, h.nodeInstallerDigest})
 }
-
-// Node and Runtime credentials pass through unchanged to Core authentication.
-// Administrator credentials are never substituted on these transport routes.
-func nodeTransportRequest(r *http.Request) bool {
-	switch r.URL.Path {
-	case "/core/v1/sandbox/enroll", "/api/v1/agent-daemon/enroll", "/api/v1/agent-daemon/bootstrap":
-		return r.Method == http.MethodPost && r.Header.Get("Upgrade") == ""
-	case "/core/v1/sandbox/node/configuration", "/core/v1/sandbox/node/identity", "/api/v1/agent-daemon/device-status", "/api/v1/agent-daemon/connection":
-		return r.Method == http.MethodGet && r.Header.Get("Upgrade") == ""
-	case "/core/v1/sandbox/node/connect", "/api/v1/agent-daemon/ws":
-		return r.Method == http.MethodGet && strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
-	}
-	return false
-}

@@ -90,8 +90,8 @@ func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_active":0}`},
 		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_active":9,"max_retained":8}`},
 		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_retained":1000001}`},
-		{"/core/v1/sandbox/enroll", "one-use", `{"max_active":100}`},
-		{"/core/v1/sandbox/enroll", "one-use", `{"max_retained":100}`},
+		{"/api/v1/sandbox-node/enroll", "one-use", `{"max_active":100}`},
+		{"/api/v1/sandbox-node/enroll", "one-use", `{"max_retained":100}`},
 	} {
 		request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
 		request.Header.Set("Authorization", "Bearer "+test.token)
@@ -99,6 +99,16 @@ func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 		h.ServeHTTP(response, request)
 		if response.Code != http.StatusBadRequest {
 			t.Fatal(test.path, response.Code, response.Body.String())
+		}
+	}
+	// Node routes moved to /api/v1/sandbox-node; the old /core paths are gone.
+	for _, test := range []struct{ method, path string }{{"POST", "/core/v1/sandbox/enroll"}, {"GET", "/core/v1/sandbox/node/identity"}, {"GET", "/core/v1/sandbox/node/configuration"}} {
+		request := httptest.NewRequest(test.method, test.path, nil)
+		request.Header.Set("Authorization", "Bearer administrator")
+		response := httptest.NewRecorder()
+		h.ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound {
+			t.Fatal(test.path, response.Code)
 		}
 	}
 }

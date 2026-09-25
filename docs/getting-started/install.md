@@ -321,13 +321,20 @@ For nodes added through Web, install with the intended shared HTTPS endpoint:
 
 The installer also uses this origin for the `wss` connection URL returned by
 self-hosted Sessions, so remote Runtime hosts never receive a Compose-only
-hostname. Configure your TLS reverse proxy to route `/v1` and the project
-executor-credential API to the loopback Core port (8091), with all console pages,
-management paths and fixed node/daemon transport routes going to Web (8080).
-Preserve Host and support WebSocket upgrades. This keeps application API access
-separate from console authentication. The bundled Web forwards the fixed
-node and daemon transport routes to Core using their own credentials. Both the
-node host and its sandbox guests must reach this address. Installation does not
+hostname. Configure your TLS reverse proxy with these routes:
+
+| Path | Destination | Callers |
+| --- | --- | --- |
+| `/v1`, `/v1/*` | Core (loopback 8091) | Applications, with a Project API key |
+| `/api/v1/*` | Core (loopback 8091) | Nodes and Runtime daemons, with their own machine credentials |
+| Everything else, including `/core/v1/*` and `/node-install/*` | Web (loopback 8080) | Browsers and the console |
+
+The project executor-credential API (`/core/v1/environments/{id}/executor-credentials`)
+is the one exception under `/core`: route it to Core as well. Preserve Host and
+support WebSocket upgrades. Web answers 404 on `/v1` and `/api/v1` and never
+forwards them, so a proxy that sends those paths to Web breaks application calls
+and node enrollment. Both the node host and its sandbox guests must reach this
+address. Installation does not
 create DNS records or certificates, nor expose a host port publicly. Without this
 option, the console uses its loopback address for local access. Do not copy a
 localhost download command to a different machine. Running plain `./install.sh`

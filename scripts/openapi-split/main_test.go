@@ -13,6 +13,7 @@ func TestSeparatePublicAndAdministrationRoots(t *testing.T) {
 	input := filepath.Join(d, "combined.yaml")
 	project := filepath.Join(d, "project.yaml")
 	manager := filepath.Join(d, "manager.yaml")
+	machine := filepath.Join(d, "runtime.yaml")
 	raw := `swagger: "2.0"
 basePath: /v1
 info:
@@ -31,6 +32,12 @@ paths:
         "200":
           schema:
             $ref: '#/definitions/Node'
+  /api/v1/sandbox-node/identity:
+    get:
+      responses:
+        "200":
+          schema:
+            $ref: '#/definitions/NodeIdentity'
 definitions:
   Session:
     properties:
@@ -40,16 +47,27 @@ definitions:
     properties:
       error:
         $ref: '#/definitions/Error'
+  NodeIdentity:
+    properties:
+      error:
+        $ref: '#/definitions/Error'
   Error:
     type: object
 `
 	if err := os.WriteFile(input, []byte(raw), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(input, project, manager); err != nil {
+	if err := run(input, project, manager, machine); err != nil {
 		t.Fatal(err)
 	}
-	for _, check := range []struct{ path, base, own, other, definition, absent string }{{project, "/v1", "/agents/sessions", "/core/v1/sandbox/nodes", "Session", "Node"}, {manager, "/", "/core/v1/sandbox/nodes", "/agents/sessions", "Node", "Session"}} {
+	for _, check := range []struct{ path, base, own, other, definition, absent string }{
+		{project, "/v1", "/agents/sessions", "/core/v1/sandbox/nodes", "Session", "Node"},
+		{project, "/v1", "/agents/sessions", "/api/v1/sandbox-node/identity", "Session", "NodeIdentity"},
+		{manager, "/", "/core/v1/sandbox/nodes", "/agents/sessions", "Node", "Session"},
+		{manager, "/", "/core/v1/sandbox/nodes", "/api/v1/sandbox-node/identity", "Node", "NodeIdentity"},
+		{machine, "/", "/api/v1/sandbox-node/identity", "/core/v1/sandbox/nodes", "NodeIdentity", "Node"},
+		{machine, "/", "/api/v1/sandbox-node/identity", "/agents/sessions", "NodeIdentity", "Session"},
+	} {
 		raw, err := os.ReadFile(check.path)
 		if err != nil {
 			t.Fatal(err)

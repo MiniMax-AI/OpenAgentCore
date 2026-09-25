@@ -86,7 +86,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False):
             raise SpecificationError("Retained node identity differs or is invalid; preserve its state") from None
     elif not token:
         raise SpecificationError("A one-time enrollment credential is required for a new node")
-    request = urllib.request.Request(args.core_url + "/core/v1/sandbox/node/configuration", headers=headers)
+    request = urllib.request.Request(args.core_url + "/api/v1/sandbox-node/configuration", headers=headers)
     try:
         try:
             response = open_request(request)
@@ -95,7 +95,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False):
                 raise
             # Identity is persisted before enrollment. A failed first registration
             # may therefore have no durable credential on Core yet.
-            request = urllib.request.Request(args.core_url + "/core/v1/sandbox/node/configuration",
+            request = urllib.request.Request(args.core_url + "/api/v1/sandbox-node/configuration",
                                              headers={"Authorization": "Bearer " + token})
             response = open_request(request)
         with response:
@@ -104,7 +104,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False):
             raise ValueError()
         data = validate(json.loads(raw), args)
     except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
-        raise SpecificationError("Cannot read Core node configuration; verify the Core origin and retained or enrollment credential") from None
+        raise SpecificationError("Cannot read Core node configuration; verify the Core origin, that the reverse proxy routes /api/v1 to Core, and the retained or enrollment credential") from None
     except (ValueError, AttributeError):
         raise SpecificationError("Core returned invalid node configuration") from None
     if retained is not None:

@@ -88,17 +88,18 @@ original Session cannot resume. This API does not add a console archive control.
 Public Environment Templates, the `/v1` contract and
 caller-owned `self_hosted` provisioning remain unchanged.
 
-`GET /core/v1/sandbox/node/configuration` uses an enrollment Bearer token, or a
+`GET /api/v1/sandbox-node/configuration` uses an enrollment Bearer token, or a
 retained node Bearer credential with `X-Parsar-Node-ID`. This read does not consume
 enrollment. Retained matching nodes can read their configuration during maintenance.
 Installers must verify the returned generation, specification digest and Runtime
 before registration; local files cannot override the saved limits. A mismatch
 returns `sandbox_specification_mismatch` without replacing node state.
 
-Node configuration, enrollment, identity and daemon WebSocket routes retain their
-own credentials through the paired console's fixed transport routes. The console
-must not substitute its administrator credential on them. They do not inherit a
-browser login or gain general management authority. E2B credentials are absent
+Node configuration, enrollment, identity and connection routes live under
+`/api/v1/sandbox-node`, beside the daemon's `/api/v1/agent-daemon`. The reverse
+proxy sends `/api/v1` directly to Core; the console returns 404 for it and never
+forwards machine traffic. These routes use their own credentials, do not inherit a
+browser login and gain no management authority. E2B credentials are absent
 from node configuration and safe deployment views.
 
 ## Frontend handoff and errors

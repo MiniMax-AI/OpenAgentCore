@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/gorilla/websocket"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,18 +12,11 @@ import (
 	"testing"
 )
 
-func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
+func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		want := "Bearer server-admin"
-		if nodeTransportRequest(r) {
-			if r.Header.Get("X-Core-Console-Actor") != "" {
-				t.Error("transport retained untrusted administrator actor")
-			}
-			want = "Bearer node-token"
-		}
-		if r.Header.Get("Authorization") != want {
+		if r.Header.Get("Authorization") != "Bearer server-admin" {
 			t.Errorf("incorrect upstream authority for %s", r.URL.Path)
 		}
 		_, _ = io.WriteString(w, "{}")
@@ -56,10 +48,8 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 		{"PATCH", "/core/v1/sandbox/deployment/maintenance", "none", 401},
 		{"GET", "/core/v1/sandbox/nodes", "node", 401},
 		{"GET", "/core/v1/admin/projects", "basic", 200},
-		{"POST", "/core/v1/sandbox/enroll", "node", 200},
-		{"POST", "/core/v1/sandbox/enroll", "basic", 403},
-		{"POST", "/api/v1/agent-daemon/bootstrap", "node", 200},
-		{"POST", "/api/v1/agent-daemon/unknown", "node", 403},
+		{"POST", "/core/v1/sandbox/enroll", "basic", 404},
+		{"POST", "/api/v1/sandbox-node/enroll", "node", 404},
 		{"GET", "/console/config", "basic", 200},
 		{"GET", "/console/config", "none", 401},
 		{"GET", "/node-install/node-install.pyz", "none", 200},
@@ -87,7 +77,7 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 			t.Fatal("paired mode missing")
 		}
 	}
-	if calls.Load() != 6 {
+	if calls.Load() != 4 {
 		t.Fatalf("unexpected upstream requests: %d", calls.Load())
 	}
 	r := consoleRequest(t, server, "POST", "/core/v1/sandbox/deployment")
@@ -95,52 +85,5 @@ func TestPairedConsoleKeepsAdminAndNodeCredentialsSeparated(t *testing.T) {
 	response, _ := responseBody(t, server, r)
 	if response.StatusCode != 403 {
 		t.Fatal("cross-origin setup reached Core")
-	}
-}
-
-func TestPairedConsoleProxiesAuthenticatedNodeWebSockets(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer node-token" {
-			t.Error("node authority replaced")
-			http.Error(w, "unauthorized", 401)
-			return
-		}
-		upgrader := websocket.Upgrader{}
-		ws, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		defer ws.Close()
-		if err := ws.WriteMessage(websocket.TextMessage, []byte("node-connected")); err != nil {
-			t.Error(err)
-		}
-	}))
-	defer upstream.Close()
-	u, _ := url.Parse(upstream.URL)
-	dist := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte("console"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	h, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, password: "console-password", adminToken: "server-admin"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer h.Close()
-	server := httptest.NewServer(h)
-	defer server.Close()
-	for _, path := range []string{"/core/v1/sandbox/node/connect", "/api/v1/agent-daemon/ws"} {
-		ws, response, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+path, http.Header{"Host": {"127.0.0.1:8080"}, "Authorization": {"Bearer node-token"}})
-		if err != nil {
-			if response != nil {
-				t.Fatalf("proxy handshake %d: %v", response.StatusCode, err)
-			}
-			t.Fatal(err)
-		}
-		_, data, err := ws.ReadMessage()
-		ws.Close()
-		if err != nil || string(data) != "node-connected" {
-			t.Fatalf("proxy message=%q error=%v", data, err)
-		}
 	}
 }

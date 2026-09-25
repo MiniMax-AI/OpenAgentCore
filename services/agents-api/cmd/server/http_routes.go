@@ -27,7 +27,7 @@ func serverHandler(apiHandler http.Handler, daemon *daemonRoutes) http.Handler {
 	mux.Handle("/api/v1/agent-daemon/enroll", daemon.enrollment)
 	mux.Handle("/api/v1/agent-daemon/connection", daemon.connection)
 	if daemon.nodeConnect != nil {
-		mux.Handle("/core/v1/sandbox/node/connect", daemon.nodeConnect)
+		mux.Handle("/api/v1/sandbox-node/connect", daemon.nodeConnect)
 	}
 	mux.Handle("/", apiHandler)
 	return api.CanonicalPaths(mux)

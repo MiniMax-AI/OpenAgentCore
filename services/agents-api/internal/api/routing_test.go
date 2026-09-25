@@ -302,7 +302,7 @@ func dirtyVariants(clean string) []string {
 // credential, so it can never reach another route group or skip its checks.
 func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 	handler, router, s := routingFixture(t)
-	selfAuthenticated := map[string]bool{"GET /healthz": false, "POST /core/v1/sandbox/enroll": false, "GET /core/v1/sandbox/node/identity": false, "GET /core/v1/sandbox/node/configuration": false}
+	selfAuthenticated := map[string]bool{"GET /healthz": false, "POST /api/v1/sandbox-node/enroll": false, "GET /api/v1/sandbox-node/identity": false, "GET /api/v1/sandbox-node/configuration": false}
 	credentials := []http.Header{{}, withHeaders(beta), withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta),
 		withHeaders([]string{"Authorization", "Basic " + routingKey}, beta), withHeaders([]string{"Authorization", "Bearer wrong"}),
 		withHeaders(project), withHeaders(project, []string{"OpenAI-Beta", "agents=v0"}),
@@ -757,7 +757,7 @@ var canonicalPathSeeds = []string{
 	"v1/agents", "v1//agents/a", "v1/x{/..%2F..%2Fcore/v1/sandbox/nodes", "v1/x\"/..%2f..%2fcore/v1/sandbox/deployment",
 	"v1/x\\/..%5C..%5Ccore/v1/sandbox/nodes", "v1/\xc3\xa9/../../core/v1/sandbox/nodes", "v1/%2E%2E/core/v1/sandbox/nodes",
 	"v1/files/..%2F..%2Fv1/skills", "0\"%2F", "core/v1/sandbox/nodes{%2F..%2F..%2F..%2Fv1/agents", "v1/agents/%252F..",
-	"api/v1/agent-daemon/%2E%2E/%2E%2E/%2E%2E/v1/agents", "v1/x{/%2e./core/v1/sandbox/node/identity", "v1/agents/%7E%5F%2D%41",
+	"api/v1/agent-daemon/%2E%2E/%2E%2E/%2E%2E/v1/agents", "v1/x{/%2e./api/v1/sandbox-node/identity", "v1/agents/%7E%5F%2D%41",
 	"core/v1/environments/x/executor-credentials/%2E%2E/%2E%2E/%2E%2E/%2E%2E/core/v1/sandbox/nodes",
 	"v1/x{/..%2F..%2Fcore/v1/project-api-keys/x", "core/v1/project-api-keys/x/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents",
 	"v1/%2E%2E/core/v1/admin/projects/x/", "core/v1/project-api-keys//x/y",

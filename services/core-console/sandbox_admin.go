@@ -5,12 +5,19 @@ import (
 	"strings"
 )
 
-func publicAPIRequest(r *http.Request) bool {
-	return r.URL.Path == "/v1" || strings.HasPrefix(r.URL.Path, "/v1/")
+// coreDirectRequest reports the application (/v1) and machine connection
+// (/api/v1) namespaces. The reverse proxy routes them straight to Core; the
+// console never forwards them, whatever credential they carry.
+func coreDirectRequest(r *http.Request) bool {
+	for _, prefix := range []string{"/v1", "/api/v1"} {
+		if r.URL.Path == prefix || strings.HasPrefix(r.URL.Path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
-// Only deployment administration is exposed through the console. Enrollment and
-// node identity/transport calls use the separate pass-through with their own credentials.
+// Only deployment administration is exposed through the console.
 func sandboxAdminRequest(r *http.Request) bool {
 	const base = "/core/v1/sandbox/"
 	if !strings.HasPrefix(r.URL.Path, base) {
@@ -37,9 +44,4 @@ func sandboxAdminRequest(r *http.Request) bool {
 		return len(parts) == 3 && parts[2] == "allocations" && r.Method == http.MethodGet
 	}
 	return false
-}
-
-func explicitBearer(r *http.Request) bool {
-	parts := strings.Fields(r.Header.Get("Authorization"))
-	return len(r.Header.Values("Authorization")) == 1 && len(parts) == 2 && strings.EqualFold(parts[0], "Bearer")
 }

@@ -382,7 +382,7 @@ def wait_ready(root, args, timeout=60):
             raise ValueError()
     except (ValueError, KeyError, TypeError, AttributeError):
         raise InstallError("Retained node identity differs or is invalid; preserve state and inspect enrollment") from None
-    request = urllib.request.Request(args.core_url + "/core/v1/sandbox/node/identity?" + urlencode({"node_id": identity["node_id"]}),
+    request = urllib.request.Request(args.core_url + "/api/v1/sandbox-node/identity?" + urlencode({"node_id": identity["node_id"]}),
                                      headers={"Authorization": "Bearer " + credential})
     deadline = time.monotonic() + timeout
     detail = "Core has not confirmed the node connection"

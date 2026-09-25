@@ -106,7 +106,7 @@ commands or initial file writes.
 
 Initialize microsandbox through Web or `POST /core/v1/sandbox/deployment`, including
 its required `resources` and immutable `runtime` fields. The standalone node
-installer reads `GET /core/v1/sandbox/node/configuration` using an enrollment token,
+installer reads `GET /api/v1/sandbox-node/configuration` using an enrollment token,
 or its retained node credential on a registered reinstall. It verifies the saved
 release and resources before registration. Local opt-in uses this same path and
 requires a guest-reachable, non-loopback HTTPS `--public-url`.

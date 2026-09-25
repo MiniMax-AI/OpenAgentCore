@@ -28,8 +28,8 @@ flowchart LR
 
 React management code must use `AdminClient` from `packages/agents-client`, plus the
 existing sandbox management client for `/core/v1/sandbox`. The console service
-returns 404 for `/v1`, including requests with an explicit Bearer token. It has no
-application key and does not impersonate the selected Project.
+returns 404 for `/v1` and `/api/v1`, including requests with an explicit Bearer
+token. It has no application key and does not impersonate the selected Project.
 
 The console authenticates the browser, checks the request origin and forwards only
 allowed management routes. It replaces browser authorization and actor headers,
@@ -37,8 +37,9 @@ strips browser cookies, and supplies its server-side deployment credential. Core
 rejects application keys on management routes and deployment credentials on `/v1`.
 The forwarded console account name is an audit label, not Core authorization.
 
-Fixed node enrollment and daemon transport routes retain their own credentials and
-existing transport behavior. They do not grant a browser execution authority.
+Node and daemon connections use `/api/v1` with their own credentials. The reverse
+proxy sends them directly to Core; the console never forwards them, and they do not
+grant a browser execution authority.
 
 ## Ownership
 

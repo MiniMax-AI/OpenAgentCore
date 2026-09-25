@@ -62,7 +62,8 @@ with the exact distribution digest and platform skips image download and import.
 ## Private connection confirmation
 
 `GET /api/v1/agent-daemon/connection?environment_id=UUID` uses the existing
-executor bearer, passed unchanged through the console. It is part of the private
+executor bearer, sent directly to Core (the reverse proxy routes `/api/v1` to
+Core; the console does not serve it). It is part of the private
 daemon transport, not the public Agents API. It reads existing authorization and
 binding only; it never enrolls a device, starts execution or changes resources.
 The no-store response contains only the requested `environment_id` and `status`

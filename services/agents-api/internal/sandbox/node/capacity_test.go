@@ -16,7 +16,7 @@ func TestCapacityRefreshUsesAuthenticatedCoreIdentity(t *testing.T) {
 	var stored StoredIdentity
 	approved := EnrollmentResponse{NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/core/v1/sandbox/node/identity" || r.URL.Query().Get("node_id") != id.NodeID || r.Header.Get("Authorization") != "Bearer "+stored.Credential {
+		if r.URL.Path != "/api/v1/sandbox-node/identity" || r.URL.Query().Get("node_id") != id.NodeID || r.Header.Get("Authorization") != "Bearer "+stored.Credential {
 			t.Error("identity refresh lacked retained authority")
 			w.WriteHeader(401)
 			return

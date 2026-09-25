@@ -7,22 +7,28 @@ import (
 	"testing"
 )
 
-func TestPublicAPINeverPassesThroughConsole(t *testing.T) {
-	c := accountConsoleConfig(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("public API reached Core through console") }))
+// Applications (/v1) and machines (/api/v1) reach Core directly through the
+// reverse proxy; the console forwards neither, whatever credential is presented.
+func TestCoreDirectRoutesNeverPassThroughConsole(t *testing.T) {
+	c := accountConsoleConfig(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("direct Core route reached Core through console") }))
 	h := accountConsole(t, c)
 	cookie := setupAccount(t, h)
-	for _, path := range []string{"/v1", "/v1/agents", "/v1/agents/sessions", "/v1/files/file/content", "/core/v1/environments/env/executor-credentials", "/console/api-keys"} {
+	for _, path := range []string{"/v1", "/v1/agents", "/v1/agents/sessions", "/v1/files/file/content", "/core/v1/environments/env/executor-credentials", "/console/api-keys",
+		"/api/v1", "/api/v1/sandbox-node/enroll", "/api/v1/sandbox-node/configuration", "/api/v1/sandbox-node/connect", "/api/v1/agent-daemon/enroll", "/api/v1/agent-daemon/ws"} {
 		for _, method := range []string{"GET", "POST", "DELETE"} {
-			for _, authorization := range []string{"", "Bearer project-key", "Bearer deployment-token", "Basic YWRtaW46cGFzc3dvcmQ="} {
-				r := httptest.NewRequest(method, path, strings.NewReader(`{}`))
-				r.Host = h.host
-				r.Header.Set("Origin", h.origin)
-				r.Header.Set("Authorization", authorization)
-				r.AddCookie(cookie)
-				w := httptest.NewRecorder()
-				h.ServeHTTP(w, r)
-				if w.Code != 404 {
-					t.Errorf("%s %s = %d", method, path, w.Code)
+			for _, authorization := range []string{"", "Bearer project-key", "Bearer node-token", "Basic YWRtaW46cGFzc3dvcmQ="} {
+				for _, upgrade := range []string{"", "websocket"} {
+					r := httptest.NewRequest(method, path, strings.NewReader(`{}`))
+					r.Host = h.host
+					r.Header.Set("Origin", h.origin)
+					r.Header.Set("Authorization", authorization)
+					r.Header.Set("Upgrade", upgrade)
+					r.AddCookie(cookie)
+					w := httptest.NewRecorder()
+					h.ServeHTTP(w, r)
+					if w.Code != 404 {
+						t.Errorf("%s %s upgrade=%q = %d", method, path, upgrade, w.Code)
+					}
 				}
 			}
 		}

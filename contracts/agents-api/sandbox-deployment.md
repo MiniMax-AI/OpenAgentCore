@@ -11,8 +11,9 @@ provisioning are unchanged. A provider selection is independent of the harness.
 A deployment can remain unconfigured, with no execution nodes or hosted admission.
 
 See [Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
-for the operator workflow and [generated OpenAPI](sandbox-manager.openapi.yaml)
-for request and response schemas.
+for the operator workflow. Generated schemas cover the
+[administrator routes](sandbox-manager.openapi.yaml) and the
+[node machine connection routes](runtime.openapi.yaml).
 
 ## Authority and routes
 
@@ -22,12 +23,14 @@ for request and response schemas.
 | `POST /core/v1/sandbox/deployment` | Deployment administrator | Select the initial provider, resources, Runtime and Core origin |
 | `PUT /core/v1/sandbox/deployment` | Deployment administrator | Replace a fully drained selection while maintenance is enabled |
 | `PATCH /core/v1/sandbox/deployment/maintenance` | Deployment administrator | Pause or resume fresh hosted admission at the expected generation |
-| `GET /core/v1/sandbox/node/configuration` | Enrollment token or retained node credential | Read the active node installation configuration without consuming enrollment |
+| `GET /api/v1/sandbox-node/configuration` | Enrollment token or retained node credential | Read the active node installation configuration without consuming enrollment |
 
 The paired console injects its administrator Bearer credential server-side for
 management routes. The browser never receives that credential. Node configuration
-uses its own Bearer credential, forwarded unchanged by the console; a console
-login or Project key does not grant node enrollment authority.
+and enrollment are machine connection routes under `/api/v1`, which the reverse
+proxy sends directly to Core; the console does not serve them. They use their own
+Bearer credential; a console login, the administrator credential or a Project key
+does not grant node enrollment authority.
 
 Node capacity is separate from the deployment specification. The administrator's
 `POST /core/v1/sandbox/enrollment-tokens` accepts optional `max_active` and
@@ -206,7 +209,7 @@ or E2B credential. It is available only for node-backed providers.
 
 The installer reads this configuration before preparing local assets. Its provider
 file records `generation` and `specification`, alongside the host's socket, paths
-and network policy. Enrollment at `POST /core/v1/sandbox/enroll` includes
+and network policy. Enrollment at `POST /api/v1/sandbox-node/enroll` includes
 `deployment_generation` and `specification_digest`. A mismatch rejects before
 token consumption. Retained node authentication checks the same generation and
 digest. A changed local resource setting, Runtime or generation must fail rather
@@ -238,7 +241,9 @@ sandboxes are refused with the same error as during maintenance. Enrollment
 tokens return 409 `sandbox_deployment_conflict`; node configuration reads and
 enrollment are refused.
 The ordinary maintenance, archive and PUT sequence records a specification and
-retires those nodes. See the [operator upgrade notes](../../docs/getting-started/operations.md#data-and-upgrades).
+retires those nodes. Those nodes use the removed `/core/v1/sandbox` node paths, so
+their drain needs a Core release that still serves them. See the
+[operator upgrade notes](../../docs/getting-started/operations.md#data-and-upgrades).
 
 Unit tests, database tests and provider inspection are separate from live
 execution acceptance. This contract does not assert that every resource profile,

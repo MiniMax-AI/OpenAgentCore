@@ -154,13 +154,26 @@ without rewriting state. Use a newly generated token if an unconsumed one expire
 
 For a public paired endpoint, use `install.sh --public-url https://core.example`
 and an operator-managed TLS reverse proxy preserving Host and WebSocket Upgrade.
-The console passes node and daemon credentials unchanged on a fixed route list;
-Core authenticates them. No administrator credential is used on these routes.
+The proxy routes `/api/v1` directly to Core; see
+[Expose Core and Web](../../docs/getting-started/install.md#expose-core-and-web).
+Nodes use only these machine connection routes, authenticated by their own
+credentials; Web does not forward them and no administrator credential applies:
+
+| Route | Credential |
+| --- | --- |
+| `GET /api/v1/sandbox-node/configuration` | Enrollment token, or node credential with `X-Parsar-Node-ID` |
+| `POST /api/v1/sandbox-node/enroll` | One-use enrollment token |
+| `GET /api/v1/sandbox-node/identity?node_id=` | Node credential |
+| WebSocket `GET /api/v1/sandbox-node/connect?node_id=` | Node credential |
+
+A node and its Core must come from the same distribution. Nodes from releases
+that used the removed `/core/v1/sandbox` node paths cannot connect to this Core;
+upgrade through the drained procedure in
+[Removal and maintenance](#removal-and-maintenance) and enroll new nodes.
 Manual registration remains available for operator-managed payloads:
 
-
 Build/install `parsar-sandbox-node` from the same Core release. On the host,
-first read `GET /core/v1/sandbox/node/configuration` with the enrollment Bearer
+first read `GET /api/v1/sandbox-node/configuration` with the enrollment Bearer
 token. Build the private provider JSON from its `provider`, `installation_id`,
 `core_url`, `generation` and `specification`, using the existing local backend
 schema for the host's socket, runtime paths and network policy. The Runtime image

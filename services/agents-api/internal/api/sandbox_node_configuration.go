@@ -7,13 +7,13 @@ import (
 
 // @Summary Read the active configuration for node installation
 // @Description Authenticates with an unconsumed enrollment token, or a retained node credential with X-Parsar-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.
-// @Tags Sandbox Manager
+// @Tags Sandbox Node
 // @Produce json
 // @Security NodeEnrollmentAuth
 // @Param X-Parsar-Node-ID header string false "Retained node UUID"
 // @Success 200 {object} store.RuntimeNodeConfiguration
 // @Failure 400,401,409,500,503 {object} v1.ErrorResponse
-// @Router /core/v1/sandbox/node/configuration [get]
+// @Router /api/v1/sandbox-node/configuration [get]
 func (h *Handler) sandboxNodeConfiguration(w http.ResponseWriter, r *http.Request) {
 	token, ok := sandboxBearer(r)
 	if !ok || len(r.Header.Values("X-Parsar-Node-ID")) > 1 {

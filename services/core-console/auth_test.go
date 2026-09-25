@@ -248,33 +248,13 @@ func TestConcurrentAccountSetupAcrossInstances(t *testing.T) {
 	}
 }
 
-func TestAccountSecureCookieExpiryAndExplicitCredentials(t *testing.T) {
-	var calls atomic.Int32
-	c := accountConsoleConfig(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		if r.Header.Get("Authorization") != "Bearer transport-credential" {
-			t.Error("explicit credential was replaced")
-		}
-		w.WriteHeader(200)
-	}))
+func TestAccountSecureCookieExpiry(t *testing.T) {
+	c := accountConsoleConfig(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("expired session reached Core") }))
 	c.origin = "https://127.0.0.1:8080"
 	h := accountConsole(t, c)
 	cookie := setupAccount(t, h)
 	if !cookie.Secure {
 		t.Fatal("HTTPS session cookie omitted Secure")
-	}
-	for _, path := range []string{"/core/v1/sandbox/enroll", "/api/v1/agent-daemon/enroll"} {
-		r := httptest.NewRequest("POST", path, nil)
-		r.Host = h.host
-		r.Header.Set("Authorization", "Bearer transport-credential")
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, r)
-		if w.Code != 200 {
-			t.Errorf("explicit credential transport blocked: %d", w.Code)
-		}
-	}
-	if calls.Load() != 2 {
-		t.Fatal("explicit transport requests were not forwarded")
 	}
 	h.auth.mu.Lock()
 	for key, session := range h.auth.sessions {

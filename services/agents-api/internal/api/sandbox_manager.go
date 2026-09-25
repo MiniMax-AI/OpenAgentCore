@@ -35,9 +35,11 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 	if h.sandboxStore == nil {
 		return
 	}
-	r.Post("/core/v1/sandbox/enroll", h.enrollSandboxNode)
-	r.Get("/core/v1/sandbox/node/identity", h.sandboxNodeIdentity)
-	r.Get("/core/v1/sandbox/node/configuration", h.sandboxNodeConfiguration)
+	// Machine connections authenticate with an enrollment token or node
+	// credential, never the Core key.
+	r.Post("/api/v1/sandbox-node/enroll", h.enrollSandboxNode)
+	r.Get("/api/v1/sandbox-node/identity", h.sandboxNodeIdentity)
+	r.Get("/api/v1/sandbox-node/configuration", h.sandboxNodeConfiguration)
 	if h.deploymentAuth == nil {
 		return
 	}
@@ -191,15 +193,15 @@ func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request
 }
 
 // @Summary Enroll a sandbox node
-// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
-// @Tags Sandbox Manager
+// @Description Node machine connection. Consumes a one-use enrollment token; grants no project or administrator access. Responses contain only explicit safe fields.
+// @Tags Sandbox Node
 // @Produce json
 // @Security NodeEnrollmentAuth
 // @Accept json
 // @Param body body store.RuntimeNodeEnrollment true "Request"
 // @Success 201 {object} store.RuntimeNodeIdentity
 // @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
-// @Router /core/v1/sandbox/enroll [post]
+// @Router /api/v1/sandbox-node/enroll [post]
 func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 	token, ok := sandboxBearer(r)
 	if !ok {
@@ -224,14 +226,14 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Recover an enrolled sandbox node identity and observe its readiness
-// @Description Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
-// @Tags Sandbox Manager
+// @Description Node machine connection. Authenticates with the retained node credential; grants no project or administrator access. Responses contain only explicit safe fields.
+// @Tags Sandbox Node
 // @Produce json
 // @Security NodeAuth
 // @Param node_id query string true "Sandbox node UUID"
 // @Success 200 {object} store.RuntimeNodeStatus
 // @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
-// @Router /core/v1/sandbox/node/identity [get]
+// @Router /api/v1/sandbox-node/identity [get]
 func (h *Handler) sandboxNodeIdentity(w http.ResponseWriter, r *http.Request) {
 	token, ok := sandboxBearer(r)
 	if !ok {

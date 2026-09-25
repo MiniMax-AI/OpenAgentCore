@@ -1,4 +1,5 @@
-// Command openapi-split separates Core administration from the project API.
+// Command openapi-split separates the project API (/v1), Core administration
+// (/core/v1) and machine connections (/api/v1) into their own documents.
 package main
 
 import (
@@ -10,51 +11,61 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	projectSurface = iota
+	managerSurface
+	runtimeSurface
+)
+
 func main() {
-	if len(os.Args) != 4 {
-		fmt.Fprintln(os.Stderr, "usage: openapi-split INPUT PROJECT_OUTPUT MANAGER_OUTPUT")
+	if len(os.Args) != 5 {
+		fmt.Fprintln(os.Stderr, "usage: openapi-split INPUT PROJECT_OUTPUT MANAGER_OUTPUT RUNTIME_OUTPUT")
 		os.Exit(1)
 	}
-	if err := run(os.Args[1], os.Args[2], os.Args[3]); err != nil {
+	if err := run(os.Args[1], os.Args[2], os.Args[3], os.Args[4]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
-func run(input, projectOutput, managerOutput string) error {
+func run(input, projectOutput, managerOutput, runtimeOutput string) error {
 	raw, err := os.ReadFile(input)
 	if err != nil {
 		return err
 	}
-	var project, manager yaml.Node
-	if err = yaml.Unmarshal(raw, &project); err != nil {
-		return err
+	var project, manager, runtime yaml.Node
+	for _, doc := range []*yaml.Node{&project, &manager, &runtime} {
+		if err = yaml.Unmarshal(raw, doc); err != nil {
+			return err
+		}
 	}
-	if err = yaml.Unmarshal(raw, &manager); err != nil {
-		return err
-	}
-	p, m := project.Content[0], manager.Content[0]
-	filterPaths(field(p, "paths"), false)
-	filterPaths(field(m, "paths"), true)
+	p, m, rt := project.Content[0], manager.Content[0], runtime.Content[0]
+	filterPaths(field(p, "paths"), projectSurface)
+	filterPaths(field(m, "paths"), managerSurface)
+	filterPaths(field(rt, "paths"), runtimeSurface)
 	field(m, "basePath").Value = "/"
 	field(field(m, "info"), "title").Value = "Core Extensions"
-	field(field(m, "info"), "description").Value = "Core extensions outside the upstream Agents API. Environment executor credential operations use project caller authentication. Sandbox administration and node enrollment use separate administrator and node credentials. See each operation's security requirements."
+	field(field(m, "info"), "description").Value = "Core extensions outside the upstream Agents API. Environment executor credential operations use project caller authentication. Sandbox administration uses the deployment administrator credential. See each operation's security requirements."
+	field(rt, "basePath").Value = "/"
+	field(field(rt, "info"), "title").Value = "Core Machine Connections"
+	field(field(rt, "info"), "description").Value = "Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the deployment administrator credential are not accepted. See each operation's security requirements."
 	// Retain exactly the definitions referenced by each surface, including shared
 	// error DTOs. Follow nested references instead of duplicating the project schema.
 	pruneDefinitions(p)
 	pruneDefinitions(m)
+	pruneDefinitions(rt)
 	// Keep unrelated existing project definitions and the generator's formatting.
-	// Only definitions exclusive to the management surface are removed.
+	// Only definitions exclusive to the management or machine surfaces are removed.
 	var original yaml.Node
 	if err := yaml.Unmarshal(raw, &original); err != nil {
 		return err
 	}
 	originalDefinitions := field(original.Content[0], "definitions")
-	projectDefinitions, managerDefinitions := field(p, "definitions"), field(m, "definitions")
+	projectDefinitions := field(p, "definitions")
 	if originalDefinitions != nil {
 		kept := make([]*yaml.Node, 0, len(originalDefinitions.Content))
 		for i := 0; i < len(originalDefinitions.Content); i += 2 {
 			key := originalDefinitions.Content[i]
-			if field(projectDefinitions, key.Value) != nil || field(managerDefinitions, key.Value) == nil {
+			if field(projectDefinitions, key.Value) != nil || field(field(m, "definitions"), key.Value) == nil && field(field(rt, "definitions"), key.Value) == nil {
 				kept = append(kept, key, originalDefinitions.Content[i+1])
 			}
 		}
@@ -63,7 +74,7 @@ func run(input, projectOutput, managerOutput string) error {
 	for _, out := range []struct {
 		path string
 		doc  *yaml.Node
-	}{{projectOutput, &project}, {managerOutput, &manager}} {
+	}{{projectOutput, &project}, {managerOutput, &manager}, {runtimeOutput, &runtime}} {
 		if out.path == projectOutput {
 			if err := os.WriteFile(out.path, preserveProjectFormatting(raw, original.Content[0], p), 0644); err != nil {
 				return err
@@ -95,10 +106,19 @@ func field(n *yaml.Node, key string) *yaml.Node {
 	}
 	return nil
 }
-func filterPaths(n *yaml.Node, manager bool) {
+func surface(path string) int {
+	switch {
+	case strings.HasPrefix(path, "/core/v1/"):
+		return managerSurface
+	case strings.HasPrefix(path, "/api/v1/"):
+		return runtimeSurface
+	}
+	return projectSurface
+}
+func filterPaths(n *yaml.Node, want int) {
 	kept := make([]*yaml.Node, 0, len(n.Content))
 	for i := 0; i < len(n.Content); i += 2 {
-		if strings.HasPrefix(n.Content[i].Value, "/core/v1/") == manager {
+		if surface(n.Content[i].Value) == want {
 			kept = append(kept, n.Content[i], n.Content[i+1])
 		}
 	}

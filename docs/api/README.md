@@ -10,7 +10,7 @@ OpenAI compatibility: Core also has explicitly documented extensions under `/v1`
 | Administrator resources | Web's server or administrative automation; deployment credential | Core `/core/v1/admin` | [Management contract](../../contracts/agents-api/admin-api.md) |
 | Hosted sandbox administration | Web's server or administrative automation; deployment credential | Core `/core/v1/sandbox` management routes | [Web API](web-management.md#sandbox-administration) |
 | Console authentication | Browser; local console sign-in and session cookie | Console `/console/auth` | [Web API](web-management.md#browser-to-console) |
-| Node and daemon transport | Installed node/Runtime; its own enrollment or connection credential | Dedicated enrollment and WebSocket paths | [Runtime credentials](../../contracts/agents-api/environment-executor-credentials.md), [node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md) |
+| Node and daemon transport | Installed node/Runtime; its own enrollment or connection credential | Direct Core `/api/v1`: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets | [Runtime credentials](../../contracts/agents-api/environment-executor-credentials.md), [node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
 
 Projects own assets. Multiple equally privileged keys share the Project's assets
 and execution principal; provenance retains the key that performed each write.
@@ -19,8 +19,9 @@ Administrator credentials cannot authenticate public Agent API operations, and
 Project keys cannot authenticate administrator operations.
 
 The console server stores its deployment credential privately and proxies only
-allowlisted management operations. Browsers do not receive it. Applications call
-Core directly; the console rejects `/v1` even when given an application key.
+allowlisted management operations. Browsers do not receive it. Applications and
+machines call Core directly; the console returns 404 for `/v1` and `/api/v1`, even
+when given an application key or machine credential.
 
 ## Contract sources
 
@@ -31,6 +32,9 @@ Core directly; the console rejects `/v1` even when given an application key.
 - [Core extension OpenAPI](../../contracts/agents-api/sandbox-manager.openapi.yaml):
   generated management and executor-credential routes. The filename does not mean
   that all its routes are sandbox-administrator operations; use the authority table above.
+- [Machine connection OpenAPI](../../contracts/agents-api/runtime.openapi.yaml):
+  generated `/api/v1` sandbox node routes. The node WebSocket and the private
+  daemon transport are described in the node and Runtime credential guides.
 - [Administrator contract](../../contracts/agents-api/admin-api.md): Project/key
   lifecycle, resources, explicit hosted Session archive, copying, summary,
   errors/deletion preconditions and audit.

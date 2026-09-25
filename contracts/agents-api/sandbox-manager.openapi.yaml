@@ -712,25 +712,6 @@ definitions:
       tenant_id:
         type: string
     type: object
-  store.RuntimeNodeConfiguration:
-    properties:
-      core_url:
-        type: string
-      generation:
-        type: integer
-      installation_id:
-        type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
-      provider:
-        type: string
-      specification:
-        $ref: '#/definitions/sandbox.DeploymentSpec'
-      specification_digest:
-        type: string
-    type: object
   store.RuntimeNodeDetail:
     properties:
       active:
@@ -776,23 +757,6 @@ definitions:
       snapshots:
         type: integer
     type: object
-  store.RuntimeNodeEnrollment:
-    properties:
-      backend_fingerprint:
-        type: string
-      credential:
-        type: string
-      deployment_generation:
-        type: integer
-      name:
-        type: string
-      node_id:
-        type: string
-      provider:
-        type: string
-      specification_digest:
-        type: string
-    type: object
   store.RuntimeNodeHost:
     properties:
       available_disk_bytes:
@@ -813,44 +777,6 @@ definitions:
       total_memory_bytes:
         type: integer
         x-nullable: true
-    type: object
-  store.RuntimeNodeIdentity:
-    properties:
-      deployment_generation:
-        type: integer
-      installation_id:
-        type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
-      node_id:
-        type: string
-      provider:
-        type: string
-      specification_digest:
-        type: string
-    type: object
-  store.RuntimeNodeStatus:
-    properties:
-      connected:
-        type: boolean
-      deployment_generation:
-        type: integer
-      installation_id:
-        type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
-      node_id:
-        type: string
-      provider:
-        type: string
-      provider_ready:
-        type: boolean
-      specification_digest:
-        type: string
     type: object
   store.RuntimeNodeUpdate:
     properties:
@@ -2896,7 +2822,7 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Core extensions outside the upstream Agents API. Environment executor credential operations use project caller authentication. Sandbox administration and node enrollment use separate administrator and node credentials. See each operation's security requirements.
+  description: Core extensions outside the upstream Agents API. Environment executor credential operations use project caller authentication. Sandbox administration uses the deployment administrator credential. See each operation's security requirements.
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
@@ -5710,54 +5636,6 @@ paths:
       summary: Pause or resume new hosted allocations
       tags:
         - Sandbox Manager
-  /core/v1/sandbox/enroll:
-    post:
-      consumes:
-        - application/json
-      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
-      parameters:
-        - description: Request
-          in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/store.RuntimeNodeEnrollment'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/store.RuntimeNodeIdentity'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - NodeEnrollmentAuth: []
-      summary: Enroll a sandbox node
-      tags:
-        - Sandbox Manager
   /core/v1/sandbox/enrollment-tokens:
     post:
       consumes:
@@ -5804,91 +5682,6 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: Create a ten-minute one-use node enrollment token
-      tags:
-        - Sandbox Manager
-  /core/v1/sandbox/node/configuration:
-    get:
-      description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-Parsar-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.
-      parameters:
-        - description: Retained node UUID
-          in: header
-          name: X-Parsar-Node-ID
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/store.RuntimeNodeConfiguration'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - NodeEnrollmentAuth: []
-      summary: Read the active configuration for node installation
-      tags:
-        - Sandbox Manager
-  /core/v1/sandbox/node/identity:
-    get:
-      description: Core deployment extension. Does not grant project resource access. Responses contain only explicit safe fields.
-      parameters:
-        - description: Sandbox node UUID
-          in: query
-          name: node_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/store.RuntimeNodeStatus'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/v1.ErrorResponse'
-      security:
-        - NodeAuth: []
-      summary: Recover an enrolled sandbox node identity and observe its readiness
       tags:
         - Sandbox Manager
   /core/v1/sandbox/nodes:

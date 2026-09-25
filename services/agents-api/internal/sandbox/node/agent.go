@@ -159,7 +159,7 @@ func (a *agent) health(ctx context.Context, host *hostHealthSampler) (Health, er
 	return h, e
 }
 func (a *agent) connect(ctx context.Context) error {
-	endpointURL, err := endpoint(a.config.CoreURL, "/core/v1/sandbox/node/connect")
+	endpointURL, err := endpoint(a.config.CoreURL, "/api/v1/sandbox-node/connect")
 	if err != nil {
 		return err
 	}

@@ -12,8 +12,9 @@ supplies the deployment administrator credential to its configured Core upstream
 Browser code must never receive that credential.
 
 Applications call Core's `/v1` directly with their own Project API keys and the
-public API's route-specific headers. The console returns 404 for `/v1`, even with
-an explicit Bearer token. Deployment routing must send application traffic to Core.
+public API's route-specific headers. Nodes and Runtime daemons call Core's `/api/v1`
+directly with their own machine credentials. The console returns 404 for `/v1` and
+`/api/v1`, even with an explicit Bearer token. Deployment routing must send both to Core.
 The console endpoint and the public application endpoint serve different purposes,
 even if they share a host.
 
@@ -78,4 +79,4 @@ work. Ordinary metadata reads cannot recover plaintext.
 A console login failure belongs to console authentication. An upstream 401 on a
 management request points to the deployment credential or Core connection. A resource
 deletion conflict must remain visible; it does not authorize an execution call.
-Fixed node transports and native Runtime interfaces retain their own authentication.
+Node and daemon `/api/v1` routes and native Runtime interfaces retain their own authentication.
