@@ -104,8 +104,17 @@ func (s *Store) CreateEnvironmentTemplate(ctx context.Context, tenantID string, 
 	if err != nil {
 		return EnvironmentTemplate{}, err
 	}
-	row, err := s.queries.CreateEnvironmentTemplate(ctx, sqlc.CreateEnvironmentTemplateParams{ID: pgtype.UUID{Bytes: id, Valid: true}, TenantID: tenant, Name: name, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, Skills: skills, SkillContents: skillContents, Plugins: plugins, PluginContents: pluginContents, CapabilityDirectories: append([]string{}, in.Initialization.CapabilityDirectories...)})
-	return templateFromRow(templateMetadataRow(row), err)
+	var result EnvironmentTemplate
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		row, err := q.CreateEnvironmentTemplate(ctx, sqlc.CreateEnvironmentTemplateParams{ID: pgtype.UUID{Bytes: id, Valid: true}, TenantID: tenant, Name: name, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, Skills: skills, SkillContents: skillContents, Plugins: plugins, PluginContents: pluginContents, CapabilityDirectories: append([]string{}, in.Initialization.CapabilityDirectories...)})
+		result, err = templateFromRow(templateMetadataRow(row), err)
+		if err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "create", "environment_template", result.ID, "", AuditResource{Type: "environment_template", ID: result.ID})
+	})
+	return result, err
 }
 
 func (s *Store) GetEnvironmentTemplate(ctx context.Context, tenantID, templateID string) (EnvironmentTemplate, error) {
@@ -152,8 +161,17 @@ func (s *Store) UpdateEnvironmentTemplate(ctx context.Context, tenantID, templat
 	if err != nil {
 		return EnvironmentTemplate{}, err
 	}
-	row, err := s.queries.UpdateEnvironmentTemplate(ctx, sqlc.UpdateEnvironmentTemplateParams{TenantID: tenant, ID: id, Name: name, SetName: in.SetName, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), SetNetwork: in.SetNetwork, SetFiles: in.SetFiles, Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, SetPackages: in.SetPackages, SetEnv: in.SetEnv, SetSetup: in.SetSetup, SetSkills: in.SetSkills, SetPlugins: in.SetPlugins, SetDirectories: in.SetDirectories, Skills: skills, SkillContents: skillContents, Plugins: plugins, PluginContents: pluginContents, CapabilityDirectories: append([]string{}, in.Initialization.CapabilityDirectories...)})
-	return templateFromRow(templateMetadataRow(row), err)
+	var result EnvironmentTemplate
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		row, err := q.UpdateEnvironmentTemplate(ctx, sqlc.UpdateEnvironmentTemplateParams{TenantID: tenant, ID: id, Name: name, SetName: in.SetName, NetworkAccess: in.NetworkAccess, NetworkAllowedDomains: append([]string{}, in.AllowedDomains...), SetNetwork: in.SetNetwork, SetFiles: in.SetFiles, Files: metadata, FileContents: encrypted, Packages: packages, EnvContents: envContents, SetupContents: setupContents, SetPackages: in.SetPackages, SetEnv: in.SetEnv, SetSetup: in.SetSetup, SetSkills: in.SetSkills, SetPlugins: in.SetPlugins, SetDirectories: in.SetDirectories, Skills: skills, SkillContents: skillContents, Plugins: plugins, PluginContents: pluginContents, CapabilityDirectories: append([]string{}, in.Initialization.CapabilityDirectories...)})
+		result, err = templateFromRow(templateMetadataRow(row), err)
+		if err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "update", "environment_template", result.ID, "")
+	})
+	return result, err
 }
 
 func (s *Store) DeleteEnvironmentTemplate(ctx context.Context, tenantID, templateID string) (string, error) {
@@ -165,14 +183,23 @@ func (s *Store) DeleteEnvironmentTemplate(ctx context.Context, tenantID, templat
 	if err != nil {
 		return "", ErrNotFound
 	}
-	result, err := s.queries.DeleteEnvironmentTemplate(ctx, sqlc.DeleteEnvironmentTemplateParams{TenantID: tenant, ID: id})
+	var deletedID string
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		result, err := q.DeleteEnvironmentTemplate(ctx, sqlc.DeleteEnvironmentTemplateParams{TenantID: tenant, ID: id})
+		if err != nil {
+			return err
+		}
+		deletedID = uuid.UUID(result.Bytes).String()
+		return recordWriteAudit(ctx, q, tenantID, "delete", "environment_template", deletedID, "")
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
 	}
 	if err != nil {
 		return "", err
 	}
-	return uuid.UUID(result.Bytes).String(), nil
+	return deletedID, nil
 }
 
 type EnvironmentTemplatePage struct {

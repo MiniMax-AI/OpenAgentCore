@@ -152,6 +152,9 @@ func (s *Store) DeleteSessionArtifact(ctx context.Context, tenantID, sessionID, 
 	if err := objects.Unlink(ctx, oid.Uint32); err != nil {
 		return err
 	}
+	if err := recordWriteAudit(ctx, q, tenantID, "delete", "artifact", uuid.UUID(lookup.ID.Bytes).String(), uuid.UUID(lookup.SessionID.Bytes).String()); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 

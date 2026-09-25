@@ -12,8 +12,8 @@ import (
 )
 
 const createEnvironmentFileWrite = `-- name: CreateEnvironmentFileWrite :one
-INSERT INTO environment_file_writes(id, environment_id, device_id, request_sha256)
-VALUES ($1, $2, $3, $4) RETURNING id, environment_id, device_id, request_sha256, state, created_at, settled_at
+INSERT INTO environment_file_writes(id, environment_id, device_id, request_sha256, audit_source)
+VALUES ($1, $2, $3, $4, $5) RETURNING id, environment_id, device_id, request_sha256, state, created_at, settled_at, audit_source
 `
 
 type CreateEnvironmentFileWriteParams struct {
@@ -21,6 +21,7 @@ type CreateEnvironmentFileWriteParams struct {
 	EnvironmentID pgtype.UUID `json:"environment_id"`
 	DeviceID      pgtype.UUID `json:"device_id"`
 	RequestSha256 string      `json:"request_sha256"`
+	AuditSource   []byte      `json:"audit_source"`
 }
 
 func (q *Queries) CreateEnvironmentFileWrite(ctx context.Context, arg CreateEnvironmentFileWriteParams) (EnvironmentFileWrite, error) {
@@ -29,6 +30,7 @@ func (q *Queries) CreateEnvironmentFileWrite(ctx context.Context, arg CreateEnvi
 		arg.EnvironmentID,
 		arg.DeviceID,
 		arg.RequestSha256,
+		arg.AuditSource,
 	)
 	var i EnvironmentFileWrite
 	err := row.Scan(
@@ -39,6 +41,7 @@ func (q *Queries) CreateEnvironmentFileWrite(ctx context.Context, arg CreateEnvi
 		&i.State,
 		&i.CreatedAt,
 		&i.SettledAt,
+		&i.AuditSource,
 	)
 	return i, err
 }
@@ -71,7 +74,7 @@ func (q *Queries) EnvironmentFileWriteHasPendingInput(ctx context.Context, sessi
 }
 
 const getEnvironmentFileWrite = `-- name: GetEnvironmentFileWrite :one
-SELECT w.id, w.environment_id, w.device_id, w.request_sha256, w.state, w.created_at, w.settled_at, e.session_id
+SELECT w.id, w.environment_id, w.device_id, w.request_sha256, w.state, w.created_at, w.settled_at, w.audit_source, e.session_id
 FROM environment_file_writes w
 JOIN environments e ON e.id = w.environment_id
 JOIN sessions s ON s.id = e.session_id
@@ -100,6 +103,7 @@ func (q *Queries) GetEnvironmentFileWrite(ctx context.Context, arg GetEnvironmen
 		&i.EnvironmentFileWrite.State,
 		&i.EnvironmentFileWrite.CreatedAt,
 		&i.EnvironmentFileWrite.SettledAt,
+		&i.EnvironmentFileWrite.AuditSource,
 		&i.SessionID,
 	)
 	return i, err
@@ -107,7 +111,7 @@ func (q *Queries) GetEnvironmentFileWrite(ctx context.Context, arg GetEnvironmen
 
 const settleEnvironmentFileWrite = `-- name: SettleEnvironmentFileWrite :one
 UPDATE environment_file_writes SET state = $3, settled_at = clock_timestamp()
-WHERE environment_id = $1 AND id = $2 AND state = 'pending' RETURNING id, environment_id, device_id, request_sha256, state, created_at, settled_at
+WHERE environment_id = $1 AND id = $2 AND state = 'pending' RETURNING id, environment_id, device_id, request_sha256, state, created_at, settled_at, audit_source
 `
 
 type SettleEnvironmentFileWriteParams struct {
@@ -127,6 +131,7 @@ func (q *Queries) SettleEnvironmentFileWrite(ctx context.Context, arg SettleEnvi
 		&i.State,
 		&i.CreatedAt,
 		&i.SettledAt,
+		&i.AuditSource,
 	)
 	return i, err
 }

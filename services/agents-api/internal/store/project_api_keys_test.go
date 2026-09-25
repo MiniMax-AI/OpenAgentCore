@@ -3,14 +3,13 @@ package store
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/google/uuid"
 )
@@ -19,178 +18,193 @@ func projectKeyDigest(value string) string {
 	digest := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(digest[:])
 }
-
 func projectKeyPrincipal() identity.Principal {
-	return identity.Principal{ProjectScope: identity.ProjectScope{
-		TenantID: uuid.NewString(), OrganizationID: "org-" + uuid.NewString(), ProjectID: "project-" + uuid.NewString(),
-	}, SubjectKind: "service_account", SubjectID: "console-admin"}
+	return identity.Principal{ProjectScope: identity.ProjectScope{TenantID: uuid.NewString(), OrganizationID: "org-" + uuid.NewString(), ProjectID: "project-" + uuid.NewString()}, SubjectKind: "service_account", SubjectID: "test"}
 }
-
-func TestProjectAPIKeysPersistWithoutSecretsAndRevoke(t *testing.T) {
-	s, pool := testStore(t)
-	ctx := t.Context()
-	owner := projectKeyPrincipal()
-	binding := projectKeyDigest(uuid.NewString())
+func keyAdminContext(ctx context.Context, id string) context.Context {
+	return adminaudit.WithSource(ctx, adminaudit.Source{CredentialID: "12345678", ActorLabel: "test", RequestID: uuid.NewString(), TraceID: uuid.NewString(), ProjectID: id})
+}
+func createTestProject(t *testing.T, s *Store) Project {
+	t.Helper()
 	id := uuid.NewString()
-	issued, err := s.CreateProjectAPIKey(ctx, binding, owner, id, "  Local terminal 云  ")
+	p, err := s.CreateProject(keyAdminContext(t.Context(), id), id, "Project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	random, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(issued.Key, "pc_"))
-	if err != nil || len(random) != 32 || !strings.HasPrefix(issued.Key, "pc_") || issued.Prefix != issued.Key[:11] ||
-		issued.ID != id || issued.Name != "Local terminal 云" || issued.CreatedAt.IsZero() || issued.RevokedAt != nil {
-		t.Fatal("issued key does not satisfy its one-time secret and metadata contract")
-	}
-	if duplicate, err := s.CreateProjectAPIKey(ctx, binding, owner, id, "replacement"); !errors.Is(err, ErrProjectAPIKeyExists) || duplicate.Key != "" {
-		t.Fatalf("duplicate ID must not replace or recover a secret: %v", err)
-	}
-	// New Store and pool instances must recover metadata and authentication, not plaintext.
-	pool.Close()
-	restarted, _ := testStore(t)
-	resolved, err := restarted.ResolveProjectAPIKey(ctx, projectKeyDigest(issued.Key))
-	if err != nil || resolved.BindingDigest != binding || resolved.Principal != owner {
-		t.Fatalf("frozen binding did not survive restart: %v", err)
-	}
-	listed, err := restarted.ListProjectAPIKeys(ctx, binding, owner)
-	if err != nil || len(listed) != 1 || !reflect.DeepEqual(listed[0], issued.ProjectAPIKey) {
-		t.Fatalf("persisted safe metadata changed: %v", err)
-	}
-	raw, err := json.Marshal(listed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, private := range []string{issued.Key, projectKeyDigest(issued.Key), binding, "token_sha256", "binding_digest", `"key"`} {
-		if strings.Contains(string(raw), private) {
-			t.Fatal("list returned private key material")
-		}
-	}
-	second, err := restarted.CreateProjectAPIKey(ctx, binding, owner, uuid.NewString(), issued.Name)
-	if err != nil || second.Key == issued.Key {
-		t.Fatalf("same name must allow an independent key: %v", err)
-	}
-	for _, unknown := range []string{"", "bad-digest", strings.Repeat("A", 64), projectKeyDigest("unknown")} {
-		if _, err := restarted.ResolveProjectAPIKey(ctx, unknown); !errors.Is(err, ErrNotFound) {
-			t.Fatalf("unknown/malformed digest authenticated: %v", err)
-		}
-	}
-	if err := restarted.RevokeProjectAPIKey(ctx, binding, owner, id); err != nil {
-		t.Fatal(err)
-	}
-	listed, err = restarted.ListProjectAPIKeys(ctx, binding, owner)
-	if err != nil || len(listed) != 2 {
-		t.Fatalf("list after revoke: %v", err)
-	}
-	var revoked ProjectAPIKey
-	for _, key := range listed {
-		if key.ID == id {
-			revoked = key
-		}
-	}
-	if revoked.RevokedAt == nil {
-		t.Fatal("revocation metadata missing")
-	}
-	if err := restarted.RevokeProjectAPIKey(ctx, binding, owner, id); err != nil {
-		t.Fatalf("repeat revoke must be idempotent: %v", err)
-	}
-	if _, err := restarted.ResolveProjectAPIKey(ctx, projectKeyDigest(issued.Key)); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("revoked key authenticated: %v", err)
-	}
-	if _, err := restarted.ResolveProjectAPIKey(ctx, projectKeyDigest(second.Key)); err != nil {
-		t.Fatalf("revocation affected independent key: %v", err)
-	}
-	listed, err = restarted.ListProjectAPIKeys(ctx, binding, owner)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range listed {
-		if key.ID == id && !reflect.DeepEqual(key, revoked) {
-			t.Fatal("idempotent revoke changed its original timestamp")
-		}
-	}
+	return p
 }
-
-func TestProjectAPIKeysRequireFullPrincipalAndParentForManagement(t *testing.T) {
+func TestProjectKeysShareIdentityAndArchiveRetainsAssets(t *testing.T) {
 	s, _ := testStore(t)
-	owner := projectKeyPrincipal()
-	binding := projectKeyDigest(uuid.NewString())
-	issued, err := s.CreateProjectAPIKey(t.Context(), binding, owner, uuid.NewString(), "owned")
+	p := createTestProject(t, s)
+	other := createTestProject(t, s)
+	first, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, uuid.NewString(), "first")
 	if err != nil {
 		t.Fatal(err)
 	}
-	type caller struct {
-		binding string
-		owner   identity.Principal
-	}
-	callers := []caller{{projectKeyDigest("other parent"), owner}, {binding, projectKeyPrincipal()}}
-	for _, field := range []string{"tenant", "organization", "project", "subject_kind", "subject_id"} {
-		other := owner
-		switch field {
-		case "tenant":
-			other.TenantID = uuid.NewString()
-		case "organization":
-			other.OrganizationID += "-other"
-		case "project":
-			other.ProjectID += "-other"
-		case "subject_kind":
-			other.SubjectKind = "user"
-		case "subject_id":
-			other.SubjectID += "-other"
-		}
-		callers = append(callers, caller{binding, other})
-	}
-	for i, other := range callers {
-		keys, err := s.ListProjectAPIKeys(t.Context(), other.binding, other.owner)
-		if err != nil || len(keys) != 0 {
-			t.Fatalf("foreign caller %d listed a key: %v", i, err)
-		}
-		if err := s.RevokeProjectAPIKey(t.Context(), other.binding, other.owner, issued.ID); !errors.Is(err, ErrNotFound) {
-			t.Fatalf("foreign caller %d revoked a key: %v", i, err)
-		}
-	}
-	if err := s.RevokeProjectAPIKey(t.Context(), binding, owner, uuid.NewString()); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("unknown ID revoke: %v", err)
-	}
-	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(issued.Key)); err != nil {
-		t.Fatalf("foreign management changed the key: %v", err)
-	}
-	otherParent, err := s.CreateProjectAPIKey(t.Context(), projectKeyDigest("other parent"), owner, uuid.NewString(), "owned")
+	second, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, uuid.NewString(), "second")
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := s.ListProjectAPIKeys(t.Context(), projectKeyDigest("other parent"), owner)
-	if err != nil || len(keys) != 1 || keys[0].ID != otherParent.ID {
-		t.Fatalf("parent key ownership mixed: %v", err)
+	a, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(first.Key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(second.Key))
+	if err != nil || a.Principal != b.Principal || a.Principal.SubjectID != "project:"+p.ID || a.Principal.ProjectID != "proj_"+p.ID {
+		t.Fatal("Project keys do not share the stable Project principal", err)
+	}
+	asset, err := s.CreateAgent(t.Context(), a.Principal.TenantID, CreateAgentInput{Configuration: []byte(`{"model":"test"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetAgent(t.Context(), b.Principal.TenantID, asset.ID); err != nil {
+		t.Fatal("peer key cannot read shared asset", err)
+	}
+	if _, err := s.GetAgent(t.Context(), other.TenantID, asset.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign Project read asset", err)
+	}
+	renamed, err := s.RenameProject(keyAdminContext(t.Context(), p.ID), p.ID, "renamed")
+	if err != nil || renamed.TenantID != p.TenantID || renamed.ActiveKeyCount != 2 {
+		t.Fatal("rename changed Project ownership", err)
+	}
+	afterRename, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(first.Key))
+	if err != nil || afterRename.Principal != a.Principal {
+		t.Fatal("rename changed key principal", err)
+	}
+	listed, err := s.ListProjectAPIKeys(t.Context(), p.ID, "", 50, true)
+	if err != nil || len(listed.Data) != 2 {
+		t.Fatal("Project keys missing", err)
+	}
+	raw, _ := json.Marshal(listed)
+	if strings.Contains(string(raw), first.Key) || strings.Contains(string(raw), projectKeyDigest(first.Key)) {
+		t.Fatal("key list exposed credential")
+	}
+	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), other.ID), other.ID, first.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign Project revoked key", err)
+	}
+	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(first.Key)); !errors.Is(err, ErrNotFound) {
+		t.Fatal("revoked key authenticated")
+	}
+	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(second.Key)); err != nil {
+		t.Fatal("revocation affected peer", err)
+	}
+	archived, err := s.ArchiveProject(keyAdminContext(t.Context(), p.ID), p.ID)
+	if err != nil || archived.ArchivedAt == nil || archived.ActiveKeyCount != 0 {
+		t.Fatal("archive did not revoke all keys", err)
+	}
+	if _, err := s.ResolveProjectAPIKey(t.Context(), projectKeyDigest(second.Key)); !errors.Is(err, ErrNotFound) {
+		t.Fatal("archived Project authenticated")
+	}
+	if _, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, uuid.NewString(), "late"); !errors.Is(err, ErrProjectArchived) {
+		t.Fatal("archived Project admitted new key", err)
+	}
+	if _, err := s.GetAgent(t.Context(), p.TenantID, asset.ID); err != nil {
+		t.Fatal("archive removed assets", err)
+	}
+	if err := s.ValidateProjectKeySeparation(t.Context(), []string{projectKeyDigest(second.Key)}); err == nil {
+		t.Fatal("revoked credential collision accepted")
+	}
+	raw, _ = json.Marshal(archived)
+	if strings.Contains(string(raw), p.TenantID) {
+		t.Fatal("Project response exposed internal tenant")
+	}
+}
+func TestProjectManagementRequiresAtomicAudit(t *testing.T) {
+	s, _ := testStore(t)
+	id := uuid.NewString()
+	if _, err := s.CreateProject(t.Context(), id, "unaudited"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unaudited Project accepted")
+	}
+	if _, err := s.GetProject(t.Context(), id); !errors.Is(err, ErrNotFound) {
+		t.Fatal("unaudited Project persisted")
+	}
+	p := createTestProject(t, s)
+	keyID := uuid.NewString()
+	if _, err := s.CreateProjectAPIKey(t.Context(), p.ID, keyID, "unaudited"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unaudited key accepted")
+	}
+	page, err := s.ListProjectAPIKeys(t.Context(), p.ID, "", 20, true)
+	if err != nil || len(page.Data) != 0 {
+		t.Fatal("unaudited key persisted")
+	}
+	if _, err := s.RenameProject(t.Context(), p.ID, "bad"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unaudited rename accepted")
+	}
+	if _, err := s.ArchiveProject(t.Context(), p.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unaudited archive accepted")
+	}
+	current, err := s.GetProject(t.Context(), p.ID)
+	if err != nil || current.Project.Name != p.Name || current.Project.ArchivedAt != nil {
+		t.Fatal("unaudited mutation persisted")
+	}
+}
+func TestProjectNamesValidateBeforeDatabaseAccess(t *testing.T) {
+	s := &Store{}
+	for _, name := range []string{"", " ", "with\ncontrol", strings.Repeat("x", 129)} {
+		if _, err := s.CreateProject(t.Context(), uuid.NewString(), name); !errors.Is(err, ErrInvalidInput) {
+			t.Fatal("invalid Project name accepted")
+		}
+	}
+	for _, name := range []string{"", " ", "with\ncontrol", strings.Repeat("x", 81)} {
+		if _, err := s.CreateProjectAPIKey(t.Context(), uuid.NewString(), uuid.NewString(), name); !errors.Is(err, ErrInvalidInput) {
+			t.Fatal("invalid key name accepted")
+		}
 	}
 }
 
-func TestProjectAPIKeysValidateBeforeDatabaseAccess(t *testing.T) {
-	s := &Store{}
-	ctx := context.Background()
-	owner := projectKeyPrincipal()
-	binding := projectKeyDigest("parent")
-	for _, name := range []string{"", "  ", strings.Repeat("云", 81), "with\ncontrol", "\ttrimmed", "nul\x00", string([]byte{0xff})} {
-		if _, err := s.CreateProjectAPIKey(ctx, binding, owner, uuid.NewString(), name); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("invalid name accepted: %v", err)
-		}
+func TestProjectCatalogPaginationAndScopedKeyCursor(t *testing.T) {
+	s, _ := testStore(t)
+	first, second := createTestProject(t, s), createTestProject(t, s)
+	if _, err := s.CreateProject(keyAdminContext(t.Context(), first.ID), first.ID, "duplicate"); !errors.Is(err, ErrProjectExists) {
+		t.Fatal("duplicate Project ID did not conflict", err)
 	}
-	for _, digest := range []string{"", "abc", strings.Repeat("A", 64), strings.Repeat("z", 64)} {
-		if _, err := s.CreateProjectAPIKey(ctx, digest, owner, uuid.NewString(), "name"); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("invalid binding accepted: %v", err)
-		}
-		if _, err := s.ListProjectAPIKeys(ctx, digest, owner); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("invalid list binding accepted: %v", err)
-		}
+	// Equal display names do not merge Projects or keys.
+	a, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, uuid.NewString(), "same name")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, id := range []string{"", "invalid", uuid.Nil.String()} {
-		if _, err := s.CreateProjectAPIKey(ctx, binding, owner, id, "name"); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("invalid create ID accepted: %v", err)
-		}
-		if err := s.RevokeProjectAPIKey(ctx, binding, owner, id); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("invalid revoke ID accepted: %v", err)
-		}
+	b, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, uuid.NewString(), "same name")
+	if err != nil {
+		t.Fatal(err)
 	}
-	owner.SubjectKind = "unknown"
-	if _, err := s.CreateProjectAPIKey(ctx, binding, owner, uuid.NewString(), "name"); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("invalid principal accepted: %v", err)
+	if _, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, a.ID, "duplicate ID"); !errors.Is(err, ErrProjectAPIKeyExists) {
+		t.Fatal("duplicate key ID did not conflict", err)
+	}
+	page, err := s.ListProjectAPIKeys(t.Context(), first.ID, "", 1, true)
+	if err != nil || len(page.Data) != 1 || !page.HasMore {
+		t.Fatal("first key page invalid", err)
+	}
+	tail, err := s.ListProjectAPIKeys(t.Context(), first.ID, page.Data[0].ID, 1, true)
+	if err != nil || len(tail.Data) != 1 || tail.HasMore || tail.Data[0].ID <= page.Data[0].ID {
+		t.Fatal("key cursor did not advance", err)
+	}
+	reverse, err := s.ListProjectAPIKeys(t.Context(), first.ID, "", 1, false)
+	if err != nil || len(reverse.Data) != 1 || reverse.Data[0].ID != tail.Data[0].ID {
+		t.Fatal("descending key page invalid", err)
+	}
+	if _, err := s.ListProjectAPIKeys(t.Context(), second.ID, a.ID, 1, true); !errors.Is(err, ErrNotFound) {
+		t.Fatal("foreign key cursor accepted", err)
+	}
+	if _, err := s.ListProjectAPIKeys(t.Context(), first.ID, "", 101, true); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("oversized key page accepted", err)
+	}
+	if _, err := s.ListProjects(t.Context(), "", 101, true); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("oversized Project page accepted", err)
+	}
+	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RevokeProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.GetProject(t.Context(), first.ID)
+	if err != nil || current.Project.ArchivedAt != nil || current.Project.ActiveKeyCount != 0 {
+		t.Fatal("last key removal changed Project lifecycle", err)
+	}
+	if _, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), first.ID), first.ID, uuid.NewString(), "new access"); err != nil {
+		t.Fatal("zero-key Project could not issue another key", err)
 	}
 }

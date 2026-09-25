@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 )
@@ -26,15 +27,15 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	principal := store.FixtureExecutorPrincipal(t, s, tenant)
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: principal.OrganizationID, ProjectID: tenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: device.HashCredential(token), TenantID: tenant},
-		{OrganizationID: principal.OrganizationID, ProjectID: tenant, SubjectKind: "user", SubjectID: "different-reader", TokenSHA256: device.HashCredential(peer), TenantID: tenant},
+		{OrganizationID: principal.OrganizationID, ProjectID: tenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: device.HashCredential(peer), TenantID: tenant},
 		{OrganizationID: principal.OrganizationID, ProjectID: foreignTenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: device.HashCredential(foreign), TenantID: foreignTenant},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.EnsureProjectScopes(t.Context(), auth.ProjectScopes()); err != nil {
+	if err := s.EnsureProjectScopes(t.Context(), []identity.ProjectScope{{TenantID: tenant, OrganizationID: principal.OrganizationID, ProjectID: tenant}, {TenantID: foreignTenant, OrganizationID: principal.OrganizationID, ProjectID: foreignTenant}}); err != nil {
 		t.Fatal(err)
 	}
 	executor, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), "")

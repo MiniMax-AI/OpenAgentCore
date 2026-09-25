@@ -63,7 +63,7 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 		}
 	}()
 	token, foreign, foreignTenant := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: device.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "other", TokenSHA256: device.HashCredential(foreign), TenantID: foreignTenant},
 	})

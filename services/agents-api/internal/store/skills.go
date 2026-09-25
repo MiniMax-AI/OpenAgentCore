@@ -50,11 +50,14 @@ func (s *Store) CreateSkill(ctx context.Context, tenantID string, archive []byte
 		if err != nil {
 			return err
 		}
-		if _, err = s.saveSkillVersion(ctx, q, tenant, id, 1, metadata, archive); err != nil {
+		initial, err := s.saveSkillVersion(ctx, q, tenant, id, 1, metadata, archive)
+		if err != nil {
 			return err
 		}
 		result = skillFromRow(row)
-		return nil
+		return recordWriteAudit(ctx, q, tenantID, "create", "skill", result.ID, "",
+			AuditResource{Type: "skill", ID: result.ID},
+			AuditResource{Type: "skill_version", ID: initial.ID, ParentID: result.ID})
 	})
 	return result, err
 }
@@ -91,8 +94,11 @@ func (s *Store) UpdateSkillDefault(ctx context.Context, tenantID, skillID, versi
 			return err
 		}
 		row, err := q.SetDefaultSkillVersion(ctx, sqlc.SetDefaultSkillVersionParams{TenantID: tenant, ID: id, DefaultVersion: number, Name: version.Name, Description: version.Description})
+		if err != nil {
+			return err
+		}
 		result = skillFromRow(row)
-		return err
+		return recordWriteAudit(ctx, q, tenantID, "update_default_version", "skill", result.ID, "")
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
@@ -105,7 +111,13 @@ func (s *Store) DeleteSkill(ctx context.Context, tenantID, skillID string) error
 	if err != nil {
 		return err
 	}
-	_, err = s.queries.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: id})
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		if _, err := q.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: id}); err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "delete", "skill", skillID, "")
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}

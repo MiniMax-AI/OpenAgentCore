@@ -72,7 +72,7 @@ func (s *Store) SubmitInputs(ctx context.Context, tenantID, sessionID, key strin
 		}
 		if len(previous) > 0 {
 			receipts = previous
-			return nil
+			return recordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
 		}
 		if slices.ContainsFunc(batch, func(input Input) bool { return input.Kind == "message" }) {
 			if err := checkEnvironmentFileWriteGate(ctx, q, session); err != nil {
@@ -89,7 +89,7 @@ func (s *Store) SubmitInputs(ctx context.Context, tenantID, sessionID, key strin
 			}
 			receipts = append(receipts, receipt)
 		}
-		return nil
+		return recordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
 	})
 	if err != nil {
 		return nil, fmt.Errorf("submit turn inputs: %w", err)

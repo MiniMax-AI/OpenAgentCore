@@ -121,12 +121,24 @@ func TestItemOrderMigrationPreservesIndexedHistory(t *testing.T) {
 	if _, err = db.ExecContext(ctx, "UPDATE turns SET items_indexed=true WHERE id=$1", turn); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = provider.Up(ctx); err != nil {
+	if _, err = provider.UpTo(ctx, 65); err != nil {
 		t.Fatal(err)
 	}
 	var after string
 	if err = db.QueryRowContext(ctx, "SELECT jsonb_agg(to_jsonb(i) ORDER BY id)::text FROM session_items i").Scan(&after); err != nil || after != before {
 		t.Fatal("upgrade changed indexed history", err)
+	}
+
+	// Exercise the reversible history migrations before the Project catalog,
+	// whose schema intentionally cannot be downgraded.
+	if _, err = provider.DownTo(ctx, 10); err != nil {
+		t.Fatal(err)
+	}
+	if got := readIDs(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("downgrade reordered history: %v", got)
+	}
+	if _, err = provider.Up(ctx); err != nil {
+		t.Fatal(err)
 	}
 
 	poolConfig := pool.Config()
@@ -147,15 +159,5 @@ func TestItemOrderMigrationPreservesIndexedHistory(t *testing.T) {
 	var position, output int
 	if err = db.QueryRowContext(ctx, "SELECT position,output_index FROM session_items WHERE id=$1", addedID).Scan(&position, &output); err != nil || position != 3 || output != 2 {
 		t.Fatalf("post-upgrade append: position=%d output=%d err=%v", position, output, err)
-	}
-	want = append(want, addedID)
-	if _, err = provider.DownTo(ctx, 10); err != nil {
-		t.Fatal(err)
-	}
-	if got := readIDs(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("downgrade reordered history: %v", got)
-	}
-	if _, err = provider.Up(ctx); err != nil {
-		t.Fatal(err)
 	}
 }

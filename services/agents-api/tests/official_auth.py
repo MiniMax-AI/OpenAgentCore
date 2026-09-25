@@ -1,7 +1,5 @@
 """Exercise caller scope through the pinned SDK, raw HTTP and service restart."""
 
-import json
-import subprocess
 import uuid
 
 import httpx2 as httpx
@@ -36,22 +34,8 @@ def verify_caller_principals(client, base, binding, token, rotated, peer, sessio
         assert response.status_code == 200 and response.json()["id"] == session.id
 
 
-def verify_scope_bootstrap(binary, env, keys_file, bindings, log):
-    # The previous process must be stopped before checking persisted configuration.
-    for name in ("organization_id", "project_id", "tenant_id"):
-        changed = [{**binding, name: str(uuid.uuid4())} if binding["tenant_id"] == bindings[0]["tenant_id"] else binding
-                   for binding in bindings]
-        # Keep same-project caller entries internally consistent, so PostgreSQL is the authority.
-        replacement = str(uuid.uuid4())
-        for old, new in zip(bindings, changed):
-            if old["tenant_id"] == bindings[0]["tenant_id"]:
-                new[name] = replacement
-        keys_file.write_text(json.dumps(changed))
-        process = subprocess.Popen([binary], env=env, stdout=log, stderr=log)
-        try:
-            assert process.wait(timeout=20) != 0, "Persisted scope remapping started successfully"
-        finally:
-            if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=15)
-            keys_file.write_text(json.dumps(bindings))
+def verify_scope_recovery(client, base, binding, keys, session):
+    # The caller has restarted Core without any business key configuration.
+    for key in keys:
+        verify_caller_principals(client, base, binding, key, keys[1], keys[2], session)
+    print("Caller scope: database Projects and all issued keys survived restart with unchanged scope.")

@@ -23,12 +23,21 @@ func (s *Store) DeleteCredential(ctx context.Context, tenantID, vaultID, credent
 	if err != nil {
 		return "", ErrNotFound
 	}
-	deleted, err := s.queries.DeleteCredential(ctx, sqlc.DeleteCredentialParams{TenantID: tenant, VaultID: vault, ID: id})
+	var deletedID string
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		deleted, err := q.DeleteCredential(ctx, sqlc.DeleteCredentialParams{TenantID: tenant, VaultID: vault, ID: id})
+		if err != nil {
+			return err
+		}
+		deletedID = uuid.UUID(deleted.Bytes).String()
+		return recordWriteAudit(ctx, q, tenantID, "delete", "credential", deletedID, uuid.UUID(vault.Bytes).String())
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
 	}
 	if err != nil {
 		return "", errors.New("credential deletion failed")
 	}
-	return uuid.UUID(deleted.Bytes).String(), nil
+	return deletedID, nil
 }

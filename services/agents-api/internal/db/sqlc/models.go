@@ -8,6 +8,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AdminAssetCopy struct {
+	TargetTenantID pgtype.UUID `json:"target_tenant_id"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	RequestHash    []byte      `json:"request_hash"`
+	Result         []byte      `json:"result"`
+	AuditID        pgtype.UUID `json:"audit_id"`
+}
+
+type AdminAuditLog struct {
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
+	AdminCredentialID string             `json:"admin_credential_id"`
+	ActorLabel        string             `json:"actor_label"`
+	Action            string             `json:"action"`
+	ResourceType      string             `json:"resource_type"`
+	ResourceID        string             `json:"resource_id"`
+	ResultIds         []byte             `json:"result_ids"`
+	RequestID         string             `json:"request_id"`
+	TraceID           string             `json:"trace_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type AdminResourceOwner struct {
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	ResourceType string      `json:"resource_type"`
+	ResourceID   string      `json:"resource_id"`
+	ParentID     string      `json:"parent_id"`
+	AuditID      pgtype.UUID `json:"audit_id"`
+}
+
 type Agent struct {
 	ID            pgtype.UUID        `json:"id"`
 	TenantID      pgtype.UUID        `json:"tenant_id"`
@@ -69,6 +100,7 @@ type EnvironmentFileWrite struct {
 	State         string             `json:"state"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	SettledAt     pgtype.Timestamptz `json:"settled_at"`
+	AuditSource   []byte             `json:"audit_source"`
 }
 
 type EnvironmentInputReservation struct {
@@ -135,19 +167,24 @@ type InitialEnvironmentFile struct {
 	Contents  []byte      `json:"contents"`
 }
 
+type Project struct {
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	SubjectKind string             `json:"subject_kind"`
+	SubjectID   string             `json:"subject_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+}
+
 type ProjectApiKey struct {
-	ID             pgtype.UUID        `json:"id"`
-	Name           string             `json:"name"`
-	Prefix         string             `json:"prefix"`
-	TokenSha256    string             `json:"token_sha256"`
-	BindingDigest  string             `json:"binding_digest"`
-	TenantID       pgtype.UUID        `json:"tenant_id"`
-	OrganizationID string             `json:"organization_id"`
-	ProjectID      string             `json:"project_id"`
-	SubjectKind    string             `json:"subject_kind"`
-	SubjectID      string             `json:"subject_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	Prefix      string             `json:"prefix"`
+	TokenSha256 string             `json:"token_sha256"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
+	ProjectID   pgtype.UUID        `json:"project_id"`
 }
 
 type PublicExecutionTurn struct {
@@ -457,4 +494,28 @@ type VaultCredential struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	Status          string             `json:"status"`
 	OauthMetadata   []byte             `json:"oauth_metadata"`
+}
+
+type WriteAuditOperation struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	KeyID        string             `json:"key_id"`
+	KeyName      string             `json:"key_name"`
+	KeyPrefix    string             `json:"key_prefix"`
+	KeyKind      string             `json:"key_kind"`
+	Action       string             `json:"action"`
+	ResourceType string             `json:"resource_type"`
+	ResourceID   string             `json:"resource_id"`
+	ParentID     string             `json:"parent_id"`
+	RequestID    string             `json:"request_id"`
+	TraceID      string             `json:"trace_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type WriteAuditOwner struct {
+	TenantID     pgtype.UUID `json:"tenant_id"`
+	ResourceType string      `json:"resource_type"`
+	ResourceID   string      `json:"resource_id"`
+	ParentID     string      `json:"parent_id"`
+	OperationID  pgtype.UUID `json:"operation_id"`
 }

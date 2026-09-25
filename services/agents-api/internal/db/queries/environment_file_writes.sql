@@ -6,8 +6,8 @@ JOIN sessions s ON s.id = e.session_id
 WHERE s.tenant_id = sqlc.arg(tenant_id) AND e.id = sqlc.arg(environment_id) AND w.id = sqlc.arg(id);
 
 -- name: CreateEnvironmentFileWrite :one
-INSERT INTO environment_file_writes(id, environment_id, device_id, request_sha256)
-VALUES ($1, $2, $3, $4) RETURNING *;
+INSERT INTO environment_file_writes(id, environment_id, device_id, request_sha256, audit_source)
+VALUES ($1, $2, $3, $4, $5) RETURNING *;
 
 -- name: SettleEnvironmentFileWrite :one
 UPDATE environment_file_writes SET state = $3, settled_at = clock_timestamp()

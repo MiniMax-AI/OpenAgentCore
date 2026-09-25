@@ -19,12 +19,21 @@ func (s *Store) DeleteVault(ctx context.Context, tenantID, vaultID string) (stri
 	if err != nil {
 		return "", ErrNotFound
 	}
-	deleted, err := s.queries.DeleteVault(ctx, sqlc.DeleteVaultParams{TenantID: tenant, ID: id})
+	var deletedID string
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		deleted, err := q.DeleteVault(ctx, sqlc.DeleteVaultParams{TenantID: tenant, ID: id})
+		if err != nil {
+			return err
+		}
+		deletedID = uuid.UUID(deleted.Bytes).String()
+		return recordWriteAudit(ctx, q, tenantID, "delete", "vault", deletedID, "")
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
 	}
 	if err != nil {
 		return "", errors.New("vault deletion failed")
 	}
-	return uuid.UUID(deleted.Bytes).String(), nil
+	return deletedID, nil
 }

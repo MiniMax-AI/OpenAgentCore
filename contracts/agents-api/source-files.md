@@ -18,8 +18,7 @@ and [FileObject](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79
 
 The configured SDK base URL includes `/v1`. These routes reuse bearer and optional
 organization/project header validation but do not require `OpenAI-Beta`. Existing
-Agents/Vault routes retain their Beta check. User and service-account keys in the
-same configured project share the source resource. Every read/delete/copy lookup
+Agents/Vault routes retain their Beta check. API keys in the same database-owned Project share the source resource. Every read/delete/copy lookup
 uses that project partition; missing and foreign IDs return the same safe 404.
 
 Listing defaults to 10,000 resources and rejects limits outside the pinned

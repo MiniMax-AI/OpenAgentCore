@@ -29,7 +29,7 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 	}
 	s := store.NewWithCredentialCipher(pool, cipher)
 	owner, foreign, ownerTenant := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{
+	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "body-owner", TokenSHA256: device.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "body-foreign", TokenSHA256: device.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
@@ -171,7 +171,7 @@ func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
 	}
 	s := store.NewWithCredentialCipher(pool, cipher)
 	token, tenant := uuid.NewString(), uuid.NewString()
-	auth, err := api.NewAuthenticator([]api.APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "excluded-owner", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "excluded-owner", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
 	if err != nil {
 		t.Fatal(err)
 	}

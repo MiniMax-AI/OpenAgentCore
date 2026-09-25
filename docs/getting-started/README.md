@@ -5,6 +5,7 @@ an execution API and an optional Web console, with native harnesses behind one
 Runtime contract. The Parsar product is not required.
 
 - [Install Core and Web](install.md)
+- [Public API and Web management reference](../api/README.md)
 - [Call the API](quickstart.md)
 - [Operate the installation](operations.md)
 - [Protocol coverage and native differences](https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/README.md)

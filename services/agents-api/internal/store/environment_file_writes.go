@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/writeaudit"
 )
 
 // FileWriteIdentity binds a private mutation to one dedicated local Runtime. RequestSHA256 covers the canonical destination, byte count and data digest.
@@ -53,6 +55,16 @@ func (s *Store) ReserveEnvironmentFileWrite(ctx context.Context, tenant, environ
 	lookup, err := fileWriteLookup(tenant, environment, key.ID)
 	if err != nil {
 		return EnvironmentFileWrite{}, err
+	}
+	var origin []byte
+	if source, ok := writeaudit.FromContext(ctx); ok {
+		if err := validateWriteAuditSource(source, tenant); err != nil {
+			return EnvironmentFileWrite{}, err
+		}
+		origin, err = json.Marshal(source)
+		if err != nil {
+			return EnvironmentFileWrite{}, err
+		}
 	}
 	var result EnvironmentFileWrite
 	err = s.withPublicSession(ctx, tenant, owned.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
@@ -100,7 +112,7 @@ func (s *Store) ReserveEnvironmentFileWrite(ctx context.Context, tenant, environ
 		}
 		deviceID, _ := parseID(key.DeviceID)
 		row, err := q.CreateEnvironmentFileWrite(ctx, sqlc.CreateEnvironmentFileWriteParams{
-			ID: lookup.ID, EnvironmentID: lookup.EnvironmentID, DeviceID: deviceID, RequestSha256: key.RequestSHA256,
+			ID: lookup.ID, EnvironmentID: lookup.EnvironmentID, DeviceID: deviceID, RequestSha256: key.RequestSHA256, AuditSource: origin,
 		})
 		if err == nil {
 			result = fileWriteFromRow(row, session)
@@ -158,10 +170,19 @@ func (s *Store) SettleEnvironmentFileWrite(ctx context.Context, tenant, environm
 			return nil
 		}
 		row, err := q.SettleEnvironmentFileWrite(ctx, sqlc.SettleEnvironmentFileWriteParams{EnvironmentID: lookup.EnvironmentID, ID: lookup.ID, State: state})
-		if err == nil {
-			result = fileWriteFromRow(row, session)
+		if err != nil {
+			return err
 		}
-		return err
+		result = fileWriteFromRow(row, session)
+		if state == "committed" && len(row.AuditSource) > 0 {
+			var source writeaudit.Source
+			if err := json.Unmarshal(row.AuditSource, &source); err != nil {
+				return err
+			}
+			auditCtx := writeaudit.WithSource(ctx, source)
+			return recordWriteAudit(auditCtx, q, tenant, "upload_file", "environment", environment, uuid.UUID(session.Bytes).String())
+		}
+		return nil
 	})
 	if err != nil {
 		return EnvironmentFileWrite{}, err

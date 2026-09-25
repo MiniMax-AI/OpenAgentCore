@@ -28,18 +28,37 @@ fixes may use self-review, including focused corrections after a blind review;
 repeat independent review when a correction materially changes the design or risk.
 Fix in-scope blockers before delivery. Do not use `codex exec` as a substitute reviewer.
 
-The Core Web is an administrator console for execution and resource operations;
-business collaboration remains in Parsar. Environment Template management shares
-the Session creation catalog and uses the existing public client operations. Patch
-only edited fields, confirm deletion, and never automatically retry an uncertain
-write. When Core refuses to delete a busy Session, offer an explicit Cancel work
-and delete action that cancels once, reads until the Session is idle within a
-bounded wait and deletes once; never cancel without that confirmation. When only
-input waiting for its Environment blocks deletion, explain that it must start,
-expire or fail instead, because Core rejects its cancellation. A Core connection
-change must discard the previous connection's forms, pending results and notices.
-Saving a Template must not allocate a Runtime, call a model or imply execution
-readiness. Keep unsupported advanced profiles explicit.
+The [API documentation index](docs/api/README.md) separates application,
+administrator and Runtime transport contracts. New or changed routes must identify
+their caller and authentication authority there, and link their detailed contract.
+Keep current integration guidance separate from historical qualification evidence.
+
+The Core Web is an administrator console. Its server authenticates to the explicit
+`/core/v1/admin` management surface and existing sandbox administration, never to
+`/v1` on behalf of a browser. Applications use an API key issued inside a Project. One Project owns one execution
+tenant and principal; all its keys share assets and permissions while writes retain
+individual key provenance. Projects and keys are database-owned, with no static
+business keys or configuration synchronization. Revocation affects one key;
+archiving a Project revokes all its keys, retaining assets and admitted execution.
+Do not add Core users, roles, memberships or cross-Project sharing. Management
+provides safe reads, public deletion preconditions, independent copies and Project
+and key operations; it cannot execute or edit arbitrary assets. Keep administrator
+target scope separate from caller principals. See [design principles](docs/design-principles.md) and the
+[administrator contract](contracts/agents-api/admin-api.md).
+
+Administrator writes and their audit record share one PostgreSQL transaction.
+Reuse existing resource deletion and serialization code. Copies rebind encrypted
+content and rewrite included dependencies inside the same transaction, including
+large objects, `admin_asset_copies` retry receipts and `admin_resource_owners`
+creation anchors. Never call separately committing resource creators from a copy.
+These anchors identify administrator copies even when API-key provenance is null;
+unknown historical provenance remains unknown. No secrets or request bodies enter
+logs. A forwarded console actor name is only a label, never an authorization input.
+
+When requirements conflict, object ownership is unclear, or a design would need
+parallel compatibility paths, raise the issue with a concrete recommendation and
+tradeoffs before implementing the disputed behavior. Continue independent work
+while the decision is pending. Do not silently preserve obsolete private designs.
 
 For subsequent alignment and milestone closure batches, the main thread coordinates
 design, shared interface agreements, file ownership, integration and merge. First
@@ -175,6 +194,21 @@ retains only the directory, write and workspace-export Rust helpers. Its build a
 check targets remain; the separate `packages/codex-harness`, its build/check scripts
 and its CI/`make check` gate are retired. Historical remote native probes are not
 current validation entrypoints.
+
+## Core operational metrics
+
+The administrator-only `/core/v1/admin/core-metrics` contract is documented in
+[core-metrics.md](contracts/agents-api/core-metrics.md). Keep this separate from
+Agent outcome and Sandbox capacity views. Instrument existing worker and job
+owners without changing scheduling, lease or retention behavior. Periodic pool
+pings and bounded in-process samples have explicit restart gaps; unknown values
+must remain null. Complete UTC buckets exclude the active partial bucket. Root
+Turn history is queried read-only from PostgreSQL with native timestamps.
+Count `execution_unavailable` at the existing HTTP error writer, once per rejected
+response; never record request/response bodies or infer this count from every
+503 or failed Turn. Builds inject the source commit with ldflags. No new monitoring
+service or storage system is required. Keep the frontend response shape aligned
+with the paired console contract.
 
 ## Architecture boundaries
 
@@ -1729,16 +1763,14 @@ existing write-only model execution extension, with the installation's persisten
 credential encryption key. Provider identity/backend namespace and native history
 must not change on a repeated install.
 
-`services/core-console` serves the production Web build and forwards public `/v1`
-requests to one configured Core using its project bearer after administrator
-authentication. New installations use a console-local single administrator account;
-existing installations without explicit account mode retain Basic authentication. The paired console uses the same login for allowlisted sandbox
-management routes and supplies its private server-side administrator token from
-`CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE`. The browser receives only capability
-flags through `/console/config`, never the deployment bearer. Project API keys
-retain their separate authority. The installer mounts only the administrator
-key file into Web and only its digest file into Core. Node/daemon transport uses
-its own authenticated finite routes and credentials, never that admin token.
+`services/core-console` serves the production Web build and proxies only finite
+administrator and sandbox-management routes after console login. It requires a
+private `CORE_CONSOLE_ADMIN_TOKEN_FILE` and holds no project caller credential.
+Every `/v1` request returns 404, including explicit Bearer requests. The installer
+mounts only the administrator key into Web and only its digest into Core. The
+browser receives safe capability flags, never that key. Node/daemon transport
+keeps its own authenticated finite routes and credentials. External API clients
+reach Core directly through the deployment's TLS routing.
 
 The Web manager offers no manual administrator-key fallback. A console without
 paired management configuration shows setup guidance; direct remote project API
@@ -1763,15 +1795,12 @@ The command verifies the installer checksum before execution, retains normal TLS
 verification, and passes the enrollment credential only to the installer process.
 
 
-Both proxy paths retain fixed-origin, cross-site, safe-path, redirect and Upgrade
+Management proxy paths retain fixed-origin, cross-site, safe-path, redirect and Upgrade
 restrictions through the standard Go reverse proxy with streaming/cancellation.
 The console implements no product identity, resource semantics, Runtime discovery
 or execution loop. Its local administrator account grants the complete console
 surface; do not introduce Web roles, invitations or per-project Web identities.
 Agent API caller keys remain independent of the administrator password and cookie.
-Explicit, unambiguous caller Bearer requests to public `/v1` routes pass through
-unchanged to Core, without borrowing the console's caller or administrator key.
-The same origin, path, method and transport restrictions still apply.
 
 Account mode is explicit (`CORE_CONSOLE_AUTH_MODE=account`) and requires a private
 writable state directory. The first visitor registers the sole administrator with
@@ -1784,50 +1813,22 @@ the static login UI, finite console authentication routes and the existing
 independently authenticated node/project transports. Authentication requests use
 same-origin JSON POSTs with bounded bodies and bounded password-hash work.
 
-Console-managed Agent API keys live in Core PostgreSQL, separate from console
-login state and model credentials. Only deployment administrator authentication
-can create, list or revoke them through the Core management extension. The console
-bridge derives the static parent binding digest from its private caller token;
-never accept a browser-supplied parent, tenant or subject. A static parent digest
-is a selector, not authentication. Freeze the complete configured principal with
-each derived key, and reject it whenever the current static binding is missing or
-changed. Never derive keys from another dynamic key. The issuer returns a random
-secret once and stores only its digest and safe metadata. Reads never return key
-material. Check revocation on each dynamic-key request without an auth cache;
-database failures fail closed. Static configured-key authentication remains
-independent of this lookup. Keep key management outside public `/v1` resources.
+Projects and application API keys live in Core PostgreSQL. Project creation owns
+its scope and shared principal; key issuance, revocation and Project archive share
+a transaction with audit. Issuance stores only a digest and metadata and returns
+plaintext once. Keys cannot be read back or reset in place; rotate by issuing a
+new key in the same Project and revoking the old key. Authentication checks the
+key and Project on every request, without a credential cache, and fails closed on
+database errors. Deployment credentials cannot authenticate to the public API.
+Configuration defines no Projects or business API keys. Fresh installation starts
+with no Projects; an administrator creates a Project and then issues a key.
 
-A caller-supplied creation UUID identifies a single key issuance. A repeated UUID
-returns conflict without replaying or rotating a secret. After an uncertain create,
-read the safe list and explicitly revoke an inaccessible key before replacing it;
-any explicit retry uses the same UUID. The first-run UI reminds the operator to
-save the key and use it for subsequent Agent API calls. Never persist a displayed
-key in browser storage or carry it into the request code or URL. The console has
-one administrator role and no project/role editor.
-The `/console/config` `api_keys` capability controls whether key management is
-available. Paired consoles require an active saved key before continuing from the
-access step. Web-only consoles with `api_keys: false` instead explain how to use
-an existing Core key and allow the introduction to continue without key-management
-requests. A failed or malformed capability read must not imply either capability.
-
-First-run Home is a standalone full-screen, skippable/replayable tutorial after
-account setup, outside the console shell. Setup and the introduction have no
-sidebar. Respect reduced-motion preferences throughout. The introduction does not
-change public Core resource semantics or block ordinary administration.
-Keep new onboarding state and components outside the oversized `App.tsx`. Persist
-only non-secret presentation progress; password and model provider key
-must not enter browser storage or generated code samples. Creating a saved Agent
-is an explicit write through the existing API. Reconcile uncertain results before
-another write, and associate external examples with their exact metadata marker,
-not arbitrary new resources or name matches. The request workbench generates code
-from its real form fields; local execution obtains caller and model keys separately.
-Generated examples reject redirects so credentials stay at the selected API origin.
-A registered host supplies sandbox resources only for hosted Sessions; self-hosted
-execution remains application-managed. Reuse the existing enrollment and topology
-contracts. Show actual confirmed resources, no simulated work or Agent-to-node
-ownership. Use nonlinear motion for transitions and success emphasis, preserve
-keyboard focus, and honor reduced motion. Compatibility scope and caveats belong
-in documentation, not in the introduction.
+Administrator onboarding covers console login, Project creation, key issuance and
+optional node enrollment. Model execution belongs in an external API example using an issued
+key. Keep secrets out of browser persistence, generated examples and URLs. Observe
+confirmed resources through the management API; do not infer Agent-to-node ownership
+or execution readiness from a host connection. Preserve keyboard focus, reduced
+motion and the existing node enrollment/topology contract.
 The console has neither KVM nor Docker authority; its static root contains no
 secrets. Installation exposes only loopback API/console ports. Remote exposure
 requires an operator-configured HTTPS/access boundary. Web-only mode can connect
@@ -1836,7 +1837,8 @@ to a loopback existing Core on the same Linux host or a remote HTTPS Core.
 Installation state and secrets live in a private directory under `~/.parsar/` by
 default. No credential enters build arguments, image layers, browser bundles or
 diagnostic output. Compose configuration is confidential. The generated database,
-caller/tenant/provider identities and encryption key survive reruns; automatic
+Projects and their issued keys, provider identity and encryption
+key survive reruns; automatic
 revision replacement and provider migration are outside this initial installer.
 Reruns also refuse enabling or disabling a sandbox provider on an existing
 installation, including adding one to the default zero-node installation.
@@ -2259,17 +2261,14 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
 - Shared supported wire types live in `contracts/agents-api/v1`. `make openapi`
   separately generates the product spec and `contracts/agents-api/openapi.yaml`;
   never mix their routes or authentication schemes. CI checks both for drift.
-- The standalone service uses `AGENTS_API_DATABASE_URL` and operator-provisioned
-  SHA-256 API key bindings from `AGENTS_API_KEYS_FILE`. Each key resolves one
-  organization/project and typed user/service-account principal. The internal
-  tenant UUID is its project resource partition. Before starting the listener or
-  Worker, atomically insert or verify the configured project-to-tenant bijection
-  in `execution_project_scopes`; never remap or delete existing associations when
-  keys change. Configuration requires explicit identities, with no legacy default.
+- The standalone service uses `AGENTS_API_DATABASE_URL`. PostgreSQL stores Projects,
+  their immutable execution scopes and API-key digests. Keys in the same Project
+  resolve to one shared service-account principal and tenant. Project/key writes
+  are managed through deployment-authenticated APIs, not configuration files.
   Optional `OpenAI-Organization` and `OpenAI-Project` headers must match the key;
   repeated/conflicting values fail authentication. Metadata, forwarded identities
-  and product session cookies grant no access. Keys can rotate under the same
-  principal; changing or removing caller bindings requires a service restart.
+  and product session cookies grant no access. Issue/revoke operations take effect
+  without restarting Core. Deployment credentials cannot authenticate public calls.
   Every new Session requires an explicit typed creator at the Store boundary,
   including internal callers. Public creation derives it only from the authenticated
   principal. Persist creator kind/ID in the creation transaction and never rewrite
@@ -3379,3 +3378,17 @@ Core Session or container creation. One conversation/Agent binding freezes the
 request on first execution; later messages and observer retries reuse it. Separate
 conversations get independent Sessions and environments. Edits affect future
 Sessions only. Keep the existing product navigation and direct empty-chat composer.
+
+### API-key write provenance
+
+Public resource writes carry authenticated key provenance separately from the
+execution principal. Persist their operation record and genuine creation ownership
+in the same business transaction; no best-effort response middleware or async audit
+queue. A failed audit must roll back the write. Internal lifecycle/refresh work does
+not acquire public provenance. Retries never replace ownership. Environment uploads
+persist safe request origin before dispatch and record success with the confirmed
+receipt, not the native filesystem call. Never put payloads, paths or secrets in
+audit metadata. Read models are deployment-authenticated `/core/v1` extensions;
+keep `/v1` wire contracts unchanged. See
+[write-audit.md](contracts/agents-api/write-audit.md) for coverage, retention and
+console integration. Do not confuse key identity with Session creator identity.

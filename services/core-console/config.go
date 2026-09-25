@@ -11,10 +11,10 @@ import (
 )
 
 type config struct {
-	addr, origin, dist, token, password string
-	adminToken, nodePayloadDir          string
-	authMode, stateDir                  string
-	upstream                            *url.URL
+	addr, origin, dist, password string
+	adminToken, nodePayloadDir   string
+	authMode, stateDir           string
+	upstream                     *url.URL
 }
 
 func loadConfig() (config, error) {
@@ -34,9 +34,9 @@ func loadConfig() (config, error) {
 	if !filepath.IsAbs(c.dist) {
 		return config{}, errors.New("CORE_CONSOLE_DIST must be absolute")
 	}
-	c.token, err = readSecret(envDefault("CORE_CONSOLE_TOKEN_FILE", "/config/caller.key"))
+	c.adminToken, err = readSecret(envDefault("CORE_CONSOLE_ADMIN_TOKEN_FILE", "/admin/sandbox-admin.key"))
 	if err != nil {
-		return config{}, errors.New("CORE_CONSOLE_TOKEN_FILE must name a private regular file containing one token")
+		return config{}, errors.New("CORE_CONSOLE_ADMIN_TOKEN_FILE must name a private regular file containing one token")
 	}
 	c.authMode = os.Getenv("CORE_CONSOLE_AUTH_MODE")
 	switch c.authMode {
@@ -45,8 +45,8 @@ func loadConfig() (config, error) {
 		if err != nil {
 			return config{}, errors.New("CORE_CONSOLE_PASSWORD_FILE must name a private regular file containing one password")
 		}
-		if c.password == c.token {
-			return config{}, errors.New("console password and Core bearer token must differ")
+		if c.password == c.adminToken {
+			return config{}, errors.New("console password and administrator credential must differ")
 		}
 	case "account":
 		c.stateDir = os.Getenv("CORE_CONSOLE_STATE_DIR")
@@ -55,15 +55,6 @@ func loadConfig() (config, error) {
 		}
 	default:
 		return config{}, errors.New("CORE_CONSOLE_AUTH_MODE must be account or unset for legacy Basic authentication")
-	}
-	if file := os.Getenv("CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE"); file != "" {
-		c.adminToken, err = readSecret(file)
-		if err != nil {
-			return config{}, errors.New("CORE_CONSOLE_SANDBOX_ADMIN_TOKEN_FILE must name a private regular token file")
-		}
-		if c.adminToken == c.token || c.adminToken == c.password {
-			return config{}, errors.New("sandbox administrator credential must be separate")
-		}
 	}
 	c.nodePayloadDir = os.Getenv("CORE_CONSOLE_NODE_PAYLOAD_DIR")
 	if c.nodePayloadDir != "" && (!filepath.IsAbs(c.nodePayloadDir) || c.adminToken == "") {

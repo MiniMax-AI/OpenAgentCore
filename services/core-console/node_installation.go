@@ -108,7 +108,7 @@ func (h *console) serveConsoleConfiguration(w http.ResponseWriter, _ *http.Reque
 }
 
 // Node and Runtime credentials pass through unchanged to Core authentication.
-// Console or project credentials are never substituted on these public routes.
+// Administrator credentials are never substituted on these transport routes.
 func nodeTransportRequest(r *http.Request) bool {
 	switch r.URL.Path {
 	case "/core/v1/sandbox/enroll", "/api/v1/agent-daemon/enroll", "/api/v1/agent-daemon/bootstrap":
@@ -119,17 +119,4 @@ func nodeTransportRequest(r *http.Request) bool {
 		return r.Method == http.MethodGet && strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
 	}
 	return false
-}
-
-// Environment credentials use project ownership, never deployment administration.
-func projectExtensionRequest(r *http.Request) bool {
-	const prefix = "/core/v1/environments/"
-	if !strings.HasPrefix(r.URL.Path, prefix) {
-		return false
-	}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix), "/")
-	if len(parts) < 2 || parts[0] == "" || parts[1] != "executor-credentials" {
-		return false
-	}
-	return len(parts) == 2 && r.Method == http.MethodPost || len(parts) == 3 && parts[2] != "" && r.Method == http.MethodDelete
 }

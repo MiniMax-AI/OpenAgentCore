@@ -66,6 +66,9 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, r, err)
 			return
 		}
+		if !h.auditSessionOperation(w, r, chi.URLParam(r, "session_id"), "send_events") {
+			return
+		}
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusAccepted)
 		return
