@@ -37,7 +37,7 @@ export const system = {
   },
   models: {
     title: "Default model",
-    help: "The model provider a hosted Session uses when neither its request nor its Agent brings one. Self-hosted Sessions bring their own key, in the request or saved on the Agent.",
+    help: "The default model applies to Core-hosted Sessions and Sessions without an environment. Self-hosted Sessions must bring their own key, in the request or saved on the Agent. A provider in the request or on the Agent takes priority over this default.",
     loadFailed: "Default models could not be loaded.",
     refreshFailed: "Refresh failed; showing the last loaded default models.",
     none: "Core reports no harnesses.",

@@ -39,7 +39,7 @@ export const system: TranslationShape<typeof english> = {
   },
   models: {
     title: "默认模型",
-    help: "托管 Session 的请求和 Agent 都没有提供模型服务时使用的模型服务。自托管 Session 自带密钥：写在请求里，或保存在 Agent 上。",
+    help: "默认模型作用于 Core 托管的 Session 和没有环境的 Session。自托管 Session 需要自带 key（请求里带或保存在 Agent 上）。请求或 Agent 上的模型服务优先于这里的默认值。",
     loadFailed: "无法加载默认模型。",
     refreshFailed: "刷新失败，显示的是上次加载的默认模型。",
     none: "Core 没有报告任何执行框架。",
@@ -52,7 +52,7 @@ export const system: TranslationShape<typeof english> = {
     notSet: "未设置",
     protocol: "协议",
     baseUrl: "Base URL",
-    apiKey: "API 密钥",
+    apiKey: "API key",
     keyConfigured: "已配置",
     keyNotConfigured: "未配置",
     contextWindow: "上下文窗口",

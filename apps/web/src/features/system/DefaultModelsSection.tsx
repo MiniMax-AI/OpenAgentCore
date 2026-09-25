@@ -45,13 +45,15 @@ function isUrl(value: string): boolean {
 }
 
 /**
- * System › Default model: each harness's deployment default model provider,
- * which hosted Sessions use when neither their request nor their Agent brings
- * one. Whether a harness is enabled, and which is the default, is Core's
- * startup configuration and only shown here. A write replaces the whole
- * provider and needs the API key every time; the key lives only in the open
- * form's state, never in the query cache, storage or the URL. Writes are never
- * retried automatically; after each one the harnesses are read again.
+ * System › Default model: each harness's deployment default model provider.
+ * It applies to Core-hosted Sessions, after a provider in the request or on
+ * the Agent, and is the only source for Sessions without an environment;
+ * self-hosted Sessions bring their own. Whether a harness is enabled, and
+ * which is the default, is Core's startup configuration and only shown here.
+ * A write replaces the whole provider and needs the API key every time; the
+ * key lives only in the open form's state, never in the query cache, storage
+ * or the URL. Writes are never retried automatically; after each one the
+ * harnesses are read again.
  */
 export function DefaultModelsSection() {
   const { t } = useTranslation("system");
