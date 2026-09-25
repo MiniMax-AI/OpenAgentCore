@@ -205,7 +205,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       />
       <div className="console-page-body sandbox-content">
         {status}
-        {selected ? <NodeDetail node={selected} allocations={allocations} stale={!confirmed} /> : snapshot && !loading ? (
+        {selected ? <NodeDetail node={selected} allocations={allocations} stale={!confirmed} suspension={snapshot?.deployment.suspension ?? null} /> : snapshot && !loading ? (
           <EmptyState icon={Server} title={t("Node not found")} hint={t("This node is not registered. It may have been removed.")} action={<button type="button" className="button outline" onClick={back}>{t("Back")}</button>} />
         ) : null}
       </div>

@@ -103,6 +103,12 @@ export function formatPeriod(seconds: number | null | undefined, locale?: string
   return locale?.startsWith("zh") ? text.replace(/^([\d.,]+)(?=[^\d\s.,])/, "$1 ") : text;
 }
 
+/** A measured span, rounded to its largest unit, as words: 7,300 s reads "2 hours / 2 小时", 90 s "2 minutes". */
+export function formatSpan(seconds: number, locale?: string): string {
+  const unit = seconds >= 172_800 ? 86_400 : seconds >= 3_600 ? 3_600 : seconds >= 60 ? 60 : 1;
+  return formatPeriod(Math.round(seconds / unit) * unit, locale);
+}
+
 /** A chart bucket as words: "1 分钟", "15 minutes", "2 hours". */
 export function formatBucket(seconds: number, locale?: string): string {
   const [amount, unit] = seconds >= 3600 ? [seconds / 3600, "hour"] : [Math.max(1, seconds / 60), "minute"];
