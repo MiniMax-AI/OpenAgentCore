@@ -78,9 +78,10 @@ workbench.
   template build's), a review, and advanced settings
   with the complete form — then the node list with each node's capacity, host
   figures and allocations, enrollment, renaming, sandbox limits and removal; Add node
-  asks for the node's sandbox limits before it issues the one-time command), System (only the sandbox
-  configuration every project shares: where sandboxes run, each sandbox's size, the
-  Runtime or E2B template build, microsandbox's idle suspension, the Core address and maintenance).
+  asks for the node's sandbox limits before it issues the one-time command), System (read-only: the
+  installation's public address, API base URL, installation ID and source commit; Core's
+  startup settings from config.json, with the file and the apply command that change them;
+  and the sandbox configuration every project shares, with a link to Nodes where it changes).
 - A node whose provider is not ready names the reason (Docker unreachable, no Docker
   limits, missing Runtime image, no KVM, missing microsandbox components, a host too
   small) and its fix in the help tip beside its status, wherever that status shows.
@@ -113,7 +114,8 @@ workbench.
   its named API keys; projects do not see each other's assets. Issuing or revoking
   a key never touches assets. Archiving a project revokes every key and keeps its
   assets viewable and deletable. Key plaintext is shown once, at issuance, and never
-  stored by the console.
+  stored by the console. Beside it the console tells developers to set
+  `OPENAI_BASE_URL` (the installation's API base URL) and `OPENAI_API_KEY` (the key).
 - **Web API only.** Every read and write goes through `/core/v1/**`. The console
   holds no API key and sends nothing to `/v1`.
 - **No asset writes except delete.** Assets are created and changed only by

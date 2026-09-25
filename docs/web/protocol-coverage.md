@@ -16,9 +16,9 @@ the administrator API are defined by the [administrator API contract](../../cont
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
 | Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config` | Core key at sign-in, then the console session cookie | Sign-in with the Core key and sign-out; the node installer (`node_installer`, `node_installer_sha256`) |
-| Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | Core key, added by the console server | Projects, keys, resource reads and deletion, executor credentials, provenance, summaries, Core metrics |
+| Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | Core key, added by the console server | Projects, keys, resource reads and deletion, executor credentials, provenance, summaries, Core metrics, the installation |
 | Sandbox administration | `/core/v1/sandbox/**` | Core key, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics; Runtime observations of every project |
-| Agents API | `/v1/**` | Project API key | Not used; the console never sends it |
+| Agents API | `/v1/**` | Project API key | Not used. Wherever a new key is shown, the console gives `OPENAI_BASE_URL` (the installation's `api_base_url`) and `OPENAI_API_KEY` (the new key) with `curl` and Python examples for `/v1/agents`, and sends neither; without an `api_base_url` it says the API is reachable only on the Core machine |
 
 Browser requests are same-origin and carry only the console session. The browser
 sends the Core key once, in the sign-in request body, and never stores it; it never
@@ -106,19 +106,20 @@ allows.
 | Resource owners | `GET /core/v1/projects/{project_id}/resource-owners` | The Creator column of every resource list and the creator fact of detail pages, in batches of up to 100 IDs. An asset an administrator copied in an earlier release shows **Admin copy**; a resource without a record shows **Unknown** |
 | Write operations | `GET /core/v1/projects/{project_id}/write-operations` | A project's write history, newest first, filtered by key and resource type, 50 per page |
 | Summary | `GET /core/v1/summary` | Overview (per project), the Agents list (`group_by=agent`), a project's page (per project and `group_by=key`), Agent metrics (to skip idle projects, and usage by creating key since the start of the range), the Projects list (last activity) |
+| Installation | `GET /core/v1/installation` | System's Installation facts (`public_url`, `api_base_url`, `installation_id`, `source_commit`) and read-only Startup settings (`configuration.settings` under its `path`, `apply_command` and `applied_at`; a sensitive setting shows only whether it is `configured`); `api_base_url` in the how-to-call samples under a new key; `path` and `apply_command` beside a sandbox configuration Core rejected; `address_bindings.nodes_on_other_address` for the Nodes warning about nodes bound to an old address. A sensitive setting with a value, or an unknown member, fails the read; `configuration: null` shows a note |
 | Core metrics | `GET /core/v1/metrics?range=` | Core metrics page; the Core popover on Overview. A Core without the route (404) is shown as not reporting; the popover then shows only Core's status. Measurements are defined in the [Core metrics contract](../../contracts/agents-api/core-metrics.md); the Process section's CPU and resident memory are a [requested extension](core-process-metrics-requirements.md) and show as missing until Core reports them |
 
 Summary figures are cumulative per Session and are not billing records. Sessions
 without reported usage count toward coverage but not toward token sums, and the
 console shows missing values as missing, never as zero. The administrator audit
-log (`GET /core/v1/audit-log`) is not consumed; System shows the sandbox
-deployment only.
+log (`GET /core/v1/audit-log`) is not consumed; System shows the installation and
+the sandbox deployment.
 
 ## Sandbox administration
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| Deployment | `GET`, `POST`, `PUT /core/v1/sandbox/deployment` | Read the provider, Core origin, maintenance state, installation ID and specification; initialize the deployment with `resources` and the Docker or microsandbox `runtime` release, or with the E2B account and no `resources` (Core adopts the template build's CPU and memory); change its settings with the expected generation. E2B's `e2b.template_build` (status, CPU, memory, disk) shows on System, the Sandbox backend summary and Sandbox metrics, and sizes each sandbox when `specification.resources` is missing; microsandbox's `suspension` (idle and retention seconds) shows on System and the Nodes summary |
+| Deployment | `GET`, `POST`, `PUT /core/v1/sandbox/deployment` | Read the provider, the read-only `core_url` (config.json's `public_url`, shown in the setup review and never sent), maintenance state, installation ID and specification; a 409 `sandbox_configuration_error` (such as E2B without an HTTPS `public_url`) shows Core's message in the setup wizard, with the installation's config file and apply command, and leaves nothing to confirm; initialize the deployment with `resources` and the Docker or microsandbox `runtime` release, or with the E2B account and no `resources` (Core adopts the template build's CPU and memory); change its settings with the expected generation. E2B's `e2b.template_build` (status, CPU, memory, disk) shows on System, the Sandbox backend summary and Sandbox metrics, and sizes each sandbox when `specification.resources` is missing; microsandbox's `suspension` (idle and retention seconds) shows on System and the Nodes summary |
 | Maintenance | `PATCH /core/v1/sandbox/deployment/maintenance` | Enter or leave maintenance to change the provider |
 | Nodes | `GET /core/v1/sandbox/nodes` | Nodes page; fleet on Overview; node capacity on Sandbox metrics. An online node's `diagnostic` (`docker_unavailable`, `docker_limits_unsupported`, `runtime_image_unavailable`, `kvm_unavailable`, `microsandbox_artifacts_unavailable`, `capacity_insufficient`, `provider_unavailable`; any other value reads as `provider_unavailable`) marks it degraded and names the reason and fix in the help tip beside its status on each of these and on the node's page |
 | Node detail | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | Sandbox metrics node dialog: the host's CPU busy share and memory from its last heartbeat, and their history over the page's range |
