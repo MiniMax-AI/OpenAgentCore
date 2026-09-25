@@ -49,7 +49,7 @@ configuration to an authenticated browser.
 Use TLS for remote browser access and loopback listeners for local development.
 Preserve host/origin checks and the management route allowlist. Browser authorization,
 cookies and actor headers are replaced or removed before forwarding to Core.
-A browser cannot choose the audit actor label the service reports: console operations always show as `console`. Keep deployment, application, node and provider credentials
+A browser cannot choose the audit actor label the service reports: the console server declares `console`. The label is caller-declared and display only. Keep deployment, application, node and provider credentials
 out of `VITE_*`, browser storage, source files, URLs and logs.
 
 ## Projects and application keys
