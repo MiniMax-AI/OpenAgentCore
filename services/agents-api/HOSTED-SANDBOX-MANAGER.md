@@ -62,6 +62,8 @@ allocation entered its current `compute_phase`, or null when unknown; an allocat
 that existed before Core recorded it reports null until its next phase change. A
 suspended allocation's age, combined with this retention, tells roughly when Core
 reclaims it.
+See [what each field means per sandbox provider](../../contracts/agents-api/sandbox-deployment.md#what-each-field-means-per-sandbox-provider)
+for fields that differ between E2B, Docker and microsandbox.
 
 For source/manual deployments using E2B, install the packaged helper and set
 `AGENTS_API_E2B_PROVIDER_BIN` to its absolute executable path. Set
