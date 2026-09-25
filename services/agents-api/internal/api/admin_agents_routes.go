@@ -2,7 +2,7 @@ package api
 
 import "net/http"
 
-// @Summary List reusable Agents in a managed key space
+// @Summary List reusable Agents in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Agents
 // @Produce json
@@ -18,7 +18,7 @@ func (h *Handler) adminListAgents(w http.ResponseWriter, r *http.Request) {
 	h.listAgents(w, r)
 }
 
-// @Summary Retrieve a reusable Agent in a managed key space
+// @Summary Retrieve a reusable Agent in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Agents
 // @Produce json
@@ -32,7 +32,7 @@ func (h *Handler) adminGetAgent(w http.ResponseWriter, r *http.Request) {
 	h.getAgent(w, r)
 }
 
-// @Summary Delete a reusable Agent in a managed key space
+// @Summary Delete a reusable Agent in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Agents
 // @Produce json

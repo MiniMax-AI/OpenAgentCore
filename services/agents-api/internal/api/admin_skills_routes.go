@@ -2,7 +2,7 @@ package api
 
 import "net/http"
 
-// @Summary List Skills in a managed key space
+// @Summary List Skills in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
@@ -17,7 +17,7 @@ func (h *Handler) adminListSkills(w http.ResponseWriter, r *http.Request) {
 	h.listSkills(w, r)
 }
 
-// @Summary Retrieve Skill metadata in a managed key space
+// @Summary Retrieve Skill metadata in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
@@ -30,7 +30,7 @@ func (h *Handler) adminGetSkill(w http.ResponseWriter, r *http.Request) {
 	h.getSkill(w, r)
 }
 
-// @Summary Delete a Skill and its versions in a managed key space
+// @Summary Delete a Skill and its versions in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
@@ -43,7 +43,7 @@ func (h *Handler) adminDeleteSkill(w http.ResponseWriter, r *http.Request) {
 	h.deleteSkill(w, r)
 }
 
-// @Summary Download Skill content in a managed key space
+// @Summary Download Skill content in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce octet-stream
@@ -56,7 +56,7 @@ func (h *Handler) adminSkillContent(w http.ResponseWriter, r *http.Request) {
 	h.skillContent(w, r)
 }
 
-// @Summary List Skill versions in a managed key space
+// @Summary List Skill versions in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
@@ -72,7 +72,7 @@ func (h *Handler) adminListSkillVersions(w http.ResponseWriter, r *http.Request)
 	h.listSkillVersions(w, r)
 }
 
-// @Summary Retrieve Skill version metadata in a managed key space
+// @Summary Retrieve Skill version metadata in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
@@ -86,7 +86,7 @@ func (h *Handler) adminGetSkillVersion(w http.ResponseWriter, r *http.Request) {
 	h.getSkillVersion(w, r)
 }
 
-// @Summary Delete a Skill version in a managed key space
+// @Summary Delete a Skill version in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce json
@@ -100,7 +100,7 @@ func (h *Handler) adminDeleteSkillVersion(w http.ResponseWriter, r *http.Request
 	h.deleteSkillVersion(w, r)
 }
 
-// @Summary Download immutable Skill version content in a managed key space
+// @Summary Download immutable Skill version content in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
 // @Produce octet-stream

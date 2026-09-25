@@ -3097,7 +3097,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List reusable Agents in a managed key space
+      summary: List reusable Agents in a Project
       tags:
         - Agents
   /core/v1/projects/{project_id}/agents/{agent_id}:
@@ -3143,7 +3143,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Delete a reusable Agent in a managed key space
+      summary: Delete a reusable Agent in a Project
       tags:
         - Agents
     get:
@@ -3184,7 +3184,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve a reusable Agent in a managed key space
+      summary: Retrieve a reusable Agent in a Project
       tags:
         - Agents
   /core/v1/projects/{project_id}/archive:
@@ -3275,7 +3275,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List Environment Templates in a managed key space
+      summary: List Environment Templates in a Project
       tags:
         - Environment Templates
   /core/v1/projects/{project_id}/environment-templates/{environment_template_id}:
@@ -3317,7 +3317,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Delete an Environment Template in a managed key space
+      summary: Delete an Environment Template in a Project
       tags:
         - Environment Templates
     get:
@@ -3358,7 +3358,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve an Environment Template in a managed key space
+      summary: Retrieve an Environment Template in a Project
       tags:
         - Environment Templates
   /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials:
@@ -3552,7 +3552,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List source files in a managed key space
+      summary: List source files in a Project
       tags:
         - Files
   /core/v1/projects/{project_id}/files/{file_id}:
@@ -3598,7 +3598,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Delete a source file in a managed key space
+      summary: Delete a source file in a Project
       tags:
         - Files
     get:
@@ -3643,7 +3643,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve source file metadata in a managed key space
+      summary: Retrieve source file metadata in a Project
       tags:
         - Files
   /core/v1/projects/{project_id}/keys:
@@ -3885,7 +3885,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List execution Sessions in a managed key space
+      summary: List execution Sessions in a Project
       tags:
         - Sessions
   /core/v1/projects/{project_id}/sessions/{session_id}:
@@ -3935,7 +3935,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Delete an execution Session in a managed key space
+      summary: Delete an execution Session in a Project
       tags:
         - Sessions
     get:
@@ -3976,7 +3976,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve an execution Session in a managed key space
+      summary: Retrieve an execution Session in a Project
       tags:
         - Sessions
   /core/v1/projects/{project_id}/sessions/{session_id}/archive:
@@ -4152,7 +4152,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List immutable Session artifacts in a managed key space
+      summary: List immutable Session artifacts in a Project
       tags:
         - Artifacts
   /core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}:
@@ -4203,7 +4203,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Delete a published artifact in a managed key space
+      summary: Delete a published artifact in a Project
       tags:
         - Artifacts
     get:
@@ -4253,7 +4253,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve immutable artifact metadata in a managed key space
+      summary: Retrieve immutable artifact metadata in a Project
       tags:
         - Artifacts
   /core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}/content:
@@ -4304,7 +4304,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Download immutable artifact bytes in a managed key space
+      summary: Download immutable artifact bytes in a Project
       tags:
         - Artifacts
   /core/v1/projects/{project_id}/sessions/{session_id}/execution-configuration:
@@ -4350,9 +4350,9 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve frozen Session execution configuration in a managed key space
+      summary: Retrieve a Session's frozen execution configuration in a Project
       tags:
-        - Core extensions
+        - Execution configuration
   /core/v1/projects/{project_id}/sessions/{session_id}/items:
     get:
       description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
@@ -4410,7 +4410,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List persisted execution Items in a managed key space
+      summary: List persisted execution Items in a Project
       tags:
         - Items
   /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history:
@@ -4476,7 +4476,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve Session Runtime history in a managed key space
+      summary: Retrieve Session Runtime history in a Project
       tags:
         - Runtime history
   /core/v1/projects/{project_id}/sessions/{session_id}/runtime-observation:
@@ -4522,7 +4522,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve a Session Runtime observation in a managed key space
+      summary: Retrieve a Session Runtime observation in a Project
       tags:
         - Runtime observations
   /core/v1/projects/{project_id}/sessions/{session_id}/turns:
@@ -4583,7 +4583,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List execution Turns in a managed key space
+      summary: List execution Turns in a Project
       tags:
         - Turns
   /core/v1/projects/{project_id}/sessions/{session_id}/turns/{turn_id}:
@@ -4630,7 +4630,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve an execution Turn in a managed key space
+      summary: Retrieve an execution Turn in a Project
       tags:
         - Turns
   /core/v1/projects/{project_id}/skills:
@@ -4669,7 +4669,7 @@ paths:
             $ref: '#/definitions/v1.SkillList'
       security:
         - DeploymentAdminAuth: []
-      summary: List Skills in a managed key space
+      summary: List Skills in a Project
       tags:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}:
@@ -4695,7 +4695,7 @@ paths:
             $ref: '#/definitions/v1.SkillDeleted'
       security:
         - DeploymentAdminAuth: []
-      summary: Delete a Skill and its versions in a managed key space
+      summary: Delete a Skill and its versions in a Project
       tags:
         - Skills
     get:
@@ -4720,7 +4720,7 @@ paths:
             $ref: '#/definitions/v1.Skill'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve Skill metadata in a managed key space
+      summary: Retrieve Skill metadata in a Project
       tags:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}/content:
@@ -4746,7 +4746,7 @@ paths:
             type: file
       security:
         - DeploymentAdminAuth: []
-      summary: Download Skill content in a managed key space
+      summary: Download Skill content in a Project
       tags:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}/versions:
@@ -4790,7 +4790,7 @@ paths:
             $ref: '#/definitions/v1.SkillVersionList'
       security:
         - DeploymentAdminAuth: []
-      summary: List Skill versions in a managed key space
+      summary: List Skill versions in a Project
       tags:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version}:
@@ -4821,7 +4821,7 @@ paths:
             $ref: '#/definitions/v1.SkillVersionDeleted'
       security:
         - DeploymentAdminAuth: []
-      summary: Delete a Skill version in a managed key space
+      summary: Delete a Skill version in a Project
       tags:
         - Skills
     get:
@@ -4851,7 +4851,7 @@ paths:
             $ref: '#/definitions/v1.SkillVersion'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve Skill version metadata in a managed key space
+      summary: Retrieve Skill version metadata in a Project
       tags:
         - Skills
   /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version}/content:
@@ -4882,7 +4882,7 @@ paths:
             type: file
       security:
         - DeploymentAdminAuth: []
-      summary: Download immutable Skill version content in a managed key space
+      summary: Download immutable Skill version content in a Project
       tags:
         - Skills
   /core/v1/projects/{project_id}/vaults:
@@ -4953,7 +4953,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List Vaults in a managed key space
+      summary: List Vaults in a Project
       tags:
         - Vaults
   /core/v1/projects/{project_id}/vaults/{vault_id}:
@@ -4999,7 +4999,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Delete a Vault and all its Credentials in a managed key space
+      summary: Delete a Vault and all its Credentials in a Project
       tags:
         - Vaults
     get:
@@ -5040,7 +5040,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve a Vault in a managed key space
+      summary: Retrieve a Vault in a Project
       tags:
         - Vaults
   /core/v1/projects/{project_id}/vaults/{vault_id}/credentials:
@@ -5116,7 +5116,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: List safe Vault Credential metadata in a managed key space
+      summary: List safe Vault Credential metadata in a Project
       tags:
         - Credentials
   /core/v1/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id}:
@@ -5167,7 +5167,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Delete a Vault Credential in a managed key space
+      summary: Delete a Vault Credential in a Project
       tags:
         - Credentials
     get:
@@ -5213,7 +5213,7 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Retrieve safe Vault Credential metadata in a managed key space
+      summary: Retrieve safe Vault Credential metadata in a Project
       tags:
         - Credentials
   /core/v1/projects/{project_id}/write-operations:

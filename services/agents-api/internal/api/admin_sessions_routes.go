@@ -2,7 +2,7 @@ package api
 
 import "net/http"
 
-// @Summary List execution Sessions in a managed key space
+// @Summary List execution Sessions in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Sessions
 // @Produce json
@@ -19,7 +19,7 @@ func (h *Handler) adminListSessions(w http.ResponseWriter, r *http.Request) {
 	h.listSessions(w, r)
 }
 
-// @Summary Retrieve an execution Session in a managed key space
+// @Summary Retrieve an execution Session in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Sessions
 // @Produce json
@@ -33,7 +33,7 @@ func (h *Handler) adminGetSession(w http.ResponseWriter, r *http.Request) {
 	h.getSession(w, r)
 }
 
-// @Summary Delete an execution Session in a managed key space
+// @Summary Delete an execution Session in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Sessions
 // @Produce json
@@ -47,7 +47,7 @@ func (h *Handler) adminDeleteSession(w http.ResponseWriter, r *http.Request) {
 	h.deleteSession(w, r)
 }
 
-// @Summary List execution Turns in a managed key space
+// @Summary List execution Turns in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Turns
 // @Produce json
@@ -64,7 +64,7 @@ func (h *Handler) adminListTurns(w http.ResponseWriter, r *http.Request) {
 	h.listTurns(w, r)
 }
 
-// @Summary Retrieve an execution Turn in a managed key space
+// @Summary Retrieve an execution Turn in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Turns
 // @Produce json
@@ -79,7 +79,7 @@ func (h *Handler) adminGetTurn(w http.ResponseWriter, r *http.Request) {
 	h.getTurn(w, r)
 }
 
-// @Summary List persisted execution Items in a managed key space
+// @Summary List persisted execution Items in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Items
 // @Produce json
@@ -96,7 +96,7 @@ func (h *Handler) adminListItems(w http.ResponseWriter, r *http.Request) {
 	h.listItems(w, r)
 }
 
-// @Summary List immutable Session artifacts in a managed key space
+// @Summary List immutable Session artifacts in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Artifacts
 // @Produce json
@@ -114,7 +114,7 @@ func (h *Handler) adminListSessionArtifacts(w http.ResponseWriter, r *http.Reque
 	h.listSessionArtifacts(w, r)
 }
 
-// @Summary Retrieve immutable artifact metadata in a managed key space
+// @Summary Retrieve immutable artifact metadata in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Artifacts
 // @Produce json
@@ -129,7 +129,7 @@ func (h *Handler) adminGetSessionArtifact(w http.ResponseWriter, r *http.Request
 	h.getSessionArtifact(w, r)
 }
 
-// @Summary Delete a published artifact in a managed key space
+// @Summary Delete a published artifact in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Artifacts
 // @Produce json
@@ -144,7 +144,7 @@ func (h *Handler) adminDeleteSessionArtifact(w http.ResponseWriter, r *http.Requ
 	h.deleteSessionArtifact(w, r)
 }
 
-// @Summary Download immutable artifact bytes in a managed key space
+// @Summary Download immutable artifact bytes in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Artifacts
 // @Produce octet-stream
@@ -159,9 +159,9 @@ func (h *Handler) adminSessionArtifactContent(w http.ResponseWriter, r *http.Req
 	h.sessionArtifactContent(w, r)
 }
 
-// @Summary Retrieve frozen Session execution configuration in a managed key space
+// @Summary Retrieve a Session's frozen execution configuration in a Project
 // @Description Core key only; the Project ID selects the target space and does not authenticate. Returns the committed model, harness and safe provider selection with recorded sources. This read never decrypts credentials, resolves current defaults or probes execution health. Deployment provider details remain redacted. Historical provenance and missing provider projections are explicitly unknown/unavailable.
-// @Tags Core extensions
+// @Tags Execution configuration
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Param session_id path string true "Session ID"
@@ -173,7 +173,7 @@ func (h *Handler) adminGetSessionExecutionConfiguration(w http.ResponseWriter, r
 	h.getSessionExecutionConfiguration(w, r)
 }
 
-// @Summary Retrieve a Session Runtime observation in a managed key space
+// @Summary Retrieve a Session Runtime observation in a Project
 // @Description Core key only; the Project ID selects the target space and does not authenticate. Returns one read-only current Runtime observation. It never provisions, renews, restarts, pauses or stops compute.
 // @Tags Runtime observations
 // @Produce json
@@ -187,7 +187,7 @@ func (h *Handler) adminGetRuntimeObservation(w http.ResponseWriter, r *http.Requ
 	h.getRuntimeObservation(w, r)
 }
 
-// @Summary Retrieve Session Runtime history in a managed key space
+// @Summary Retrieve Session Runtime history in a Project
 // @Description Core key only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session. End is exclusive; the server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
 // @Tags Runtime history
 // @Produce json

@@ -2,7 +2,7 @@ package api
 
 import "net/http"
 
-// @Summary List Vaults in a managed key space
+// @Summary List Vaults in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Vaults
 // @Produce json
@@ -20,7 +20,7 @@ func (h *Handler) adminListVaults(w http.ResponseWriter, r *http.Request) {
 	h.listVaults(w, r)
 }
 
-// @Summary Retrieve a Vault in a managed key space
+// @Summary Retrieve a Vault in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Vaults
 // @Produce json
@@ -34,7 +34,7 @@ func (h *Handler) adminGetVault(w http.ResponseWriter, r *http.Request) {
 	h.getVault(w, r)
 }
 
-// @Summary Delete a Vault and all its Credentials in a managed key space
+// @Summary Delete a Vault and all its Credentials in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Vaults
 // @Produce json
@@ -48,7 +48,7 @@ func (h *Handler) adminDeleteVault(w http.ResponseWriter, r *http.Request) {
 	h.deleteVault(w, r)
 }
 
-// @Summary List safe Vault Credential metadata in a managed key space
+// @Summary List safe Vault Credential metadata in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Credentials
 // @Produce json
@@ -67,7 +67,7 @@ func (h *Handler) adminListCredentials(w http.ResponseWriter, r *http.Request) {
 	h.listCredentials(w, r)
 }
 
-// @Summary Retrieve safe Vault Credential metadata in a managed key space
+// @Summary Retrieve safe Vault Credential metadata in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Credentials
 // @Produce json
@@ -82,7 +82,7 @@ func (h *Handler) adminGetCredential(w http.ResponseWriter, r *http.Request) {
 	h.getCredential(w, r)
 }
 
-// @Summary Delete a Vault Credential in a managed key space
+// @Summary Delete a Vault Credential in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Credentials
 // @Produce json

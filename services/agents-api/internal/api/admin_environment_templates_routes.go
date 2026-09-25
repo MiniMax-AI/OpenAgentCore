@@ -2,7 +2,7 @@ package api
 
 import "net/http"
 
-// @Summary List Environment Templates in a managed key space
+// @Summary List Environment Templates in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Environment Templates
 // @Produce json
@@ -18,7 +18,7 @@ func (h *Handler) adminListEnvironmentTemplates(w http.ResponseWriter, r *http.R
 	h.listEnvironmentTemplates(w, r)
 }
 
-// @Summary Retrieve an Environment Template in a managed key space
+// @Summary Retrieve an Environment Template in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Environment Templates
 // @Produce json
@@ -32,7 +32,7 @@ func (h *Handler) adminGetEnvironmentTemplate(w http.ResponseWriter, r *http.Req
 	h.getEnvironmentTemplate(w, r)
 }
 
-// @Summary Delete an Environment Template in a managed key space
+// @Summary Delete an Environment Template in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Environment Templates
 // @Produce json
