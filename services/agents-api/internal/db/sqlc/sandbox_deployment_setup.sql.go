@@ -75,6 +75,29 @@ func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg Initializ
 	return err
 }
 
+const recordSandboxTemplateBuild = `-- name: RecordSandboxTemplateBuild :exec
+UPDATE runtime_deployment SET e2b_template_build_status=$1, e2b_template_cpus=$2,
+e2b_template_memory_mib=$3, e2b_template_root_disk_mib=$4,
+updated_at=clock_timestamp() WHERE singleton=true AND provider_kind='e2b'
+`
+
+type RecordSandboxTemplateBuildParams struct {
+	E2bTemplateBuildStatus pgtype.Text `json:"e2b_template_build_status"`
+	E2bTemplateCpus        pgtype.Int4 `json:"e2b_template_cpus"`
+	E2bTemplateMemoryMib   pgtype.Int4 `json:"e2b_template_memory_mib"`
+	E2bTemplateRootDiskMib pgtype.Int4 `json:"e2b_template_root_disk_mib"`
+}
+
+func (q *Queries) RecordSandboxTemplateBuild(ctx context.Context, arg RecordSandboxTemplateBuildParams) error {
+	_, err := q.db.Exec(ctx, recordSandboxTemplateBuild,
+		arg.E2bTemplateBuildStatus,
+		arg.E2bTemplateCpus,
+		arg.E2bTemplateMemoryMib,
+		arg.E2bTemplateRootDiskMib,
+	)
+	return err
+}
+
 const retireSandboxEnrollments = `-- name: RetireSandboxEnrollments :exec
 UPDATE runtime_node_enrollments SET expires_at=clock_timestamp() WHERE consumed_at IS NULL
 `

@@ -136,16 +136,34 @@ func (s *Store) saveSandboxSelection(ctx context.Context, q *sqlc.Queries, d sql
 			return ErrSandboxCredentialUnavailable
 		}
 		params.E2bCredential, params.E2bTemplate = encrypted, input.E2B.Template
-		if build := input.E2B.TemplateBuild; build != nil {
-			params.E2bTemplateBuildStatus = pgtype.Text{String: build.Status, Valid: true}
-			params.E2bTemplateCpus = pgtype.Int4{Int32: build.CPUs, Valid: true}
-			params.E2bTemplateMemoryMib = pgtype.Int4{Int32: build.MemoryMiB, Valid: true}
-			if build.RootDiskMiB != nil {
-				params.E2bTemplateRootDiskMib = pgtype.Int4{Int32: *build.RootDiskMiB, Valid: true}
-			}
-		}
+		build := templateBuildColumns(input.E2B.TemplateBuild)
+		params.E2bTemplateBuildStatus, params.E2bTemplateCpus = build.E2bTemplateBuildStatus, build.E2bTemplateCpus
+		params.E2bTemplateMemoryMib, params.E2bTemplateRootDiskMib = build.E2bTemplateMemoryMib, build.E2bTemplateRootDiskMib
 	}
 	return q.InitializeSandboxDeployment(ctx, params)
+}
+
+func templateBuildColumns(build *SandboxE2BTemplateBuild) sqlc.RecordSandboxTemplateBuildParams {
+	var params sqlc.RecordSandboxTemplateBuildParams
+	if build != nil {
+		params.E2bTemplateBuildStatus = pgtype.Text{String: build.Status, Valid: true}
+		params.E2bTemplateCpus = pgtype.Int4{Int32: build.CPUs, Valid: true}
+		params.E2bTemplateMemoryMib = pgtype.Int4{Int32: build.MemoryMiB, Valid: true}
+		if build.RootDiskMiB != nil {
+			params.E2bTemplateRootDiskMib = pgtype.Int4{Int32: *build.RootDiskMiB, Valid: true}
+		}
+	}
+	return params
+}
+
+// recordTemplateBuild saves the build read by this request's validation when
+// the selection is otherwise unchanged, without a new generation. Saving the
+// same E2B selection again thus records a build that an older Core did not.
+func recordTemplateBuild(ctx context.Context, q *sqlc.Queries, input SandboxDeploymentSetupRequest) error {
+	if input.E2B == nil || input.E2B.TemplateBuild == nil {
+		return nil
+	}
+	return q.RecordSandboxTemplateBuild(ctx, templateBuildColumns(input.E2B.TemplateBuild))
 }
 
 func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID string, input SandboxDeploymentSetupRequest) (RuntimeDeploymentView, error) {
@@ -178,6 +196,9 @@ func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID 
 			}
 			if !equal {
 				return ErrSandboxDeploymentConflict
+			}
+			if err := recordTemplateBuild(ctx, q, input); err != nil {
+				return err
 			}
 		} else if err := s.saveSandboxSelection(ctx, q, d, input); err != nil {
 			return err
@@ -258,6 +279,8 @@ func (s *Store) UpdateSandboxDeployment(ctx context.Context, installation string
 			if err := q.AdvanceSandboxOwnerEpoch(ctx); err != nil {
 				return err
 			}
+		} else if err := recordTemplateBuild(ctx, q, input.SandboxDeploymentSetupRequest); err != nil {
+			return err
 		}
 		result, err = getRuntimeDeploymentView(ctx, q)
 		return err

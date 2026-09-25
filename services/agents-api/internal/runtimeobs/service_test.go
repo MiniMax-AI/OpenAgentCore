@@ -625,6 +625,7 @@ func (s *batchSource) Observe(context.Context, Target) (Sample, error) {
 }
 
 func (s *batchSource) ObserveBatch(ctx context.Context, targets []Target) ([]BatchResult, bool) {
+	time.Sleep(time.Millisecond)
 	s.mu.Lock()
 	s.batches = append(s.batches, len(targets))
 	s.mu.Unlock()
@@ -665,5 +666,21 @@ func TestServiceBatchesPageReadsWithinProviderLimit(t *testing.T) {
 	if observations[120].Status != StatusUnavailable || observations[120].Reason != "runtime_not_running" ||
 		observations[0].Status != StatusObserved || *observations[0].Sample.CPUUtilizationRatio != .25 {
 		t.Fatalf("batch results were not classified: %+v %+v", observations[0], observations[120])
+	}
+	// Each provider read reports its duration once, on the first row of its batch.
+	for index, observation := range observations {
+		if (observation.SourceDuration > 0) != (index == 0 || index == MaxBatchTargets) {
+			t.Fatalf("row %d source duration = %v", index, observation.SourceDuration)
+		}
+	}
+}
+
+func TestSampleWithoutNewerFieldsKeepsItsNodeWireForm(t *testing.T) {
+	observedAt := time.Date(2026, 9, 25, 1, 0, 0, 0, time.UTC)
+	cpu, memory := 1.5, uint64(1024)
+	raw, err := json.Marshal(Sample{ObservedAt: observedAt, CPUUsageSecondsTotal: &cpu, MemoryUsageBytes: &memory})
+	want := `{"ObservedAt":"2026-09-25T01:00:00Z","StartedAt":null,"CPUUsageSecondsTotal":1.5,"CPUCapacityCores":null,"MemoryUsageBytes":1024,"MemoryLimitBytes":null}`
+	if err != nil || string(raw) != want {
+		t.Fatalf("an older Core could not decode this node sample: %s %v", raw, err)
 	}
 }

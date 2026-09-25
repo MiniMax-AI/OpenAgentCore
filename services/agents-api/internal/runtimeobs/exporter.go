@@ -207,5 +207,17 @@ func cloneSample(sample *Sample) *Sample {
 		value := *sample.MemoryLimitBytes
 		cloned.MemoryLimitBytes = &value
 	}
+	if sample.CPUUtilizationRatio != nil {
+		value := *sample.CPUUtilizationRatio
+		cloned.CPUUtilizationRatio = &value
+	}
+	if sample.DiskUsageBytes != nil {
+		value := *sample.DiskUsageBytes
+		cloned.DiskUsageBytes = &value
+	}
+	if sample.DiskLimitBytes != nil {
+		value := *sample.DiskLimitBytes
+		cloned.DiskLimitBytes = &value
+	}
 	return &cloned
 }

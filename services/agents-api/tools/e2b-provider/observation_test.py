@@ -18,20 +18,23 @@ class ObservationTest(ProviderTest):
         except Failure as error:
             return {'Version': 1, 'ErrorCode': error.code}
 
-    def listing(self, *clouds):
-        pages = [list(clouds)]
-        paginator = SimpleNamespace(has_next=True)
+    def listing(self, *pages):
+        pages = [list(page) for page in pages] or [[]]
+        paginator = SimpleNamespace(has_next=True, reads=0)
 
         def next_items(**options):
-            paginator.has_next = False
-            return pages.pop()
+            paginator.reads += 1
+            paginator.has_next = paginator.reads < len(pages)
+            return pages[paginator.reads - 1]
         paginator.next_items = next_items
         self.api.list.return_value = paginator
+        return paginator
 
     def test_one_metrics_request_maps_owned_running_sandboxes(self):
         self.assertEqual(self.call('create')['ErrorCode'], '')
         self.cloud.started_at = datetime(2026, 9, 25, 10, 31, 34, tzinfo=timezone.utc)
-        self.listing(self.cloud)
+        other = SimpleNamespace(sandbox_id='other-id', metadata={'parsar_installationid': self.config['InstallationID']})
+        paginator = self.listing([other, self.cloud], [other])
         stopped = {key: str(uuid4()) for key in self.reference}
         point = {'cpuCount': 2, 'cpuUsedPct': 19.55, 'memUsed': 183836672, 'memTotal': 2079141888,
                  'memCache': 1, 'diskUsed': 1593188352, 'diskTotal': 23511863296,
@@ -54,10 +57,22 @@ class ObservationTest(ProviderTest):
                                      MemUsed=183836672, MemTotal=2079141888,
                                      DiskUsed=1593188352, DiskTotal=23511863296))
         self.assertEqual(missing, dict(stopped, Status='unavailable'))
+        self.assertEqual(paginator.reads, 1, 'listing continued after every receipt sandbox was found')
+
+        del point['diskUsed']
+        point['memTotal'] = -1
+        with patch('provider.read_metrics', return_value={'owned-id': point}):
+            self.listing([self.cloud])
+            self.assertEqual(self.observe([self.reference])['Observations'], [dict(self.reference, Status='unavailable')])
+        point['memTotal'] = 2079141888
+        with patch('provider.read_metrics', return_value={'owned-id': point}):
+            self.listing([self.cloud])
+            row = self.observe([self.reference])['Observations'][0]
+        self.assertEqual((row['Status'], row['DiskUsed'], row['DiskTotal']), ('observed', None, None))
 
     def test_absent_listing_is_not_running_and_rejects_oversized_batches(self):
         self.assertEqual(self.call('create')['ErrorCode'], '')
-        self.listing()
+        self.listing([])
         with patch('provider.read_metrics', return_value={}):
             result = self.observe([self.reference])
         self.assertEqual(result['Observations'], [dict(self.reference, Status='not_running')])

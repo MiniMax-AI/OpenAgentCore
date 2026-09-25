@@ -298,12 +298,13 @@ The OTLP request uses standard protobuf metrics and these instruments:
 | --- | --- | --- |
 | `agents.runtime.cpu.usage` | monotonic cumulative sum, seconds | provider cumulative CPU counter |
 | `agents.runtime.cpu.capacity` | gauge, cores | configured provider capacity |
+| `agents.runtime.cpu.utilization` | gauge, ratio | provider-reported share of capacity (E2B), when there is no cumulative counter |
 | `agents.runtime.memory.usage` | gauge, bytes | provider memory usage |
 | `agents.runtime.memory.limit` | gauge, bytes | configured provider limit |
 | `agents.session.tokens.input` | gauge, tokens | measured cumulative Session usage (`MeasuredSessionUsage`) |
 | `agents.session.tokens.output` | gauge, tokens | measured cumulative Session usage (`MeasuredSessionUsage`) |
 | `agents.runtime.sample` | monotonic delta sum | one validated result, including unavailable/unsupported |
-| `agents.runtime.sample.duration` | delta histogram, seconds | bounded provider read duration |
+| `agents.runtime.sample.duration` | delta histogram, seconds | bounded provider read duration; a batch read is recorded once |
 
 Core-owned tenant, Session, Environment, allocation, mode, provider type,
 status, safe reason, collection source (`on_read` or `periodic`), and Core

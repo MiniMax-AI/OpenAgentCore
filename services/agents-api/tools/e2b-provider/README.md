@@ -16,8 +16,10 @@ Runtime observation uses a third read-only request, `observe`, for at most 100
 allocations. It reads each allocation's sandbox ID from its receipt without the
 allocation lock, then runs one `GET /sandboxes/metrics` request and one labelled
 listing of this installation's running sandboxes concurrently, within the
-caller's deadline. Only a sandbox that the listing confirms for exactly that
-allocation is reported, with the listing's start time. It never connects to,
+caller's deadline; the listing stops once every requested sandbox has appeared.
+Only a sandbox that the listing confirms for exactly that allocation is
+reported, with the listing's start time. A malformed metrics point makes only
+its row unavailable. It never connects to,
 renews or changes a sandbox and never writes receipts. See
 [Runtime observability](../../../../contracts/agents-api/runtime-observability.md). Actual sandbox information
 is checked before writing bootstrap credentials and on subsequent inspection;

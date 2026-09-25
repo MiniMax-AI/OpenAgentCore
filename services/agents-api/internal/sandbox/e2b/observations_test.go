@@ -48,6 +48,11 @@ func TestObserveBatchMapsMetricsAndKeepsUnmeasuredValuesNull(t *testing.T) {
 	if results[0].Err != nil || results[0].Sample.DiskUsageBytes != nil || results[0].Sample.DiskLimitBytes != nil {
 		t.Fatalf("unreported disk was not null: %+v %v", results[0].Sample, results[0].Err)
 	}
+	caller.response.Observations[0].MemTotal = nil
+	results, _ = p.ObserveBatch(bounded(t), targets)
+	if !errors.Is(results[0].Err, runtimeobs.ErrUnavailable) || !errors.Is(results[1].Err, runtimeobs.ErrNotRunning) {
+		t.Fatalf("a malformed point affected more than its row: %+v", results)
+	}
 	caller.response.ErrorCode = "unconfirmed"
 	results, _ = p.ObserveBatch(bounded(t), targets)
 	if !errors.Is(results[0].Err, runtimeobs.ErrUnavailable) || !errors.Is(results[1].Err, runtimeobs.ErrUnavailable) {

@@ -217,7 +217,13 @@ func (s *Service) readBatch(ctx context.Context, chunk []*sourceRead, observatio
 			errs[read.index] = errors.New("Runtime observation batch returned mismatched results")
 			continue
 		}
-		observations[read.index], errs[read.index] = s.complete(ctx, read, results[index].Sample, results[index].Err, duration, collectionSource, owner)
+		// The rows share one provider read; only the first carries its duration,
+		// so sample-duration telemetry counts each read once.
+		rowDuration := time.Duration(0)
+		if index == 0 {
+			rowDuration = duration
+		}
+		observations[read.index], errs[read.index] = s.complete(ctx, read, results[index].Sample, results[index].Err, rowDuration, collectionSource, owner)
 	}
 	return true
 }

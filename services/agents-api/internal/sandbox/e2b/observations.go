@@ -19,8 +19,8 @@ var (
 const maxClockLead = 30 * time.Second
 
 // Observation is one allocation's latest E2B metrics point. Status is
-// observed, not_running, unavailable, ownership or invalid; only observed
-// carries values. Values keep E2B's units: CPUUsedPct is a percentage of all
+// observed, not_running, unavailable or ownership; only observed carries
+// values. A malformed E2B point is unavailable for its row only. Values keep E2B's units: CPUUsedPct is a percentage of all
 // CPUCount cores, and memory and disk are in bytes.
 type Observation struct {
 	sandbox.Reference
@@ -122,12 +122,14 @@ func sampleFromObservation(observation Observation, now time.Time) (runtimeobs.S
 	case "ownership":
 		return runtimeobs.Sample{}, sandbox.ErrOwnership
 	default:
+		// An unknown status breaks Core's own helper protocol.
 		return runtimeobs.Sample{}, sandbox.ErrInvalid
 	}
+	// Malformed provider data leaves this row unavailable, not the whole page.
 	if observation.ObservedAt == nil || observation.StartedAt == nil || observation.CPUCount == nil || observation.CPUUsedPct == nil ||
 		observation.MemUsed == nil || observation.MemTotal == nil || !finite(*observation.CPUCount) || *observation.CPUCount <= 0 ||
 		!finite(*observation.CPUUsedPct) || *observation.CPUUsedPct < 0 || *observation.MemTotal == 0 {
-		return runtimeobs.Sample{}, sandbox.ErrInvalid
+		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
 	}
 	// E2B timestamps use the provider's clock. Record a small lead at Core's
 	// time so that a fresh point is not rejected as a future sample.

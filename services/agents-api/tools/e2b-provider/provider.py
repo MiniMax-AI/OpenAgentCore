@@ -37,11 +37,16 @@ def utc(value):
 
 
 def observed(reference, cloud, point):
-    """Map one metrics point without changing E2B units; malformed points are invalid.
+    """Map one metrics point without changing E2B units. A malformed point makes
+    only its own row unavailable.
 
-    Disk metrics need a newer envd; without a positive total, disk stays unknown."""
+    Disk metrics need a newer envd; unless E2B reports both integer values and a
+    positive total, disk stays unknown rather than an observed zero."""
     try:
-        disk_known = type(point.get('diskTotal')) is int and point['diskTotal'] > 0
+        disk_known = (type(point.get('diskUsed')) is int and type(point.get('diskTotal')) is int and
+                      point['diskTotal'] > 0)
+        # SandboxMetric requires every field; placeholders for unused or unknown
+        # fields are never reported.
         metric = SandboxMetric.from_dict({'memCache': 0, 'timestampUnix': 0, 'diskUsed': 0, 'diskTotal': 0, **point})
         cpu_count, cpu_pct = metric.cpu_count, metric.cpu_used_pct
         values = (metric.mem_used, metric.mem_total, metric.disk_used, metric.disk_total)
@@ -53,7 +58,7 @@ def observed(reference, cloud, point):
                     CPUCount=cpu_count, CPUUsedPct=cpu_pct, MemUsed=metric.mem_used, MemTotal=metric.mem_total,
                     DiskUsed=metric.disk_used if disk_known else None, DiskTotal=metric.disk_total if disk_known else None)
     except Exception:
-        return dict(reference, Status='invalid')
+        return dict(reference, Status='unavailable')
 
 
 class Provider:
@@ -266,17 +271,22 @@ class Provider:
         metadata = {PREFIX + 'installationid': installation}
         if len(self.references) == 1:
             metadata = self.metadata_for(self.references[0])
+        wanted, seen = set(candidates.values()), set()
         with ThreadPoolExecutor(max_workers=1) as pool:
-            metrics = pool.submit(read_metrics, self.config, sorted(set(candidates.values())), self.remaining)
+            metrics = pool.submit(read_metrics, self.config, sorted(wanted), self.remaining)
             running = {}
             paginator = Sandbox.list(query=SandboxQuery(metadata=metadata, state=[SandboxState.RUNNING]),
                                      limit=100, **self.options())
-            while paginator.has_next:
+            # Stop once every receipt's sandbox has been listed. Detection of a
+            # second sandbox with the same allocation labels then covers only
+            # the pages read; lifecycle discovery remains exhaustive.
+            while paginator.has_next and not wanted <= seen:
                 for cloud in paginator.next_items(**self.options()):
                     labels = cloud.metadata or {}
                     if labels.get(PREFIX + 'installationid') == installation:
                         key = tuple(labels.get(PREFIX + field.lower()) for field in FIELDS[1:])
                         running.setdefault(key, []).append(cloud)
+                        seen.add(cloud.sandbox_id)
             points = metrics.result()
         result = []
         for index, reference in enumerate(self.references):

@@ -77,9 +77,12 @@ page: at most 100 allocations, one metrics request and, concurrently, one listin
 of this installation's running sandboxes by their allocation labels. The helper
 takes each sandbox ID from its private receipt without the allocation lock; the
 listing confirms that exactly that sandbox is running with the allocation's labels
-and supplies its `started_at`. A listed sandbox without a metrics point, an
-ambiguous listing or an E2B API failure (including a rejected key) is unavailable;
-a sandbox absent from the running listing is `runtime_not_running`. Observation
+and supplies its `started_at`; it stops paging once every requested sandbox has
+been listed, so duplicate-label detection covers only the pages read. A listed
+sandbox without a metrics point or with a malformed point, an ambiguous listing
+or an E2B API failure (including a rejected key) is unavailable; a malformed
+point affects only its own row. A sandbox absent from the running listing is
+`runtime_not_running`. Observation
 never connects to, renews or changes a sandbox and never writes receipts.
 
 The E2B mapping is: `cpuUsedPct / 100` to `cpu.utilization_ratio`, `cpuCount` to
