@@ -12,11 +12,12 @@ python3 -m venv .venv
 pip install openai==3.13.0
 ```
 
-The deployment administrator first creates a Project through
+The deployment administrator creates a Project and issues a named key in
+**Platform → Projects and keys**. The equivalent management API operations are
 `POST /core/v1/admin/projects` with `{"name":"Default"}`, then issues a key through
 `POST /core/v1/admin/projects/{project_id}/keys` with a descriptive `{"name":"..."}`.
-These requests use the separate deployment credential. The management UI has not
-yet migrated; see [integration status](../web/README.md).
+These API requests use the separate deployment credential. The console supplies
+that credential server-side; it never exposes it to the browser.
 
 Obtain that key through a private channel and supply it as `PARSAR_API_KEY` in your
 application configuration. Its plaintext appears only at issuance; Core stores a

@@ -64,9 +64,6 @@ retains that URL for remote node downloads; it does not silently change mirrors.
 
 ## Sign in to Web
 
-The management backend and client require the corresponding Web screen migration
-before release. See [console integration status](../web/README.md).
-
 Installation creates private configuration under `~/.parsar/core`, a dedicated
 PostgreSQL volume and a credential encryption key. Installation creates no Project
 or application API key. Projects and their keys are managed in the database;
@@ -79,9 +76,9 @@ password, and keep your sign-in details safe. The Web has one role: administrato
 with access to every console operation. It has no secondary user roles. The paired
 console already connects to Core; no API key is needed to sign in.
 
-Use the administrator API to create a Project, then issue a named API key within
-it and save the one-time plaintext response privately. Core stores only its digest.
-The corresponding Web management screens remain pending. Multiple keys in a Project
+Open **Platform → Projects and keys** to create a Project, then issue a named API
+key within it and save the one-time plaintext response privately. The administrator
+API provides the same operations. Core stores only the key digest. Multiple keys in a Project
 share its assets and execution principal; writes record the actual key separately.
 Rotate by issuing another key in that Project and revoking the old one. Archiving
 the Project disables all its keys and retains assets for inspection, deletion or
@@ -131,7 +128,7 @@ management. Choose English or Chinese through the System language selector.
 
 ## Add nodes after a default installation
 
-1. Log in to the bundled Web console and open **Hosted Sandbox Manager**.
+1. Log in to the bundled Web console and open **Platform → Nodes**.
    The paired installation needs no second key or Core connection setup.
 2. Choose Docker or microsandbox. The paired console address is used
    automatically. If your network requires a different address for nodes and

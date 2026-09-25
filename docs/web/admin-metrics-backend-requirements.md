@@ -1,7 +1,9 @@
 # Administrator metrics: backend requirements
 
-Status: proposal for discussion with Core owners. Nothing in this document is
-implemented beyond the Web API routes it names as existing.
+Status: remaining aggregate proposals for discussion with Core owners. Core process
+metrics are implemented separately at `GET /core/v1/admin/core-metrics`; see the
+[measurement contract](../../contracts/agents-api/core-metrics.md). The proposed
+endpoints below are not release prerequisites.
 [简体中文](admin-metrics-backend-requirements.zh-CN.md)
 
 The console is a management tool: Monitor (Overview, Agent metrics, Sandbox
@@ -79,8 +81,9 @@ This replaces the Item fan-out.
 
 The Overview shows Core itself beside its sandbox hosts. Core runs no
 sandboxes, so it has no slots; the operator asked for its CPU and memory
-instead. Nothing reports them, so the console shows the Web API's reachability
-and maintenance state and "Not reported" for CPU and memory.
+instead. The Core metrics page reports Go memory, service state and database observations
+through `/core/v1/admin/core-metrics`. The Overview topology still shows Web API
+reachability and maintenance state; host CPU and memory are not reported.
 
 `GET /core/v1/admin/core-status`
 
