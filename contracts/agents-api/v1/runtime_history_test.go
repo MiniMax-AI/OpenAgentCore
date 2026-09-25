@@ -11,7 +11,7 @@ import (
 func TestRuntimeHistoryOpenAPICollectionLimits(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile("../sandbox-manager.openapi.yaml")
+	raw, err := os.ReadFile("../core.openapi.yaml")
 	if err != nil {
 		t.Fatalf("read generated OpenAPI contract: %v", err)
 	}

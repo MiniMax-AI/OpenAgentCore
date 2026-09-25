@@ -9,11 +9,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestSeparatePublicAndAdministrationRoots(t *testing.T) {
+func TestSeparatesTheThreeNamespaces(t *testing.T) {
 	d := t.TempDir()
 	input := filepath.Join(d, "combined.yaml")
 	project := filepath.Join(d, "project.yaml")
-	manager := filepath.Join(d, "manager.yaml")
+	core := filepath.Join(d, "core.yaml")
 	machine := filepath.Join(d, "runtime.yaml")
 	raw := `swagger: "2.0"
 basePath: /v1
@@ -69,14 +69,14 @@ securityDefinitions:
 	if err := os.WriteFile(input, []byte(raw), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(input, project, manager, machine); err != nil {
+	if err := run(input, project, core, machine); err != nil {
 		t.Fatal(err)
 	}
 	for _, check := range []struct{ path, base, own, other, definition, absent string }{
 		{project, "/v1", "/agents/sessions", "/core/v1/sandbox/nodes", "Session", "Node"},
 		{project, "/v1", "/agents/sessions", "/api/v1/sandbox-node/identity", "Session", "NodeIdentity"},
-		{manager, "/", "/core/v1/sandbox/nodes", "/agents/sessions", "Node", "Session"},
-		{manager, "/", "/core/v1/sandbox/nodes", "/api/v1/sandbox-node/identity", "Node", "NodeIdentity"},
+		{core, "/", "/core/v1/sandbox/nodes", "/agents/sessions", "Node", "Session"},
+		{core, "/", "/core/v1/sandbox/nodes", "/api/v1/sandbox-node/identity", "Node", "NodeIdentity"},
 		{machine, "/", "/api/v1/sandbox-node/identity", "/core/v1/sandbox/nodes", "NodeIdentity", "Node"},
 		{machine, "/", "/api/v1/sandbox-node/identity", "/agents/sessions", "NodeIdentity", "Session"},
 	} {
@@ -99,7 +99,7 @@ securityDefinitions:
 	}
 	// Generated surfaces keep only the schemes their operations use; the project
 	// document is left as generated.
-	for path, want := range map[string]string{project: "BearerAuth DeploymentAdminAuth NodeAuth", manager: "DeploymentAdminAuth", machine: "NodeAuth"} {
+	for path, want := range map[string]string{project: "BearerAuth DeploymentAdminAuth NodeAuth", core: "DeploymentAdminAuth", machine: "NodeAuth"} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

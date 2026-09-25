@@ -1,5 +1,6 @@
-// Command openapi-split separates the project API (/v1), Core administration
-// (/core/v1) and machine connections (/api/v1) into their own documents.
+// Command openapi-split separates the generated document by namespace: the
+// application API (/v1), the Core API (/core/v1) and machine connections
+// (/api/v1) each get their own document.
 package main
 
 import (
@@ -13,13 +14,13 @@ import (
 
 const (
 	projectSurface = iota
-	managerSurface
+	coreSurface
 	runtimeSurface
 )
 
 func main() {
 	if len(os.Args) != 5 {
-		fmt.Fprintln(os.Stderr, "usage: openapi-split INPUT PROJECT_OUTPUT MANAGER_OUTPUT RUNTIME_OUTPUT")
+		fmt.Fprintln(os.Stderr, "usage: openapi-split INPUT PROJECT_OUTPUT CORE_OUTPUT RUNTIME_OUTPUT")
 		os.Exit(1)
 	}
 	if err := run(os.Args[1], os.Args[2], os.Args[3], os.Args[4]); err != nil {
@@ -27,24 +28,24 @@ func main() {
 		os.Exit(1)
 	}
 }
-func run(input, projectOutput, managerOutput, runtimeOutput string) error {
+func run(input, projectOutput, coreOutput, runtimeOutput string) error {
 	raw, err := os.ReadFile(input)
 	if err != nil {
 		return err
 	}
-	var project, manager, runtime yaml.Node
-	for _, doc := range []*yaml.Node{&project, &manager, &runtime} {
+	var project, core, runtime yaml.Node
+	for _, doc := range []*yaml.Node{&project, &core, &runtime} {
 		if err = yaml.Unmarshal(raw, doc); err != nil {
 			return err
 		}
 	}
-	p, m, rt := project.Content[0], manager.Content[0], runtime.Content[0]
+	p, m, rt := project.Content[0], core.Content[0], runtime.Content[0]
 	filterPaths(field(p, "paths"), projectSurface)
-	filterPaths(field(m, "paths"), managerSurface)
+	filterPaths(field(m, "paths"), coreSurface)
 	filterPaths(field(rt, "paths"), runtimeSurface)
 	field(m, "basePath").Value = "/"
-	field(field(m, "info"), "title").Value = "Core Extensions"
-	field(field(m, "info"), "description").Value = "Core extensions outside the upstream Agents API. Environment executor credential operations use project caller authentication. Sandbox administration uses the deployment administrator credential. See each operation's security requirements."
+	field(field(m, "info"), "title").Value = "Core API"
+	field(field(m, "info"), "description").Value = "Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted."
 	field(rt, "basePath").Value = "/"
 	field(field(rt, "info"), "title").Value = "Core Machine Connections"
 	field(field(rt, "info"), "description").Value = "Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the deployment administrator credential are not accepted. See each operation's security requirements."
@@ -57,7 +58,7 @@ func run(input, projectOutput, managerOutput, runtimeOutput string) error {
 	pruneSecurityDefinitions(m)
 	pruneSecurityDefinitions(rt)
 	// Keep unrelated existing project definitions and the generator's formatting.
-	// Only definitions exclusive to the management or machine surfaces are removed.
+	// Only definitions exclusive to the Core or machine surfaces are removed.
 	var original yaml.Node
 	if err := yaml.Unmarshal(raw, &original); err != nil {
 		return err
@@ -77,7 +78,7 @@ func run(input, projectOutput, managerOutput, runtimeOutput string) error {
 	for _, out := range []struct {
 		path string
 		doc  *yaml.Node
-	}{{projectOutput, &project}, {managerOutput, &manager}, {runtimeOutput, &runtime}} {
+	}{{projectOutput, &project}, {coreOutput, &core}, {runtimeOutput, &runtime}} {
 		if out.path == projectOutput {
 			if err := os.WriteFile(out.path, preserveProjectFormatting(raw, original.Content[0], p), 0644); err != nil {
 				return err
@@ -112,7 +113,7 @@ func field(n *yaml.Node, key string) *yaml.Node {
 func surface(path string) int {
 	switch {
 	case strings.HasPrefix(path, "/core/v1/"):
-		return managerSurface
+		return coreSurface
 	case strings.HasPrefix(path, "/api/v1/"):
 		return runtimeSurface
 	}

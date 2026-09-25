@@ -190,9 +190,9 @@ migrations. The public protocol schema is `contracts/agents-api/openapi.yaml`;
 there is no product swaggo contract in this repository. Preserve its pinned types,
 coverage ledgers and official SDK/raw HTTP tests when changing API behavior.
 Run `make openapi` after handler annotation changes. It reuses the original
-Core-only swaggo v1.16.4 generator, then separates project paths under `/v1` from
-`/core/v1` administration in `sandbox-manager.openapi.yaml` and `/api/v1` machine
-connections in `runtime.openapi.yaml` (both base path `/`), each keeping only the
+Core-only swaggo v1.16.4 generator, then splits the result by namespace: `/v1`
+into `openapi.yaml`, `/core/v1` into `core.openapi.yaml` and `/api/v1` into
+`runtime.openapi.yaml` (the last two with base path `/`), each keeping only the
 security schemes its operations use. All generated schemas remain free of product
 routes.
 

@@ -56,7 +56,7 @@ it is operational attribution, not per-key billing.
 
 The [deployment configuration contract](../../contracts/agents-api/sandbox-deployment.md),
 [Hosted Sandbox Manager reference](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
-and [generated OpenAPI](../../contracts/agents-api/sandbox-manager.openapi.yaml)
+and [generated OpenAPI](../../contracts/agents-api/core.openapi.yaml)
 define deployment and node operations:
 
 - `GET/POST/PUT /core/v1/sandbox/deployment` and

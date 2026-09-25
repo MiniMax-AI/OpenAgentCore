@@ -2803,11 +2803,11 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Core extensions outside the upstream Agents API. Environment executor credential operations use project caller authentication. Sandbox administration uses the deployment administrator credential. See each operation's security requirements.
+  description: Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted.
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
-  title: Core Extensions
+  title: Core API
   version: "1"
 paths:
   /core/v1/audit-log:

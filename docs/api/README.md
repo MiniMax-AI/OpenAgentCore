@@ -35,9 +35,8 @@ when given an application key or machine credential.
   `x_agents_core`.
 - [Public OpenAPI](../../contracts/agents-api/openapi.yaml): public schema snapshot;
   combine it with the fixed SDK and [operation evidence](../../contracts/agents-api/operation-evidence.md).
-- [Core extension OpenAPI](../../contracts/agents-api/sandbox-manager.openapi.yaml):
-  generated management and executor-credential routes. The filename does not mean
-  that all its routes are sandbox-administrator operations; use the authority table above.
+- [Core OpenAPI](../../contracts/agents-api/core.openapi.yaml): generated `/core/v1`
+  routes, all authenticated by the Core key.
 - [Machine connection OpenAPI](../../contracts/agents-api/runtime.openapi.yaml):
   generated `/api/v1` sandbox node routes. The node WebSocket and the private
   daemon transport are described in the node and Runtime credential guides.

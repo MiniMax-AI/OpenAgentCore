@@ -12,7 +12,7 @@ A deployment can remain unconfigured, with no execution nodes or hosted admissio
 
 See [Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
 for the operator workflow. Generated schemas cover the
-[administrator routes](sandbox-manager.openapi.yaml) and the
+[administrator routes](core.openapi.yaml) and the
 [node machine connection routes](runtime.openapi.yaml).
 
 ## Authority and routes
