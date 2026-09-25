@@ -1,0 +1,12 @@
+{
+  "docker": {
+    "cpus": 2,
+    "memory_mib": 2048
+  },
+  "microsandbox": {
+    "cpus": 2,
+    "memory_mib": 4096,
+    "root_disk_mib": 8192,
+    "environment_disk_mib": 8192
+  }
+}
