@@ -1219,11 +1219,19 @@ html[data-theme="dark"] {
   background: var(--hover);
 }
 
+/* A chart's numbers, in its dialog: a scrolling table with a pinned header. */
 .chart-table-wrap {
-  max-height: 220px;
+  max-height: min(60vh, 520px);
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-control, 8px);
+}
+
+.chart-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
 }
 
 @media (max-width: 1180px) {

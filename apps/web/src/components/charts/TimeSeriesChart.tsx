@@ -1,7 +1,8 @@
 import { Table2 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Modal } from "../Modal";
 import { formatBucketTime, niceTicks, tickIndices } from "./chart-scale";
 
 export interface TimeSeries {
@@ -81,7 +82,6 @@ export function TimeSeriesChart({
   const [width, setWidth] = useState(640);
   const [active, setActive] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
-  const tableId = useId();
 
   useEffect(() => {
     const element = wrapperRef.current;
@@ -267,19 +267,19 @@ export function TimeSeriesChart({
           }).join(", ")}`
           : ""}
       </p>
+      {/* The numbers open in a dialog, so the chart grid keeps its layout. */}
       <button
         className={showTable ? "chart-table-toggle active" : "chart-table-toggle"}
         type="button"
-        aria-expanded={showTable}
-        aria-controls={tableId}
-        aria-label={showTable ? t("actions.hideData") : t("actions.showData")}
-        title={showTable ? t("actions.hideData") : t("actions.showData")}
-        onClick={() => setShowTable((value) => !value)}
+        aria-haspopup="dialog"
+        aria-label={t("actions.showData")}
+        title={t("actions.showData")}
+        onClick={() => setShowTable(true)}
       >
         <Table2 size={14} strokeWidth={1.6} aria-hidden="true" />
       </button>
-      {showTable ? (
-        <div className="chart-table-wrap" id={tableId}>
+      <Modal open={showTable} title={label} onClose={() => setShowTable(false)}>
+        <div className="chart-table-wrap">
           <table className="data-table data-table-compact">
             <caption className="visually-hidden">{label}</caption>
             <thead>
@@ -291,7 +291,7 @@ export function TimeSeriesChart({
             <tbody>
               {buckets.map((bucket, index) => (
                 <tr key={bucket}>
-                  <th scope="row">{new Intl.DateTimeFormat(locale, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(bucket * 1000))}</th>
+                  <th scope="row">{new Intl.DateTimeFormat(locale, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", ...(bucketSeconds < 60 ? { second: "2-digit" } : {}), hourCycle: "h23" }).format(new Date(bucket * 1000))}</th>
                   {tooltipSeries.map((entry) => {
                     const value = entry.values[index];
                     return <td key={entry.id} className="numeric">{value === null || value === undefined ? "—" : formatValue(value)}</td>;
@@ -301,7 +301,7 @@ export function TimeSeriesChart({
             </tbody>
           </table>
         </div>
-      ) : null}
+      </Modal>
     </div>
   );
 }
