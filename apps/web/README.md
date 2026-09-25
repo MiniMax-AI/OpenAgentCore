@@ -1,8 +1,8 @@
 # Core administrator Web frontend
 
 This package contains the React application served by `services/core-console`:
-the administrator console for monitoring Core, inspecting and copying Project
-resources, and managing Projects, keys and sandbox nodes. Its design system is
+the administrator console for monitoring Core, inspecting Project resources, and
+managing Projects, keys and sandbox nodes. Its design system is
 described in [DESIGN.md](DESIGN.md) and its product scope in [PRODUCT.md](PRODUCT.md).
 
 ## Integration contract
@@ -14,7 +14,7 @@ Applications use their own Project keys directly against Core's public `/v1` API
 The production console returns 404 for `/v1`, even with an explicit Bearer token.
 
 Management covers Projects and keys, resource inspection and permitted deletion,
-independent copies, monitoring and audit. It does not create or edit arbitrary
+monitoring and audit. It does not create or edit arbitrary
 application resources or execute Sessions. Do not add application keys or deployment
 credentials to browser configuration, `VITE_*`, storage or logs.
 

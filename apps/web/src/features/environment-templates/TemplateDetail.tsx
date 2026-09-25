@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -28,8 +28,6 @@ export interface TemplateDetailPageProps extends TemplateLinks {
   onBack: () => void;
   onRefresh: () => void;
   onDelete: () => void;
-  /** Copies the Template into another project; absent while unavailable. */
-  onCopy?: () => void;
   /** Extra facts shown first, such as the owning project and creator. */
   facts?: ReactNode;
 }
@@ -130,10 +128,9 @@ function SkillRow({ skill, onOpenSkill }: { skill: EnvironmentTemplateSkill } & 
 
 /** One Template with every safe configuration section Core returns. */
 export function TemplateDetailPage({
-  template, blocked, refreshing, onBack, onRefresh, onDelete, onCopy, facts, onOpenFile, onOpenSkill,
+  template, blocked, refreshing, onBack, onRefresh, onDelete, facts, onOpenFile, onOpenSkill,
 }: TemplateDetailPageProps) {
   const { t, i18n } = useTranslation("templates");
-  const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
   const name = templateName(template);
   const unrecognized = unrecognizedLabels(template, t as never);
@@ -155,11 +152,6 @@ export function TemplateDetailPage({
         actions={(
           <>
             <RefreshButton onClick={onRefresh} refreshing={refreshing} disabled={blocked && !refreshing} />
-            {onCopy ? (
-              <button className="button outline" type="button" disabled={blocked} onClick={onCopy}>
-                <Copy size={14} aria-hidden="true" />{tCommon("copy.action")}
-              </button>
-            ) : null}
             <button className="button danger" type="button" disabled={blocked} aria-label={t("deleteLabel", { name })} onClick={onDelete}>
               <Trash2 size={14} aria-hidden="true" />{t("delete")}
             </button>

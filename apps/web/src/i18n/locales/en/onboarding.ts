@@ -36,7 +36,7 @@ export const onboarding = {
         points: [
           "Agents, environment templates and Skills, with who created each one.",
           "Files and Vaults; credentials stay write-only.",
-          "Inspect, delete safely, or copy an asset into another project.",
+          "Inspect any asset, or delete one safely.",
         ],
       },
       platform: {

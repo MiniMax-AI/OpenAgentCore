@@ -1,5 +1,5 @@
 import type { CoreHarnessKind, SavedAgent } from "@agents-core-web/agents-client";
-import { ArrowLeft, Bot, Copy, ListTree, Trash2 } from "lucide-react";
+import { ArrowLeft, Bot, ListTree, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -11,7 +11,6 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatCompact, formatDateTime, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { admin, CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
-import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import "./AgentCatalog.css";
 import { type ProjectSummary } from "../../lib/admin-view";
 import { refreshAgentSummaries, useAgentSummaries } from "./agent-summaries";
@@ -33,7 +32,7 @@ function coverage(summary: ProjectSummary | undefined, locale?: string): string 
 /**
  * Resources › Agent: every project's saved Agents with their usage. Agents are
  * created and edited by the project's keys through the Agents API; the console
- * inspects, deletes and copies them.
+ * inspects and deletes them.
  */
 export function AgentsPage() {
   const { params } = useConsoleNavigation();
@@ -51,7 +50,6 @@ function AgentsList() {
   const { byId } = useProjects();
   const [filter, setFilter] = useState(params.project ?? "");
   const [query, setQuery] = useState("");
-  const [copy, setCopy] = useState<CopySource | null>(null);
   const collection = useProjectCollection(collections.agents, filter);
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -121,7 +119,6 @@ function AgentsList() {
                       <td><CreatorCell creator={creators.creatorOf(row.project.id, agent.id)} /></td>
                       <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
                         <RowActions>
-                          <button className="text-action" type="button" aria-label={tCommon("copy.actionLabel", { name })} onClick={() => setCopy({ type: "agent", id: agent.id, name, project: row.project })}>{tCommon("copy.action")}</button>
                           <button className="text-action danger" type="button" aria-label={t("view.deletePrompt", { name })} onClick={() => remove.ask(row)}>{t("view.delete")}</button>
                         </RowActions>
                       </td>
@@ -150,7 +147,6 @@ function AgentsList() {
         actions={<RefreshButton onClick={refresh} refreshing={collection.status === "loading"} label={t("refreshLabel")} />}
       />
       <PageBody>{body}</PageBody>
-      <CopyDialog source={copy} onClose={() => setCopy(null)} />
       <ConfirmDialog
         open={remove.target !== null}
         title={t("view.deleteTitle")}
@@ -187,7 +183,6 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
   const project = byId.get(projectId);
   // Opens from the cache (or the list row) at once; a refresh keeps the Agent on screen.
   const { read, forget } = useAgentDetail(projectId, agentId);
-  const [copy, setCopy] = useState<CopySource | null>(null);
   const back = useCallback(() => goBack("agents", { project: projectId }), [goBack, projectId]);
   const summaries = useAgentSummaries(useMemo(() => [projectId], [projectId]));
   const summary = summaries.get(`${projectId}:${agentId}`);
@@ -224,11 +219,6 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
             <button className="button outline" type="button" onClick={() => navigate("sessions", { project: projectId, id: agentId })}>
               <ListTree size={14} aria-hidden="true" />{t("view.openSessions")}
             </button>
-            {agent && project ? (
-              <button className="button outline" type="button" onClick={() => setCopy({ type: "agent", id: agent.id, name, project })}>
-                <Copy size={14} aria-hidden="true" />{tCommon("copy.action")}
-              </button>
-            ) : null}
             <button className="button danger" type="button" disabled={!agent} onClick={() => { if (agent) remove.ask(agent); }}>
               <Trash2 size={14} aria-hidden="true" />{t("view.delete")}
             </button>
@@ -298,7 +288,6 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
           </>
         ) : null}
       </PageBody>
-      <CopyDialog source={copy} onClose={() => setCopy(null)} />
       <ConfirmDialog
         open={remove.target !== null}
         title={t("view.deleteTitle")}

@@ -1,6 +1,6 @@
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
-import { Activity, ArrowLeft, ArrowRight, Bot, Copy, FolderKanban, LayoutDashboard, ListTree, Server, Settings2, Vault, type LucideIcon } from "lucide-react";
+import { Activity, ArrowLeft, ArrowRight, Bot, FolderKanban, LayoutDashboard, ListTree, Server, Settings2, Trash2, Vault, type LucideIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -10,7 +10,7 @@ export const TOUR_CHAPTERS: readonly TourChapter[] = ["monitor", "resources", "p
 
 const icons: Record<TourChapter, readonly [LucideIcon, LucideIcon, LucideIcon]> = {
   monitor: [LayoutDashboard, Activity, ListTree],
-  resources: [Bot, Vault, Copy],
+  resources: [Bot, Vault, Trash2],
   platform: [FolderKanban, Server, Settings2],
 };
 

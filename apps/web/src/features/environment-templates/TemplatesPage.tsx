@@ -11,7 +11,6 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime, MISSING } from "../../lib/format";
 import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
-import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import { TemplateDetailPage } from "./TemplateDetail";
 import { filterTemplates, templateName } from "./template-name";
 import "./EnvironmentTemplatesView.css";
@@ -26,7 +25,7 @@ function count(value: readonly unknown[] | undefined): string | number {
 /**
  * Resources › Environment templates: every project's reusable Session
  * configurations. Read-only here; `env` and setup commands are write-only and
- * never returned. Administrators delete and copy but never edit.
+ * never returned. Administrators delete but never edit.
  */
 export function TemplatesPage() {
   const { params } = useConsoleNavigation();
@@ -43,7 +42,6 @@ function TemplatesList() {
   const { byId } = useProjects();
   const [filter, setFilter] = useState(params.project ?? "");
   const [query, setQuery] = useState("");
-  const [copy, setCopy] = useState<CopySource | null>(null);
   const collection = useProjectCollection(collections.templates, filter);
   const rows = useMemo(() => {
     const visible = new Set(filterTemplates(collection.items.map((row) => row.value), query));
@@ -127,7 +125,6 @@ function TemplatesList() {
                       <td><CreatorCell creator={creators.creatorOf(row.project.id, template.id)} /></td>
                       <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
                         <RowActions>
-                          <button className="text-action" type="button" aria-label={tCommon("copy.actionLabel", { name })} onClick={() => setCopy({ type: "environment_template", id: template.id, name, project: row.project })}>{tCommon("copy.action")}</button>
                           <button className="text-action danger" type="button" aria-label={t("deleteLabel", { name })} onClick={() => remove.ask(row)}>{t("delete")}</button>
                         </RowActions>
                       </td>
@@ -156,7 +153,6 @@ function TemplatesList() {
         actions={<RefreshButton onClick={refresh} refreshing={collection.status === "loading"} />}
       />
       <PageBody>{body}</PageBody>
-      <CopyDialog source={copy} onClose={() => setCopy(null)} />
       <ConfirmDialog
         open={remove.target !== null}
         title={t("modal.delete")}
@@ -181,7 +177,6 @@ function TemplateDetailRoute({ projectId, templateId }: { projectId: string; tem
   const project = byId.get(projectId);
   // Opens from the cache (or the list row) at once; a refresh keeps the Template on screen.
   const { read, forget } = useTemplateDetail(projectId, templateId);
-  const [copy, setCopy] = useState<CopySource | null>(null);
   const back = useCallback(() => goBack("templates", { project: projectId }), [goBack, projectId]);
   const creators = useCreators("environment_template", useMemo(() => [{ projectId, id: templateId }], [projectId, templateId]));
   const refresh = () => { forgetCreators(); void read.refetch(); };
@@ -218,7 +213,6 @@ function TemplateDetailRoute({ projectId, templateId }: { projectId: string; tem
         onBack={back}
         onRefresh={refresh}
         onDelete={() => remove.ask(template)}
-        onCopy={project ? () => setCopy({ type: "environment_template", id: template.id, name: templateName(template), project }) : undefined}
         facts={(
           <>
             <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={project} /></dd></div>
@@ -228,7 +222,6 @@ function TemplateDetailRoute({ projectId, templateId }: { projectId: string; tem
         onOpenFile={(fileId) => navigate("files", { project: projectId, id: fileId })}
         onOpenSkill={(skillId) => navigate("skills", { project: projectId, id: skillId })}
       />
-      <CopyDialog source={copy} onClose={() => setCopy(null)} />
       <ConfirmDialog
         open={remove.target !== null}
         title={t("modal.delete")}

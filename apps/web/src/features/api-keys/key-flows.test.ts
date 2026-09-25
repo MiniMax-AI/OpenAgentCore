@@ -137,7 +137,7 @@ describe("helpers", () => {
   it("builds a request the caller runs with their own key variable", () => {
     const command = curlExample("https://core.example/");
     expect(command).toContain("curl https://core.example/v1/agents");
-    expect(command).toContain('"Authorization: Bearer $CORE_API_KEY"');
+    expect(command).toContain('"Authorization: Bearer $PROJECT_API_KEY"');
     expect(command).not.toContain("pc_live");
     // Anything that is not a plain origin falls back to a variable instead of reaching the shell.
     expect(curlExample('https://core.example/$(id)')).toContain('"$CORE_URL/v1/agents"');

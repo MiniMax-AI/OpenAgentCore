@@ -1,5 +1,5 @@
 import type { Vault, VaultCredential } from "@agents-core-web/agents-client";
-import { ArrowLeft, Copy, Trash2, Vault as VaultIcon } from "lucide-react";
+import { ArrowLeft, Trash2, Vault as VaultIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -11,7 +11,6 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime } from "../../lib/format";
 import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
-import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import { vaultName } from "./vault-catalog";
 import "./vaults.css";
 import { collections } from "../../lib/queries";
@@ -24,9 +23,9 @@ function errorText(error: unknown): string {
 
 /**
  * Resources › Vault: every project's Vaults and their Credential metadata.
- * Tokens are write-only and never reach the console; administrators view,
- * delete (for example a leaked Credential) and copy, but never create or
- * replace Credentials on a project's behalf.
+ * Tokens are write-only and never reach the console; administrators view and
+ * delete (for example a leaked Credential), but never create or replace
+ * Credentials on a project's behalf.
  */
 export function VaultsPage() {
   const { params } = useConsoleNavigation();
@@ -43,7 +42,6 @@ function VaultsList() {
   const { byId } = useProjects();
   const [filter, setFilter] = useState(params.project ?? "");
   const [query, setQuery] = useState("");
-  const [copy, setCopy] = useState<CopySource | null>(null);
   const collection = useProjectCollection(collections.vaults, filter);
   const rows = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -102,7 +100,6 @@ function VaultsList() {
                       <td><CreatorCell creator={creators.creatorOf(row.project.id, vault.id)} /></td>
                       <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
                         <RowActions>
-                          <button className="text-action" type="button" aria-label={tCommon("copy.actionLabel", { name })} onClick={() => setCopy({ type: "vault", id: vault.id, name, project: row.project })}>{tCommon("copy.action")}</button>
                           <button className="text-action danger" type="button" aria-label={t("deleteVaultLabel", { name })} onClick={() => remove.ask(row)}>{t("delete")}</button>
                         </RowActions>
                       </td>
@@ -131,7 +128,6 @@ function VaultsList() {
         actions={<RefreshButton onClick={refresh} refreshing={collection.status === "loading"} label={tPages("vaults.refresh")} />}
       />
       <PageBody>{body}</PageBody>
-      <CopyDialog source={copy} onClose={() => setCopy(null)} />
       <ConfirmDialog
         open={remove.target !== null}
         title={t("deleteVaultTitle")}
@@ -158,7 +154,6 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
   const project = byId.get(projectId);
   // The Vault opens from the cache (or its list row) at once; its Credentials read beside it.
   const { read, credentials: credentialsRead, forget } = useVaultDetail(projectId, vaultId);
-  const [copy, setCopy] = useState<CopySource | null>(null);
   const back = useCallback(() => goBack("vaults", { project: projectId }), [goBack, projectId]);
 
   const { refetch: refetchVault } = read;
@@ -201,11 +196,6 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
         actions={(
           <>
             <RefreshButton onClick={refresh} refreshing={read.isFetching || credentialsRead.isFetching} label={tPages("vaults.refresh")} />
-            {vault && project ? (
-              <button className="button outline" type="button" onClick={() => setCopy({ type: "vault", id: vault.id, name, project })}>
-                <Copy size={14} aria-hidden="true" />{tCommon("copy.action")}
-              </button>
-            ) : null}
             <button className="button danger" type="button" disabled={!vault} aria-label={t("deleteVaultLabel", { name })} onClick={() => { if (vault) removeVault.ask(vault); }}>
               <Trash2 size={14} aria-hidden="true" />{t("detail.deleteVault")}
             </button>
@@ -265,11 +255,6 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
                           <td><CreatorCell creator={creators.creatorOf(projectId, credential.id)} /></td>
                           <td className="actions-cell">
                             <RowActions>
-                              {project ? (
-                                <button className="text-action" type="button" aria-label={tCommon("copy.actionLabel", { name: credential.name })} onClick={() => setCopy({ type: "credential", id: credential.id, name: credential.name, project })}>
-                                  {tCommon("copy.action")}
-                                </button>
-                              ) : null}
                               <button className="text-action danger" type="button" aria-label={t("deleteCredentialLabel", { name: credential.name })} onClick={() => removeCredential.ask(credential)}>
                                 {t("delete")}
                               </button>
@@ -285,7 +270,6 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
           </>
         ) : null}
       </PageBody>
-      <CopyDialog source={copy} onClose={() => setCopy(null)} />
       <ConfirmDialog
         open={removeVault.target !== null}
         title={t("deleteVaultTitle")}

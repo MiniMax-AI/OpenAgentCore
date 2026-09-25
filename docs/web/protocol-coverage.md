@@ -5,21 +5,20 @@ consumes and for what. It is not a statement of public Agents API compatibility;
 that inventory, its pinned baseline and its evidence live in the
 [Agents API contract](../../contracts/agents-api/README.md).
 
-The console is a management tool. It reads, deletes and copies each project's
-assets and manages projects and keys through the administrator API
-(`/core/v1/admin/**`), and it administers sandbox nodes through
-`/core/v1/sandbox/**`. It sends no request to the Agents API (`/v1/**`). Routes,
-response shapes, pagination, copy rules and audit records of the administrator API
-are defined by the [administrator API contract](../../contracts/agents-api/admin-api.md).
+The console is a management tool. It reads and deletes each project's assets and
+manages projects and keys through the administrator API (`/core/v1/admin/**`), and
+it administers sandbox nodes through `/core/v1/sandbox/**`. It sends no request to
+the Agents API (`/v1/**`). Routes, response shapes, pagination and audit records of
+the administrator API are defined by the [administrator API contract](../../contracts/agents-api/admin-api.md).
 
 ## Interfaces
 
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
 | Console server | `/console/auth`, `/console/auth/{setup,login,logout}`, `/console/config` | Console account (session cookie) or legacy Basic authentication | Sign-in and sign-out; non-secret capability flags such as `sandbox_admin` |
-| Administrator API | `/core/v1/admin/**` | Deployment administrator credential, added by the console server | Projects, keys, resource reads and deletion, copies, provenance, summaries, Runtime observations |
+| Administrator API | `/core/v1/admin/**` | Deployment administrator credential, added by the console server | Projects, keys, resource reads and deletion, provenance, summaries, Runtime observations |
 | Sandbox administration | `/core/v1/sandbox/**` | Deployment administrator credential, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics |
-| Agents API | `/v1/**` | Project API key | Not used. The first-run screen shows a `curl` example for `/v1/agents` with a `$CORE_API_KEY` placeholder; the console never sends it |
+| Agents API | `/v1/**` | Project API key | Not used. The first-run screen shows a `curl` example for `/v1/agents` with a `$PROJECT_API_KEY` placeholder; the console never sends it |
 
 Browser requests are same-origin and carry only the console sign-in. The browser
 never holds or sends the deployment credential, an API key or an `OpenAI-Beta`
@@ -34,7 +33,7 @@ value.
 | List projects | `GET /projects` | Project filter on every project-scoped page; Projects and keys list; first-run detection (no project opens the first-run screen) |
 | Create project | `POST /projects` | **Create project**; first run (default name `Default`) |
 | Rename project | `POST /projects/{project_id}` | **Rename** on an active project; the ID stays the same |
-| Archive project | `POST /projects/{project_id}/archive` | **Archive**: revokes every key; the project's assets stay readable, deletable and copyable |
+| Archive project | `POST /projects/{project_id}/archive` | **Archive**: revokes every key; the project's assets stay readable and deletable |
 | List keys | `GET /projects/{project_id}/keys` | Key table of a project: name, prefix, status, creation and revocation time |
 | Issue key | `POST /projects/{project_id}/keys` | **Issue key** on an active project and the first-run screen; the plaintext is shown once |
 | Revoke key | `DELETE /projects/{project_id}/keys/{key_id}` | **Revoke**, with a warning when it is the project's last active key |
@@ -50,14 +49,14 @@ Routes are relative to `/core/v1/admin/projects/{project_id}` and return the sam
 objects as the corresponding public `/v1` operations, so the console applies the
 public client's strict projections. Archived projects remain readable.
 
-| Resource | Reads used | Deletion | Copy | Creator | Console surface |
-| --- | --- | --- | --- | --- | --- |
-| Agents | `/agents`, `/agents/{agent_id}` | Agent | Yes | `agent` | Agents list with usage per Agent; Agent page with instructions, tools, generation settings and metadata |
-| Environment templates | `/environment-templates`, `/environment-templates/{id}` | Template | Yes | `environment_template` | Templates list; Template page with every safe section |
-| Skills | `/skills`, `/skills/{skill_id}`, `/skills/{skill_id}/versions`, Skill and version `/content` | Skill and Skill version | Yes | `skill` (list) | Skills list; Skill page with versions and archive downloads |
-| Files | `/files` | File | Yes | `file` | Files list (metadata only) |
-| Vaults | `/vaults`, `/vaults/{vault_id}`, `/vaults/{vault_id}/credentials` | Vault and Credential | Vault, or one Credential into a Vault of the target project | `vault`, `credential` | Vaults list; Vault page with Credential metadata |
-| Sessions | `/sessions`, `/sessions/{session_id}`, `/sessions/{session_id}/items`, `/sessions/{session_id}/turns`, `/sessions/{session_id}/runtime-observation`, `/sessions/{session_id}/runtime-history` | Session | No | `session` | Session log; Session page; Agent metrics; hosted Runtime rows |
+| Resource | Reads used | Deletion | Creator | Console surface |
+| --- | --- | --- | --- | --- |
+| Agents | `/agents`, `/agents/{agent_id}` | Agent | `agent` | Agents list with usage per Agent; Agent page with instructions, tools, generation settings and metadata |
+| Environment templates | `/environment-templates`, `/environment-templates/{id}` | Template | `environment_template` | Templates list; Template page with every safe section |
+| Skills | `/skills`, `/skills/{skill_id}`, `/skills/{skill_id}/versions`, Skill and version `/content` | Skill and Skill version | `skill` (list) | Skills list; Skill page with versions and archive downloads |
+| Files | `/files` | File | `file` | Files list (metadata only) |
+| Vaults | `/vaults`, `/vaults/{vault_id}`, `/vaults/{vault_id}/credentials` | Vault and Credential | `vault`, `credential` | Vaults list; Vault page with Credential metadata |
+| Sessions | `/sessions`, `/sessions/{session_id}`, `/sessions/{session_id}/items`, `/sessions/{session_id}/turns`, `/sessions/{session_id}/runtime-observation`, `/sessions/{session_id}/runtime-history` | Session | `session` | Session log; Session page; Agent metrics; hosted Runtime rows |
 
 Resource-specific boundaries:
 
@@ -79,14 +78,13 @@ Resource-specific boundaries:
   skipped. The console does not read single Turns, Artifacts, execution
   configuration or Environment resources.
 
-## Provenance, monitoring and copies
+## Provenance and monitoring
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| Resource owners | `GET /projects/{project_id}/resource-owners` | The Creator column of every resource list and the creator fact of detail pages, in batches of up to 100 IDs. An administrator's copy shows **Admin copy**; a resource without a record shows **Unknown** |
+| Resource owners | `GET /projects/{project_id}/resource-owners` | The Creator column of every resource list and the creator fact of detail pages, in batches of up to 100 IDs. An asset an administrator copied in an earlier release shows **Admin copy**; a resource without a record shows **Unknown** |
 | Write operations | `GET /projects/{project_id}/write-operations` | A project's write history, newest first, filtered by key and resource type, 50 per page |
 | Summary | `GET /summary` | Overview (per project), the Agents list (`group_by=agent`), a project's page (per project and `group_by=key`), Agent metrics (to skip idle projects, and usage by creating key since the start of the range), the Projects list (last activity) |
-| Copies | `POST /copies` with `Idempotency-Key` | **Copy to…** on Agents, Environment templates, Skills, Files, Vaults and Credentials |
 | Runtime observations | `GET /runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project |
 | Core metrics | `GET /core-metrics?range=` | Core metrics page; the Core popover on Overview. A Core without the route (404) is shown as not reporting; the popover then shows only Core's status. Measurements are defined in the [Core metrics contract](../../contracts/agents-api/core-metrics.md); the Process section's CPU and resident memory are a [requested extension](core-process-metrics-requirements.md) and show as missing until Core reports them |
 
@@ -125,12 +123,7 @@ enters the release under advanced settings.
   as uncertain and followed by a fresh read.
 - The console offers Session deletion only for idle or failed Sessions without
   required actions and never cancels work to make a Session deletable.
-- A copy targets an active project other than the source. The dialog keeps one
-  `Idempotency-Key` while the source, target, dependency choice and target Vault stay
-  the same, so a retry after an uncertain answer returns the committed result
-  instead of a second copy. The result lists new IDs and skipped entries with their
-  reasons.
-- Project, key, deletion, copy and sandbox writes are never retried automatically.
+- Project, key, deletion and sandbox writes are never retried automatically.
 
 ## Read bounds
 
@@ -176,7 +169,6 @@ origin checks and header handling live in [server.go](../../services/core-consol
 Update this matrix when those boundaries or the console's reads change, and keep
 detailed wire semantics in the administrator contract.
 
-Backend HTTP tests, console login and proxy checks and Project isolation and copy
+Backend HTTP tests, console login and proxy checks and Project isolation
 acceptance establish backend behavior. The console's unit tests and fixture-backed
-browser tests cover its screens; they do not prove execution readiness or that a
-copied asset is usable.
+browser tests cover its screens; they do not prove execution readiness.

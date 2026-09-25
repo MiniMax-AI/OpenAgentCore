@@ -6,7 +6,7 @@ Agents API independently with their own Project keys. The management backend,
 
 The [design principles](../design-principles.md) define identity and authority.
 The [administrator contract](../../contracts/agents-api/admin-api.md) defines exact
-routes, payloads, pagination, copy rules and audit records.
+routes, payloads, pagination and audit records.
 
 ## Request boundaries
 
@@ -47,7 +47,7 @@ existing transport behavior. They do not grant a browser execution authority.
 | React frontend | Project selection, permitted management actions and operational views; cached reads (TanStack Query) that keep the last data on screen while refreshing |
 | `AdminClient` | Typed management requests and validation, sharing resource parsers with the public client |
 | `services/core-console` | Console authentication, origin checks, route allowlist and private upstream credential |
-| Core API and PostgreSQL | Project isolation, resource state, deletion preconditions, atomic copies, audit and scheduling |
+| Core API and PostgreSQL | Project isolation, resource state, deletion preconditions, audit and scheduling |
 | Runtime and native adapters | Existing allocation, process lifecycle and execution protocols |
 
 A Project owns one tenant and one principal; its keys have equal access to its
@@ -56,18 +56,16 @@ settings, not business identities. Core has no separate API-user or role model.
 
 Revoking one key prevents new authentication without removing assets or admitted
 work. Archiving a Project disables all its keys and retains resources for
-administrator inspection, deletion or copying to an active Project.
+administrator inspection and deletion.
 
-Management adds no execution path. It can inspect metadata and history, apply
-existing deletion rules, and copy supported assets. It cannot edit arbitrary
-resources, create Sessions, send input or cancel work. A deletion conflict cannot
-be resolved by an implicit cancellation from the console.
+Management adds no execution path. It can inspect metadata and history and apply
+existing deletion rules. It cannot edit arbitrary resources, create Sessions, send
+input or cancel work. A deletion conflict cannot be resolved by an implicit
+cancellation from the console.
 
-Copies receive independent IDs. Core rewrites included dependencies and rebinds
-stored encrypted values in one transaction with the copy receipt and audit record.
-Sessions and Artifacts are not copyable. Secret fields remain write-only; Skill
-source and Artifact content have explicit read routes, while Source File content
-does not have an administrator download route.
+Secret fields remain write-only; Skill source and Artifact content have explicit
+read routes, while Source File content does not have an administrator download
+route.
 
 ## Deployment and application Runtime paths
 
@@ -89,8 +87,8 @@ pending operation state before displaying results in another Project.
 
 The client sends each write once per explicit action. An uncertain result stays
 visible until the administrator checks state and decides how to proceed. Issued
-key plaintext must not enter browser storage or logs. Copy idempotency and key
-issuance recovery follow the administrator contract.
+key plaintext must not enter browser storage or logs. Key issuance recovery
+follows the administrator contract.
 
 Startup configuration describes configured support. It does not prove a reachable
 model, valid provider credentials or execution readiness. Runtime observations,

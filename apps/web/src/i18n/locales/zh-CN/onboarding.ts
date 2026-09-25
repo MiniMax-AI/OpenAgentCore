@@ -36,7 +36,7 @@ export const onboarding = {
         points: [
           "Agent、环境模板和 Skills，每一项都记录由谁创建。",
           "文件和 Vault；凭据只写入、不回显。",
-          "查看、安全删除，或把资产复制到另一个项目。",
+          "查看任意资产，或安全地删除。",
         ],
       },
       platform: {

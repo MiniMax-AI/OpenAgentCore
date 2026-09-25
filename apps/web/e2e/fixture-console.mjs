@@ -71,16 +71,6 @@ function list(all, url, max = 100) {
 const id = (prefix) => `${prefix}${String(state.nextId++).padStart(8, "0")}`;
 const uuid = () => `00000000-0000-4000-8000-${String(state.nextId++).padStart(12, "0")}`;
 
-const startupConfiguration = {
-  object: "agents.core.startup_configuration", schema_version: 1,
-  supported: { harnesses: ["claude_sdk", "codex"], managed_sandbox_providers: ["docker", "microsandbox"] },
-  configured: {
-    default_harness: "codex", enabled_harnesses: ["claude_sdk", "codex"], daemon_gateway: true, self_hosted: true,
-    managed_sandbox: { enabled: true, provider: "docker", maintenance: false },
-    model_providers: [{ harness: "claude_sdk", endpoint_configured: true }, { harness: "codex", endpoint_configured: true }],
-  },
-};
-
 async function consoleRoute(request, response, url) {
   const auth = state.auth;
   if (url.pathname === "/console/auth" && request.method === "GET") {
@@ -117,15 +107,6 @@ async function adminWrite(request, response, path) {
     const project = { id: id("proj_"), name: input.name, created_at: Math.floor(Date.now() / 1000), archived_at: null, keys: [] };
     a.projects.push(project);
     return send(response, 201, a.publicProject(project));
-  }
-  if (path === "/copies" && request.method === "POST") {
-    const source = a.collections(input.source_project_id);
-    const agent = source.agents.find((entry) => entry.id === input.resource_id);
-    if (input.resource_type !== "agent" || !agent) return error(response, 404, "No such resource.");
-    const copy = { ...agent, id: id("agent_") };
-    state.agents.unshift(copy);
-    a.owner.set(`agent:${copy.id}`, input.target_project_id);
-    return send(response, 201, { mappings: [{ type: "agent", source_id: agent.id, target_id: copy.id }], skipped: [] });
   }
   const match = path.match(/^\/projects\/([^/]+)(\/.*)?$/);
   const project = match && a.projects.find((entry) => entry.id === match[1]);
@@ -168,7 +149,6 @@ function adminRead(response, path, url) {
     const data = a.runtimeObservations();
     return send(response, 200, { object: "list", data, has_more: false, first_id: data[0]?.observation.id ?? null, last_id: data.at(-1)?.observation.id ?? null });
   }
-  if (path === "/startup-configuration") return send(response, 200, startupConfiguration);
   if (path === "/core-metrics") return send(response, 200, coreMetrics(url.searchParams.get("range") ?? "1h"));
   const match = path.match(/^\/projects\/([^/]+)(\/.*)?$/);
   const project = match && a.projects.find((entry) => entry.id === match[1]);

@@ -149,8 +149,6 @@ export function buildAdmin(now, base, resources) {
       for (const k of project.keys) { add(k.created_at, "issue_key", project, "api_key", k.id); if (k.revoked_at) add(k.revoked_at, "revoke_key", project, "api_key", k.id); }
       if (project.archived_at) add(project.archived_at, "archive_project", project, "project", project.id);
     }
-    const agent = base.agents[0];
-    add(now - 86400 * 2, "copy", projects[1], "agent", agent.id, [{ type: "agent", source_id: agent.id, target_id: "agent_c0p1ed01" }]);
     return entries.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   };
 

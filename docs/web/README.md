@@ -19,7 +19,7 @@ management client, and it sends nothing to `/v1`.
 | Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
 | Monitor | Sandbox metrics | Node capacity and hosted Runtime CPU and memory across Projects |
 | Monitor | Session log | Every Session, read-only, opening one Session's conversation, trace and Turns |
-| Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection, permitted deletion and copies to another Project |
+| Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion |
 | Platform | Projects and keys, Nodes, System | Project and key lifecycle, sandbox deployment and nodes, Core startup configuration |
 
 Missing data is shown as missing (—), never as zero. How each figure is read and
@@ -28,11 +28,11 @@ bounded is recorded in [management interface coverage](protocol-coverage.md).
 ## Management scope
 
 Administrators can create, rename and archive Projects; issue and revoke their
-keys; inspect resources and execution history; delete supported resources; and
-copy supported assets between Projects. They can also read summaries, Runtime
-observations and audit history, and manage deployment sandbox nodes. Deployment
-sandbox management selects E2B, Docker or microsandbox; caller-managed `self_hosted`
-Runtimes remain a separate application path.
+keys; inspect resources and execution history; and delete supported resources.
+They can also read summaries, Runtime observations and audit history, and manage
+deployment sandbox nodes. Deployment sandbox management selects E2B, Docker or
+microsandbox; caller-managed `self_hosted` Runtimes remain a separate application
+path.
 
 A Project owns one tenant and one principal. All its keys share assets and
 permissions; writes record the individual key as provenance. Projects and keys

@@ -11,7 +11,6 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatBytes, formatDateTime, MISSING } from "../../lib/format";
 import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
-import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import { filesPageSize, filterFiles, isUnrecognizedFile } from "./file-operations";
 import "./files.css";
 import { filesCollection } from "../../lib/queries";
@@ -19,7 +18,7 @@ import { TableSkeleton } from "../../components/Skeleton";
 
 type Row = Owned<SourceFileListEntry>;
 
-/** Resources › Files: every project's uploaded files, read-only apart from delete and copy. */
+/** Resources › Files: every project's uploaded files, read-only apart from delete. */
 export function FilesPage() {
   const { t, i18n } = useTranslation("files");
   const { t: tCommon } = useTranslation();
@@ -29,7 +28,6 @@ export function FilesPage() {
   const [filter, setFilter] = useState(params.project ?? "");
   const [query, setQuery] = useState(params.id ?? "");
   const [order, setOrder] = useState<PageOrder>("desc");
-  const [copy, setCopy] = useState<CopySource | null>(null);
 
   const collection = useProjectCollection(useMemo(() => filesCollection(order, filesPageSize), [order]), filter);
   const rows = useMemo(() => {
@@ -110,11 +108,6 @@ export function FilesPage() {
                       <td><CreatorCell creator={creators.creatorOf(row.project.id, file.id)} /></td>
                       <td className="actions-cell">
                         <RowActions>
-                          {!unrecognized ? (
-                            <button className="text-action" type="button" aria-label={tCommon("copy.actionLabel", { name: label })} onClick={() => setCopy({ type: "file", id: file.id, name: label, project: row.project })}>
-                              {tCommon("copy.action")}
-                            </button>
-                          ) : null}
                           <button className="text-action danger" type="button" aria-label={t("actions.deleteLabel", { name: label })} onClick={() => remove.ask(row)}>
                             {t("actions.delete")}
                           </button>
@@ -145,7 +138,6 @@ export function FilesPage() {
         actions={<RefreshButton onClick={refresh} refreshing={collection.status === "loading"} label={t("actions.refresh")} />}
       />
       <PageBody>{body}</PageBody>
-      <CopyDialog source={copy} onClose={() => setCopy(null)} />
       <ConfirmDialog
         open={remove.target !== null}
         title={remove.target ? t("delete.prompt", { name: name(remove.target) }) : ""}

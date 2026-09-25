@@ -420,24 +420,24 @@ Compact and quiet; the primary button is the only filled accent in a header.
   Lucide icon.
 - **Primary:** Parsar Indigo fill, white text, control lift; deepens on hover. Used
   for the one affirmative header action (Create project) and for the submit button
-  of non-destructive dialogs (create, rename, issue, copy, continue).
+  of non-destructive dialogs (create, rename, issue, continue).
 - **Outline:** Paper face, Firm Rule border, control lift; hover takes the ink wash.
   Used for every action in a card or section header (Issue key, Manage nodes,
-  Session log, Projects and keys), Copy on detail pages, Cancel in dialogs and
-  empty-state actions.
+  Session log, Projects and keys), Download on the Skill page, Cancel in dialogs
+  and empty-state actions.
 - **Danger:** Fault Red fill, white text. Used for Delete on detail pages and for
   the confirm button of every destructive dialog.
 - **Ghost:** transparent with Graphite text; darkens on hover.
 - **Focus / Press:** focus draws an indigo border plus 1px indigo ring; press scales
   to 0.97.
 - **Text action:** borderless Graphite 12.5px/500 that takes the hover wash; used
-  only for per-row actions in tables (Copy to project, Delete) and links in a
+  only for per-row actions in tables (Rename, Archive, Delete) and links in a
   popover's foot, never in a header. A destructive text action turns red on hover.
 
 ### Refresh button
 A 32px ghost icon button with the refresh glyph. Controls that scope the whole page
 (project filter, time range) come before it; on detail pages it leads, followed by
-Copy and Delete. It spins while reading; its tooltip carries the last update time
+any outline actions and Delete. It spins while reading; its tooltip carries the last update time
 instead of a visible timestamp.
 
 ### Segmented control
@@ -467,11 +467,11 @@ Every resource list, the Session log and the project list share one grammar:
   ID's copy button appears on row hover or focus; the full ID lives in its tooltip.
 - **Creator column**: the last column before the actions, headed "Creator" with a
   help tip. It shows the creating key's name (its prefix when unnamed) with a small
-  "Revoked" flag for revoked keys, "Admin copy" in Graphite for an administrator's
-  copy, "Unknown" in Graphite when Core has no record, and "—" while loading or when
-  the lookup failed.
-- **RowActions**: text actions right-aligned at the end of the row, 16px apart:
-  Copy to…, then Delete (red on hover). A row click opens the detail page; action
+  "Revoked" flag for revoked keys, "Admin copy" in Graphite for an asset an
+  administrator copied in an earlier release, "Unknown" in Graphite when Core has no
+  record, and "—" while loading or when the lookup failed.
+- **RowActions**: text actions right-aligned at the end of the row, 16px apart,
+  ending with Delete (red on hover). A row click opens the detail page; action
   clicks do not.
 - **Partial failure**: when some projects fail to load, one red line names them
   above the table; the other projects still show.
@@ -483,7 +483,7 @@ Every resource list, the Session log and the project list share one grammar:
 ### Detail pages
 - The page header starts with a **back button** (28px ghost icon button, arrow-left,
   Graphite) before the title; the actions on the right start with Refresh, continue
-  with outline actions such as Copy, and end with Delete (danger).
+  with outline actions such as Download, and end with Delete (danger).
 - Under the header, **resource-facts** lays out the facts as a grid of up to four
   label/value pairs per row (12px Graphite label over a 13px value, 14px by 40px
   gaps, two columns below 900px). It starts with the ID (with its copy button) and
@@ -500,12 +500,6 @@ request runs.
   rejection, or an uncertain-outcome warning, appears in red inside the dialog.
   The Skill page's delete dialogs follow the same grammar; deleting a whole Skill
   also requires typing its name.
-- **CopyDialog**: the source name with its type and project; a target-project
-  select (active projects other than the source) with a help tip; a target Vault
-  select when copying one Credential; the **Include dependencies** checkbox with a
-  help tip where it applies. After success it lists new IDs (source → copy) and
-  skipped entries with their reasons, and offers "Open in <project>". A failed copy
-  says whether nothing was copied or the outcome is uncertain.
 - **Key dialogs**: name fields carry their rules in a help tip and their problem in
   red underneath. The issued key appears in a read-only field with a copy button,
   under a notice that it is shown once; only "I've saved this key" dismisses it.
@@ -633,7 +627,7 @@ once per range, new conversation messages settle 6px upward in 260ms, pages fade
 - **Do** start every project-scoped toolbar with the project filter, then search,
   with the count on the right.
 - **Do** end every resource table with the Creator column and then the row actions.
-- **Do** confirm every deletion in ConfirmDialog and every copy in CopyDialog.
+- **Do** confirm every deletion in ConfirmDialog.
 - **Do** keep meters in neutral ink and let amber and red mean a threshold was
   crossed.
 - **Do** reserve Parsar Indigo for selection, focus, primary actions and the single

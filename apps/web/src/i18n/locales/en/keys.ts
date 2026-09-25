@@ -55,7 +55,7 @@ export const keys = {
   },
   archiveDialog: {
     title: "Archive project",
-    prompt: "Archive {{name}}? All of its keys are revoked immediately. Its assets are kept and stay viewable and copyable.",
+    prompt: "Archive {{name}}? All of its keys are revoked immediately. Its assets are kept and stay viewable.",
     submit: "Archive",
     submitting: "Archiving…",
   },
@@ -202,7 +202,7 @@ export const keys = {
     readyTitle: "Your API key is ready",
     keyCaption: "{{key}} · {{project}}",
     tryIt: "Try it",
-    tryItHelp: "Run this in a terminal with CORE_API_KEY set to the key above. It lists the project's Agents; a new project has none yet. The console does not send this request.",
+    tryItHelp: "Run this in a terminal with PROJECT_API_KEY set to the project API key above. It lists the project's Agents; a new project has none yet. The console does not send this request.",
     command: "Example request",
     continue: "I've saved it, continue",
     uncertain: "Core did not confirm the result. Open the console and check Projects and keys before trying again, so that no key is issued without you seeing it.",

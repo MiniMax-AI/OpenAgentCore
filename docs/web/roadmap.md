@@ -17,8 +17,8 @@ contract. Public Agents API compatibility work is tracked in the
   short tour of the console before it opens.
 - Projects and keys: create, rename, archive, issue with one-time display, revoke;
   uncertain writes are reported, never replayed.
-- Resource inspection, permitted deletion and independent copies across Projects;
-  no execution, resource editors, Session input or cancellation.
+- Resource inspection and permitted deletion; no execution, resource editors,
+  Session input or cancellation.
 - Monitoring: Overview, Core metrics, Agent metrics, Sandbox metrics and the Session
   log, keeping missing data unknown and summaries distinct from billing.
 
@@ -33,16 +33,16 @@ contract. Public Agents API compatibility work is tracked in the
 ## Acceptance before calling the UI complete
 
 Verify login, Project isolation, shared access across a Project's keys, revocation,
-archive retention, deletion conflicts, copy results and audit attribution through
-the production console service. Browser acceptance must also cover denied cross-origin
+archive retention, deletion conflicts and audit attribution through the
+production console service. Browser acceptance must also cover denied cross-origin
 writes, absent `/v1` proxying, secret handling and uncertain write outcomes.
 
 `apps/web/e2e` covers the browser side against `fixture-console.mjs`, a synthetic
 console service: administrator setup and sign-in with no credential in browser
 storage; Project creation, one-time key display, revocation and archive; an
-unconfirmed key issue that is reported and never replayed; a copy's result and the
-copy in its target Project; a refused deletion that keeps Core's reason; the
-monitor pages and a read-only Session conversation; node enrollment and removal.
+unconfirmed key issue that is reported and never replayed; a refused deletion that
+keeps Core's reason; the monitor pages and a read-only Session conversation; node
+enrollment and removal.
 Every test also asserts that the browser sent nothing to `/v1` and no
 Authorization header. Project isolation, shared key access, audit attribution and
 cross-origin write denial are enforced by Core and the console service and are

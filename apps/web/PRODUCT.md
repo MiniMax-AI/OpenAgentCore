@@ -27,8 +27,8 @@ A management console for one Parsar Core deployment. Success: the administrator
 lands on health, capacity, usage and failures across every project; inspects any
 project's Agents, Environment templates, Skills, Files, Vaults and Session history
 together with the API key that created each of them; deletes assets (for example a
-leaked Credential) and copies them between projects; manages projects and their
-named keys; and administers sandbox nodes.
+leaked Credential); manages projects and their named keys; and administers sandbox
+nodes.
 
 ## Positioning
 
@@ -64,7 +64,7 @@ workbench.
 - **Resources**: Agents, Environment templates, Skills, Files, Vaults. Each list
   shows one project or all projects, with a Project column when all are shown and a
   Creator column naming the creating key. Detail pages show the resource's facts
-  and offer Copy and Delete.
+  and offer Delete.
 - **Platform**: Projects and keys (projects, their assets and usage, named keys,
   write history), Nodes (sandbox setup as pages — where sandboxes run, the
   backend or E2B account, the size of each sandbox, a review, and advanced settings
@@ -92,24 +92,21 @@ workbench.
 - **Projects and keys.** A project owns an isolated set of assets shared by all of
   its named API keys; projects do not see each other's assets. Issuing or revoking
   a key never touches assets. Archiving a project revokes every key and keeps its
-  assets viewable, deletable and copyable. Key plaintext is shown once, at issuance,
-  and never stored by the console.
+  assets viewable and deletable. Key plaintext is shown once, at issuance, and never
+  stored by the console.
 - **Web API only.** Every read and write goes through `/core/v1/admin/**` or
   `/core/v1/sandbox/**`. The console holds no API key and sends nothing to `/v1`.
-- **No asset writes except delete and copy.** Assets are created and changed only by
+- **No asset writes except delete.** Assets are created and changed only by
   a project's keys through the Agents API. The console does not create or edit
   Agents or Templates, upload Skills or Files, create or replace Credentials, start
   Sessions, send input or cancel work. Deletion follows the public deletion rules;
   a busy Session is not deletable and the console never cancels work to make it so.
-- **Copies are independent.** A copy lands in another active project with new IDs,
-  optionally with its dependencies, and is never synchronised afterwards. Core
-  re-encrypts secrets internally; OAuth Credentials with a refresh configuration are
-  skipped. Sessions cannot be copied.
 - **Secrets stay write-only.** Credential tokens, Template environment variables and
   setup commands are never returned, to the administrator included.
 - **Creators.** Core records the key behind every write. The console shows the
-  creating key of each asset and a project's write history; an administrator's copy
-  shows as Admin copy and an asset without a record as Unknown.
+  creating key of each asset and a project's write history; an asset an
+  administrator copied in an earlier release shows as Admin copy and an asset
+  without a record as Unknown.
 - **Session history is read-only.** A Session page reads the Session, its Items and
   Turns and polls while work is in flight; there is no live event stream.
 - **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
@@ -119,7 +116,7 @@ workbench.
   billing.
 - Runtime CPU and memory exist only for Core-managed hosted sandboxes.
 - Preserve workflow safety: confirmed deletion, no automatic retry of uncertain
-  writes, idempotent copies, no secrets in browser storage.
+  writes, no secrets in browser storage.
 
 ## Brand Commitments
 
@@ -137,8 +134,8 @@ workbench.
 ## Product Principles
 
 1. Operations first: health, capacity, usage and failures lead.
-2. Manage, don't operate: the administrator views, deletes, copies and manages
-   projects and keys; assets belong to the projects' keys.
+2. Manage, don't operate: the administrator views, deletes and manages projects
+   and keys; assets belong to the projects' keys.
 3. Report evidence, not assumptions: missing data stays visibly missing.
 4. One page grammar everywhere: the same header, toolbar, tables, metrics and
    states on every screen.

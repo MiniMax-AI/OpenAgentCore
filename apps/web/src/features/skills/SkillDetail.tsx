@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Download, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Trash2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -59,8 +59,6 @@ export interface SkillDetailPageProps {
   onRefresh: () => void;
   onDownload: (version?: SkillVersion) => void;
   onDeleteSkill: () => void;
-  /** Copies this Skill into another project; absent while unavailable. */
-  onCopy?: (skill: Skill) => void;
   onDeleteVersion: (version: SkillVersion, state: VersionDeleteState) => void;
   onLoadMoreVersions: () => void;
 }
@@ -68,10 +66,9 @@ export interface SkillDetailPageProps {
 /** One Skill: its facts, header actions and the version table. */
 export function SkillDetailPage({
   skill, status, error, versions, refreshing, downloading,
-  onBack, onRefresh, onDownload, onDeleteSkill, onCopy, onDeleteVersion, onLoadMoreVersions,
+  onBack, onRefresh, onDownload, onDeleteSkill, onDeleteVersion, onLoadMoreVersions,
 }: SkillDetailPageProps) {
   const { t, i18n } = useTranslation("skills");
-  const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
   const available = skill !== null && status !== "missing";
   const busy = downloading !== null;
@@ -94,11 +91,6 @@ export function SkillDetailPage({
             <button className="button outline" type="button" disabled={!available || busy} title={t("actions.downloadDefault")} onClick={() => onDownload()}>
               <Download size={14} aria-hidden="true" />{t("actions.download")}
             </button>
-            {onCopy ? (
-              <button className="button outline" type="button" disabled={!available} onClick={() => { if (skill) onCopy(skill); }}>
-                <Copy size={14} aria-hidden="true" />{tCommon("copy.action")}
-              </button>
-            ) : null}
             <button className="button danger" type="button" disabled={!available} onClick={onDeleteSkill}>
               <Trash2 size={14} aria-hidden="true" />{t("actions.deleteSkill")}
             </button>
@@ -264,10 +256,9 @@ export interface SkillDetailProps {
   onChanged: (skill: Skill) => void;
   /** Called once the Skill no longer exists because this page deleted it. */
   onDeleted: (skillId: string) => void;
-  onCopy?: (skill: Skill) => void;
 }
 
-export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, onChanged, onDeleted, onCopy }: SkillDetailProps) {
+export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, onChanged, onDeleted }: SkillDetailProps) {
   const { t } = useTranslation("skills");
   const { t: tCommon } = useTranslation();
   const toast = useToast();
@@ -441,7 +432,6 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
         onRefresh={load}
         onDownload={(version) => void download(version)}
         onDeleteSkill={() => openDialog({ kind: "delete-skill" })}
-        onCopy={onCopy}
         onDeleteVersion={(version, state) => {
           if (state !== "blocked-default") openDialog({ kind: "delete-version", version, only: state === "only-version" });
         }}

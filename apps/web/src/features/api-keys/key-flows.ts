@@ -157,7 +157,7 @@ export function curlExample(coreOrigin: string | null): string {
   const url = /^https?:\/\/[^\s/?#"'\\$`]+$/.test(trimmed) ? `${trimmed}/v1/agents` : '"$CORE_URL/v1/agents"';
   return [
     `curl ${url} \\`,
-    '  -H "Authorization: Bearer $CORE_API_KEY" \\',
+    '  -H "Authorization: Bearer $PROJECT_API_KEY" \\',
     '  -H "OpenAI-Beta: agents=v1"',
   ].join("\n");
 }

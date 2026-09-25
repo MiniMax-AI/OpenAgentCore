@@ -1,15 +1,11 @@
 import {
   AdminClient,
   type AdminAPIKey,
-  type AdminCopyInput,
-  type AdminCopyResourceType,
-  type AdminCopyResult,
   type AdminKeyProvenance,
   type AdminProject,
   type AdminResourceType,
   type AdminSummaryEntry,
   type AdminWriteOperation,
-  type CoreStartupConfiguration,
   type RuntimeObservation,
 } from "@agents-core-web/agents-client";
 
@@ -101,8 +97,6 @@ export interface WriteOperation {
 export type OwnedRuntimeObservation = RuntimeObservation & { project_id: string };
 export const ownerResourceTypes = ["agent", "session", "environment", "environment_template", "skill", "skill_version", "file", "vault", "credential", "artifact"] as const satisfies readonly AdminResourceType[];
 export type OwnerResourceType = AdminResourceType;
-export type CopyableResourceType = AdminCopyResourceType;
-export type CopyResult = AdminCopyResult;
 
 const PAGE = 100;
 /** Bounded walks: a deployment has a handful of projects and keys. */
@@ -154,7 +148,7 @@ export async function createProject(name: string, signal?: AbortSignal): Promise
 export async function renameProject(projectId: string, name: string, signal?: AbortSignal): Promise<Project> {
   return projectView(await admin.renameProject(projectId, { name }, { signal }));
 }
-/** Revokes every key of the project; its assets stay viewable and copyable. */
+/** Revokes every key of the project; its assets stay viewable. */
 export async function archiveProject(projectId: string, signal?: AbortSignal): Promise<Project> {
   return projectView(await admin.archiveProject(projectId, { signal }));
 }
@@ -291,14 +285,6 @@ export async function listRuntimeObservations(signal?: AbortSignal): Promise<Own
     after = result.last_id;
   }
   return observations;
-}
-
-export function copyAsset(input: AdminCopyInput, options: { idempotencyKey: string; signal?: AbortSignal }): Promise<CopyResult> {
-  return admin.copyResources(input, options);
-}
-
-export function retrieveStartupConfiguration(signal?: AbortSignal): Promise<CoreStartupConfiguration> {
-  return admin.retrieveStartupConfiguration({ signal });
 }
 
 export function isProjectName(value: string): boolean {

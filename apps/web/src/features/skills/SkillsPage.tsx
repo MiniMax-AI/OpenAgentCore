@@ -11,7 +11,6 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime, MISSING } from "../../lib/format";
 import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
-import { CopyDialog, type CopySource } from "../copy/CopyDialog";
 import { SkillDetail } from "./SkillDetail";
 import { LatestVersion } from "./skill-parts";
 import { filterSkills } from "./skill-operations";
@@ -20,15 +19,12 @@ import { collections } from "../../lib/queries";
 import { TableSkeleton } from "../../components/Skeleton";
 
 /**
- * Resources › Skills: every project's Skills. The console views, downloads,
- * deletes and copies them; uploads and default-version changes belong to the
- * project's own keys.
+ * Resources › Skills: every project's Skills. The console views, downloads and
+ * deletes them; uploads and default-version changes belong to the project's own
+ * keys.
  */
 export function SkillsPage() {
   const { params, navigate, back } = useConsoleNavigation();
-  const { byId } = useProjects();
-  const project = params.project ? byId.get(params.project) : undefined;
-  const [copy, setCopy] = useState<CopySource | null>(null);
 
   if (params.project && params.id) {
     return (
@@ -42,9 +38,7 @@ export function SkillsPage() {
           onBack={() => back("skills", { project: params.project })}
           onChanged={() => undefined}
           onDeleted={() => { forgetCreators(); back("skills", { project: params.project }); }}
-          onCopy={project ? (skill) => setCopy({ type: "skill", id: skill.id, name: skill.name, project }) : undefined}
         />
-        <CopyDialog source={copy} onClose={() => setCopy(null)} />
       </>
     );
   }
@@ -59,7 +53,6 @@ function SkillsList() {
   const { byId } = useProjects();
   const [filter, setFilter] = useState(params.project ?? "");
   const [query, setQuery] = useState("");
-  const [copy, setCopy] = useState<CopySource | null>(null);
   const collection = useProjectCollection(collections.skills, filter);
   const rows = useMemo(() => {
     const visible = new Set(filterSkills(collection.items.map((row) => row.value), query));
@@ -121,9 +114,6 @@ function SkillsList() {
                       <td><CreatorCell creator={creators.creatorOf(row.project.id, skill.id)} /></td>
                       <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
                         <RowActions>
-                          <button className="text-action" type="button" aria-label={tCommon("copy.actionLabel", { name: skill.name })} onClick={() => setCopy({ type: "skill", id: skill.id, name: skill.name, project: row.project })}>
-                            {tCommon("copy.action")}
-                          </button>
                           <button className="text-action danger" type="button" aria-label={t("deleteSkill.title", { name: skill.name })} onClick={() => remove.ask(row)}>
                             {t("actions.delete")}
                           </button>
@@ -154,7 +144,6 @@ function SkillsList() {
         actions={<RefreshButton onClick={refresh} refreshing={collection.status === "loading"} label={t("actions.refresh")} />}
       />
       <PageBody>{body}</PageBody>
-      <CopyDialog source={copy} onClose={() => setCopy(null)} />
       <ConfirmDialog
         open={remove.target !== null}
         title={remove.target ? t("deleteSkill.title", { name: remove.target.value.name }) : ""}
