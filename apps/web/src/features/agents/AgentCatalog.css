@@ -12,3 +12,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A provider's base URL takes two grid columns so it stays on one line, like an ID. */
+.resource-facts > .agent-provider-url {
+  grid-column: span 2;
+}

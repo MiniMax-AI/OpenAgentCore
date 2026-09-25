@@ -52,7 +52,7 @@ here. Archived projects remain readable.
 
 | Resource | Reads used | Deletion | Creator | Console surface |
 | --- | --- | --- | --- | --- |
-| Agents | `/agents`, `/agents/{agent_id}` | Agent | `agent` | Agents list with usage per Agent; Agent page with instructions, tools, generation settings and metadata |
+| Agents | `/agents`, `/agents/{agent_id}` | Agent | `agent` | Agents list with usage per Agent; Agent page with instructions, tools, the saved model provider (never its key), generation settings and metadata |
 | Environment templates | `/environment-templates`, `/environment-templates/{id}` | Template | `environment_template` | Templates list; Template page with every safe section |
 | Skills | `/skills`, `/skills/{skill_id}`, `/skills/{skill_id}/versions`, Skill and version `/content` | Skill and Skill version | `skill` (list) | Skills list; Skill page with versions and archive downloads |
 | Files | `/files` | File | `file` | Files list (metadata only) |
