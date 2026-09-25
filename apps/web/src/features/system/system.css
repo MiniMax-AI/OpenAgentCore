@@ -1,0 +1,76 @@
+/* Platform › System: read-only deployment facts, each ledger one card. */
+
+.system-facts {
+  margin: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* The label column matches the first column of the harness table, so values line up. */
+.system-fact {
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: center;
+  font-size: 13px;
+  line-height: 18px;
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.system-fact > dt,
+.system-fact > dd {
+  padding: 6px 12px;
+}
+
+.system-fact:last-child {
+  border-bottom: 0;
+}
+
+.system-fact dt {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-2);
+}
+
+.system-fact dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--fg);
+}
+
+.system-harnesses th[scope="row"],
+.system-harnesses thead th:first-child {
+  width: 240px;
+}
+
+.system-harness {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+/* The default harness carries a quiet pill. */
+.system-flag {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  padding: 0 7px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 500;
+  background: var(--field);
+  border-radius: 999px;
+  box-shadow: var(--shadow-hairline);
+}
+
+.system-code {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

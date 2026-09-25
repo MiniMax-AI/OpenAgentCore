@@ -23,16 +23,25 @@ async function fixtureRequests(request: APIRequestContext): Promise<FixtureReque
   return response.json() as Promise<FixtureRequest[]>;
 }
 
-async function openAgents(page: Page, request: APIRequestContext): Promise<void> {
+function consoleNav(page: Page): Locator {
+  return page.getByRole("navigation", { name: "Console navigation", exact: true });
+}
+
+async function openView(page: Page, name: string): Promise<void> {
+  await consoleNav(page).getByRole("button", { name, exact: true }).click();
+}
+
+async function openAgentBuilder(page: Page, request: APIRequestContext): Promise<void> {
   await resetFixture(request);
   await page.goto("/");
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
-  await expect(page.getByRole("list", { name: "Agents", exact: true })).toBeVisible();
+  await openView(page, "Agent builder");
+  await expect(page.getByRole("table", { name: "Agents", exact: true })).toBeVisible();
 }
 
 async function openAdvancedSessionSettings(dialog: Locator): Promise<void> {
   const toggle = dialog.getByRole("button", { name: /Advanced settings/ });
-  await toggle.click();
+  // The dialog opens this section itself while a Vault plan still needs attention.
+  if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
 }
 
@@ -60,8 +69,9 @@ test.describe("Vault capability discovery", () => {
       });
       await page.goto("/");
 
-      await expect(page.getByRole("button", { name: "Vaults", exact: true })).toHaveCount(0);
-      await page.getByRole("button", { name: "System", exact: true }).click();
+      await expect(consoleNav(page).getByRole("button", { name: "Overview", exact: true })).toBeVisible();
+      await expect(consoleNav(page).getByRole("button", { name: "Vaults", exact: true })).toHaveCount(0);
+      await openView(page, "System");
       await expect(page.locator(".system-page")).not.toContainText("Vaults");
     });
   }
@@ -71,7 +81,7 @@ test("keeps Vault content aligned with the page header without narrow-screen cli
   await resetFixture(request);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
-  await page.getByRole("button", { name: "Vaults", exact: true }).click();
+  await openView(page, "Vaults");
 
   const desktop = await page.locator(".vaults-page").evaluate((pageElement) => {
     const title = pageElement.querySelector(".page-header h1")?.getBoundingClientRect();
@@ -113,8 +123,8 @@ test("keeps Vault content aligned with the page header without narrow-screen cli
 });
 
 test("shows a fixed 503 storage error, clears the token, and does not retry the write", async ({ page, request }) => {
-  await openAgents(page, request);
-  await page.getByRole("button", { name: "Vaults", exact: true }).click();
+  await openAgentBuilder(page, request);
+  await openView(page, "Vaults");
   await page.getByRole("button", { name: "New Vault" }).click();
   const vaultDialog = page.getByRole("dialog", { name: "Create a Vault" });
   await vaultDialog.getByLabel("Name").fill("Unavailable storage");
@@ -156,9 +166,9 @@ test("shows a fixed 503 storage error, clears the token, and does not retry the 
 
 test("creates, replaces, uses, and deletes a write-only Vault Credential", async ({ page, request }) => {
   const mcpURL = "https://mcp.example/vault-tools";
-  await openAgents(page, request);
+  await openAgentBuilder(page, request);
 
-  const vaultsNavigation = page.getByRole("button", { name: "Vaults", exact: true });
+  const vaultsNavigation = consoleNav(page).getByRole("button", { name: "Vaults", exact: true });
   await expect(vaultsNavigation).toBeVisible();
   await vaultsNavigation.click();
   await page.getByRole("button", { name: "New Vault" }).click();
@@ -193,7 +203,7 @@ test("creates, replaces, uses, and deletes a write-only Vault Credential", async
   expect(replacementWrite?.body?.auth).toEqual({ type: "static_bearer", token_present: true });
   expect(replacementWrite?.body?.auth).not.toHaveProperty("token");
 
-  await page.getByRole("button", { name: "Agents" }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Create agent/ }).click();
   await page.getByLabel("Name").fill("Credentialed MCP Agent");
   await page.getByLabel("Model").selectOption({ label: "Custom model ID…" });
@@ -229,7 +239,7 @@ test("creates, replaces, uses, and deletes a write-only Vault Credential", async
   expect(sessionCreate?.body?.vault_ids).toEqual([vaultId]);
   expect(JSON.stringify(requests)).not.toContain('"token":');
 
-  await page.getByRole("button", { name: "Vaults", exact: true }).click();
+  await openView(page, "Vaults");
   const currentVaultCard = page.locator(".vault-card").filter({ hasText: "Runtime credentials" });
   await currentVaultCard.getByRole("button", { name: "Delete Private docs MCP", exact: true }).click();
   const deleteCredentialDialog = page.getByRole("dialog", { name: "Delete Credential?" });

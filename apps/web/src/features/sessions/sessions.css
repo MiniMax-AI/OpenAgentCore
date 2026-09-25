@@ -1,0 +1,346 @@
+/* Session log and one Session's read-only history. */
+
+.session-nowrap {
+  white-space: nowrap;
+}
+
+.session-log-table code {
+  display: inline;
+}
+
+/* Facts: stacked values (a name with its ID, several Vault IDs) share one column edge. */
+.session-fact-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.session-fact-stack .copyable-id code,
+.session-facts .copyable-id code {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.session-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.session-metadata code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.session-link {
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.session-link:hover {
+  color: var(--accent);
+}
+
+.session-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.session-detail-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Conversation: a chat in one card. Each Turn opens with a quiet meta line;
+   the user's message is a bubble on the right, the Agent's work and reply sit
+   on the left under its avatar. A readable column, compact rhythm. */
+.chat-thread {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+}
+
+.chat-turn {
+  padding: 14px 16px 18px;
+}
+
+.chat-turn + .chat-turn {
+  border-top: 1px solid var(--grid-line);
+}
+
+.chat-turn-meta,
+.chat-stack {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.chat-turn-meta {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-turn-meta .status-dot {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.chat-turn-title {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.chat-turn-time {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.chat-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.chat-row.user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: min(72%, 620px);
+  padding: 8px 13px;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 21px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--hover-2);
+  border-radius: 16px 16px 4px 16px;
+}
+
+.chat-row.assistant {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.chat-avatar > span {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--frame-line);
+}
+
+.chat-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-author {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.chat-reply,
+.chat-note {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 22px;
+}
+
+.chat-note {
+  color: var(--ink-2);
+}
+
+.chat-note-label {
+  display: block;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.chat-reply .message-markdown,
+.chat-note .message-markdown {
+  font-size: 13.5px;
+  line-height: 22px;
+}
+
+.chat-error {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--red);
+  font-size: 13px;
+  line-height: 20px;
+  background: var(--red-tint);
+  border-radius: var(--radius-control);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 24%, transparent);
+}
+
+/* Tool steps (Beautiful UI's tool-chip grammar): one quiet summary line that
+   opens into rows of verb plus an inline mono chip. */
+.chat-body .work-trace {
+  max-width: 640px;
+}
+
+.chat-body .trace-header {
+  width: auto;
+  height: 24px;
+  gap: 6px;
+  padding: 0 8px 0 4px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  border-radius: var(--radius-control);
+}
+
+.chat-body .trace-header:hover {
+  background: var(--hover);
+}
+
+.chat-body .trace-steps {
+  margin-top: 4px;
+  border-top: 0;
+  border-left: 1px solid var(--line);
+  margin-left: 11px;
+  padding-left: 10px;
+}
+
+.chat-body .trace-step {
+  border-bottom: 0;
+}
+
+.chat-body .trace-step-row {
+  height: 28px;
+  gap: 8px;
+  padding: 0 6px;
+  border-radius: var(--radius-control);
+}
+
+.chat-body .trace-step-verb {
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.chat-body .trace-step-target {
+  flex: 0 1 auto;
+  padding: 1px 7px;
+  color: var(--ink);
+  font-size: 11.5px;
+  background: var(--field);
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-hairline);
+}
+
+.chat-body .trace-duration {
+  margin-left: auto;
+}
+
+/* Replies keep their Markdown structure at chat density. */
+.chat-reply .message-markdown p {
+  margin: 2px 0;
+}
+
+.chat-reply .message-markdown ul,
+.chat-reply .message-markdown ol {
+  margin: 4px 0;
+}
+
+.chat-reply .message-markdown li {
+  margin: 0;
+}
+
+.chat-reply .message-markdown h2,
+.chat-reply .message-markdown h3,
+.chat-reply .message-markdown h4 {
+  margin: 8px 0 2px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.chat-reply .message-markdown pre,
+.chat-reply .message-markdown table {
+  margin: 6px 0;
+}
+
+/* Trace: ledger and detail scroll inside a frame of fixed height. */
+.session-trace-frame {
+  display: flex;
+  height: min(720px, calc(100vh - 200px));
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--frame-radius);
+}
+
+.session-trace-frame .trace-workbench {
+  border-radius: inherit;
+}
+
+.trace-dt-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.session-turns-table .name-cell-title {
+  font-weight: 500;
+}
+
+/* The title sits in the shared page header, whose h1 spans are subtitles; keep it a title. */
+.page-header h1 .session-detail-title {
+  color: var(--fg);
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+/* Runtime charts are divided by hairlines inside one frame. */
+.session-runtime-charts {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--frame-radius);
+}
+
+/* The order strip's explanation sits beside its label, behind the help tip. */
+.session-trace-frame .trace-order-overview > header {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+/* Five filters and the count share one row at desktop widths. */
+.session-log-page .list-toolbar .search-control.list-search {
+  width: 232px;
+}
+

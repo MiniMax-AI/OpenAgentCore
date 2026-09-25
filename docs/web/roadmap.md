@@ -1,26 +1,31 @@
 # Frontend handoff and acceptance
 
-The backend management service and `AdminClient` are implemented. The frontend team
-owns migration of the React application and development proxy. Existing execution
-pages and their fixture tests do not establish administrator UI acceptance.
+The backend management service, `AdminClient` and the React console that uses them
+are implemented (PR #96). The console signs in through the console service, sends
+same-origin management requests only and never calls `/v1`.
 
 Use the [architecture](architecture.md), [connection guide](core-connection.md) and
-[administrator API contract](../../contracts/agents-api/admin-api.md) as the handoff
+[administrator API contract](../../contracts/agents-api/admin-api.md) as the
 contract. Public Agents API compatibility work is tracked in the
 [public contract documentation](../../contracts/agents-api/README.md).
 
+## Delivered
+
+- Console login and same-origin `AdminClient` and sandbox management requests; the
+  browser holds no deployment credential or application key.
+- Projects and keys: create, rename, archive, issue with one-time display, revoke;
+  uncertain writes are reported, never replayed.
+- Resource inspection, permitted deletion and independent copies across Projects;
+  no execution, resource editors, Session input or cancellation.
+- Monitoring: Overview, Core metrics, Agent metrics, Sandbox metrics and the Session
+  log, keeping missing data unknown and summaries distinct from billing.
+
 ## Remaining frontend work
 
-- Connect console login and same-origin `AdminClient` requests without exposing the
-  deployment credential or requiring an application key.
-- Implement Project selection and Project/key lifecycle actions, with one-time key
-  display and explicit handling of uncertain writes.
-- Provide resource inspection, permitted deletion and independent copies. Keep
-  execution, resource editors, Session input and cancellation out of management.
-- Present durable Session history, Runtime observations, summaries and audit using
-  their distinct meanings. Preserve missing data as unknown.
-- Replace the development proxy's public execution path with the console management
-  boundary. Discard stale results when Project selection changes.
+- The Vite development proxy still forwards `/v1` with a local bearer for older
+  tooling (`scripts/core-doctor.mjs`, `.env.example`). The console no longer sends
+  `/v1`; remove the path together with that tooling.
+- Run the browser acceptance below through the production console service.
 
 ## Acceptance before calling the UI complete
 

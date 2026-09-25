@@ -1,0 +1,1358 @@
+/*
+ * The console's component system, in Beautiful UI's vocabulary
+ * (src/app/beautifui/foundation.css): cool canvas, white cards drawn by a
+ * hairline ring and a smooth shadow, an ink ramp for text, pill buttons with an
+ * ink primary, filled fields with a hairline ring, dark tooltips, and Parsar
+ * indigo as the only accent. Loaded after the legacy stylesheets, so every
+ * shared atom is defined here once; feature stylesheets only arrange them.
+ */
+
+/* Brand and palette ----------------------------------------------------- */
+
+/* Parsar indigo, a shade quieter than stock indigo, is the only accent. Status
+   and data colours share one lightness band and a moderate chroma, so a page
+   reads as one palette rather than a set of default hues. */
+:root {
+  --accent: oklch(0.52 0.165 277);
+  --accent-ink: oklch(0.47 0.16 277);
+  --accent-tint: oklch(0.965 0.018 277);
+  --accent-fg: #ffffff;
+  --green: oklch(0.6 0.12 158);
+  --green-tint: oklch(0.965 0.022 158);
+  --orange: oklch(0.68 0.135 62);
+  --orange-tint: oklch(0.97 0.028 70);
+  --red: oklch(0.585 0.17 25);
+  --red-tint: oklch(0.965 0.02 20);
+  --series-1: oklch(0.56 0.14 277);
+  --series-2: oklch(0.7 0.09 195);
+  --series-3: oklch(0.78 0.11 80);
+  --series-4: oklch(0.66 0.12 20);
+  --series-5: oklch(0.62 0.06 250);
+  --series-6: oklch(0.72 0.08 145);
+  --series-other: oklch(0.82 0.008 264);
+  --status-running: var(--series-1);
+  --data: var(--series-1);
+  /* Inside the white page panel, frames are hairlines, not raised cards. */
+  --frame-line: color-mix(in oklch, var(--ink) 11%, transparent);
+  --shadow-card: 0 0 0 1px var(--frame-line);
+  --panel-shadow: 0 0 0 1px var(--line), 0 1px 2px oklch(0 0 0 / 3%), 0 8px 24px -12px oklch(0 0 0 / 8%);
+  --control-height: 30px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-window: 14px;
+  --frame-radius: var(--radius-card);
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+html[data-theme="dark"] {
+  --accent: oklch(0.72 0.12 277);
+  --accent-ink: oklch(0.8 0.1 277);
+  --accent-tint: oklch(0.72 0.12 277 / 16%);
+  --accent-fg: oklch(0.2 0.03 277);
+  --green: oklch(0.72 0.12 158);
+  --green-tint: oklch(0.72 0.12 158 / 14%);
+  --orange: oklch(0.76 0.12 65);
+  --orange-tint: oklch(0.76 0.12 65 / 14%);
+  --red: oklch(0.68 0.15 25);
+  --red-tint: oklch(0.68 0.15 25 / 14%);
+  --series-1: oklch(0.68 0.13 277);
+  --series-2: oklch(0.74 0.09 195);
+  --series-3: oklch(0.8 0.1 80);
+  --series-4: oklch(0.72 0.11 20);
+  --series-5: oklch(0.7 0.06 250);
+  --series-6: oklch(0.76 0.08 145);
+  --series-other: oklch(0.45 0.01 264);
+  --frame-line: oklch(1 0 0 / 10%);
+  --shadow-card: 0 0 0 1px var(--frame-line);
+  --panel-shadow: 0 0 0 1px oklch(1 0 0 / 8%), 0 8px 28px -12px oklch(0 0 0 / 50%);
+}
+
+/* Browser surfaces ------------------------------------------------------ */
+
+html {
+  caret-color: var(--accent);
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+body {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  font-feature-settings: "cv11", "ss01";
+}
+
+::selection {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+}
+
+/* Shell ----------------------------------------------------------------- */
+
+/* The gray canvas is the app frame; each page lives in one white panel. */
+.app-shell,
+.app-main {
+  background: var(--canvas);
+}
+
+.app-main {
+  padding: 8px 8px 8px 0;
+}
+
+.app-main > .page-transition {
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--radius-window);
+  box-shadow: var(--panel-shadow);
+}
+
+.page-section {
+  background: var(--surface);
+}
+
+.app-sidebar {
+  padding: 10px 8px;
+  color: var(--ink-2);
+  background: var(--canvas);
+  border-right: 0;
+}
+
+.brand-lockup {
+  min-height: 36px;
+  padding: 0 8px;
+}
+
+.brand-name {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.brand-product,
+.brand-lockup .brand-product {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.console-nav .nav-label {
+  padding: 14px 8px 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.main-nav button {
+  height: 32px;
+  margin: 0 0 1px;
+  padding: 0 8px;
+  gap: 8px;
+  color: var(--ink-2);
+  border-radius: var(--radius-control);
+  transition:
+    color 150ms var(--ease-out-strong),
+    background-color 150ms var(--ease-out-strong),
+    transform 150ms var(--ease-out-strong);
+}
+
+.main-nav button span {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.main-nav button svg {
+  color: var(--ink-3);
+  transition: color 150ms var(--ease-out-strong);
+}
+
+.main-nav button:hover {
+  color: var(--ink);
+  background: var(--hover-2);
+}
+
+.main-nav button:active {
+  transform: scale(0.98);
+}
+
+/* The current page is a white chip, the same surface as the panel it opens.
+ * One chip glides between items (a Motion shared layout); labels sit above it. */
+.main-nav {
+  isolation: isolate;
+}
+
+.main-nav button {
+  position: relative;
+}
+
+.main-nav button > svg,
+.main-nav button > span:not(.nav-active-chip) {
+  position: relative;
+  z-index: 1;
+}
+
+.main-nav button.active {
+  color: var(--ink);
+  font-weight: 500;
+  background: transparent;
+}
+
+.nav-active-chip {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: var(--surface);
+  border-radius: var(--radius-control);
+  box-shadow: 0 0 0 1px var(--frame-line), 0 1px 2px oklch(0 0 0 / 4%);
+  pointer-events: none;
+}
+
+.main-nav button.active svg,
+.main-nav button:hover svg {
+  color: var(--ink);
+}
+
+.main-nav button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.console-nav .nav-group:last-child {
+  border-top-color: var(--line);
+}
+
+.sidebar-footer {
+  border-top-color: var(--line);
+}
+
+/* Page frame ------------------------------------------------------------ */
+
+.console-page > .page-header,
+.page-header {
+  min-height: 56px;
+  flex-basis: auto;
+  gap: 12px;
+  padding: 10px var(--page-gutter);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.page-header h1,
+.page-header .console-page-heading h1 {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: -0.015em;
+}
+
+.console-page-body {
+  gap: 28px;
+  padding: 20px var(--page-gutter) 48px;
+}
+
+/* A list toolbar belongs to the table under it: 12px apart, not a section gap. */
+.console-page-body > .list-toolbar {
+  margin-bottom: -12px;
+}
+
+.list-toolbar-summary {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.console-section {
+  gap: 10px;
+}
+
+.console-section-header h2 {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+}
+
+.heading-count {
+  min-width: 20px;
+  padding: 0 6px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 18px;
+  background: var(--field);
+  border-radius: 999px;
+  box-shadow: var(--shadow-hairline);
+}
+
+/* Buttons --------------------------------------------------------------- */
+
+/* Buttons share the 8px control radius with fields and selects: ink primary,
+   ringed surface secondary, quiet ghost, red danger. Only status badges are pills. */
+.button {
+  height: var(--control-height);
+  padding: 0 13px;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-btn);
+  transition:
+    transform 150ms var(--ease-out-strong),
+    background-color 150ms var(--ease-out-strong),
+    opacity 150ms var(--ease-out-strong),
+    color 150ms var(--ease-out-strong);
+}
+
+.button:hover:not(:disabled),
+.button.outline:hover:not(:disabled) {
+  background: var(--inset);
+}
+
+.button:active:not(:disabled),
+.icon-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.button:disabled,
+.icon-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.button.outline {
+  background: var(--surface);
+  border: 0;
+  box-shadow: var(--shadow-btn);
+}
+
+.button.primary {
+  color: var(--canvas);
+  background: var(--ink);
+  border: 0;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 14%), var(--shadow-xs);
+}
+
+.button.primary:hover:not(:disabled) {
+  background: var(--ink);
+  opacity: 0.88;
+}
+
+.button.secondary {
+  background: var(--hover-2);
+  box-shadow: none;
+}
+
+.button.secondary:hover:not(:disabled) {
+  background: var(--line-strong);
+}
+
+.button.ghost {
+  color: var(--ink-2);
+  background: transparent;
+  box-shadow: none;
+}
+
+.button.ghost:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.button.danger {
+  color: #fff;
+  background: var(--red);
+  border: 0;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 14%), var(--shadow-xs);
+}
+
+.button.danger:hover:not(:disabled) {
+  background: var(--red);
+  opacity: 0.88;
+}
+
+/* Destructive actions on a page are quiet (red text on a ringed button); the
+   solid red button belongs to the confirmation dialog. */
+.button.outline.danger,
+.page-actions .button.danger {
+  color: var(--red);
+  background: var(--surface);
+  box-shadow: var(--shadow-btn);
+  opacity: 1;
+}
+
+.button.outline.danger:hover:not(:disabled),
+.page-actions .button.danger:hover:not(:disabled) {
+  background: var(--red-tint);
+  opacity: 1;
+}
+
+.button svg {
+  flex: 0 0 auto;
+}
+
+.icon-button {
+  width: var(--control-height);
+  height: var(--control-height);
+  flex: 0 0 var(--control-height);
+  color: var(--ink-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  box-shadow: none;
+}
+
+.icon-button:hover:not(:disabled),
+.icon-button.ghost:hover:not(:disabled),
+.modal-header .icon-button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover-2);
+}
+
+.icon-button.outline {
+  background: var(--surface);
+  border: 0;
+  box-shadow: var(--shadow-btn);
+}
+
+.refresh-button {
+  width: var(--control-height);
+  height: var(--control-height);
+  flex-basis: var(--control-height);
+  color: var(--ink-2);
+  border-radius: var(--radius-control);
+}
+
+.refresh-button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover-2);
+}
+
+.button:focus-visible,
+.icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: transparent;
+  box-shadow: var(--shadow-btn);
+}
+
+.button.primary:focus-visible,
+.button.danger:focus-visible,
+.icon-button:focus-visible {
+  box-shadow: none;
+}
+
+/* Quiet row and card actions: ink-2 text that darkens; destructive ones turn red. */
+.text-action {
+  height: 24px;
+  padding: 0 6px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: var(--radius-chip);
+  transition: color 120ms var(--ease-out-strong), background-color 120ms var(--ease-out-strong);
+}
+
+.text-action:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.text-action.danger:hover:not(:disabled) {
+  color: var(--red);
+  background: var(--red-tint);
+}
+
+.text-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Fields ---------------------------------------------------------------- */
+
+/* Filled fields with a hairline ring; focus adds an indigo ring. */
+.field input,
+.field textarea,
+.field select,
+.select-control select,
+.search-control {
+  min-height: var(--control-height);
+  color: var(--ink);
+  font-size: 13px;
+  background-color: var(--field);
+  border: 0;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+  transition: box-shadow 120ms var(--ease-out-strong), background-color 120ms var(--ease-out-strong);
+}
+
+.field input,
+.field select {
+  height: var(--control-height);
+  padding: 0 10px;
+}
+
+.field textarea {
+  padding: 8px 10px;
+}
+
+.field input::placeholder,
+.field textarea::placeholder,
+.search-control input::placeholder {
+  color: var(--ink-3);
+}
+
+.field input:hover,
+.field textarea:hover,
+.field select:hover,
+.select-control select:hover,
+.search-control:hover {
+  background-color: var(--hover-2);
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus,
+.select-control select:focus-visible,
+.search-control:focus-within {
+  outline: none;
+  background-color: var(--surface);
+  border-color: transparent;
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-tint);
+}
+
+.field > span,
+.field > .field-label {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+/* On the canvas (toolbars, headers) a control is a ringed white surface, like a
+   secondary button; inside cards and dialogs it is a filled field. */
+.list-toolbar .search-control,
+.list-toolbar .select-control select,
+.page-header .select-control select,
+.console-section-header .select-control select {
+  background-color: var(--surface);
+  box-shadow: var(--shadow-btn);
+}
+
+.list-toolbar .search-control:hover,
+.list-toolbar .select-control select:hover,
+.page-header .select-control select:hover,
+.console-section-header .select-control select:hover {
+  background-color: var(--inset);
+}
+
+.list-toolbar .search-control:focus-within,
+.list-toolbar .select-control select:focus-visible,
+.page-header .select-control select:focus-visible,
+.console-section-header .select-control select:focus-visible {
+  background-color: var(--surface);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-tint);
+}
+
+.select-control select {
+  height: var(--control-height);
+  padding: 0 30px 0 10px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='m1 1 4 4 4-4' stroke='%239096a2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+
+.search-control {
+  height: var(--control-height);
+  align-items: center;
+}
+
+.search-control input {
+  color: var(--ink);
+  font-size: 13px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.search-control svg {
+  color: var(--ink-3);
+}
+
+/* Filter segments: an 8px track with 6px options; the active one is a ringed surface. */
+.segmented {
+  padding: 2px;
+  gap: 2px;
+  background: var(--hover-2);
+  border-radius: var(--radius-control);
+}
+
+.segmented button {
+  height: 26px;
+  padding: 0 11px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: 6px;
+  transition:
+    color 150ms var(--ease-out-strong),
+    background-color 150ms var(--ease-out-strong),
+    box-shadow 150ms var(--ease-out-strong);
+}
+
+.segmented button:hover {
+  color: var(--ink);
+}
+
+/* The selected option is a thumb that glides between options (Motion shared
+ * layout); labels and counts sit above it. */
+.segmented {
+  isolation: isolate;
+}
+
+.segmented button {
+  position: relative;
+}
+
+.segmented-label,
+.segmented-count {
+  position: relative;
+  z-index: 1;
+}
+
+.segmented button[aria-pressed="true"],
+.segmented button[aria-checked="true"],
+.segmented button.active {
+  color: var(--ink);
+  background: transparent;
+  box-shadow: none;
+}
+
+.segmented-thumb {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: var(--surface);
+  border-radius: 6px;
+  box-shadow: var(--shadow-btn);
+  pointer-events: none;
+}
+
+.segmented-count {
+  margin-left: 6px;
+  padding: 0 4px;
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 16px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented button[aria-checked="true"] .segmented-count,
+.segmented button[aria-pressed="true"] .segmented-count {
+  color: var(--ink-2);
+  background: var(--field);
+}
+
+/* Cards ----------------------------------------------------------------- */
+
+.kpi-strip,
+.table-frame,
+.chart-grid,
+.overview-card,
+.console-empty {
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.kpi {
+  gap: 4px;
+  padding: 14px 16px 16px;
+  box-shadow: inset -1px 0 var(--grid-line), inset 0 -1px var(--grid-line);
+}
+
+.kpi dt {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+/* Figures are emphasised by weight and position, not size: one 20px step
+   above body text, units small beside them. */
+.kpi dd {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 26px;
+  letter-spacing: -0.015em;
+  font-optical-sizing: auto;
+}
+
+/* Tables ---------------------------------------------------------------- */
+
+.table-frame {
+  overflow: auto;
+}
+
+.data-table {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.data-table thead th {
+  height: 36px;
+  padding: 0 12px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.data-table tbody th,
+.data-table tbody td {
+  color: var(--ink);
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.data-table tbody tr {
+  transition: background-color 100ms linear;
+}
+
+.data-table tbody tr:hover {
+  background: var(--hover);
+}
+
+.data-table code,
+.console-section-header code {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.table-muted {
+  color: var(--ink-3);
+}
+
+.name-cell-link,
+.table-link {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.name-cell-link:hover,
+.table-link:hover strong {
+  color: var(--accent-ink);
+}
+
+/* Status ---------------------------------------------------------------- */
+
+.status-dot {
+  gap: 6px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.status-dot-mark {
+  width: 6px;
+  height: 6px;
+  flex-basis: 6px;
+}
+
+.status-dot-ok .status-dot-mark { background: var(--green); }
+.status-dot-warning .status-dot-mark { background: var(--orange); }
+.status-dot-danger .status-dot-mark { background: var(--red); }
+.status-dot-neutral .status-dot-mark { background: var(--ink-3); }
+
+.kpi-ok .kpi-tone { background: var(--green); }
+.kpi-warning .kpi-tone { background: var(--orange); }
+.kpi-danger .kpi-tone { background: var(--red); }
+
+/* Value pills (Beautiful UI's ValuePill): a quiet badge beside a value. */
+.pill {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  background: var(--field);
+  border-radius: 999px;
+  box-shadow: var(--shadow-hairline);
+}
+
+.pill-green { color: var(--green); background: var(--green-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--green) 28%, transparent); }
+.pill-orange { color: var(--orange); background: var(--orange-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--orange) 28%, transparent); }
+.pill-red { color: var(--red); background: var(--red-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 28%, transparent); }
+.pill-accent { color: var(--accent-ink); background: var(--accent-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 28%, transparent); }
+
+.meter {
+  height: 5px;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--grid-line);
+}
+
+/* Overlays -------------------------------------------------------------- */
+
+/* Help tips and chart tooltips read as one dark tooltip. */
+.help-tip {
+  color: var(--ink-3);
+}
+
+.help-tip:hover,
+.help-tip[aria-expanded="true"] {
+  color: var(--ink);
+  background: var(--hover-2);
+}
+
+.help-tip-popover,
+.chart-tooltip {
+  color: var(--tooltip-fg);
+  font-size: 12px;
+  line-height: 18px;
+  background: var(--tooltip-bg);
+  border: 1px solid var(--tooltip-border);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-overlay);
+}
+
+.chart-tooltip-time,
+.chart-tooltip-row span {
+  color: var(--tooltip-muted);
+}
+
+.chart-tooltip-row strong {
+  color: var(--tooltip-fg);
+}
+
+/* An anchored popover: a glance at one object, facts on a two-column grid,
+ * links onward at the foot. The card itself is the coss ui popup. */
+.console-popover {
+  display: grid;
+  gap: 14px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.console-popover-head {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.console-popover-head h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-popover-meta,
+.console-popover-meta code {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  padding: 0;
+}
+
+.console-popover-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  margin: 0;
+}
+
+.console-popover-facts > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.console-popover-facts dt {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.console-popover-facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-popover-facts .kpi-unit {
+  margin-left: 3px;
+  font-size: 12px;
+}
+
+.console-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  margin: 0 -16px -4px;
+  padding: 10px 16px 0;
+  border-top: 1px solid var(--line);
+}
+
+.modal-backdrop {
+  background: var(--overlay);
+}
+
+.modal-card {
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-window);
+  box-shadow: var(--shadow-overlay);
+}
+
+.modal-header {
+  min-height: 52px;
+  padding: 0 12px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-header h2 {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.modal-body {
+  padding: 18px;
+}
+
+.modal-footer {
+  min-height: 56px;
+  padding: 0 14px;
+  background: var(--inset);
+  border-top: 1px solid var(--line);
+}
+
+/* Empty states: a hairline icon tile, a title and one line. */
+.console-empty {
+  gap: 4px;
+  padding: 36px 24px;
+  color: var(--ink-3);
+}
+
+.console-empty > svg {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 6px;
+  padding: 7px;
+  color: var(--ink-3);
+  background: var(--inset);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+}
+
+.console-empty-title {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.console-empty-description {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+/* Notices keep to one quiet line inside the page rhythm. */
+.coverage-note {
+  color: var(--ink-2);
+  background: var(--inset);
+  border: 0;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+}
+
+.coverage-note-error {
+  color: var(--red);
+  background: var(--red-tint);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 28%, transparent);
+}
+
+/* Charts ---------------------------------------------------------------- */
+
+.chart-gridline line {
+  stroke: var(--grid-line);
+}
+
+.chart-gridline text,
+.chart-axis-label {
+  fill: var(--ink-3);
+}
+
+/* Values in a table read at ink-2; IDs under a name stay quieter at ink-3. */
+.data-table td > code {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.owner-name,
+.space-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.owner-revoked,
+.space-disabled {
+  color: var(--ink-3);
+}
+
+/* Skeletons ------------------------------------------------------------- */
+
+/* Quick, not calming: one sweep under a second, and static for reduced motion. */
+.skeleton-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.skeleton-row {
+  display: flex;
+  height: 44px;
+  align-items: center;
+  gap: 24px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.skeleton-row:last-child {
+  border-bottom: 0;
+}
+
+.skeleton-head {
+  height: 36px;
+  border-bottom-color: var(--line);
+}
+
+.skeleton-bar {
+  display: block;
+  height: 10px;
+  flex: 0 0 auto;
+  background: linear-gradient(90deg, var(--field) 0%, var(--hover-2) 50%, var(--field) 100%);
+  background-size: 200% 100%;
+  border-radius: 999px;
+  animation: skeleton-sweep 900ms linear infinite;
+}
+
+/* Dashboard and detail skeletons take the final layout's cards. */
+.skeleton-stack {
+  display: grid;
+  gap: 28px;
+}
+
+.skeleton-kpi {
+  gap: 12px;
+  padding-bottom: 18px;
+}
+
+.skeleton-label {
+  height: 8px;
+  opacity: 0.8;
+}
+
+.skeleton-figure {
+  height: 16px;
+  border-radius: 6px;
+}
+
+.skeleton-chart {
+  gap: 14px;
+}
+
+.skeleton-plot {
+  display: block;
+  height: 168px;
+  background: repeating-linear-gradient(to bottom, transparent 0 41px, var(--grid-line) 41px 42px);
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.resource-facts .skeleton-bar + .skeleton-bar {
+  margin-top: 8px;
+}
+
+.skeleton-head .skeleton-bar {
+  height: 8px;
+  opacity: 0.7;
+}
+
+@keyframes skeleton-sweep {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+  }
+}
+
+/* Detail pages ---------------------------------------------------------- */
+
+/* A resource's facts sit in one card on an even grid, labels above values. */
+.resource-facts,
+.template-facts {
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 14px 24px;
+  padding: 14px 16px 15px;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.resource-facts > div,
+.template-facts > div {
+  gap: 3px;
+}
+
+.resource-facts dt,
+.template-facts dt {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.resource-facts dd,
+.template-facts dd {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+/* Long configuration text reads as prose in an inset card. */
+.agent-instructions {
+  max-height: 360px;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  color: var(--ink);
+  font-family: var(--font-console);
+  font-size: 13.5px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* Overview figures: large, light and tabular, set in Inter's display cut. */
+.metric-tile-value {
+  height: auto;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 28px;
+  letter-spacing: -0.015em;
+  font-optical-sizing: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-tile-label,
+.overview-card-header h2 {
+  color: var(--ink);
+}
+
+/* A pill after a name keeps a small gap from it. */
+:where(span, strong, a, button, code) + .pill {
+  margin-left: 6px;
+}
+
+/* An ID fact (a full Session or template ID) takes two grid columns so it stays on one line. */
+.resource-facts > div:has(> dd > .copyable-id > code:not(:empty)):first-child {
+  grid-column: span 2;
+}
+
+/* Tables inside Agent replies: hairline rules and tabular figures. */
+.message-markdown table {
+  width: auto;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.message-markdown th,
+.message-markdown td {
+  padding: 5px 14px 5px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--grid-line);
+}
+
+.message-markdown th {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+
+/* Shape and spacing scale ------------------------------------------------ */
+
+/* Radii: 6 inner option, 8 control, 12 card, 14 panel and dialog; badges are
+   pills. Every card starts its content 16px in, so text in stacked cards and
+   the first table column share one left edge. */
+.data-table thead th:first-child,
+.data-table tbody th:first-child,
+.data-table tbody td:first-child {
+  padding-left: 16px;
+}
+
+.data-table thead th:last-child,
+.data-table tbody th:last-child,
+.data-table tbody td:last-child {
+  padding-right: 16px;
+}
+
+.fleet-node {
+  border-radius: 10px;
+}
+
+.fleet-core {
+  border-radius: var(--radius-card);
+}
+
+.copy-item,
+.coverage-note,
+.help-tip-popover,
+.chart-tooltip {
+  border-radius: var(--radius-control);
+}
+
+/* A figure's unit or limit sits small beside it; only the number is large. */
+.kpi-unit {
+  margin-left: 5px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* A page's live state reads as a quiet line beside its title. */
+.page-title-meta {
+  display: inline-flex;
+  margin-left: 12px;
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.page-title-meta .status-dot {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+/* Motion ------------------------------------------------------------------
+ * Motion here reports state: data arriving, work in progress, a figure that
+ * changed. Nothing waits on it; the reduced-motion rule in style.css makes
+ * every animation instant. */
+
+/* Charts draw in once per range: bars rise from the baseline in a short
+ * left-to-right wave, lines trace from their first point. */
+.chart-bar {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: chart-bar-in 460ms var(--ease-settle) both;
+  animation-delay: calc(min(var(--i, 0), 30) * 9ms);
+}
+
+.chart-line {
+  stroke-dasharray: 1;
+  animation: chart-line-draw 720ms var(--ease-settle) both;
+}
+
+.chart-last-dot {
+  animation: motion-fade 200ms ease-out 560ms both;
+}
+
+@keyframes chart-bar-in {
+  from { opacity: 0; transform: scaleY(0); }
+}
+
+@keyframes chart-line-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes motion-fade {
+  from { opacity: 0; }
+}
+
+/* A figure's digits roll when a refresh changes it (NumberFlow). */
+.live-number {
+  font-variant-numeric: tabular-nums;
+  --number-flow-mask-height: 0.2em;
+}
+
+/* Work in progress breathes: a soft ring expands from the dot. */
+.status-dot-pending .status-dot-mark {
+  animation: status-breathe 1.8s ease-out infinite;
+}
+
+@keyframes status-breathe {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--status-running) 45%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 5px color-mix(in oklab, var(--status-running) 0%, transparent); }
+}
+
+/* New messages settle into the conversation as a running Session reports them. */
+.chat-row {
+  animation: chat-in 260ms var(--ease-settle) both;
+}
+
+@keyframes chat-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+/* The Agent is working: its name's line shimmers (Beautiful UI's thinking state). */
+.chat-working {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+}

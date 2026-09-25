@@ -2,8 +2,14 @@ import { expect, test, type Page } from "@playwright/test";
 
 const fixture = `http://127.0.0.1:${process.env.AGENTS_FIXTURE_PORT ?? 18092}`;
 const setupUrl = `${fixture}/core/v1/sandbox/deployment`;
+function consoleNav(page: Page) {
+  return page.getByRole("navigation", { name: "Console navigation", exact: true });
+}
+async function openNodes(page: Page) {
+  await consoleNav(page).getByRole("button", { name: "Nodes", exact: true }).click();
+}
 async function openSetup(page: Page) {
-  await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
+  await openNodes(page);
   await expect(page.getByRole("heading", { name: "Set up hosted sandboxes" })).toBeVisible();
 }
 test.beforeEach(async ({ page, request }) => {
@@ -11,7 +17,7 @@ test.beforeEach(async ({ page, request }) => {
   await request.post(`${fixture}/__fixture/reset`);
   await request.post(`${fixture}/__fixture/sandbox-uninitialized`);
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Sessions", exact: true })).toBeVisible();
+  await expect(consoleNav(page).getByRole("button", { name: "Overview", exact: true })).toBeVisible();
 });
 
 test("bundled console needs no extra admin key and provides one install command with automatic node status", async ({ page, request }) => {
@@ -22,8 +28,7 @@ test("bundled console needs no extra admin key and provides one install command 
     await route.continue();
   });
   await page.reload();
-  await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Set up hosted sandboxes" })).toBeVisible();
+  await openSetup(page);
   await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
   await expect(page.getByLabel("Core origin reachable from nodes and guests")).toBeVisible();
   await page.getByLabel("Core origin reachable from nodes and guests").fill("https://core.example");
@@ -176,7 +181,7 @@ for (const operation of ["setup", "enrollment"] as const) {
     await connection.getByLabel("Compatible Core base URL").fill(`${new URL(page.url()).origin}/v1`);
     await connection.getByLabel("Bearer token").fill("replacement-token");
     await connection.getByRole("button", { name: "Apply connection", exact: true }).click();
-    await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
+    await openNodes(page);
     await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
     await expect(page.locator(".sandbox-manager")).toContainText("Switch the Core connection to /v1");
     await page.evaluate(() => { (window as Window & { releaseSandboxResponse?: () => void }).releaseSandboxResponse?.(); });
@@ -191,8 +196,14 @@ for (const operation of ["setup", "enrollment"] as const) {
 test("unpaired or unavailable consoles show setup guidance without admin credentials or manager requests", async ({ page, request }) => {
   for (const body of [{ sandbox_admin: false, node_installer: true }, null]) {
     await page.route("**/console/config", (route) => route.fulfill(body ? { contentType: "application/json", body: JSON.stringify(body) } : { status: 404, body: "Not found" }));
-    await page.reload();
-    await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
+    // The Overview reads the fleet when administration is available, so clear the call log
+    // with no page open; both the Overview and the node manager must then stay silent.
+    await page.goto("about:blank");
+    await request.post(`${fixture}/__fixture/reset`);
+    await request.post(`${fixture}/__fixture/sandbox-uninitialized`);
+    await page.goto("/");
+    await expect(page.getByRole("status").filter({ hasText: "Sandbox administration is not configured on this console." })).toBeVisible();
+    await openNodes(page);
     await expect(page.getByRole("alert")).toContainText("Sandbox administration is not configured");
     await expect(page.getByLabel("Deployment admin key")).toHaveCount(0);
     expect((await (await request.get(`${fixture}/__fixture/sandbox`)).json()).calls).toHaveLength(0);

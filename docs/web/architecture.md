@@ -1,9 +1,8 @@
 # Core Web architecture
 
 Core Web manages a Core deployment. Applications, including Parsar, use the public
-Agents API independently with their own Project keys. The management backend and
-`AdminClient` are implemented; the frontend team owns the React migration. Existing
-screens and their tests do not prove that the administrator UI is complete.
+Agents API independently with their own Project keys. The management backend,
+`AdminClient` and the React console built on them are implemented.
 
 The [design principles](../design-principles.md) define identity and authority.
 The [administrator contract](../../contracts/agents-api/admin-api.md) defines exact
@@ -45,7 +44,7 @@ existing transport behavior. They do not grant a browser execution authority.
 
 | Component | Responsibility |
 | --- | --- |
-| React frontend | Project selection, permitted management actions and operational views; migration owned by the frontend team |
+| React frontend | Project selection, permitted management actions and operational views; cached reads (TanStack Query) that keep the last data on screen while refreshing |
 | `AdminClient` | Typed management requests and validation, sharing resource parsers with the public client |
 | `services/core-console` | Console authentication, origin checks, route allowlist and private upstream credential |
 | Core API and PostgreSQL | Project isolation, resource state, deletion preconditions, atomic copies, audit and scheduling |

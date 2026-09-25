@@ -1,0 +1,181 @@
+/* Skills: list, detail and upload dialog. Shared tokens only; no decorative frames. */
+
+.skills-page .page-header h1 {
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
+.skill-back {
+  margin-left: -6px;
+  color: var(--fg-muted);
+}
+
+.skill-back:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+.skills-table th[scope="row"] {
+  min-width: 140px;
+}
+
+.skills-table .skill-description {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--fg-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-nowrap {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.skill-cell-text {
+  overflow-wrap: anywhere;
+}
+
+.skill-id {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.skill-id code {
+  overflow-wrap: anywhere;
+}
+
+.skill-copy {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  color: var(--fg-muted);
+}
+
+.skill-copy:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+.skill-latest,
+.skill-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.skills-footer {
+  justify-content: flex-end;
+}
+
+.skills-footer > span:empty {
+  display: none;
+}
+
+/* Empty state example */
+
+/* Detail facts */
+
+.skill-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, max-content));
+  gap: 14px 40px;
+  margin: 0;
+}
+
+.skill-facts > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skill-facts .skill-fact-wide {
+  grid-column: 1 / -1;
+}
+
+.skill-facts dt {
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.skill-facts dd {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.skill-facts .skill-fact-text {
+  display: block;
+  max-width: 72ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.skill-row-actions {
+  text-align: right;
+}
+
+.skill-row-actions .text-action + .text-action,
+.skill-row-actions .text-action + .skill-disabled-action {
+  margin-left: 14px;
+}
+
+/* The wrapper carries the hover explanation of a disabled delete. */
+.skill-row-actions .skill-disabled-action {
+  display: inline-flex;
+  cursor: not-allowed;
+}
+
+.skill-row-actions .text-action:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.skill-row-actions .skill-danger-action:hover {
+  color: var(--danger);
+}
+
+@media (max-width: 760px) {
+  .skill-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Upload dialog */
+
+/* Confirmations */
+
+.skill-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skill-confirm p {
+  margin: 0;
+}
+
+.skill-confirm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  line-height: 20px;
+}
+
+.skill-confirm-list + .coverage-note {
+  margin-top: 12px;
+}
+
+.skill-only-warning strong {
+  font-weight: 600;
+}

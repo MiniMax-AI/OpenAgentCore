@@ -60,6 +60,14 @@ parallel compatibility paths, raise the issue with a concrete recommendation and
 tradeoffs before implementing the disputed behavior. Continue independent work
 while the decision is pending. Do not silently preserve obsolete private designs.
 
+Core Web leads with operations: Monitor (Overview, Core metrics, Agent metrics,
+Sandbox metrics, Session log), Resources and Platform. Pages use the shared
+components in `apps/web/src/components` and the tokens in `apps/web/src/styles`,
+described in `apps/web/DESIGN.md`. Keep explanations behind help tips, but keep
+errors, warnings and safety notices visible. Browser-derived metrics state their
+coverage, keep missing values missing, bound their fan-out and time, report a failed
+read as failed and never imply deployment-wide or billing totals.
+
 For subsequent alignment and milestone closure batches, the main thread coordinates
 design, shared interface agreements, file ownership, integration and merge. First
 reconcile main and the boards, then list remaining mandatory milestone work,

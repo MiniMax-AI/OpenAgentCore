@@ -1,0 +1,24 @@
+/*
+ * coss ui (https://coss.com/ui, Base UI + Tailwind) names its colours the
+ * shadcn way. Map those names onto the console's tokens so its components sit
+ * in the same palette. `accent` is not mapped: in this console it is the brand
+ * indigo, so installed coss components use `hover-2` for highlighted rows.
+ */
+@theme inline {
+  --color-background: var(--surface);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--ink);
+  --color-muted: var(--field);
+  --color-muted-foreground: var(--ink-3);
+  --color-border: var(--frame-line);
+  --color-input: var(--line-strong);
+  --color-ring: var(--accent);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--canvas);
+  --color-secondary: var(--hover-2);
+  --color-secondary-foreground: var(--ink);
+  --color-destructive: var(--red);
+  --color-destructive-foreground: #ffffff;
+}

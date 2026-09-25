@@ -1,5 +1,6 @@
 import http from "node:http";
 import { handleSandboxFixture, resetSandboxFixture } from "./fixture-sandbox.mjs";
+import { handleSkillsFixture, resetSkillsFixture } from "./fixture-skills.mjs";
 
 const host = "127.0.0.1";
 const port = Number(process.env.AGENTS_FIXTURE_PORT ?? 18092);
@@ -73,6 +74,83 @@ function isRecord(value) {
 
 function hasOnlyKeys(value, allowed) {
   return Object.keys(value).every((key) => allowed.includes(key));
+}
+
+const fixtureTemplateFields = ["name", "network", "capability_directories", "env", "files", "packages", "plugins", "skills", "setup_commands"];
+const fixtureHostnamePattern = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/u;
+const fixtureNetworkPolicyMessage = "network access must be enabled, disabled or restricted; restricted access requires 1–100 exact ASCII hostnames, and allowed_domains is only accepted with restricted access.";
+
+/** Core's Template network write: null or omitted is the enabled default. Returns null when invalid. */
+function fixtureTemplateNetwork(value) {
+  if (value === undefined || value === null) return { access: "enabled", allowed_domains: [] };
+  if (!isRecord(value) || !hasOnlyKeys(value, ["access", "allowed_domains"])) return null;
+  if (value.access === "enabled" || value.access === "disabled") {
+    return value.allowed_domains == null ? { access: value.access, allowed_domains: [] } : null;
+  }
+  if (
+    value.access !== "restricted" || !Array.isArray(value.allowed_domains) ||
+    value.allowed_domains.length < 1 || value.allowed_domains.length > 100 ||
+    !value.allowed_domains.every((domain) => typeof domain === "string" && fixtureHostnamePattern.test(domain))
+  ) return null;
+  return { access: "restricted", allowed_domains: [...value.allowed_domains] };
+}
+
+/**
+ * Mirrors Core's safe Template metadata for the installation fields. env,
+ * setup commands and inline bytes are accepted but never returned: inline
+ * files keep only size_bytes and inline Skills/Plugins only name/description.
+ * Returns null when a supplied field is malformed.
+ */
+function fixtureTemplateInstallations(body) {
+  const strings = (list) => Array.isArray(list) && list.every((entry) => typeof entry === "string");
+  const result = {};
+  if (Object.hasOwn(body, "env") && body.env !== null && !(isRecord(body.env) && Object.values(body.env).every((entry) => typeof entry === "string"))) return null;
+  if (Object.hasOwn(body, "setup_commands") && body.setup_commands !== null && !Array.isArray(body.setup_commands)) return null;
+  if (Object.hasOwn(body, "capability_directories")) {
+    const directories = body.capability_directories ?? [];
+    if (!strings(directories) || !directories.every((directory) => directory === "/workspace" || directory.startsWith("/workspace/"))) return null;
+    result.capability_directories = [...directories];
+  }
+  if (Object.hasOwn(body, "packages")) {
+    const packages = body.packages ?? {};
+    if (!isRecord(packages) || !hasOnlyKeys(packages, ["npm", "python", "system"])) return null;
+    const list = (value) => value == null ? [] : strings(value) ? [...value] : null;
+    const [npm, python, system] = [list(packages.npm), list(packages.python), list(packages.system)];
+    if (!npm || !python || !system) return null;
+    result.packages = { npm, python, system };
+  }
+  if (Object.hasOwn(body, "files")) {
+    const files = [];
+    for (const entry of body.files ?? []) {
+      if (!isRecord(entry) || typeof entry.path !== "string" || !entry.path.startsWith("/workspace/")) return null;
+      if (entry.type === "inline" && hasOnlyKeys(entry, ["type", "path", "data"]) && typeof entry.data === "string") {
+        files.push({ type: "inline", path: entry.path, size_bytes: Buffer.from(entry.data, "base64").length });
+      } else if (entry.type === "file_id" && hasOnlyKeys(entry, ["type", "path", "file_id"]) && typeof entry.file_id === "string") {
+        files.push({ type: "file_id", path: entry.path, file_id: entry.file_id });
+      } else return null;
+    }
+    result.files = files;
+  }
+  if (Object.hasOwn(body, "skills")) {
+    const skills = [];
+    for (const entry of body.skills ?? []) {
+      if (isRecord(entry) && entry.type === "skill_reference" && hasOnlyKeys(entry, ["type", "skill_id", "version"]) && typeof entry.skill_id === "string") {
+        skills.push({ type: "skill_reference", skill_id: entry.skill_id, version: entry.version ?? null });
+      } else if (isRecord(entry) && entry.type === "inline" && hasOnlyKeys(entry, ["type", "name", "description", "source"]) && entry.name && entry.description) {
+        skills.push({ type: "inline", name: entry.name, description: entry.description });
+      } else return null;
+    }
+    result.skills = skills;
+  }
+  if (Object.hasOwn(body, "plugins")) {
+    const plugins = [];
+    for (const entry of body.plugins ?? []) {
+      if (!isRecord(entry) || entry.type !== "inline" || !hasOnlyKeys(entry, ["type", "name", "description", "source"]) || !entry.name || !entry.description) return null;
+      plugins.push({ type: "inline", name: entry.name, description: entry.description });
+    }
+    result.plugins = plugins;
+  }
+  return result;
 }
 
 function isEmptyObject(value) {
@@ -382,6 +460,7 @@ function initialState() {
     createdSessionItems: new Map(),
     requests: [],
     sourceFiles: new Map(),
+    sourceFileSequence: 0,
     hostedWorkspaceFiles: [],
     environmentTemplates: [],
     environmentTemplateSequence: 0,
@@ -406,6 +485,7 @@ function initialState() {
       sendResponseLoss: 0,
       itemsScenario: 0,
       turnsScenario: 0,
+      usageScenario: 0,
       turnsRetrieveDelayMs: 0,
       turnsRetrieveStatus: 200,
       turnsPageSize: 2,
@@ -450,6 +530,8 @@ function initialState() {
       sourceUploadResponseLoss: 0,
       sourceDeleteStatus: 200,
       sourceDeleteResponseLoss: 0,
+      sourceListStatus: 200,
+      sourceListPageSize: 10000,
     },
     aborts: {
       sessionListReads: 0,
@@ -461,6 +543,52 @@ function initialState() {
     },
     sequence: 0,
   };
+}
+
+/**
+ * Per-Agent usage: Sessions with and without reported usage across the saved
+ * Agents, a deleted Agent and an inline Agent, spread over 60 days so the
+ * 7- and 30-day ranges select different Sessions.
+ */
+function applyUsageScenario(value) {
+  if (value !== 1 || state.sessions.some((session) => session.id.startsWith("session_usage_"))) return;
+  const day = 86_400;
+  const lifecycle = savedAgent("agent_a", "Lifecycle Agent", "fixture/model-a", baseline - 60);
+  const second = savedAgent("agent_b", "Second Agent", "fixture/model-b", baseline - 30);
+  const deleted = savedAgent("agent_deleted", "Deleted Agent", "fixture/model-deleted", baseline - 90 * day);
+  const inline = { ...savedAgent("agent_inline_usage", "Inline Agent", "fixture/model-inline", baseline - 90 * day), name: null };
+  const usage = (input, output, cached = 0, reasoning = 0) => ({
+    input_tokens: input,
+    output_tokens: output,
+    total_tokens: input + output,
+    input_tokens_details: { cached_tokens: cached },
+    output_tokens_details: { reasoning_tokens: reasoning },
+  });
+  const usageSession = (id, agent, daysAgo, status, reported) => ({
+    id,
+    object: "agent.session",
+    agent: sessionSnapshot(agent),
+    environment: { type: "none" },
+    status,
+    error: status === "failed" ? "Fixture usage Session failed." : null,
+    metadata: { fixture: "usage" },
+    required_actions: [],
+    vault_ids: [],
+    usage: reported,
+    created_at: baseline - daysAgo * day,
+    last_active_at: baseline - daysAgo * day + 300,
+  });
+  state.sessions.push(
+    usageSession("session_usage_a_recent", lifecycle, 1, "idle", null),
+    usageSession("session_usage_a_reported", lifecycle, 2, "failed", usage(100, 40, 20, 10)),
+    usageSession("session_usage_deleted", deleted, 3, "idle", usage(600, 400)),
+    usageSession("session_usage_b_month", second, 20, "idle", usage(50, 10)),
+    usageSession("session_usage_a_old", lifecycle, 45, "idle", usage(7, 3)),
+    usageSession("session_usage_deleted_old", deleted, 50, "idle", null),
+    usageSession("session_usage_inline", inline, 60, "idle", null),
+  );
+  // Core lists Sessions newest first by creation time.
+  state.sessions.sort((left, right) => right.created_at - left.created_at);
 }
 
 function applyTurnsScenario(value) {
@@ -771,12 +899,14 @@ const server = http.createServer(async (request, response) => {
       streamResponses.clear();
       state = initialState();
       resetSandboxFixture();
+      resetSkillsFixture();
       return sendJson(response, { reset: true });
     }
     if (request.method === "POST" && url.pathname === "/__fixture/control") {
       state.controls = { ...state.controls, ...await readJson(request) };
       applyEnvironmentScenario(state.controls.environmentScenario);
       applyTurnsScenario(state.controls.turnsScenario);
+      applyUsageScenario(state.controls.usageScenario);
       return sendJson(response, state.controls);
     }
     if (request.method === "POST" && url.pathname === "/__fixture/emit-turn") {
@@ -815,6 +945,9 @@ const server = http.createServer(async (request, response) => {
       return sendJson(response, { removed: state.sessions.length !== before });
     }
 
+    // Skills read their own multipart and JSON bodies, like Source Files.
+    if (await handleSkillsFixture(request, response, url, sendJson, (entry) => state.requests.push(entry))) return;
+
     if (request.method === "POST" && url.pathname === "/v1/files") {
       const upload = await readSourceMultipart(request);
       recordRequest(request, url, upload ? {
@@ -829,12 +962,14 @@ const server = http.createServer(async (request, response) => {
         return sendError(response, status, "Fixture Source upload failed.");
       }
       if (!upload) return sendError(response, 400, "Fixture Source multipart is invalid.");
-      const id = `file-${sourceFileUuid}`;
+      // The first upload keeps the historical fixture ID; later uploads get distinct IDs and times.
+      const sequence = ++state.sourceFileSequence;
+      const id = sequence === 1 ? `file-${sourceFileUuid}` : `file-${String(sequence).padStart(8, "0")}-8cf6-4272-9c31-d470b08d31af`;
       const metadata = {
         id,
         object: "file",
         bytes: upload.file.length,
-        created_at: baseline,
+        created_at: baseline + sequence - 1,
         filename: upload.filename,
         purpose: "user_data",
         status: "processed",
@@ -849,6 +984,39 @@ const server = http.createServer(async (request, response) => {
         return;
       }
       return sendJson(response, metadata);
+    }
+
+    // Files list: cursor pages over metadata only, like services/agents-api source_files_list.go.
+    if (request.method === "GET" && url.pathname === "/v1/files") {
+      recordRequest(request, url, undefined);
+      if (request.headers["openai-beta"] != null) return sendError(response, 400, "Source Files do not accept the Agents beta header in this fixture.");
+      const listStatus = state.controls.sourceListStatus;
+      if (listStatus !== 200) {
+        return listStatus === 503
+          ? sendError(response, 503, "Source file storage is unavailable.", "file_storage_unavailable", "server_error")
+          : sendError(response, listStatus, "Fixture Files list failed.");
+      }
+      const limit = Number(url.searchParams.get("limit") ?? 10000);
+      const order = url.searchParams.get("order") ?? "desc";
+      const purpose = url.searchParams.get("purpose") ?? "";
+      if (!Number.isInteger(limit) || limit < 1 || limit > 10000 || !["asc", "desc"].includes(order)) {
+        return sendError(response, 400, "Fixture Files list query is invalid.");
+      }
+      if (purpose !== "" && purpose !== "user_data") return sendError(response, 400, "Invalid purpose.", null, "invalid_request_error");
+      const files = [...state.sourceFiles.values()].map((entry) => entry.metadata)
+        .sort((left, right) => left.created_at - right.created_at || left.id.localeCompare(right.id));
+      if (order === "desc") files.reverse();
+      const after = url.searchParams.get("after");
+      const start = after ? files.findIndex((file) => file.id === after) + 1 : 0;
+      if (after && start === 0) return sendError(response, 404, "No such File cursor.", null, "invalid_request_error");
+      const page = files.slice(start, start + Math.min(limit, state.controls.sourceListPageSize));
+      return sendJson(response, {
+        object: "list",
+        data: page,
+        has_more: start + page.length < files.length,
+        first_id: page[0]?.id ?? null,
+        last_id: page.at(-1)?.id ?? null,
+      });
     }
 
     const sourceContentMatch = url.pathname.match(/^\/v1\/files\/([^/]+)\/content$/);
@@ -1403,17 +1571,14 @@ const server = http.createServer(async (request, response) => {
           state.controls.environmentTemplateCreateStatus = 200;
           return sendError(response, status, "Fixture Environment Template create failed.");
         }
-        if (!isRecord(body) || !hasOnlyKeys(body, ["name", "network"])) {
+        // API callers may create advanced Templates; the response carries only safe metadata.
+        if (!isRecord(body) || !hasOnlyKeys(body, fixtureTemplateFields)) {
           return sendError(response, 400, "Fixture Environment Template body is invalid.");
         }
-        let access = "enabled";
-        if (body.network !== undefined && body.network !== null) {
-          if (
-            !isRecord(body.network) || !hasOnlyKeys(body.network, ["access"]) ||
-            (body.network.access !== "enabled" && body.network.access !== "disabled")
-          ) return sendError(response, 400, "Fixture Environment Template network is unsupported.");
-          access = body.network.access;
-        }
+        const network = fixtureTemplateNetwork(body.network);
+        if (!network) return sendError(response, 400, fixtureNetworkPolicyMessage, "invalid_request_error", "invalid_request_error");
+        const installations = fixtureTemplateInstallations(body);
+        if (!installations) return sendError(response, 400, "Template fields are invalid or require unsupported initialization.", "unsupported_or_invalid_configuration", "invalid_request_error");
         if (body.name !== undefined && body.name !== null && typeof body.name !== "string") {
           return sendError(response, 400, "Fixture Environment Template name is invalid.");
         }
@@ -1423,12 +1588,12 @@ const server = http.createServer(async (request, response) => {
           id: `4${String(index).padStart(7, "0")}-1111-4111-8111-111111111111`,
           object: "agent.environment.template",
           name: body.name === undefined ? null : body.name,
-          network: { access, allowed_domains: [] },
-          capability_directories: [],
-          packages: { npm: [], python: [], system: [] },
-          files: [],
-          plugins: [],
-          skills: [],
+          network,
+          capability_directories: installations.capability_directories ?? [],
+          packages: installations.packages ?? { npm: [], python: [], system: [] },
+          files: installations.files ?? [],
+          plugins: installations.plugins ?? [],
+          skills: installations.skills ?? [],
           created_at: created,
           updated_at: created,
         };
@@ -1460,12 +1625,12 @@ const server = http.createServer(async (request, response) => {
         (body.name !== undefined && body.name !== null && typeof body.name !== "string")) {
         return sendError(response, 400, "Fixture Environment Template patch is invalid.");
       }
-      if (body.network !== undefined && body.network !== null &&
-        (!isRecord(body.network) || !hasOnlyKeys(body.network, ["access"]) || !["enabled", "disabled"].includes(body.network.access))) {
-        return sendError(response, 400, "Fixture Environment Template network is unsupported.");
-      }
+      // Web updates only name and network, so this fixture rejects any other field;
+      // omitted fields keep their stored values exactly as Core does.
+      const network = Object.hasOwn(body, "network") ? fixtureTemplateNetwork(body.network) : undefined;
+      if (network === null) return sendError(response, 400, fixtureNetworkPolicyMessage, "invalid_request_error", "invalid_request_error");
       if (Object.hasOwn(body, "name")) template.name = body.name;
-      if (Object.hasOwn(body, "network")) template.network = { access: body.network?.access ?? "enabled", allowed_domains: [] };
+      if (network) template.network = network;
       template.updated_at = Math.max(template.updated_at + 1, Math.floor(Date.now() / 1000));
       return sendJson(response, template);
     }

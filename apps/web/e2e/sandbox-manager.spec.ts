@@ -1,9 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
 const fixture = `http://127.0.0.1:${process.env.AGENTS_FIXTURE_PORT ?? 18092}`;
 const installer = { sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) };
+function consoleNav(page: Page) {
+  return page.getByRole("navigation", { name: /^(Console navigation|控制台导航)$/ });
+}
+async function openView(page: Page, name: string) {
+  await consoleNav(page).getByRole("button", { name, exact: true }).click();
+}
 async function openManager(page: Page) {
-  await page.getByRole("button", { name: "Hosted Sandbox Manager", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toBeVisible();
+  await openView(page, "Nodes");
+  await expect(page.getByRole("heading", { level: 1, name: "Nodes", exact: true })).toBeVisible();
+}
+async function chooseLanguage(page: Page, language: "English" | "简体中文") {
+  await page.locator(".app-sidebar .appearance-menu-trigger").click();
+  await page.getByRole("menuitemradio", { name: language, exact: true }).click();
 }
 async function details(page: Page, name = "Core server") {
   await page.locator(".sandbox-topology-node").filter({ hasText: name }).click();
@@ -14,7 +24,7 @@ test.beforeEach(async ({ page, request }) => {
   await page.route("**/console/config", (route) => route.fulfill({ json: installer }));
   await request.post(`${fixture}/__fixture/reset`);
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Sessions", exact: true })).toBeVisible();
+  await expect(consoleNav(page).getByRole("button", { name: "Overview", exact: true })).toBeVisible();
 });
 
 test("nodes lead the page, details preserve diagnostics and removal is confirmed", async ({ page, request }) => {
@@ -100,20 +110,22 @@ for (const value of ["node_unavailable", "resource_missing"]) {
 }
 
 test("Chinese actions, diagnostics, and enrollment are translated and language persists", async ({ page, request }) => {
-  await page.getByRole("button", { name: "Language and appearance" }).click();
-  await page.getByRole("menuitemradio", { name: "简体中文" }).click();
+  await chooseLanguage(page, "简体中文");
   await request.post(`${fixture}/__fixture/sandbox-diagnostic?value=resource_missing`);
-  await page.getByRole("button", { name: "托管沙箱管理", exact: true }).click();
+  await openView(page, "节点");
+  await expect(page.getByRole("heading", { level: 1, name: "节点", exact: true })).toBeVisible();
   await page.locator(".sandbox-topology-node").first().click();
   await expect(page.getByRole("region", { name: "沙箱资源分配" }).first()).toContainText("沙箱资源缺失");
   await page.getByRole("button", { name: "添加节点", exact: true }).click();
   await expect(page.getByLabel("一次性注册命令")).toHaveValue(/fixture-once-token/);
   await expect(page.getByRole("dialog")).toContainText("等待节点连接");
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "语言和外观" }).click();
-  await page.getByRole("menuitemradio", { name: "English" }).click();
   await page.reload();
-  await expect(page.getByRole("button", { name: "Language and appearance" })).toContainText("EN");
+  await expect(consoleNav(page).getByRole("button", { name: "节点", exact: true })).toHaveAttribute("aria-current", "page");
+  await chooseLanguage(page, "English");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(consoleNav(page).getByRole("button", { name: "Nodes", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByLabel("One-time enrollment command")).toHaveCount(0);
 });
 
@@ -234,7 +246,7 @@ for (const width of [1280, 1440]) {
   }
 }
 test("hosted creation defaults to automatic and an explicit unavailable node is never replaced", async ({ page }) => {
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
   await page.getByRole("button", { name: "New Session", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByLabel("Saved Agent", { exact: true }).selectOption("agent_b");
@@ -256,7 +268,7 @@ test("hosted creation defaults to automatic and an explicit unavailable node is 
   expect(creates[0]?.x_agents_core).toEqual({ sandbox_node_id: "node-local" });
 });
 test("Session details show the actual Core placement", async ({ page }) => {
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
   await page.locator(".conversation-session-action").click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Core server");
@@ -278,7 +290,7 @@ test("late placement reads cannot replace another Session's placement", async ({
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ node_id: isSecond ? "new-node" : "old-node", node_name: isSecond ? "Second placement" : "Old placement", available: true, state: "active", compute_phase: "running" }) }).catch(() => {});
   });
   await page.reload();
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
   await page.locator('.session-row-action[aria-label="Manage Lifecycle Agent"]').click();
   await expect.poll(() => oldRequested).toBe(true);
   await page.getByRole("button", { name: "Close dialog", exact: true }).click();
@@ -292,9 +304,8 @@ for (const theme of ["light", "dark"]) {
   test(`Chinese topology and node details render on desktop in ${theme}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
-    await page.getByRole("button", { name: "Language and appearance" }).click();
-    await page.getByRole("menuitemradio", { name: "简体中文" }).click();
-    await page.getByRole("button", { name: "托管沙箱管理", exact: true }).click();
+    await chooseLanguage(page, "简体中文");
+    await openView(page, "节点");
     await expect(page.getByRole("region", { name: "沙箱节点", exact: true })).toContainText("可用");
     await page.screenshot({ path: testInfo.outputPath(`topology-zh-${theme}.png`), animations: "disabled" });
     await page.locator(".sandbox-topology-node").first().click();

@@ -1,0 +1,550 @@
+{
+  "revision": "d3f55046717264876157acd567646d665997b040",
+  "source": "Raw HTTP responses of services/agents-api/internal/api/environment_templates.go, initial_files.go, environment_skills.go, environment_plugins.go and hosted_environment.go at this revision (derived from the handlers and tests/official_environment_initial_files.py, not captured from a running Core). Inline file sizes are size_bytes. Core never returns env, setup_commands or inline file data.",
+  "responses": {
+    "template_advanced": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/agents/environments/templates/6a3e1f0c-2b4d-4c8e-9f10-7a6b5c4d3e2f",
+        "headers": {
+          "openai-beta": "agents=v1"
+        }
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "6a3e1f0c-2b4d-4c8e-9f10-7a6b5c4d3e2f",
+        "object": "agent.environment.template",
+        "name": "Report builder",
+        "created_at": 1790208300,
+        "updated_at": 1790208400,
+        "capability_directories": [
+          "/workspace/capabilities"
+        ],
+        "network": {
+          "access": "restricted",
+          "allowed_domains": [
+            "pypi.org",
+            "files.pythonhosted.org"
+          ]
+        },
+        "packages": {
+          "npm": [
+            "typescript@5.8.3"
+          ],
+          "python": [
+            "packaging==26.0"
+          ],
+          "system": [
+            "jq"
+          ]
+        },
+        "files": [
+          {
+            "type": "inline",
+            "path": "/workspace/config/settings.json",
+            "size_bytes": 128
+          },
+          {
+            "type": "file_id",
+            "path": "/workspace/data/input.csv",
+            "file_id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+          }
+        ],
+        "plugins": [
+          {
+            "type": "inline",
+            "name": "release-notes",
+            "description": "Draft release notes from merged changes."
+          }
+        ],
+        "skills": [
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+            "version": null
+          },
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_9d8c7b6a-5e4f-4d3c-8b2a-1f0e9d8c7b6a",
+            "version": "latest"
+          },
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+            "version": "2"
+          },
+          {
+            "type": "inline",
+            "name": "triage",
+            "description": "Sort incoming issues."
+          }
+        ]
+      }
+    },
+    "template_unrecognized": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/agents/environments/templates/7b4f2a1d-3c5e-4d9f-8a21-8b7c6d5e4f30",
+        "headers": {
+          "openai-beta": "agents=v1"
+        }
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "7b4f2a1d-3c5e-4d9f-8a21-8b7c6d5e4f30",
+        "object": "agent.environment.template",
+        "name": "Future profile",
+        "created_at": 1790208200,
+        "updated_at": 1790208200,
+        "capability_directories": [],
+        "network": {
+          "access": "disabled",
+          "allowed_domains": []
+        },
+        "packages": {
+          "npm": [],
+          "python": [],
+          "system": []
+        },
+        "files": [
+          {
+            "type": "archive",
+            "path": "/workspace/bundle",
+            "archive_id": "archive_0f1e2d3c"
+          }
+        ],
+        "plugins": [],
+        "skills": [
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+            "version": null
+          }
+        ]
+      },
+      "note": "Hypothetical future file type; used to prove that only this Template is marked unrecognized."
+    },
+    "template_list": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/agents/environments/templates",
+        "query": "limit=100&order=desc",
+        "headers": {
+          "openai-beta": "agents=v1"
+        }
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "object": "list",
+        "data": [
+          {
+            "id": "6a3e1f0c-2b4d-4c8e-9f10-7a6b5c4d3e2f",
+            "object": "agent.environment.template",
+            "name": "Report builder",
+            "created_at": 1790208300,
+            "updated_at": 1790208400,
+            "capability_directories": [
+              "/workspace/capabilities"
+            ],
+            "network": {
+              "access": "restricted",
+              "allowed_domains": [
+                "pypi.org",
+                "files.pythonhosted.org"
+              ]
+            },
+            "packages": {
+              "npm": [
+                "typescript@5.8.3"
+              ],
+              "python": [
+                "packaging==26.0"
+              ],
+              "system": [
+                "jq"
+              ]
+            },
+            "files": [
+              {
+                "type": "inline",
+                "path": "/workspace/config/settings.json",
+                "size_bytes": 128
+              },
+              {
+                "type": "file_id",
+                "path": "/workspace/data/input.csv",
+                "file_id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+              }
+            ],
+            "plugins": [
+              {
+                "type": "inline",
+                "name": "release-notes",
+                "description": "Draft release notes from merged changes."
+              }
+            ],
+            "skills": [
+              {
+                "type": "skill_reference",
+                "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+                "version": null
+              },
+              {
+                "type": "skill_reference",
+                "skill_id": "skill_9d8c7b6a-5e4f-4d3c-8b2a-1f0e9d8c7b6a",
+                "version": "latest"
+              },
+              {
+                "type": "skill_reference",
+                "skill_id": "skill_1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+                "version": "2"
+              },
+              {
+                "type": "inline",
+                "name": "triage",
+                "description": "Sort incoming issues."
+              }
+            ]
+          },
+          {
+            "id": "7b4f2a1d-3c5e-4d9f-8a21-8b7c6d5e4f30",
+            "object": "agent.environment.template",
+            "name": "Future profile",
+            "created_at": 1790208200,
+            "updated_at": 1790208200,
+            "capability_directories": [],
+            "network": {
+              "access": "disabled",
+              "allowed_domains": []
+            },
+            "packages": {
+              "npm": [],
+              "python": [],
+              "system": []
+            },
+            "files": [
+              {
+                "type": "archive",
+                "path": "/workspace/bundle",
+                "archive_id": "archive_0f1e2d3c"
+              }
+            ],
+            "plugins": [],
+            "skills": [
+              {
+                "type": "skill_reference",
+                "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+                "version": null
+              }
+            ]
+          },
+          {
+            "id": "8c5a3b2e-4d6f-4ea0-9b32-9c8d7e6f5a41",
+            "object": "agent.environment.template",
+            "name": null,
+            "created_at": 1790208100,
+            "updated_at": 1790208100,
+            "capability_directories": [],
+            "network": {
+              "access": "enabled",
+              "allowed_domains": []
+            },
+            "packages": {
+              "npm": [],
+              "python": [],
+              "system": []
+            },
+            "files": [],
+            "plugins": [],
+            "skills": []
+          }
+        ],
+        "has_more": false,
+        "first_id": "6a3e1f0c-2b4d-4c8e-9f10-7a6b5c4d3e2f",
+        "last_id": "8c5a3b2e-4d6f-4ea0-9b32-9c8d7e6f5a41"
+      }
+    },
+    "template_renamed": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/agents/environments/templates/6a3e1f0c-2b4d-4c8e-9f10-7a6b5c4d3e2f",
+        "headers": {
+          "openai-beta": "agents=v1"
+        },
+        "body": {
+          "name": "Report builder v2"
+        }
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "6a3e1f0c-2b4d-4c8e-9f10-7a6b5c4d3e2f",
+        "object": "agent.environment.template",
+        "name": "Report builder v2",
+        "created_at": 1790208300,
+        "updated_at": 1790208500,
+        "capability_directories": [
+          "/workspace/capabilities"
+        ],
+        "network": {
+          "access": "restricted",
+          "allowed_domains": [
+            "pypi.org",
+            "files.pythonhosted.org"
+          ]
+        },
+        "packages": {
+          "npm": [
+            "typescript@5.8.3"
+          ],
+          "python": [
+            "packaging==26.0"
+          ],
+          "system": [
+            "jq"
+          ]
+        },
+        "files": [
+          {
+            "type": "inline",
+            "path": "/workspace/config/settings.json",
+            "size_bytes": 128
+          },
+          {
+            "type": "file_id",
+            "path": "/workspace/data/input.csv",
+            "file_id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+          }
+        ],
+        "plugins": [
+          {
+            "type": "inline",
+            "name": "release-notes",
+            "description": "Draft release notes from merged changes."
+          }
+        ],
+        "skills": [
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+            "version": null
+          },
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_9d8c7b6a-5e4f-4d3c-8b2a-1f0e9d8c7b6a",
+            "version": "latest"
+          },
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+            "version": "2"
+          },
+          {
+            "type": "inline",
+            "name": "triage",
+            "description": "Sort incoming issues."
+          }
+        ]
+      }
+    },
+    "template_restricted_update": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/agents/environments/templates/6a3e1f0c-2b4d-4c8e-9f10-7a6b5c4d3e2f",
+        "headers": {
+          "openai-beta": "agents=v1"
+        },
+        "body": {
+          "network": {
+            "access": "restricted",
+            "allowed_domains": [
+              "pypi.org"
+            ]
+          }
+        }
+      },
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "id": "6a3e1f0c-2b4d-4c8e-9f10-7a6b5c4d3e2f",
+        "object": "agent.environment.template",
+        "name": "Report builder",
+        "created_at": 1790208300,
+        "updated_at": 1790208500,
+        "capability_directories": [
+          "/workspace/capabilities"
+        ],
+        "network": {
+          "access": "restricted",
+          "allowed_domains": [
+            "pypi.org"
+          ]
+        },
+        "packages": {
+          "npm": [
+            "typescript@5.8.3"
+          ],
+          "python": [
+            "packaging==26.0"
+          ],
+          "system": [
+            "jq"
+          ]
+        },
+        "files": [
+          {
+            "type": "inline",
+            "path": "/workspace/config/settings.json",
+            "size_bytes": 128
+          },
+          {
+            "type": "file_id",
+            "path": "/workspace/data/input.csv",
+            "file_id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+          }
+        ],
+        "plugins": [
+          {
+            "type": "inline",
+            "name": "release-notes",
+            "description": "Draft release notes from merged changes."
+          }
+        ],
+        "skills": [
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+            "version": null
+          },
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_9d8c7b6a-5e4f-4d3c-8b2a-1f0e9d8c7b6a",
+            "version": "latest"
+          },
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+            "version": "2"
+          },
+          {
+            "type": "inline",
+            "name": "triage",
+            "description": "Sort incoming issues."
+          }
+        ]
+      }
+    },
+    "session_environment_from_advanced_template": {
+      "note": "The environment member of a Session created with environment_template_id of template_advanced.",
+      "body": {
+        "type": "openai_hosted",
+        "id": "9d6b4c3f-5e70-4fb1-8c43-0d9e8f7a6b52",
+        "capability_directories": [
+          "/workspace/capabilities"
+        ],
+        "network": {
+          "access": "restricted",
+          "allowed_domains": [
+            "pypi.org",
+            "files.pythonhosted.org"
+          ]
+        },
+        "packages": {
+          "npm": [
+            "typescript@5.8.3"
+          ],
+          "python": [
+            "packaging==26.0"
+          ],
+          "system": [
+            "jq"
+          ]
+        },
+        "files": [
+          {
+            "id": "0e7c5d40-6f81-4ac2-9d54-1e0f9a8b7c63",
+            "type": "inline",
+            "path": "/workspace/config/settings.json",
+            "size_bytes": 128
+          },
+          {
+            "id": "1f8d6e51-7092-4bd3-8e65-2f1a0b9c8d74",
+            "type": "file_id",
+            "path": "/workspace/data/input.csv",
+            "file_id": "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+            "size_bytes": 42
+          }
+        ],
+        "plugins": [
+          {
+            "type": "inline",
+            "name": "release-notes",
+            "description": "Draft release notes from merged changes."
+          }
+        ],
+        "skills": [
+          {
+            "type": "skill_reference",
+            "skill_id": "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
+            "version": "1",
+            "name": "report",
+            "description": "Create the report."
+          },
+          {
+            "type": "inline",
+            "name": "triage",
+            "description": "Sort incoming issues."
+          }
+        ]
+      }
+    },
+    "template_invalid_network": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/agents/environments/templates",
+        "headers": {
+          "openai-beta": "agents=v1"
+        },
+        "body": {
+          "network": {
+            "access": "restricted",
+            "allowed_domains": [
+              "*.example.com"
+            ]
+          }
+        }
+      },
+      "status": 400,
+      "headers": {
+        "content-type": "application/json",
+        "cache-control": "no-store"
+      },
+      "body": {
+        "error": {
+          "message": "network access must be enabled, disabled or restricted; restricted access requires 1–100 exact ASCII hostnames, and allowed_domains is only accepted with restricted access.",
+          "type": "invalid_request_error",
+          "code": "invalid_request_error",
+          "param": null
+        }
+      }
+    }
+  }
+}

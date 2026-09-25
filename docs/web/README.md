@@ -4,10 +4,26 @@ Core Web is the administrator console for a Core deployment. Its Go service
 provides console login and a restricted management proxy. Applications use Core's
 public Agents API directly with their own Project API keys.
 
-**Frontend status:** the management service and typed `AdminClient` are implemented.
-The frontend team owns migration of the React screens and development proxy to this
-contract. Existing execution pages, screenshots and fixture tests do not establish
-acceptance of the administrator UI.
+The React console (`apps/web`) uses this contract: every browser request goes through
+the console's same-origin management routes with `AdminClient` and the sandbox
+management client, and it sends nothing to `/v1`.
+
+![Core Web overview](images/overview.png)
+
+## Console pages
+
+| Group | Page | Purpose |
+| --- | --- | --- |
+| Monitor | Overview | Service status, running Sessions, sandbox slots and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each with a popover glance; Sessions needing attention; usage by Project |
+| Monitor | Core metrics | The Core process: execution slots, the Turn queue, connected daemons, database latency and pool, background jobs |
+| Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
+| Monitor | Sandbox metrics | Node capacity and hosted Runtime CPU and memory across Projects |
+| Monitor | Session log | Every Session, read-only, opening one Session's conversation, trace and Turns |
+| Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection, permitted deletion and copies to another Project |
+| Platform | Projects and keys, Nodes, System | Project and key lifecycle, sandbox deployment and nodes, Core startup configuration |
+
+Missing data is shown as missing (—), never as zero. How each figure is read and
+bounded is recorded in [management interface coverage](protocol-coverage.md).
 
 ## Management scope
 

@@ -1,18 +1,4 @@
 export const dashboard = {
-  runtime: {
-    explorer: "Runtime target explorer", targets: "Runtime targets", resourceSnapshot: "Runtime resource snapshot",
-    search: "Search Runtime targets", searchPlaceholder: "Search Session, provider, or identity", visible: "{{value}} visible",
-    sortBy: "Sort by {{label}}", noResults: "No Runtime targets match these filters.",
-    page: "Page {{page}} of {{pages}}", previous: "Previous", next: "Next",
-    columns: { session: "Session", mode: "Mode", status: "Status", cpu: "CPU time", memory: "Memory", uptime: "Uptime", sessionState: "Session state", tokens: "Tokens" },
-    identity: "Identity", environment: "Environment", allocation: "Allocation", resolved: "Resolved", notApplicable: "Not applicable", notAvailable: "Not available",
-    filters: { allStatuses: "All statuses", allModes: "All modes", observed: "Observed", unavailable: "Unavailable", unsupported: "Unsupported", managed: "Managed", selfHosted: "Self-hosted", none: "None" },
-    status: { observed: "Observed", unsupported: "Unsupported", allocation_pending: "Allocation pending", runtime_not_running: "Not running", source_not_configured: "Source unavailable", sample_timeout: "Sample timeout", sample_unavailable: "Sample unavailable", idle: "Idle", in_progress: "In progress", requires_action: "Requires action", failed: "Failed", unknown: "Unavailable" },
-    managedProvider: "Managed {{provider}}", managed: "Managed", cores: "{{value}} cores", capacityUnknown: "Capacity unknown",
-    limitUnknown: "Limit unknown", ofLimit: "of {{limit}}", memoryUsed: "{{percent}}% memory used", allocationUnknown: "Allocation age unknown", allocated: "{{duration}} allocated", notReported: "Not reported", sessionReported: "Session reported",
-    metrics: { sandboxState: "Sandbox state", sandboxStateValue: "{{active}} active · {{sleeping}} sleeping", sandboxStateDetail: "{{total}} total · {{transitioning}} transitioning or pending", cpu: "Cumulative CPU / capacity", cpuDetail: "{{covered}}/{{total}} observed Runtimes report CPU time", memory: "Memory now", memoryDetail: "{{covered}}/{{total}} observed Runtimes report usage", tokens: "Reported tokens", tokenDetail: "{{covered}}/{{total}} Sessions report usage", noSample: "No current sample" },
-    explorerHint: "Search and inspect exact observations · unknown remains unknown, never zero", targetCount: "{{value}} targets · {{snapshot}}", retainedSnapshot: "retained snapshot", currentSnapshot: "current snapshot",
-  },
   trends: {
     title: "Resource trends", retained: "Retained samples · durable history", local: "Browser-local samples · reset on reload", source: "Runtime metric source", live: "Live", history: "History",
     historyStale: "History stale", historyLoading: "History · loading", durableResolution: "Durable · {{seconds}}s", liveRetrying: "Live · history retrying", liveUnavailable: "Live · history unavailable", liveLoading: "Live · loading history", staleRetrying: "Stale · retrying", liveInterval: "Live · {{seconds}}s",
@@ -26,7 +12,7 @@ export const dashboard = {
     instructions: "Move the pointer over the plot for exact values. Drag horizontally to select and zoom a time range. Double-click or use Reset zoom to restore the full range. Click to pin a time. Use Left and Right arrows to move the pinned selection, and Escape to clear it.",
     pinned: "Pinned", hover: "Hover", unavailable: "Unavailable", allHidden: "All series hidden", sparse: "Sparse samples", showLegend: "Use the legend to show a series", sparseDetail: "{{count}} valid points · a line requires consecutive buckets", emptyDetail: "{{valid}}/2 valid points · {{count}} snapshots · no history is synthesized",
     table: { series: "Series", latest: "Latest value", missing: "Missing samples" }, runtime: "Runtime", usage: "usage", used: "used", configuredLimit: "configured limit", input: "input", output: "output", gridDurable: "Runtime durable-history charts", gridLive: "Runtime live-window charts",
-    cpu: { title: "CPU usage", durable: "bucketed cumulative-delta utilization · durable history", live: "reported or cumulative-delta utilization · live window", empty: "No retained CPU samples" },
+    cpu: { title: "CPU usage", withoutData: "{{count}} runtime targets have no CPU data in this range", durable: "bucketed cumulative-delta utilization · durable history", live: "reported or cumulative-delta utilization · live window", empty: "No retained CPU samples" },
     memory: { title: "Memory usage", durable: "observed Sandbox aggregate / configured limit · durable history", live: "observed Sandbox working set / configured limit · live window", empty: "No retained observed memory samples" },
     active: { series: "active", sandboxTitle: "Active sandboxes", runtimeTitle: "Runtime active", sumDurable: "observed allocations per retained bucket · durable history", sumLive: "lifecycle state active allocations per snapshot · live window", binaryDurable: "observed allocation in retained bucket · 1 active / 0 inactive", binaryLive: "lifecycle state active · 1 active / 0 inactive", active: "Active", inactive: "Inactive", empty: "No retained active Sandbox samples" },
     tokens: { title: "Token throughput", durable: "canonical Session Usage deltas · durable history", live: "Session Usage deltas · missing usage excluded", empty: "No retained token samples", perMinute: "{{value}}/min" },

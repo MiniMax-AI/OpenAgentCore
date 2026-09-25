@@ -1,10 +1,9 @@
 # Core administrator Web frontend
 
-This package contains the React application served by `services/core-console`.
-The frontend team owns migration to the implemented administrator API and
-`AdminClient`. Current execution pages and the Vite development proxy still reflect
-the previous frontend implementation; their builds, screenshots and fixture tests
-do not establish acceptance of the new management UI.
+This package contains the React application served by `services/core-console`:
+the administrator console for monitoring Core, inspecting and copying Project
+resources, and managing Projects, keys and sandbox nodes. Its design system is
+described in [DESIGN.md](DESIGN.md) and its product scope in [PRODUCT.md](PRODUCT.md).
 
 ## Integration contract
 
@@ -34,6 +33,6 @@ pnpm --filter @agents-core-web/web test
 pnpm --filter @agents-core-web/web build
 ```
 
-These checks cover the current application source. Management browser acceptance
-must run separately after migration through `services/core-console`. Required
-repository checks are documented in [CONTRIBUTING.md](../../CONTRIBUTING.md).
+These checks cover the application source. Browser acceptance through
+`services/core-console` is tracked in the [frontend roadmap](../../docs/web/roadmap.md).
+Required repository checks are documented in [CONTRIBUTING.md](../../CONTRIBUTING.md).

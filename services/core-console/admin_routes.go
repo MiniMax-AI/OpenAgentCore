@@ -26,7 +26,7 @@ func adminAPIRequest(r *http.Request) bool {
 			return read || r.Method == http.MethodPost
 		case "copies":
 			return r.Method == http.MethodPost
-		case "summary", "runtime-observations", "startup-configuration", "audit-log":
+		case "summary", "runtime-observations", "startup-configuration", "audit-log", "core-metrics":
 			return read
 		}
 	}

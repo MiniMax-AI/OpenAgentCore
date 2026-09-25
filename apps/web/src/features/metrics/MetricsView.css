@@ -1,0 +1,49 @@
+/* Metrics pages reuse the console grammar; the embedded runtime trend panel
+   is flattened so it reads as part of the page instead of a nested card. */
+
+.metrics-page .console-page-header .segmented {
+  flex: 0 0 auto;
+}
+
+.runtime-embed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The Runtime list belongs to the section; its toolbar sits a step below the trends. */
+.runtime-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.runtime-list-empty {
+  margin: 0;
+  padding: 16px 12px;
+  color: var(--fg-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* A quiet state beside a name (revoked key), on the same line. */
+
+.metrics-page th[scope="row"] .table-primary {
+  display: inline;
+}
+
+/* A section's live totals read as a quiet line beside its title. */
+.section-meta {
+  margin-left: 10px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table .numeric-warning {
+  color: var(--orange);
+}
+

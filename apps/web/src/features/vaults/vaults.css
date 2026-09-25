@@ -1,0 +1,24 @@
+.vault-nowrap {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.vault-url {
+  display: inline-block;
+  max-width: 360px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.vault-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.vault-metadata code {
+  font-size: 12px;
+}

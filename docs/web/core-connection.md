@@ -1,10 +1,8 @@
 # Connecting the administrator console to Core
 
 `services/core-console` serves built Web assets, authenticates administrators and
-proxies an explicit management allowlist to Core. This backend contract is
-implemented. React screens and the Vite development proxy still need migration by
-the frontend team; their current execution controls are not supported management
-workflows.
+proxies an explicit management allowlist to Core. The backend contract and the
+React screens that use it are implemented; the console has no execution controls.
 
 ## Connection model
 

@@ -7,9 +7,10 @@ const beta = { "OpenAI-Beta": "agents=v1" };
 interface Template {
   id: string;
   name: string | null;
-  network: { access: "enabled" | "disabled"; allowed_domains: string[] };
+  network: { access: "enabled" | "disabled" | "restricted"; allowed_domains: string[] };
   created_at: number;
   updated_at: number;
+  [section: string]: unknown;
 }
 
 interface RecordedRequest {
@@ -45,12 +46,29 @@ async function openTemplates(page: Page) {
   await expect(page.getByRole("heading", { name: "Environment Templates", exact: true })).toBeVisible();
 }
 
+function consoleNav(page: Page) {
+  return page.getByRole("navigation", { name: "Console navigation", exact: true });
+}
+
+async function openView(page: Page, name: string) {
+  await consoleNav(page).getByRole("button", { name, exact: true }).click();
+}
+
 function manager(page: Page) {
   return page.locator(".templates-page");
 }
 
+/** A Template row's accessible open action; page-rooted so it also works inside `filter({ has })`. */
+function templateLink(page: Page, name: string) {
+  return page.getByRole("button", { name: `Open ${name}`, exact: true });
+}
+
+function emptyCatalog(page: Page) {
+  return manager(page).getByText("No Environment Templates yet", { exact: true });
+}
+
 async function openSessionSelector(page: Page) {
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
   const dialog = page.getByRole("dialog", { name: "Create a Session", exact: true });
   await dialog.getByRole("radio", { name: /Managed hosted/ }).check();
@@ -75,12 +93,12 @@ test.afterEach(async ({ request }) => {
 
 test("opens Templates by navigation and hash, with an explicit empty catalog", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Templates", exact: true }).click();
+  await openView(page, "Environment templates");
   await expect(page).toHaveURL(/#templates$/u);
-  await expect(manager(page).getByRole("heading", { name: "No Environment Templates yet" })).toBeVisible();
+  await expect(emptyCatalog(page)).toBeVisible();
   await expect(manager(page).getByRole("button", { name: "New Template", exact: true })).toBeEnabled();
   await page.reload();
-  await expect(page.getByRole("button", { name: "Templates", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(consoleNav(page).getByRole("button", { name: "Environment templates", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(manager(page).getByRole("heading", { name: "Environment Templates", exact: true })).toBeVisible();
 });
 
@@ -88,14 +106,14 @@ test("loads every Template page and keeps pagination cursors distinct", async ({
   const templates = await Promise.all(["First profile", "Second profile", "Third profile"].map((name) => seed(request, name)));
   await control(request, { environmentTemplatePageSize: 2 });
   await openTemplates(page);
-  for (const template of templates) await expect(manager(page).getByRole("heading", { name: template.name!, exact: true })).toBeVisible();
+  for (const template of templates) await expect(templateLink(page, template.name!)).toBeVisible();
   await expect(manager(page)).toContainText("3 of 3 Templates");
   const reads = (await requests(request)).filter((entry) => entry.method === "GET" && entry.path === collectionPath);
   expect(reads.some((entry) => new URLSearchParams(entry.query).has("after"))).toBe(true);
   expect(new Set(reads.map((entry) => entry.query)).size).toBeGreaterThanOrEqual(2);
   await manager(page).getByRole("searchbox", { name: "Filter Templates" }).fill("Third profile");
   await expect(manager(page)).toContainText("1 of 3 Templates");
-  await expect(manager(page).getByRole("heading", { name: "First profile", exact: true })).toHaveCount(0);
+  await expect(templateLink(page, "First profile")).toHaveCount(0);
 });
 
 for (const status of [400, 404, 405, 501, 503]) {
@@ -106,11 +124,11 @@ for (const status of [400, 404, 405, 501, 503]) {
       status === 503 ? "Environment Templates could not be loaded" : "Environment Templates are not available",
       { exact: true },
     )).toBeVisible();
-    await expect(manager(page).getByRole("heading", { name: "No Environment Templates yet" })).toHaveCount(0);
+    await expect(emptyCatalog(page)).toHaveCount(0);
     await expect(manager(page).getByRole("button", { name: "New Template", exact: true })).toBeDisabled();
     await control(request, { environmentTemplateListStatus: 200 });
     await manager(page).getByRole("button", { name: "Refresh", exact: true }).click();
-    await expect(manager(page).getByRole("heading", { name: "No Environment Templates yet" })).toBeVisible();
+    await expect(emptyCatalog(page)).toBeVisible();
   });
 }
 
@@ -123,7 +141,7 @@ test("creates and edits basic Templates with minimal patches, then refreshes the
   const beforeCreate = (await requests(request)).filter((entry) => entry.method === "GET" && entry.path === collectionPath).length;
   await dialog.getByRole("button", { name: "Create Template", exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(manager(page).getByRole("heading", { name: "Outbound disabled", exact: true })).toBeVisible();
+  await expect(templateLink(page, "Outbound disabled")).toBeVisible();
   const writes = (await requests(request)).filter((entry) => entry.method === "POST" && entry.path === collectionPath);
   expect(writes).toHaveLength(1);
   expect(writes[0]!.body).toEqual({ name: "Outbound disabled", network: { access: "disabled" } });
@@ -161,7 +179,7 @@ test("confirms deletion, preserves a failed delete, and removes the selected cat
   await openTemplates(page);
   await manager(page).getByRole("button", { name: "Delete Delete candidate", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "Delete Template?", exact: true });
-  await expect(dialog).toContainText("Existing Sessions keep their configuration");
+  await expect(dialog).toContainText("Existing Sessions are not affected");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   expect((await requests(request)).filter((entry) => entry.method === "DELETE")).toEqual([]);
 
@@ -176,25 +194,156 @@ test("confirms deletion, preserves a failed delete, and removes the selected cat
   await expect(manager(page).getByRole("button", { name: "Delete Delete candidate", exact: true })).toBeEnabled();
   await manager(page).getByRole("button", { name: "Delete Delete candidate", exact: true }).click();
   await page.getByRole("dialog", { name: "Delete Template?", exact: true }).getByRole("button", { name: "Delete Template", exact: true }).click();
-  await expect(manager(page).getByRole("heading", { name: "No Environment Templates yet" })).toBeVisible();
+  await expect(emptyCatalog(page)).toBeVisible();
   const selector = await openSessionSelector(page);
   await expect(selector.locator(`option[value="${template.id}"]`)).toHaveCount(0);
   await expect(selector).toBeDisabled();
   await page.keyboard.press("Escape");
 });
 
-test("rejects advanced Template responses without offering destructive basic edits", async ({ page, request }) => {
-  await seed(request, "Advanced profile");
+const advancedBody = {
+  name: "Report builder",
+  network: { access: "restricted", allowed_domains: ["pypi.org", "files.pythonhosted.org"] },
+  capability_directories: ["/workspace/capabilities"],
+  packages: { npm: ["typescript@5.8.3"], python: ["packaging==26.0"], system: ["jq"] },
+  files: [
+    { type: "inline", path: "/workspace/config/settings.json", data: Buffer.from("{\"mode\":\"report\"}").toString("base64") },
+    { type: "file_id", path: "/workspace/data/input.csv", file_id: "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d" },
+  ],
+  skills: [
+    { type: "skill_reference", skill_id: "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c" },
+    { type: "skill_reference", skill_id: "skill_9d8c7b6a-5e4f-4d3c-8b2a-1f0e9d8c7b6a", version: "latest" },
+    { type: "skill_reference", skill_id: "skill_1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", version: "2" },
+    { type: "inline", name: "triage", description: "Sort incoming issues.", source: { type: "base64", media_type: "application/zip", data: "UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==" } },
+  ],
+  plugins: [{ type: "inline", name: "release-notes", description: "Draft release notes from merged changes.", source: { type: "base64", media_type: "application/zip", data: "UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==" } }],
+  env: { REPORT_TOKEN: "private-canary" },
+  setup_commands: [{ command: "echo private-setup" }],
+};
+
+async function seedAdvanced(request: APIRequestContext, fileId?: string): Promise<Template> {
+  const data = fileId
+    ? { ...advancedBody, files: [advancedBody.files[0], { ...advancedBody.files[1], file_id: fileId }] }
+    : advancedBody;
+  const response = await request.post(`${fixtureBaseUrl}${collectionPath}`, { headers: beta, data });
+  expect(response.status()).toBe(201);
+  const template = await response.json() as Template;
+  expect(JSON.stringify(template)).not.toContain("private-");
+  return template;
+}
+
+test("shows an advanced Template created through the API in full, renames it, and keeps every other section", async ({ page, request }) => {
+  const original = await seedAdvanced(request);
+  await openTemplates(page);
+  const row = manager(page).getByRole("row").filter({ has: templateLink(page, "Report builder") });
+  await expect(row).toContainText("Restricted (2)");
+  await templateLink(page, "Report builder").click();
+
+  const detail = manager(page);
+  await expect(detail.getByRole("heading", { name: /Report builder$/u })).toBeVisible();
+  for (const text of [
+    "pypi.org", "files.pythonhosted.org", "typescript@5.8.3", "packaging==26.0", "jq", "/workspace/capabilities",
+    "/workspace/config/settings.json", "17 B", "/workspace/data/input.csv", "file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    "skill_3f1c2a9e-7b4d-4e8a-9c21-5d6e7f8a9b0c", "Default", "latest", "v2", "triage", "Sort incoming issues.",
+    "release-notes", "Draft release notes from merged changes.",
+    "Core never returns them, so this console cannot tell whether they are configured.",
+  ]) await expect(detail).toContainText(text);
+  await expect(detail).not.toContainText("private-");
+  await expect(detail).not.toContainText("Not configured");
+
+  await detail.getByRole("button", { name: "Edit Report builder", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit Template", exact: true });
+  await expect(dialog.getByLabel("Network access", { exact: true })).toHaveValue("restricted");
+  await expect(dialog.getByLabel("Allowed domains", { exact: true })).toHaveValue("pypi.org\nfiles.pythonhosted.org");
+  await dialog.getByRole("textbox", { name: /^Name/ }).fill("Report builder v2");
+  await dialog.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(detail.getByRole("heading", { name: /Report builder v2$/u })).toBeVisible();
+
+  const updates = (await requests(request)).filter((entry) => entry.method === "POST" && entry.path === `${collectionPath}/${original.id}`);
+  expect(updates.map((entry) => entry.body)).toEqual([{ name: "Report builder v2" }]);
+  const readBack = await retrieve(request, original.id);
+  expect({ ...readBack, name: original.name, updated_at: original.updated_at }).toEqual(original);
+});
+
+test("edits a restricted domain list without changing the mode or other sections", async ({ page, request }) => {
+  const original = await seedAdvanced(request);
+  await openTemplates(page);
+  await manager(page).getByRole("button", { name: "Edit Report builder", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit Template", exact: true });
+  const domains = dialog.getByLabel("Allowed domains", { exact: true });
+  await domains.fill("");
+  await expect(dialog.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
+  await domains.fill("pypi.org\n\n");
+  await dialog.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const updates = (await requests(request)).filter((entry) => entry.method === "POST" && entry.path === `${collectionPath}/${original.id}`);
+  expect(updates.map((entry) => entry.body)).toEqual([{ network: { access: "restricted", allowed_domains: ["pypi.org"] } }]);
+  const readBack = await retrieve(request, original.id);
+  expect(readBack.network).toEqual({ access: "restricted", allowed_domains: ["pypi.org"] });
+  expect({ ...readBack, network: original.network, updated_at: original.updated_at }).toEqual(original);
+
+  await manager(page).getByRole("button", { name: "Edit Report builder", exact: true }).click();
+  const retry = page.getByRole("dialog", { name: "Edit Template", exact: true });
+  await retry.getByLabel("Allowed domains", { exact: true }).fill("*.example.com");
+  await retry.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(manager(page).getByRole("alert")).toContainText("Core rejected the Template configuration");
+  expect((await retrieve(request, original.id)).network).toEqual({ access: "restricted", allowed_domains: ["pypi.org"] });
+});
+
+test("marks only the Template with unrecognized configuration and keeps the others usable", async ({ page, request }) => {
+  await seed(request, "Basic profile");
+  await seedAdvanced(request);
   await page.route(`**${collectionPath}?*`, async (route) => {
     const response = await route.fetch();
     const value = await response.json();
-    value.data[0].packages.npm = ["private-package"];
+    const target = value.data.find((template: Template) => template.name === "Report builder");
+    target.files.push({ type: "archive", path: "/workspace/bundle", archive_id: "archive-canary" });
     await route.fulfill({ response, json: value });
   });
   await openTemplates(page);
-  await expect(manager(page).getByText("Environment Templates could not be loaded", { exact: true })).toBeVisible();
-  await expect(manager(page).getByRole("button", { name: "Edit Advanced profile", exact: true })).toHaveCount(0);
-  await expect(manager(page).getByRole("button", { name: "New Template", exact: true })).toBeDisabled();
+  await expect(templateLink(page, "Basic profile")).toBeVisible();
+  const flagged = manager(page).getByRole("row").filter({ has: templateLink(page, "Report builder") });
+  await expect(flagged).toContainText("Unrecognized configuration");
+  await expect(manager(page).getByRole("row").filter({ has: templateLink(page, "Basic profile") })).not.toContainText("Unrecognized configuration");
+  await templateLink(page, "Report builder").click();
+  await expect(manager(page)).toContainText("Not recognized by this console: Files");
+  await expect(manager(page)).toContainText("typescript@5.8.3");
+  await expect(manager(page)).not.toContainText("archive-canary");
+  await expect(manager(page).getByRole("button", { name: "Edit Report builder", exact: true })).toBeEnabled();
+});
+
+test("links a referenced File ID to the Files page", async ({ page, request }) => {
+  const upload = await request.post(`${fixtureBaseUrl}/v1/files`, {
+    multipart: { purpose: "user_data", file: { name: "input.csv", mimeType: "text/csv", buffer: Buffer.from("a,b\n") } },
+  });
+  const file = await upload.json() as { id: string };
+  await seedAdvanced(request, file.id);
+  await openTemplates(page);
+  await templateLink(page, "Report builder").click();
+  await manager(page).getByRole("button", { name: `Open ${file.id} in Files`, exact: true }).click();
+  await expect(page).toHaveURL(/#files$/u);
+  const files = page.locator(".files-page");
+  await expect(files.getByRole("searchbox", { name: "Filter loaded files", exact: true })).toHaveValue(file.id);
+  await expect(files.getByRole("row").filter({ hasText: "input.csv" })).toBeVisible();
+});
+
+test("keeps an advanced Template selectable when starting a Session", async ({ page, request }) => {
+  const template = await seedAdvanced(request);
+  await page.goto("/");
+  const selector = await openSessionSelector(page);
+  const option = selector.locator(`option[value="${template.id}"]`);
+  await expect(option).toHaveText("Report builder · network restricted");
+  await selector.selectOption(template.id);
+  const dialog = page.getByRole("dialog", { name: "Create a Session", exact: true });
+  const network = dialog.getByLabel("Managed Environment network access", { exact: true });
+  await expect(network.locator('option[value="default"]')).toHaveText("Inherit from Template (Restricted)");
+  await expect(dialog.getByRole("alert").filter({ hasText: "never widen" })).toHaveCount(0);
+  await network.selectOption("enabled");
+  await expect(dialog.getByRole("alert").filter({ hasText: "restricts network access" })).toBeVisible();
+  await network.selectOption("default");
+  await expect(dialog.getByRole("alert").filter({ hasText: "never widen" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 });
 
 for (const operation of ["create", "update"] as const) {
@@ -213,7 +362,7 @@ for (const operation of ["create", "update"] as const) {
     if (template) expect(await retrieve(request, template.id)).toEqual(template);
     await manager(page).getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(manager(page).getByRole("button", { name: "New Template", exact: true })).toBeEnabled();
-    await expect(manager(page).getByRole("heading", { name: "Rejected name", exact: true })).toHaveCount(0);
+    await expect(templateLink(page, "Rejected name")).toHaveCount(0);
   });
 }
 
@@ -252,7 +401,7 @@ for (const operation of ["read", "write"] as const) {
       };
     }, { original, operation, collectionPath });
     await openTemplates(page);
-    await expect(manager(page).getByRole("heading", { name: original.name!, exact: true })).toBeVisible();
+    await expect(templateLink(page, original.name!)).toBeVisible();
     await page.evaluate(() => { (window as Window & { holdTemplateResponse?: boolean }).holdTemplateResponse = true; });
     if (operation === "read") {
       await manager(page).getByRole("button", { name: "Refresh", exact: true }).click();
@@ -265,7 +414,7 @@ for (const operation of ["read", "write"] as const) {
     await expect.poll(() => page.evaluate(() => typeof (window as Window & { releaseTemplateResponse?: () => void }).releaseTemplateResponse)).toBe("function");
     // Changing the hash is the same navigation available in the address bar;
     // it lets an in-flight write finish after its owning page has unmounted.
-    await page.evaluate(() => { location.hash = "system"; });
+    await page.evaluate(() => { location.hash = "files"; });
     await expect(page.getByRole("dialog", { name: "Edit Template", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Configure Agent Core connection", exact: true }).click();
     const connection = page.getByRole("dialog", { name: "Connect an Agent Core", exact: true });
@@ -273,14 +422,14 @@ for (const operation of ["read", "write"] as const) {
     await connection.getByLabel("Compatible Core base URL").fill(`${new URL(page.url()).origin}/v1`);
     await connection.getByLabel("Bearer token").fill("replacement-token");
     await connection.getByRole("button", { name: "Apply connection", exact: true }).click();
-    await page.getByRole("button", { name: "Templates", exact: true }).click();
-    await expect(manager(page).getByRole("heading", { name: "New connection Template", exact: true })).toBeVisible();
+    await openView(page, "Environment templates");
+    await expect(templateLink(page, "New connection Template")).toBeVisible();
     const before = await page.evaluate(() => (window as Window & { newTemplateReads?: number }).newTemplateReads);
     await page.evaluate(async () => {
       (window as Window & { releaseTemplateResponse?: () => void }).releaseTemplateResponse?.();
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     });
-    await expect(manager(page).getByRole("heading", { name: "New connection Template", exact: true })).toBeVisible();
+    await expect(templateLink(page, "New connection Template")).toBeVisible();
     await expect(manager(page)).not.toContainText("Late old name");
     await expect(manager(page)).not.toContainText("Old connection Template");
     expect(await page.evaluate(() => (window as Window & { newTemplateReads?: number }).newTemplateReads)).toBe(before);

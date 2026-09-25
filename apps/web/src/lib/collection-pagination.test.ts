@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { listAllCollectionPages, listStableCollectionPages } from "./collection-pagination";
+import { appendCollectionPage, listAllCollectionPages, listStableCollectionPages } from "./collection-pagination";
 
 describe("top-level collection pagination", () => {
   it("loads every page in stable descending order and forwards cancellation", async () => {
@@ -99,5 +99,23 @@ describe("top-level collection pagination", () => {
 
     expect(result).toBeNull();
     expect(reads).toBe(3);
+  });
+});
+
+describe("load-more collection pages", () => {
+  it("appends a page and returns the next cursor until Core reports the end", () => {
+    const first = appendCollectionPage([], { data: [{ id: "skill_3" }, { id: "skill_2" }], has_more: true, last_id: "skill_2" });
+    expect(first).toEqual({ values: [{ id: "skill_3" }, { id: "skill_2" }], nextAfter: "skill_2" });
+    const second = appendCollectionPage(first.values, { data: [{ id: "skill_1" }], has_more: false }, "skill_2");
+    expect(second).toEqual({ values: [{ id: "skill_3" }, { id: "skill_2" }, { id: "skill_1" }], nextAfter: null });
+  });
+
+  it("falls back to the last entry and rejects repeated identities or cursors that do not advance", () => {
+    expect(appendCollectionPage([], { data: [{ id: "a" }], has_more: true }).nextAfter).toBe("a");
+    expect(() => appendCollectionPage([{ id: "a" }], { data: [{ id: "a" }], has_more: false }))
+      .toThrow("duplicate or invalid collection identities");
+    expect(() => appendCollectionPage([], { data: [], has_more: true })).toThrow("invalid collection pagination cursor");
+    expect(() => appendCollectionPage([{ id: "a" }], { data: [{ id: "b" }], has_more: true, last_id: "a" }, "a"))
+      .toThrow("invalid collection pagination cursor");
   });
 });

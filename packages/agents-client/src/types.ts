@@ -296,19 +296,32 @@ export interface AgentEnvironmentPackages {
   system: string[];
 }
 
-/** Exact safe output of Parsar's operator-gated basic managed profile. */
+/**
+ * Network policy of a hosted Environment or Template. `restricted` carries the
+ * exact hostnames in Core's spelling and order; the other modes carry none.
+ */
+export type EnvironmentNetworkAccess = "enabled" | "disabled" | "restricted";
+
+export interface EnvironmentNetworkPolicy {
+  access: EnvironmentNetworkAccess;
+  allowed_domains: string[];
+}
+
+/**
+ * Safe output of a managed Session Environment. A basic profile has only empty
+ * lists; a Session created from an advanced Template also carries its frozen
+ * installation metadata, kept as Core returned it (never env, setup commands or
+ * file content).
+ */
 export interface OpenAIHostedAgentEnvironment {
   type: "openai_hosted";
   id: string;
-  capability_directories: [];
-  network: {
-    access: OpenAIHostedNetworkAccess;
-    allowed_domains: [];
-  };
-  packages: { npm: []; python: []; system: [] };
-  files: [];
-  plugins: [];
-  skills: [];
+  capability_directories: string[];
+  network: EnvironmentNetworkPolicy;
+  packages: AgentEnvironmentPackages;
+  files: Record<string, unknown>[];
+  plugins: Record<string, unknown>[];
+  skills: Record<string, unknown>[];
 }
 
 export type UnknownEnvironmentType = string & { readonly [unknownEnvironmentType]: true };
@@ -355,32 +368,81 @@ export type AgentEnvironmentResource =
   | SelfHostedAgentEnvironmentResource
   | OpenAIHostedAgentEnvironmentResource;
 
+/** An initial Template file. Inline content is never returned, only its decoded size. */
+export type EnvironmentTemplateFile =
+  | { type: "inline"; path: string; size_bytes: number }
+  | { type: "file_id"; path: string; file_id: string };
+
 /**
- * Exact safe projection of Parsar's basic reusable hosted configuration. A
- * Template never contains a running Workspace, never exposes `env` or
- * `setup_commands`, and never selects a provider image: Docker or E2B packaging
- * stays operator-owned behind the same `openai_hosted` discriminator.
+ * A Template Skill. A reference keeps its unresolved selector: `null` selects the
+ * Skill's default version when a Session is created, `"latest"` the latest
+ * version, and a positive integer string that exact version.
  */
-export interface EnvironmentTemplate {
+export type EnvironmentTemplateSkill =
+  | { type: "skill_reference"; skill_id: string; version: string | null }
+  | { type: "inline"; name: string; description: string };
+
+/** A Template Plugin; only its descriptive metadata is returned. */
+export interface EnvironmentTemplatePlugin {
+  type: "inline";
+  name: string;
+  description: string;
+}
+
+/** The configuration sections of a Template response. */
+export type EnvironmentTemplateSection =
+  | "network"
+  | "capability_directories"
+  | "packages"
+  | "files"
+  | "plugins"
+  | "skills";
+
+export interface EnvironmentTemplateConfiguration {
+  network: EnvironmentNetworkPolicy;
+  /** Absolute directories within /workspace. */
+  capability_directories: string[];
+  packages: AgentEnvironmentPackages;
+  files: EnvironmentTemplateFile[];
+  plugins: EnvironmentTemplatePlugin[];
+  skills: EnvironmentTemplateSkill[];
+}
+
+interface EnvironmentTemplateIdentity {
   id: string;
   object: "agent.environment.template";
   name: string | null;
-  network: {
-    access: OpenAIHostedNetworkAccess;
-    allowed_domains: [];
-  };
-  capability_directories: [];
-  packages: { npm: []; python: []; system: [] };
-  files: [];
-  plugins: [];
-  skills: [];
   created_at: number;
   updated_at: number;
 }
 
+/**
+ * Reusable hosted configuration whose complete safe metadata was recognized. A
+ * Template never contains a running Workspace and never selects a provider
+ * image. Core never returns `env`, `setup_commands` or inline file content, so
+ * none of them can appear here.
+ */
+export interface EnvironmentTemplate extends EnvironmentTemplateIdentity, EnvironmentTemplateConfiguration {
+  unrecognized?: undefined;
+}
+
+/**
+ * A Template whose response contains configuration this client does not
+ * recognize, for example a new file or Skill type. Only this Template is
+ * affected: recognized sections are still projected, while an unrecognized
+ * section is omitted instead of being guessed.
+ */
+export interface UnrecognizedEnvironmentTemplate
+  extends EnvironmentTemplateIdentity, Partial<EnvironmentTemplateConfiguration> {
+  /** Unrecognized sections, plus the names (never the values) of unexpected fields. */
+  unrecognized: string[];
+}
+
+export type EnvironmentTemplateResource = EnvironmentTemplate | UnrecognizedEnvironmentTemplate;
+
 export interface EnvironmentTemplateList {
   object: "list";
-  data: EnvironmentTemplate[];
+  data: EnvironmentTemplateResource[];
   has_more: boolean;
   first_id: string | null;
   last_id: string | null;
@@ -392,15 +454,21 @@ export interface EnvironmentTemplateDeleted {
   deleted: true;
 }
 
+/** A Template network write. Core validates restricted hostnames. */
+export type EnvironmentTemplateNetworkInput =
+  | { access: OpenAIHostedNetworkAccess }
+  | { access: "restricted"; allowed_domains: string[] };
+
 /** Supported create fields. Omitted network stores the pinned enabled default. */
 export interface CreateEnvironmentTemplateInput {
   name?: string | null;
-  network?: { access: OpenAIHostedNetworkAccess } | null;
+  network?: EnvironmentTemplateNetworkInput | null;
 }
 
 /**
- * Supplied fields replace; omitted fields stay unchanged. Null name clears the
- * name and null network resets the pinned enabled default.
+ * Supplied fields replace; omitted fields stay unchanged, so every other
+ * configuration section is preserved. Null name clears the name and null
+ * network resets the pinned enabled default.
  */
 export type UpdateEnvironmentTemplateInput = CreateEnvironmentTemplateInput;
 
@@ -441,12 +509,41 @@ export interface SourceFile {
   status: "processed";
   expires_at: null;
   status_details: null;
+  unrecognized?: undefined;
 }
 
 export interface SourceFileDeleted {
   id: string;
   object: "file";
   deleted: true;
+}
+
+/** Files list query. Core accepts limits of 1–10000 (default 10000) and orders newest first by default. */
+export interface SourceFileListOptions extends ReadOptions {
+  after?: string;
+  limit?: number;
+  order?: PageOrder;
+  purpose?: "user_data";
+}
+
+/**
+ * A listed File whose metadata this client does not recognize, for example a
+ * purpose other than user_data. Only its ID is kept; nothing is guessed.
+ */
+export interface UnrecognizedSourceFile {
+  id: string;
+  object: "file";
+  unrecognized: true;
+}
+
+export type SourceFileListEntry = SourceFile | UnrecognizedSourceFile;
+
+export interface SourceFileList {
+  object: "list";
+  data: SourceFileListEntry[];
+  has_more: boolean;
+  first_id: string | null;
+  last_id: string | null;
 }
 
 export interface SourceFileContent {
@@ -459,6 +556,84 @@ export interface SourceFileContent {
 export interface SourceFileUploadInput {
   file: Blob;
   filename: string;
+}
+
+/**
+ * A project-owned Skill. Top-level name and description follow the default
+ * version; version numbers are positive integer strings that Core never reuses.
+ */
+export interface Skill {
+  id: string;
+  object: "skill";
+  created_at: number;
+  name: string;
+  description: string;
+  default_version: string;
+  latest_version: string;
+}
+
+export interface SkillList extends ListPage<Skill> {
+  object: "list";
+  first_id: string | null;
+  last_id: string | null;
+}
+
+/** One immutable uploaded version of a Skill. */
+export interface SkillVersion {
+  id: string;
+  object: "skill.version";
+  skill_id: string;
+  version: string;
+  name: string;
+  description: string;
+  created_at: number;
+}
+
+export interface SkillVersionList extends ListPage<SkillVersion> {
+  object: "list";
+  first_id: string | null;
+  last_id: string | null;
+}
+
+export interface SkillDeleted {
+  id: string;
+  object: "skill.deleted";
+  deleted: true;
+}
+
+/** Deleting the only remaining version also deletes its Skill. */
+export interface SkillVersionDeleted {
+  id: string;
+  object: "skill.version.deleted";
+  deleted: true;
+  version: string;
+}
+
+/** Skill lists accept 0 through 100 entries; `after` is a Skill ID, or a version resource ID for version lists. */
+export type SkillListOptions = PageOptions;
+
+export interface SkillDirectoryFile {
+  /** Relative path inside one top-level folder, for example `report/SKILL.md`. */
+  path: string;
+  file: Blob;
+}
+
+/** One ZIP in the `files` field, or a folder as repeated `files[]` fields. */
+export type SkillUploadInput =
+  | { kind: "zip"; file: Blob; filename: string }
+  | { kind: "directory"; files: SkillDirectoryFile[] };
+
+export interface SkillVersionUploadOptions extends ReadOptions {
+  /** Sends the `default` form field once; omitted leaves the default pointer unchanged. */
+  setDefault?: boolean;
+}
+
+/** A downloaded Skill bundle. */
+export interface SkillContent {
+  data: Blob;
+  bytes: number;
+  content_type: "application/octet-stream";
+  content_disposition: string;
 }
 
 export type SessionStatus = "idle" | "in_progress" | "requires_action" | "failed";
@@ -503,6 +678,38 @@ export interface AgentSession {
   usage: TokenUsage | null;
   created_at: number;
   last_active_at: number;
+}
+
+/** Session list query. Pages hold 1–100 Sessions (default 20), newest first by default. */
+export interface SessionListOptions extends PageOptions {
+  /** Root Agent ID whose Sessions to return; omission lists every Agent. */
+  agentId?: string;
+}
+
+/**
+ * A listed Session this client does not recognize, for example one with an
+ * unknown field or value. Nothing of it is kept or guessed beyond its position
+ * and, when it has Core's Session ID form, its raw ID.
+ */
+export interface UnrecognizedSession {
+  /** Position of the entry in the page as Core returned it. */
+  index: number;
+  /** Raw ID when it is a Session ID (a UUID); otherwise null. */
+  id: string | null;
+}
+
+/**
+ * One Session page read tolerantly: `data` holds the recognized Sessions in
+ * page order and `unrecognized` every other entry. The envelope and cursors
+ * are Core's own; `first_id` and `last_id` may name an unrecognized entry.
+ */
+export interface TolerantSessionList {
+  object: "list";
+  data: AgentSession[];
+  unrecognized: UnrecognizedSession[];
+  has_more: boolean;
+  first_id: string | null;
+  last_id: string | null;
 }
 
 export interface CreateSessionInput {
@@ -1093,6 +1300,8 @@ export interface AgentCore {
   replaceVaultCredentialToken(vaultId: string, credentialId: string, input: ReplaceVaultCredentialTokenInput): Promise<VaultCredential>;
   deleteVaultCredential(vaultId: string, credentialId: string): Promise<VaultCredentialDeleted>;
   listSessions(options?: PageOptions & { agentId?: string }): Promise<ListPage<AgentSession>>;
+  /** Like listSessions, but a malformed Session is reported instead of failing the page. */
+  listSessionsTolerant(options?: SessionListOptions): Promise<TolerantSessionList>;
   listRuntimeObservations(options?: PageOptions): Promise<RuntimeObservationList>;
   retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation>;
   getRuntimeHistoryCapabilities(options?: ReadOptions): Promise<RuntimeHistoryCapabilities>;
@@ -1107,15 +1316,27 @@ export interface AgentCore {
   retrieveEnvironment(environmentId: string, options?: ReadOptions): Promise<AgentEnvironmentResource>;
   listEnvironmentTemplates(options?: PageOptions & ReadOptions): Promise<EnvironmentTemplateList>;
   createEnvironmentTemplate(input: CreateEnvironmentTemplateInput, options?: ReadOptions): Promise<EnvironmentTemplate>;
-  retrieveEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplate>;
-  updateEnvironmentTemplate(templateId: string, input: UpdateEnvironmentTemplateInput, options?: ReadOptions): Promise<EnvironmentTemplate>;
+  retrieveEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplateResource>;
+  updateEnvironmentTemplate(templateId: string, input: UpdateEnvironmentTemplateInput, options?: ReadOptions): Promise<EnvironmentTemplateResource>;
   deleteEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplateDeleted>;
   listEnvironmentFiles(environmentId: string, options: EnvironmentFileListOptions): Promise<EnvironmentFileList>;
   createEnvironmentFile(environmentId: string, input: EnvironmentFileCreateInput, options?: ReadOptions): Promise<EnvironmentFile>;
+  listSourceFiles(options?: SourceFileListOptions): Promise<SourceFileList>;
   uploadSourceFile(input: SourceFileUploadInput, options?: ReadOptions): Promise<SourceFile>;
   retrieveSourceFile(fileId: string, options?: ReadOptions): Promise<SourceFile>;
   downloadSourceFile(fileId: string, options?: ReadOptions): Promise<SourceFileContent>;
   deleteSourceFile(fileId: string, options?: ReadOptions): Promise<SourceFileDeleted>;
+  listSkills(options?: SkillListOptions): Promise<SkillList>;
+  retrieveSkill(skillId: string, options?: ReadOptions): Promise<Skill>;
+  uploadSkill(input: SkillUploadInput, options?: ReadOptions): Promise<Skill>;
+  updateSkillDefaultVersion(skillId: string, version: string, options?: ReadOptions): Promise<Skill>;
+  deleteSkill(skillId: string, options?: ReadOptions): Promise<SkillDeleted>;
+  downloadSkill(skillId: string, options?: ReadOptions): Promise<SkillContent>;
+  listSkillVersions(skillId: string, options?: SkillListOptions): Promise<SkillVersionList>;
+  retrieveSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillVersion>;
+  uploadSkillVersion(skillId: string, input: SkillUploadInput, options?: SkillVersionUploadOptions): Promise<SkillVersion>;
+  deleteSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillVersionDeleted>;
+  downloadSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillContent>;
   updateSession(sessionId: string, metadata: Record<string, string> | null): Promise<AgentSession>;
   deleteSession(sessionId: string): Promise<SessionDeleted>;
   listItems(sessionId: string, options?: PageOptions & ReadOptions): Promise<ListPage<SessionItem>>;

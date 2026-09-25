@@ -1,58 +1,176 @@
-# Management interface coverage
+# Protocol coverage
 
-This matrix describes the implemented console service and management API contract.
-It is not React UI acceptance or proof of complete OpenAI-hosted compatibility.
-The frontend team owns migration to these interfaces. Existing pages and fixtures
-must not be used as evidence that the management workflows have shipped.
+This matrix records which Core interfaces the Parsar Core console (`apps/web`)
+consumes and for what. It is not a statement of public Agents API compatibility;
+that inventory, its pinned baseline and its evidence live in the
+[Agents API contract](../../contracts/agents-api/README.md).
 
-## Interface boundaries
+The console is a management tool. It reads, deletes and copies each project's
+assets and manages projects and keys through the administrator API
+(`/core/v1/admin/**`), and it administers sandbox nodes through
+`/core/v1/sandbox/**`. It sends no request to the Agents API (`/v1/**`). Routes,
+response shapes, pagination, copy rules and audit records of the administrator API
+are defined by the [administrator API contract](../../contracts/agents-api/admin-api.md).
 
-| Caller | Interface | Authentication | Purpose |
+## Interfaces
+
+| Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
-| Administrator browser | `/console/auth` and its setup/login/logout routes | Console account and session cookie | Console sign-in |
-| Administrator browser via console | `/core/v1/admin` | Console session; server supplies deployment credential | Project and key management, resource inspection/deletion/copy, monitoring and audit |
-| Administrator browser via console | Allowed `/core/v1/sandbox` routes | Console session; server supplies deployment credential | Deployment, maintenance, node and enrollment-token management |
-| Application or official SDK directly to Core | `/v1` | Project API key | Application resource creation, editing and execution |
-| Node and daemon transports | Fixed transport routes | Their own transport credentials | Existing enrollment and Runtime communication |
+| Console server | `/console/auth`, `/console/auth/{setup,login,logout}`, `/console/config` | Console account (session cookie) or legacy Basic authentication | Sign-in and sign-out; non-secret capability flags such as `sandbox_admin` |
+| Administrator API | `/core/v1/admin/**` | Deployment administrator credential, added by the console server | Projects, keys, resource reads and deletion, copies, provenance, summaries, Runtime observations, startup configuration |
+| Sandbox administration | `/core/v1/sandbox/**` | Deployment administrator credential, added by the console server | Nodes page; fleet and capacity figures on Overview and Sandbox metrics |
+| Agents API | `/v1/**` | Project API key | Not used. The first-run screen shows a `curl` example for `/v1/agents` with a `$CORE_API_KEY` placeholder; the console never sends it |
 
-The console denies `/v1` with 404 regardless of a supplied Bearer token. Core
-rejects Project keys on administrator routes and deployment credentials on `/v1`.
-An administrator-selected Project is a target scope, not a caller identity.
+Browser requests are same-origin and carry only the console sign-in. The browser
+never holds or sends the deployment credential, an API key or an `OpenAI-Beta`
+header. Responses are validated: a malformed value is reported as a failure, or
+marked as unrecognised where noted below, and never replaced by a guessed or zero
+value.
 
-## Administrator resources
+## Projects and keys
 
-Paths below are relative to `/core/v1/admin`. Exact routes, payloads, list bounds
-and deletion preconditions are defined in the
-[administrator contract](../../contracts/agents-api/admin-api.md).
-
-| Capability | Management surface | Limits |
+| Operation | Route | Console use |
 | --- | --- | --- |
-| Projects and keys | `/projects`, Project rename/archive, Project `/keys` | Database-owned; key plaintext only at issuance; rotate by issue and revoke |
-| Asset inspection and deletion | `/projects/{project_id}/agents`, `/skills`, `/environment-templates`, `/files`, `/vaults` and documented item routes | No arbitrary creation or editing; existing deletion rules apply |
-| Session inspection and deletion | Project `/sessions` and documented Turn, Item, Artifact, configuration and Runtime reads | No Session creation, events/SSE, input or cancellation; no Session/Artifact copies |
-| Content reads | Documented Skill/version and Artifact content routes | No Source File content route; credential values and confidential configuration remain write-only |
-| Independent copies | `/copies` | Supported assets only, different Projects, active destination; dependencies, receipt and audit commit atomically |
-| Summary and observations | `/summary`, `/runtime-observations`, `/runtime-history/capabilities`, `/startup-configuration` | Missing usage stays unknown; summaries are not billing; observation never provisions compute |
-| Provenance and audit | Project `/resource-owners`, `/write-operations`; global `/audit-log` | Key provenance and administrator audit are distinct; no tokens or request bodies |
+| List projects | `GET /projects` | Project filter on every project-scoped page; Projects and keys list; first-run detection (no project opens the first-run screen) |
+| Create project | `POST /projects` | **Create project**; first run (default name `Default`) |
+| Rename project | `POST /projects/{project_id}` | **Rename** on an active project; the ID stays the same |
+| Archive project | `POST /projects/{project_id}/archive` | **Archive**: revokes every key; the project's assets stay readable, deletable and copyable |
+| List keys | `GET /projects/{project_id}/keys` | Key table of a project: name, prefix, status, creation and revocation time |
+| Issue key | `POST /projects/{project_id}/keys` | **Issue key** on an active project and the first-run screen; the plaintext is shown once |
+| Revoke key | `DELETE /projects/{project_id}/keys/{key_id}` | **Revoke**, with a warning when it is the project's last active key |
 
-`AdminClient` shares public resource parsers where wire shapes match. It exposes
-finite management operations, uses same-origin cookies in the browser and never
-retries writes automatically. Server/test callers may supply an explicit deployment
-credential; the browser must not configure one.
+Names are checked for length (projects 1–128 characters, keys 1–80) and control
+characters before sending. An issued key's plaintext stays in component memory
+until the administrator confirms it was saved and is never written to browser
+storage, URLs or logs. There is no project deletion and no plaintext recovery.
+
+## Project resources
+
+Routes are relative to `/core/v1/admin/projects/{project_id}` and return the same
+objects as the corresponding public `/v1` operations, so the console applies the
+public client's strict projections. Archived projects remain readable.
+
+| Resource | Reads used | Deletion | Copy | Creator | Console surface |
+| --- | --- | --- | --- | --- | --- |
+| Agents | `/agents`, `/agents/{agent_id}` | Agent | Yes | `agent` | Agents list with usage per Agent; Agent page with instructions, tools, generation settings and metadata |
+| Environment templates | `/environment-templates`, `/environment-templates/{id}` | Template | Yes | `environment_template` | Templates list; Template page with every safe section |
+| Skills | `/skills`, `/skills/{skill_id}`, `/skills/{skill_id}/versions`, Skill and version `/content` | Skill and Skill version | Yes | `skill` (list) | Skills list; Skill page with versions and archive downloads |
+| Files | `/files` | File | Yes | `file` | Files list (metadata only) |
+| Vaults | `/vaults`, `/vaults/{vault_id}`, `/vaults/{vault_id}/credentials` | Vault and Credential | Vault, or one Credential into a Vault of the target project | `vault`, `credential` | Vaults list; Vault page with Credential metadata |
+| Sessions | `/sessions`, `/sessions/{session_id}`, `/sessions/{session_id}/items`, `/sessions/{session_id}/turns`, `/sessions/{session_id}/runtime-observation`, `/sessions/{session_id}/runtime-history` | Session | No | `session` | Session log; Session page; Agent metrics; hosted Runtime rows |
+
+Resource-specific boundaries:
+
+- **Environment templates.** `env` and setup commands are write-only and never
+  returned, so the console cannot tell whether a Template has them. Inline files
+  report only their size. A Template with a section or field the client does not
+  recognise is marked; its recognised sections are still shown and nothing else is
+  guessed.
+- **Skills.** A version upload, a default-pointer change and every other Skill write
+  belong to the project's keys. The console downloads the default or an exact
+  version as a ZIP, deletes versions (the default version is blocked while others
+  remain; deleting the only version deletes the Skill) and deletes a Skill after
+  its name is typed.
+- **Files.** The list is read 100 per page, newest or oldest first. The
+  administrator API has no File content route, so the console offers no download.
+- **Vaults.** Credential tokens are never returned. The console shows each
+  Credential's name, MCP server URL, authentication type and update time.
+- **Sessions.** A malformed Session fails the read of its project instead of being
+  skipped. The console does not read single Turns, Artifacts, execution
+  configuration or Environment resources.
+
+## Provenance, monitoring and copies
+
+| Operation | Route | Console use |
+| --- | --- | --- |
+| Resource owners | `GET /projects/{project_id}/resource-owners` | The Creator column of every resource list and the creator fact of detail pages, in batches of up to 100 IDs. An administrator's copy shows **Admin copy**; a resource without a record shows **Unknown** |
+| Write operations | `GET /projects/{project_id}/write-operations` | A project's write history, newest first, filtered by key and resource type, 50 per page |
+| Summary | `GET /summary` | Overview (per project), the Agents list (`group_by=agent`), a project's page (per project and `group_by=key`), Agent metrics (to skip idle projects, and usage by creating key since the start of the range), the Projects list (last activity) |
+| Copies | `POST /copies` with `Idempotency-Key` | **Copy to…** on Agents, Environment templates, Skills, Files, Vaults and Credentials |
+| Runtime observations | `GET /runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project |
+| Core metrics | `GET /core-metrics?range=` | Core metrics page; the Core popover on Overview. A Core without the route (404) is shown as not reporting; the popover then shows only Core's status. Measurements are defined in the [Core metrics contract](../../contracts/agents-api/core-metrics.md) |
+| Startup configuration | `GET /startup-configuration` | System: harnesses, default harness, model endpoint presence, managed sandbox, daemon gateway and self-hosted execution |
+
+Summary figures are cumulative per Session and are not billing records. Sessions
+without reported usage count toward coverage but not toward token sums, and the
+console shows missing values as missing, never as zero. The administrator audit
+log (`GET /audit-log`) and Runtime history capabilities
+(`GET /runtime-history/capabilities`) are not consumed.
+
+## Sandbox administration
+
+| Operation | Route | Console use |
+| --- | --- | --- |
+| Deployment | `GET`, `POST`, `PUT /core/v1/sandbox/deployment` | Read the provider, Core origin, maintenance state and installation ID; initialize the deployment; change its settings with the expected generation |
+| Maintenance | `PATCH /core/v1/sandbox/deployment/maintenance` | Enter or leave maintenance to change the provider |
+| Nodes | `GET /core/v1/sandbox/nodes` | Nodes page; fleet on Overview; node capacity on Sandbox metrics |
+| Allocations | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes page; Sandbox metrics |
+| Enrollment | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**: a single-use token inside a command that verifies the installer checksum |
+| Remove node | `DELETE /core/v1/sandbox/nodes/{node_id}` | Confirmed node removal; the row goes only after Core acknowledges the deletion |
+
+These pages appear only when `/console/config` reports `sandbox_admin: true`. An E2B
+deployment has no nodes; its API key is write-only.
+
+## Writes
+
+- Deletion uses the administrator API with the same preconditions as the public
+  delete operation. Every deletion is confirmed. A 4xx keeps the dialog open with
+  Core's reason, a 404 counts as already deleted, and any other failure is reported
+  as uncertain and followed by a fresh read.
+- The console offers Session deletion only for idle or failed Sessions without
+  required actions and never cancels work to make a Session deletable.
+- A copy targets an active project other than the source. The dialog keeps one
+  `Idempotency-Key` while the source, target, dependency choice and target Vault stay
+  the same, so a retry after an uncertain answer returns the committed result
+  instead of a second copy. The result lists new IDs and skipped entries with their
+  reasons.
+- Project, key, deletion, copy and sandbox writes are never retried automatically.
+
+## Read bounds
+
+| Page | Reads | Bound |
+| --- | --- | --- |
+| Resource lists | Every page of the selected project, or of every project in parallel | 10,000 entries per project; a failed project is named and the rest still show |
+| Session log | Every Session page of the selected projects, newest first | 10,000 per project; refreshed on request |
+| Session page | Session, Items and Turns | 10,000 Items and Turns; polled every 5 s while the Session is in progress or waiting, backing off to 60 s on failures |
+| Overview | Summary; Session lists for the 24-hour activity and the Sessions needing attention | 1,000 Sessions per project; idle projects are skipped; refreshed every 30 s while visible |
+| Agent metrics | Summary; Session lists; Turns and Items of the most recently active Sessions | 2,000 Sessions listed per project; 200 Sessions read per load, 10 Turn and 5 Item pages each, 15 s per Session and 45 s per load |
+| Sandbox metrics | Nodes and allocations; Runtime observations; hosted Sessions by ID; Runtime history | 100 hosted Sessions read per refresh; history for at most 24; refreshed every 30 s while visible |
+
+The aggregate endpoints that would replace these browser reads are proposed in
+[Administrator metrics: backend requirements](admin-metrics-backend-requirements.md).
+
+## Not consumed
+
+- Any `/v1/**` route, including Session creation, Session events and their SSE
+  stream, message input, function results and cancellation.
+- Creation or update of Agents, Environment templates, Skills, Files, Vaults or
+  Credentials, including uploads and Credential token replacement.
+- Environment resources, Environment Files, executor credentials and Artifacts.
+
+## Terminology
+
+- **OpenAI Agents API** is the managed-harness API described in the official
+  [Agents guide](https://developers.openai.com/api/docs/guides/agents). Parsar Core
+  implements part of its pinned beta resource shape under `/v1`.
+- **Administrator API** (also called the Web API) is Parsar Core's management
+  extension under `/core/v1/admin`. It is not part of the public Agents API.
+- **OpenAI Agents SDK** and **Responses API** are different interfaces and are not
+  used by the console.
+
+Any change to a consumed route, field, error or bound must update this matrix, the
+client tests and the console's fixtures in the same change.
 
 ## Evidence and changes
 
-The route allowlists live in [admin_routes.go](../../services/core-console/admin_routes.go)
-and [sandbox_admin.go](../../services/core-console/sandbox_admin.go). Authentication,
+The console's route allowlists live in
+[admin_routes.go](../../services/core-console/admin_routes.go) and
+[sandbox_admin.go](../../services/core-console/sandbox_admin.go); authentication,
 origin checks and header handling live in [server.go](../../services/core-console/server.go).
-Update this guide when those boundaries change; keep detailed wire semantics in the
-administrator contract.
+Update this matrix when those boundaries or the console's reads change, and keep
+detailed wire semantics in the administrator contract.
 
-Backend HTTP tests, real console login/proxy checks and Project isolation/copy
-acceptance establish backend behavior. React integration needs separate browser
-acceptance after migration. Fixture screenshots, health responses and deserialization
-tests do not prove execution readiness or copied asset usability.
-
-The [public protocol inventory](../../contracts/agents-api/README.md) owns pinned SDK
-versions and public API compatibility evidence. Runtime and native adapter behavior
-remain governed by the [design principles](../design-principles.md).
+Backend HTTP tests, console login and proxy checks and Project isolation and copy
+acceptance establish backend behavior. The console's unit tests and fixture-backed
+browser tests cover its screens; they do not prove execution readiness or that a
+copied asset is usable.

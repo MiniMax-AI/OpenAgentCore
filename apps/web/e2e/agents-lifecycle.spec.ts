@@ -18,6 +18,56 @@ async function resetFixture(request: APIRequestContext) {
   expect(response.ok()).toBe(true);
 }
 
+function consoleNav(page: Page) {
+  return page.getByRole("navigation", { name: "Console navigation", exact: true });
+}
+
+function navButton(page: Page, name: string) {
+  return consoleNav(page).getByRole("button", { name, exact: true });
+}
+
+function sessionLog(page: Page) {
+  return page.getByRole("region", { name: "Session log", exact: true });
+}
+
+function sessionLogStatusFilter(page: Page, label: string) {
+  return sessionLog(page).getByRole("group", { name: "Status", exact: true })
+    .getByRole("button", { name: new RegExp(`^${label}\\s*\\d*$`) });
+}
+
+/** The value cell of one Overview KPI, located by its visible label. */
+function overviewKpi(page: Page, label: string) {
+  return page.getByLabel("Deployment health", { exact: true }).locator(".kpi")
+    .filter({ has: page.locator("dt > span", { hasText: new RegExp(`^${label}$`) }) })
+    .locator(".kpi-value");
+}
+
+/** The Sandbox metrics page, which hosts the runtime observability block formerly on the Dashboard. */
+function sandboxMetrics(page: Page) {
+  return page.locator(".metrics-page");
+}
+
+function pageRefresh(page: Page) {
+  return page.locator("main .page-header").getByRole("button", { name: "Refresh", exact: true });
+}
+
+/** The console's theme lives in the sidebar's language and appearance menu. */
+async function chooseDarkTheme(page: Page) {
+  await page.locator(".app-sidebar .appearance-menu-trigger").click();
+  await page.getByRole("menuitemradio", { name: "Dark theme", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+}
+
+/** Sampling provenance (sample count and last sample time) lives in the Help tip beside the trend status. */
+function runtimeSamplingHelp(scope: Locator) {
+  return scope.locator(".dashboard-runtime-live-controls").getByRole("button", { name: "Help", exact: true });
+}
+
+/** Opens a console page from the grouped sidebar, e.g. "Agent builder" or "Session console". */
+async function openView(page: Page, name: string) {
+  await navButton(page, name).click();
+}
+
 async function controlFixture(request: APIRequestContext, control: Record<string, unknown>) {
   const response = await request.post(`${fixtureBaseUrl}/__fixture/control`, { data: control });
   expect(response.ok()).toBe(true);
@@ -130,8 +180,8 @@ function isEnvironmentResourcePath(path: string): boolean {
 async function openAgents(page: Page, request: APIRequestContext) {
   await resetFixture(request);
   await openSessionsFromHome(page);
-  await page.getByRole("button", { name: "Agents" }).click();
-  await expect(page.getByRole("list", { name: "Agents", exact: true })).toBeVisible();
+  await openView(page, "Agent builder");
+  await expect(page.getByRole("table", { name: "Agents", exact: true })).toBeVisible();
 }
 
 async function startSessionWithSecondAgent(page: Page) {
@@ -154,16 +204,12 @@ async function openAdvancedSessionSettings(dialog: Locator) {
 }
 
 function environmentTrigger(page: Page) {
-  return page.getByRole("button", { name: /Environment|Connect environment/i });
+  // Scoped to the page body: the sidebar's "Environment templates" item would otherwise match.
+  return page.locator("main").getByRole("button", { name: /Environment|Connect environment/i });
 }
 
 function connectedLiveEvents(page: Page) {
   return page.getByRole("status", { name: "Session live events: Live events" });
-}
-
-async function setDarkTheme(page: Page) {
-  await page.getByRole("button", { name: "Language and appearance" }).click();
-  await page.getByRole("menuitemradio", { name: "Dark theme" }).click();
 }
 
 async function openEnvironmentDialog(page: Page) {
@@ -198,16 +244,16 @@ async function attachElementScreenshot(locator: Locator, testInfo: TestInfo, nam
 
 async function openSessionsFromHome(page: Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
 }
 
-test("opens Dashboard as the default landing page", async ({ page, request }) => {
+test("opens Overview as the default landing page", async ({ page, request }) => {
   await resetFixture(request);
   await page.goto("/");
 
-  await expect(page.getByRole("button", { name: "Dashboard", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
-  await expect(page.locator(".dashboard-page")).toBeVisible();
+  await expect(navButton(page, "Overview")).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { level: 1, name: "Overview", exact: true })).toBeVisible();
+  await expect(page.locator(".overview-page")).toBeVisible();
 });
 
 test("explains a 502 Core backend failure and opens copyable Docker recovery steps", async ({ page }) => {
@@ -229,7 +275,7 @@ test("explains a 502 Core backend failure and opens copyable Docker recovery ste
   await expect(recovery).toContainText("HTTP 502");
   await expect(page.getByText("Agents: Agent core request failed (502).", { exact: true })).toHaveCount(0);
   await expect(page.getByText(
-    "Agent Core backend is not ready. Open the Dashboard startup guide.",
+    "Agent Core backend is not ready. Open the Overview startup guide.",
     { exact: true },
   )).toHaveCount(1);
   await expect(page.getByText("Agent core request failed (502).", { exact: true })).toHaveCount(0);
@@ -261,7 +307,7 @@ test("retrieves the latest Agent and opens its validated edit setup directly", a
   await openAgents(page, request);
   await expect(page.getByText("Lifecycle Agent · stale list", { exact: true })).toBeVisible();
 
-  await controlFixture(request, { retrieveDelayMs: 250 });
+  await controlFixture(request, { retrieveDelayMs: 1_500 });
   await page.getByRole("button", { name: /^Edit Lifecycle Agent/ }).click();
   await expect(page.getByRole("status")).toHaveText("Opening latest definition…");
   const setup = page.locator(".agent-setup-page");
@@ -332,7 +378,7 @@ test("fails closed when the latest Agent response has a different identity", asy
   await editTrigger.click();
   await expect(page.getByRole("alert")).toContainText("returned a different Agent than the one requested");
   await expect(page.locator(".agent-setup-page")).toHaveCount(0);
-  await expect(page.getByRole("list", { name: "Agents", exact: true })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Agents", exact: true })).toBeVisible();
   await expect(editTrigger).toBeFocused();
 
   const reads = (await fixtureRequests(request)).filter((entry) => (
@@ -448,39 +494,28 @@ test("creates, previews, edits, and removes bounded Function and anonymous HTTP 
 test("keeps Source Files controls out of the System status page", async ({ page, request }) => {
   await resetFixture(request);
   await openSessionsFromHome(page);
-  await page.getByRole("button", { name: "System", exact: true }).click();
+  await openView(page, "System");
   await expect(page.getByRole("region", { name: "Source Files" })).toHaveCount(0);
   await expect(page.locator(".system-page")).not.toContainText("Source Files");
 });
 
-test("supports global Create keyboard navigation and consumes setup requests once", async ({ page, request }) => {
+test("supports grouped console navigation and consumes Agent setup requests once", async ({ page, request }) => {
   await openAgents(page, request);
   const sidebar = page.locator(".app-sidebar");
-  const productNavigation = sidebar.getByRole("navigation", { name: "Agents product" });
-  await expect(productNavigation).toBeVisible();
-  await expect(productNavigation.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(page.locator(".product-header").getByRole("navigation", { name: "Agents product" })).toHaveCount(0);
-  const createMenu = page.getByRole("button", { name: "Create", exact: true });
-  await createMenu.focus();
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("menuitem", { name: /^Agent\b/ })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(createMenu).toBeFocused();
-  await page.keyboard.press("ArrowDown");
-  const createAgentItem = page.getByRole("menuitem", { name: /^Agent\b/ });
-  const startSessionItem = page.getByRole("menuitem", { name: /^Start Session\b/ });
-  await expect(createAgentItem).toBeFocused();
-  await page.keyboard.press("ArrowDown");
-  await expect(startSessionItem).toBeFocused();
-  await page.keyboard.press("ArrowUp");
-  await expect(createAgentItem).toBeFocused();
+  await expect(sidebar.getByRole("navigation", { name: "Console navigation", exact: true })).toBeVisible();
+  await expect(navButton(page, "Agent builder")).toHaveAttribute("aria-current", "page");
+  await expect(navButton(page, "Agents")).not.toHaveAttribute("aria-current", "page");
+  // The global Create menu is gone; Agents are created from the Agent builder catalog.
+  await expect(page.getByRole("button", { name: "Create", exact: true })).toHaveCount(0);
+  const catalogCreate = page.getByRole("button", { name: /^Create agent/ });
+  await catalogCreate.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("Name")).toBeFocused();
   await expect(page.getByRole("heading", { name: "Request preview" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
-  await expect(page.getByRole("list", { name: "Agents", exact: true })).toBeVisible();
+  await openView(page, "Session console");
+  await openView(page, "Agent builder");
+  await expect(page.getByRole("table", { name: "Agents", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "New Agent" })).toHaveCount(0);
 
   const editTrigger = page.getByRole("button", { name: /^Edit Lifecycle Agent/ });
@@ -492,32 +527,7 @@ test("supports global Create keyboard navigation and consumes setup requests onc
   await expect(editTrigger).toBeFocused();
   await expect(page.locator(".modal-backdrop")).toHaveCount(0);
 
-  await createMenu.click();
-  await startSessionItem.click();
-  const sessionDialog = page.getByRole("dialog", { name: "Create a Session" });
-  await expect(sessionDialog).toBeVisible();
-  await expect(sessionDialog.getByLabel("Saved Agent", { exact: true })).toHaveValue("agent_a");
-  await expect(sessionDialog.locator('option[value="agent_a"]')).toBeEnabled();
-  await expect(sessionDialog.locator('option[value="agent_a"]')).toContainText("Lifecycle Agent");
-  await expect(sessionDialog.locator('option[value="agent_a"]')).not.toContainText("Session requires changes");
-  await expect(sessionDialog.locator('option[value="agent_tool_only"]')).toBeEnabled();
-  await expect(sessionDialog.locator('option[value="agent_tool_only"]')).toContainText("Saved-only Tool Agent");
-  await expect(sessionDialog.locator('option[value="agent_tool_only"]')).not.toContainText("Session requires changes");
-  const sessionPostsBeforeCancel = (await fixtureRequests(request)).filter((entry) => (
-    entry.method === "POST" && entry.path === "/v1/agents/sessions"
-  )).length;
-  await sessionDialog.getByRole("button", { name: "Cancel" }).click();
-  expect((await fixtureRequests(request)).filter((entry) => (
-    entry.method === "POST" && entry.path === "/v1/agents/sessions"
-  ))).toHaveLength(sessionPostsBeforeCancel);
-  await expect(createMenu).toBeFocused();
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Create a Session" })).toHaveCount(0);
-
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
-  await createMenu.click();
-  await createAgentItem.click();
+  await catalogCreate.click();
   const createMetadata = page.locator(".agent-metadata-input");
   const createName = page.locator('input[data-agent-initial-focus="true"]');
   await expect(createName).toBeFocused();
@@ -528,16 +538,11 @@ test("supports global Create keyboard navigation and consumes setup requests onc
   await page.keyboard.press("Enter");
   await expect(page.getByRole("status")).toContainText("Agent definition saved as");
 
-  await createMenu.click();
-  await createAgentItem.click();
+  await page.getByRole("button", { name: "Back to Agents" }).click();
+  await catalogCreate.click();
   await expect(page.getByLabel("Name")).toHaveValue("");
   await expect(page.getByLabel("Name")).toBeEnabled();
   await expect(page.getByRole("status")).toHaveCount(0);
-  await page.getByRole("button", { name: "Back to Agents" }).click();
-  await expect(createMenu).toBeFocused();
-
-  const catalogCreate = page.getByRole("button", { name: /^Create agent/ });
-  await catalogCreate.click();
   await page.getByRole("button", { name: "Back to Agents" }).click();
   await expect(catalogCreate).toBeFocused();
 
@@ -552,6 +557,44 @@ test("supports global Create keyboard navigation and consumes setup requests onc
     text: { format: { type: "text" }, verbosity: "medium" },
   });
   expect(creates[0]?.body).not.toHaveProperty("reasoning");
+});
+
+test("consumes Session setup requests once and returns focus to the Session console create button", async ({ page, request }) => {
+  await openAgents(page, request);
+  // A Session setup request from an Agent card opens once in the Session console.
+  await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
+  await expect(navButton(page, "Session console")).toHaveAttribute("aria-current", "page");
+  const sessionDialog = page.getByRole("dialog", { name: "Create a Session" });
+  await expect(sessionDialog).toBeVisible();
+  await expect(sessionDialog.getByLabel("Saved Agent", { exact: true })).toHaveValue("agent_b");
+  await expect(sessionDialog.locator('option[value="agent_a"]')).toBeEnabled();
+  await expect(sessionDialog.locator('option[value="agent_a"]')).toContainText("Lifecycle Agent");
+  await expect(sessionDialog.locator('option[value="agent_a"]')).not.toContainText("Session requires changes");
+  await expect(sessionDialog.locator('option[value="agent_tool_only"]')).toBeEnabled();
+  await expect(sessionDialog.locator('option[value="agent_tool_only"]')).toContainText("Saved-only Tool Agent");
+  await expect(sessionDialog.locator('option[value="agent_tool_only"]')).not.toContainText("Session requires changes");
+  const sessionPostsBeforeCancel = (await fixtureRequests(request)).filter((entry) => (
+    entry.method === "POST" && entry.path === "/v1/agents/sessions"
+  )).length;
+  await sessionDialog.getByRole("button", { name: "Cancel" }).click();
+  expect((await fixtureRequests(request)).filter((entry) => (
+    entry.method === "POST" && entry.path === "/v1/agents/sessions"
+  ))).toHaveLength(sessionPostsBeforeCancel);
+  await openView(page, "Agent builder");
+  await openView(page, "Session console");
+  await expect(page.getByRole("dialog", { name: "Create a Session" })).toHaveCount(0);
+
+  // The Session console's own create button returns focus when cancelled.
+  const newSession = page.getByRole("button", { name: "New Session", exact: true });
+  await newSession.click();
+  await expect(sessionDialog).toBeVisible();
+  await expect(sessionDialog.getByLabel("Saved Agent", { exact: true })).toHaveValue("agent_a");
+  await sessionDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(sessionDialog).toHaveCount(0);
+  await expect(newSession).toBeFocused();
+  expect((await fixtureRequests(request)).filter((entry) => (
+    entry.method === "POST" && entry.path === "/v1/agents/sessions"
+  ))).toHaveLength(sessionPostsBeforeCancel);
 });
 
 test("continues from a default Agent definition into a Session with initial input", async ({ page, request }) => {
@@ -580,7 +623,7 @@ test("continues from a default Agent definition into a Session with initial inpu
   await expect(sessionDialog.getByRole("textbox", { name: /^Additional metadata\b/u })).toHaveCount(0);
   await expect(sessionDialog.getByRole("radio", { name: /No environment/ })).toBeChecked();
   await sessionDialog.getByRole("button", { name: "Create Session" }).click();
-  await expect(page.getByRole("button", { name: "Sessions", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(navButton(page, "Session console")).toHaveAttribute("aria-current", "page");
   await expect(environmentTrigger(page)).toHaveCount(0);
   await expect(
     page.getByRole("tabpanel", { name: "Conversation" })
@@ -631,7 +674,7 @@ test("opens repair setup for a saved response while blocking an invalid Session 
 
 test("starts only Agents that pass known Session admission", async ({ page, request }) => {
   await openAgents(page, request);
-  await expect(page.getByRole("list", { name: "Agents", exact: true })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Agents", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Edit Lifecycle Agent/ })).toBeVisible();
 
   const blockedStart = page.getByRole("button", { name: /^Start a Session with Lifecycle Agent/ });
@@ -667,7 +710,7 @@ test("starts only Agents that pass known Session admission", async ({ page, requ
   await expect(sessionDialog).toBeVisible();
   await expect(sessionDialog.getByLabel("Saved Agent", { exact: true })).toHaveValue("agent_b");
   await sessionDialog.getByRole("button", { name: "Create Session" }).click();
-  await expect(page.getByRole("button", { name: "Sessions", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(navButton(page, "Session console")).toHaveAttribute("aria-current", "page");
 
   const sessionCreates = (await fixtureRequests(request)).filter((entry) => (
     entry.method === "POST" && entry.path === "/v1/agents/sessions"
@@ -682,7 +725,7 @@ test("starts only Agents that pass known Session admission", async ({ page, requ
 
 test("serializes complete saved-Agent overrides with initial input", async ({ page, request }) => {
   await openAgents(page, request);
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
   await page.getByRole("button", { name: "New Session" }).click();
   let dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("Review the Session-specific settings.");
@@ -791,8 +834,8 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
   }
 
   await openSessionsFromHome(page);
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
-  await expect(page.getByRole("list", { name: "Agents", exact: true })).toBeVisible();
+  await openView(page, "Agent builder");
+  await expect(page.getByRole("table", { name: "Agents", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: /^Start a Session with Anonymous MCP Agent/ }).click();
   let dialog = page.getByRole("dialog", { name: "Create a Session" });
@@ -802,7 +845,7 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
   await dialog.getByRole("button", { name: "Create Session" }).click();
   await expect(dialog).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Start a Session with Anonymous MCP Agent/ }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("List the available documentation resources.");
@@ -812,7 +855,7 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
   await dialog.getByRole("button", { name: "Create Session" }).click();
   await expect(dialog).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Start a Session with Anonymous MCP Agent/ }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("List the available documentation resources.");
@@ -823,7 +866,7 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
   await expect(dialog.getByRole("button", { name: "Create Session" })).toBeDisabled();
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Start a Session with Explicit MCP Agent/ }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("List the available documentation resources.");
@@ -846,7 +889,7 @@ test("derives manual Vault attachments for anonymous and explicit MCP Credential
   ]);
   const createsBeforeCredentialDelete = creates.length;
 
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Start a Session with Explicit MCP Agent/ }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("List the available documentation resources.");
@@ -885,7 +928,7 @@ test("clears manual Vault attachments when overrides remove HTTP MCP tools", asy
   expect(agentResponse.status()).toBe(201);
 
   await openSessionsFromHome(page);
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Start a Session with MCP Clear Agent/ }).click();
   const dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByRole("textbox", { name: /^First message\b/u }).fill("Explain the Session without MCP tools.");
@@ -1027,7 +1070,7 @@ test("hides Template selection when the connected Core lacks the resource", asyn
   await resetFixture(request);
   await controlFixture(request, { environmentTemplateListStatus: 400 });
   await openSessionsFromHome(page);
-  await page.getByRole("button", { name: "Agents" }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
   const dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByRole("radio", { name: /Managed hosted/ }).check();
@@ -1047,7 +1090,7 @@ test("creates managed hosted profiles with JSON for empty input and SSE for init
   ] as const;
 
   for (const [index, profile] of profiles.entries()) {
-    if (index > 0) await page.getByRole("button", { name: "Agents", exact: true }).click();
+    if (index > 0) await openView(page, "Agent builder");
     if (index === 0) await controlFixture(request, { environmentEventStatus: 3, environmentEventCount: 1 });
     await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
     const dialog = page.getByRole("dialog", { name: "Create a Session" });
@@ -1127,8 +1170,8 @@ test("creates managed hosted profiles with JSON for empty input and SSE for init
     }
   }
 
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-  await expect(page.getByRole("table", { name: "Recent Sessions" })).toContainText("Managed hosted");
+  await openView(page, "Session log");
+  await expect(sessionLog(page).getByRole("table")).toContainText("Hosted sandbox");
 });
 
 test("blocks hosted MCP before persistence while allowing a Function-only managed Session", async ({ page, request }) => {
@@ -1156,7 +1199,7 @@ test("blocks hosted MCP before persistence while allowing a Function-only manage
   expect(fn.status()).toBe(201);
 
   await openSessionsFromHome(page);
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   const before = (await fixtureRequests(request)).filter((entry) => (
     entry.method === "POST" && entry.path === "/v1/agents/sessions"
   )).length;
@@ -1170,7 +1213,7 @@ test("blocks hosted MCP before persistence while allowing a Function-only manage
   ))).toHaveLength(before);
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Start a Session with Hosted Function Agent/ }).click();
   dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByRole("radio", { name: /Managed hosted/ }).check();
@@ -1191,16 +1234,16 @@ test("keeps managed Environment resource and terminal event states fail-closed",
   let trigger = environmentTrigger(page);
   await expect(trigger).toContainText("Environment: Expired");
   let opened = await openEnvironmentDialog(page);
-  await expect(opened.panel).toContainText("Managed Environment Expired");
+  await expect(opened.panel).toContainText(/Managed Environment expired/i);
   await expect(opened.panel.getByText("Add inline Workspace file", { exact: true })).toHaveCount(0);
   await expect(opened.panel).not.toContainText("Connect Environment");
   await opened.dialog.getByRole("button", { name: "Done" }).click();
 
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-  await expect(page.getByRole("table", { name: "Recent Sessions" })).toContainText("Managed hosted");
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session log");
+  await expect(sessionLog(page).getByRole("table")).toContainText("Hosted sandbox");
+  await openView(page, "Session console");
   await controlFixture(request, { environmentResourceStatus: "pending", environmentResourceVariant: "wrong_type" });
-  await page.getByRole("button", { name: "Refresh Sessions" }).click();
+  await page.getByRole("button", { name: "Refresh Sessions", exact: true }).click();
   trigger = environmentTrigger(page);
   await expect(trigger).toContainText("Environment: Unavailable");
   opened = await openEnvironmentDialog(page);
@@ -1216,7 +1259,7 @@ test("keeps managed Environment resource and terminal event states fail-closed",
   await page.reload();
   await expect(environmentTrigger(page)).toContainText("Environment: Failed");
   opened = await openEnvironmentDialog(page);
-  await expect(opened.panel).toContainText("Managed Environment Failed");
+  await expect(opened.panel).toContainText(/Managed Environment failed/i);
   await expect(opened.panel.getByText("Add inline Workspace file", { exact: true })).toHaveCount(0);
   await expect(opened.panel).not.toContainText("Connect Environment");
 
@@ -1232,7 +1275,7 @@ test("keeps managed Environment resource and terminal event states fail-closed",
   await expect(page.getByText('Failed to provision environment: script "setup_commands[0]" failed with exit code 3', { exact: true })).toBeVisible();
   await expect(page.getByLabel("Message the Agent")).toBeDisabled();
   opened = await openEnvironmentDialog(page);
-  await expect(opened.panel).toContainText("Managed Environment Failed");
+  await expect(opened.panel).toContainText(/Managed Environment failed/i);
   await expect(opened.panel.getByText("Add inline Workspace file", { exact: true })).toHaveCount(0);
   await expect(opened.panel).not.toContainText("Connect Environment");
 
@@ -1257,7 +1300,7 @@ test("creates an inline Session without saved Agents and preserves ordered user-
   await page.getByRole("button", { name: "Refresh Agents" }).click();
   await expect(page.getByText("No saved Agents", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
   const newSession = page.getByRole("button", { name: "New Session" });
   await expect(newSession).toBeEnabled();
   await newSession.click();
@@ -1351,12 +1394,12 @@ test("keeps failures visible, rejects stale async continuations, and never retri
   await controlFixture(request, { retrieveDelayMs: 400 });
   await page.getByRole("button", { name: /^Edit Lifecycle Agent/ }).click();
   await expect(page.getByRole("status")).toHaveText("Opening latest definition…");
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
   await page.waitForTimeout(500);
   await expect(page.locator(".session-page")).toBeVisible();
   await expect(page.locator(".agent-setup-page")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   await page.getByRole("button", { name: /^Edit Lifecycle Agent/ }).click();
   await expect(page.locator(".agent-setup-page")).toBeVisible();
   await page.getByLabel("Name").fill("Preserved after failure");
@@ -1372,7 +1415,7 @@ test("keeps failures visible, rejects stale async continuations, and never retri
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("button", { name: "Back to Agents" })).toBeDisabled();
   await page.waitForTimeout(100);
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
   await page.waitForTimeout(700);
   await expect(page.locator(".session-page")).toBeVisible();
   await expect(page.locator(".agent-setup-page")).toHaveCount(0);
@@ -1408,50 +1451,41 @@ test("requires delete confirmation, preserves failures, and keeps Session snapsh
   await dialog.getByRole("button", { name: "Delete Agent" }).click();
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeDisabled();
   await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole("list", { name: "Agents", exact: true })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Agents", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Edit Lifecycle Agent/ })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Sessions" }).click();
-  await expect(page.getByRole("button", { name: /Idle Lifecycle Agent/ })).toBeVisible();
+  await openView(page, "Session console");
+  await expect(page.getByRole("button", { name: /^Idle Lifecycle Agent/ })).toBeVisible();
   requests = await fixtureRequests(request);
   expect(requests.filter((entry) => entry.method === "DELETE" && entry.path === "/v1/agents/agent_a")).toHaveLength(2);
 });
 
-test("keeps the Agent card grid, setup, and delete confirmation usable at 390 px", async ({ page, request }, testInfo) => {
+test("keeps the Agent table, setup, and delete confirmation usable at 390 px", async ({ page, request }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openAgents(page, request);
 
-  const agentList = page.getByRole("list", { name: "Agents", exact: true });
-  await expect(agentList.getByRole("listitem")).toHaveCount(2);
-  await expect(agentList.getByRole("listitem").first()).toContainText("Create agent");
+  // Every saved Agent is one table row; the table scrolls inside its frame instead of the page.
+  const agentTable = page.getByRole("table", { name: "Agents", exact: true });
+  await expect(agentTable.locator("tbody tr")).toHaveCount(3);
   await expect(page.getByRole("button", { name: /^Edit Lifecycle Agent/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Edit Second Agent/ })).toHaveCount(0);
-  const showMore = page.getByRole("button", { name: "Show 2 more" });
-  await expect(showMore).toHaveAttribute("aria-expanded", "false");
-  await showMore.click();
-  await expect(page.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
-  await expect(agentList.getByRole("listitem")).toHaveCount(4);
   const secondAgent = page.getByRole("button", { name: /^Edit Second Agent/ });
   await expect(secondAgent).toBeVisible();
   await secondAgent.click();
   await expect(page.locator(".agent-setup-page").getByRole("heading", { name: "Second Agent", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Back to Agents" }).click();
   await expect(secondAgent).toBeFocused();
-  await expect(page.getByRole("button", { name: "Show less" })).toBeVisible();
 
   const metrics = await page.evaluate(() => {
     const main = document.querySelector(".app-main")?.getBoundingClientRect();
     const trigger = Array.from(document.querySelectorAll("button")).find((button) => button.textContent?.includes("Create agent"))?.getBoundingClientRect();
-    const grid = document.querySelector(".agent-card-grid")?.getBoundingClientRect();
-    const sessionTrigger = document.querySelector('button[aria-label^="Start a Session with Second Agent ("]')?.getBoundingClientRect();
+    const frame = document.querySelector(".agent-table-frame")?.getBoundingClientRect();
     return {
       innerWidth,
       documentScrollWidth: document.documentElement.scrollWidth,
       bodyScrollWidth: document.body.scrollWidth,
       main: main && { left: main.left, right: main.right, width: main.width },
       trigger: trigger && { left: trigger.left, right: trigger.right, width: trigger.width },
-      grid: grid && { left: grid.left, right: grid.right, width: grid.width },
-      sessionTrigger: sessionTrigger && { left: sessionTrigger.left, right: sessionTrigger.right, width: sessionTrigger.width },
+      frame: frame && { left: frame.left, right: frame.right, width: frame.width },
     };
   });
   expect(metrics.documentScrollWidth).toBeLessThanOrEqual(metrics.innerWidth);
@@ -1460,33 +1494,22 @@ test("keeps the Agent card grid, setup, and delete confirmation usable at 390 px
   expect(metrics.main?.right).toBeLessThanOrEqual(390);
   expect(metrics.trigger?.left).toBeGreaterThanOrEqual(0);
   expect(metrics.trigger?.right).toBeLessThanOrEqual(390);
-  expect(metrics.grid?.left).toBeGreaterThanOrEqual(0);
-  expect(metrics.grid?.right).toBeLessThanOrEqual(390);
-  expect(metrics.sessionTrigger?.left).toBeGreaterThanOrEqual(metrics.grid?.left ?? 0);
-  expect(metrics.sessionTrigger?.right).toBeLessThanOrEqual(metrics.grid?.right ?? 390);
+  expect(metrics.frame?.left).toBeGreaterThanOrEqual(0);
+  expect(metrics.frame?.right).toBeLessThanOrEqual(390);
   await expect(page.getByRole("button", { name: /^Start a Session with Second Agent/ })).toContainText("Start Session");
-  await attachScreenshot(page, testInfo, "narrow-light-agent-card-grid");
+  await attachScreenshot(page, testInfo, "narrow-light-agent-table");
 
   await expect(page.getByRole("button", { name: "Environments", exact: true })).toHaveCount(0);
-  const sessionsNavigation = page.getByRole("button", { name: "Sessions", exact: true });
+  const sessionsNavigation = navButton(page, "Session console");
   await sessionsNavigation.click();
   await expect(sessionsNavigation).toHaveAttribute("aria-current", "page");
   await expect(page.locator(".session-page")).toBeVisible();
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
 
-  const globalCreate = page.getByRole("button", { name: "Create", exact: true });
-  await globalCreate.click();
-  const createPanel = page.getByRole("menu", { name: "Create" });
-  await expect(createPanel).toBeVisible();
-  await expect(createPanel.getByRole("menuitem")).toHaveCount(2);
-  await expect(createPanel.getByRole("menuitem", { name: /Environment template/i })).toHaveCount(0);
-  await expect(createPanel.getByRole("menuitem", { name: /Environment key/i })).toHaveCount(0);
-  const createPanelBox = await createPanel.boundingBox();
-  expect(createPanelBox).not.toBeNull();
-  expect(createPanelBox?.x ?? -1).toBeGreaterThanOrEqual(0);
-  expect((createPanelBox?.x ?? 0) + (createPanelBox?.width ?? 0)).toBeLessThanOrEqual(390);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await createPanel.getByRole("menuitem", { name: /^Agent\b/ }).click();
+  // Agents are created from the page header's Create agent action; the global Create menu was removed.
+  await expect(page.getByRole("button", { name: "Create", exact: true })).toHaveCount(0);
+  const catalogCreate = page.getByRole("button", { name: /^Create agent/ });
+  await catalogCreate.click();
   const setup = page.locator(".agent-setup-page");
   const box = await setup.boundingBox();
   expect(box).not.toBeNull();
@@ -1501,10 +1524,9 @@ test("keeps the Agent card grid, setup, and delete confirmation usable at 390 px
   await expect(setup).toContainText("Creation is locked to the current Session-compatible profile");
   await attachScreenshot(page, testInfo, "narrow-light-agent-setup");
   await page.getByRole("button", { name: "Back to Agents" }).click();
-  await expect(globalCreate).toBeFocused();
+  await expect(catalogCreate).toBeFocused();
 
-  await setDarkTheme(page);
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await chooseDarkTheme(page);
   await page.getByRole("button", { name: /^Edit Lifecycle Agent/ }).click();
   const editSetup = page.locator(".agent-setup-page");
   await expect(editSetup).toBeVisible();
@@ -1582,7 +1604,7 @@ test("requires a first message without an Environment and preserves the draft ac
 test("starts one Session with an idempotency key and without browser authorization", async ({ page, request }) => {
   await openAgents(page, request);
   await startSessionWithSecondAgent(page);
-  await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Session console" })).toBeVisible();
 
   const requests = await fixtureRequests(request);
   const creates = requests.filter((entry) => entry.method === "POST" && entry.path === "/v1/agents/sessions");
@@ -1605,7 +1627,7 @@ test("filters every Session page by Agent and aborts a stale filter read", async
   await expect(page.locator(".session-row")).toHaveCount(1);
 
   // These Sessions are deliberately created after the global snapshot loads.
-  // The Agent-scoped list must be able to select them without inflating Dashboard totals.
+  // The Agent-scoped list must be able to select them without inflating the Session log totals.
   await createFixtureSession(request, "first");
   await createFixtureSession(request, "second");
 
@@ -1627,10 +1649,10 @@ test("filters every Session page by Agent and aborts a stale filter read", async
     new URLSearchParams(entry.query ?? "").has("after")
   ))).toBe(true);
 
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-  const dashboard = page.locator(".dashboard-page");
-  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Sessions" })).toContainText("1");
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session log");
+  await expect(sessionLogStatusFilter(page, "All").locator(".filter-count")).toHaveText("1");
+  await expect(sessionLog(page).getByRole("table").getByRole("row")).toHaveCount(2);
+  await openView(page, "Session console");
   await expect(filter).toHaveValue("agent_b");
   await expect(page.locator(".conversation-header h2")).toHaveText("Second Agent");
 
@@ -1640,7 +1662,7 @@ test("filters every Session page by Agent and aborts a stale filter read", async
     entry.path === "/v1/agents/sessions" &&
     new URLSearchParams(entry.query ?? "").get("agent_id") === "agent_a"
   )).length;
-  await controlFixture(request, { sessionListDelayMs: 500 });
+  await controlFixture(request, { sessionListDelayMs: 2_000 });
   await filter.selectOption("agent_a");
   await expect.poll(async () => (await fixtureRequests(request)).filter((entry) => (
     entry.method === "GET" &&
@@ -1654,7 +1676,7 @@ test("filters every Session page by Agent and aborts a stale filter read", async
   await expect(page.locator(".session-row")).toHaveCount(2);
   await expect(page.locator(".session-row").filter({ hasText: "Second Agent" })).toHaveCount(2);
   await expect(page.locator(".session-row").filter({ hasText: "Lifecycle Agent" })).toHaveCount(0);
-  await page.waitForTimeout(550);
+  await page.waitForTimeout(2_050);
   await expect(filter).toHaveValue("agent_b");
   await expect(page.locator(".session-row").filter({ hasText: "Second Agent" })).toHaveCount(2);
   await expect(page.locator(".session-row").filter({ hasText: "Lifecycle Agent" })).toHaveCount(0);
@@ -1666,11 +1688,12 @@ test("filters every Session page by Agent and aborts a stale filter read", async
 
   await filter.selectOption("agent_b");
   await expect(page.locator(".conversation-header h2")).toHaveText("Second Agent");
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-  const lifecycleRow = page.getByRole("table", { name: "Recent Sessions" })
+  await openView(page, "Session log");
+  const lifecycleRow = sessionLog(page).getByRole("table")
     .getByRole("row")
     .filter({ hasText: "Lifecycle Agent" });
-  await lifecycleRow.getByRole("button").click();
+  await lifecycleRow.getByRole("button", { name: "Lifecycle Agent", exact: true }).click();
+  await expect(navButton(page, "Session console")).toHaveAttribute("aria-current", "page");
   await expect(filter).toHaveValue("");
   await expect(page.locator(".session-row")).toHaveCount(1);
   await expect(page.locator(".conversation-header h2")).toHaveText("Lifecycle Agent");
@@ -1701,7 +1724,7 @@ test("fences the filtered workspace across loading, errors, unavailable Agents, 
   await expect(page.locator(".conversation-header h2")).toHaveText("Second Agent");
   const deletedAgent = await request.delete(`${fixtureBaseUrl}/v1/agents/agent_b`);
   expect(deletedAgent.ok()).toBe(true);
-  await page.getByRole("button", { name: "Refresh Sessions" }).click();
+  await page.getByRole("button", { name: "Refresh Sessions", exact: true }).click();
   await expect(filter).toHaveValue("agent_b");
   await expect(filter.locator("option:checked")).toHaveText("Unavailable Agent (not loaded)");
   await expect(page.locator(".conversation-header h2")).toHaveText("Second Agent");
@@ -1724,7 +1747,7 @@ test("fences the filtered workspace across loading, errors, unavailable Agents, 
 
 test("streams initial Session creation, captures early events, then hands off to one GET stream", async ({ page, request }) => {
   await openAgents(page, request);
-  await controlFixture(request, { sessionCreateStreamCloseDelayMs: 1_500 });
+  await controlFixture(request, { sessionCreateStreamCloseDelayMs: 4_000 });
   await page.getByRole("button", { name: /^Start a Session with Second Agent/ }).click();
   const dialog = page.getByRole("dialog", { name: "Create a Session" });
   await dialog.getByRole("textbox", { name: /^Title\b/u }).fill("Streamed creation");
@@ -1807,7 +1830,7 @@ for (const failure of [
     expect((await fixtureState(request)).sessions).toHaveLength(2);
 
     await create.click();
-    await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Session console" })).toBeVisible();
     creates = (await fixtureRequests(request)).filter((entry) => (
       entry.method === "POST" && entry.path === "/v1/agents/sessions"
     ));
@@ -2125,7 +2148,7 @@ test("deletes an inactive Session without disturbing the active composer or live
   await resetFixture(request);
   await openSessionsFromHome(page);
   await expect(connectedLiveEvents(page)).toBeVisible();
-  await page.getByRole("button", { name: "Agents" }).click();
+  await openView(page, "Agent builder");
   await startSessionWithSecondAgent(page);
   await expect(page.locator(".conversation-header h2")).toHaveText("Second Agent");
   await expect(connectedLiveEvents(page)).toBeVisible();
@@ -2143,7 +2166,7 @@ test("deletes an inactive Session without disturbing the active composer or live
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("button", { name: "Delete", exact: true })).toBeEnabled();
   await dialog.getByRole("button", { name: "Delete", exact: true }).click();
-  await controlFixture(request, { sessionDeleteDelayMs: 1_500 });
+  await controlFixture(request, { sessionDeleteDelayMs: 4_000 });
   const deleteButton = dialog.locator(".modal-footer .button.danger");
   const deleteClick = deleteButton.click();
   await expect(deleteButton).toBeDisabled();
@@ -2229,7 +2252,7 @@ for (const pendingRead of [
     await resetFixture(request);
     await openSessionsFromHome(page);
     await expect(connectedLiveEvents(page)).toBeVisible();
-    await page.getByRole("button", { name: "Agents" }).click();
+    await openView(page, "Agent builder");
     await startSessionWithSecondAgent(page);
     await expect(page.locator(".conversation-header h2")).toHaveText("Second Agent");
     await controlFixture(request, { turnsScenario: 1 });
@@ -2275,7 +2298,7 @@ test("aborts a pending manual recovery read after deleting the selected Session"
   await controlFixture(request, { sessionRetrieveDelayMs: 5_000 });
 
   await expectSelectedDeleteAbortsSessionRead(page, request, () => (
-    page.getByRole("button", { name: "Refresh Sessions" }).click()
+    page.getByRole("button", { name: "Refresh Sessions", exact: true }).click()
   ));
 });
 
@@ -2284,7 +2307,7 @@ test("aborts a pending detail retry read after deleting the selected Session", a
   await openSessionsFromHome(page);
   await expect(connectedLiveEvents(page)).toBeVisible();
   await controlFixture(request, { sessionRetrieveStatus: 503 });
-  await page.getByRole("button", { name: "Refresh Sessions" }).click();
+  await page.getByRole("button", { name: "Refresh Sessions", exact: true }).click();
   const detailError = page.locator(".session-detail-error");
   await expect(detailError).toBeVisible();
   await controlFixture(request, { sessionRetrieveDelayMs: 5_000 });
@@ -2298,12 +2321,12 @@ test("deletes the selected Session while its SSE is still connecting", async ({ 
   await resetFixture(request);
   await openSessionsFromHome(page);
   await expect(connectedLiveEvents(page)).toBeVisible();
-  await page.getByRole("button", { name: "Agents" }).click();
+  await openView(page, "Agent builder");
   await startSessionWithSecondAgent(page);
   await expect(page.locator(".conversation-header h2")).toHaveText("Second Agent");
   await expect(connectedLiveEvents(page)).toBeVisible();
 
-  await controlFixture(request, { streamOpenDelayMs: 3_000 });
+  await controlFixture(request, { streamOpenDelayMs: 8_000 });
   const streamReadsBefore = (await fixtureRequests(request)).filter((entry) => (
     entry.method === "GET" && entry.path === "/v1/agents/sessions/session_snapshot/events"
   )).length;
@@ -2331,7 +2354,7 @@ test("keeps Session actions accessible and contained at 390 px in dark mode", as
   await resetFixture(request);
   await openSessionsFromHome(page);
   await expect(connectedLiveEvents(page)).toBeVisible();
-  await setDarkTheme(page);
+  await chooseDarkTheme(page);
   const manage = page.locator(".conversation-session-action");
   await manage.focus();
   await page.keyboard.press("Enter");
@@ -2365,7 +2388,7 @@ test("keeps Session actions accessible and contained at 390 px in dark mode", as
   await expect(manage).toBeFocused();
 });
 
-test("presents Dashboard page-chain results and System boundaries without extra detail reads", async ({ page, request }, testInfo) => {
+test("presents Overview page-chain results and System boundaries without extra detail reads", async ({ page, request }, testInfo) => {
   await resetFixture(request);
   await openSessionsFromHome(page);
   await expect(connectedLiveEvents(page)).toBeVisible();
@@ -2381,19 +2404,15 @@ test("presents Dashboard page-chain results and System boundaries without extra 
       entry.method === "GET" && entry.path === path
     )).length >= 2);
   }).toBe(true);
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await openView(page, "Overview");
 
-  const dashboard = page.locator(".dashboard-page");
-  await expect(dashboard.getByRole("heading", { name: /Dashboard/ })).toBeVisible();
-  await expect(dashboard).toContainText("Latest complete paginated reads");
-  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Agents" })).toContainText("3");
-  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Sessions" })).toContainText("1");
-  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "In progress" })).toContainText("0");
-  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Needs attention" })).toContainText("0");
-  await expect(dashboard).not.toContainText("Reported aggregate tokens");
-  await expect(dashboard).toContainText("No Sessions currently need attention.");
-  await expect(dashboard.getByRole("button", { name: /Create agent/ })).toBeVisible();
-  await expect(dashboard.getByRole("button", { name: /Start session/ })).toBeVisible();
+  const overview = page.locator(".overview-page");
+  await expect(overview.getByRole("heading", { level: 1, name: "Overview", exact: true })).toBeVisible();
+  await expect(overviewKpi(page, "Running Sessions")).toHaveText("0");
+  await expect(overviewKpi(page, "Needs attention")).toHaveText("0");
+  // No Session reports usage, so the Overview must not invent an aggregate.
+  await expect(overviewKpi(page, "Tokens reported")).toHaveText("—");
+  await expect(overview.getByRole("region", { name: "Needs attention", exact: true })).toContainText("Nothing needs attention");
 
   const before = await fixtureRequests(request);
   const count = (entries: FixtureRequest[], path: string) => entries.filter((entry) => (
@@ -2421,7 +2440,7 @@ test("presents Dashboard page-chain results and System boundaries without extra 
     });
     await route.continue();
   });
-  const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
+  const refresh = overview.locator(".page-header").getByRole("button", { name: "Refresh", exact: true });
   await refresh.click();
   await sessionListStarted;
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
@@ -2435,10 +2454,10 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   expect(count(after, "/v1/agents/sessions")).toBe(count(before, "/v1/agents/sessions") + 2);
   expect(count(after, "/v1/agents/runtime-observations")).toBe(count(before, "/v1/agents/runtime-observations") + 1);
   for (const path of detailPaths) expect(count(after, path)).toBe(count(before, path));
-  await attachScreenshot(page, testInfo, "desktop-dashboard-loaded-snapshot");
+  await attachScreenshot(page, testInfo, "desktop-overview-loaded-snapshot");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  const dashboardBounds = await dashboard.evaluate((element) => {
+  const overviewBounds = await overview.evaluate((element) => {
     const box = element.getBoundingClientRect();
     return {
       viewportWidth: innerWidth,
@@ -2448,30 +2467,24 @@ test("presents Dashboard page-chain results and System boundaries without extra 
       right: box.right,
     };
   });
-  expect(dashboardBounds.documentWidth).toBeLessThanOrEqual(dashboardBounds.viewportWidth);
-  expect(dashboardBounds.bodyWidth).toBeLessThanOrEqual(dashboardBounds.viewportWidth);
-  expect(dashboardBounds.left).toBeGreaterThanOrEqual(0);
-  expect(dashboardBounds.right).toBeLessThanOrEqual(390);
-  await expect(dashboard.getByRole("button", { name: /Create agent/ })).toBeVisible();
-  await expect(dashboard.getByRole("button", { name: /Start session/ })).toBeVisible();
-  await attachScreenshot(page, testInfo, "narrow-dashboard-loaded-snapshot");
+  expect(overviewBounds.documentWidth).toBeLessThanOrEqual(overviewBounds.viewportWidth);
+  expect(overviewBounds.bodyWidth).toBeLessThanOrEqual(overviewBounds.viewportWidth);
+  expect(overviewBounds.left).toBeGreaterThanOrEqual(0);
+  expect(overviewBounds.right).toBeLessThanOrEqual(390);
+  await attachScreenshot(page, testInfo, "narrow-overview-loaded-snapshot");
   await page.setViewportSize({ width: 1280, height: 720 });
 
-  await dashboard.getByRole("button", { name: /Create agent/ }).click();
-  await expect(page.locator(".agent-setup-page").getByRole("heading", { name: "New Agent" })).toBeVisible();
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-  await dashboard.getByRole("button", { name: /Start session/ }).click();
-  const sessionDialog = page.getByRole("dialog", { name: "Create a Session" });
-  await expect(sessionDialog).toBeVisible();
-  await sessionDialog.getByRole("button", { name: "Cancel" }).click();
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-
-  await dashboard.getByRole("table", { name: "Recent Sessions" }).getByRole("button", { name: "Lifecycle Agent" }).click();
+  // Saved Agent and Session totals now live on the resource pages.
+  await openView(page, "Agents");
+  await expect(page.getByRole("region", { name: "Agents", exact: true })).toContainText("3 of 3 Agents");
+  await openView(page, "Session log");
+  await expect(sessionLogStatusFilter(page, "All").locator(".filter-count")).toHaveText("1");
+  await sessionLog(page).getByRole("table").getByRole("button", { name: "Lifecycle Agent", exact: true }).click();
   const sessionPage = page.locator(".session-page");
   await expect(sessionPage).toBeVisible();
   await expect(sessionPage.getByText("Lifecycle Agent", { exact: true }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "System", exact: true }).click();
+  await openView(page, "System");
   const system = page.locator(".system-page");
   await expect(system.getByRole("listitem").filter({ hasText: "Daemon gateway" })).toContainText("Enabled");
   await expect(system.getByRole("listitem").filter({ hasText: "Managed sandbox" })).toContainText("Docker");
@@ -2486,6 +2499,10 @@ test("presents Dashboard page-chain results and System boundaries without extra 
   await expect(system).toContainText("Operator endpoint override: configured");
   await expect(system).toContainText("Compiled into this build, but not enabled when this Core process started");
   await expect(system).toContainText("Runtime connection, native binary availability, sandbox health, and model execution belong to the relevant Session or Environment");
+  // The boundary note now lives behind the page header's Help tip; it must stay in the accessible description.
+  await expect(system.locator(".page-header").getByRole("button", { name: "Help", exact: true })).toHaveAccessibleDescription(
+    /Runtime connection, native binary availability, sandbox health, and model execution belong to the relevant Session or Environment/,
+  );
   await expect(system).not.toContainText("Source Files");
   await expect(system).not.toContainText("Public capability surface");
   await expect(system).not.toContainText("Cannot be pre-checked");
@@ -2520,13 +2537,11 @@ test("presents Dashboard page-chain results and System boundaries without extra 
       content: section.querySelector(".system-harness-grid")!.getBoundingClientRect().left,
       explanation: section.querySelector(".system-config-explanation")?.getBoundingClientRect().left ?? null,
     })),
-    boundaryInset: element.querySelector(".system-boundary-note")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
   }));
   expect(compactSystemBounds.documentWidth).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
   expect(compactSystemBounds.bodyWidth).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
   expect(compactSystemBounds.right).toBeLessThanOrEqual(compactSystemBounds.viewportWidth);
   expect(compactSystemBounds.sectionInset).toBe(24);
-  expect(compactSystemBounds.boundaryInset).toBe(24);
   for (const edge of compactSystemBounds.sectionEdges) {
     expect({ left: edge.left, right: edge.right }).toEqual({ left: 24, right: 24 });
     expect(edge.header).toBe(edge.content);
@@ -2539,9 +2554,9 @@ test("presents Dashboard page-chain results and System boundaries without extra 
     return {
       viewportWidth: innerWidth,
       documentWidth: document.documentElement.scrollWidth,
+      headingInset: element.querySelector(".page-header h1")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
       sectionInset: element.querySelector(".system-config-section")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
       sectionRightInset: element.getBoundingClientRect().right - element.querySelector(".system-config-section")!.getBoundingClientRect().right,
-      boundaryInset: element.querySelector(".system-boundary-note")!.getBoundingClientRect().left - element.getBoundingClientRect().left,
       rowBounds: rows.map((row) => ({
         top: row.getBoundingClientRect().top,
         bottom: row.getBoundingClientRect().bottom,
@@ -2551,9 +2566,9 @@ test("presents Dashboard page-chain results and System boundaries without extra 
     };
   });
   expect(systemBounds.documentWidth).toBeLessThanOrEqual(systemBounds.viewportWidth);
-  expect(systemBounds.sectionInset).toBe(12);
-  expect(systemBounds.sectionRightInset).toBe(12);
-  expect(systemBounds.boundaryInset).toBe(12);
+  // Sections align with the page heading and keep symmetric insets on narrow screens.
+  expect(systemBounds.sectionInset).toBe(systemBounds.headingInset);
+  expect(systemBounds.sectionRightInset).toBe(systemBounds.sectionInset);
   for (let index = 1; index < systemBounds.rowBounds.length; index += 1) {
     expect(systemBounds.rowBounds[index]!.top).toBeGreaterThanOrEqual(systemBounds.rowBounds[index - 1]!.bottom);
   }
@@ -2680,31 +2695,32 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
     });
   });
 
-  await page.goto("/");
-  const dashboard = page.locator(".dashboard-page");
-  await expect(dashboard.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
-  const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
-  await expect(dashboard.locator(".dashboard-runtime-sample-count")).toContainText("1 sample ·");
-  await expect(dashboard.getByRole("heading", { name: "CPU usage" })).toBeVisible();
-  await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
-  await expect(dashboard.getByRole("heading", { name: "Active sandboxes" })).toBeVisible();
-  await expect(dashboard.getByRole("heading", { name: "Token throughput" })).toBeVisible();
-  await expect(dashboard.getByLabel("Live Runtime sampling every 30 seconds")).toBeVisible();
-  const liveRange = dashboard.getByRole("group", { name: "Runtime live range" });
-  await expect(liveRange.getByRole("button", { name: "1h" })).toHaveAttribute("aria-pressed", "true");
-  await liveRange.getByRole("button", { name: "15m" }).click();
-  await expect(liveRange.getByRole("button", { name: "15m" })).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/#sandbox-metrics");
+  const metrics = sandboxMetrics(page);
+  await expect(metrics.getByRole("heading", { level: 1, name: "Sandbox metrics", exact: true })).toBeVisible();
+  await expect(metrics.getByRole("heading", { name: "Hosted runtime", exact: true })).toBeVisible();
+  const refresh = pageRefresh(page);
+  await expect(runtimeSamplingHelp(metrics)).toHaveAccessibleDescription(/^1 sample · /);
+  await expect(metrics.getByRole("heading", { name: "CPU usage" })).toBeVisible();
+  await expect(metrics.getByRole("heading", { name: "Memory usage" })).toBeVisible();
+  await expect(metrics.getByRole("heading", { name: "Active sandboxes" })).toBeVisible();
+  await expect(metrics.getByRole("heading", { name: "Token throughput" })).toBeVisible();
+  await expect(metrics.getByLabel("Live Runtime sampling every 30 seconds")).toBeVisible();
+  const liveRange = metrics.getByRole("group", { name: "Runtime live range" });
+  await expect(liveRange.getByRole("button", { name: "1 hour", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await liveRange.getByRole("button", { name: "15 minutes", exact: true }).click();
+  await expect(liveRange.getByRole("button", { name: "15 minutes", exact: true })).toHaveAttribute("aria-pressed", "true");
   await refresh.click();
-  await expect(dashboard.getByLabel("CPU usage: 2 live samples")).toBeVisible();
+  await expect(metrics.getByLabel("CPU usage: 2 live samples")).toBeVisible();
   await refresh.click();
-  await expect(dashboard.getByLabel("CPU usage: 3 live samples")).toBeVisible();
-  await expect(dashboard.getByLabel("Memory usage: 3 live samples")).toBeVisible();
-  await expect(dashboard.getByLabel("Active sandboxes: 3 live samples")).toBeVisible();
-  await expect(dashboard.getByLabel("Token throughput: 3 live samples")).toBeVisible();
-  await expect(dashboard.locator(".dashboard-runtime-sample-count")).toContainText("3 samples");
-  await expect(dashboard.getByText("CPU usage live trend available")).toBeAttached();
-  await expect(dashboard).not.toContainText("Collecting live samples");
-  const memoryCard = dashboard.getByRole("region", { name: "Memory usage live chart" });
+  await expect(metrics.getByLabel("CPU usage: 3 live samples")).toBeVisible();
+  await expect(metrics.getByLabel("Memory usage: 3 live samples")).toBeVisible();
+  await expect(metrics.getByLabel("Active sandboxes: 3 live samples")).toBeVisible();
+  await expect(metrics.getByLabel("Token throughput: 3 live samples")).toBeVisible();
+  await expect(runtimeSamplingHelp(metrics)).toHaveAccessibleDescription(/^3 samples · /);
+  await expect(metrics.getByText("CPU usage live trend available")).toBeAttached();
+  await expect(metrics).not.toContainText("Collecting live samples");
+  const memoryCard = metrics.getByRole("region", { name: "Memory usage live chart" });
   const memoryStrokePixelCount = () => memoryCard.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
     const context = canvas.getContext("2d");
     if (!context) return 0;
@@ -2725,7 +2741,7 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
     return pixels;
   });
   expect(await memoryStrokePixelCount()).toBeGreaterThan(0);
-  const cpuChart = dashboard.getByLabel("CPU usage: 3 live samples");
+  const cpuChart = metrics.getByLabel("CPU usage: 3 live samples");
   const cpuCard = cpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
   await cpuChart.focus();
   await cpuChart.press("Enter");
@@ -2735,7 +2751,8 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toBeVisible();
   await cpuChart.click({ position: { x: 260, y: 90 } });
   await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Pinned");
-  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("10%");
+  // The first live sample has no CPU rate yet. It renders as a gap ("Unavailable"), never as a fabricated 0%.
+  await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Repository migration 1Unavailable");
   await cpuChart.focus();
   await cpuChart.press("ArrowRight");
   await expect(cpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Pinned");
@@ -2746,8 +2763,8 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   await cpuSeriesToggle.click();
   await expect(cpuSeriesToggle).toHaveAttribute("aria-pressed", "true");
 
-  await expect(dashboard.locator('[data-chart-engine="uplot"]')).toHaveCount(4);
-  await expect(dashboard.locator(".dashboard-runtime-timeline")).toHaveCount(0);
+  await expect(metrics.locator('[data-chart-engine="uplot"]')).toHaveCount(4);
+  await expect(metrics.locator(".dashboard-runtime-timeline")).toHaveCount(0);
   const initialViewStart = Number(await cpuChart.getAttribute("data-view-start"));
   const initialViewEnd = Number(await cpuChart.getAttribute("data-view-end"));
   const plot = cpuCard.locator(".u-over");
@@ -2768,47 +2785,47 @@ test("renders Runtime telemetry as visual snapshot panels with details on demand
   expect(keyboardSelectedAt).toBeGreaterThanOrEqual(zoomedViewStart);
   expect(keyboardSelectedAt).toBeLessThanOrEqual(zoomedViewEnd);
   for (const chartName of ["Memory usage", "Active sandboxes", "Token throughput"]) {
-    await expect(dashboard.getByLabel(`${chartName}: 3 live samples`)).toHaveAttribute("data-view-start", String(initialViewStart));
-    await expect(dashboard.getByLabel(`${chartName}: 3 live samples`)).toHaveAttribute("data-view-end", String(initialViewEnd));
+    await expect(metrics.getByLabel(`${chartName}: 3 live samples`)).toHaveAttribute("data-view-start", String(initialViewStart));
+    await expect(metrics.getByLabel(`${chartName}: 3 live samples`)).toHaveAttribute("data-view-end", String(initialViewEnd));
   }
   const resetZoom = cpuCard.getByRole("button", { name: "Reset zoom" });
   await expect(resetZoom).toBeEnabled();
   await resetZoom.click();
   await expect(cpuChart).toHaveAttribute("data-view-start", String(initialViewStart));
   await expect(cpuChart).toHaveAttribute("data-view-end", String(initialViewEnd));
-  await expect(dashboard.getByRole("table", { name: "Runtime targets" })).not.toBeVisible();
+  await expect(metrics.getByRole("table", { name: "Runtime targets" })).not.toBeVisible();
   for (const close of await page.getByRole("button", { name: "Close notification" }).all()) await close.click();
   await expect(page.getByRole("button", { name: "Close notification" })).toHaveCount(0);
-  await attachElementScreenshot(dashboard.locator(".dashboard-runtime-panel"), testInfo, "runtime-visual-dashboard");
+  await attachElementScreenshot(metrics.locator(".runtime-embed"), testInfo, "runtime-visual-dashboard");
 
-  await dashboard.getByText("Runtime targets", { exact: true }).click();
-  await expect(dashboard.getByRole("table", { name: "Runtime targets" })).toBeVisible();
-  await expect(dashboard.getByText("Page 1 of 2")).toBeVisible();
-  const runtimeSearch = dashboard.getByPlaceholder("Search Session, provider, or identity");
+  await metrics.getByText("Runtime targets", { exact: true }).click();
+  await expect(metrics.getByRole("table", { name: "Runtime targets" })).toBeVisible();
+  await expect(metrics.getByText("Page 1 of 2")).toBeVisible();
+  const runtimeSearch = metrics.getByPlaceholder("Search Session, provider, or identity");
   await runtimeSearch.fill("Repository migration 12");
-  await expect(dashboard.getByText("1 visible")).toBeVisible();
-  await expect(dashboard.getByRole("table", { name: "Runtime targets" }).getByRole("row", { name: /Repository migration 12/ })).toBeVisible();
+  await expect(metrics.getByText("1 visible")).toBeVisible();
+  await expect(metrics.getByRole("table", { name: "Runtime targets" }).getByRole("row", { name: /Repository migration 12/ })).toBeVisible();
   await runtimeSearch.fill("");
-  await dashboard.getByRole("button", { name: "Tokens" }).click();
-  await expect(dashboard.getByRole("columnheader", { name: "Tokens" })).toHaveAttribute("aria-sort", "descending");
-  await dashboard.getByRole("button", { name: "Next" }).click();
-  await expect(dashboard.getByText("Page 2 of 2")).toBeVisible();
+  await metrics.getByRole("button", { name: "Tokens" }).click();
+  await expect(metrics.getByRole("columnheader", { name: "Tokens" })).toHaveAttribute("aria-sort", "descending");
+  await metrics.getByRole("button", { name: "Next" }).click();
+  await expect(metrics.getByText("Page 2 of 2")).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(dashboard.getByRole("heading", { name: "Memory usage" })).toBeVisible();
+  await expect(metrics.getByRole("heading", { name: "Memory usage" })).toBeVisible();
   await expect.poll(() => cpuChart.evaluate((element) => getComputedStyle(element).touchAction)).toBe("pan-y");
   for (const close of await page.getByRole("button", { name: "Close notification" }).all()) await close.click();
-  const widths = await dashboard.locator(".dashboard-runtime-panel").evaluate((element) => ({
+  const widths = await metrics.locator(".runtime-embed").evaluate((element) => ({
     viewport: innerWidth,
     document: document.documentElement.scrollWidth,
     panel: element.getBoundingClientRect().width,
   }));
   expect(widths.document).toBeLessThanOrEqual(widths.viewport);
   expect(widths.panel).toBeLessThanOrEqual(widths.viewport);
-  await attachElementScreenshot(dashboard.locator(".dashboard-runtime-panel"), testInfo, "runtime-visual-dashboard-narrow");
+  await attachElementScreenshot(metrics.locator(".runtime-embed"), testInfo, "runtime-visual-dashboard-narrow");
 });
 
-test("restores retained Runtime history after a Dashboard reload", async ({ page }) => {
+test("restores retained Runtime history after a Sandbox metrics reload", async ({ page }) => {
   const sessionId = "11111111-1111-4111-8111-111111111111";
   const environmentId = "22222222-2222-4222-8222-222222222222";
   const allocationId = "33333333-3333-4333-8333-333333333333";
@@ -2913,27 +2930,30 @@ test("restores retained Runtime history after a Dashboard reload", async ({ page
   });
 
   await page.goto("/");
-  const dashboard = page.locator(".dashboard-runtime-panel");
-  await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
-  await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
-  await expect(dashboard.getByLabel("Runtime durable-history charts")).toBeVisible();
-  await expect(dashboard.getByRole("heading", { name: "Compute uptime", exact: true })).toHaveCount(0);
-  await expect(dashboard.getByRole("heading", { name: "Active sandboxes", exact: true })).toBeVisible();
-  await expect(dashboard.locator('[data-chart-engine="uplot"]')).toHaveCount(4);
-  await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
-  await expect(dashboard).toContainText("120 buckets");
-  await expect(dashboard).toContainText("119/120 observations");
-  await expect(dashboard.getByText("Active sandboxes durable trend available")).toBeAttached();
-  await expect(dashboard.getByText("Token throughput durable trend available")).toBeAttached();
-  const durableCpuChart = dashboard.getByLabel("CPU usage: 120 retained buckets");
-  await expect(dashboard.getByRole("region", { name: "CPU usage durable history chart" })).toBeVisible();
+  await openView(page, "Sandbox metrics");
+  await expect(sandboxMetrics(page).getByRole("heading", { name: "Hosted runtime", exact: true })).toBeVisible();
+  const runtimePanel = sandboxMetrics(page).locator(".runtime-embed");
+  await expect(runtimePanel.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
+  await expect(runtimePanel.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
+  await expect(runtimePanel.getByLabel("Runtime durable-history charts")).toBeVisible();
+  await expect(runtimePanel.getByRole("heading", { name: "Compute uptime", exact: true })).toHaveCount(0);
+  await expect(runtimePanel.getByRole("heading", { name: "Active sandboxes", exact: true })).toBeVisible();
+  await expect(runtimePanel.locator('[data-chart-engine="uplot"]')).toHaveCount(4);
+  await expect(runtimePanel.getByText("CPU usage durable trend available")).toBeAttached();
+  await expect(runtimePanel).toContainText("120 buckets");
+  await expect(runtimePanel).toContainText("119/120 observations");
+  await expect(runtimePanel.getByText("Active sandboxes durable trend available")).toBeAttached();
+  await expect(runtimePanel.getByText("Token throughput durable trend available")).toBeAttached();
+  const durableCpuChart = runtimePanel.getByLabel("CPU usage: 120 retained buckets");
+  await expect(runtimePanel.getByRole("region", { name: "CPU usage durable history chart" })).toBeVisible();
   const durableCpuCard = durableCpuChart.locator("xpath=ancestor::section[contains(@class, 'dashboard-runtime-trend-card')]");
   await durableCpuChart.focus();
   await durableCpuChart.press("ArrowLeft");
-  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("0%");
+  // The explicit gap bucket has no CPU observation; it must read "Unavailable", not an idle 0%.
+  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
   await durableCpuChart.press("ArrowLeft");
-  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("0%");
-  const durableMemoryCard = dashboard.getByRole("region", { name: "Memory usage durable history chart" });
+  await expect(durableCpuCard.locator(".dashboard-runtime-trend-tooltip")).toContainText("Unavailable");
+  const durableMemoryCard = runtimePanel.getByRole("region", { name: "Memory usage durable history chart" });
   const durableMemorySpan = await durableMemoryCard.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
     const context = canvas.getContext("2d");
     if (!context) return 0;
@@ -2967,18 +2987,19 @@ test("restores retained Runtime history after a Dashboard reload", async ({ page
   const durableZoomStart = Number(await durableCpuChart.getAttribute("data-view-start"));
   const durableZoomEnd = Number(await durableCpuChart.getAttribute("data-view-end"));
   await expect(durableCpuCard.getByRole("button", { name: "Reset zoom" })).toBeVisible();
-  await page.getByRole("button", { name: "Refresh Dashboard snapshot" }).click();
-  const refreshedDurableCpuChart = dashboard.getByLabel("CPU usage: 120 retained buckets");
+  await pageRefresh(page).click();
+  const refreshedDurableCpuChart = runtimePanel.getByLabel("CPU usage: 120 retained buckets");
   await expect(refreshedDurableCpuChart).toHaveAttribute("data-view-start", String(durableZoomStart));
   await expect(refreshedDurableCpuChart).toHaveAttribute("data-view-end", String(durableZoomEnd));
 
   await page.reload();
-  await expect(dashboard.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
-  await expect(dashboard.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
-  await expect(dashboard.getByText("CPU usage durable trend available")).toBeAttached();
+  await expect(navButton(page, "Sandbox metrics")).toHaveAttribute("aria-current", "page");
+  await expect(runtimePanel.getByRole("group", { name: "Runtime trend source" })).toHaveCount(0);
+  await expect(runtimePanel.getByLabel(/Durable · 30s; 1 Runtime targets/)).toBeVisible();
+  await expect(runtimePanel.getByText("CPU usage durable trend available")).toBeAttached();
 });
 
-test("publishes Dashboard counts only after every top-level Agent and Session page loads", async ({ page, request }) => {
+test("publishes Overview and resource counts only after every top-level Agent and Session page loads", async ({ page, request }) => {
   await resetFixture(request);
   const agentAfters: Array<string | null> = [];
   const sessionAfters: Array<string | null> = [];
@@ -3041,33 +3062,37 @@ test("publishes Dashboard counts only after every top-level Agent and Session pa
   });
 
   await page.goto("/");
-  const dashboard = page.locator(".dashboard-page");
+  const overview = page.locator(".overview-page");
   // The synthetic second Session has no Runtime observation. Let that initial
   // snapshot finish before navigation, so requests cannot be aborted mid-chain.
-  await expect(dashboard.locator(".dashboard-source-badge").filter({ hasText: "Runtime" })).toContainText("Unavailable");
+  await expect(overview).toContainText("Runtime observations unavailable");
   expect(sessionAfters).toEqual([null, "session_snapshot", null, "session_snapshot"]);
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
   await expect.poll(() => sessionAfters.length).toBe(4);
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Agents" })).toContainText("3");
-  await expect(dashboard.locator(".dashboard-summary > div").filter({ hasText: "Sessions" })).toContainText("2");
+  await openView(page, "Overview");
+  await expect(overviewKpi(page, "Running Sessions")).not.toHaveText("—");
+  await openView(page, "Agents");
+  await expect(page.getByRole("region", { name: "Agents", exact: true })).toContainText("3 of 3 Agents");
+  await openView(page, "Session log");
+  await expect(sessionLogStatusFilter(page, "All").locator(".filter-count")).toHaveText("2");
+  await expect(sessionLog(page).getByRole("table").getByRole("row")).toHaveCount(3);
   expect(agentAfters).toEqual([null, "agent_b"]);
-  // The cached Dashboard and shared Session collection stay mounted across
-  // navigation, so no extra page-chain read occurs on either transition.
+  // The cached snapshot and shared Session collection stay mounted across
+  // navigation, so no extra page-chain read occurs on any transition.
   await expect.poll(() => sessionAfters).toEqual([
     null, "session_snapshot",
     null, "session_snapshot",
   ]);
 });
 
-test("keeps the previous Dashboard result when pagination exceeds the safety limit", async ({ page, request }) => {
+test("keeps the previous Agent result when pagination exceeds the safety limit", async ({ page, request }) => {
   await resetFixture(request);
   await openSessionsFromHome(page);
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-
-  const dashboard = page.locator(".dashboard-page");
-  const loadedAgents = dashboard.locator(".dashboard-summary > div").filter({ hasText: "Agents" });
-  await expect(loadedAgents).toContainText("3");
+  await openView(page, "Agents");
+  const loadedAgents = page.getByRole("region", { name: "Agents", exact: true });
+  await expect(loadedAgents).toContainText("3 of 3 Agents");
+  await openView(page, "Overview");
+  const overview = page.locator(".overview-page");
 
   let template: Record<string, unknown> | null = null;
   let reads = 0;
@@ -3096,18 +3121,22 @@ test("keeps the previous Dashboard result when pagination exceeds the safety lim
     });
   });
 
-  const refresh = dashboard.getByRole("button", { name: "Refresh Dashboard snapshot" });
+  const refresh = pageRefresh(page);
   await refresh.click();
-  await expect.poll(() => reads).toBe(100);
+  // Every page passes through a routed handler, which is slow over a remote browser connection.
+  await expect.poll(() => reads, { timeout: 30_000 }).toBe(100);
   await expect(refresh).toBeEnabled();
-  await expect(dashboard).toContainText("Snapshot incomplete");
-  await expect(dashboard).toContainText("collection pagination exceeded the Web safety limit");
-  await expect(dashboard).toContainText("Sessions changed while Runtime observations were loading");
-  await expect(loadedAgents).toContainText("3");
-  await dashboard.getByRole("button", { name: "Connection settings" }).click();
+  const collectionAlert = overview.getByRole("alert").filter({ hasText: "Agents:" });
+  await expect(collectionAlert).toContainText("collection pagination exceeded the Web safety limit");
+  await expect(overview).toContainText("Sessions changed while Runtime observations were loading");
+  await collectionAlert.getByRole("button", { name: "Connection settings" }).click();
   const connectionDialog = page.getByRole("dialog", { name: "Connect an Agent Core" });
   await expect(connectionDialog).toBeVisible();
   await connectionDialog.getByRole("button", { name: "Cancel" }).click();
+  await openView(page, "Agents");
+  await expect(loadedAgents).toContainText("3 of 3 Agents");
+  await expect(loadedAgents).toContainText("Refresh failed; showing the last loaded Agents.");
+  await expect(loadedAgents).not.toContainText("Safety page");
   expect(reads).toBe(100);
 });
 
@@ -3153,7 +3182,7 @@ test("renders self-hosted Environment and Workspace state safely across reconnec
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await page.setViewportSize({ width: 390, height: 844 });
-  await setDarkTheme(page);
+  await chooseDarkTheme(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const { panel: narrowPanel } = await openEnvironmentDialog(page);
   const widths = await narrowPanel.evaluate((element) => {
@@ -3180,7 +3209,7 @@ test("renders self-hosted Environment and Workspace state safely across reconnec
   await page.reload();
   const { panel: unknown, trigger: unknownTrigger } = await openEnvironmentDialog(page);
   await expect(unknownTrigger).toHaveAccessibleName("Environment: Unavailable");
-  await expect(unknown).toContainText("Environment unavailable");
+  await expect(unknown).toContainText(/Environment:? unavailable/i);
   await expect(unknown).toContainText("Unknown type");
   await expect(unknown).not.toContainText("/must-not-render");
   await expect(unknown.locator("a")).toHaveCount(0);
@@ -3240,7 +3269,7 @@ test("lists Workspace file metadata explicitly, paginates, fails closed, and fen
     await fixtureRequests(request)
   ).filter((entry) => entry.path.endsWith("/files")).length).toBeGreaterThan(reads.length + 1);
   await controlFixture(request, { environmentScenario: 2 });
-  await page.getByRole("button", { name: "Refresh Sessions" }).evaluate((button) => (
+  await page.getByRole("button", { name: "Refresh Sessions", exact: true }).evaluate((button) => (
     button as HTMLButtonElement
   ).click());
   await expect(page.getByRole("region", { name: "Workspace files" })).toHaveCount(0);
@@ -3260,7 +3289,7 @@ test("hydrates durable expired and unavailable Environment states without a writ
   let { panel, trigger } = await openEnvironmentDialog(page);
   await expect(trigger).toHaveAccessibleName("Environment: Expired");
   await expect(panel).toContainText("Expired");
-  await expect(panel).toContainText("Environment expired");
+  await expect(panel).toContainText(/Environment:? expired/i);
   await expect(panel).toContainText("no API-managed files, plugins, or skills");
   await expect(page.getByLabel("Message the Agent")).toBeVisible();
 
@@ -3436,7 +3465,7 @@ test("loads every Turn page, reconciles terminal events, and keeps diagnostics o
   ).filter((entry) => entry.method === "GET" && entry.path.endsWith("/turns")).length).toBeGreaterThan(readsBeforeTerminal.length);
 
   await controlFixture(request, { turnsRetrieveStatus: 503 });
-  await page.getByRole("button", { name: "Refresh Sessions" }).click();
+  await page.getByRole("button", { name: "Refresh Sessions", exact: true }).click();
   await expect(trace.locator(".trace-load-error").filter({ hasText: "Turn history is incomplete" })).toBeVisible();
   await expect(timeline.locator(".turn-timeline-failure")).toContainText("Couldn’t load Turn history");
   await expect(timeline).toContainText("last observed Turn timeline remains visible");
@@ -3602,8 +3631,8 @@ test("drops a delayed Turn page after switching Sessions", async ({ page, reques
   await diagnostics.locator("summary").click();
   const timeline = diagnostics.getByRole("region", { name: "Turn timeline" });
   await expect(timeline).toContainText("Loading every Turn page");
-  await page.getByRole("button", { name: "Agents" }).click();
-  await expect(page.getByRole("list", { name: "Agents", exact: true })).toBeVisible();
+  await openView(page, "Agent builder");
+  await expect(page.getByRole("table", { name: "Agents", exact: true })).toBeVisible();
   await startSessionWithSecondAgent(page);
 
   await page.getByRole("tab", { name: "Trace" }).click();
@@ -3660,7 +3689,7 @@ test("renders Parsar patches as accessible read-only diffs in desktop and narrow
   await attachScreenshot(page, testInfo, "desktop-light-parsar-diff");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await setDarkTheme(page);
+  await chooseDarkTheme(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const widths = await viewer.evaluate((element) => {
     const box = element.getBoundingClientRect();

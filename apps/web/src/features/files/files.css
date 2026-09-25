@@ -1,0 +1,29 @@
+/* Resources › Files. Shared page grammar and tokens only; no decorative frames. */
+
+.files-table th[scope="row"] {
+  min-width: 200px;
+}
+
+.files-nowrap {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A freshly uploaded row fades from the accent tint back to the table surface. */
+.data-table tbody tr.files-row-new {
+  animation: files-row-new 8s var(--ease-settle) forwards;
+}
+
+@keyframes files-row-new {
+  from { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+  to { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-table tbody tr.files-row-new {
+    animation: none;
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  }
+}
+
+

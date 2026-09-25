@@ -28,6 +28,10 @@ async function mockAccount(page: Page, initial: AuthStatus) {
   return writes;
 }
 
+async function openView(page: Page, name: string) {
+  await page.getByRole("navigation", { name: "Console navigation", exact: true }).getByRole("button", { name, exact: true }).click();
+}
+
 async function fillAccount(page: Page) {
   await page.getByLabel(/^Administrator username/).fill(username);
   await page.getByLabel(/^Password/).fill(password);
@@ -250,9 +254,9 @@ test("runs the copied local request against Core and reveals only its matching A
   await expect(page.getByRole("heading", { name: "Ada's first Agent 云", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Saved definition", exact: true })).toContainText(createdId);
   await page.getByRole("button", { name: "Back to Agents", exact: true }).click();
-  await page.getByRole("button", { name: "Sessions", exact: true }).click();
+  await openView(page, "Session console");
   await expect(page.locator(".session-page")).toBeVisible();
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await openView(page, "Agent builder");
   await expect(page.getByRole("region", { name: "Agents", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Saved definition", exact: true })).toHaveCount(0);
 });

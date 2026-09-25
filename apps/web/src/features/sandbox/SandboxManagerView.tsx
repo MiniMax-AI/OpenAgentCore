@@ -1,81 +1,88 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SandboxAdminClient, type InitializeSandboxDeployment, type SandboxAllocation, type SandboxDeployment, type SandboxNode } from "@agents-core-web/agents-client";
-import { RefreshCw, Server } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { InitializeSandboxDeployment, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { isLocalProxyBaseUrl } from "../../lib/connection";
-import { sandboxProviderLabel, sandboxRequestError } from "../../lib/sandbox-labels";
-import { SandboxTopology } from "./SandboxTopology";
-import { SandboxNodeCard } from "./SandboxNodeCard";
-import { sandboxConsoleConfig, type SandboxConsoleConfig } from "./console-config";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { EmptyState, HelpTip, RefreshButton } from "../../components/console-ui";
+import { useConsoleNavigation } from "../../lib/console-navigation";
+import { sandboxRequestError } from "../../lib/sandbox-labels";
+import type { SandboxConsoleConfig } from "./console-config";
+import { sandboxAdmin, sandboxConsoleConfigQuery, sandboxDeploymentQuery, sandboxScope, sandboxSnapshotQuery, type SandboxSnapshot } from "./sandbox-queries";
 import { SandboxSetup } from "./SandboxSetup";
 import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 import { NodeEnrollment } from "./NodeEnrollment";
+import { NodeList } from "./NodeList";
+import { NodeDetail } from "./NodeDetail";
 import "./SandboxManagerView.css";
 
-export function SandboxManagerView({ coreBaseUrl, presentation = "manager" }: { coreBaseUrl: string; presentation?: "manager" | "home" }) {
-  const { t, i18n } = useTranslation("sandbox");
+/** Nodes: the deployment provider, the node list and one node's detail (`#nodes?id=…`). */
+export function SandboxManagerView() {
+  const { i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
-  return <section className="sandbox-manager" lang={locale}>
-    {isLocalProxyBaseUrl(coreBaseUrl) ? <SandboxAccess key={coreBaseUrl} presentation={presentation} /> : <p role="status">{t("Sandbox management is available through the signed-in console connection. Switch the Core connection to /v1 to manage this deployment.")}</p>}
+  return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={locale}>
+    <SandboxAccess />
   </section>;
 }
 
-function SandboxAccess({ presentation }: { presentation: "manager" | "home" }) {
+function NodesPageHeader({ title, count, back, actions }: { title?: ReactNode; count?: number; back?: () => void; actions?: ReactNode }) {
   const { t } = useTranslation("sandbox");
-  const [config, setConfig] = useState<SandboxConsoleConfig | null>(null);
-  const [checking, setChecking] = useState(true);
-  const [revision, setRevision] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    setChecking(true);
-    void sandboxConsoleConfig(controller.signal).then((value) => {
-      if (!controller.signal.aborted) { setConfig(value); setChecking(false); }
-    });
-    return () => controller.abort();
-  }, [revision]);
-  if (checking) return <p role="status">{t("Connecting to this console's Core…")}</p>;
-  if (!config?.sandbox_admin) return <div><p role="alert">{t("Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.")}</p><button type="button" className="button outline" onClick={() => setRevision((value) => value + 1)}>{t("Refresh sandbox state")}</button></div>;
-  return <SandboxManager consoleConfig={config} presentation={presentation} />;
+  return <header className="page-header">
+    <div className="console-page-heading">
+      {back ? <button type="button" className="icon-button ghost back-button" aria-label={t("Back to nodes")} title={t("Back to nodes")} onClick={back}><ArrowLeft size={16} strokeWidth={1.6} aria-hidden="true" /></button> : null}
+      <h1>{title ?? t("Nodes")}</h1>
+      {count === undefined ? null : <span className="heading-count">{count}</span>}
+      {back ? null : <HelpTip>{t("Your hosts for running sandboxes.")}</HelpTip>}
+    </div>
+    {actions ? <div className="page-actions">{actions}</div> : null}
+  </header>;
 }
 
-function SandboxManager({ consoleConfig, presentation }: { consoleConfig: SandboxConsoleConfig; presentation: "manager" | "home" }) {
+function SandboxAccess() {
+  const { t } = useTranslation("sandbox");
+  const { data: config, isPending: checking, isFetching, refetch } = useQuery(sandboxConsoleConfigQuery);
+  if (checking) return <><NodesPageHeader /><div className="console-page-body"><p role="status">{t("Connecting to this console's Core…")}</p></div></>;
+  if (!config?.sandbox_admin) return <><NodesPageHeader /><div className="console-page-body"><p role="alert">{t("Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></div></>;
+  return <SandboxManager consoleConfig={config} />;
+}
+
+function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig }) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
-  const client = useMemo(() => new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" }), []);
-  const [snapshot, setSnapshot] = useState<{ deployment: SandboxDeployment; nodes: SandboxNode[]; allocations: SandboxAllocation[] } | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(true);
-  const [fresh, setFresh] = useState(false);
+  const { params, navigate } = useConsoleNavigation();
+  const client = sandboxAdmin;
+  const queryClient = useQueryClient();
+  const query = useQuery(sandboxSnapshotQuery);
+  const snapshot: SandboxSnapshot | null = query.data ?? null;
+  const loading = query.isFetching;
+  // As before a reload clears the last error, a running read hides it.
+  const error: unknown = query.isFetching ? null : query.error;
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selectedNode = snapshot?.nodes.find((node) => node.id === selectedId);
-  const [removeId, setRemoveId] = useState<string | null>(null);
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
-  const revealNode = useCallback((id: string) => { setSelectedId(id); setRemoveId(null); }, []);
+  const [removeTarget, setRemoveTarget] = useState<SandboxNode | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const initialCoreUrl = window.location.origin;
-  const [setupNeedsRefresh, setSetupNeedsRefresh] = useState(false);
+  // When a deployment write last had an uncertain outcome; only a read begun after it confirms the state again.
+  const [uncertainSince, setUncertainSince] = useState<number | null>(null);
+  const setupNeedsRefresh = uncertainSince !== null && !(snapshot && snapshot.readAt > uncertainSince);
+  // The state on screen is Core's last successful read, with no uncertain write since.
+  const confirmed = snapshot !== null && !query.isError && !setupNeedsRefresh;
+  // Writes additionally wait for any read in flight.
+  const fresh = confirmed && !loading;
   const [mutationError, setMutationError] = useState<unknown>(null);
+  const { refetch } = query;
+  const refresh = useCallback(() => {
+    // Each refresh starts a new read (cancelling one in flight) and resets the forms, as a reload did.
+    setRevision((value) => value + 1);
+    setMutationError(null);
+    void refetch();
+  }, [refetch]);
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController(); lifetime.current = controller;
     return () => { controller.abort(); lifetime.current = null; };
   }, []);
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true); setError(null); setMutationError(null); setFresh(false);
-    void (async () => {
-      const deployment = await client.retrieveDeployment({ signal: controller.signal });
-      const nodes = deployment.provider === "e2b" ? { data: [] } : await client.listNodes({ signal: controller.signal });
-      const allocations = await Promise.all(nodes.data.map((node) => client.listAllocations(node.id, { signal: controller.signal })));
-      if (!controller.signal.aborted) {
-        setSnapshot({ deployment, nodes: nodes.data, allocations: allocations.flatMap((page) => page.data) });
-        setSetupNeedsRefresh(false); setFresh(true);
-      }
-    })().catch((error) => { if (!controller.signal.aborted) { setError(error); setFresh(false); } })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [client, revision]);
   async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>) {
     const controller = lifetime.current;
     if (!controller || busy || loading || setupNeedsRefresh || !fresh) return;
@@ -83,11 +90,21 @@ function SandboxManager({ consoleConfig, presentation }: { consoleConfig: Sandbo
     try {
       const deployment = await operation(controller.signal);
       if (!controller.signal.aborted) {
-        setSnapshot((current) => ({ deployment, nodes: deployment.generation === current?.deployment.generation ? current.nodes : [], allocations: deployment.generation === current?.deployment.generation ? current.allocations : [] }));
-        setSelectedId(null); setRemoveId(null);
+        // Core's confirmed response replaces the deployment; nodes of an older generation no longer apply.
+        queryClient.setQueryData(sandboxSnapshotQuery.queryKey, (current): SandboxSnapshot => {
+          const same = current !== undefined && deployment.generation === current.deployment.generation;
+          return { deployment, nodes: same ? current.nodes : [], allocations: same ? current.allocations : [], readAt: current?.readAt ?? performance.now() };
+        });
+        // A later visit reads the whole snapshot again; other pages re-read the deployment now.
+        void queryClient.invalidateQueries({ queryKey: sandboxSnapshotQuery.queryKey, refetchType: "none" });
+        void queryClient.invalidateQueries({ queryKey: sandboxDeploymentQuery.queryKey });
       }
     } catch (error) {
-      if (!controller.signal.aborted) { setSetupNeedsRefresh(true); setMutationError(error); setFresh(false); }
+      if (!controller.signal.aborted) {
+        setUncertainSince(performance.now()); setMutationError(error);
+        // Nothing re-reads on its own: the operator refreshes to confirm. A later visit reads again.
+        void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
+      }
     } finally { if (!controller.signal.aborted) setBusy(false); }
   }
   function initialize(input: InitializeSandboxDeployment) {
@@ -100,41 +117,92 @@ function SandboxManager({ consoleConfig, presentation }: { consoleConfig: Sandbo
     return changeDeployment((signal) => client.setMaintenance({ maintenance, expected_generation: snapshot!.deployment.generation }, { signal }));
   }
   const writeError = mutationError === null ? null : `${sandboxRequestError(mutationError, locale)} ${t("Refresh sandbox state to confirm whether the change was saved before submitting again.")}`;
+  const askRemove = (node: SandboxNode) => { setRemoveError(null); setRemoveTarget(node); };
   async function remove() {
     const controller = lifetime.current;
-    if (!controller || !removeId || busy) return;
-    setBusy(true); setError(null);
+    const target = removeTarget;
+    if (!controller || !target || removing) return;
+    setRemoving(true); setRemoveError(null);
     try {
-      const result = await client.removeNode(removeId, { signal: controller.signal });
-      if (!result.deleted || result.id !== removeId) throw new Error("removal_unconfirmed");
-      if (!controller.signal.aborted) { setRemoveId(null); setRevision((v) => v + 1); }
-    } catch (error) { if (!controller.signal.aborted) setError(error); }
-    finally { if (!controller.signal.aborted) setBusy(false); }
+      const result = await client.removeNode(target.id, { signal: controller.signal });
+      if (!result.deleted || result.id !== target.id) throw new Error("removal_unconfirmed");
+      if (!controller.signal.aborted) {
+        setRemoveTarget(null);
+        if (params.id === target.id) navigate("nodes");
+        refresh();
+      }
+    } catch (error) {
+      // Keep the dialog open with Core's reason; the refreshed list shows what actually happened.
+      if (!controller.signal.aborted) { setRemoveError(sandboxRequestError(error, locale)); refresh(); }
+    } finally { if (!controller.signal.aborted) setRemoving(false); }
   }
-  return <div className="sandbox-content form-stack">
-    <header className="sandbox-heading"><div>{presentation === "home" ? <h2>{t(snapshot?.deployment.provider === "e2b" ? "Hosted sandboxes" : "Node network")}</h2> : <><h1>{t("Hosted Sandbox Manager")}</h1><p>{t("Manage hosted execution for this Core deployment.")}</p></>}</div><div className="sandbox-actions">
-      <button type="button" className="icon-button sandbox-refresh" disabled={loading || busy} aria-label={t("Refresh sandbox state")} title={t("Refresh sandbox state")} onClick={refresh}><RefreshCw size={17} /></button>
-      {snapshot?.deployment.provider && snapshot.deployment.provider !== "e2b" ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || !fresh || snapshot.deployment.maintenance} fresh={fresh} onRefresh={refresh} onConnected={revealNode} /> : null}
-    </div></header>
-    {loading && !snapshot ? <p role="status">{t("Loading sandbox state…")}</p> : null}
+
+  const nodes = snapshot?.nodes ?? [];
+  const allocations = snapshot?.allocations ?? [];
+  const hostedNodes = Boolean(snapshot?.deployment.provider && snapshot.deployment.provider !== "e2b");
+  const selected = params.id ? nodes.find((node) => node.id === params.id) : undefined;
+  const refreshButton = <RefreshButton onClick={refresh} refreshing={loading} disabled={busy || removing} label={t("Refresh sandbox state")} />;
+  const status = <>
+    {!snapshot && (loading || query.isPending) ? <p role="status">{t("Loading sandbox state…")}</p> : null}
     {busy ? <span role="status">{t("Saving sandbox change…")}</span> : null}
     {error !== null ? <p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}{snapshot ? ` ${t("Previously loaded state is shown below.")}` : ""}</p> : null}
-    {snapshot && !snapshot.deployment.provider && writeError ? <p role="alert" className="sandbox-error">{writeError}</p> : null}
-    {snapshot && !snapshot.deployment.provider ? <SandboxSetup key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || error !== null} onInitialize={initialize} /> : null}
-    {presentation === "home" && snapshot && !snapshot.deployment.provider ? <SandboxTopology nodes={snapshot.nodes} allocations={snapshot.allocations} stale={!fresh} selectedId={selectedId} onSelect={revealNode} /> : null}
-    {snapshot?.deployment.provider ? <>
-      {snapshot.deployment.maintenance ? <p className="sandbox-maintenance" role="status">{t("Maintenance is enabled. New sandbox placement is paused.")}</p> : null}
-      <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={fresh} disabled={busy || loading || !fresh || setupNeedsRefresh} error={writeError} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
-      {snapshot.deployment.provider !== "e2b" ? <section aria-labelledby="sandbox-nodes-heading"><div className="sandbox-section-heading"><h2 id="sandbox-nodes-heading">{t("Nodes")}</h2><span>{snapshot.nodes.length}</span></div>
-        {snapshot.nodes.length || presentation === "home" ? <SandboxTopology nodes={snapshot.nodes} allocations={snapshot.allocations} stale={!fresh} selectedId={selectedId} onSelect={revealNode} /> : <div className="sandbox-empty"><Server size={32} strokeWidth={1.25} /><h3>{t("Add your first node")}</h3><p>{t("No nodes registered. Add a node to provide hosted capacity.")}</p></div>}
-        {selectedNode ? <div id="sandbox-selected-node" className="sandbox-selected-node"><SandboxNodeCard key={selectedNode.id} node={selectedNode} allocations={snapshot.allocations.filter((allocation) => allocation.node_id === selectedNode.id)} stale={!fresh} disabled={busy || loading} confirming={removeId === selectedNode.id} onRemove={() => setRemoveId(selectedNode.id)} onConfirm={() => void remove()} onCancel={() => setRemoveId(null)} /></div> : null}
-      </section> : null}
-      <details className="sandbox-deployment-details"><summary>{t("Deployment details")}</summary><dl className="sandbox-summary">
-        <div><dt>{t("Provider")}</dt><dd>{sandboxProviderLabel(snapshot.deployment.provider, locale)}</dd></div>
-        <div><dt>{t("Maintenance")}</dt><dd>{snapshot.deployment.maintenance ? t("Enabled") : t("Off")}</dd></div>
-        <div><dt>{t("Installation")}</dt><dd><code>{snapshot.deployment.installation_id}</code></dd></div>
-        <div><dt>{t("Core origin")}</dt><dd>{snapshot.deployment.core_url || initialCoreUrl}</dd></div>
-      </dl></details>
-    </> : null}
-  </div>;
+  </>;
+  const removeName = removeTarget ? removeTarget.name || removeTarget.id : "";
+  const dialog = <ConfirmDialog
+    open={removeTarget !== null}
+    title={t("Remove node")}
+    confirmLabel={t("Confirm removal")}
+    busyLabel={t("Removing…")}
+    busy={removing}
+    error={removeError}
+    onConfirm={() => void remove()}
+    onClose={() => { if (!removing) { setRemoveTarget(null); setRemoveError(null); } }}
+  >
+    <p>{t("{{name}} will be removed from this deployment.", { name: removeName })}</p>
+    <p>{t("Core rejects removal while allocations or retained resources remain.")}</p>
+  </ConfirmDialog>;
+
+  if (params.id && hostedNodes) {
+    const back = () => navigate("nodes");
+    return <>
+      <NodesPageHeader
+        back={back}
+        title={selected ? selected.name || selected.id : params.id}
+        actions={<>
+          {refreshButton}
+          {selected ? <button type="button" className="button danger" disabled={busy || removing} onClick={() => askRemove(selected)}><Trash2 size={14} aria-hidden="true" />{t("Remove node")}</button> : null}
+        </>}
+      />
+      <div className="console-page-body sandbox-content">
+        {status}
+        {selected ? <NodeDetail node={selected} allocations={allocations} stale={!confirmed} /> : snapshot && !loading ? (
+          <EmptyState icon={Server} title={t("Node not found")} description={t("This node is not registered. It may have been removed.")} action={<button type="button" className="button outline" onClick={back}>{t("Back to nodes")}</button>} />
+        ) : null}
+      </div>
+      {dialog}
+    </>;
+  }
+
+  const actions = <>
+    {refreshButton}
+    {hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} disabled={busy || loading || !fresh || snapshot.deployment.maintenance} fresh={confirmed} onRefresh={refresh} /> : null}
+  </>;
+  return <>
+    <NodesPageHeader count={hostedNodes ? nodes.length : undefined} actions={actions} />
+    <div className="console-page-body sandbox-content">
+      {status}
+      {snapshot && !snapshot.deployment.provider && writeError ? <p role="alert" className="sandbox-error">{writeError}</p> : null}
+      {snapshot && !snapshot.deployment.provider ? <SandboxSetup key={revision} initialCoreUrl={initialCoreUrl} disabled={busy || loading || setupNeedsRefresh || error !== null} onInitialize={initialize} /> : null}
+      {snapshot?.deployment.provider ? <>
+        {snapshot.deployment.maintenance ? <p className="sandbox-maintenance" role="status">{t("Maintenance is enabled. New sandbox placement is paused.")}</p> : null}
+        <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} error={writeError} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
+        {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
+          {nodes.length
+            ? <NodeList nodes={nodes} allocations={allocations} stale={!confirmed} disabled={busy || loading || removing} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
+            : <div className="sandbox-empty"><Server size={32} strokeWidth={1.25} /><h3>{t("Add your first node")}</h3><p>{t("No nodes registered. Add a node to provide hosted capacity.")}</p></div>}
+        </section> : null}
+      </> : null}
+    </div>
+    {dialog}
+  </>;
 }
