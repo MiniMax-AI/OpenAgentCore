@@ -57,9 +57,20 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await expect(add).toBeHidden();
   await setNode(request, { id: "node-new", name: "edge-04" });
   await page.clock.fastForward("10:30");
+  // Every render from the reopening on is watched, so even a brief "Command expired" would count.
+  await page.evaluate(() => {
+    const watch = window as unknown as { expiredShown: boolean; expiredWatch: MutationObserver };
+    watch.expiredShown = false;
+    watch.expiredWatch = new MutationObserver(() => { if (document.body.textContent?.includes("Command expired")) watch.expiredShown = true; });
+    watch.expiredWatch.observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
   await page.getByRole("button", { name: "Add node" }).click();
   await expect(progress).toHaveText(/Registered · edge-04.*Waiting to connect.*Docker check/);
-  await expect(add.getByText("Command expired")).toHaveCount(0);
+  expect(await page.evaluate(() => {
+    const watch = window as unknown as { expiredShown: boolean; expiredWatch: MutationObserver };
+    watch.expiredWatch.disconnect();
+    return watch.expiredShown;
+  })).toBe(false);
   await expect(add.getByText("Rerun only on edge-04 if asked")).toBeVisible();
   // Past the installer's minute without connecting, the dialog points at the node's log.
   await page.clock.fastForward("01:01");
@@ -102,6 +113,9 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   await expect(page.getByText("c0ffee000000")).toBeVisible();
   // Own machines continue straight to adding the first node, at its limits: no command is issued yet.
   await expect(page.getByRole("dialog", { name: "Add node" }).getByLabel("Sandboxes at once")).toBeVisible();
+  // None is requested within a second of opening, and Core saw only the deployment write.
+  const tokenRequested = await page.waitForRequest((sent) => sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"), { timeout: 1000 }).then(() => true, () => false);
+  expect(tokenRequested).toBe(false);
   expect(await writes(request)).toEqual(["POST /core/v1/sandbox/deployment"]);
 });
 
