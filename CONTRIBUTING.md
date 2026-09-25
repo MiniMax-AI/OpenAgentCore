@@ -227,7 +227,7 @@ intervals and restart gaps. Do not substitute host usage for process usage.
 
 Administrator node detail adds host observations and history as documented in
 [node-host-history.md](contracts/agents-api/node-host-history.md). Keep the node
-list unchanged. Reuse authenticated heartbeat ownership, the Runtime sampling
+list unchanged apart from the address each node enrolled with (`core_url`). Reuse authenticated heartbeat ownership, the Runtime sampling
 sweep and PostgreSQL retention cleanup; node observations have their own table
 because they do not belong to a Project, Session or Environment. History is
 best-effort telemetry, never scheduling truth. No read-triggered sampling or
@@ -737,8 +737,9 @@ server receives the private key, uses it for sign-in and injects it only on
 never receives that key. Node and daemon connections use `/api/v1`
 with their own credentials; the reverse proxy sends them directly to Core, never
 through Web. Zero-node Core receives neither the Docker socket nor KVM.
-The Web and deployment administrator API select one provider, public Core origin,
-per-sandbox resources and immutable Runtime release. PostgreSQL owns this complete,
+The Web and deployment administrator API select one provider, per-sandbox
+resources and immutable Runtime release; the Core address comes from the
+installation public URL. PostgreSQL owns this complete,
 generation-tagged selection under the existing execution lease and deployment lock.
 The shared `sandbox.DeploymentSpec` defines required CPU/memory and supported disk
 limits plus Runtime provenance; neither a node file nor the installer owns another
@@ -779,13 +780,13 @@ A locally unavailable provider dependency keeps hosted admission closed while th
 existing scan waits for repair; administrator recovery remains available, including
 on restart. Database and ownership errors remain failures. Unconfigured hosted
 admission creates no Session state. Derive Runtime bootstrap and daemon WebSocket
-addresses from the saved validated origin, never inbound Host headers. Read the
+addresses from the validated installation public URL, never inbound Host headers. Read the
 current selection from the live deployment API; there is no startup configuration
 read.
 
 Provider, resources and Runtime changes require maintenance, the current generation
-and verified zero retained or pending resources. The Core origin remains unchanged
-by this operation. Maintenance prevents fresh hosted Sessions and allocations while
+and verified zero retained or pending resources. They never change the Core
+address, which comes from the installation public URL. Maintenance prevents fresh hosted Sessions and allocations while
 retaining admitted work, known receipts, queries and explicit cleanup. Unreleased
 allocations include stopped compute, snapshots, uncertain operations and pending
 cleanup. Pending hosted Environments without allocations also block changes.
@@ -1652,8 +1653,8 @@ execution concurrency bounds simultaneous work, not attempt frequency. Managed-p
 polling retains its separate five-second interval. Unknown promotion results or
 errors after admission retain the existing no-replay settlement rules.
 
-`AGENTS_API_DAEMON_WS_URL` enables the private gateway and supplies the unchanged
-public `remote_url`. `AGENTS_API_HARNESSES` explicitly adds deployment-supported
+`AGENTS_API_PUBLIC_URL` enables the private gateway; Core derives the public
+`remote_url` from it. `AGENTS_API_HARNESSES` explicitly adds deployment-supported
 engines to the default engine and configured managed profiles; advertising a
 heartbeat alone does not enable an engine. The three native profiles share enrollment
 at `/workspace`. Their new user-managed public chain requires fixed-client/raw HTTP,
@@ -1791,14 +1792,15 @@ Environment/key binding and current authenticated connection; it never enrolls,
 allocates, wakes a sandbox or grants project resource access. It is an `/api/v1`
 machine route that reaches Core directly, never through the console. Bounded
 polling and reruns retain the original container and history; timeout is a
-diagnostic failure, not permission to relaunch. An explicit installer
-`--public-url` supplies both the console origin and the advertised daemon `wss`
-origin. Keep local managed Provider routing separate; do not return an internal
-Compose hostname to a user-managed Runtime when an external origin was supplied. Bootstrap routing uses the
-node bound to the authenticated device's persisted allocation, never request Host
-or caller-supplied placement fields. Local and remote managed nodes use the saved
-public Core origin. Self-hosted devices retain the deployment's advertised public
-address. This does
+diagnostic failure, not permission to relaunch. The installation public URL
+(`AGENTS_API_PUBLIC_URL`, from the installer's `--public-url`) is the one origin for
+applications, nodes, sandbox guests and self-hosted executors, and also the console
+origin. Core derives the daemon `wss` URL, the self-hosted `remote_url`, hosted
+Runtime bootstrap and the deployment's read-only `core_url` from it; the deployment
+API does not accept a Core address, and no deployment row stores one. Bootstrap
+never uses request Host or caller-supplied placement fields. Each node records the
+address it enrolled with; after the public URL changes, it receives no new
+sandboxes until re-added. This does
 not widen sandbox network policies or change credential admission.
 
 The distribution build sets umask 022 for non-root-readable payloads; installation
@@ -1879,7 +1881,7 @@ liveness only, never invented traffic or work; offline/stale connections are
 static and reduced-motion preferences disable decorative animation. Node selection
 reveals inspection details. Installation identifiers, provider metadata and
 allocation records are secondary content. Node enrollment is an explicit Add node action in a focused
-dialog, using the saved Core origin or the paired console origin by default.
+dialog, using the deployment's `core_url` (the installation public URL).
 Do not expose routine network wiring or manual runtime setup as the primary flow.
 Generate a one-time command only on user intent, never retry enrollment writes
 automatically, and discard credentials and late responses when the dialog closes
@@ -2413,7 +2415,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   tenant ownership and a credential digest. Their internal daemon gateway uses
   `/api/v1/agent-daemon/*`, separately from the official `/v1/agents/*` surface;
   device credentials grant no Session API or product permissions. The optional
-  `AGENTS_API_DAEMON_WS_URL` enables that gateway. It is a single-process registry,
+  `AGENTS_API_PUBLIC_URL` enables that gateway. It is a single-process registry,
   not a claim of multi-pod execution or stock `exec-server` interoperability.
   Self-hosted enrollment uses this gateway with an exact Environment binding.
   Session/device bindings are tenant-scoped and immutable. Revocation denies new
@@ -2784,7 +2786,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   including after terminal or later Turns. Omitted/null input is permitted only
   for non-streaming hosted creation and self-hosted creation.
   Creation streaming uses the shared live path above; non-text messages remain a gap.
-- Enabling `AGENTS_API_DAEMON_WS_URL` also starts a bounded execution worker. Select
+- Enabling daemon transport with `AGENTS_API_PUBLIC_URL` also starts a bounded execution worker. Select
   only connected, capable devices owned by the authenticated tenant; bind once and
   preserve native continuity. Metadata cannot select a device. Offline work stays
   queued and can be cancelled. An engine host is not a self-hosted environment.

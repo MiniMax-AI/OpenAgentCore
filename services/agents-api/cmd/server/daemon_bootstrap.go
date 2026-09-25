@@ -8,21 +8,19 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 )
 
+// webSocketURL answers daemon bootstrap. Every daemon uses the one URL derived
+// from AGENTS_API_PUBLIC_URL, except a legacy embedded node's own Runtime.
 func (m *managedNodes) webSocketURL(publicURL string) func(context.Context, gateway.AuthenticatedRuntime) (string, error) {
 	return func(ctx context.Context, auth gateway.AuthenticatedRuntime) (string, error) {
-		if m == nil || (auth.RuntimeNodeID == "" && auth.RuntimeAllocationID == "") {
-			return publicURL, nil
-		}
-		if m.runtime != nil && auth.RuntimeNodeID != "" && auth.RuntimeNodeID == m.runtime.LocalNodeID {
+		if m != nil && m.runtime != nil && auth.RuntimeNodeID != "" && auth.RuntimeNodeID == m.runtime.LocalNodeID {
 			return runtimeWebSocketURL(m.runtime.CoreURL)
-		}
-		if m.setup != nil {
-			return m.setup.webSocketURL(publicURL)(ctx)
 		}
 		return publicURL, nil
 	}
 }
 
+// runtimeWebSocketURL derives the daemon WebSocket URL from a Core origin or
+// its /api/v1 base.
 func runtimeWebSocketURL(coreURL string) (string, error) {
 	u, err := url.Parse(coreURL)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {

@@ -54,10 +54,10 @@ its scope and principal; rotation uses issuance and revocation without a restart
 
 For the Docker variant, continue in `HOSTED.md` now to configure the Runtime's
 outward connection and provider before starting Core. For the basic archive,
-set the reachable daemon endpoint:
+set the reachable public origin; Core derives the daemon endpoint from it:
 
 ```sh
-export AGENTS_API_DAEMON_WS_URL=ws://127.0.0.1:8091/api/v1/agent-daemon/ws
+export AGENTS_API_PUBLIC_URL=http://127.0.0.1:8091
 ```
 
 Keep the configuration and key files mode 0600. Run migrations explicitly, then

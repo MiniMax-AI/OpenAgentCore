@@ -64,6 +64,8 @@ type Handler struct {
 	subagents             SubagentStore
 	runtimeObservations   RuntimeObservationService
 	runtimeHistory        RuntimeHistoryService
+	installation          *Installation
+	installationBindings  func(context.Context) (store.AddressBindings, error)
 }
 
 func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...Option) (http.Handler, error) {

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"errors"
@@ -18,14 +19,16 @@ import (
 func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 	t.Setenv("AGENTS_API_MANAGED_RUNTIMES_FILE", "")
 	t.Setenv("AGENTS_API_SANDBOX_INSTALLATION_ID", uuid.NewString())
-	t.Setenv("AGENTS_API_DAEMON_WS_URL", "ws://core:8091/api/v1/agent-daemon/ws")
 	digest := sha256.Sum256([]byte("synthetic-admin"))
 	path := filepath.Join(t.TempDir(), "core-key-digests.json")
 	if err := os.WriteFile(path, []byte(`["`+hex.EncodeToString(digest[:])+`"]`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("AGENTS_API_CORE_KEY_DIGESTS_FILE", path)
-	m, err := configureManagedNodes(nil, func(context.Context) error { return nil })
+	if _, err := configureManagedNodes(nil, "", nil); err == nil || !strings.Contains(err.Error(), "AGENTS_API_PUBLIC_URL") {
+		t.Fatal("sandbox manager started without a public URL", err)
+	}
+	m, err := configureManagedNodes(nil, "https://core.example", func(context.Context) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,25 +37,8 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
 	}
 	t.Setenv("AGENTS_API_CORE_KEY_DIGESTS_FILE", "")
-	if _, err := configureManagedNodes(nil, nil); err == nil {
+	if _, err := configureManagedNodes(nil, "https://core.example", nil); err == nil {
 		t.Fatal("setup accepted without admin authentication")
-	}
-}
-
-func TestSelectedSetupPublishesSameOriginForDaemonBootstrap(t *testing.T) {
-	for _, tc := range []struct{ origin, want string }{
-		{"https://core.example:8443/api/v1", "wss://core.example:8443/api/v1/agent-daemon/ws"},
-		{"http://127.0.0.1:8091/api/v1", "ws://127.0.0.1:8091/api/v1/agent-daemon/ws"},
-	} {
-		s := &managedSetup{store: &setupStore{value: store.SandboxSetup{Provider: "docker", Generation: 1}}}
-		s.selected.Store(&execution.RuntimeProvider{CoreURL: tc.origin, ProviderKind: "docker", Generation: 1})
-		got, err := s.webSocketURL("ws://private-core:8091/api/v1/agent-daemon/ws")(context.Background())
-		if err != nil || got != tc.want {
-			t.Fatalf("bootstrap URL=%s error=%v", got, err)
-		}
-		if s.ObservationProviderType() != "docker" {
-			t.Fatal("observation lost selected provider")
-		}
 	}
 }
 
@@ -113,14 +99,14 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 	id := uuid.NewString()
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	s := &managedSetup{installationID: id, hub: hub, store: &setupStore{}}
+	s := &managedSetup{installationID: id, hub: hub, store: &setupStore{}, publicURL: "https://core.example"}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.selected.Store(previous)
-	candidate, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", CoreURL: "https://core.example", IdleSeconds: 300, RetentionSeconds: 86400})
+	candidate, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", IdleSeconds: 300, RetentionSeconds: 86400})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.selected.Load() != previous || candidate.Config.ProviderKind != "microsandbox" || candidate.Config.Suspension == nil {
+	if s.selected.Load() != previous || candidate.Config.ProviderKind != "microsandbox" || candidate.Config.Suspension == nil || candidate.Config.CoreURL != "https://core.example/api/v1" {
 		t.Fatal("preparation published or lost candidate configuration")
 	}
 	committed := *candidate.Config
@@ -138,16 +124,26 @@ func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 	s := &managedSetup{installationID: id}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.selected.Store(previous)
-	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", CoreURL: "https://core.example",
+	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct",
 		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
 	if !errors.Is(err, execution.ErrExecutionUnavailable) || s.selected.Load() != previous {
 		t.Fatal("rejected candidate lost the previous selection", err)
 	}
 }
 
+func TestE2BRequiresAPublicURLOutsideTheHost(t *testing.T) {
+	id := uuid.NewString()
+	s := &managedSetup{installationID: id, publicURL: "http://127.0.0.1:8091"}
+	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct",
+		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
+	if !errors.Is(err, store.ErrSandboxPublicURLUnreachable) {
+		t.Fatal("E2B accepted a loopback public URL", err)
+	}
+}
+
 func TestCoreRejectsFileManagedSandboxConfiguration(t *testing.T) {
 	t.Setenv("AGENTS_API_MANAGED_RUNTIMES_FILE", "/retained/config.json")
-	if _, err := configureManagedNodes(nil, nil); err == nil {
+	if _, err := configureManagedNodes(nil, "https://core.example", nil); err == nil {
 		t.Fatal("accepted a second configuration source")
 	}
 }

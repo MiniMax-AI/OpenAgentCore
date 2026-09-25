@@ -92,6 +92,8 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	switch {
 	case errors.As(err, &sandboxConfiguration):
 		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", sandboxConfiguration.Message)
+	case errors.Is(err, store.ErrSandboxPublicURLUnreachable):
+		writeError(w, http.StatusConflict, "sandbox_configuration_error", err.Error())
 	case errors.Is(err, store.ErrRuntimeSpecificationMismatch):
 		writeError(w, http.StatusConflict, "sandbox_specification_mismatch", "The node resource limits or Runtime release do not match the active deployment. Restore its installed configuration or remove and enroll the node again after a drained deployment change.")
 	case errors.Is(err, store.ErrProjectArchived):

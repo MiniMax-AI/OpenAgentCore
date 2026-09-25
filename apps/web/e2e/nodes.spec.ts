@@ -76,7 +76,7 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await page.clock.fastForward("01:01");
   const problem = add.getByRole("alert");
   await expect(problem).toContainText("Not connected yet");
-  await expect(problem).toContainText("journalctl --user -u parsar-node-7f3c2a90-fixture.service");
+  await expect(problem).toContainText("journalctl --user -u parsar-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
   // Connected, it reports why Docker isn't ready; once ready, the node is connected.
   await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
   await expect(problem).toContainText("Docker limits unsupported");
@@ -106,7 +106,6 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   await page.getByRole("button", { name: "Docker" }).click();
   await page.getByRole("button", { name: /^Standard/ }).click();
   await expect(page.getByRole("heading", { name: "Review and save" })).toBeVisible();
-  await page.getByLabel("Core address").fill("https://core.example.com");
   await page.getByRole("button", { name: "Save configuration" }).click();
 
   // The saved specification carries the Runtime read from the console's manifest.
@@ -125,7 +124,6 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
   await page.getByLabel("E2B API key").fill("fixture-private-key");
   await page.getByLabel("Template build").fill("template:94be54a1-138c-4f30-bc87-b13686272dbe");
   await page.getByRole("button", { name: "Next" }).click();
-  await page.getByLabel("Core address").fill("https://core.example.com");
   await page.getByRole("button", { name: "Save configuration" }).click();
   await expect(page.getByRole("heading", { name: "Sandbox backend", level: 1 })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -155,6 +153,8 @@ test("keeps the saved size and Runtime for the same backend, and starts another 
   await save.click();
   await expect.poll(() => submitted?.resources).toEqual(current.resources);
   expect(submitted?.runtime).toEqual(runtime);
+  // Core's address is config.json's public_url: a change never sends it.
+  expect(submitted).not.toHaveProperty("core_url");
 
   // Another backend starts from its own size, with disks, and this console's Runtime.
   await back.click();

@@ -48,8 +48,7 @@ def install(root, state, manifest, bundle, run):
         if state["provider"] == "microsandbox":
             resources.update(memory_mib=4096, root_disk_mib=8192, environment_disk_mib=8192)
         current = request(core, admin, "POST", "deployment", {
-            "provider": state["provider"], "core_url": state["public_url"],
-            "resources": resources, "runtime": node_spec.release(manifest)})
+            "provider": state["provider"], "resources": resources, "runtime": node_spec.release(manifest)})
     if current.get("provider") != state["provider"] or current.get("core_url") != state["public_url"]:
         raise LocalNodeError("Existing deployment selection differs; change it through maintenance instead of reinstalling")
     node_root = Path.home() / ".parsar/nodes" / state["installation_id"]

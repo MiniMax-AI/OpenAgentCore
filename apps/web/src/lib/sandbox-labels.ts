@@ -25,6 +25,15 @@ export function sandboxRequestError(error: unknown, locale: Locale): string {
   return translate(locale, key);
 }
 
+/**
+ * Core's own reason when it rejects a deployment configuration it cannot serve,
+ * such as E2B with a loopback public_url; null for any other failure. Nothing
+ * was saved, so the administrator corrects the cause and saves again.
+ */
+export function sandboxConfigurationRejection(error: unknown): string | null {
+  return error instanceof AgentCoreError && error.status === 409 && error.code === "sandbox_configuration_error" && error.message ? error.message : null;
+}
+
 export function sandboxNodeStatus(node: SandboxNode, stale: boolean, locale: Locale): string {
   return translate(locale, stale ? "Status unconfirmed" : !node.online ? "Offline" : node.provider_ready ? "Available" : "Unavailable");
 }

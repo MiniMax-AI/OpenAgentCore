@@ -26,7 +26,7 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, Run
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
-	input := SandboxDeploymentSetupRequest{Provider: provider, CoreURL: "https://core.example", DeploymentSpec: SandboxDeploymentTestSpec(provider)}
+	input := SandboxDeploymentSetupRequest{Provider: provider, DeploymentSpec: SandboxDeploymentTestSpec(provider)}
 	if provider == "e2b" {
 		input = e2bSelection()
 	}
@@ -339,5 +339,46 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 	input.Resources.CPUs++
 	if _, err := w.UpdateSandboxDeployment(t.Context(), view.InstallationID, SandboxDeploymentUpdateRequest{ExpectedGeneration: view.Generation, SandboxDeploymentSetupRequest: input}); !errors.Is(err, ErrSandboxDeploymentConflict) {
 		t.Fatal("allocation race bypassed replacement guard", err)
+	}
+}
+
+// A node keeps the public URL it enrolled with. After the public URL changes it
+// receives no new sandboxes until it is re-added.
+func TestNodeBoundToAnotherPublicURLGetsNoNewSandboxes(t *testing.T) {
+	s, _, view, _ := webSpecificationFixture(t, "docker")
+	s.SetPublicURL("https://old.example")
+	node := specificationNode(t, s, view)
+	nodes, err := s.ListRuntimeNodes(t.Context())
+	if err != nil || len(nodes) != 1 || nodes[0].ID != node.NodeID || nodes[0].CoreURL != "https://old.example" {
+		t.Fatal("enrollment did not record the node's address", nodes, err)
+	}
+	s.SetPublicURL("https://new.example")
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrRuntimeNodeUnavailable) {
+		t.Fatal("placed a new sandbox on a node bound to the old address", err)
+	}
+	bindings, err := s.AddressBindings(t.Context())
+	if err != nil || bindings.Nodes != 1 || bindings.NodesOnOtherAddress != 1 || bindings.HostedSandboxes != 0 {
+		t.Fatal(bindings, err)
+	}
+	s.SetPublicURL("https://old.example")
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
+		t.Fatal("node on the current address rejected placement", err)
+	}
+}
+
+// An E2B selection saved before the public URL became loopback admits no new
+// Session, and its configuration stays readable for cleanup.
+func TestE2BAdmitsNothingWhileThePublicURLIsLoopback(t *testing.T) {
+	s, _, _, _ := webSpecificationFixture(t, "e2b")
+	s.SetPublicURL("http://127.0.0.1:8091")
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrSandboxPublicURLUnreachable) {
+		t.Fatal("admitted an E2B Session that could not reach Core", err)
+	}
+	if setup, err := s.GetSandboxSetup(t.Context()); err != nil || setup.Provider != "e2b" {
+		t.Fatal("the saved E2B selection became unreadable", err)
+	}
+	s.SetPublicURL("https://core.example")
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
+		t.Fatal(err)
 	}
 }

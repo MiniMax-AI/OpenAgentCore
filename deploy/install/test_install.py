@@ -139,13 +139,15 @@ class InstallerTests(unittest.TestCase):
         environment = install.read_core_environment(self.root, state)
         path = self.root / "config/core.env"
         self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
-        self.assertEqual(environment["AGENTS_API_CONFIG_FILE"], "/config/core.env")
+        self.assertNotIn("AGENTS_API_CONFIG_FILE", environment)
+        self.assertEqual(environment["AGENTS_API_DATABASE_URL"], "postgres://agents_api@database:5432/agents_api?sslmode=disable")
+        self.assertEqual(environment["AGENTS_API_DATABASE_PASSWORD_FILE"], "/config/database.password")
         services = self.document("compose.json")["services"]
         for name in ("core", "migrate"):
             self.assertEqual(services[name]["env_file"], [str(path)])
             self.assertNotIn("environment", services[name])
         environment["AGENTS_API_ENGINE"] = "claude_sdk"
-        environment["AGENTS_API_DAEMON_WS_URL"] = "wss://edited.example/api/v1/agent-daemon/ws"
+        environment["AGENTS_API_PUBLIC_URL"] = "https://edited.example"
         path.write_text(install.environment_text(environment))
         before = self.snapshot()
         self.initialize()
@@ -181,11 +183,10 @@ class InstallerTests(unittest.TestCase):
     def test_retained_core_environment_cannot_replace_installation_identity(self):
         state = self.initialize()
         values = install.read_core_environment(self.root)
-        for key in ("AGENTS_API_SANDBOX_INSTALLATION_ID", "AGENTS_API_CONFIG_FILE"):
-            changed = dict(values, **{key: "changed"})
-            (self.root / "config/core.env").write_text(install.environment_text(changed))
-            with self.assertRaisesRegex(RuntimeError, "identity or file path"):
-                self.initialize()
+        changed = dict(values, AGENTS_API_SANDBOX_INSTALLATION_ID="changed")
+        (self.root / "config/core.env").write_text(install.environment_text(changed))
+        with self.assertRaisesRegex(RuntimeError, "identity differs"):
+            self.initialize()
         (self.root / "config/core.env").write_text(install.environment_text(values))
         self.assertEqual(self.initialize(), state)
 
@@ -393,7 +394,7 @@ class InstallerTests(unittest.TestCase):
                 before = self.snapshot()
                 self.initialize(*flags)
                 self.assertEqual(self.snapshot(), before)
-                environment = install.core_environment(self.root, state, "synthetic database password")
+                environment = install.core_environment(self.root, state)
                 expected = str(admin / "core-key-digests.json") if native else "/admin/core-key-digests.json"
                 self.assertEqual(environment["AGENTS_API_CORE_KEY_DIGESTS_FILE"], expected)
                 self.assertNotIn("AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE", environment)
@@ -535,34 +536,43 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(web["environment"]["CORE_CONSOLE_ORIGIN"], "https://core.example")
         self.assertEqual(web["ports"], ["127.0.0.1:8080:8080"])
         self.assertEqual(state["public_url"], "https://core.example")
-        self.assertEqual(install.read_core_environment(self.root)["AGENTS_API_DAEMON_WS_URL"],
-                         "wss://core.example/api/v1/agent-daemon/ws")
+        self.assertEqual(install.read_core_environment(self.root)["AGENTS_API_PUBLIC_URL"], "https://core.example")
         with self.assertRaises(install.InstallError):
             self.initialize("--public-url", "https://other.example")
 
-    def test_public_daemon_address_is_shared_across_placement_modes(self):
+    def test_public_url_is_shared_across_packaging_modes(self):
         state = self.initialize("--public-url", "https://core.example:8443")
         for native in (False, True):
             with self.subTest(native=native):
                 configured = dict(state, native_core=native, database_port=15432)
-                env = install.core_environment(self.root, configured, "fixture-password")
-                self.assertEqual(env["AGENTS_API_DAEMON_WS_URL"],
-                                 "wss://core.example:8443/api/v1/agent-daemon/ws")
+                env = install.core_environment(self.root, configured)
+                self.assertEqual(env["AGENTS_API_PUBLIC_URL"], "https://core.example:8443")
+                self.assertNotIn("AGENTS_API_DAEMON_WS_URL", env)
                 configured["public_url"] = None
-                local = install.core_environment(self.root, configured, "fixture-password")
-                expected_host = "127.0.0.1:8091" if native else "core:8091"
-                self.assertEqual(local["AGENTS_API_DAEMON_WS_URL"], "ws://" + expected_host + "/api/v1/agent-daemon/ws")
+                # Without a public URL, only this host reaches Core.
+                self.assertEqual(install.core_environment(self.root, configured)["AGENTS_API_PUBLIC_URL"], "http://127.0.0.1:8091")
 
-    def test_accepted_public_origin_schemes_generate_websocket_urls(self):
-        state = self.initialize()
-        for origin, expected in (("HTTPS://core.example", "wss://core.example"),
-                                 ("http://localhost:8080", "ws://localhost:8080"),
-                                 ("http://127.0.0.1:8080", "ws://127.0.0.1:8080")):
+    def test_public_url_is_canonical_for_core(self):
+        for origin, expected in (("HTTPS://Core.Example", "https://core.example"),
+                                 ("http://localhost:8080/", "http://localhost:8080"),
+                                 ("https://[2001:db8::1]", "https://[2001:db8::1]")):
             with self.subTest(origin=origin):
-                args = self.args("--public-url", origin)
-                configured = dict(state, public_url=args.public_url)
-                env = install.core_environment(self.root, configured, "fixture-password")
-                self.assertEqual(env["AGENTS_API_DAEMON_WS_URL"], expected + "/api/v1/agent-daemon/ws")
+                self.assertEqual(self.args("--public-url", origin).public_url, expected)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            install.arguments(["--public-url", "https://core_example"])
+
+    def test_public_url_rule_matches_core(self):
+        # The same cases as Core's TestSandboxCoreURLValidation.
+        for origin in ("https://core.example", "https://core.example:8443", "http://localhost:8091",
+                       "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]"):
+            self.assertTrue(install.valid_core_origin(origin), origin)
+        for origin in ("", "http://core.example", "http://core:8091", "http://host.localhost", "https://core.example/",
+                       "https://user:secret@core.example", "https://core.example/path", "https://core.example?",
+                       "https://core.example#x", "https://CORE.example", "https://core.example:", "https://core.example:0",
+                       "https://core.example:65536", "https://core.example:0080", "https://core.example:0443",
+                       "https://core.example\\evil", "https://[not-an-ip]", "https://-core.example", "https://core..example",
+                       "https://core_example", "https://core.example.", "https://b\u00fccher.example"):
+            self.assertFalse(install.valid_core_origin(origin), origin)
 
     def test_local_opt_in_requires_non_loopback_https_origin_before_installation(self):
         for provider in ("docker", "microsandbox"):

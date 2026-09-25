@@ -259,3 +259,68 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Core's reason for rejecting the saved configuration, and where to fix it. */
+.wizard-rejection {
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line));
+  border-radius: var(--radius-card);
+}
+
+.sandbox-wizard .wizard-rejection > p {
+  margin: 0;
+  color: var(--ink);
+}
+
+.wizard-rejection dl {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.wizard-rejection dl > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.wizard-rejection dt {
+  color: var(--ink-3);
+}
+
+.wizard-rejection dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.wizard-rejection code {
+  font-size: 12.5px;
+}
+
+/* A loopback address only the Core machine reaches. */
+.wizard-review-caution {
+  color: var(--orange);
+  font-size: 13px;
+}
+
+/* After a save attempt the E2B key is gone; this says so beside the way back to it. */
+.sandbox-wizard .wizard-key-again {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.wizard-key-again .wizard-link {
+  color: var(--accent);
+}

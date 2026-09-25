@@ -24,10 +24,10 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, BackendFingerprint: setup.BackendFingerprint, CoreURL: setup.CoreURL + "/api/v1", Provider: p}, nil
+		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, BackendFingerprint: setup.BackendFingerprint, CoreURL: "https://core.example/api/v1", Provider: p}, nil
 	}, func(ctx context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
 
-		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, Maintenance: setup.Maintenance, CoreURL: setup.CoreURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p}}, nil
+		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, Maintenance: setup.Maintenance, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p}}, nil
 	})
 	start := func() (*execution.Worker, func()) {
 		t.Helper()
@@ -47,7 +47,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	if _, err := w.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("uninitialized worker admitted hosted Session", err)
 	}
-	if _, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("docker"), Provider: "docker", CoreURL: "https://core.example"}); err != nil {
+	if _, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, store.ErrRuntimeNodeUnavailable) {

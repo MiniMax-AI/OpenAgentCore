@@ -158,7 +158,7 @@ func TestSandboxSetupRetryCannotBypassOutstandingDrain(t *testing.T) {
 	m, err := newRuntimeManager(nil, gateway.NewRegistry(), NewDeferredRuntimeProvider(id,
 		func(context.Context) (*RuntimeProvider, error) { return nil, nil },
 		func(_ context.Context, setup store.SandboxSetup) (PreparedRuntimeDeployment, error) {
-			return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, CoreURL: setup.CoreURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker")}}, nil
+			return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker")}}, nil
 		}))
 	if err != nil {
 		t.Fatal(err)
@@ -177,7 +177,7 @@ func TestSandboxSetupRetryCannotBypassOutstandingDrain(t *testing.T) {
 	ctx, cancel = context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
 	w := &Worker{runtimes: m}
-	_, err = w.InitializeSandboxDeployment(ctx, store.SandboxDeploymentSetupRequest{Provider: "e2b", CoreURL: "https://core.example", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}})
+	_, err = w.InitializeSandboxDeployment(ctx, store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal("setup retry bypassed the unfinished drain", err)
 	}

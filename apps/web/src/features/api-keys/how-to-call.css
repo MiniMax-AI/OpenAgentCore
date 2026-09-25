@@ -1,0 +1,79 @@
+/* How to call Core with a new key: labelled, copyable samples and one note. */
+
+.how-to-call {
+  display: grid;
+  gap: 10px;
+}
+
+.how-to-call > h3 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.how-to-call-sample {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.how-to-call-sample-head {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 0 12px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.how-to-call-sample pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.how-to-call-sample pre:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.how-to-call .how-to-call-note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.how-to-call-error {
+  margin: 0;
+  padding: 0 12px 10px;
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+/* Before the installation is read: the first sample's place, two lines tall. */
+.how-to-call-skeleton {
+  display: grid;
+  gap: 10px;
+  padding: 14px 12px;
+}
+
+.how-to-call-skeleton .skeleton-bar:first-child {
+  width: 62%;
+}
+
+.how-to-call-skeleton .skeleton-bar:last-child {
+  width: 48%;
+}

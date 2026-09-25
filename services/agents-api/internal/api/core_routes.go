@@ -18,6 +18,9 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "This Core operation does not exist.")
 		})
+		if h.installation != nil {
+			r.Get("/installation", h.getInstallation)
+		}
 		h.registerProjectAPIKeyRoutes(r)
 		h.registerAdminResourceRoutes(r)
 		h.registerExecutorCredentialRoutes(r)

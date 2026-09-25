@@ -26,7 +26,7 @@ func SandboxSetupForSelection(installationID string, input SandboxDeploymentSetu
 	if err := validateSandboxSelection(input); err != nil {
 		return SandboxSetup{}, err
 	}
-	result := SandboxSetup{InstallationID: installationID, Provider: input.Provider, CoreURL: input.CoreURL,
+	result := SandboxSetup{InstallationID: installationID, Provider: input.Provider,
 		Mode: "nodes", Specification: input.DeploymentSpec, E2B: input.E2B}
 	namespace := "nodes:" + installationID
 	if input.Provider == "e2b" {

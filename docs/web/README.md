@@ -21,7 +21,7 @@ management client, and it sends nothing to `/v1`.
 | Monitor | Sandbox metrics | Node capacity and hosted Runtime CPU and memory across Projects |
 | Monitor | Session log | Every Session, opening one Session's read-only conversation, trace and Turns; a self-hosted Session's page also manages its executor credentials |
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion |
-| Platform | Projects and keys, Nodes, System | Project and key lifecycle; sandbox deployment and nodes; the sandbox configuration every Project shares: provider, sandbox size, Runtime or E2B template build, idle suspension, Core address and maintenance |
+| Platform | Projects and keys, Nodes, System | Project and key lifecycle; sandbox deployment and nodes; System, read-only: the installation's public address, API base URL, ID and source commit, Core's config.json startup settings with where to change them, and the sandbox configuration every Project shares: provider, sandbox size, Runtime or E2B template build, idle suspension and maintenance |
 
 Missing data is shown as missing (—), never as zero. How each figure is read and
 bounded is recorded in [management interface coverage](protocol-coverage.md).

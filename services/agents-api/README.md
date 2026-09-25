@@ -295,9 +295,9 @@ other exact hosted failure and expiry semantics remain unverified.
 
 The standalone service can accept existing daemon connections without a Parsar
 workspace or product database. Enable its internal gateway by setting
-`AGENTS_API_DAEMON_WS_URL=wss://your-service/api/v1/agent-daemon/ws` (use `ws`
-for local development). This configured URL is returned unchanged as
-`self_hosted.remote_url`. It names
+`AGENTS_API_PUBLIC_URL=https://your-service` (HTTP only for a loopback host during
+local development). Core returns the derived
+`wss://your-service/api/v1/agent-daemon/ws` as `self_hosted.remote_url`. It names
 our private daemon transport, not stock OpenAI `exec-server` interoperability.
 
 After migrations, an operator can provision a device for an execution tenant:

@@ -8,13 +8,16 @@ export const FIXTURE_CORE_KEY = "fixture-core-key-3f9a2c71";
 
 /**
  * Fixture state options: `fresh` is a new install (no project, Session or Runtime),
- * `sandbox` the sandbox deployment, and `nodes: "none"` a deployment no node has joined.
+ * `sandbox` the sandbox deployment, `nodes: "none"` a deployment no node has joined, and
+ * `installation` how config.json's public_url is set: "public" (HTTPS, the default), "local"
+ * (loopback: only the Core machine reaches the API, and E2B is rejected) or "stale" (public,
+ * with a node enrolled with an earlier address).
  */
-export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none" }
+export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale" }
 
 /** Fresh fixture state: signed out ("login") or already signed in ("authenticated"). */
 export async function resetFixture(request: APIRequestContext, auth: "login" | "authenticated" = "authenticated", options: FixtureOptions = {}) {
-  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}`);
+  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}&installation=${options.installation ?? "public"}`);
 }
 
 /** Opens the console already signed in, in English. */

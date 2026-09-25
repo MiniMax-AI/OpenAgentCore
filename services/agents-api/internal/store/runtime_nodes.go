@@ -66,9 +66,11 @@ func runtimeDeploymentInitialized(d sqlc.RuntimeDeployment) bool {
 	return d.InstallationID.Valid && d.ProviderKind != ""
 }
 func (s *Store) GetRuntimeDeployment(ctx context.Context) (RuntimeDeploymentView, error) {
-	return getRuntimeDeploymentView(ctx, s.queries)
+	return s.deploymentView(ctx, s.queries)
 }
-func getRuntimeDeploymentView(ctx context.Context, q *sqlc.Queries) (RuntimeDeploymentView, error) {
+
+// deploymentView reports the public URL as the deployment's read-only core_url.
+func (s *Store) deploymentView(ctx context.Context, q *sqlc.Queries) (RuntimeDeploymentView, error) {
 	d, err := q.GetRuntimeDeployment(ctx)
 	if err != nil {
 		return RuntimeDeploymentView{}, err
@@ -77,7 +79,7 @@ func getRuntimeDeploymentView(ctx context.Context, q *sqlc.Queries) (RuntimeDepl
 	if err != nil {
 		return RuntimeDeploymentView{}, err
 	}
-	result := runtimeDeploymentView(d)
+	result := runtimeDeploymentView(d, s.publicURL)
 	result.Resources = SandboxDeploymentResources{Allocations: resources.Allocations, Pending: resources.Pending}
 	return result, nil
 }
@@ -112,7 +114,7 @@ func runtimeNodeViews(rows []sqlc.ListRuntimeNodesRow) ([]RuntimeNode, error) {
 			return nil, err
 		}
 		health.ProviderReady = n.ProviderReady
-		out = append(out, RuntimeNode{RuntimeNodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: runtimeUUID(n.ID), Name: n.Name, Provider: n.ProviderKind, Online: n.Online, LastSeenAt: seen, MaxActive: int(n.MaxActive), MaxRetained: retainedLimit(n.ProviderKind, int(n.MaxActive), int(n.MaxRetained)), Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt.Time})
+		out = append(out, RuntimeNode{RuntimeNodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: runtimeUUID(n.ID), Name: n.Name, CoreURL: n.CoreUrl, Provider: n.ProviderKind, Online: n.Online, LastSeenAt: seen, MaxActive: int(n.MaxActive), MaxRetained: retainedLimit(n.ProviderKind, int(n.MaxActive), int(n.MaxRetained)), Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt.Time})
 	}
 	return out, nil
 }
@@ -182,7 +184,7 @@ func (s *Store) EnrollRuntimeNode(ctx context.Context, token string, input Runti
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: receipt.MaxActive, MaxRetained: int32(retainedLimit(d.ProviderKind, int(receipt.MaxActive), int(receipt.MaxRetained))), SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration)})
+		row, err := q.InsertRuntimeNode(ctx, sqlc.InsertRuntimeNodeParams{ID: id, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialSha256: runtimeTokenDigest(input.Credential), MaxActive: receipt.MaxActive, MaxRetained: int32(retainedLimit(d.ProviderKind, int(receipt.MaxActive), int(receipt.MaxRetained))), SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: int64(input.DeploymentGeneration), CoreUrl: s.publicURL})
 		if err != nil {
 			return err
 		}

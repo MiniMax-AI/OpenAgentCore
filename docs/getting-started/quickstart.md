@@ -17,23 +17,21 @@ on Web's **Projects and keys** page or with the [Core key](operations.md#core-ke
 as Bearer credential: `POST /core/v1/projects` with `{"name":"Default"}`, then
 `POST /core/v1/projects/{project_id}/keys` with a descriptive `{"name":"..."}`.
 
-Obtain that key through a private channel and supply it as `PARSAR_API_KEY` in your
-application configuration. Its plaintext appears only at issuance; Core stores a
-digest in its database. All keys in the Project share assets, permissions and the
-same execution principal, while write provenance records the actual key. Other
-Projects remain isolated. The installer creates neither a Project nor an API key.
-For a remote installation, use its HTTPS API endpoint routed directly to Core; the
-console does not proxy `/v1`.
+Obtain that key through a private channel and set it as `OPENAI_API_KEY` in your
+application's environment. Set `OPENAI_BASE_URL` to the installation's API base
+URL: `api_base_url` in `GET /core/v1/installation`, which is the public URL followed
+by `/v1`, such as `https://core.example/v1`. The official SDK reads both variables.
+The key's plaintext appears only at issuance; Core stores a digest in its database.
+All keys in the Project share assets, permissions and the same execution principal,
+while write provenance records the actual key. Other Projects remain isolated. The
+installer creates neither a Project nor an API key. The API base URL reaches Core
+directly; the console does not proxy `/v1`.
 
 ```python
-import os
 from openai import OpenAI
 
-client = OpenAI(
-    base_url="http://127.0.0.1:8091/v1",
-    api_key=os.environ["PARSAR_API_KEY"],
-    default_headers={"OpenAI-Beta": "agents=v1"},
-)
+# Reads OPENAI_API_KEY and OPENAI_BASE_URL.
+client = OpenAI(default_headers={"OpenAI-Beta": "agents=v1"})
 print(client.beta.agents.list().data)
 ```
 

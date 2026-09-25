@@ -57,9 +57,6 @@ func validateSandboxSelection(input SandboxDeploymentSetupRequest) error {
 	} else if err := input.DeploymentSpec.Validate(input.Provider); err != nil {
 		return &SandboxConfigurationError{Message: err.Error()}
 	}
-	if ValidateSandboxCoreURL(input.CoreURL) != nil {
-		return ErrInvalidInput
-	}
 	switch input.Provider {
 	case "docker", "microsandbox":
 		if input.E2B != nil {
@@ -93,7 +90,7 @@ func (s *Store) sandboxSelectionEqual(d sqlc.RuntimeDeployment, input SandboxDep
 	if spec.Digest(d.ProviderKind) != input.DeploymentSpec.Digest(input.Provider) {
 		return false, nil
 	}
-	if d.ProviderKind != input.Provider || d.CoreUrl != input.CoreURL {
+	if d.ProviderKind != input.Provider {
 		return false, nil
 	}
 	if input.E2B == nil {
@@ -125,7 +122,7 @@ func (s *Store) saveSandboxSelection(ctx context.Context, q *sqlc.Queries, d sql
 		namespace = "e2b:" + runtimeUUID(d.InstallationID)
 	}
 	digest := sha256.Sum256([]byte(input.Provider + "\x00" + namespace))
-	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: input.Provider, CoreUrl: input.CoreURL, BackendFingerprint: hex.EncodeToString(digest[:]), Generation: generation, Mode: mode}
+	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: input.Provider, BackendFingerprint: hex.EncodeToString(digest[:]), Generation: generation, Mode: mode}
 	params.Specification, _ = json.Marshal(input.DeploymentSpec)
 	if input.Provider == "microsandbox" {
 		params.IdleSeconds, params.RetentionSeconds = 300, 86400
@@ -203,7 +200,7 @@ func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID 
 		} else if err := s.saveSandboxSelection(ctx, q, d, input); err != nil {
 			return err
 		}
-		result, err = getRuntimeDeploymentView(ctx, q)
+		result, err = s.deploymentView(ctx, q)
 		return err
 	})
 	return result, err
@@ -230,7 +227,7 @@ func (s *Store) CheckSandboxDeploymentSwitch(ctx context.Context, installation s
 	})
 }
 func checkSandboxSwitch(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDeployment, installation string, input SandboxDeploymentUpdateRequest) error {
-	if !d.WebManaged || runtimeUUID(d.InstallationID) != installation || d.ProviderKind == "" || !d.Maintenance || uint64(d.Generation) != input.ExpectedGeneration || d.CoreUrl != input.CoreURL {
+	if !d.WebManaged || runtimeUUID(d.InstallationID) != installation || d.ProviderKind == "" || !d.Maintenance || uint64(d.Generation) != input.ExpectedGeneration {
 		return ErrSandboxDeploymentConflict
 	}
 	resources, err := q.CountRuntimeDeploymentResources(ctx)
@@ -282,7 +279,7 @@ func (s *Store) UpdateSandboxDeployment(ctx context.Context, installation string
 		} else if err := recordTemplateBuild(ctx, q, input.SandboxDeploymentSetupRequest); err != nil {
 			return err
 		}
-		result, err = getRuntimeDeploymentView(ctx, q)
+		result, err = s.deploymentView(ctx, q)
 		return err
 	})
 	return result, err
@@ -308,7 +305,7 @@ func (s *Store) SetSandboxMaintenance(ctx context.Context, installation string, 
 		if err := q.SetSandboxMaintenance(ctx, input.Maintenance); err != nil {
 			return err
 		}
-		result, err = getRuntimeDeploymentView(ctx, q)
+		result, err = s.deploymentView(ctx, q)
 		return err
 	})
 	return result, err

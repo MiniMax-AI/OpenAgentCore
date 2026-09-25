@@ -70,8 +70,9 @@ active service per execution database; container replicas do not add HA/recovery
 
 ## Connect execution
 
-Set `AGENTS_API_DAEMON_WS_URL` in `api.env` to the API's externally reachable daemon
-WebSocket URL, then start the container. Provision a device using this image with
+Set `AGENTS_API_PUBLIC_URL` in `api.env` to the API's externally reachable origin,
+such as `https://core.example`, then start the container. Core derives the daemon
+WebSocket URL from it. Provision a device using this image with
 `/usr/local/bin/agents-api-device` as the command and the arguments documented in
 [Internal execution device connection](README.md#internal-execution-device-connection).
 Pass the same private environment file. The operator command emits a secret profile;

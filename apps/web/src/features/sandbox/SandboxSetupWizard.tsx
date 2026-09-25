@@ -7,9 +7,11 @@ import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip } from "../../components/console-ui";
+import { CopyableId } from "../../components/list-ui";
 import { formatBytes } from "../../lib/format";
+import { installationQuery } from "../../lib/installation";
 import type { MessageKey } from "../../lib/locale-strings";
-import { sandboxSetupOrigin } from "./core-origin";
+import { sandboxConfigurationRejection } from "../../lib/sandbox-labels";
 import { defaultSandboxResources, distributionRuntime, savedSpecification, validSandboxResources } from "./deployment-specification";
 import { isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS } from "./runtime-release";
 import "./sandbox-wizard.css";
@@ -66,11 +68,13 @@ function presetOf(provider: SandboxProvider, resources: SandboxResources): Prese
  * release comes from this console's distribution manifest when it serves one.
  * `current` pre-selects the saved choices when a deployment changes. Keeping
  * the backend keeps its saved size and Runtime; another backend starts from its
- * defaults and this console's Runtime. The Core address stays as it is and an
- * E2B key must be entered again.
+ * defaults and this console's Runtime. An E2B key must be entered again.
+ * Core's address is config.json's `public_url`: the review only shows it, and
+ * a configuration Core rejects for it is explained here, where it was saved.
  */
-export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switching = false, onSubmit }: {
-  initialCoreUrl: string;
+export function SandboxSetupWizard({ coreUrl, current, disabled, switching = false, onSubmit }: {
+  /** The deployment's read-only Core address. */
+  coreUrl: string;
   current?: { provider: SandboxProvider; specification?: SandboxSpecification; e2bTemplate?: string };
   disabled: boolean;
   switching?: boolean;
@@ -84,21 +88,21 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
   const saved = provider && current ? savedSpecification(provider, current.provider, current.specification) : null;
   const [resources, setResources] = useState<SandboxResources>(current?.specification?.resources ?? defaultSandboxResources("docker"));
   const [size, setSize] = useState<Size>(current?.specification ? presetOf(current.provider, current.specification.resources) ?? "current" : "standard");
-  // An unusable console address (loopback, plain HTTP) is not offered as the Core address.
-  const [coreUrl, setCoreUrl] = useState(sandboxSetupOrigin(initialCoreUrl) ? initialCoreUrl : "");
   const [apiKey, setApiKey] = useState("");
   const [template, setTemplate] = useState(current?.e2bTemplate ?? "");
   const [runtime, setRuntime] = useState<Partial<SandboxRuntimeRelease>>({});
   const [busy, setBusy] = useState(false);
+  // Core's reason for rejecting the saved configuration, such as E2B with a loopback public_url.
+  const [rejection, setRejection] = useState<string | null>(null);
+  const installation = useQuery(installationQuery);
+  const address = coreUrl || installation.data?.public_url || null;
+  const configuration = installation.data?.configuration ?? null;
 
   // A release the administrator entered comes first, then the saved one of the same backend,
   // then the one this console distributes (the release its node installer verifies).
   const matched = useQuery({ queryKey: ["sandbox-runtime-release"], queryFn: ({ signal }) => distributionRuntime(signal).catch(() => null), staleTime: Infinity, retry: false });
   const release: Partial<SandboxRuntimeRelease> = Object.keys(runtime).length ? runtime : saved?.runtime ?? matched.data ?? {};
 
-  const origin = switching ? initialCoreUrl : sandboxSetupOrigin(coreUrl);
-  // The review asks for the Core address only when the console's own cannot serve.
-  const askOrigin = !switching && !sandboxSetupOrigin(initialCoreUrl);
   const needsRuntime = provider === "docker" || provider === "microsandbox";
   const runtimeReady = !needsRuntime || isRuntimeRelease(release);
   // Core keeps no key across a change: E2B always needs one.
@@ -106,7 +110,7 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
   // Core sizes E2B sandboxes from the template build, so E2B sends no resources.
   const sized = provider !== null && provider !== "e2b";
   const sizeReady = provider !== null && (!sized || validSandboxResources(provider, resources));
-  const ready = provider !== null && origin !== null && runtimeReady && e2bReady && sizeReady && !disabled && !busy;
+  const ready = provider !== null && runtimeReady && e2bReady && sizeReady && !disabled && !busy;
 
   const order: Step[] = where === "direct" ? ["where", "e2b", "review"] : ["where", "backend", "size", "review"];
   const index = Math.max(0, order.indexOf(step === "advanced" ? "review" : step));
@@ -115,6 +119,7 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
   // The saved backend keeps its size and Runtime; another starts from its standard size and this console's Runtime.
   function choose(next: SandboxProvider) {
     if (next !== provider) {
+      setRejection(null);
       const kept = current ? savedSpecification(next, current.provider, current.specification) : null;
       setResources(kept?.resources ?? presets(next).standard);
       setSize(kept ? presetOf(next, kept.resources) ?? "current" : "standard");
@@ -126,15 +131,19 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
   async function save(event?: FormEvent) {
     event?.preventDefault();
     if (!ready || !provider) return;
-    setBusy(true);
+    setBusy(true); setRejection(null);
     try {
       await onSubmit({
         provider,
-        core_url: origin!,
         ...(sized ? { resources } : {}),
         ...(needsRuntime ? { runtime: release as SandboxRuntimeRelease } : {}),
         ...(provider === "e2b" ? { e2b: { api_key: apiKey.trim(), template: template.trim() } } : {}),
       });
+    } catch (error) {
+      // A configuration Core rejected is explained here; the page reports every other failure.
+      const reason = sandboxConfigurationRejection(error);
+      if (reason === null) throw error;
+      setRejection(reason);
     } finally {
       setApiKey("");
       setBusy(false);
@@ -217,17 +226,32 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
               <dd>{runtimeReady ? <code>{release.source_commit!.slice(0, 12)}</code> : <span className="wizard-missing">{t("Runtime release needed")}<HelpTip>{t("This console serves no Runtime manifest. Enter the release under advanced settings.")}</HelpTip></span>}</dd>
             </div>
           ) : null}
-          {askOrigin ? null : (
-            <div>
-              <dt>{t("Core address")}<HelpTip>{t("The address nodes and sandboxes use to reach Core. It must be HTTPS and reachable from them; the console's own address may differ.")}</HelpTip></dt>
-              <dd>{origin ? <code>{origin}</code> : <span className="wizard-missing">{t("Core address needed")}</span>}</dd>
-            </div>
-          )}
+          <div>
+            <dt>{t("Core address")}<HelpTip>{t("The address nodes and sandboxes use to reach Core.")}</HelpTip></dt>
+            <dd>
+              {address ? <code>{address}</code> : "—"}
+              <span className="wizard-review-sub">{t("Set by public_url in config.json")}</span>
+              {installation.data?.local_only ? <span className="wizard-review-caution">{t("Only the Core machine can reach this address: nodes on other machines and E2B sandboxes can't. Set a public_url in config.json that other machines can reach (not loopback).")}</span> : null}
+            </dd>
+          </div>
         </dl>
-        {askOrigin ? (
-          <Field id={`${id}-origin`} label={t("Core address")} help={t("This console address cannot be used by sandbox guests. Enter the HTTPS Core address that your nodes and guests can reach.")} error={coreUrl && !origin ? t("Enter a non-loopback HTTPS origin, such as https://core.example.") : null}>
-            <input id={`${id}-origin`} type="url" value={coreUrl} onChange={(event) => setCoreUrl(event.target.value)} placeholder="https://core.example" />
-          </Field>
+        {rejection ? (
+          <div className="wizard-rejection" role="alert">
+            <p>{rejection}</p>
+            {configuration ? (
+              <dl>
+                <div><dt>{t("Config file")}</dt><dd><CopyableId id={configuration.path} label={t("Copy path")} /></dd></div>
+                <div><dt>{t("Then run")}</dt><dd><CopyableId id={configuration.apply_command} label={t("Copy command")} /></dd></div>
+              </dl>
+            ) : null}
+          </div>
+        ) : null}
+        {/* Every save attempt clears the E2B key, so a second one needs it entered again. */}
+        {provider === "e2b" && !apiKey.trim() ? (
+          <p className="wizard-key-again">
+            {t("Enter the E2B key again to save.")}
+            <button className="wizard-link" type="button" onClick={() => setStep("e2b")}>{t("Enter the key")}</button>
+          </p>
         ) : null}
         <button className="wizard-link" type="button" onClick={() => setStep("advanced")}>
           <SlidersHorizontal size={14} aria-hidden="true" />{t("Advanced settings")}
@@ -255,11 +279,6 @@ export function SandboxSetupWizard({ initialCoreUrl, current, disabled, switchin
               </> : null}
             </div>
           </fieldset> : null}
-          {!switching ? (
-            <Field id={`${id}-origin-advanced`} label={t("Core address")} help={t("The address nodes and sandboxes use to reach Core. It must be HTTPS and reachable from them; the console's own address may differ.")} error={coreUrl && !origin ? t("Enter a non-loopback HTTPS origin, such as https://core.example.") : null}>
-              <input id={`${id}-origin-advanced`} type="url" value={coreUrl} onChange={(event) => setCoreUrl(event.target.value)} placeholder="https://core.example" />
-            </Field>
-          ) : null}
           {needsRuntime ? (
             <fieldset className="wizard-group">
               <legend>{t("Runtime release")}<HelpTip>{t("Filled in from this console's distribution when it serves one. Otherwise copy these from the distribution manifest that matches your nodes; image configuration IDs and manifest digests are different values.")}</HelpTip></legend>

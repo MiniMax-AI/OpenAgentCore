@@ -27,7 +27,9 @@ type managedSetup struct {
 	}
 	hub            *node.Hub
 	installationID string
-	selected       atomic.Pointer[execution.RuntimeProvider]
+	// publicURL is AGENTS_API_PUBLIC_URL; every sandbox reaches Core through it.
+	publicURL string
+	selected  atomic.Pointer[execution.RuntimeProvider]
 }
 
 func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, error) {
@@ -63,6 +65,10 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 }
 
 func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+	// E2B guests reach Core from E2B's cloud, over the internet.
+	if setup.Provider == "e2b" && store.LoopbackOrigin(s.publicURL) {
+		return execution.PreparedRuntimeDeployment{}, store.ErrSandboxPublicURLUnreachable
+	}
 	candidate, err := s.configuration(setup)
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
@@ -105,25 +111,12 @@ func (s *managedSetup) configuration(setup store.SandboxSetup) (execution.Prepar
 		return execution.PreparedRuntimeDeployment{}, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, Maintenance: setup.Maintenance,
-		CoreURL: setup.CoreURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
+		CoreURL: s.publicURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	if setup.Provider == "microsandbox" {
 		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.IdleSeconds) * time.Second,
 			Retention: time.Duration(setup.RetentionSeconds) * time.Second, MaxActive: 4, MaxRetained: 16}
 	}
 	return execution.PreparedRuntimeDeployment{Config: selected, Publish: s.selected.Store}, nil
-}
-
-func (s *managedSetup) webSocketURL(fallback string) func(context.Context) (string, error) {
-	return func(ctx context.Context) (string, error) {
-		selected, err := s.load(ctx)
-		if err != nil {
-			return "", err
-		}
-		if selected == nil {
-			return fallback, nil
-		}
-		return runtimeWebSocketURL(selected.CoreURL)
-	}
 }
 
 func (s *managedSetup) ObservationProviderType() string {

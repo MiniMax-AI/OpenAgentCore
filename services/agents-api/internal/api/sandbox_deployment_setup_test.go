@@ -20,7 +20,7 @@ func TestSandboxDeploymentSetupRequiresAdministratorAndStrictBody(t *testing.T) 
 		if input.Provider == "microsandbox" {
 			return store.RuntimeDeploymentView{}, store.ErrSandboxDeploymentConflict
 		}
-		return store.RuntimeDeploymentView{Provider: input.Provider, CoreURL: input.CoreURL}, nil
+		return store.RuntimeDeploymentView{Provider: input.Provider}, nil
 	}
 	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin), WithSandboxDeploymentSetup(initialize))
 	if err != nil {
@@ -30,12 +30,12 @@ func TestSandboxDeploymentSetupRequiresAdministratorAndStrictBody(t *testing.T) 
 		token, body   string
 		status, calls int
 	}{
-		{"caller", `{"provider":"docker","core_url":"https://core.example"}`, 401, 0},
-		{"node-credential", `{"provider":"docker","core_url":"https://core.example"}`, 401, 0},
-		{"enrollment-token", `{"provider":"docker","core_url":"https://core.example"}`, 401, 0},
-		{"administrator", `{"provider":"docker","core_url":"https://core.example","unexpected":true}`, 400, 0},
-		{"administrator", `{"provider":"docker","core_url":"https://core.example"}`, 200, 1},
-		{"administrator", `{"provider":"microsandbox","core_url":"https://core.example"}`, 409, 2},
+		{"caller", `{"provider":"docker"}`, 401, 0},
+		{"node-credential", `{"provider":"docker"}`, 401, 0},
+		{"enrollment-token", `{"provider":"docker"}`, 401, 0},
+		{"administrator", `{"provider":"docker","unexpected":true}`, 400, 0},
+		{"administrator", `{"provider":"docker"}`, 200, 1},
+		{"administrator", `{"provider":"microsandbox"}`, 409, 2},
 	} {
 		request := httptest.NewRequest(http.MethodPost, "/core/v1/sandbox/deployment", strings.NewReader(test.body))
 		request.Header.Set("Authorization", "Bearer "+test.token)
@@ -49,7 +49,7 @@ func TestSandboxDeploymentSetupRequiresAdministratorAndStrictBody(t *testing.T) 
 
 func TestSandboxDeploymentSetupFileModeReturnsConflict(t *testing.T) {
 	h := &Handler{}
-	request := httptest.NewRequest(http.MethodPost, "/core/v1/sandbox/deployment", strings.NewReader(`{"provider":"docker","core_url":"https://core.example"}`))
+	request := httptest.NewRequest(http.MethodPost, "/core/v1/sandbox/deployment", strings.NewReader(`{"provider":"docker"}`))
 	result := httptest.NewRecorder()
 	h.initializeSandboxDeployment(result, request)
 	if result.Code != http.StatusConflict || !strings.Contains(result.Body.String(), "sandbox_deployment_conflict") {
