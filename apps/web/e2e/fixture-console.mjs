@@ -253,7 +253,11 @@ async function sandboxRoute(request, response, path) {
   }
   if (path === "/nodes") return send(response, 200, { data: state.nodes });
   if (path === "/enrollment-tokens" && request.method === "POST") {
-    // As Core: a one-time token valid for ten minutes.
+    // As Core: a one-time token valid for ten minutes, whose limits the node it enrolls takes;
+    // only microsandbox keeps a retained limit above the active one.
+    const input = await body(request);
+    const maxActive = input.max_active ?? 1;
+    state.enrollmentLimits = { max_active: maxActive, max_retained: state.deployment?.provider === "microsandbox" ? input.max_retained ?? maxActive : maxActive };
     return send(response, 201, { token: `enroll_fixture_${state.nextId++}`, expires_at: new Date(Date.now() + 10 * 60_000).toISOString() });
   }
   let m;
@@ -321,9 +325,14 @@ async function executorCredentialRoute(request, response, projectId, environment
   return error(response, 404, "Not found.");
 }
 
-/** A node as it first registers with an enrollment command: not yet connected, provider not ready. */
+/**
+ * A node as it first registers with the last enrollment command: not yet connected,
+ * provider not ready, with the token's limits. Like Core, it has no diagnostic
+ * field until one is reported.
+ */
 function registeredNode(nodeId) {
-  return { id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", online: false, provider_ready: false, diagnostic: "", cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, max_active: 2, max_retained: 2, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
+  const limits = state.enrollmentLimits ?? { max_active: 1, max_retained: 1 };
+  return { id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
 }
 
 /** Test controls: reset state, inject one failure, register or change a node, and read what the browser sent. */
@@ -338,11 +347,13 @@ async function fixtureRoute(request, response, url) {
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/node" && request.method === "POST") {
-    // { id, ...fields }: registers the node on first use, then applies the fields (online, provider_ready, diagnostic).
+    // { id, ...fields }: registers the node on first use, then applies the fields (online, provider_ready, diagnostic);
+    // an empty diagnostic removes the field, as Core omits it.
     const { id: nodeId, ...fields } = await body(request);
     let node = state.nodes.find((entry) => entry.id === nodeId);
     if (!node) state.nodes.push(node = registeredNode(nodeId));
     Object.assign(node, fields);
+    if (!node.diagnostic) delete node.diagnostic;
     return send(response, 200, node);
   }
   if (url.pathname === "/__fixture/requests") return send(response, 200, { violations: state.violations, writes: state.writes });
