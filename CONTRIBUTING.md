@@ -1867,7 +1867,9 @@ and so the node, root-equivalent on the host; that is inherent to Docker sandbox
 not a least-privilege boundary. Microsandbox needs only `kvm`. Files the service
 user owns are read, written and deleted only with its credentials, never by root,
 in a child that starts its own session with /dev/null as input, so nothing it runs
-can reach the administrator's terminal; root never runs a file that user can write,
+can reach the administrator's terminal. The installer turns SIGINT, SIGHUP and
+SIGTERM into stopping that child, which would otherwise outlive a closed terminal.
+Root never runs a file that user can write,
 opens a URL it wrote, or follows a link in its home. Sudo mode
 never installs Docker, KVM or packages, never changes device permissions, refuses
 SELinux-enforcing hosts and a token in the environment, and changes nothing when a

@@ -536,11 +536,21 @@ def stop_child(pid):
     os.waitpid(pid, 0)
 
 
+def interrupted(number, frame):
+    raise InstallError("The installation was interrupted; run the command again to continue.")
+
+
+# The child's own session gets none of the terminal's signals, so while it runs the
+# parent turns these into an error that stops the child before the parent exits.
+STOP_SIGNALS = (signal.SIGINT, signal.SIGHUP, signal.SIGTERM)
+
+
 def as_service_user(account, function, *arguments):
     """Run a step with the service user's credentials in a forked child.
 
     The child starts a new session with /dev/null as standard input and pipes as
     output, so no program it runs holds the administrator's terminal (TIOCSTI).
+    Interrupting the installer or closing its terminal stops the child too.
     Every installer module is already imported, so the child never reads the root
     caller's private copy of this program, and the token stays in memory. Files the
     service user owns are read, written and deleted only here, never by root."""
@@ -548,51 +558,70 @@ def as_service_user(account, function, *arguments):
     sys.stderr.flush()
     output_read, output_write = os.pipe()
     errors_read, errors_write = os.pipe()
-    pid = os.fork()
-    if pid == 0:
-        code = 1
-        try:
-            os.close(output_read)
-            os.close(errors_read)
-            os.setsid()
-            null = os.open(os.devnull, os.O_RDWR)
-            os.dup2(null, 0)
-            os.dup2(output_write, 1)
-            os.dup2(errors_write, 2)
-            for descriptor in (null, output_write, errors_write):
-                if descriptor > 2:
-                    os.close(descriptor)
-            sys.stdout = open(1, "w", buffering=1, closefd=False)
-            sys.stderr = open(2, "w", buffering=1, closefd=False)
-            os.setgroups(os.getgrouplist(account.pw_name, account.pw_gid))
-            os.setgid(account.pw_gid)
-            os.setuid(account.pw_uid)
-            os.umask(0o077)
-            os.environ.clear()
-            os.environ.update(HOME=account.pw_dir, USER=account.pw_name, LOGNAME=account.pw_name, PATH=SAFE_PATH,
-                              LANG="C.UTF-8", DOCKER_CONFIG=str(CHILD_DOCKER_CONFIG))
-            os.chdir(account.pw_dir)
-            function(*arguments)
-            code = 0
-        except (InstallError, node_spec.SpecificationError, distribution.DistributionError) as error:
-            print(str(error), file=sys.stderr)
-        except Exception as error:  # noqa: BLE001 - the child must always report and exit
-            print("The step running as " + SERVICE_USER + " failed unexpectedly (" + type(error).__name__
-                  + "). Inspect the host, then rerun the command.", file=sys.stderr)
-        finally:
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os._exit(code)
-    os.close(output_write)
-    os.close(errors_write)
+    previous = {number: signal.getsignal(number) for number in STOP_SIGNALS}
+    for number, handler in previous.items():
+        if handler is not signal.SIG_IGN:  # As under nohup, an ignored signal stays ignored.
+            signal.signal(number, interrupted)
     try:
-        relay(output_read, errors_read)
-        _, status = os.waitpid(pid, 0)
-    except BaseException:
-        stop_child(pid)
-        raise
+        pid = os.fork()
+        if pid == 0:
+            service_child(account, function, arguments, (output_read, errors_read), output_write, errors_write)
+        os.close(output_write)
+        os.close(errors_write)
+        try:
+            relay(output_read, errors_read)
+            _, status = os.waitpid(pid, 0)
+        except BaseException:
+            for number in STOP_SIGNALS:  # A second signal must not cut the stop short.
+                signal.signal(number, signal.SIG_IGN)
+            stop_child(pid)
+            raise
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
     if not os.WIFEXITED(status) or os.WEXITSTATUS(status) != 0:
         raise ChildFailed()
+
+
+def service_child(account, function, arguments, read_ends, output_write, errors_write):
+    """The forked child of as_service_user; it never returns into the root caller's code."""
+    code = 1
+    try:
+        for number in STOP_SIGNALS:
+            signal.signal(number, signal.SIG_DFL)
+        for descriptor in read_ends:
+            os.close(descriptor)
+        os.setsid()
+        null = os.open(os.devnull, os.O_RDWR)
+        os.dup2(null, 0)
+        os.dup2(output_write, 1)
+        os.dup2(errors_write, 2)
+        for descriptor in (null, output_write, errors_write):
+            if descriptor > 2:
+                os.close(descriptor)
+        sys.stdout = open(1, "w", buffering=1, closefd=False)
+        sys.stderr = open(2, "w", buffering=1, closefd=False)
+        os.setgroups(os.getgrouplist(account.pw_name, account.pw_gid))
+        os.setgid(account.pw_gid)
+        os.setuid(account.pw_uid)
+        os.umask(0o077)
+        os.environ.clear()
+        os.environ.update(HOME=account.pw_dir, USER=account.pw_name, LOGNAME=account.pw_name, PATH=SAFE_PATH,
+                          LANG="C.UTF-8", DOCKER_CONFIG=str(CHILD_DOCKER_CONFIG))
+        os.chdir(account.pw_dir)
+        function(*arguments)
+        code = 0
+    except (InstallError, node_spec.SpecificationError, distribution.DistributionError) as error:
+        print(str(error), file=sys.stderr)
+    except Exception as error:  # noqa: BLE001 - the child must always report and exit
+        print("The step running as " + SERVICE_USER + " failed unexpectedly (" + type(error).__name__
+              + "). Inspect the host, then rerun the command.", file=sys.stderr)
+    finally:
+        # A closed output pipe must not skip the exit below.
+        for stream in (sys.stdout, sys.stderr):
+            with contextlib.suppress(BaseException):
+                stream.flush()
+        os._exit(code)
 
 
 run_as = as_service_user

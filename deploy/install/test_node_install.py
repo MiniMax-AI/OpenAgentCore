@@ -6,10 +6,12 @@ import io
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import stat
 import subprocess
 import tempfile
+import time
 import unittest
 import urllib.error
 from types import SimpleNamespace
@@ -504,6 +506,25 @@ class NodeInstallTests(unittest.TestCase):
                 mock.patch.object(installer.os, "setuid"), mock.patch.object(installer.sys, "stdout", output):
             installer.as_service_user(account, probe)
         self.assertIn("session-leader=True stdin=/dev/null docker-config=" + str(installer.CHILD_DOCKER_CONFIG), output.getvalue())
+
+    def test_closing_the_terminal_stops_the_service_user_step(self):
+        """The child's own session misses SIGHUP; the installer must stop and reap it before it exits."""
+        account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
+                                  pw_dir=str(self.home), pw_shell="/usr/sbin/nologin")
+        record = self.home / "child.pid"
+
+        def long_step():
+            record.write_text(str(os.getpid()))
+            os.kill(os.getppid(), signal.SIGHUP)  # The administrator's terminal closes.
+            time.sleep(60)
+        started = time.monotonic()
+        with mock.patch.object(installer.os, "setgroups"), mock.patch.object(installer.os, "setgid"), \
+                mock.patch.object(installer.os, "setuid"), mock.patch.object(installer.sys, "stdout", io.StringIO()), \
+                self.assertRaisesRegex(installer.InstallError, "interrupted"):
+            installer.as_service_user(account, long_step)
+        self.assertLess(time.monotonic() - started, 30)
+        with self.assertRaises(ProcessLookupError):  # Stopped and reaped, not left running.
+            os.kill(int(record.read_text()), 0)
 
 
     def test_uninstall_never_follows_a_link_in_the_service_home(self):

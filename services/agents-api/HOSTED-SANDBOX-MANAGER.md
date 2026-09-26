@@ -183,7 +183,8 @@ The installer chooses how the node runs from the user that runs it:
   without sudo is found in the invoking user's home or, for Docker, by its network
   on the same engine; other users' homes are not searched. The steps that run as
   `parsar-node` start in their own session with no terminal, so nothing they run
-  can reach the administrator's terminal.
+  can reach the administrator's terminal. Interrupting the installer or closing
+  its terminal stops those steps as well.
 
   **Docker mode is root-equivalent.** Membership in the `docker` group lets
   `parsar-node`, and so anything that controls the node, act as root on that host.
