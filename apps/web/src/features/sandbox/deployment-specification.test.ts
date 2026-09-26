@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defaultSandboxResources, distributionRuntime, savedSpecification, validSandboxResources } from "./deployment-specification";
+import { isRuntimeReleaseField } from "./runtime-release";
 import standardSizes from "./standard-sizes.json";
 import type { SandboxSpecification } from "@agents-core-web/agents-client";
 
@@ -47,6 +48,19 @@ describe("deployment resources and Runtime", () => {
     expect(validSandboxResources("docker", { cpus: 2, memory_mib: 1048577 })).toBe(false);
     expect(validSandboxResources("e2b", { cpus: 2, memory_mib: 2048, root_disk_mib: 1024 })).toBe(false);
     expect(validSandboxResources("microsandbox", { cpus: 2, memory_mib: 2048, root_disk_mib: 1023, environment_disk_mib: 8192 })).toBe(false);
+  });
+  it("accepts any well-formed Runtime image name in the Runtime reference", async () => {
+    const digest = "b".repeat(64);
+    for (const runtime_ref of [`parsar-core-runtime@sha256:${digest}`, `oac-runtime@sha256:${digest}`]) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...manifest, runtime_ref }))));
+      expect((await distributionRuntime(new AbortController().signal)).microsandbox_ref).toBe(runtime_ref);
+      expect(isRuntimeReleaseField("microsandbox_ref", runtime_ref)).toBe(true);
+    }
+    for (const runtime_ref of [`oac-runtime:${digest}`, `oac-runtime@sha256:${"b".repeat(63)}`, `oac-runtime@sha256:${"B".repeat(64)}`, `@sha256:${digest}`]) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...manifest, runtime_ref }))));
+      await expect(distributionRuntime(new AbortController().signal)).rejects.toThrow();
+      expect(isRuntimeReleaseField("microsandbox_ref", runtime_ref)).toBe(false);
+    }
   });
   it("rejects unavailable, mutable or incomplete release identities", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 404 })));
