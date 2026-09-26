@@ -93,7 +93,8 @@ class InstallerTests(unittest.TestCase):
                              "on the Projects and keys page.",
                              # Sandboxes call Core at public_url, so a loopback install has no nodes yet.
                              "\nNodes need an HTTPS public URL that other machines and their sandboxes can reach: "
-                             "set public_url in {root}/config.json and run {root}/parsar apply, then add nodes.\n"]),
+                             "set public_url in {root}/config.json and run {root}/parsar apply first.\nAdd nodes: in "
+                             "Web, open Nodes and choose Add node"]),
             "core-only": (["--core-only"], ["API base URL: http://127.0.0.1:8091/v1 (local only)\n",
                                             "Next: create a Project and its API key through the Core management API at "
                                             f"http://127.0.0.1:8091/core/v1 (local only) with the Core key in {key}."]),
@@ -182,6 +183,7 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("API base URL", self.output.getvalue())
         self.assertFalse(any(command[:2] == ["docker", "load"] and not command[-1].endswith("web.tar")
                              for command in self.host.commands))
+        self.assertEqual(self.host.deployment_posts, [])
 
     def test_web_only_rejects_exposed_or_malformed_core_key_files(self):
         link = self.work / "linked.key"
@@ -205,26 +207,54 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(set(self.document("generated/compose.json")["services"]), {"database", "web"})
         self.assertTrue(self.host.native["active"])
 
-    def test_a_new_installation_selects_docker_at_web_standard_size(self):
+    def test_a_new_installation_selects_microsandbox_at_web_standard_size(self):
         self.install("--public-url", "https://core.example")
         standard = json.loads(STANDARD_SIZES.read_text())
-        self.assertEqual(self.host.deployment_posts, [
-            {"provider": "docker", "resources": standard["docker"], "runtime": node_spec.release(self.manifest)}])
-        self.assertIn(f'\nSandboxes: Docker, Standard ({install.size(standard["docker"])}).\nAdd nodes: in Web, open '
-                      "Nodes and choose Add node, then paste the command on each host, this one included.\n",
-                      self.output.getvalue())
+        self.assertEqual(self.host.deployment_posts, [{"provider": "microsandbox", "resources": standard["microsandbox"],
+                                                       "runtime": node_spec.release(self.manifest)}])
+        self.assertIn("\nSandboxes: microsandbox, Standard (2 CPUs, 4 GiB). Its nodes need KVM (/dev/kvm); this host "
+                      "needs it only if you add it as a node.\nAdd nodes: in Web, open Nodes and choose Add node, then "
+                      "paste the command on each host, this one included.\n", self.output.getvalue())
+        self.assertNotIn(install.DOCKER_RISKS, self.output.getvalue())
         self.assertNotIn("sandbox", json.dumps(self.document("config.json")))
         # A repair never selects again.
         self.host.deployment = {"provider": ""}
         self.install()
         self.assertEqual(len(self.host.deployment_posts), 1)
-        self.root = self.work / "microsandbox"
-        self.install("--core-only", "--sandbox", "microsandbox")
-        self.assertEqual(self.host.deployment_posts[-1]["resources"], standard["microsandbox"])
         self.root, self.output = self.work / "none", io.StringIO()
         self.install("--sandbox", "none")
-        self.assertEqual(len(self.host.deployment_posts), 2)
+        self.assertEqual(len(self.host.deployment_posts), 1)
         self.assertIn("Sandboxes: none chosen. Choose a sandbox backend on the Nodes page in Web.", self.output.getvalue())
+
+    def install_docker(self, *flags, answer=None):
+        """--sandbox docker; answer is what an interactive operator types, None without a terminal."""
+        with mock.patch.object(install.sys, "stdin", mock.Mock(isatty=lambda: answer is not None)), \
+                mock.patch("builtins.input", return_value=answer) as prompt:
+            self.install("--sandbox", "docker", *flags)
+        return prompt
+
+    def test_docker_needs_confirmation_before_anything_is_created(self):
+        for answer in (None, "", "n"):
+            with self.subTest(answer=answer), self.assertRaisesRegex(install.InstallError, "Docker sandboxes were not "
+                                                                     "confirmed; nothing was installed. Rerun with "
+                                                                     "--accept-docker-risks"):
+                self.install_docker("--public-url", "https://core.example", answer=answer)
+            self.assertFalse(self.root.exists())
+            self.assertEqual((self.host.commands, self.host.deployment_posts), ([], []))
+        output = self.output.getvalue()
+        for risk in ("share the node's kernel", "own microVM", "root-equivalent", "trusted workloads or for node hosts "
+                     "without KVM"):
+            self.assertIn(risk, output)
+        standard = json.loads(STANDARD_SIZES.read_text())
+        docker = {"provider": "docker", "resources": standard["docker"], "runtime": node_spec.release(self.manifest)}
+        prompt = self.install_docker("--core-only", "--accept-docker-risks")
+        prompt.assert_not_called()
+        self.assertEqual(self.host.deployment_posts, [docker])
+        self.root, self.host.deployment = self.work / "confirmed", {"provider": ""}
+        prompt = self.install_docker(answer="y")
+        prompt.assert_called_once_with("Use Docker sandboxes anyway? [y/N] ")
+        self.assertEqual(self.host.deployment_posts, [docker, docker])
+        self.assertIn("\nSandboxes: Docker, Standard (2 CPUs, 2 GiB).\n", self.output.getvalue())
 
     def test_e2b_needs_a_public_address_a_private_key_file_and_an_exact_build(self):
         secret = "synthetic-e2b-key-0123456789"
@@ -259,7 +289,8 @@ class InstallerTests(unittest.TestCase):
         for flags, message in ((("--web-only", "--core-key-file", self.key_file(), "--sandbox", "docker"),
                                 "--web-only has no Core; choose the sandbox backend on the Core host"),
                                (("--sandbox", "e2b"), "requires --e2b-api-key-file and --e2b-template"),
-                               (("--e2b-template", BUILD), "require --sandbox e2b")):
+                               (("--e2b-template", BUILD), "require --sandbox e2b"),
+                               (("--accept-docker-risks",), "--accept-docker-risks requires --sandbox docker")):
             with self.subTest(flags=flags), self.assertRaisesRegex(install.InstallError, message):
                 self.install(*flags)
             self.assertFalse(self.root.exists())

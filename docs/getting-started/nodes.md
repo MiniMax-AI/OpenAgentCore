@@ -20,7 +20,7 @@ node protocol, manual registration, placement and failure handling.
   node files to the smaller bundle; see
   [Download a release](install.md#download-a-release). Otherwise Add node says that
   the console has no node files for the provider.
-- **A sandbox backend is chosen.** The installer selects Docker unless you chose
+- **A sandbox backend is chosen.** The installer selects microsandbox unless you chose
   otherwise. After `--sandbox none`, the **Nodes** page first asks you to choose
   **Own machines**, then microsandbox (preselected as recommended) or Docker, which it
   asks you to confirm, and a sandbox size, then **Save configuration**. Every node of a

@@ -1850,8 +1850,10 @@ private dedicated PostgreSQL service and separate Core and console services in
 Compose by default, with zero execution nodes. The default requires neither KVM
 nor systemd user services, imports no Runtime image, mounts neither the Docker
 socket nor host devices into Core, and never adds its own host as a node.
-`--sandbox docker|microsandbox|e2b|none` (default `docker`; `none` and nothing else
-with `--web-only`) is a one-time install action: once the services are healthy, the
+`--sandbox docker|microsandbox|e2b|none` (default `microsandbox`; `none` and nothing
+else with `--web-only`; `docker` prints its weaker isolation and needs a y/N
+confirmation or `--accept-docker-risks` before anything is created) is a one-time
+install action: once the services are healthy, the
 installer POSTs `/core/v1/sandbox/deployment` as Web's setup would, and never on a
 repair or conversion. It is not written to `config.json`; PostgreSQL owns the
 selection. E2B needs a non-loopback HTTPS `public_url`, `--e2b-api-key-file` and
