@@ -13,15 +13,19 @@ describe("node enrollment", () => {
     expect(formatCountdown(3_723_000)).toBe("1:02:03");
   });
 
-  it("follows the newest new node from registered to ready, and reports it once the installer's wait has passed", () => {
-    const target = { known: new Set(["old"]), max_active: 4, max_retained: 8 };
-    const fresh = node("new", { online: false, provider_ready: false, created_at: "2026-09-25T00:00:02Z" });
-    expect(enrolledNode([node("old"), node("earlier", { created_at: "2026-09-25T00:00:01Z" }), fresh], target, true)?.id).toBe("new");
-    // A newer node from another command, with other limits, is not this command's.
-    const other = node("other", { max_active: 3, created_at: "2026-09-25T00:00:03Z" });
-    expect(enrolledNode([fresh, other], target, true)?.id).toBe("new");
-    expect(enrolledNode([node("retains", { max_retained: 5, created_at: "2026-09-25T00:00:03Z" }), fresh], target, true)?.id).toBe("new");
-    expect(enrolledNode([node("docker", { max_retained: 4, created_at: "2026-09-25T00:00:03Z" }), fresh], target, false)?.id).toBe("docker");
+  it("follows only the node that reports the command's enrollment ID", () => {
+    const command = { enrollment_id: "3b0c1f4e-8a2d-4c6b-9e7f-1a2b3c4d5e6f" };
+    const fresh = node("new", { enrollment_id: command.enrollment_id, created_at: "2026-09-25T00:00:02Z" });
+    // A newer node from another command with the same limits is not this command's, nor is an older node without an ID.
+    const other = node("other", { enrollment_id: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a", created_at: "2026-09-25T00:00:03Z" });
+    expect(enrolledNode([node("old"), fresh, other], command)?.id).toBe("new");
+    expect(enrolledNode([node("old"), other], command)).toBeNull();
+    // A command without an ID matches nothing, not even nodes without one.
+    expect(enrolledNode([node("old"), node("absent", { enrollment_id: undefined })], { enrollment_id: "" })).toBeNull();
+  });
+
+  it("follows the node from registered to ready, and reports it once the installer's wait has passed", () => {
+    const fresh = node("new", { online: false, provider_ready: false });
     expect(enrollmentProgress(null, undefined, 0)).toEqual({ stage: "waiting", problem: "" });
     expect(enrollmentProgress(fresh, 0, NODE_READY_WAIT_MS - 1)).toEqual({ stage: "registered", problem: "" });
     expect(enrollmentProgress(fresh, 0, NODE_READY_WAIT_MS)).toEqual({ stage: "registered", problem: "not_connected" });

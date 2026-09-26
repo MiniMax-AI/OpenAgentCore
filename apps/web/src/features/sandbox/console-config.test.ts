@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sandboxConsoleConfig } from "./console-config";
+import { nodeFilesAvailable, sandboxConsoleConfig } from "./console-config";
 
 afterEach(() => vi.unstubAllGlobals());
 describe("bundled console capabilities", () => {
@@ -32,6 +32,25 @@ describe("bundled console capabilities", () => {
   it("reports a failed read as a failure, not as an unconfigured console", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Bad gateway", { status: 502 })));
     await expect(sandboxConsoleConfig(new AbortController().signal)).rejects.toThrow();
+  });
+  it("blocks a provider's command only when the console reports no node files for it", async () => {
+    const read = async (body: object) => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ node_installer: true, node_installer_sha256: "a".repeat(64), ...body }))));
+      return (await sandboxConsoleConfig(new AbortController().signal))!;
+    };
+    // An older console doesn't report them: nothing is blocked.
+    const older = await read({});
+    expect(older.node_artifacts).toBeUndefined();
+    expect(nodeFilesAvailable(older, "docker")).toBe(true);
+    const docker = await read({ node_artifacts: ["docker"] });
+    expect(nodeFilesAvailable(docker, "docker")).toBe(true);
+    expect(nodeFilesAvailable(docker, "microsandbox")).toBe(false);
+    // null, like any malformed value, reports none.
+    for (const node_artifacts of [null, "docker", { docker: true }]) {
+      const config = await read({ node_artifacts });
+      expect(config.node_artifacts).toEqual([]);
+      expect(nodeFilesAvailable(config, "docker")).toBe(false);
+    }
   });
   it("disables sandbox administration only when the console says so", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ sandbox_admin: false }))));

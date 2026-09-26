@@ -1,7 +1,7 @@
 import { createPortal } from "react-dom";
 import { Check, Copy, Terminal, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { SandboxAdminClient, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxAdminClient, SandboxDeployment, SandboxEnrollment, SandboxNode } from "@agents-core-web/agents-client";
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
@@ -10,9 +10,9 @@ import { sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
 import { useCopy } from "../api-keys/IssuedKey";
 import { sandboxCoreOrigin, sandboxSetupOrigin } from "./core-origin";
-import type { SandboxConsoleConfig } from "./console-config";
+import { nodeFilesAvailable, type SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand, nodeLogCommand } from "./enrollment-command";
-import { enrolledNode, enrollmentProgress, formatCountdown, hostPrerequisites, progressSteps, USER_MANAGER_RESTART, type EnrollmentTarget, type StepState } from "./node-enrollment";
+import { enrolledNode, enrollmentProgress, formatCountdown, hostPrerequisites, progressSteps, USER_MANAGER_RESTART, type StepState } from "./node-enrollment";
 
 /** The host requirements open by default until this browser has shown them once. */
 const REQUIREMENTS_SEEN = "agents-core-web.node-requirements-seen";
@@ -27,25 +27,20 @@ function rememberRequirementsSeen() {
 const DEFAULT_ACTIVE = "2";
 const DEFAULT_RETAINED = "8";
 
-/** A command, with the nodes registered before it and the limits it approved, which identify its node. */
-interface Enrollment extends EnrollmentTarget {
-  token: string;
-  expires_at: string;
-}
-
 /**
  * Add node: the administrator sets the node's sandbox limits, then Core issues a
  * one-time enrollment command that approves them
  * (`POST /core/v1/sandbox/enrollment-tokens`). Only microsandbox suspends
  * sandboxes, so only it asks for a retained limit; Docker retains exactly the
- * sandboxes it runs at once.
+ * sandboxes it runs at once. A console that reports no node files for the
+ * deployment's provider (`node_artifacts`) says so instead and issues no command.
  *
  * The page keeps this dialog mounted, so a command survives closing it: it is
  * shown again until it expires or its node connects. An expired command is
  * replaced only when the administrator asks. After the command, the dialog
- * follows the new node through the node list: read on each opening, every few
- * seconds while open, and once more at expiry, since a node registered by the
- * command outranks its expiry.
+ * follows the node that reports the command's `enrollment_id` through the node
+ * list: read on each opening, every few seconds while open, and once more at
+ * expiry, since a node registered by the command outranks its expiry.
  */
 export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open, fresh, onClose, onRefresh }: {
   client: SandboxAdminClient;
@@ -64,7 +59,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const [active, setActive] = useState(DEFAULT_ACTIVE);
   const [retained, setRetained] = useState(DEFAULT_RETAINED);
   const [busy, setBusy] = useState(false);
-  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+  const [enrollment, setEnrollment] = useState<SandboxEnrollment | null>(null);
   const [appeared, setAppeared] = useState<{ id: string; at: number } | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [copied, setCopied] = useState(false);
@@ -79,6 +74,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const sourceUrl = sandboxCoreOrigin(window.location.origin);
   const coreUrl = sandboxCoreOrigin(deployment.core_url || window.location.origin);
   const available = Boolean(consoleConfig.node_installer && sourceUrl && coreUrl);
+  // Without the provider's node files the installer would fail on the host, so no command is issued.
+  const nodeFiles = nodeFilesAvailable(consoleConfig, deployment.provider);
   // The command downloads from this console's own address. A loopback one (or any
   // address sandboxSetupOrigin refuses for guests) resolves to the node host itself.
   const localOnly = sourceUrl !== null && sandboxSetupOrigin(sourceUrl) === null;
@@ -93,7 +90,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     : !inRange(retainedLimit) ? t("Enter a whole number from 1 to 1,000,000.")
     : inRange(activeLimit) && retainedLimit < activeLimit ? t("Enter at least the number of sandboxes at once.") : null;
   const limitsReady = !activeProblem && !retainedProblem;
-  const node = enrollment ? enrolledNode(nodes, enrollment, suspends) : null;
+  const node = enrollment ? enrolledNode(nodes, enrollment) : null;
   const progress = enrollmentProgress(node, node && appeared?.id === node.id ? appeared.at : undefined, now);
   // Registration uses the token, so from then on its expiry no longer matters; rerunning
   // the command on that host resumes with the node's retained identity.
@@ -157,25 +154,25 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     setEnrollment(null); setAppeared(null); setError(null); setCopied(false); setCopyFailed(false);
   }
   async function generate() {
-    if (request.current || !available || !limitsReady || activeLimit === null || retainedLimit === null) return;
+    if (request.current || !available || !nodeFiles || !limitsReady || activeLimit === null || retainedLimit === null) return;
     const capacity = { max_active: activeLimit, max_retained: retainedLimit };
     generation.current++;
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setError(null); setCopied(false); setCopyFailed(false);
     try {
-      // Capture the current node set before issuing a one-time enrollment token.
-      const current = await client.listNodes({ signal: controller.signal });
-      if (controller.signal.aborted) return;
       // A node the previous command enrolled since the last read is that command's success:
-      // follow it instead of folding it into a new command's known nodes.
-      if (enrollment && enrolledNode(current.data, enrollment, suspends)) {
-        await onRefresh();
-        return;
+      // follow it instead of issuing another command.
+      if (enrollment) {
+        const current = await client.listNodes({ signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (enrolledNode(current.data, enrollment)) {
+          await onRefresh();
+          return;
+        }
       }
-      const known = new Set(current.data.map((entry) => entry.id));
       const result = await client.createEnrollment({ signal: controller.signal }, capacity);
       if (!controller.signal.aborted) {
-        setEnrollment({ token: result.token, expires_at: result.expires_at, known, ...capacity }); setAppeared(null); setNow(Date.now());
+        setEnrollment({ token: result.token, expires_at: result.expires_at, enrollment_id: result.enrollment_id }); setAppeared(null); setNow(Date.now());
         // Seen with the limits; the command comes first now.
         setRequirementsOpen(false);
       }
@@ -214,7 +211,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     </details>
   ) : null;
   const limitsForm = `${id}-limits`;
-  const footer = !available ? undefined
+  const footer = !available || (!enrollment && !nodeFiles) ? undefined
     : !enrollment ? <>
       <button className="button outline" type="button" onClick={close}>{t("Cancel")}</button>
       <button className="button primary" type="submit" form={limitsForm} disabled={busy || !limitsReady}>{busy ? t("Preparing your command…") : t("Generate command")}</button>
@@ -223,7 +220,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     : registered ? <button className="button outline" type="button" onClick={changeLimits}>{t("Add another node")}</button>
     : <>
       <button className="button outline" type="button" disabled={busy} onClick={changeLimits}>{t("Change limits")}</button>
-      {expired ? <button className="button primary" type="button" autoFocus disabled={busy} onClick={() => void generate()}>{busy ? t("Preparing your command…") : t("Generate new command")}</button> : null}
+      {expired && nodeFiles ? <button className="button primary" type="button" autoFocus disabled={busy} onClick={() => void generate()}>{busy ? t("Preparing your command…") : t("Generate new command")}</button> : null}
     </>;
   // Tense tells a step's state: done in the past, the current one waiting, later ones as plain nouns.
   // Readiness from an unconfirmed read still counts as waiting.
@@ -234,14 +231,17 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   ];
   const tones: Record<StepState, Tone> = { done: "ok", current: progress.problem ? "warning" : "pending", future: "neutral" };
   const steps = progressSteps(progress.stage === "ready" ? "connected" : progress.stage).map((state, index) => ({ state, label: labels[index]![state], tone: tones[state] }));
-  const problem = progress.problem === "not_connected"
-    ? { label: t("Not connected yet"), advice: t("The node registered but its service hasn't reached Core.") }
+  const problem: { label: string; advice: string; help?: string } | null = progress.problem === "not_connected"
+    ? { label: t("Not connected yet"), advice: t("The node registered but its service hasn't reached Core."),
+      help: t("The node service keeps retrying while Core is unavailable, and stops once the node is removed.") }
     : sandboxDiagnosticMessage(progress.problem, locale);
   return createPortal(<Modal open={open} title={t("Add node")} onClose={close} footer={footer}>
     <div className="sandbox-add-node form-stack">
       {!available ? <p role="status">{consoleConfig.node_installer && coreUrl && !sourceUrl
         ? t("Open this console over HTTPS to add a node: the installer downloads only over HTTPS.")
-        : t("Node installation is unavailable. Ask the deployment administrator to enable the node installer on this console.")}</p> : !enrollment ? (
+        : t("Node installation is unavailable. Ask the deployment administrator to enable the node installer on this console.")}</p>
+      : !enrollment && !nodeFiles ? <p role="status">{t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend })}</p>
+      : !enrollment ? (
         <form id={limitsForm} className="form-stack" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
           <p>{t("Set the sandbox limits for the host you want to add.")}</p>
           {localOnly ? <p className="sandbox-add-node-warning" role="note"><TriangleAlert size={14} aria-hidden="true" /><span>{t("This console is open at {{origin}}, which other machines can't reach. To add another machine, open the console at its HTTPS address, then generate the command.", { origin: sourceUrl })}</span></p> : null}
@@ -281,7 +281,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
             </ol>}
         </div>
         {problem && !ready ? <div className="sandbox-enrollment-problem" role="alert">
-          <p><strong>{problem.label}</strong> {problem.advice}</p>
+          <p><strong>{problem.label}</strong> {problem.advice}{problem.help ? <HelpTip>{problem.help}</HelpTip> : null}</p>
           <div className="sandbox-log-hint"><span>{t("Check the log on the host:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id)} /></div>
         </div> : null}
         {!fresh ? <p>{t("Connection status unavailable. Refresh to check your node.")}</p> : null}

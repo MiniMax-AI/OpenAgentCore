@@ -82,7 +82,7 @@ function e2bDeployment() {
   return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
 }
 
-function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured", installers = true) {
+function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured", installers = true, artifacts = "docker,microsandbox") {
   // Self-hosted Sessions get their remote_url from public_url, as in Core.
   const base = buildDemo(undefined, address === "local" ? LOCAL_URL : PUBLIC_URL);
   const now = Math.floor(Date.now() / 1000);
@@ -114,10 +114,13 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     deployment: null,
     // Whether the console has its node installation payload, and so serves both installers.
     installers,
+    // The providers whose node files the console serves (/console/config node_artifacts).
+    nodeArtifacts: artifacts.split(",").filter(Boolean),
   };
   state.deployment = sandbox === "none" ? null : sandbox === "e2b" ? e2bDeployment() : configuredDeployment();
   // Each node reports the address it enrolled with; in "stale" mode the first one enrolled before public_url changed.
-  state.nodes.forEach((node, index) => { node.core_url = address === "stale" && index === 0 ? OLD_URL : publicUrl(); });
+  // The seeded nodes enrolled before Core recorded enrollment IDs.
+  state.nodes.forEach((node, index) => { node.core_url = address === "stale" && index === 0 ? OLD_URL : publicUrl(); node.enrollment_id = null; });
   if (sandbox === "e2b") Object.assign(state, { nodes: [], allocations: [] });
 }
 reset();
@@ -188,10 +191,12 @@ async function consoleRoute(request, response, url) {
   }
   if (url.pathname === "/console/config") {
     // As Core's console: signing in grants administration, so it reports only its installers,
-    // both served from the node installation payload, and without that payload neither.
+    // both served from the node installation payload, and without that payload neither, and the
+    // providers whose node files that payload holds (always a list, empty without it).
     const served = state.installers;
     return send(response, 200, {
       node_installer: served, node_installer_sha256: served ? "a".repeat(64) : "",
+      node_artifacts: served ? state.nodeArtifacts : [],
       self_hosted_installer: served, self_hosted_installer_sha256: served ? SELF_HOSTED_INSTALLER_SHA256 : "",
     });
   }
@@ -331,12 +336,14 @@ async function sandboxRoute(request, response, path) {
   }
   if (path === "/nodes") return send(response, 200, { data: state.nodes });
   if (path === "/enrollment-tokens" && request.method === "POST") {
-    // As Core: a one-time token valid for ten minutes, whose limits the node it enrolls takes;
+    // As Core: a one-time token valid for ten minutes, whose limits and enrollment ID the node it enrolls takes;
     // only microsandbox keeps a retained limit above the active one.
     const input = await body(request);
     const maxActive = input.max_active ?? 1;
-    state.enrollmentLimits = { max_active: maxActive, max_retained: state.deployment?.provider === "microsandbox" ? input.max_retained ?? maxActive : maxActive };
-    return send(response, 201, { token: `enroll_fixture_${state.nextId++}`, expires_at: new Date(Date.now() + 10 * 60_000).toISOString() });
+    const serial = state.nextId++;
+    const enrollmentId = `00000000-0000-4000-8000-${String(serial).padStart(12, "0")}`;
+    state.enrollment = { max_active: maxActive, max_retained: state.deployment?.provider === "microsandbox" ? input.max_retained ?? maxActive : maxActive, enrollment_id: enrollmentId };
+    return send(response, 201, { token: `enroll_fixture_${serial}`, expires_at: new Date(Date.now() + 10 * 60_000).toISOString(), enrollment_id: enrollmentId });
   }
   let m;
   if ((m = path.match(/^\/nodes\/([^/]+)\/allocations$/))) return send(response, 200, { data: state.allocations.filter((entry) => entry.node_id === m[1]) });
@@ -405,12 +412,12 @@ async function executorCredentialRoute(request, response, projectId, environment
 
 /**
  * A node as it first registers with the last enrollment command: not yet connected,
- * provider not ready, with the token's limits. Like Core, it has no diagnostic
- * field until one is reported.
+ * provider not ready, with the token's limits and enrollment ID. Like Core, it has no
+ * diagnostic field until one is reported.
  */
 function registeredNode(nodeId) {
-  const limits = state.enrollmentLimits ?? { max_active: 1, max_retained: 1 };
-  return { id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
+  const { enrollment_id = null, ...limits } = state.enrollment ?? { max_active: 1, max_retained: 1 };
+  return { id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), enrollment_id, online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
 }
 
 const HARNESS_PROVIDER = /^\/harnesses\/([^/]+)\/model-provider$/;
@@ -488,7 +495,7 @@ async function harnessRoute(request, response, path) {
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("credentials") ?? "configured", url.searchParams.get("installers") !== "none");
+    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("credentials") ?? "configured", url.searchParams.get("installers") !== "none", url.searchParams.get("artifacts") ?? undefined);
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {
@@ -496,8 +503,8 @@ async function fixtureRoute(request, response, url) {
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/node" && request.method === "POST") {
-    // { id, ...fields }: registers the node on first use, then applies the fields (online, provider_ready, diagnostic);
-    // an empty diagnostic removes the field, as Core omits it.
+    // { id, ...fields }: registers the node on first use, then applies the fields (online, provider_ready, diagnostic,
+    // or another command's enrollment_id); an empty diagnostic removes the field, as Core omits it.
     const { id: nodeId, ...fields } = await body(request);
     let node = state.nodes.find((entry) => entry.id === nodeId);
     if (!node) state.nodes.push(node = registeredNode(nodeId));

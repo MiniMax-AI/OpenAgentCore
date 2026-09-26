@@ -54,7 +54,9 @@ workbench.
 - `/console/config` reports the node installer (`node_installer`,
   `node_installer_sha256`) and the self-hosted executor installer
   (`self_hosted_installer`, `self_hosted_installer_sha256`); an installer is
-  offered only with a 64-hex digest. Signing in grants administration, so sandbox
+  offered only with a 64-hex digest. It also lists the providers it has node files
+  for (`node_artifacts`); without the deployment's provider, Add node says so and
+  issues no command. Signing in grants administration, so sandbox
   administration is available unless the console explicitly reports
   `sandbox_admin: false`; then the Nodes page explains that it is not configured
   and the fleet figures show as unavailable.

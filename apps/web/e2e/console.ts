@@ -14,13 +14,14 @@ export const FIXTURE_CORE_KEY = "fixture-core-key-3f9a2c71";
  * with a node enrolled with an earlier address), `credentials: "none"` a Core without a
  * credential encryption key, which cannot store a model provider's key, and
  * `installers: "none"` a console without its node installation payload, so it serves neither
- * the node nor the self-hosted installer.
+ * the node nor the self-hosted installer. `nodeArtifacts` lists the providers the console has
+ * node files for, both by default; as in the console, microsandbox needs Docker's files too.
  */
-export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale"; credentials?: "none"; installers?: "none" }
+export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale"; credentials?: "none"; installers?: "none"; nodeArtifacts?: ("docker" | "microsandbox")[] }
 
 /** Fresh fixture state: signed out ("login") or already signed in ("authenticated"). */
 export async function resetFixture(request: APIRequestContext, auth: "login" | "authenticated" = "authenticated", options: FixtureOptions = {}) {
-  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}&installation=${options.installation ?? "public"}${options.credentials ? `&credentials=${options.credentials}` : ""}${options.installers ? `&installers=${options.installers}` : ""}`);
+  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}&installation=${options.installation ?? "public"}${options.credentials ? `&credentials=${options.credentials}` : ""}${options.installers ? `&installers=${options.installers}` : ""}${options.nodeArtifacts ? `&artifacts=${options.nodeArtifacts.join(",")}` : ""}`);
 }
 
 /** Opens the console already signed in, in English. */
@@ -36,8 +37,8 @@ export async function failNext(request: APIRequestContext, failure: { method: st
   await request.post(`${fixture}/__fixture/fail-next`, { data: failure });
 }
 
-/** Registers a node, or changes one, as a host running an enrollment command would. */
-export async function setNode(request: APIRequestContext, node: { id: string; name?: string; online?: boolean; provider_ready?: boolean; diagnostic?: string }) {
+/** Registers a node, or changes one, as a host running the last enrollment command (or, with its `enrollment_id`, another one) would. */
+export async function setNode(request: APIRequestContext, node: { id: string; name?: string; online?: boolean; provider_ready?: boolean; diagnostic?: string; enrollment_id?: string }) {
   await request.post(`${fixture}/__fixture/node`, { data: node });
 }
 
