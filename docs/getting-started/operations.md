@@ -149,6 +149,7 @@ services and rename them first:
 | `--admin-token-file` | `--core-key-file` | `install.sh --web-only` flag; the installer rejects the old flag |
 | `AGENTS_API_DAEMON_WS_URL` (a `wss://…/api/v1/agent-daemon/ws` URL) | `AGENTS_API_PUBLIC_URL` (the origin only, such as `https://core.example`) | `config/core.env` |
 | `AGENTS_API_CONFIG_FILE` | None; delete the line | `config/core.env` |
+| `PARSAR_NODE_ENROLLMENT_TOKEN` | The token on standard input with `--enrollment-token-stdin`, as Web's Add node command does | Node installer; it refuses the variable |
 
 Also remove `CORE_CONSOLE_AUTH_MODE`, `CORE_CONSOLE_STATE_DIR` and
 `CORE_CONSOLE_PASSWORD_FILE` from Web's environment, with their `state/console`

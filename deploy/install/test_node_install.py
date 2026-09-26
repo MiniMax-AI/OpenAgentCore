@@ -343,12 +343,6 @@ class NodeInstallTests(unittest.TestCase):
             self.install()
         self.assertEqual(list(elsewhere.iterdir()), [])
 
-    def test_main_removes_token_environment_before_any_subprocess(self):
-        with mock.patch.dict(os.environ, {"PARSAR_NODE_ENROLLMENT_TOKEN": "synthetic-once-token"}):
-            installer.main(["--source-url", self.args.source_url, "--core-url", self.args.core_url,
-                            "--provider", "docker", "--installation-id", self.args.installation_id])
-            self.assertNotIn("PARSAR_NODE_ENROLLMENT_TOKEN", os.environ)
-
     def sudo_host(self, enforcing=False):
         """Sudo mode against temporary system paths; the service-user step runs in-process."""
         system = self.home / "system"
@@ -636,13 +630,21 @@ class NodeInstallTests(unittest.TestCase):
                 mock.patch.object(installer.os, "geteuid", return_value=1000):
             installer.main(arguments)
         self.assertEqual(install.call_args.args[1], "synthetic-once-token")
-        with mock.patch.dict(os.environ, {"PARSAR_NODE_ENROLLMENT_TOKEN": "other"}), self.assertRaises(SystemExit):
-            installer.main(arguments)
-        # As root, a token in the environment would come from `sudo VAR=...`, which sudo logs.
-        with mock.patch.dict(os.environ, {"PARSAR_NODE_ENROLLMENT_TOKEN": "other"}), mock.patch.object(installer.os, "geteuid", return_value=0), \
-                mock.patch.object(installer, "install_system") as install_system, self.assertRaises(SystemExit):
-            installer.main(arguments[:-1])
-        install_system.assert_not_called()
+
+    def test_the_retired_token_variable_is_refused_in_every_mode(self):
+        install = ["--source-url", self.args.source_url, "--core-url", self.args.core_url,
+                   "--installation-id", self.args.installation_id, "--enrollment-token-stdin"]
+        for euid in (1000, 0):
+            for arguments in (install, install[:-1], ["--uninstall", "--installation-id", self.args.installation_id]):
+                errors = io.StringIO()
+                with mock.patch.dict(os.environ, {"PARSAR_NODE_ENROLLMENT_TOKEN": "synthetic-once-token"}), \
+                        mock.patch.object(installer.os, "geteuid", return_value=euid), mock.patch.object(installer.sys, "stderr", errors), \
+                        mock.patch.multiple(installer, install=mock.DEFAULT, install_system=mock.DEFAULT, uninstall_user=mock.DEFAULT,
+                                            uninstall_system=mock.DEFAULT) as steps, self.assertRaises(SystemExit):
+                    installer.main(arguments)
+                self.assertEqual(errors.getvalue().splitlines(), ["PARSAR_NODE_ENROLLMENT_TOKEN is retired: pass the enrollment "
+                                                                  "token on standard input with --enrollment-token-stdin."])
+                self.assertFalse(any(step.called for step in steps.values()))
 
     def test_user_manager_bus_is_found_without_a_login_session(self):
         runtime = self.home / "run-user"
