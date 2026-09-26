@@ -502,7 +502,8 @@ def as_service_user(account, function, *arguments):
     """Run a step with the service user's credentials in a forked child.
 
     Every installer module is already imported, so the child never reads the root
-    caller's private copy of this program. The token stays in memory."""
+    caller's private copy of this program. The token stays in memory. Files the
+    service user owns are read, written and deleted only here, never by root."""
     sys.stdout.flush()
     sys.stderr.flush()
     pid = os.fork()
@@ -520,8 +521,9 @@ def as_service_user(account, function, *arguments):
             code = 0
         except (InstallError, node_spec.SpecificationError, distribution.DistributionError) as error:
             print(str(error), file=sys.stderr)
-        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-            print("Node installation failed; check host prerequisites and retained private files", file=sys.stderr)
+        except Exception as error:  # noqa: BLE001 - the child must always report and exit
+            print("The step running as " + SERVICE_USER + " failed unexpectedly (" + type(error).__name__
+                  + "). Inspect the host, then rerun the command.", file=sys.stderr)
         finally:
             sys.stdout.flush()
             sys.stderr.flush()
@@ -535,13 +537,18 @@ run_as = as_service_user
 
 
 @contextlib.contextmanager
-def system_lock(installation_id):
-    descriptor = os.open(SYSTEM_LOCKS / ("parsar-node-" + installation_id + ".lock"), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+def host_lock():
+    """One sudo-mode installation or uninstallation at a time on this host.
+
+    Account preparation and deletion are host-wide, so installing one Core's node can
+    never race removing another's. The lock lives in /run, which the next boot clears."""
+    descriptor = os.open(SYSTEM_LOCKS / "parsar-node.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, "w") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise InstallError("Another node installation or uninstallation for this installation is running") from None
+            print("Waiting for another node installation or uninstallation on this host...", flush=True)
+            fcntl.flock(lock, fcntl.LOCK_EX)
         yield
 
 
@@ -550,7 +557,7 @@ def host_checks():
         raise InstallError("Run with Python 3.9+ on Linux amd64." + NOTHING_CHANGED)
     if not SYSTEMD_RUNNING.is_dir():
         raise InstallError("systemd is not the init system here, so this host cannot run the node service." + NOTHING_CHANGED)
-    for tool in ("systemctl", "useradd", "usermod", "userdel"):
+    for tool in ("systemctl", "useradd", "usermod", "userdel", "gpasswd"):
         if shutil.which(tool) is None:
             raise InstallError(tool + " is required to prepare the node service user." + NOTHING_CHANGED)
     try:
@@ -562,14 +569,17 @@ def host_checks():
                            "command as a prepared user instead." + NOTHING_CHANGED)
 
 
-def root_file(path, content):
-    """Write a root-owned 0644 file, or accept an identical existing one."""
+def root_file(path, content, replace=False):
+    """Write a root-owned 0644 file, or accept an identical existing one (or replace it)."""
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise InstallError(str(path) + " must be a regular file")
     if path.exists():
-        if path.stat().st_uid != os.geteuid() or path.read_text() != content:
+        if path.stat().st_uid != os.geteuid():
+            raise InstallError(str(path) + " must be owned by root; preserve it and inspect the node")
+        if path.read_text() == content:
+            return
+        if not replace:
             raise InstallError(str(path) + " differs from this installer's version; preserve it and inspect the node")
-        return
     if not path.parent.exists():
         # Readable by every user, so a no-sudo run can see a sudo-mode node; the caller's umask is 077.
         path.parent.mkdir(parents=True, mode=0o755)
@@ -586,7 +596,7 @@ def root_file(path, content):
 
 
 def read_root_json(path):
-    if not path.exists():
+    if not path.exists() and not path.is_symlink():
         return None
     if path.is_symlink() or not path.is_file() or path.stat().st_uid != os.geteuid():
         raise InstallError(str(path) + " must be a regular file owned by root")
@@ -598,6 +608,12 @@ def service_account():
         return pwd.getpwnam(SERVICE_USER)
     except KeyError:
         return None
+
+
+def ours(account, recorded_uid=None):
+    """The account the installer created or adopted: its home, a nologin shell and, when recorded, its uid."""
+    return (account is not None and account.pw_dir == str(SERVICE_HOME) and account.pw_shell.endswith(("nologin", "false"))
+            and recorded_uid in (None, account.pw_uid))
 
 
 def host_capacity(provider, resources, docker_info):
@@ -612,6 +628,11 @@ def host_capacity(provider, resources, docker_info):
     if cpus < resources["cpus"] or memory < resources["memory_mib"] * 1024 * 1024:
         raise InstallError("This host has %d CPUs and %d MiB of memory; each sandbox needs %d CPUs and %d MiB."
                            % (cpus, memory // (1024 * 1024), resources["cpus"], resources["memory_mib"]) + NOTHING_CHANGED)
+
+
+# The service user joins only the group that owns the provider's device, and only
+# these names; a device owned by a privileged group (disk, sudo, wheel, adm) is refused.
+DEVICE_GROUPS = {"docker": "docker", "microsandbox": "kvm"}
 
 
 def provider_group(provider):
@@ -636,7 +657,7 @@ def provider_group(provider):
         # docker info's JSON uses the Engine API names (CpuCfsQuota), not the Go field names.
         if details.get("MemoryLimit") is not True or details.get("CpuCfsQuota") is not True:
             raise InstallError("Docker on this host does not enforce CPU and memory limits; use cgroup v2, then rerun this command." + NOTHING_CHANGED)
-        return group_name(info.st_gid), details
+        return device_group(provider, DOCKER_SOCKET, info.st_gid), details
     try:
         info = KVM.stat()
     except OSError:
@@ -649,26 +670,31 @@ def provider_group(provider):
     if info.st_gid == 0 or stat.S_IMODE(info.st_mode) & 0o060 != 0o060:
         raise InstallError("/dev/kvm must be group-accessible, for example root:kvm with mode 0660 (your distribution's "
                            "KVM package sets this), then rerun this command." + NOTHING_CHANGED)
-    return group_name(info.st_gid), {}
+    return device_group(provider, KVM, info.st_gid), {}
 
 
-def group_name(gid):
+def device_group(provider, device, gid):
     try:
-        return grp.getgrgid(gid).gr_name
+        name = grp.getgrgid(gid).gr_name
     except KeyError:
-        raise InstallError("The device's group " + str(gid) + " has no name; give it a named group, then rerun." + NOTHING_CHANGED) from None
+        name = str(gid)
+    if name != DEVICE_GROUPS[provider]:
+        raise InstallError(str(device) + " belongs to the group " + name + "; the node's service user joins only the "
+                           + DEVICE_GROUPS[provider] + " group. Give the device that group, then rerun this command." + NOTHING_CHANGED)
+    return name
 
 
 def other_node(args, provider):
     """Refuse a second node for this installation on the same host or Docker engine."""
-    sudo_user = os.environ.get("SUDO_USER", "")
-    if sudo_user and sudo_user != "root":
+    for entry in pwd.getpwall():
+        if entry.pw_name == SERVICE_USER or not entry.pw_dir.startswith("/"):
+            continue
         try:
-            home = Path(pwd.getpwnam(sudo_user).pw_dir)
-        except KeyError:
-            home = None
-        if home is not None and (home / ".parsar/nodes" / args.installation_id).exists():
-            raise InstallError("This host already runs a node for this installation, installed without sudo by " + sudo_user
+            present = (Path(entry.pw_dir) / ".parsar/nodes" / args.installation_id).exists()
+        except OSError:
+            present = False
+        if present:
+            raise InstallError("This host already runs a node for this installation, installed without sudo by " + entry.pw_name
                                + ". Remove it on the Nodes page and uninstall it as that user first." + NOTHING_CHANGED)
     if provider == "docker" and not (SERVICE_HOME / ".parsar/nodes" / args.installation_id).exists():
         networks = checked(list(DOCKER) + ["network", "ls", "--format", "{{.Name}}"], "Cannot inspect Docker networks").splitlines()
@@ -677,28 +703,43 @@ def other_node(args, provider):
                                + args.installation_id + "). Remove it on the Nodes page and uninstall it first." + NOTHING_CHANGED)
 
 
-def prepare_account(group):
-    """Create or adopt the service user and give it the provider's group."""
-    account = service_account()
+def account_plan():
+    """Check the service account, its record and home before changing anything.
+
+    Returns the existing account (or None when it must be created) and the account record."""
+    account, record = service_account(), read_root_json(SYSTEM_RECORDS / "account.json")
+    if account is not None and not ours(account, (record or {}).get("uid")):
+        raise InstallError("An account named " + SERVICE_USER + " exists but was not created or adopted by this installer "
+                           "(home " + account.pw_dir + ", shell " + account.pw_shell + ", uid " + str(account.pw_uid)
+                           + "). Rename or remove it, then rerun." + NOTHING_CHANGED)
+    if SERVICE_HOME.is_symlink() or (SERVICE_HOME.exists() and not SERVICE_HOME.is_dir()):
+        raise InstallError(str(SERVICE_HOME) + " must be a directory, not a symbolic link." + NOTHING_CHANGED)
+    if SERVICE_HOME.exists() and (account is None or SERVICE_HOME.stat().st_uid != account.pw_uid):
+        raise InstallError(str(SERVICE_HOME) + " exists but does not belong to the " + SERVICE_USER + " account; preserve "
+                           "it and inspect the host." + NOTHING_CHANGED)
+    return account, record
+
+
+def prepare_account(account, record, group):
+    """Create or adopt the service user and give it the provider's group; record what changed."""
     if account is None:
+        # A record of an account that no longer exists is stale; the new account replaces it.
+        (SYSTEM_RECORDS / "account.json").unlink(missing_ok=True)
         shell = next((path for path in ("/usr/sbin/nologin", "/sbin/nologin") if os.path.exists(path)), "/bin/false")
         checked(["useradd", "--system", "--user-group", "--no-create-home", "--home-dir", str(SERVICE_HOME),
                  "--shell", shell, SERVICE_USER], "Cannot create the " + SERVICE_USER + " service user")
         account = service_account()
-        root_file(SYSTEM_RECORDS / "user.json", json_text({"format": 1, "created": True, "uid": account.pw_uid}))
-    elif account.pw_dir != str(SERVICE_HOME) or not account.pw_shell.endswith(("nologin", "false")):
-        raise InstallError("An account named " + SERVICE_USER + " exists but was not created by this installer (home "
-                           + account.pw_dir + ", shell " + account.pw_shell + "). Rename or remove it, then rerun." + NOTHING_CHANGED)
-    if SERVICE_HOME.is_symlink():
-        raise InstallError(str(SERVICE_HOME) + " must not be a symlink")
+        record = {"format": 1, "created": True, "uid": account.pw_uid, "groups_added": []}
+    elif record is None:
+        record = {"format": 1, "created": False, "uid": account.pw_uid, "groups_added": []}
     if not SERVICE_HOME.exists():
         SERVICE_HOME.mkdir(mode=0o700, parents=True)
         os.chown(SERVICE_HOME, account.pw_uid, account.pw_gid)
-    if SERVICE_HOME.stat().st_uid != account.pw_uid:
-        raise InstallError(str(SERVICE_HOME) + " is owned by another user; preserve it and inspect the host")
     os.chmod(SERVICE_HOME, 0o700)
     if group and SERVICE_USER not in grp.getgrnam(group).gr_mem:
         checked(["usermod", "--append", "--groups", group, SERVICE_USER], "Cannot add " + SERVICE_USER + " to the " + group + " group")
+        record = dict(record, groups_added=sorted(set(record["groups_added"]) | {group}))
+    root_file(SYSTEM_RECORDS / "account.json", json_text(record), replace=True)
     return service_account()
 
 
@@ -715,12 +756,33 @@ def system_unit(root, provider):
             + "\n\n[Install]\nWantedBy=multi-user.target\n")
 
 
+def recorded_origin(value, source):
+    """A Core address read from a file, checked with the same rule as the command line."""
+    try:
+        return origin(value)
+    except (argparse.ArgumentTypeError, TypeError, AttributeError):
+        raise InstallError(source + " holds an invalid Core address; preserve it and inspect the host." + NOTHING_CHANGED) from None
+
+
+def node_record(installation_id):
+    """The root-owned record of this installation's sudo-mode node, checked against the fixed paths."""
+    record = read_root_json(SYSTEM_RECORDS / (installation_id + ".json"))
+    if record is not None:
+        expected = {"installation_id": installation_id, "node_root": str(SERVICE_HOME / ".parsar/nodes" / installation_id),
+                    "unit": str(SYSTEM_UNITS / unit_name(installation_id))}
+        if any(record.get(key) != value for key, value in expected.items()) or record.get("provider") not in DEVICE_GROUPS:
+            raise InstallError(str(SYSTEM_RECORDS / (installation_id + ".json")) + " is not this installer's record; preserve "
+                               "it and inspect the host." + NOTHING_CHANGED)
+        recorded_origin(record.get("core_url"), str(SYSTEM_RECORDS / (installation_id + ".json")))
+    return record
+
+
 def install_system(args, token):
     """Sudo mode: prepare the host, then run the node as a root-owned system service."""
+    os.environ["PATH"] = SAFE_PATH
     host_checks()
-    with system_lock(args.installation_id):
-        record_path = SYSTEM_RECORDS / (args.installation_id + ".json")
-        record = read_root_json(record_path)
+    with host_lock():
+        record = node_record(args.installation_id)
         configuration = None
         if record is None:
             print("Reading the Core deployment specification...", flush=True)
@@ -736,11 +798,14 @@ def install_system(args, token):
         if record is None:
             other_node(args, provider)
             host_capacity(provider, configuration["specification"]["resources"], details)
-        account = prepare_account(group)
-        root = Path(account.pw_dir) / ".parsar/nodes" / args.installation_id
+        account, account_record = account_plan()
+        # Every check has passed; from here on the host changes.
+        account = prepare_account(account, account_record, group)
+        root = SERVICE_HOME / ".parsar/nodes" / args.installation_id
         unit = SYSTEM_UNITS / unit_name(args.installation_id)
-        root_file(record_path, json_text({"format": 1, "installation_id": args.installation_id, "provider": provider,
-                                          "core_url": args.core_url, "node_root": str(root), "unit": str(unit)}))
+        root_file(SYSTEM_RECORDS / (args.installation_id + ".json"),
+                  json_text({"format": 1, "installation_id": args.installation_id, "provider": provider,
+                             "core_url": args.core_url, "node_root": str(root), "unit": str(unit)}))
         args.system, args.provider = True, provider
         run_as(account, prepare_service_node, args, token)
         root_file(unit, system_unit(root, provider))
@@ -756,22 +821,48 @@ def install_system(args, token):
 
 # Uninstall -------------------------------------------------------------------
 
-def confirm_removed(root, owner, force):
-    """Continue only once Core rejects the node's credential, or when it never registered."""
+def private_json(path):
+    """Read one of this user's private JSON files without following links or racing a swap."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return None
+    with os.fdopen(descriptor) as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_size > 16384:
+            return None
+        try:
+            return json.loads(stream.read())
+        except ValueError:
+            return None
+
+
+def no_links(path):
+    """Refuse a path whose components include a symbolic link."""
+    if os.path.realpath(path) != str(path):
+        raise InstallError(str(path) + " is reached through a symbolic link; inspect and remove it by hand." + NOTHING_CHANGED)
+
+
+def confirm_removed(root, core_url, force):
+    """Continue only once Core rejects the node's credential, or when it never registered.
+
+    Runs as the node's own user. The Core address comes from the caller: in sudo mode
+    the root-owned record, never a file the service user can write."""
+    no_links(root)
     identity_file = root / "state/node/identity.json"
     if not (root / "registered.json").exists() and not identity_file.exists():
         return
     if force:
         print("Skipping the Core check (--force).", flush=True)
         return
-    if identity_file.is_symlink() or not identity_file.is_file() or identity_file.stat().st_uid != owner:
-        raise InstallError("Retained node identity is missing or unsafe; rerun with --force only if Core no longer exists." + NOTHING_CHANGED)
+    stored = private_json(identity_file)
     try:
-        stored = json.loads(identity_file.read_text())
-        node_id, credential, core = stored["identity"]["node_id"], stored["credential"], stored["core_url"]
-    except (ValueError, KeyError, TypeError):
-        raise InstallError("Retained node identity is invalid; rerun with --force only if Core no longer exists." + NOTHING_CHANGED) from None
-    request = urllib.request.Request(core + "/api/v1/sandbox-node/identity?" + urlencode({"node_id": node_id}),
+        node_id, credential = stored["identity"]["node_id"], stored["credential"]
+        if str(uuid.UUID(node_id)) != node_id or not re.fullmatch(r"[0-9a-f]{64}", credential):
+            raise ValueError()
+    except (TypeError, KeyError, ValueError):
+        raise InstallError("Retained node identity is missing or invalid; rerun with --force only if Core no longer exists." + NOTHING_CHANGED) from None
+    request = urllib.request.Request(core_url + "/api/v1/sandbox-node/identity?" + urlencode({"node_id": node_id}),
                                      headers={"Authorization": "Bearer " + credential})
     try:
         with open_request(request, timeout=15):
@@ -789,7 +880,7 @@ def confirm_removed(root, owner, force):
                        "if this Core no longer exists." + NOTHING_CHANGED)
 
 
-def release_docker_network(root, installation_id):
+def release_docker_network(installation_id):
     """Remove the node's Docker network; never containers, volumes or images."""
     if shutil.which("docker") is None:
         return
@@ -808,40 +899,46 @@ def release_docker_network(root, installation_id):
     checked(list(DOCKER) + ["network", "rm", network], "Cannot remove Docker network " + network)
 
 
-def remove_node_files(root, installation_id, home):
-    try:
-        image = json.loads((root / "provider.json").read_text()).get("docker", {}).get("image")
-    except (OSError, ValueError, AttributeError):
-        image = None
-    runtime_home = home / ".parsar/m" / hashlib.sha256(installation_id.encode()).hexdigest()[:12]
-    try:
-        owned = json.loads((runtime_home / "parsar-installation.json").read_text()).get("installation_id") == installation_id
-    except (OSError, ValueError, AttributeError):
-        owned = False
-    if owned and not runtime_home.is_symlink():
-        shutil.rmtree(runtime_home)
-    if root.exists() and not root.is_symlink():
+def remove_node_files(root, installation_id):
+    """Delete the node's state directory; keep the Runtime image and the microsandbox store.
+
+    Runs as the node's own user, so a link it planted can never reach another user's files."""
+    no_links(root)
+    provider = private_json(root / "provider.json") or {}
+    image = (provider.get("docker") or {}).get("image")
+    runtime_home = micro_home(installation_id)
+    if root.exists():
         shutil.rmtree(root)
     if image:
         print("Kept the Runtime image " + image + "; remove it with `docker image rm " + image + "` if no other node uses it.")
+    if runtime_home.exists():
+        print("Kept the microsandbox store " + str(runtime_home) + " with its images and any sandbox state. When no "
+              "microVM runs (`pgrep -u " + os.environ.get("USER", "") + "` is empty), remove it with `rm -rf " + str(runtime_home)
+              + "` (sudo mode: `sudo rm -rf`), then rerun this uninstall command.")
 
 
 def uninstall_system(args):
     """Sudo mode: remove the system service, the node files and, when unused, the service user."""
+    os.environ["PATH"] = SAFE_PATH
     if shutil.which("systemctl") is None:
         raise InstallError("systemctl is required." + NOTHING_CHANGED)
-    with system_lock(args.installation_id):
-        record_path = SYSTEM_RECORDS / (args.installation_id + ".json")
-        read_root_json(record_path)
-        account = service_account()
-        home = Path(account.pw_dir) if account else SERVICE_HOME
-        root = home / ".parsar/nodes" / args.installation_id
+    with host_lock():
+        record = node_record(args.installation_id)
+        account, account_record = service_account(), read_root_json(SYSTEM_RECORDS / "account.json")
+        root = SERVICE_HOME / ".parsar/nodes" / args.installation_id
         unit = SYSTEM_UNITS / unit_name(args.installation_id)
-        if not record_path.exists() and not root.exists() and not unit.exists():
+        if record is None and not root.exists() and not unit.exists():
             print("No node for installation " + args.installation_id + " was installed with sudo on this host. If it was "
                   "installed without sudo, run the uninstall command as that user without sudo.")
         else:
-            confirm_removed(root, account.pw_uid if account else -1, args.force)
+            if not ours(account, (account_record or {}).get("uid")):
+                raise InstallError("The " + SERVICE_USER + " account is missing or differs from the one this installer "
+                                   "recorded, so its files are not removed. Inspect the host." + NOTHING_CHANGED)
+            core_url = record["core_url"] if record else None
+            if core_url is None and not args.force:
+                raise InstallError("This node's record is missing, so Core cannot be asked; rerun with --force only if "
+                                   "Core no longer exists." + NOTHING_CHANGED)
+            run_as(account, confirm_removed, root, core_url, args.force)
             if unit.exists():
                 checked(["systemctl", "disable", "--now", unit.name], "Cannot stop the node service " + unit.name)
                 unit.unlink()
@@ -849,25 +946,38 @@ def uninstall_system(args):
                 # A removed node's service ends failed (exit 78); drop that state with the unit.
                 with contextlib.suppress(InstallError):
                     checked(["systemctl", "reset-failed", unit.name], "Cannot reset " + unit.name)
-            release_docker_network(root, args.installation_id)
-            remove_node_files(root, args.installation_id, home)
-            record_path.unlink(missing_ok=True)
+            release_docker_network(args.installation_id)
+            run_as(account, remove_node_files, root, args.installation_id)
+            (SYSTEM_RECORDS / (args.installation_id + ".json")).unlink(missing_ok=True)
             print("Node for installation " + args.installation_id + " uninstalled from this host.")
-        remove_unused_account(account)
+        release_account(account, account_record)
 
 
-def remove_unused_account(account):
-    """Delete the service user only when this installer created it and no node uses it."""
-    created = read_root_json(SYSTEM_RECORDS / "user.json")
-    if not account or not created or not created.get("created") or any(SYSTEM_RECORDS.glob("*-*-*-*-*.json")):
+def release_account(account, record):
+    """When no node remains, undo the account changes: delete a created account, or leave an adopted one as found."""
+    if record is None or any(SYSTEM_RECORDS.glob("*-*-*-*-*.json")):
         return
-    checked(["userdel", SERVICE_USER], "Cannot remove the " + SERVICE_USER + " user; stop its processes and rerun the uninstall command")
-    if SERVICE_HOME.exists() and not SERVICE_HOME.is_symlink():
-        shutil.rmtree(SERVICE_HOME)
-    (SYSTEM_RECORDS / "user.json").unlink()
+    if not ours(account, record.get("uid")):
+        print("The " + SERVICE_USER + " account differs from the one this installer recorded; it was left alone.")
+        return
+    if record.get("created"):
+        stores = sorted(str(path) for path in (SERVICE_HOME / ".parsar/m").glob("*")) if (SERVICE_HOME / ".parsar/m").is_dir() else []
+        if stores:
+            print("Kept the " + SERVICE_USER + " user while microsandbox stores remain: " + ", ".join(stores)
+                  + ". Remove them, then rerun this uninstall command.")
+            return
+        checked(["userdel", SERVICE_USER], "Cannot remove the " + SERVICE_USER + " user; stop its processes and rerun the uninstall command")
+        # No process can run as the deleted user, so nothing races this removal.
+        if SERVICE_HOME.is_dir() and not SERVICE_HOME.is_symlink():
+            shutil.rmtree(SERVICE_HOME)
+        print("Removed the " + SERVICE_USER + " service user, which this installer created.")
+    else:
+        for group in record.get("groups_added", []):
+            checked(["gpasswd", "--delete", SERVICE_USER, group], "Cannot remove " + SERVICE_USER + " from the " + group + " group")
+            print("Removed " + SERVICE_USER + " from the " + group + " group, which this installer added.")
+    (SYSTEM_RECORDS / "account.json").unlink()
     with contextlib.suppress(OSError):
         SYSTEM_RECORDS.rmdir()
-    print("Removed the " + SERVICE_USER + " service user, which this installer created.")
 
 
 def uninstall_user(args):
@@ -876,19 +986,26 @@ def uninstall_user(args):
         print("No node for installation " + args.installation_id + " is installed for this user. If it was installed "
               "with sudo, run the uninstall command with sudo.")
         return
-    confirm_removed(root, os.getuid(), args.force)
+    identity = private_json(root / "state/node/identity.json") or {}
+    core_url = identity.get("core_url")
+    if core_url is not None:
+        recorded_origin(core_url, str(root / "state/node/identity.json"))
+    elif (root / "registered.json").exists() and not args.force:
+        raise InstallError("Retained node identity is missing; rerun with --force only if Core no longer exists." + NOTHING_CHANGED)
+    confirm_removed(root, core_url, args.force)
     unit = root / unit_name(args.installation_id)
     service = unit.exists()
     if service:
         user_bus()
         checked(["systemctl", "--user", "disable", "--now", unit.name], "Cannot stop the node service " + unit.name)
-    release_docker_network(root, args.installation_id)
-    remove_node_files(root, args.installation_id, Path.home())
+    release_docker_network(args.installation_id)
+    remove_node_files(root, args.installation_id)
     if service:
         checked(["systemctl", "--user", "daemon-reload"], "Cannot reload the systemd user manager")
         with contextlib.suppress(InstallError):
             checked(["systemctl", "--user", "reset-failed", unit.name], "Cannot reset " + unit.name)
     print("Node for installation " + args.installation_id + " uninstalled for this user.")
+
 
 def wait_ready(root, args, timeout=60):
     identity_file = root / "state/node/identity.json"
@@ -938,10 +1055,13 @@ def wait_ready(root, args, timeout=60):
 
 def read_token(args, parser):
     """The one-time token comes on standard input, never in argv or a sudo command line."""
-    # The installer's own local node passes it in this variable to its child process.
+    # The installer's own local node, which never runs as root, passes it in this variable.
     environment = os.environ.pop("PARSAR_NODE_ENROLLMENT_TOKEN", None)
     if args.enrollment_token_stdin and environment is not None:
         parser.error("pass the enrollment token on standard input only")
+    if environment is not None and os.geteuid() == 0:
+        # `sudo VAR=... python3` would put the token in sudo's command line and log.
+        parser.error("with sudo or as root, pass the enrollment token on standard input with --enrollment-token-stdin")
     if not args.enrollment_token_stdin:
         return environment or ""
     if sys.stdin.isatty():

@@ -165,17 +165,32 @@ The installer chooses how the node runs from the user that runs it:
 
 - **With sudo or as root (the default command).** It prepares the host itself. It
   creates the system user `parsar-node` (home `/var/lib/parsar-node`) if missing,
-  adds it to the group that owns `/var/run/docker.sock` or `/dev/kvm`, and runs the
-  node as the root-owned system service `/etc/systemd/system/parsar-node-<installation-id>.service`
-  with `User=parsar-node`, enabled for boot. No lingering or login session is needed;
+  or adopts an existing one with that home and a nologin shell. It adds the user to
+  the `docker` group (Docker) or the `kvm` group (microsandbox), whichever owns the
+  device; any other device group is refused. The node runs as the root-owned system
+  service `/etc/systemd/system/parsar-node-<installation-id>.service` with
+  `User=parsar-node`, enabled for boot. No lingering or login session is needed;
   logs are in `sudo journalctl -u parsar-node-<installation-id>.service`. Node state
   lives in `/var/lib/parsar-node/.parsar/nodes/<installation-id>/`, and what the
-  installer created is recorded in `/etc/parsar-node/`. All node work runs as
-  `parsar-node`; root only prepares the account and the service. It never installs
+  installer created or changed is recorded in `/etc/parsar-node/`. Files the service
+  user owns are written and deleted only with that user's credentials; root handles
+  the account, the group, the unit and the Docker network. It never installs
   Docker, KVM or packages, never changes device permissions and refuses
   SELinux-enforcing hosts; a missing prerequisite stops it with a one-line hint
   before anything changes. A foreign account named `parsar-node`, or another node
-  for the same installation on the host, is refused.
+  for the same installation on the host (any user's `~/.parsar/nodes/<installation-id>`
+  or the same Docker engine), is refused.
+
+  **Docker mode is root-equivalent.** Membership in the `docker` group lets
+  `parsar-node`, and so anything that controls the node, act as root on that host.
+  This is inherent to running sandboxes on Docker and equally true in the no-sudo
+  mode. Add Docker nodes only on hosts dedicated to running sandboxes. Microsandbox
+  nodes need only the `kvm` group.
+
+  Pass the token on standard input, as the command does. In sudo mode the installer
+  refuses `PARSAR_NODE_ENROLLMENT_TOKEN`, because `sudo VAR=… python3` records the
+  variable in sudo's log. A sudoers policy with `log_input` records standard input
+  as well; the token is single-use and expires after ten minutes.
 - **As a normal user (for hosts without sudo).** The node runs as that user's
   systemd user service with state under `~/.parsar/nodes/<installation-id>/`. The
   user needs lingering and Docker or KVM access, which an administrator grants
@@ -297,14 +312,29 @@ unknown operations or cleanup records cannot be removed. Resolve those resources
 through their normal lifecycle and then retry; the API reports the conflict.
 Offline resources remain owned and visible. Explicit removal permanently retires
 the node identity; adding that host again requires a fresh private state directory.
-After removal, clean up the host with the installer's `--uninstall` (the same
-checked download as the add command, then `sudo python3 node-install.pyz --uninstall
---installation-id <installation-id>`, or without sudo for a node installed as a
-normal user). It proceeds only when Core answers 401 to the node's credential, or
-with `--force` for a Core that no longer exists. It stops and removes the service,
-the node state and the Docker network, and deletes the `parsar-node` account only
-when the installer created it and no other node uses it. It never removes sandboxes,
-volumes or images. The host can then be added again with a new command.
+After removal, clean up the host with the installer's `--uninstall`, using the same
+checked download as the add command:
+
+```sh
+ (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
+curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
+printf '%s  %s\n' '<node_installer_sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
+$s python3 "$d/node-install.pyz" --uninstall --installation-id '<installation-id>')
+```
+
+For a node installed as a normal user, run it as that user; it does not use sudo
+then. The installer's checksum is `node_installer_sha256` in the console's
+`/console/config`. Uninstall proceeds only when Core answers 401 to the node's
+credential, or with `--force` for a Core that no longer exists. It stops and removes
+the service, the node state and the Docker network. The `parsar-node` account is
+deleted only when the installer created it and no node remains; an adopted account
+is left as found, minus the groups the installer added. Uninstall never removes
+sandboxes, volumes or images: it keeps the Runtime image and a microsandbox node's
+store (`/var/lib/parsar-node/.parsar/m/<hash>`, its images and any sandbox state),
+prints how to remove them, and keeps a created account until that store is gone.
+With `--force`, microVMs that `KillMode=process` left running may still use the
+store, so check `pgrep -u parsar-node` first. The host can then be added again with
+a new command.
 The node program then exits with status 78 when Core answers 401 to its credential,
 and the installed service does not restart it. Other failures, including an
 unreachable Core or a 403 from a proxy in front of it, restart the service every

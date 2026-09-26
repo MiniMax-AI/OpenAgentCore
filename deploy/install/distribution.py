@@ -162,7 +162,7 @@ def obtain_artifact(manifest, logical_path, destination, offline_root=None):
             break
         except urllib.error.HTTPError as error:
             if error.code == 416:
-                partial.unlink(missing_ok=True)
+                discard_partial(partial)
             elif error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
                 raise DistributionError(f'Artifact download failed (HTTP {error.code}): {logical_path}. Check the console and retry.') from None
         except (urllib.error.URLError, socket.timeout, ConnectionError, http.client.HTTPException):
@@ -173,11 +173,21 @@ def obtain_artifact(manifest, logical_path, destination, offline_root=None):
     else:
         raise DistributionError('Artifact download did not complete')
     if digest(partial) != entry['sha256']:
-        partial.unlink()
+        discard_partial(partial)
         raise DistributionError('Artifact checksum mismatch: ' + logical_path)
     os.chmod(partial, 0o700 if logical_path.startswith('native/') else 0o600)
     os.replace(partial, target)
+    validator_path(partial).unlink(missing_ok=True)
     return target
+
+
+def validator_path(partial):
+    return partial.with_name(partial.name + '.validator')
+
+
+def discard_partial(partial):
+    partial.unlink(missing_ok=True)
+    validator_path(partial).unlink(missing_ok=True)
 
 
 def copy_artifact(source, target, entry, logical_path):
@@ -213,10 +223,27 @@ def download_partial(url, partial, entry, logical_path):
         offset = info.st_size if info.st_size <= size else 0
     if offset == size:
         return
-    request = urllib.request.Request(url, headers={'Range': f'bytes={offset}-'} if offset else {})
+    headers = {}
+    if offset:
+        headers['Range'] = f'bytes={offset}-'
+        # If-Range makes a server whose file changed since the partial began send it whole.
+        try:
+            validator = validator_path(partial).read_text().strip()
+        except OSError:
+            validator = ''
+        if validator:
+            headers['If-Range'] = validator
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as stream:
         if offset and (stream.status != 206 or not stream.headers.get('Content-Range', '').startswith(f'bytes {offset}-')):
             offset = 0  # The server sent the whole file; start over.
+        if not offset:
+            validator = stream.headers.get('ETag') or stream.headers.get('Last-Modified') or ''
+            if validator and all(32 <= ord(c) < 127 for c in validator) and len(validator) < 200:
+                with os.fdopen(os.open(validator_path(partial), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600), 'w') as note:
+                    note.write(validator)
+            else:
+                validator_path(partial).unlink(missing_ok=True)
         flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_APPEND if offset else os.O_TRUNC)
         with os.fdopen(os.open(partial, flags, 0o600), 'ab' if offset else 'wb') as output:
             count, reported = offset, offset * 10 // size
@@ -227,7 +254,7 @@ def download_partial(url, partial, entry, logical_path):
                 count += len(block)
                 if count > size:
                     output.close()
-                    partial.unlink()
+                    discard_partial(partial)
                     raise DistributionError('Artifact exceeds published size: ' + logical_path)
                 output.write(block)
                 if size >= 50 * 1024 * 1024 and count * 10 // size > reported:

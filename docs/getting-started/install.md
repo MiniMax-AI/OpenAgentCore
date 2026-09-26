@@ -144,8 +144,10 @@ Choose English or Chinese through the System language selector.
    maintenance and completed cleanup. Microsandbox uses a five-minute idle timeout
    and one-day snapshot retention.
 4. For own-machine hosting, click **Add node**, copy the command, and run it on the target Linux amd64
-   host with sudo, or as root. It prepares the host itself: the `parsar-node` service user, its Docker or
-   KVM group and a system service. Hosts without sudo use the no-sudo command as a prepared user instead.
+   host with sudo, or as root. It prepares the host itself: the `parsar-node` service user, its `docker`
+   or `kvm` group and a system service. For Docker nodes, the `docker` group makes that user, and so the
+   node, root-equivalent on the host; use hosts dedicated to sandboxes. Hosts without sudo use the no-sudo
+   command as a prepared user instead.
    It downloads the matched bootstrap and execution assets from your console
    (never from a release URL), verifies
    checksums, reads the saved generation and specification without consuming enrollment,

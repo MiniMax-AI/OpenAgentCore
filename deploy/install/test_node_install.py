@@ -19,6 +19,11 @@ import node_install as installer
 import node_spec
 
 
+class Response(io.BytesIO):
+    """An HTTP response body with the status and headers the downloader reads."""
+    status, headers = 200, {}
+
+
 class NodeInstallTests(unittest.TestCase):
     def setUp(self):
         base = Path.home() / ".parsar/tests/node-install"
@@ -72,7 +77,7 @@ class NodeInstallTests(unittest.TestCase):
         self.assertTrue(url.startswith(self.args.source_url + "/node-install/artifacts/"), url)
         for name, item in self.manifest["artifacts"].items():
             if url.endswith("/" + item["filename"]):
-                return io.BytesIO(self.payloads[name])
+                return Response(self.payloads[name])
         raise AssertionError("Unexpected artifact URL: " + url)
 
     def refresh_manifest(self):
@@ -335,7 +340,7 @@ class NodeInstallTests(unittest.TestCase):
         docker_socket.bind(str(system / "docker.sock"))
         self.addCleanup(docker_socket.close)
         os.chmod(system / "docker.sock", 0o660)
-        self.account, self.joined, self.docker_installed = None, False, True
+        self.account, self.joined, self.docker_installed, self.device_group = None, False, True, "docker"
         service_home = self.home / "service"
         self.root = service_home / ".parsar/nodes" / self.args.installation_id
 
@@ -348,7 +353,8 @@ class NodeInstallTests(unittest.TestCase):
                                           DOCKER_SOCKET=system / "docker.sock", run_as=run_as,
                                           service_account=lambda: self.account),
                       mock.patch.object(installer.shutil, "which", side_effect=lambda tool: None if tool == "docker" and not self.docker_installed else "/usr/bin/" + tool),
-                      mock.patch.object(installer.grp, "getgrnam", side_effect=lambda name: SimpleNamespace(gr_mem=["parsar-node"] if self.joined else []))):
+                      mock.patch.object(installer.grp, "getgrnam", side_effect=lambda name: SimpleNamespace(gr_mem=["parsar-node"] if self.joined else [])),
+                      mock.patch.object(installer.grp, "getgrgid", side_effect=lambda gid: SimpleNamespace(gr_name=self.device_group))):
             patch.start()
             self.addCleanup(patch.stop)
         return system
@@ -369,7 +375,8 @@ class NodeInstallTests(unittest.TestCase):
         self.assertNotIn("synthetic-once-token", unit)
         self.assertTrue((self.root / "registered.json").exists())
         self.assertFalse((self.root / ("parsar-node-" + self.args.installation_id + ".service")).exists())
-        self.assertEqual(json.loads((system / "etc/user.json").read_text())["created"], True)
+        account = json.loads((system / "etc/account.json").read_text())
+        self.assertEqual((account["created"], account["groups_added"]), (True, ["docker"]))
         self.assertEqual(stat.S_IMODE((system / "etc").stat().st_mode), 0o755)
         before = {path: path.read_bytes() for path in (system / "etc").iterdir()}
         self.calls.clear()
@@ -377,15 +384,25 @@ class NodeInstallTests(unittest.TestCase):
         commands = [call for call, _ in self.calls]
         self.assertFalse([call for call in commands if call[:1] in (["useradd"], ["usermod"]) or "register" in call])
         self.assertEqual({path: path.read_bytes() for path in (system / "etc").iterdir()}, before)
+        # A command naming another Core address is refused before anything changes.
+        self.args.core_url, self.calls[:] = "https://moved.example", []
+        with self.assertRaisesRegex(installer.InstallError, "this command uses https://moved.example.*Nothing was changed"):
+            installer.install_system(self.args, "")
+        self.assertFalse([call for call, _ in self.calls if call[:1] in (["useradd"], ["usermod"], ["systemctl"])])
+        self.assertEqual({path: path.read_bytes() for path in (system / "etc").iterdir()}, before)
 
     def test_sudo_mode_refusals_change_nothing(self):
         foreign = SimpleNamespace(pw_name="parsar-node", pw_uid=4242, pw_gid=4242, pw_dir="/home/parsar-node", pw_shell="/bin/bash")
         for case, message in (("selinux", "SELinux is enforcing"), ("docker", "Docker Engine is not installed"),
-                              ("account", "not created by this installer")):
+                              ("account", "not created or adopted by this installer"), ("group", "belongs to the group disk"),
+                              ("home", "does not belong to the parsar-node account")):
             with self.subTest(case=case):
                 system = self.sudo_host(enforcing=case == "selinux")
                 self.docker_installed = case != "docker"
                 self.account = foreign if case == "account" else None
+                self.device_group = "disk" if case == "group" else "docker"
+                if case == "home":  # a home directory left without its account
+                    (self.home / "service").mkdir()
                 self.calls.clear()
                 with self.assertRaisesRegex(installer.InstallError, message + ".*Nothing was changed"):
                     installer.install_system(self.args, "synthetic-once-token")
@@ -395,6 +412,8 @@ class NodeInstallTests(unittest.TestCase):
                 for path in sorted(system.rglob("*"), reverse=True):
                     path.unlink() if not path.is_dir() else path.rmdir()
                 system.rmdir()
+                if (self.home / "service").exists():
+                    (self.home / "service").rmdir()
 
     def test_uninstall_waits_for_core_to_reject_the_node(self):
         system = self.sudo_host()
@@ -417,6 +436,36 @@ class NodeInstallTests(unittest.TestCase):
         self.assertFalse((system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).exists())
         self.assertFalse((system / "etc").exists())
 
+    def test_uninstall_leaves_an_adopted_account_as_found(self):
+        system = self.sudo_host()
+        (self.home / "service").mkdir(mode=0o700)
+        self.account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
+                                       pw_dir=str(self.home / "service"), pw_shell="/usr/sbin/nologin")
+        installer.install_system(self.args, "synthetic-once-token")
+        self.assertFalse([call for call, _ in self.calls if call[:1] == ["useradd"]])
+        self.assertEqual(json.loads((system / "etc/account.json").read_text())["created"], False)
+        self.calls.clear()
+        with mock.patch.object(installer, "open_request", side_effect=urllib.error.HTTPError("https://core.example", 401, "", {}, None)):
+            installer.uninstall_system(SimpleNamespace(installation_id=self.args.installation_id, force=False))
+        commands = [call for call, _ in self.calls]
+        self.assertNotIn(["userdel", "parsar-node"], commands)
+        self.assertIn(["gpasswd", "--delete", "parsar-node", "docker"], commands)
+        self.assertTrue((self.home / "service").is_dir())
+        self.assertFalse((system / "etc").exists())
+
+    def test_uninstall_never_follows_a_link_in_the_service_home(self):
+        # The service user owns its home; a link it plants must not steer deletion elsewhere.
+        system = self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
+        victim = self.home / "victim"
+        (self.home / "service/.parsar").rename(victim)
+        (self.home / "service/.parsar").symlink_to(victim)
+        with mock.patch.object(installer, "open_request", side_effect=urllib.error.HTTPError("https://core.example", 401, "", {}, None)), \
+                self.assertRaisesRegex(installer.InstallError, "symbolic link.*Nothing was changed"):
+            installer.uninstall_system(SimpleNamespace(installation_id=self.args.installation_id, force=True))
+        self.assertTrue((victim / "nodes" / self.args.installation_id / "registered.json").exists())
+        self.assertTrue((system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).exists())
+
     def test_token_comes_on_standard_input_only(self):
         arguments = ["--source-url", self.args.source_url, "--core-url", self.args.core_url, "--installation-id",
                      self.args.installation_id, "--enrollment-token-stdin"]
@@ -426,6 +475,11 @@ class NodeInstallTests(unittest.TestCase):
         self.assertEqual(install.call_args.args[1], "synthetic-once-token")
         with mock.patch.dict(os.environ, {"PARSAR_NODE_ENROLLMENT_TOKEN": "other"}), self.assertRaises(SystemExit):
             installer.main(arguments)
+        # As root, a token in the environment would come from `sudo VAR=...`, which sudo logs.
+        with mock.patch.dict(os.environ, {"PARSAR_NODE_ENROLLMENT_TOKEN": "other"}), mock.patch.object(installer.os, "geteuid", return_value=0), \
+                mock.patch.object(installer, "install_system") as install_system, self.assertRaises(SystemExit):
+            installer.main(arguments[:-1])
+        install_system.assert_not_called()
 
     def test_user_manager_bus_is_found_without_a_login_session(self):
         runtime = self.home / "run-user"
