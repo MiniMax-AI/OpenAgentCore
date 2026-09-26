@@ -10,8 +10,8 @@ Every setting of a Core installation has exactly one home. There are two kinds:
 Web's **System** page shows both: the installation's addresses, the process settings
 read-only with the path of `config.json` and the apply command, the default models,
 and the sandbox configuration. Secrets live in [`secrets/`](#secrets-and-identity),
-one copy each. No setting is stored twice, and no configuration file defines Projects
-or API keys.
+one copy each. Each setting is set in one place; the files in `generated/` are only
+derived from `config.json`. No configuration file defines Projects or API keys.
 
 ## Process settings: config.json
 
@@ -121,7 +121,7 @@ Core API with the Core key.
 | --- | --- | --- | --- |
 | Sandbox backend: Docker, microsandbox or E2B | **Nodes** (**Sandbox backend** with E2B): the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per deployment. `install.sh --sandbox` saves the first choice. Changing it needs [maintenance](#sandbox-deployment) |
 | Sandbox size and Runtime release | **Nodes**: the setup wizard | `/core/v1/sandbox/deployment` | Every sandbox gets the same size. See [Sandbox deployment](#sandbox-deployment) |
-| E2B API key and template build | **Sandbox backend**: the setup wizard | `/core/v1/sandbox/deployment` | The key is write-only and encrypted |
+| E2B API key and template build | **Nodes**: the setup wizard's **E2B cloud** (the page is then called **Sandbox backend**) | `/core/v1/sandbox/deployment` | The key is write-only and encrypted |
 | Maintenance | **Nodes**: **Enter maintenance to change provider**, **Resume hosted placement** | `PATCH /core/v1/sandbox/deployment/maintenance` | Pauses new hosted sandboxes while you change the backend |
 | Nodes and their capacity | **Nodes**: **Add node**, **Edit node**, **Remove node** | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and the [nodes guide](getting-started/nodes.md) |
 | Projects and API keys | **Projects and keys**: **Create project**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
