@@ -558,7 +558,8 @@
 }
 
 /* A failed Session's reason, as Core sent it, under its status: in full on the
-   Session page, one truncated line in the Session log (full text in the tooltip). */
+   Session page, its line breaks kept; one truncated line in the Session log,
+   with the full text in its tooltip. */
 .session-status {
   display: inline-flex;
   max-width: 100%;
@@ -571,18 +572,27 @@
   color: var(--fg-muted);
   font-size: 12px;
   line-height: 16px;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .session-status-truncated {
   display: flex;
-  max-width: 220px;
 }
 
+/* The log's reason is clamped to one line rather than kept from wrapping: it
+   can break anywhere, so it never sets the status column's minimum width and
+   the table keeps fitting its card, yet it uses the room the table has spare,
+   up to 220px. */
 .session-status-truncated .session-status-reason {
+  display: -webkit-box;
+  max-width: 220px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
 }
 
 /* A jump to a failed Turn focuses it; only keyboard focus draws a ring. */

@@ -611,9 +611,9 @@ A 7px circle plus a plain label at 12.5px: ok green, warning amber, danger red,
 pending Series 1 with a soft expanding ring while work is in progress, neutral
 Idle Gray. A waiting Session's required actions sit in a help tip beside the
 label. A failed Session's reason, as Core sent it, stays visible under the label
-in 12px Graphite: in full on the Session page, on one line cut at 220px with the
-full text in its tooltip in the Session log. Never a coloured pill, never colour
-alone.
+in 12px Graphite: in full on the Session page, its line breaks kept; in the
+Session log on one truncated line, with the full text in its tooltip, that never
+widens the status column. Never a coloured pill, never colour alone.
 
 ### Meter
 A 6px pill rail in Meter Track with a neutral ink fill. The fill turns amber at 90%
