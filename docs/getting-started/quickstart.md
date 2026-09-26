@@ -21,7 +21,7 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install openai==3.13.0
 export OPENAI_BASE_URL=https://core.example/v1
-export OPENAI_API_KEY=<project API key>
+read -rs OPENAI_API_KEY && export OPENAI_API_KEY   # paste the Project API key; it isn't echoed
 ```
 
 ```python
@@ -31,11 +31,13 @@ client = OpenAI()  # reads OPENAI_BASE_URL and OPENAI_API_KEY
 print(client.beta.agents.list().data)
 ```
 
-This read checks access; it runs no model and creates no sandbox. The same request
-with curl:
+`read -rs` keeps the key out of your shell history. This read checks access; it runs no
+model and creates no sandbox. The same request with curl, which keeps the key off its
+command line:
 
 ```sh
-curl "$OPENAI_BASE_URL/agents" -H "Authorization: Bearer $OPENAI_API_KEY" -H "OpenAI-Beta: agents=v1"
+curl "$OPENAI_BASE_URL/agents" -H "OpenAI-Beta: agents=v1" \
+  -H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")
 ```
 
 All keys of a Project share its assets and execution principal; other Projects are
@@ -74,7 +76,7 @@ print(session.id)
 
 This makes a real model request and may incur charges. If the administrator set a
 default model for the harness, omit `x_agents_core.model_provider`; `agent.model` is
-still required. SDK 3.13.0 replaces an ordinary body field with the matching
+still required, so ask the administrator which model ID the default provider serves. SDK 3.13.0 replaces an ordinary body field with the matching
 `extra_body` field instead of merging nested fields, so keep the whole `agent` object
 in `extra_body`.
 
@@ -85,16 +87,16 @@ in `extra_body`.
 
 | Field | Where | Meaning |
 | --- | --- | --- |
-| `x_agents_core.harness` | A saved Agent, or the Session's inline `agent` | Which native harness runs the Agent: `codex`, `claude_sdk` or `mcode`. Omitted: the installation's default harness (`core.default_harness`, Codex unless changed) |
+| `x_agents_core.harness` | A saved Agent, or the Session's inline `agent` | Which native harness runs the Agent: `codex` (Codex), `claude_sdk` (Claude Code) or `mcode` (MiniMax Code). Omitted: the installation's default harness (`core.default_harness`, Codex unless changed) |
 | `x_agents_core.model_provider` | A saved Agent, or Session creation | The model provider bundle: `protocol`, HTTPS `base_url`, write-only `api_key`, and for `mcode` also `context_window` and `max_output_tokens`. Reads return `api_key_configured` instead of the key |
 
 The provider's protocol must match the harness:
 
 | Harness | `protocol` | Also required |
 | --- | --- | --- |
-| `codex` | `responses` | The provider's exact model ID in `agent.model` |
-| `claude_sdk` | `anthropic` | The provider's exact model ID |
-| `mcode` | `anthropic` | `context_window` and `max_output_tokens` |
+| Codex (`codex`) | `responses` | The provider's exact model ID in `agent.model` |
+| Claude Code (`claude_sdk`) | `anthropic` | The provider's exact model ID |
+| MiniMax Code (`mcode`) | `anthropic` | `context_window` and `max_output_tokens` |
 
 See [harness selection](../../contracts/agents-api/harness-selection.md) and
 [model execution](../../contracts/agents-api/model-execution.md) for the full contract.
@@ -114,7 +116,7 @@ never merged:
 | --- | --- | --- | --- |
 | `openai_hosted` | Used | Used | 400 `model_provider_required` |
 | `self_hosted` | Used | Never | 400 `model_provider_required` |
-| `none` | Rejected with 400 | Used | Allowed: the device's own environment supplies the model |
+| `none` | Rejected with 400 `unsupported_or_invalid_configuration` | Used | Allowed: the device's own environment supplies the model |
 
 A Session freezes its provider when it is created; later changes to the Agent or the
 default affect only new Sessions. Core encrypts the key with the Session and never

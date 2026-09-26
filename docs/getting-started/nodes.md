@@ -26,14 +26,17 @@ node protocol, manual registration, placement and failure handling.
 ## Add a node
 
 1. In Web, open **Nodes** and select **Add node**.
-2. Set **Sandboxes at once** (default 2) and **Retained sandboxes** (default 8): how
-   many sandboxes Core may run and keep on this node. You can change them later with
-   **Edit node**.
-3. Select **Generate command** and copy the command. It works once, within 10 minutes;
-   Web counts down and offers **Generate new command** when it expires.
+2. Set **Sandboxes at once** (default 2): how many sandboxes Core may run on this node.
+   With microsandbox, also set **Retained sandboxes** (default 8): how many it may keep,
+   suspended ones included. With Docker, Core keeps retained equal to at once. You can
+   change them later with **Edit node**.
+3. Select **Generate command** and copy the command. It registers one node, once, and
+   only if it runs within 10 minutes; Web counts down and offers
+   **Generate new command** when it expires.
 4. Run it on the host. Web follows the node from registered to connected to ready.
 
-The command downloads the node installer from your console, checks its SHA-256, and
+The command downloads the node installer from the console's public address, checks
+its SHA-256, and
 runs it with a one-time enrollment token. The installer downloads the node files from
 the same console and checks each against the release manifest, imports the Runtime
 image, registers the node, starts its service and waits until Core reports the node
@@ -94,16 +97,19 @@ printf '%s\n' '<enrollment-token>' | python3 "$d/node-install.pyz" --enrollment-
 Run it as the non-root user that will run the node; run by root, it installs the
 sudo-mode service instead. An administrator prepares that user once:
 
-- Docker: `sudo usermod -aG docker <user>`, with Docker enforcing CPU and memory limits.
-  microsandbox: `sudo usermod -aG kvm <user>` for read and write access to `/dev/kvm`.
-- Lingering, after the group change: `sudo loginctl enable-linger <user>`. After a group
-  change, sign in again as that user; if the user's systemd manager was already
-  running, restart it (`sudo systemctl restart user@$(id -u <user>).service`) or reboot.
+- Docker: `sudo usermod -aG docker NODE_USER`, with Docker enforcing CPU and memory
+  limits. microsandbox: `sudo usermod -aG kvm NODE_USER` for read and write access to
+  `/dev/kvm`.
+- Lingering, after the group change: `sudo loginctl enable-linger NODE_USER`. After a
+  group change, sign in again as that user; if the user's systemd manager was already
+  running, restart it (`sudo systemctl restart user@$(id -u NODE_USER).service`) or
+  reboot.
 - microsandbox only: a home directory of at most 25 bytes, such as `/home/parsar`,
   because microsandbox's socket paths are short.
 - The host requirements above, except root, SELinux and one Core per host.
 
-Run the command as that user over SSH, or from a root shell with `su - <user>`. The
+`NODE_USER` stands for that user, as in the dialog's commands. Run the command as that
+user over SSH, or from a root shell with `su - NODE_USER`. The
 node's state then lives in `~/.parsar/nodes/<installation-id>/` of that user. The
 Docker group makes this user root-equivalent on the host too.
 
@@ -118,8 +124,8 @@ Docker group makes this user root-equivalent on the host too.
 | Records | `/etc/parsar-node/`: what the installer created or changed, used by reruns and uninstall |
 | Docker | The Runtime image, imported once, and a network `parsar-node-<installation-id>` |
 
-Root only prepares the account, group, unit and network; everything else runs as
-`parsar-node`, in its own session without a terminal. The installer never installs
+Root only prepares the account, the group and the unit; everything else, the Docker
+network included, runs as `parsar-node`, in its own session without a terminal. The installer never installs
 Docker, KVM or packages, never starts Docker, never changes device permissions,
 sudoers, firewall or SELinux settings, and never touches other accounts.
 
@@ -142,7 +148,11 @@ where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy wit
 
 - Rerunning the same command is safe. Once the node is registered, a rerun uses the
   node's own credential, changes nothing that already matches and needs no token.
-- If the command expires during a slow download, the downloaded files are kept:
+- A command that already expired, or was used on another host, fails at once with
+  `Core rejected the node configuration read (HTTP 401)`: generate a new command and
+  run it within 10 minutes.
+- If the command expires during a slow download, registration fails with
+  `The enrollment command expired or was already used`. The downloaded files are kept:
   generate a new command in Web and run it.
 - Downloads resume where they stopped. A download that brings less than 64 KiB in a
   minute stops, keeping what it has; run the command again.
@@ -155,7 +165,9 @@ where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy wit
 
 ## Logs
 
-After you run the command, the Add node dialog shows the node's log command:
+The installer prints the node's log command (`Logs: …`) when it finishes. The Add node
+dialog shows it too when something needs attention: when the node reports a problem, or
+when it hasn't become connected and ready about a minute after registering.
 
 | Node installed | Command |
 | --- | --- |
@@ -166,7 +178,8 @@ The installation ID is in the command (`--installation-id`) and on the **System*
 
 ## Remove a node
 
-1. In Web, open **Nodes**, select the node and choose **Remove node**. Core refuses
+1. In Web, open **Nodes** and choose **Remove node** on the node's page, or **Remove**
+   in its list row, then **Confirm removal**. Core refuses
    while the node still holds sandboxes, snapshots or pending cleanup; let them finish,
    or [archive their Sessions](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)
    through the Core API. Removal is permanent: the host can come back only as a new node.
@@ -183,9 +196,12 @@ The installation ID is in the command (`--installation-id`) and on the **System*
    without `sudo`; run it as that user.
 
 Uninstall first asks Core, at the address the node enrolled with, whether the node was
-removed, and refuses while Core still lists it. If that address no longer responds, for
-example after the public URL changed, **Old Core address gone?** gives the command with
-`--force`, which skips the check; remove the node on the Nodes page first. Uninstall
+removed, and refuses while Core still lists it. When the node enrolled with an address
+other than the current public URL, the dialog also shows **Old Core address gone?**:
+if that address no longer responds, it gives the command with `--force`, which skips
+the check; remove the node on the Nodes page first. Without the dialog, take the
+installer's SHA-256 from the `node-install.pyz` line of
+`https://core.example/node-install/SHA256SUMS`. Uninstall
 stops and removes the service, the node state, the records and the Docker network. It
 deletes the `parsar-node` account only if the installer created it and no node remains;
 an adopted account only loses the groups the installer added.
@@ -201,32 +217,35 @@ check `pgrep -u parsar-node` first. Uninstall can be rerun until it completes.
 
 ### Readiness codes
 
-When a node is online but its provider is not ready, **Nodes** shows one of these codes
-(the `diagnostic` field of `GET /core/v1/sandbox/nodes`). A node reports only its first
-failed check, and the next heartbeat, about ten seconds after a fix, clears or replaces
-the code. The node's log has the local error behind the code.
+When a node is online but its provider is not ready, **Nodes** shows its status as
+**Provider unavailable**, with the reason in a help tip; **Overview** counts it as a
+**Provider issue**. The API reports the reason as a fixed code, the `diagnostic` field
+of `GET /core/v1/sandbox/nodes`. A node reports only its first failed check, and the
+next heartbeat, about ten seconds after a fix, clears or replaces it. The node's log has
+the local error behind the code.
 
-| Code | Cause | Fix |
-| --- | --- | --- |
-| `docker_unavailable` | The Docker socket is unreachable or not accessible, or Docker fails its info or image request | Start Docker and give the node's user access to `/var/run/docker.sock` |
-| `docker_limits_unsupported` | Docker reports no CPU quota or memory limit support | Use a host whose cgroups enforce CPU and memory limits (cgroup v2) |
-| `runtime_image_unavailable` | Docker does not have the pinned Runtime image | Rerun the add command, or load the image from the matching release |
-| `kvm_unavailable` | The node can't open `/dev/kvm` for reading and writing | Enable hardware virtualization and give the node's user KVM access, through the `kvm` group |
-| `microsandbox_artifacts_unavailable` | The Runtime or firmware is missing or fails its SHA-256 check, or the helper is missing | Rerun the add command |
-| `capacity_insufficient` | The host has fewer CPUs or less memory than one sandbox | Use a larger host, or change the sandbox size |
-| `provider_unavailable` | Any other failure, and every failure an older node reports | Read the node's log |
+| Code | Web shows | Cause | Fix |
+| --- | --- | --- | --- |
+| `docker_unavailable` | Docker unavailable | The Docker socket is unreachable or not accessible, or Docker fails its info or image request | Start Docker and give the node's user access to `/var/run/docker.sock` |
+| `docker_limits_unsupported` | Docker limits unsupported | Docker reports no CPU quota or memory limit support | Use a host whose cgroups enforce CPU and memory limits (cgroup v2) |
+| `runtime_image_unavailable` | Runtime image missing | Docker does not have the pinned Runtime image | Rerun the add command, or load the image from the matching release |
+| `kvm_unavailable` | KVM unavailable | The node can't open `/dev/kvm` for reading and writing | Enable hardware virtualization and give the node's user KVM access, through the `kvm` group |
+| `microsandbox_artifacts_unavailable` | microsandbox components missing | The Runtime or firmware is missing or fails its SHA-256 check, or the helper is missing | Rerun the add command |
+| `capacity_insufficient` | Host too small | The host has fewer CPUs or less memory than one sandbox | Use a larger host, or change the sandbox size |
+| `provider_unavailable` | Sandbox provider unavailable | Any other failure, and every failure an older node reports | Read the node's log |
 
-A new group membership applies only to a new process: restart the service with
-`sudo systemctl restart parsar-node-<installation-id>.service`, or
-`systemctl --user restart parsar-node-<installation-id>.service` without sudo. A node
-that is registered but never connects usually can't reach Core at the public URL, or
-its `/api/v1` WebSocket doesn't pass the reverse proxy.
+A new group membership applies only to a new process. In sudo mode, restart the node
+service: `sudo systemctl restart parsar-node-<installation-id>.service`. Without sudo,
+the user's systemd manager keeps the groups it started with, so restart that manager:
+`sudo systemctl restart user@$(id -u NODE_USER).service`. A node that is registered
+but never connects usually can't reach Core at the public URL, or its `/api/v1`
+WebSocket doesn't pass the reverse proxy.
 
 ### Installer messages
 
 | Message | Fix |
 | --- | --- |
-| The enrollment command expired or was already used | Generate a new command in Web and run it |
+| `Core rejected the node configuration read (HTTP 401)` before anything downloads, or `The enrollment command expired or was already used` | Generate a new command in Web and run it within 10 minutes |
 | Core's public URL changed after this command was generated | Generate a new command in Web and run it |
 | This host's node uses `<address>`, but this command uses `<address>` | The node was added under an older public URL. Remove it in Web, uninstall it, then add it again |
 | Docker Engine is not installed, or Docker is not running | Install Docker Engine, or `sudo systemctl enable --now docker`, then rerun |
@@ -240,11 +259,10 @@ its `/api/v1` WebSocket doesn't pass the reverse proxy.
 
 ## Change the sandbox backend or size
 
-Changing Docker, microsandbox or E2B, the sandbox size or the Runtime release applies to
-the whole deployment. On **Nodes**, choose **Enter maintenance to change provider**, which
-pauses new hosted sandboxes; let the existing ones finish, or archive their Sessions
-through the Core API, until nothing is retained; save the new configuration; then choose
-**Resume hosted placement**. A change retires every node: remove and uninstall them, and
-add the hosts again with new commands. See
-[maintenance](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)
-for the exact steps and API.
+To change the sandbox backend, the sandbox size or the Runtime, see the **Nodes** page;
+this flow will change in a coming release. A change applies to the whole deployment
+and retires every node. Retired nodes drop out of the list, so there is nothing to
+remove in Web: on each host, run the [uninstall command](#remove-a-node) (Core no longer
+accepts the node, so it needs no `--force`), then add the host again with a new command.
+The [operator reference](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)
+describes today's procedure and API.

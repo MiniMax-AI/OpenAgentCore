@@ -68,9 +68,9 @@ Each release has two bundles:
 | `parsar-core-<commit>-linux-amd64-offline.tar.gz` | Core, Web and PostgreSQL images, the installers and every node and Runtime file | Any installation. Web serves the node files to your nodes and self-hosted executors |
 | `parsar-core-<commit>-linux-amd64.tar.gz` | The same without the node and Runtime files | E2B-only or Web-only hosts. Web can't add nodes until the files are present |
 
-To add the node files to the smaller bundle, download the release's other
-`parsar-core-<commit>-linux-amd64-*` assets (not the two bundles) into the extracted
-bundle's `artifacts/` directory, then run `./install.sh`, or rerun it if the
+To add the node files to the smaller bundle, create an `artifacts/` directory in the
+extracted bundle, download the release's other `parsar-core-<commit>-linux-amd64-*`
+assets (not the two bundles) into it, then run `./install.sh`, or rerun it if the
 installation already exists. Nodes download these files only from your Web console,
 never from GitHub, so node hosts need no GitHub access.
 
@@ -161,20 +161,37 @@ To change the backend or the sandbox size later, use the Nodes page in Web; see
 | `--core-only` | PostgreSQL and Core | A Core whose Web runs on another host, or scripts only. Without Web there is no Add node command |
 | `--web-only` | Web | A second host for the console, paired with an existing Core |
 
-A Web-only installation needs the Core's origin and a private copy of its Core key:
+A Web-only console forwards every signed-in `/core/v1` request to its Core with the
+Core key, so `--core-url` must reach Core's `/core/v1` directly. The usual reverse proxy
+sends `/core/v1` to Web, so the Core's public URL doesn't work here:
+
+- **Web on the Core host:** use Core's loopback port, `--core-url http://127.0.0.1:8091`.
+- **Web on another host:** give Core a second HTTPS name whose proxy sends every path to
+  Core, such as `https://core-api.example` to `127.0.0.1:8091` on the Core host, and use
+  it as `--core-url`. Anyone who reaches that name still needs the Core key.
+
+A split deployment then looks like this:
+
+| Host | Install | Reverse proxy |
+| --- | --- | --- |
+| Core | `./install.sh --core-only --public-url https://core.example` | `core.example`: `/v1`, `/v1/*` and `/api/v1/*` to Core (there is no Web here). `core-api.example`: every path to Core |
+| Web | See below | `console.example`: every path to Web |
 
 ```sh
 ./install.sh --web-only --install-dir "$HOME/.parsar/core-console" \
   --public-url https://console.example \
-  --core-url https://core.example \
+  --core-url https://core-api.example \
   --core-key-file "$HOME/core.key"
 ```
 
-Its `--public-url` is the address browsers use for this console. Copy the key file
-from the Core host's `secrets/core.key` with mode `0600`; the installer keeps its own
-copy. After the Core key is rotated, copy the new key again; see
-[Rotate the Core key](operations.md#rotate-the-core-key). Web-only installs select no
-sandbox backend; do that on the Core host.
+The Web host's `--public-url` is the address browsers use for this console; nodes also
+download their installer from it. Applications, nodes and sandboxes use the Core
+host's public URL. Copy the key file from the Core host's `secrets/core.key` with mode
+`0600`; the installer keeps its own copy in `secrets/core.key`, so delete
+`$HOME/core.key` afterwards. After the Core key is rotated, copy the new key again; see
+[Rotate the Core key](operations.md#rotate-the-core-key). A Web-only install selects no
+sandbox backend: the Core host's `--sandbox` does, or later the paired console's
+**Nodes** page.
 
 The mode and native Core are fixed once installed. To change them, install into a
 new directory.
@@ -205,7 +222,7 @@ path:
 | --- | --- | --- |
 | `/v1`, `/v1/*` | Core, `127.0.0.1:8091` | Applications, with a Project API key |
 | `/api/v1/*` | Core, `127.0.0.1:8091` | Nodes, sandboxes and self-hosted executors, with their own machine credentials. Uses WebSockets |
-| Everything else | Web, `127.0.0.1:8080` | Browsers: the console, its sign-in, `/core/v1/*` and `/node-install/*` |
+| Everything else | Web, `127.0.0.1:8080` | Browsers: the console, its sign-in and `/core/v1/*`. Node and executor hosts download their installers from `/node-install/*` |
 
 The proxy must:
 
@@ -342,21 +359,27 @@ at Add node.
 
    The Core key is the installation's administrator credential. Keep it private; see
    [Core key](operations.md#core-key). Web has no user accounts.
-3. **Set a default model.** Open **System**, find **Default model** and choose
-   **Set** for the harness your applications use (Codex unless you changed
-   `core.default_harness`). Enter the model provider's base URL and API key; MiniMax
-   Code also needs the context window and max output tokens. Core encrypts the key and
-   never shows it again. Core-hosted Sessions use this default when the request and the
-   Agent carry no model provider; self-hosted Sessions never do. See
+3. **Set a default model.** Open **System** and find **Default model**. On the harness
+   card marked **Default** (Codex unless you changed `core.default_harness`), choose
+   **Set**; once a provider is configured, the button reads **Replace**. Enter the
+   model provider's base URL and API key; MiniMax Code also needs the context window
+   and max output tokens. Core encrypts the key and never shows it again. The default
+   applies to Core-hosted Sessions and Sessions without an environment when the request
+   and the Agent carry no model provider; self-hosted Sessions never use it. See
    [model providers](quickstart.md#model-providers).
-4. **Create a project and issue a key.** Open **Projects and keys**, select
-   **Create project**, then **Issue key** in it. Copy the key: Web shows it once and
-   Core keeps only a digest. Web also shows how to call the API with it.
-5. Give the key and the API base URL to the application developer, who follows the
+4. **Create a project and issue a key.** Open **Projects and keys**, choose
+   **Create project** and give it a **Name**, then **Issue key** in it with a
+   **Key name**. The **Key issued** dialog shows the key once: choose **Copy key**, keep
+   it somewhere safe, then **I've saved this key**. Core keeps only a digest. The
+   dialog's **How to call** card shows the API base URL and sample requests.
+5. Give the application developer the key, the API base URL and the model ID to use
+   with the default model provider (Sessions must name `agent.model`). They follow the
    [API quickstart](quickstart.md).
 
-**Overview** shows the same steps as a **Getting started** checklist, including
-[adding a node](nodes.md).
+**Overview** tracks the setup in a **Getting started** checklist, in any order:
+**Get sandboxes ready** ([add a node](nodes.md)), **Set a default model**,
+**Create a project and issue a key**, and **Run the first Session**. After you hide it,
+**Show Getting started** in the sidebar brings it back.
 
 ## What the installer creates
 

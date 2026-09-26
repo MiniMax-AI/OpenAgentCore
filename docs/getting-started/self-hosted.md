@@ -14,11 +14,13 @@ Agent API, the Core API or node enrollment.
 - **Core has an HTTPS public URL.** The Session's `remote_url` is
   `wss://<public host>/api/v1/agent-daemon/ws`, and the installer connects only over
   `wss://`. Web shows no command until Core has a reachable public URL.
-- **Web holds the Runtime files.** The installer downloads the Runtime launcher and
-  image from your console, as nodes do; install Core from the offline bundle.
-- **The host** runs Linux amd64 with Python 3.9+, `curl` and `sha256sum`, and Docker
-  usable by a non-root user through `/var/run/docker.sock`. It reaches the public URL
-  over HTTPS.
+- **Web holds the installer and the Runtime files.** The installer downloads the Runtime
+  launcher and image from the console's public address, as nodes do; install Core from
+  the offline bundle. A console without the self-hosted installer shows no
+  **Connect a host** section at all.
+- **The host** runs Linux amd64 with Python 3.9+, `curl`, `sha256sum` and the Docker
+  CLI, with Docker usable through `/var/run/docker.sock` by the non-root user that runs
+  the installer; the installer refuses root. It reaches the public URL over HTTPS.
 - **The Session carries its model provider**, in the request or saved on its Agent.
   Default models never apply to self-hosted Sessions, and creating one without a
   provider fails with 400 `model_provider_required`.
@@ -47,9 +49,9 @@ Agent API, the Core API or node enrollment.
    print(session.id, session.environment.id, session.environment.remote_url)
    ```
 
-2. **In Web**, open **Session log**, then the Session's page. Its
-   **Executor credentials** section shows **Connect a host** with the
-   **Executor install command**. Copy it and run it on the executor host:
+2. **In Web**, open **Session log**, then the Session's page. In its
+   **Executor credentials** section, **Connect a host** shows a command in a
+   **Terminal** block; copy it and run it on the executor host:
 
    ```sh
    (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
@@ -60,18 +62,23 @@ Agent API, the Core API or node enrollment.
 
    The command contains no secret. It downloads the installer from your console and
    checks its SHA-256 before running it.
-3. **Issue the credential.** Select **Issue credential**, then **Copy credential**.
-   Web shows it once.
+3. **Issue the credential.** Select **Issue credential**. The **Executor credential**
+   dialog shows it once: choose **Copy credential**.
 4. **Paste it at the installer's hidden prompt** and press Enter. The prompt accepts the
-   compact or the pretty-printed credential and never echoes it.
+   compact or the pretty-printed credential and never echoes it. Then choose **Done** in
+   the dialog; after that the credential can't be shown again. Closing the dialog with
+   × keeps the credential on the page until you choose **Done**.
 
 The installer downloads the Runtime from the console and checks it, starts a container
 named `parsar-selfhost-<32 hex digits>`, and waits until Core confirms that the
-Environment is connected. The Session then runs its Turns there. The command is safe
-to rerun; it resumes the same installation.
+Environment is connected. The Session then runs its Turns there. Rerunning the same
+command resumes the same installation. It refuses, with "This installation belongs to
+another Environment or distribution", once Core runs another release or its public URL
+changed: the host's installation is tied to both.
 
-For automation without a terminal, choose **Download credential file**, make it private
-(`chmod 600`), and add `--credential-file /absolute/path/executor-key.json` to the
+For automation without a terminal, choose **Download credential file**, which saves
+`executor-credential-<first 8 characters of the environment ID>.json`, make it private
+(`chmod 600`), and add `--credential-file /absolute/path/to/that-file.json` to the
 installer line. The path must not go through a symbolic link.
 
 The host keeps its state in `~/.parsar/self-hosted/<environment-id>/`
@@ -107,19 +114,23 @@ To remove the Runtime instead, stop its container:
 `docker --host unix:///var/run/docker.sock stop <container>`. Deleting the Session does
 not remove containers or volumes on the executor host.
 
+In an archived project, Web shows "This project is archived, so executor credentials
+can't be issued or rotated." Only **Revoke** remains; a host that already holds a
+credential keeps it when you rerun the command.
+
 ## Without Web
 
 Scripts on the Core host can issue credentials with the Core key through Core's
-loopback port. Choose a new UUID for the credential and keep it:
+loopback port (`ports.core` in `config.json`, 8091 by default). Choose a new UUID for
+the credential and keep it:
 
 ```sh
-umask 077
-key_id=$(python3 -c 'import uuid; print(uuid.uuid4())')
-curl -fsS -X POST \
+key_id=$(python3 -c 'import uuid; print(uuid.uuid4())'); echo "credential ID: $key_id"
+(umask 077; curl -fsS -X POST \
   -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.parsar/core/secrets/core.key")") \
   -H 'Content-Type: application/json' -d "{\"key_id\":\"$key_id\"}" \
   "http://127.0.0.1:8091/core/v1/projects/$PROJECT_ID/environments/$ENVIRONMENT_ID/executor-credentials" \
-  -o executor-key.json
+  -o executor-key.json)
 ```
 
 Rotate with `{"key_id":"…","rotate":true}` on the same route; revoke with

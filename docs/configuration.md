@@ -8,8 +8,8 @@ Every setting of a Core installation has exactly one home. There are two kinds:
 | [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | At once, without a restart |
 
 Web's **System** page shows both: the installation's addresses, the process settings
-read-only with the path of `config.json` and the apply command, the default models,
-and the sandbox configuration. Secrets live in [`secrets/`](#secrets-and-identity),
+read-only under **Startup settings** with the path of `config.json` and the apply
+command, the default models, and the sandbox configuration. Secrets live in [`secrets/`](#secrets-and-identity),
 one copy each. Each setting is set in one place; the files in `generated/` are only
 derived from `config.json`. No configuration file defines Projects or API keys.
 
@@ -63,7 +63,9 @@ sandboxes or self-hosted executors are bound to the current address, `apply` lis
 them and asks you to type the new URL (`--confirm-public-url-change URL` when not
 interactive). Afterwards, nodes on the old address get no new sandboxes: remove them
 in Web and add them again. Existing sandboxes and executors keep working only while
-the old address still reaches this Core. Update your reverse proxy first.
+the old address still reaches this Core, and `apply` warns that self-hosted executors
+must restart with the new `remote_url`; their installer refuses to reuse an
+installation made for the old address. Update your reverse proxy first.
 
 ### Settings
 
@@ -119,12 +121,11 @@ Core API with the Core key.
 
 | Setting | Where in Web | Core API | Notes |
 | --- | --- | --- | --- |
-| Sandbox backend: Docker, microsandbox or E2B | **Nodes** (**Sandbox backend** with E2B): the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per deployment. `install.sh --sandbox` saves the first choice. Changing it needs [maintenance](#sandbox-deployment) |
+| Sandbox backend: Docker, microsandbox or E2B | **Nodes** (**Sandbox backend** with E2B): the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per deployment. `install.sh --sandbox` saves the first choice. To change it, see the Nodes page; that flow will change in a coming release |
 | Sandbox size and Runtime release | **Nodes**: the setup wizard | `/core/v1/sandbox/deployment` | Every sandbox gets the same size. See [Sandbox deployment](#sandbox-deployment) |
 | E2B API key and template build | **Nodes**: the setup wizard's **E2B cloud** (the page is then called **Sandbox backend**) | `/core/v1/sandbox/deployment` | The key is write-only and encrypted |
-| Maintenance | **Nodes**: **Enter maintenance to change provider**, **Resume hosted placement** | `PATCH /core/v1/sandbox/deployment/maintenance` | Pauses new hosted sandboxes while you change the backend |
-| Nodes and their capacity | **Nodes**: **Add node**, **Edit node**, **Remove node** | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and the [nodes guide](getting-started/nodes.md) |
-| Projects and API keys | **Projects and keys**: **Create project**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
+| Nodes and their capacity | **Nodes**: **Add node**, **Edit node**, **Remove node** on a node's page (**Remove** in its list row) | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and the [nodes guide](getting-started/nodes.md) |
+| Projects and API keys | **Projects and keys**: **Create project**, **Rename**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
 | Default model per harness | **System**: **Default model** | `/core/v1/harnesses/{harness}/model-provider` | See [Default models](#default-models) |
 | Executor credentials of a self-hosted Session | **Session log**, the Session's page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](getting-started/self-hosted.md) |
 
@@ -153,22 +154,21 @@ E2B takes no `runtime`, and Web sends no resources for it: Core adopts the CPU a
 memory of the ready template build `template-id:build-uuid`, and supplied values must
 match it. Docker has no separate disk quota.
 
-Changing the provider, the size or the Runtime is a deployment-wide procedure: enter
-maintenance, let or make every hosted sandbox finish and clean up, save the new
-configuration against the current generation, then resume. A successful change
-retires the old nodes and enrollment commands; history stays. Nothing is deleted
-automatically, and existing Sessions never move between providers. See
-[maintenance](../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)
+Changing the provider, the size or the Runtime applies to the whole deployment; see the
+**Nodes** page, and note that this flow will change in a coming release. A successful
+change retires the old nodes and enrollment commands; history stays, and existing
+Sessions never move between providers. See the
+[operator reference](../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)
 and the [deployment contract](../contracts/agents-api/sandbox-deployment.md).
 
 ### Node capacity
 
 Core approves a node's capacity when you generate its Add node command: **Sandboxes
-at once** (`max_active`, default 2) and **Retained sandboxes** (`max_retained`,
-default 8), with `max_retained >= max_active >= 1`. Change them later with
-**Edit node**. Reservations and cleanup that is not confirmed count against capacity;
-lowering a limit stops no running sandbox. Docker never suspends sandboxes, so its
-`max_retained` always equals `max_active`. A node's own files can't change its
+at once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes**
+(`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never
+suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to
+`max_active`. Change them later with **Edit node**. Reservations and cleanup that is not
+confirmed count against capacity; lowering a limit stops no running sandbox. A node's own files can't change its
 capacity, size or Runtime.
 
 `core.execution_concurrency` is unrelated: it limits concurrent execution work in Core.
@@ -196,7 +196,7 @@ The operator file `AGENTS_API_EXECUTION_OPTIONS_FILE` is retired; see
 | File | Content | Changed by |
 | --- | --- | --- |
 | `secrets/core.key` | The [Core key](getting-started/operations.md#core-key) | `parsar rotate-core-key` |
-| `secrets/credential.key` | Encryption key for credentials stored in the database: model providers, E2B key, Vault credentials | Nothing. Keep it with the database; `parsar apply` refuses a changed file |
+| `secrets/credential.key` | Encryption key for what Core stores sealed in the database: model providers, the E2B key, Vault credentials, Skills, initial files and environment setup | Nothing. Keep it with the database; `parsar apply` refuses a changed file |
 | `secrets/database.password` | PostgreSQL password | Nothing. PostgreSQL reads it only when the database is created; `parsar apply` refuses a changed file |
 | `state.json` | Installation ID, Compose project, image IDs, source commit and the digests of generated files | The tools only |
 
@@ -234,8 +234,10 @@ self-hosted install command are unavailable.
 Core fails at startup, naming the replacement, while a retired variable is set:
 `AGENTS_API_DAEMON_WS_URL` (use `AGENTS_API_PUBLIC_URL`), `AGENTS_API_CONFIG_FILE`
 (no replacement), `AGENTS_API_EXECUTION_OPTIONS_FILE` (use
-[default models](#default-models)) and `AGENTS_API_MANAGED_RUNTIMES_FILE` (the
-sandbox deployment lives in the database). Core logs the file paths it loads, never
+[default models](#default-models)), `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` (use
+`AGENTS_API_CORE_KEY_DIGESTS_FILE`), and `AGENTS_API_MANAGED_RUNTIMES_FILE`,
+`AGENTS_API_SANDBOX_NODE_STATE_DIR` and `AGENTS_API_SANDBOX_NODE_CORE_URL` (the
+sandbox deployment lives in the database and nodes enroll separately). Core logs the file paths it loads, never
 environment values or file contents. Native installation paths must be canonical
 absolute paths without control characters, quotes, backslashes or wildcards. Keep the
 installation ID and the database together; Core refuses a missing installation ID

@@ -102,10 +102,13 @@ curl -fsS -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.parsar/core/s
 ~/.parsar/core/parsar rotate-core-key
 ```
 
-It asks for confirmation (`--yes` skips it), stops Web, writes a new key to
-`secrets/core.key`, regenerates the digest file, restarts Core and then starts Web. It
-checks that Core accepts the new key and refuses the old one. The old key stops working
-at once and every console session ends: sign in again and update your scripts. If the
+It refuses while `config.json` has changes that are not applied or a generated file was
+edited by hand: run `parsar apply` first. It asks for confirmation (`--yes` skips it),
+stops Web, writes a new key to `secrets/core.key` and regenerates the digest file. On a
+running installation it then restarts Core, starts Web and checks that Core accepts the
+new key and refuses the old one; a stopped installation only gets the new files and
+uses the new key at the next `parsar start`. The old key stops working as soon as Core
+restarts, and every console session ends: sign in again and update your scripts. If the
 command stops early, `secrets/core.key` holds the key to use; run `parsar apply` to
 finish.
 
@@ -162,12 +165,10 @@ not prove that all provider resources were reclaimed.
 | --- | --- |
 | Made before `config.json` (it has `installation.json`) | [Convert it](#convert-an-earlier-installation) with the new bundle |
 | Made with `config.json`, same release | Rerun `./install.sh` from the same bundle to repair it |
-| Made with `config.json`, other release | Not automated yet: the installer refuses a bundle from another release |
+| Made with `config.json`, other release | Not supported yet. The installer refuses a bundle from another release and says upgrades arrive with `parsar upgrade`, which doesn't exist yet. Keep running the installed release |
 
-For an upgrade the installer does not automate, back up as above, keep the previous
-bundle, let execution settle, and apply the new release's migrations with its matched
-Core, Web and Runtime, keeping the installation ID and backend paths. Qualify recovery
-before calling the upgrade done; there is no downgrade.
+There is no downgrade: database migrations can't be undone, so back up before any
+upgrade or conversion.
 
 ### Convert an earlier installation
 
@@ -180,9 +181,17 @@ Installations made before `config.json` have `installation.json`, `config/core.e
 ```
 
 Conversion is also an upgrade to that release, and its database migrations can't be
-undone: back up first (the command prints a `pg_dump` command). It reads the old files
-without changing anything, shows the resulting settings and asks for confirmation
-(`--yes` skips it). It then writes `config.json` and `state.json`, moves the secrets
+undone. Back up the database first. An installation made before `config.json` keeps its
+Compose file at the top of the installation directory:
+
+```sh
+docker compose -f "$HOME/.parsar/core/compose.json" exec -T database \
+  pg_dump -U agents_api agents_api > parsar-backup.sql
+```
+
+Conversion reads the old files without changing anything, shows the resulting settings
+and the same backup command, and asks for confirmation. `--yes` skips the prompt and
+runs the migrations at once, so use it only after backing up. It then writes `config.json` and `state.json`, moves the secrets
 into `secrets/` without copying them, removes the old generated files, and starts the
 new release with the same Compose project, database and installation ID. Settings set
 by hand, such as `AGENTS_API_EXECUTION_CONCURRENCY`, `PARSAR_LOG_*` or a Runtime history
@@ -220,8 +229,14 @@ replacement:
 | `install.sh --status`, `--stop` | `parsar status`, `parsar stop` | Installer flags |
 | `PARSAR_NODE_ENROLLMENT_TOKEN` | The token on standard input with `--enrollment-token-stdin`, as Web's Add node command passes it | Node installer; it refuses the variable |
 
-Rename or remove the old names of an installation made before `config.json` before
-converting it. Hosted and self-hosted Sessions that relied on the retired options file
+Before converting, rename or remove only the names from before the Core key:
+`admin/sandbox-admin.key`, `admin/digests.json`, `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE`
+and the retired `CORE_CONSOLE_*` settings. Leave `AGENTS_API_DAEMON_WS_URL`,
+`AGENTS_API_CONFIG_FILE` and `AGENTS_API_EXECUTION_OPTIONS_FILE` to `--convert`, which
+maps or reports them. Don't add `AGENTS_API_PUBLIC_URL` by hand: when it is present,
+conversion takes it as the address Core uses and skips the check against the sandbox
+deployment's Core address that keeps existing nodes bound. Hosted and self-hosted
+Sessions that relied on the retired options file
 have no model provider of their own and can't start new work after the upgrade. Count
 them before converting, from the new bundle:
 
@@ -240,17 +255,21 @@ added again.
 #### Node connections at /api/v1
 
 Core and its nodes must come from the same distribution; the node installer refuses a
-mismatched release. Nodes from releases that used the removed `/core/v1/sandbox/enroll`
-and `/core/v1/sandbox/node/*` paths can't connect to a current Core. For a Docker or
+mismatched release. Current releases serve every machine connection at `/api/v1`, and
+Web returns 404 there. When the new Core and Web go live, route `/api/v1/*`, including
+WebSocket upgrades, to Core instead of Web
+([HTTPS and the reverse proxy](install.md#https-and-the-reverse-proxy)); with the old
+routing, node enrollment and every Runtime connection fail, for Docker, microsandbox,
+E2B and self-hosted executors alike.
+
+Nodes from releases that used the removed `/core/v1/sandbox/enroll` and
+`/core/v1/sandbox/node/*` paths can't connect to a current Core. For a Docker or
 microsandbox deployment:
 
 1. Drain with the previous release while its nodes are connected: enter maintenance,
    archive retained hosted Sessions and wait until nothing is retained (the
    [maintenance procedure](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)).
-2. When the new Core and Web go live, route `/api/v1/*`, including WebSocket upgrades,
-   to Core instead of Web ([HTTPS and the reverse proxy](install.md#https-and-the-reverse-proxy)).
-   Web returns 404 for `/api/v1`; with the old routing, node enrollment and every Runtime
-   connection fail.
+2. Upgrade Core and Web, and change the routing as above.
 3. Save the new release's Runtime, resume, and add the nodes again. On each node host,
    stop the old node service and move its state directory aside as a backup first.
 
@@ -269,7 +288,8 @@ Artifacts remain. E2B deployments from that period are not covered.
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `Run as a non-root user on Linux amd64 with Docker access` | Run `install.sh` as a normal user who can run `docker` |
+| `Run as a non-root user on Linux amd64 with Docker access` | Run `install.sh` as a normal user, on Linux amd64 |
+| `Installation failed; inspect prerequisites and private deployment files` | A prerequisite failed without its own message, most often Docker: check that `docker info` and `docker compose version` work for this user |
 | `Docker Compose 2.26.0 or newer is required …` | Update the Docker Compose plugin |
 | `Port N is already in use; select another port` | Free the port, or install with `--core-port`/`--web-port` |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |

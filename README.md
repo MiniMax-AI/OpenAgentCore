@@ -26,12 +26,17 @@ administrator console that issues the keys applications call Core with.
 
    Put your HTTPS reverse proxy in front first, or install without `--public-url` for a
    local trial and set it later. See the [installation guide](docs/getting-started/install.md).
+   Follow the docs inside the downloaded bundle (`docs/` and `README.md`): they match
+   its installer, while these pages describe the current source.
 2. **Sign in to Web with the Core key**, from `~/.parsar/core/secrets/core.key`. On
    **System**, set a default model; on **Projects and keys**, create a project and
    issue a key. See [Sign in to Web](docs/getting-started/install.md#sign-in-to-web).
 3. **Add a node by pasting one command.** On **Nodes**, choose **Add node**, then
    **Generate command**, and run the command on a Linux host with sudo. See
    [Nodes](docs/getting-started/nodes.md).
+
+Web's **Overview** tracks these steps, and the first Session, in its **Getting started**
+checklist; they can be done in any order.
 
 Applications then set `OPENAI_BASE_URL` to `https://core.example/v1` and
 `OPENAI_API_KEY` to the Project API key, and use the official OpenAI SDK; see
