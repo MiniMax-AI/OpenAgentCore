@@ -136,6 +136,8 @@ export const keys = {
     },
     coverageValue: "{{reported}} / {{total}}",
     keys: "Keys",
+    keyCounts: "{{active}} active · {{revoked}} revoked",
+    keyCountsActive: "{{active}} active",
     keysHelp: "Every active key of the project reaches the same assets. Usage columns count the Sessions each key created. Revoked keys stay listed.",
     keysLabel: "Keys of {{name}}",
     keysLoading: "Loading keys…",

@@ -138,6 +138,8 @@ export const keys: TranslationShape<typeof english> = {
     },
     coverageValue: "{{reported}} / {{total}}",
     keys: "Key",
+    keyCounts: "{{active}} 有效 · {{revoked}} 已撤销",
+    keyCountsActive: "{{active}} 有效",
     keysHelp: "项目里的每个有效 key 访问的都是同一批资产。用量列统计的是每个 key 创建的 Session。已撤销的 key 会继续列在这里。",
     keysLabel: "{{name}} 的 key",
     keysLoading: "正在加载 key…",

@@ -53,6 +53,7 @@ export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
   const pending = summaries.status === "loading" && !summaries.value;
   const figure = (value: number | null | undefined, compact = false) => (pending ? "—" : compact ? formatCompact(value, locale) : formatInteger(value, locale));
   const activeCount = (keys.value ?? []).filter((key) => key.revoked_at === null).length;
+  const revokedCount = (keys.value?.length ?? 0) - activeCount;
   const byKey = summaries.value?.byKey ?? null;
   const unknownUsage = byKey?.get(null) ?? null;
   const usage = summary?.usage ?? null;
@@ -122,7 +123,13 @@ export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
 
       <Section
         headingId="project-keys-heading"
-        title={<>{t("detail.keys")} {keys.value ? <span className="heading-count">{formatInteger(keys.value.length, locale)}</span> : null}</>}
+        title={<>{t("detail.keys")} {keys.value ? (
+          <span className="heading-count">
+            {revokedCount
+              ? t("detail.keyCounts", { active: formatInteger(activeCount, locale), revoked: formatInteger(revokedCount, locale) })
+              : t("detail.keyCountsActive", { active: formatInteger(activeCount, locale) })}
+          </span>
+        ) : null}</>}
         help={t("detail.keysHelp")}
         actions={project.status === "active" ? (
           <button className="button outline" type="button" onClick={onIssue} disabled={busy}>
