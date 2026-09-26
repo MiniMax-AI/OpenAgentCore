@@ -113,8 +113,9 @@ workbench.
   ready (a saved deployment and a node online and ready, or a saved E2B deployment
   whose template build is not reported as not ready), a default model on the default
   harness (on any enabled harness when none is default),
-  a project with an active key, and a first Session, whose action opens the newest
-  project's call samples. Completion comes from reads the
+  a project with an active key, and a first Session, whose action opens the call
+  samples of the newest active project, preferring one with an active key.
+  Completion comes from reads the
   console already makes. It can be hidden; Show Getting started in the sidebar
   opens it again, and it ends with a brief "You're set". The optional
   three-chapter tour of the console (Monitor, Resources, Platform) opens from it,

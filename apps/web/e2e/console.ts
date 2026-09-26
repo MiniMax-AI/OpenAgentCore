@@ -47,6 +47,11 @@ export async function archiveProject(request: APIRequestContext, projectId: stri
   await request.post(`${fixture}/core/v1/projects/${projectId}/archive`, { headers: { cookie: "core_console=fixture-session" } });
 }
 
+/** Issues keys in a project behind the console's back, as another administrator would. */
+export async function issueKeys(request: APIRequestContext, projectId: string, names: readonly string[]) {
+  for (const name of names) await request.post(`${fixture}/core/v1/projects/${projectId}/keys`, { headers: { cookie: "core_console=fixture-session" }, data: { name } });
+}
+
 /** Writes the browser sent through the console, as "METHOD /path". */
 export async function writes(request: APIRequestContext): Promise<string[]> {
   return (await (await request.get(`${fixture}/__fixture/requests`)).json()).writes;

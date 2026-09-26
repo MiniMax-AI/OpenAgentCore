@@ -16,7 +16,8 @@ import { activeKeyNames, archiveKeyCount, flowError, isAbort, isArchiveConfirmed
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
 import { PROJECT_CALL_HEADING_ID } from "./HowToCall";
 import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
-import { invalidateProjects, projectActivityQuery, projectKeysQuery, projectScope } from "./project-queries";
+import { invalidateProjects, projectActivityQuery, projectKeysQuery, projectScope, projectSummaryQuery } from "./project-queries";
+import { installationQuery } from "../../lib/installation";
 import { projectsQuery } from "../../lib/queries";
 import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
@@ -94,8 +95,18 @@ export function ProjectsPage() {
   useConsoleIntent("issue-key", selected ? (manageable(selected) && flow.step === "idle" ? "ready" : "unavailable") : state.status === "loading" ? "wait" : "unavailable", () => {
     if (selected) dispatch({ type: "openIssue", project: selected });
   });
-  // Getting started's last step opens a project on its call samples.
-  useConsoleIntent("how-to-call", selected ? (manageable(selected) ? "ready" : "unavailable") : state.status === "loading" ? "wait" : "unavailable", () => {
+  // Getting started's last step opens a project on its call samples. It waits
+  // until the reads that size the page above them (keys, usage) and the
+  // samples themselves (the installation) settle, so the heading stays in view.
+  // The same reads as the project's page, which shows its call samples only while it is active.
+  const summary = useQuery({ ...projectSummaryQuery(selected?.id ?? ""), enabled: selected !== null });
+  const installation = useQuery({ ...installationQuery, enabled: selected !== null && manageable(selected) });
+  const settled = (query: { isFetching: boolean; isError: boolean; data: unknown }) => !query.isFetching && (query.data !== undefined || query.isError);
+  const callReadiness = !selected
+    ? (state.status === "loading" ? "wait" : "unavailable")
+    : !manageable(selected) ? "unavailable"
+      : keys.status !== "loading" && settled(summary) && settled(installation) ? "ready" : "wait";
+  useConsoleIntent("how-to-call", callReadiness, () => {
     revealInPageBody(document.getElementById(PROJECT_CALL_HEADING_ID));
   });
 
