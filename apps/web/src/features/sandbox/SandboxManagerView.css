@@ -85,7 +85,7 @@
 .sandbox-host-requirements .sandbox-no-sudo-body ul { padding: 0 0 0 18px; }
 .sandbox-no-sudo-body .sandbox-host-requirements-note { padding: 0; }
 .sandbox-add-node .sandbox-host-requirements-note p { font-size: 12px; }
-.sandbox-add-node .sandbox-cleanup-note { font-size: 12px; }
+.sandbox-add-node .sandbox-cleanup-note, .sandbox-add-node .sandbox-command-note { font-size: 12px; }
 .sandbox-copy-command { display: grid; justify-items: start; gap: 2px; max-width: 100%; }
 .sandbox-copy-command-row { display: flex; align-items: flex-start; gap: 2px; max-width: 100%; }
 .sandbox-copy-command code { min-width: 0; padding: 2px 6px; color: var(--fg); font-family: var(--font-mono); font-size: 11.5px; background: var(--surface-subtle); border-radius: 5px; overflow-wrap: anywhere; }

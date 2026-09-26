@@ -18,6 +18,7 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   // What a Docker host needs for the default command, which installs the node with sudo.
   await expect(add.getByText("Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)")).toBeVisible();
   await expect(add.getByText("SELinux is not enforcing (otherwise use the no-sudo command)")).toBeVisible();
+  await expect(add.getByText("One Core per host: a host already running a node for another Core is refused.")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
   await expect(add.getByText(/^Reaches http:\/\/127\.0\.0\.1:\d+ and https:\/\/core\.example\.com; sandboxes reach https:\/\/core\.example\.com$/)).toBeVisible();
   await expect(add.getByText("parsar-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
@@ -37,6 +38,7 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   // The token goes on stdin to the checked installer, run with sudo unless the shell is root.
   await expect(field).toHaveValue(/^ \(umask 077;.*\|\| s=sudo\n/);
   await expect(field).toHaveValue(/\| \$s python3 "\$d\/node-install\.pyz" --enrollment-token-stdin /);
+  await expect(add.getByText("If the command is interrupted or the download stalls, run the same command again: the download resumes.")).toBeVisible();
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
   const progress = add.getByRole("status", { name: "Registration progress" });
   await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);

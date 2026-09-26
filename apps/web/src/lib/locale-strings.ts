@@ -46,6 +46,8 @@ export const chinese = {
   "Host requirements": "主机要求",
   "Linux amd64 with systemd; Python 3.9+, curl and sha256sum; root or sudo": "Linux amd64，使用 systemd；装有 Python 3.9+、curl 和 sha256sum；有 root 或 sudo 权限",
   "SELinux is not enforcing (otherwise use the no-sudo command)": "SELinux 不是 enforcing（否则请使用不带 sudo 的命令）",
+  "One Core per host: a host already running a node for another Core is refused.": "每台主机只能接入一个 Core：已为其他 Core 运行节点的主机会被拒绝。",
+  "If the command is interrupted or the download stalls, run the same command again: the download resumes.": "如果命令被中断或下载卡住，重新运行同一条命令即可，下载会接着进行。",
   "Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)": "Docker Engine 以 rootful 模式运行，套接字属于 docker 组、权限 0660，且能限制 CPU 和内存（cgroup v2）",
   "/dev/kvm in the kvm group (hardware or nested virtualization) and the libraries microsandbox links (glibc)": "属于 kvm 组的 /dev/kvm（硬件或嵌套虚拟化），以及 microsandbox 链接的库（glibc）",
   "Without sudo, the node runs as a user service of the user who runs the command. An administrator prepares that user once:": "不用 sudo 时，节点作为用户服务运行在执行命令的用户下。管理员需要先为该用户准备一次：",

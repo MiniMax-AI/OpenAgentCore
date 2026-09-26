@@ -287,6 +287,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         {command ? <p>{registered && node ? t("Rerun only on {{name}} if asked", { name: node.name }) : t("Run on the host you want to add.")}</p> : null}
         {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command")} autoFocus onCopy={() => setCopiedMode("sudo")}
           extra={!registered ? <span className="sandbox-command-expiry" role="timer" title={new Date(enrollment.expires_at).toLocaleString(locale)}>{t("Expires in {{time}}", { time: formatCountdown(Date.parse(enrollment.expires_at) - now) })}</span> : null} /> : null}
+        {/* The installer keeps partial downloads and exits 130 on Ctrl-C; the token lasts until the countdown ends. */}
+        {command ? <p className="sandbox-command-note">{t("If the command is interrupted or the download stalls, run the same command again: the download resumes.")}</p> : null}
         {/* One live region for the whole flow; only its contents change, so each change is announced. */}
         <div role="status" aria-label={t("Registration progress")}>
           {ready && node ? <div className="sandbox-enrollment-status connected"><span className="sandbox-status-dot" />{t("{{name}} · Connected", { name: node.name })}</div>

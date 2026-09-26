@@ -22,7 +22,9 @@ export interface HostPrerequisite {
  * and deploy/install/node_install.py check it:
  * - the command runs curl, sha256sum and python3 (enrollment-command.ts), and
  *   `sudo` unless the shell is root; `host_checks` needs Python 3.9+, Linux amd64,
- *   systemd as the init system, and SELinux not enforcing;
+ *   systemd as the init system, and SELinux not enforcing; `other_node` refuses a
+ *   host that already runs a sudo-mode node for another installation, since
+ *   sudo-mode nodes share the parsar-node account;
  * - Docker: `provider_group` needs rootful Docker Engine running, its socket
  *   group-accessible (0660) and, through `device_group`, owned by the docker
  *   group, which the service user joins; and CPU and memory limits enforced (the
@@ -43,6 +45,7 @@ export function hostRequirements(provider: "docker" | "microsandbox", sized: boo
   return [
     { label: "Linux amd64 with systemd; Python 3.9+, curl and sha256sum; root or sudo" },
     { label: "SELinux is not enforcing (otherwise use the no-sudo command)" },
+    { label: "One Core per host: a host already running a node for another Core is refused." },
     provider === "docker"
       ? { label: "Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)" }
       : { label: "/dev/kvm in the kvm group (hardware or nested virtualization) and the libraries microsandbox links (glibc)" },
