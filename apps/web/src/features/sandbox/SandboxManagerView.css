@@ -32,8 +32,6 @@
   .sandbox-enrollment { padding: 18px; }
 }
 
-.sandbox-add-node .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-
 /* The node manager page uses the shared console header and body rhythm. */
 .sandbox-manager-page { display: flex; padding: 0; overflow: hidden; }
 .sandbox-manager-page > .console-page-body { max-width: none; margin: 0; }
@@ -80,6 +78,12 @@
 .sandbox-host-requirements li { display: list-item; }
 .sandbox-host-requirements li .sandbox-copy-command { margin-top: 4px; }
 .sandbox-host-requirements-note { display: grid; gap: 4px; padding: 8px 12px 10px; }
+/* Without sudo: the same list style, inside the disclosure's own padding, with the command after it. */
+.sandbox-host-requirements + .sandbox-no-sudo { margin-top: -4px; }
+.sandbox-no-sudo-body { display: grid; gap: 8px; padding: 0 12px 12px; }
+.sandbox-no-sudo-body > p { font-size: 12.5px; }
+.sandbox-host-requirements .sandbox-no-sudo-body ul { padding: 0 0 0 18px; }
+.sandbox-no-sudo-body .sandbox-host-requirements-note { padding: 0; }
 .sandbox-add-node .sandbox-host-requirements-note p { font-size: 12px; }
 .sandbox-copy-command { display: grid; justify-items: start; gap: 2px; max-width: 100%; }
 .sandbox-copy-command-row { display: flex; align-items: flex-start; gap: 2px; max-width: 100%; }

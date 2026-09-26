@@ -17,48 +17,59 @@ export interface HostPrerequisite {
 }
 
 /**
- * What a node host needs, exactly as the enrollment command, the installer and
- * the node's readiness probe check it (line numbers as of this revision):
- * - the command runs curl, sha256sum and python3 (enrollment-command.ts);
- *   deploy/install/node_install.py:67-69 needs Python 3.9+, Linux amd64 and a non-root user;
- * - Docker: node_install.py:73-74 runs `docker info` through /var/run/docker.sock,
- *   and the node is ready only when Docker enforces CPU and memory limits
- *   (services/agents-api/internal/sandbox/config/probe.go:37-38), which the
- *   installer waits for (node_install.py:363-364);
- * - microsandbox: read/write /dev/kvm (node_install.py:75-76);
- * - node_install.py:71-72 needs lingering. It starts the user's systemd manager,
- *   whose services, the node's included, keep the groups it started with; so the
- *   group changes above come first, or that manager is restarted after them. A
- *   shell open before the change lacks the group too, so the user signs in again;
- * - microsandbox: the host libraries its binaries link (the ldd check,
- *   node_install.py:249-253), and a home short enough for ~/.parsar/m/<12 hex> to
- *   fit in 48 bytes (node_install.py:205-209): at most 48 - len("/.parsar/m/") - 12 = 25 bytes;
- * - the host's CPUs and total memory hold one sandbox of the deployment's size
- *   (probe.go:43 and 75, config/capacity.go:9), else the node reports capacity_insufficient;
- * - node_install.py:70 needs the user's own systemd session (`systemctl --user`),
- *   which sudo -u and su don't provide;
+ * What a host needs for the default command, which runs the installer as root
+ * and the node as the `parsar-node` system service (sudo mode), as the command
+ * and deploy/install/node_install.py check it:
+ * - the command runs curl, sha256sum and python3 (enrollment-command.ts), and
+ *   `sudo` unless the shell is root; `host_checks` needs Python 3.9+, Linux amd64
+ *   and systemd as the init system;
+ * - Docker: `provider_group` needs Docker Engine running with a group-accessible
+ *   socket, enforcing CPU and memory limits (the node is ready only then:
+ *   services/agents-api/internal/sandbox/config/probe.go); it installs nothing;
+ * - microsandbox: `provider_group` needs /dev/kvm, and `prepare_runtime` the
+ *   libraries its binaries link (the ldd check);
+ * - `host_capacity`: the host's CPUs and memory hold one sandbox of the
+ *   deployment's size (else the node reports capacity_insufficient); the Runtime
+ *   image needs about 2 GB of disk;
  * - network: node files and artifacts only from the console (`fetch` and
- *   `metadata` in node_install.py, which never use a release URL), Core's /api/v1
- *   (node_spec.py:89, the `register` call in node_install.py), and sandboxes reach
- *   Core as well (`provider_config` in node_install.py).
+ *   `metadata`, which never use a release URL), Core's /api/v1 (node_spec.py, the
+ *   `register` call), and sandboxes reach Core as well (`provider_config`).
  * `sized` says whether the deployment's sandbox size is known for the capacity item.
  */
-export function hostPrerequisites(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
-  const access: HostPrerequisite = provider === "docker"
-    ? { label: "Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits", command: "sudo usermod -aG docker NODE_USER" }
-    : { label: "Read and write access to /dev/kvm for that user", command: "sudo usermod -aG kvm NODE_USER" };
-  const microsandbox: HostPrerequisite[] = provider === "microsandbox" ? [
-    { label: "The shared libraries microsandbox needs, on a glibc system" },
-    { label: "A home directory of 25 bytes or less, such as /home/parsar" },
-  ] : [];
+export function hostRequirements(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
   return [
-    { label: "Linux amd64 with Python 3.9+, curl and sha256sum, and a non-root user to run the node (NODE_USER below)" },
-    access,
+    { label: "Linux amd64 with systemd; Python 3.9+, curl and sha256sum; root or sudo" },
+    provider === "docker"
+      ? { label: "Docker Engine installed and running, enforcing CPU and memory limits (cgroup v2)" }
+      : { label: "/dev/kvm (hardware or nested virtualization) and the libraries microsandbox links (glibc)" },
+    { label: sized ? "CPUs and memory for at least one sandbox: {{size}}; about 2 GB of disk for the Runtime image" : "CPUs and memory for at least one sandbox; about 2 GB of disk for the Runtime image" },
+    { label: "Reaches {{console}} and {{core}}; sandboxes reach {{core}}" },
+  ];
+}
+
+/**
+ * What the node's own user needs besides the host requirements when the command
+ * runs without sudo, so the node is that user's systemd service (node_install.py
+ * `preflight` and `install`):
+ * - a non-root user, with Docker's socket or read/write /dev/kvm through its group;
+ * - lingering. It starts the user's systemd manager, whose services, the node's
+ *   included, keep the groups it started with; so the group change comes first,
+ *   or that manager is restarted after it (USER_MANAGER_RESTART). A shell open
+ *   before the change lacks the group too, so the user signs in again;
+ * - the user's own systemd session (`systemctl --user`), which sudo -u and su
+ *   don't provide;
+ * - microsandbox: a home short enough for ~/.parsar/m/<12 hex> to fit in 48 bytes
+ *   (`micro_home`): at most 48 - len("/.parsar/m/") - 12 = 25 bytes.
+ */
+export function userModePrerequisites(provider: "docker" | "microsandbox"): HostPrerequisite[] {
+  return [
+    { label: "A non-root user to run the node (NODE_USER below)" },
+    provider === "docker"
+      ? { label: "Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits", command: "sudo usermod -aG docker NODE_USER" }
+      : { label: "Read and write access to /dev/kvm for that user", command: "sudo usermod -aG kvm NODE_USER" },
     { label: "systemd lingering for that user, enabled after the group change", command: "sudo loginctl enable-linger NODE_USER" },
-    ...microsandbox,
-    { label: sized ? "CPUs and memory for at least one sandbox: {{size}}" : "CPUs and memory for at least one sandbox" },
+    ...(provider === "microsandbox" ? [{ label: "A home directory of 25 bytes or less, such as /home/parsar" } satisfies HostPrerequisite] : []),
     { label: "Run the command signed in as that user: over SSH, or with", command: "sudo machinectl shell NODE_USER@" },
-    { label: "Can reach {{console}} and {{core}}; sandboxes must reach {{core}}" },
   ];
 }
 

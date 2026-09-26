@@ -19,6 +19,8 @@ import { NodeEnrollment } from "./NodeEnrollment";
 import { NodeList } from "./NodeList";
 import { NodeDetail } from "./NodeDetail";
 import { NodeEditDialog } from "./NodeEditDialog";
+import { NodeCleanupDialog, type NodeCleanup } from "./NodeCleanupDialog";
+import { sandboxCoreOrigin } from "./core-origin";
 import "./SandboxManagerView.css";
 
 /** Nodes: the deployment provider, the node list and one node's detail (`#nodes?id=…`). */
@@ -72,6 +74,8 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  // After a removal, the host's uninstall command; it stays for the closing animation.
+  const [cleanup, setCleanup] = useState<{ node: NodeCleanup; open: boolean } | null>(null);
   // When a deployment write last had an uncertain outcome; only a read begun after it confirms the state again.
   const [uncertainSince, setUncertainSince] = useState<number | null>(null);
   const setupNeedsRefresh = uncertainSince !== null && !(snapshot && snapshot.readAt > uncertainSince);
@@ -168,6 +172,11 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         setRemoveTarget(null);
         if (params.id === target.id) navigate("nodes");
         refresh();
+        // The host still runs the node's service until it is uninstalled there.
+        const sourceUrl = sandboxCoreOrigin(window.location.origin);
+        if (consoleConfig.node_installer && sourceUrl && snapshot) {
+          setCleanup({ node: { name: target.name || target.id, sourceUrl, installationId: snapshot.deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256 }, open: true });
+        }
       }
     } catch (error) {
       // Keep the dialog open with Core's reason; the refreshed list shows what actually happened.
@@ -211,6 +220,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     <p>{t("{{name}} will be removed from this deployment.", { name: removeName })}</p>
     <p>{t("Core rejects removal while allocations or retained resources remain.")}</p>
   </ConfirmDialog>;
+  const cleanupDialog = <NodeCleanupDialog cleanup={cleanup?.node ?? null} open={cleanup?.open ?? false} onClose={() => setCleanup((current) => current && { ...current, open: false })} />;
   // Rendered first in both the list and a node's page, so an open command outlives the navigation.
   const enrollment = hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} open={adding} fresh={confirmed} onClose={() => setAdding(false)} onRefresh={refresh} /> : null;
 
@@ -234,6 +244,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         ) : null}
       </div>
       {dialog}
+      {cleanupDialog}
       {writeDialog}
       <NodeEditDialog
         key={editTarget?.id ?? "closed"}
@@ -277,6 +288,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       </> : null}
     </div>
     {dialog}
+    {cleanupDialog}
     {writeDialog}
   </>;
 }

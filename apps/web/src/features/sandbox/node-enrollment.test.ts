@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { node } from "../overview/test-fixtures";
-import { nodeLogCommand } from "./enrollment-command";
 import { enrolledNode, enrollmentProgress, formatCountdown, NODE_READY_WAIT_MS, progressSteps } from "./node-enrollment";
 
 describe("node enrollment", () => {
@@ -40,10 +39,5 @@ describe("node enrollment", () => {
     expect(progressSteps("waiting")).toEqual(["current", "future", "future"]);
     expect(progressSteps("registered")).toEqual(["done", "current", "future"]);
     expect(progressSteps("connected")).toEqual(["done", "done", "current"]);
-  });
-
-  it("points at the installer's systemd user unit", () => {
-    expect(nodeLogCommand("7f3c2a90-fixture")).toBe("journalctl --user -u parsar-node-7f3c2a90-fixture.service");
-    expect(nodeLogCommand("a b")).toBe("journalctl --user -u 'parsar-node-a b.service'");
   });
 });

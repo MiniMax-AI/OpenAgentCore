@@ -1,18 +1,21 @@
 import { createPortal } from "react-dom";
-import { Check, Copy, Terminal, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SandboxAdminClient, SandboxDeployment, SandboxEnrollment, SandboxNode } from "@agents-core-web/agents-client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { formatBytes } from "../../lib/format";
+import { installationQuery } from "../../lib/installation";
 import { sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
-import { useCopy } from "../api-keys/IssuedKey";
 import { sandboxCoreOrigin, sandboxSetupOrigin } from "./core-origin";
 import { nodeFilesAvailable, type SandboxConsoleConfig } from "./console-config";
-import { nodeInstallCommand, nodeLogCommand } from "./enrollment-command";
-import { enrolledNode, enrollmentProgress, formatCountdown, hostPrerequisites, progressSteps, USER_MANAGER_RESTART, type StepState } from "./node-enrollment";
+import { nodeInstallCommand, nodeLogCommand, type NodeInstallMode } from "./enrollment-command";
+import { CommandBlock, CopyCommand, HostRequirements, NoSudoGuide } from "./node-commands";
+import { enrolledNode, enrollmentProgress, formatCountdown, progressSteps, type StepState } from "./node-enrollment";
+import { sandboxConsoleConfigQuery } from "./sandbox-queries";
 
 /** The host requirements open by default until this browser has shown them once. */
 const REQUIREMENTS_SEEN = "agents-core-web.node-requirements-seen";
@@ -32,8 +35,13 @@ const DEFAULT_RETAINED = "8";
  * one-time enrollment command that approves them
  * (`POST /core/v1/sandbox/enrollment-tokens`). Only microsandbox suspends
  * sandboxes, so only it asks for a retained limit; Docker retains exactly the
- * sandboxes it runs at once. A console that reports no node files for the
- * deployment's provider (`node_artifacts`) says so instead and issues no command.
+ * sandboxes it runs at once. The command runs the installer with sudo, which
+ * installs the node as a system service; a disclosure offers the same command
+ * without sudo, which installs a user service. An installation whose public URL
+ * is loopback (`local_only`), or a console that reports no node files for the
+ * deployment's provider (`node_artifacts`), says so instead and issues no command.
+ * Each opening, and each return to the window while open, reads both again, so a
+ * fix on the Core host shows without a reload.
  *
  * The page keeps this dialog mounted, so a command survives closing it: it is
  * shown again until it expires or its node connects. An expired command is
@@ -62,10 +70,12 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const [enrollment, setEnrollment] = useState<SandboxEnrollment | null>(null);
   const [appeared, setAppeared] = useState<{ id: string; at: number } | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
   const [now, setNow] = useState(Date.now);
   const [requirementsOpen, setRequirementsOpen] = useState(() => !requirementsSeen());
+  // The no-sudo disclosure; while it is open, log hints are for a user service.
+  const [noSudoOpen, setNoSudoOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const installation = useQuery(installationQuery);
   // When the latest node-list read this dialog asked for began (Date.now()), once it has finished.
   const [checkedAt, setCheckedAt] = useState(0);
   const reading = useRef(false);
@@ -74,11 +84,18 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const sourceUrl = sandboxCoreOrigin(window.location.origin);
   const coreUrl = sandboxCoreOrigin(deployment.core_url || window.location.origin);
   const available = Boolean(consoleConfig.node_installer && sourceUrl && coreUrl);
-  // Without the provider's node files the installer would fail on the host, so no command is issued.
-  const nodeFiles = nodeFilesAvailable(consoleConfig, deployment.provider);
+  const provider = deployment.provider === "docker" || deployment.provider === "microsandbox" ? deployment.provider : null;
+  const backend = provider === "microsandbox" ? "microsandbox" : "Docker";
+  // Nodes and their sandboxes reach Core at its public URL, so a loopback one serves no other machine;
+  // and without the provider's node files the installer would fail on the host. Either way no command is issued.
+  const blocker = installation.data?.local_only === true
+    ? t("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply")
+    : !nodeFilesAvailable(consoleConfig, deployment.provider)
+      ? t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend })
+      : null;
   // The command downloads from this console's own address. A loopback one (or any
   // address sandboxSetupOrigin refuses for guests) resolves to the node host itself.
-  const localOnly = sourceUrl !== null && sandboxSetupOrigin(sourceUrl) === null;
+  const consoleLoopback = sourceUrl !== null && sandboxSetupOrigin(sourceUrl) === null;
   // Core takes whole numbers from 1 to a million, with the retained limit at least the active one.
   const suspends = deployment.provider === "microsandbox";
   const whole = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : null);
@@ -100,8 +117,9 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const lapsed = Boolean(enrollment && expiresAt <= now);
   // Expired only once a read begun after the expiry found no node for the command.
   const expired = lapsed && checkedAt >= expiresAt;
-  const command = enrollment && available && (registered || !expired) && !ready
-    ? nodeInstallCommand(enrollment.token, coreUrl!, sourceUrl!, deployment.provider, deployment.installation_id, consoleConfig.node_installer_sha256) : "";
+  const commandFor = (mode: NodeInstallMode) => enrollment && provider && available && (registered || !expired) && !ready
+    ? nodeInstallCommand({ token: enrollment.token, coreUrl: coreUrl!, sourceUrl: sourceUrl!, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256, mode }) : "";
+  const command = commandFor("sudo");
   const nodeId = node?.id ?? null;
   const polling = open && enrollment !== null && !ready && (registered || !expired);
   const check = useCallback(async () => {
@@ -113,6 +131,17 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   }, [onRefresh]);
   useEffect(() => () => { generation.current++; request.current?.abort(); }, []);
   useEffect(() => { if (open) rememberRequirementsSeen(); }, [open]);
+  // Rerunning ./install.sh or parsar apply on the Core host changes what the console and the installation report.
+  useEffect(() => {
+    if (!open) return;
+    const reread = () => {
+      void queryClient.invalidateQueries({ queryKey: sandboxConsoleConfigQuery.queryKey });
+      void queryClient.invalidateQueries({ queryKey: installationQuery.queryKey });
+    };
+    reread();
+    window.addEventListener("focus", reread);
+    return () => window.removeEventListener("focus", reread);
+  }, [open, queryClient]);
   // The command's node may have registered while the dialog was closed.
   useEffect(() => { if (open && enrollment) void check(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   // At expiry, one more read decides between the command's node and "Command expired".
@@ -137,7 +166,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   function close() {
     generation.current++;
     request.current?.abort(); request.current = null;
-    setError(null); setBusy(false); setCopied(false); setCopyFailed(false);
+    setError(null); setBusy(false);
     // A connected node ends the command; otherwise it waits here for the next opening.
     if (ready) { setEnrollment(null); setAppeared(null); }
     // The limits stay only with an unfinished flow: a command still waiting for its node.
@@ -151,14 +180,14 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
    */
   function changeLimits() {
     generation.current++;
-    setEnrollment(null); setAppeared(null); setError(null); setCopied(false); setCopyFailed(false);
+    setEnrollment(null); setAppeared(null); setError(null);
   }
   async function generate() {
-    if (request.current || !available || !nodeFiles || !limitsReady || activeLimit === null || retainedLimit === null) return;
+    if (request.current || !available || blocker || !limitsReady || activeLimit === null || retainedLimit === null) return;
     const capacity = { max_active: activeLimit, max_retained: retainedLimit };
     generation.current++;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setError(null); setCopied(false); setCopyFailed(false);
+    setBusy(true); setError(null);
     try {
       // A node the previous command enrolled since the last read is that command's success:
       // follow it instead of issuing another command.
@@ -182,36 +211,17 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     }
     finally { if (!controller.signal.aborted) { request.current = null; setBusy(false); } }
   }
-  async function copyCommand() {
-    const current = generation.current;
-    try { await navigator.clipboard.writeText(command); if (current === generation.current) { setCopied(true); setCopyFailed(false); } }
-    catch { if (current === generation.current) { setCopied(false); setCopyFailed(true); } }
-  }
-  const backend = suspends ? "microsandbox" : "Docker";
   const size = deployment.specification?.resources;
   const values = {
     console: sourceUrl ?? "", core: coreUrl ?? "",
     size: size ? t("{{cpus}} CPU · {{memory}}", { cpus: size.cpus, memory: formatBytes(size.memory_mib * 2 ** 20) }) : "",
   };
-  const requirements = deployment.provider === "docker" || deployment.provider === "microsandbox" ? (
-    <details className="sandbox-host-requirements" open={requirementsOpen} onToggle={(event) => setRequirementsOpen(event.currentTarget.open)}>
-      <summary>{t("Host requirements")}</summary>
-      <ul>
-        {hostPrerequisites(deployment.provider, Boolean(size)).map((item) => (
-          <li key={item.label}>
-            <span>{t(item.label, values)}</span>
-            {item.command ? <CopyCommand value={item.command} /> : null}
-          </li>
-        ))}
-      </ul>
-      <div className="sandbox-host-requirements-note">
-        <p>{t("After a group change, sign in again as that user. If its systemd manager was already running, restart it (or reboot):")}</p>
-        <CopyCommand value={USER_MANAGER_RESTART} />
-      </div>
-    </details>
-  ) : null;
+  const requirements = provider ? <>
+    <HostRequirements provider={provider} sized={Boolean(size)} values={values} open={requirementsOpen} onToggle={setRequirementsOpen} />
+    <NoSudoGuide provider={provider} values={values} command={commandFor("user")} open={noSudoOpen} onToggle={setNoSudoOpen} />
+  </> : null;
   const limitsForm = `${id}-limits`;
-  const footer = !available || (!enrollment && !nodeFiles) ? undefined
+  const footer = !available || (!enrollment && blocker) ? undefined
     : !enrollment ? <>
       <button className="button outline" type="button" onClick={close}>{t("Cancel")}</button>
       <button className="button primary" type="submit" form={limitsForm} disabled={busy || !limitsReady}>{busy ? t("Preparing your command…") : t("Generate command")}</button>
@@ -220,7 +230,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     : registered ? <button className="button outline" type="button" onClick={changeLimits}>{t("Add another node")}</button>
     : <>
       <button className="button outline" type="button" disabled={busy} onClick={changeLimits}>{t("Change limits")}</button>
-      {expired && nodeFiles ? <button className="button primary" type="button" autoFocus disabled={busy} onClick={() => void generate()}>{busy ? t("Preparing your command…") : t("Generate new command")}</button> : null}
+      {expired && !blocker ? <button className="button primary" type="button" autoFocus disabled={busy} onClick={() => void generate()}>{busy ? t("Preparing your command…") : t("Generate new command")}</button> : null}
     </>;
   // Tense tells a step's state: done in the past, the current one waiting, later ones as plain nouns.
   // Readiness from an unconfirmed read still counts as waiting.
@@ -240,11 +250,11 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       {!available ? <p role="status">{consoleConfig.node_installer && coreUrl && !sourceUrl
         ? t("Open this console over HTTPS to add a node: the installer downloads only over HTTPS.")
         : t("Node installation is unavailable. Ask the deployment administrator to enable the node installer on this console.")}</p>
-      : !enrollment && !nodeFiles ? <p role="status">{t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend })}</p>
+      : !enrollment && blocker ? <p role="status">{blocker}</p>
       : !enrollment ? (
         <form id={limitsForm} className="form-stack" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
           <p>{t("Set the sandbox limits for the host you want to add.")}</p>
-          {localOnly ? <p className="sandbox-add-node-warning" role="note"><TriangleAlert size={14} aria-hidden="true" /><span>{t("This console is open at {{origin}}, which other machines can't reach. To add another machine, open the console at its HTTPS address, then generate the command.", { origin: sourceUrl })}</span></p> : null}
+          {consoleLoopback ? <p className="sandbox-add-node-warning" role="note"><TriangleAlert size={14} aria-hidden="true" /><span>{t("This console is open at {{origin}}, which other machines can't reach. To add another machine, open the console at its HTTPS address, then generate the command.", { origin: sourceUrl })}</span></p> : null}
           <div className="field">
             <span className="field-label-row"><label htmlFor={`${id}-active`}>{t("Sandboxes at once")}</label><HelpTip>{t("The most sandboxes Core places on this node at the same time.")}</HelpTip></span>
             <input id={`${id}-active`} inputMode="numeric" autoComplete="off" autoFocus={open} value={active} onChange={(event) => setActive(event.target.value)} aria-invalid={Boolean(activeProblem)} />
@@ -263,15 +273,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       ) : <>
         {/* Once used, the command only recovers its own node: running it on another host fails. */}
         {command ? <p>{registered && node ? t("Rerun only on {{name}} if asked", { name: node.name }) : t("Run on the host you want to add.")}</p> : null}
-        {command ? <div className="sandbox-command">
-          <div className="sandbox-command-heading">
-            <span><Terminal size={15} />{t("Terminal")}</span>
-            {!registered ? <span className="sandbox-command-expiry" role="timer" title={new Date(enrollment.expires_at).toLocaleString(locale)}>{t("Expires in {{time}}", { time: formatCountdown(Date.parse(enrollment.expires_at) - now) })}</span> : null}
-            <button type="button" className="button outline" autoFocus aria-label={copied ? t("Copied") : t("Copy node command")} onClick={() => void copyCommand()}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? t("Copied") : t("Copy command")}</button>
-          </div>
-          <label className="field"><span className="sr-only">{t("One-time enrollment command")}</span><textarea readOnly rows={5} value={command} onClick={(event) => event.currentTarget.select()} spellCheck={false} /></label>
-        </div> : null}
-        {copyFailed && !ready ? <p role="alert">{t("Select the command above and copy it manually.")}</p> : null}
+        {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command")} copyLabel={t("Copy node command")} autoFocus
+          extra={!registered ? <span className="sandbox-command-expiry" role="timer" title={new Date(enrollment.expires_at).toLocaleString(locale)}>{t("Expires in {{time}}", { time: formatCountdown(Date.parse(enrollment.expires_at) - now) })}</span> : null} /> : null}
         {/* One live region for the whole flow; only its contents change, so each change is announced. */}
         <div role="status" aria-label={t("Registration progress")}>
           {ready && node ? <div className="sandbox-enrollment-status connected"><span className="sandbox-status-dot" />{t("{{name}} · Connected", { name: node.name })}</div>
@@ -282,7 +285,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         </div>
         {problem && !ready ? <div className="sandbox-enrollment-problem" role="alert">
           <p><strong>{problem.label}</strong> {problem.advice}{problem.help ? <HelpTip>{problem.help}</HelpTip> : null}</p>
-          <div className="sandbox-log-hint"><span>{t("Check the log on the host:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id)} /></div>
+          <div className="sandbox-log-hint"><span>{t("Check the log on the host:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id, noSudoOpen ? "user" : "sudo")} /></div>
         </div> : null}
         {!fresh ? <p>{t("Connection status unavailable. Refresh to check your node.")}</p> : null}
         {!ready ? requirements : null}
@@ -291,18 +294,3 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   </Modal>, document.body);
 }
 
-/** A short command to run on the host, copied with one click. */
-function CopyCommand({ value }: { value: string }) {
-  const { t } = useTranslation("sandbox");
-  const { state, copy } = useCopy(value);
-  const label = state === "copied" ? t("Copied") : t("Copy {{command}}", { command: value });
-  return <span className="sandbox-copy-command">
-    <span className="sandbox-copy-command-row">
-      <code>{value}</code>
-      <button type="button" className="icon-button ghost" aria-label={label} title={label} onClick={() => void copy()}>
-        {state === "copied" ? <Check size={13} strokeWidth={1.7} aria-hidden="true" /> : <Copy size={13} strokeWidth={1.7} aria-hidden="true" />}
-      </button>
-    </span>
-    {state === "failed" ? <span className="field-error" role="alert">{t("Select the command and copy it manually.")}</span> : null}
-  </span>;
-}

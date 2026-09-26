@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, openConsole, setNode, writes } from "./console";
+import { expectManagementBoundary, openConsole, resetFixture, setNode, writes } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
-test("adds a node: host requirements, a countdown, the same command after closing, a new one after expiry, then its own node's registration", async ({ page, request }) => {
+test("adds a node: host requirements, a sudo command and one without, a countdown, the same command after closing, a new one after expiry, then its own node's registration", async ({ page, request }) => {
   await page.clock.install();
   // Core counts a token's ten minutes on its own clock; the page's clock stands in for it, so fast-forwarding expires a command.
   await page.route("**/core/v1/sandbox/enrollment-tokens", async (route) => {
@@ -15,12 +15,14 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await openConsole(page, request, "nodes");
   await page.getByRole("button", { name: "Add node" }).click();
   const add = page.getByRole("dialog", { name: "Add node" });
-  // What a Docker host needs, with the root commands that prepare it.
-  await expect(add.getByText("Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits")).toBeVisible();
-  await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeVisible();
-  await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB")).toBeVisible();
-  await expect(add.getByText(/^Can reach http:\/\/127\.0\.0\.1:\d+ and https:\/\/core\.example\.com; sandboxes must reach https:\/\/core\.example\.com$/)).toBeVisible();
+  // What a Docker host needs for the default command, which installs the node with sudo.
+  await expect(add.getByText("Docker Engine installed and running, enforcing CPU and memory limits (cgroup v2)")).toBeVisible();
+  await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
+  await expect(add.getByText(/^Reaches http:\/\/127\.0\.0\.1:\d+ and https:\/\/core\.example\.com; sandboxes reach https:\/\/core\.example\.com$/)).toBeVisible();
+  await expect(add.getByText("parsar-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
   await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
+  // Preparing a user instead of using sudo waits behind its disclosure.
+  await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeHidden();
   // The fixture console runs on loopback, where another machine can't download from it.
   await expect(add.getByRole("note")).toContainText("other machines can't reach");
   await add.getByLabel("Sandboxes at once").fill("3");
@@ -29,8 +31,11 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await add.getByRole("button", { name: "Generate command" }).click();
   // Docker never suspends, so it retains exactly the sandboxes it runs.
   expect((await issued).postDataJSON()).toEqual({ max_active: 3, max_retained: 3 });
-  const field = add.getByLabel("One-time enrollment command");
+  const field = add.getByLabel("One-time enrollment command", { exact: true });
   await expect(field).toHaveValue(/enroll_fixture_/);
+  // The token goes on stdin to the checked installer, run with sudo unless the shell is root.
+  await expect(field).toHaveValue(/^ \(umask 077;.*\|\| s=sudo\n/);
+  await expect(field).toHaveValue(/\| \$s python3 "\$d\/node-install\.pyz" --enrollment-token-stdin /);
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
   const progress = add.getByRole("status", { name: "Registration progress" });
   await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
@@ -81,6 +86,13 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await page.clock.fastForward("01:01");
   const problem = add.getByRole("alert");
   await expect(problem).toContainText("Not connected yet");
+  await expect(problem).toContainText("sudo journalctl -u parsar-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
+  // Without sudo: what that user needs, the same command without sudo, and its user service's log.
+  await add.getByText("No sudo on this host?").click();
+  await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeVisible();
+  const userCommand = add.getByLabel("One-time enrollment command without sudo", { exact: true });
+  await expect(userCommand).toHaveValue(/EXIT\ncurl/);
+  await expect(userCommand).toHaveValue(/\| python3 "\$d\/node-install\.pyz" --enrollment-token-stdin /);
   await expect(problem).toContainText("journalctl --user -u parsar-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
   // Connected, it reports why Docker isn't ready; once ready, the node is connected.
   await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
@@ -95,14 +107,27 @@ test("adds a node: host requirements, a countdown, the same command after closin
   await expect(add.getByLabel("Sandboxes at once")).toHaveValue("2");
 });
 
-test("says the console has no node files for the provider and issues no command", async ({ page, request }) => {
+test("issues no command for a loopback public URL or without node files, and sees a fix on reopening", async ({ page, request }) => {
+  // Nodes on other machines can't reach a loopback public_url; this replaces the note about the browser's address.
+  await openConsole(page, request, "nodes", { installation: "local" });
+  await page.getByRole("button", { name: "Add node" }).click();
+  const add = page.getByRole("dialog", { name: "Add node" });
+  await expect(add.getByRole("status")).toHaveText("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply");
+  await expect(add.getByRole("note")).toHaveCount(0);
+  await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
+  await add.getByRole("button", { name: "Close dialog" }).click();
+
   // A thin bundle: the console holds no node files at all.
   await openConsole(page, request, "nodes", { nodeArtifacts: [] });
   await page.getByRole("button", { name: "Add node" }).click();
-  const add = page.getByRole("dialog", { name: "Add node" });
   await expect(add.getByRole("status")).toHaveText("This console has no node files for Docker. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.");
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   expect(await writes(request)).toEqual([]);
+  // Rerunning ./install.sh adds them: reopening reads the console again, without a reload.
+  await add.getByRole("button", { name: "Close dialog" }).click();
+  await resetFixture(request);
+  await page.getByRole("button", { name: "Add node" }).click();
+  await expect(add.getByRole("button", { name: "Generate command" })).toBeVisible();
 });
 
 test("removes a node after confirmation", async ({ page, request }) => {
@@ -112,6 +137,13 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await confirm.getByRole("button", { name: "Confirm removal" }).click();
   await expect(confirm).toBeHidden();
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("edge-03");
+  // The host still runs the node until it is uninstalled there: with sudo, or as the user that installed it.
+  const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\n[^]*\n\$s python3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  await cleanup.getByText("Installed without sudo?").click();
+  await expect(cleanup.getByLabel("Uninstall command without sudo", { exact: true })).toHaveValue(/\npython3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  await cleanup.getByRole("button", { name: "Done" }).click();
+  await expect(cleanup).toBeHidden();
 });
 
 test("sets up own-machine sandboxes page by page, with the Runtime from the distribution", async ({ page, request }) => {
