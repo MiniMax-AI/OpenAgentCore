@@ -106,7 +106,8 @@ export const sessions = {
     unassociated: "Items without a Turn",
     steps: "{{n}} steps",
     tokens: "{{value}} tokens",
-    jumpToFailed: "Jump to the failed Turn", jumpToFailed_one: "Jump to the failed Turn", jumpToFailed_other: "Jump to a failed Turn ({{count}})",
+    jumpToFailed: "Jump to the failed Turn",
+    jumpToFailedOfMany: "Jump to a failed Turn ({{count}})",
   },
   turnTable: {
     turn: "Turn",

@@ -103,7 +103,8 @@ export const sessions = {
     unassociated: "未关联 Turn",
     steps: "{{n}} 个步骤",
     tokens: "{{value}} token",
-    jumpToFailed: "跳到失败的 Turn", jumpToFailed_one: "跳到失败的 Turn", jumpToFailed_other: "跳到失败的 Turn（{{count}} 个）",
+    jumpToFailed: "跳到失败的 Turn",
+    jumpToFailedOfMany: "跳到失败的 Turn（{{count}} 个）",
   },
   turnTable: {
     turn: "Turn",

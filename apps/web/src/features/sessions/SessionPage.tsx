@@ -177,7 +177,7 @@ export function SessionPage() {
           actions={(
             <>
               {failedTurns.length ? (
-                <button className="button outline" type="button" onClick={jumpToFailed}>{t("history.jumpToFailed", { count: failedTurns.length })}</button>
+                <button className="button outline" type="button" onClick={jumpToFailed}>{failedTurns.length > 1 ? t("history.jumpToFailedOfMany", { count: failedTurns.length }) : t("history.jumpToFailed")}</button>
               ) : null}
               <SegmentedControl
                 label={t("history.view")}
