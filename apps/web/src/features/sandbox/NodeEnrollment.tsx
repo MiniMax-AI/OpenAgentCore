@@ -37,11 +37,13 @@ const DEFAULT_RETAINED = "8";
  * sandboxes, so only it asks for a retained limit; Docker retains exactly the
  * sandboxes it runs at once. The command runs the installer with sudo, which
  * installs the node as a system service; a disclosure offers the same command
- * without sudo, which installs a user service. An installation whose public URL
- * is loopback (`local_only`), or a console that reports no node files for the
- * deployment's provider (`node_artifacts`), says so instead and issues no command.
- * Each opening, and each return to the window while open, reads both again, so a
- * fix on the Core host shows without a reload.
+ * without sudo, which installs a user service, and the log hint follows the
+ * command last copied. No command is issued until the installation is read: one
+ * whose public URL is loopback (`local_only`), an unreadable one, or a console
+ * that reports no node files for the deployment's provider (`node_artifacts`)
+ * says so instead. Each opening, and each return to the window while open, reads
+ * the installation and the console again, so a fix on the Core host shows
+ * without a reload.
  *
  * The page keeps this dialog mounted, so a command survives closing it: it is
  * shown again until it expires or its node connects. An expired command is
@@ -72,8 +74,9 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const [error, setError] = useState<unknown>(null);
   const [now, setNow] = useState(Date.now);
   const [requirementsOpen, setRequirementsOpen] = useState(() => !requirementsSeen());
-  // The no-sudo disclosure; while it is open, log hints are for a user service.
   const [noSudoOpen, setNoSudoOpen] = useState(false);
+  // The command last copied, so the log hint names that one's service.
+  const [copiedMode, setCopiedMode] = useState<NodeInstallMode>("sudo");
   const queryClient = useQueryClient();
   const installation = useQuery(installationQuery);
   // When the latest node-list read this dialog asked for began (Date.now()), once it has finished.
@@ -87,12 +90,15 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const provider = deployment.provider === "docker" || deployment.provider === "microsandbox" ? deployment.provider : null;
   const backend = provider === "microsandbox" ? "microsandbox" : "Docker";
   // Nodes and their sandboxes reach Core at its public URL, so a loopback one serves no other machine;
-  // and without the provider's node files the installer would fail on the host. Either way no command is issued.
-  const blocker = installation.data?.local_only === true
-    ? t("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply")
-    : !nodeFilesAvailable(consoleConfig, deployment.provider)
-      ? t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend })
-      : null;
+  // and without the provider's node files the installer would fail on the host. Either way no command
+  // is issued, nor before the installation is read: a failed read (an older Core, say) proves nothing.
+  const blocker: { text: string; failed?: boolean } | null = installation.data === undefined
+    ? installation.isError ? { text: t("The installation couldn't be read, so no command can be issued."), failed: true } : { text: t("Checking this installation's public URL…") }
+    : installation.data.local_only
+      ? { text: t("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply") }
+      : !nodeFilesAvailable(consoleConfig, deployment.provider)
+        ? { text: t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend }) }
+        : null;
   // The command downloads from this console's own address. A loopback one (or any
   // address sandboxSetupOrigin refuses for guests) resolves to the node host itself.
   const consoleLoopback = sourceUrl !== null && sandboxSetupOrigin(sourceUrl) === null;
@@ -169,8 +175,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     setError(null); setBusy(false);
     // A connected node ends the command; otherwise it waits here for the next opening.
     if (ready) { setEnrollment(null); setAppeared(null); }
-    // The limits stay only with an unfinished flow: a command still waiting for its node.
-    if (!enrollment || ready) { setActive(DEFAULT_ACTIVE); setRetained(DEFAULT_RETAINED); }
+    // The limits, and which command was copied, stay only with an unfinished flow: a command still waiting for its node.
+    if (!enrollment || ready) { setActive(DEFAULT_ACTIVE); setRetained(DEFAULT_RETAINED); forgetMode(); }
     onClose();
   }
   /**
@@ -180,7 +186,11 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
    */
   function changeLimits() {
     generation.current++;
-    setEnrollment(null); setAppeared(null); setError(null);
+    setEnrollment(null); setAppeared(null); setError(null); forgetMode();
+  }
+  /** A flow that ends or starts over forgets which command was copied, and folds the no-sudo command away. */
+  function forgetMode() {
+    setCopiedMode("sudo"); setNoSudoOpen(false);
   }
   async function generate() {
     if (request.current || !available || blocker || !limitsReady || activeLimit === null || retainedLimit === null) return;
@@ -201,7 +211,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       }
       const result = await client.createEnrollment({ signal: controller.signal }, capacity);
       if (!controller.signal.aborted) {
-        setEnrollment({ token: result.token, expires_at: result.expires_at, enrollment_id: result.enrollment_id }); setAppeared(null); setNow(Date.now());
+        setEnrollment({ token: result.token, expires_at: result.expires_at, enrollment_id: result.enrollment_id }); setAppeared(null); setNow(Date.now()); forgetMode();
         // Seen with the limits; the command comes first now.
         setRequirementsOpen(false);
       }
@@ -218,7 +228,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   };
   const requirements = provider ? <>
     <HostRequirements provider={provider} sized={Boolean(size)} values={values} open={requirementsOpen} onToggle={setRequirementsOpen} />
-    <NoSudoGuide provider={provider} values={values} command={commandFor("user")} open={noSudoOpen} onToggle={setNoSudoOpen} />
+    <NoSudoGuide provider={provider} values={values} command={commandFor("user")} open={noSudoOpen} onToggle={setNoSudoOpen} onCopy={() => setCopiedMode("user")} />
   </> : null;
   const limitsForm = `${id}-limits`;
   const footer = !available || (!enrollment && blocker) ? undefined
@@ -250,7 +260,9 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       {!available ? <p role="status">{consoleConfig.node_installer && coreUrl && !sourceUrl
         ? t("Open this console over HTTPS to add a node: the installer downloads only over HTTPS.")
         : t("Node installation is unavailable. Ask the deployment administrator to enable the node installer on this console.")}</p>
-      : !enrollment && blocker ? <p role="status">{blocker}</p>
+      : !enrollment && blocker ? blocker.failed
+        ? <p role="alert">{blocker.text} <button className="text-action" type="button" disabled={installation.isFetching} onClick={() => void installation.refetch()}>{t("Try again")}</button></p>
+        : <p role="status">{blocker.text}</p>
       : !enrollment ? (
         <form id={limitsForm} className="form-stack" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
           <p>{t("Set the sandbox limits for the host you want to add.")}</p>
@@ -273,7 +285,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       ) : <>
         {/* Once used, the command only recovers its own node: running it on another host fails. */}
         {command ? <p>{registered && node ? t("Rerun only on {{name}} if asked", { name: node.name }) : t("Run on the host you want to add.")}</p> : null}
-        {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command")} copyLabel={t("Copy node command")} autoFocus
+        {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command")} autoFocus onCopy={() => setCopiedMode("sudo")}
           extra={!registered ? <span className="sandbox-command-expiry" role="timer" title={new Date(enrollment.expires_at).toLocaleString(locale)}>{t("Expires in {{time}}", { time: formatCountdown(Date.parse(enrollment.expires_at) - now) })}</span> : null} /> : null}
         {/* One live region for the whole flow; only its contents change, so each change is announced. */}
         <div role="status" aria-label={t("Registration progress")}>
@@ -285,7 +297,11 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         </div>
         {problem && !ready ? <div className="sandbox-enrollment-problem" role="alert">
           <p><strong>{problem.label}</strong> {problem.advice}{problem.help ? <HelpTip>{problem.help}</HelpTip> : null}</p>
-          <div className="sandbox-log-hint"><span>{t("Check the log on the host:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id, noSudoOpen ? "user" : "sudo")} /></div>
+          <div className="sandbox-log-hint">
+            <span>{t("Check the log on the host:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id, copiedMode)} />
+            {/* Run by root, the no-sudo command installs the system service after all. */}
+            {copiedMode === "user" ? <><span>{t("If root ran it, it is a system service:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id, "sudo")} /></> : null}
+          </div>
         </div> : null}
         {!fresh ? <p>{t("Connection status unavailable. Refresh to check your node.")}</p> : null}
         {!ready ? requirements : null}

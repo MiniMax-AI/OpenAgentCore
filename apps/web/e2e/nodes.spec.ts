@@ -16,7 +16,8 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   await page.getByRole("button", { name: "Add node" }).click();
   const add = page.getByRole("dialog", { name: "Add node" });
   // What a Docker host needs for the default command, which installs the node with sudo.
-  await expect(add.getByText("Docker Engine installed and running, enforcing CPU and memory limits (cgroup v2)")).toBeVisible();
+  await expect(add.getByText("Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)")).toBeVisible();
+  await expect(add.getByText("SELinux is not enforcing (otherwise use the no-sudo command)")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
   await expect(add.getByText(/^Reaches http:\/\/127\.0\.0\.1:\d+ and https:\/\/core\.example\.com; sandboxes reach https:\/\/core\.example\.com$/)).toBeVisible();
   await expect(add.getByText("parsar-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
@@ -84,16 +85,20 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   await expect(add.getByText("Rerun only on edge-04 if asked")).toBeVisible();
   // Past the installer's minute without connecting, the dialog points at the node's log.
   await page.clock.fastForward("01:01");
-  const problem = add.getByRole("alert");
+  const problem = add.getByRole("alert").filter({ hasText: "Check the log on the host:" });
   await expect(problem).toContainText("Not connected yet");
   await expect(problem).toContainText("sudo journalctl -u parsar-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
-  // Without sudo: what that user needs, the same command without sudo, and its user service's log.
+  // Without sudo: what that user needs and the same command without sudo. Once that one is copied, the log
+  // hint names its user service, and the system service in case root ran it.
   await add.getByText("No sudo on this host?").click();
   await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeVisible();
   const userCommand = add.getByLabel("One-time enrollment command without sudo", { exact: true });
   await expect(userCommand).toHaveValue(/EXIT\ncurl/);
   await expect(userCommand).toHaveValue(/\| python3 "\$d\/node-install\.pyz" --enrollment-token-stdin /);
+  await expect(problem).not.toContainText("journalctl --user");
+  await add.getByRole("button", { name: "Copy command without sudo" }).click();
   await expect(problem).toContainText("journalctl --user -u parsar-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
+  await expect(problem).toContainText("If root ran it, it is a system service:sudo journalctl -u parsar-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
   // Connected, it reports why Docker isn't ready; once ready, the node is connected.
   await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
   await expect(problem).toContainText("Docker limits unsupported");
@@ -107,11 +112,25 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   await expect(add.getByLabel("Sandboxes at once")).toHaveValue("2");
 });
 
-test("issues no command for a loopback public URL or without node files, and sees a fix on reopening", async ({ page, request }) => {
-  // Nodes on other machines can't reach a loopback public_url; this replaces the note about the browser's address.
+test("issues no command before the installation is read, for a loopback public URL or without node files, and sees a fix on reopening", async ({ page, request }) => {
+  // Until the installation is read, and while it can't be, nothing is issued: the read decides.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/core/v1/installation", async (route) => {
+    await held;
+    await route.fulfill({ status: 500, json: { error: { message: "Unavailable.", type: "server_error", code: null, param: null } } });
+  });
   await openConsole(page, request, "nodes", { installation: "local" });
   await page.getByRole("button", { name: "Add node" }).click();
   const add = page.getByRole("dialog", { name: "Add node" });
+  await expect(add.getByRole("status")).toHaveText("Checking this installation's public URL…");
+  await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
+  release();
+  await expect(add.getByRole("alert")).toContainText("The installation couldn't be read, so no command can be issued.");
+  await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
+  await page.unroute("**/core/v1/installation");
+  await add.getByRole("button", { name: "Try again" }).click();
+  // Nodes on other machines can't reach a loopback public_url; this replaces the note about the browser's address.
   await expect(add.getByRole("status")).toHaveText("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply");
   await expect(add.getByRole("note")).toHaveCount(0);
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
@@ -142,8 +161,11 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\n[^]*\n\$s python3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
   await cleanup.getByText("Installed without sudo?").click();
   await expect(cleanup.getByLabel("Uninstall command without sudo", { exact: true })).toHaveValue(/\npython3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  // Nothing to force for a node on the current address; closing leaves focus on the page, as the row is gone.
+  await expect(cleanup.getByText("Old Core address gone?")).toHaveCount(0);
   await cleanup.getByRole("button", { name: "Done" }).click();
   await expect(cleanup).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Nodes", level: 1 })).toBeFocused();
 });
 
 test("sets up own-machine sandboxes page by page, with the Runtime from the distribution", async ({ page, request }) => {

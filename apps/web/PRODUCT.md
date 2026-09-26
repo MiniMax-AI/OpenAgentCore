@@ -84,8 +84,9 @@ workbench.
   figures and allocations, enrollment, renaming, sandbox limits and removal; Add node
   asks for the node's sandbox limits before it issues the one-time command, which installs
   the node with sudo as a system service (a disclosure gives the command without sudo, as a
-  user service); it issues none while the public URL is loopback or the console lacks the
-  provider's node files; after Remove, a dialog gives the host's uninstall command), System (the
+  user service); it issues none before the installation is read, while the public URL is
+  loopback, or when the console lacks the provider's node files; after Remove, a dialog gives
+  the host's uninstall command), System (the
   installation's public address, API base URL, installation ID and source commit, read-only;
   each harness's default model, set, replaced or cleared there beside its read-only startup
   state; the sandbox configuration every project shares, with a link to Nodes where it

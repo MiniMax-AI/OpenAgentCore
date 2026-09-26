@@ -40,10 +40,12 @@ export function nodeInstallCommand({ token, coreUrl, sourceUrl, provider, instal
 
 /**
  * Removes a node Core no longer lists from its host: its service, its files and,
- * when no node uses it, the service user. It holds no secret.
+ * when no node uses it, the service user. It holds no secret. The installer first
+ * confirms with Core, at the address the node enrolled with, that the node is
+ * removed; `force` skips that check, for an address that no longer answers.
  */
-export function nodeUninstallCommand({ sourceUrl, installationId, scriptDigest, mode }: { sourceUrl: string; installationId: string; scriptDigest: string; mode: NodeInstallMode }): string {
-  return `${nodeInstaller(sourceUrl, scriptDigest, mode)}${runInstaller(mode)} --uninstall --installation-id ${quote(installationId)})`;
+export function nodeUninstallCommand({ sourceUrl, installationId, scriptDigest, mode, force = false }: { sourceUrl: string; installationId: string; scriptDigest: string; mode: NodeInstallMode; force?: boolean }): string {
+  return `${nodeInstaller(sourceUrl, scriptDigest, mode)}${runInstaller(mode)} --uninstall --installation-id ${quote(installationId)}${force ? " --force" : ""})`;
 }
 
 /**

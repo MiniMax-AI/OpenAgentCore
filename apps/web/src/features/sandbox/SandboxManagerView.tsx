@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { InitializeSandboxDeployment, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Pencil, Plus, Server, Trash2 } from "lucide-react";
@@ -33,12 +33,12 @@ export function SandboxManagerView() {
 }
 
 /** The page header; an E2B deployment has no machines, so the page is its sandbox backend. */
-function NodesPageHeader({ title, count, back, actions, cloud = false }: { title?: ReactNode; count?: number; back?: () => void; actions?: ReactNode; cloud?: boolean }) {
+function NodesPageHeader({ title, count, back, actions, cloud = false, headingRef }: { title?: ReactNode; count?: number; back?: () => void; actions?: ReactNode; cloud?: boolean; headingRef?: RefObject<HTMLHeadingElement | null> }) {
   const { t } = useTranslation("sandbox");
   return <header className="page-header">
     <div className="console-page-heading">
       {back ? <button type="button" className="icon-button ghost back-button" aria-label={t("Back")} title={t("Back")} onClick={back}><ArrowLeft size={16} strokeWidth={1.6} aria-hidden="true" /></button> : null}
-      <h1>{title ?? t(cloud ? "Sandbox backend" : "Nodes")}</h1>
+      <h1 ref={headingRef} tabIndex={headingRef ? -1 : undefined}>{title ?? t(cloud ? "Sandbox backend" : "Nodes")}</h1>
       {count === undefined ? null : <span className="heading-count">{count}</span>}
       {back ? null : <HelpTip>{t(cloud ? "E2B runs this deployment's sandboxes in its cloud. There are no machines to add." : "Your hosts for running sandboxes.")}</HelpTip>}
     </div>
@@ -91,9 +91,13 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     setRevision((value) => value + 1);
     // The wizard reads the address and config file from the installation.
     void queryClient.invalidateQueries({ queryKey: installationQuery.queryKey });
-    // Settles when the read does; the enrollment dialog waits for it before calling a command expired.
     return refetch();
   }, [queryClient, refetch]);
+  // The enrollment dialog's reads: the node list alone, every few seconds while it waits. It settles
+  // when the read does, which the dialog waits for before calling a command expired.
+  const refreshNodes = useCallback(() => refetch(), [refetch]);
+  // Where focus goes once a dialog about a node that is gone closes.
+  const heading = useRef<HTMLHeadingElement>(null);
   const toast = useToast();
   // A refresh the administrator asks for reports its failure even while an earlier one is still unconfirmed;
   // the enrollment dialog's own repeated refreshes do not.
@@ -175,7 +179,11 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         // The host still runs the node's service until it is uninstalled there.
         const sourceUrl = sandboxCoreOrigin(window.location.origin);
         if (consoleConfig.node_installer && sourceUrl && snapshot) {
-          setCleanup({ node: { name: target.name || target.id, sourceUrl, installationId: snapshot.deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256 }, open: true });
+          const { deployment } = snapshot;
+          setCleanup({ node: {
+            name: target.name || target.id, sourceUrl, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256,
+            provider: deployment.provider, oldAddress: target.core_url !== deployment.core_url ? target.core_url : null,
+          }, open: true });
         }
       }
     } catch (error) {
@@ -220,15 +228,20 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     <p>{t("{{name}} will be removed from this deployment.", { name: removeName })}</p>
     <p>{t("Core rejects removal while allocations or retained resources remain.")}</p>
   </ConfirmDialog>;
-  const cleanupDialog = <NodeCleanupDialog cleanup={cleanup?.node ?? null} open={cleanup?.open ?? false} onClose={() => setCleanup((current) => current && { ...current, open: false })} />;
+  const cleanupDialog = <NodeCleanupDialog cleanup={cleanup?.node ?? null} open={cleanup?.open ?? false} onClose={() => {
+    setCleanup((current) => current && { ...current, open: false });
+    // The removed node's button is gone, so focus returns to the page, after the dialog restores its own.
+    window.requestAnimationFrame(() => heading.current?.focus());
+  }} />;
   // Rendered first in both the list and a node's page, so an open command outlives the navigation.
-  const enrollment = hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} open={adding} fresh={confirmed} onClose={() => setAdding(false)} onRefresh={refresh} /> : null;
+  const enrollment = hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} open={adding} fresh={confirmed} onClose={() => setAdding(false)} onRefresh={refreshNodes} /> : null;
 
   if (params.id && hostedNodes) {
     const back = () => goBack("nodes");
     return <>
       {enrollment}
       <NodesPageHeader
+        headingRef={heading}
         back={back}
         title={selected ? selected.name || selected.id : params.id}
         actions={<>
@@ -270,7 +283,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   </>;
   return <>
     {enrollment}
-    <NodesPageHeader count={hostedNodes ? nodes.length : undefined} actions={actions} cloud={snapshot?.deployment.provider === "e2b"} />
+    <NodesPageHeader headingRef={heading} count={hostedNodes ? nodes.length : undefined} actions={actions} cloud={snapshot?.deployment.provider === "e2b"} />
     <div className="console-page-body sandbox-content">
       {status}
       {snapshot && !snapshot.deployment.provider ? <SandboxSetupWizard key={revision} coreUrl={snapshot.deployment.core_url} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}

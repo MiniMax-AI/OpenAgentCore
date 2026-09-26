@@ -28,6 +28,8 @@ curl -fsS --max-time 30 --max-filesize 1048576 'https://console.example/node-ins
 printf '%s  %s\\n' '${digest}' "$d/node-install.pyz" | sha256sum -c --status &&
 $s python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
     expect(uninstall("user").split("\n").at(-1)).toBe(`python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
+    expect(nodeUninstallCommand({ sourceUrl: "https://console.example", installationId: "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", scriptDigest: digest, mode: "sudo", force: true }).split("\n").at(-1))
+      .toBe(`$s python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f' --force)`);
   });
   it("points at the node's journal in each mode", () => {
     expect(nodeLogCommand("7f3c2a90-fixture", "sudo")).toBe("sudo journalctl -u parsar-node-7f3c2a90-fixture.service");
@@ -49,7 +51,7 @@ python3 "$d/install.pyz" --source-url 'https://core.example' --environment-id 'e
     const bin = join(root, "bin"), temporary = join(root, "tmp");
     mkdirSync(bin); mkdirSync(temporary);
     const payload = "verified installer fixture\n";
-    const fixture = join(root, "fixture"), report = join(root, "report.json"), sudoReport = join(root, "sudo.json");
+    const fixture = join(root, "fixture"), report = join(root, "report.json"), sudoReport = join(root, "sudo.json"), printfReport = join(root, "printf.log");
     writeFileSync(fixture, payload);
     function executable(name: string, code: string) {
       const path = join(bin, name);
@@ -67,6 +69,8 @@ if(split!==64) process.exit(2);
 const actual=crypto.createHash('sha256').update(fs.readFileSync(line.slice(split+2))).digest('hex');
 process.exit(actual===line.slice(0,split)?0:1);`);
     executable("id", `console.log(process.env.SCENARIO==='as root'?'0':'1000');`);
+    // The shell's builtin printf feeds the token; an external one would put it in an argv.
+    executable("printf", `require('node:fs').appendFileSync(process.env.PRINTF_REPORT,'called\\n');`);
     executable("sudo", `const fs=require('node:fs'), {spawnSync}=require('node:child_process');
 fs.writeFileSync(process.env.SUDO_REPORT,JSON.stringify({args:process.argv.slice(2),env:process.env}));
 process.exit(spawnSync(process.argv[2],process.argv.slice(3),{stdio:'inherit'}).status ?? 1);`);
@@ -79,9 +83,10 @@ process.exit(process.env.SCENARIO==='installer failure'?7:0);`);
     const mode: NodeInstallMode = scenario === "no sudo" ? "user" : "sudo";
     try {
       const command = nodeInstallCommand({ token, coreUrl: "http://127.0.0.1:8091", sourceUrl: "http://localhost:8080", provider: "docker", installationId: "fixture-installation", scriptDigest: digest, mode });
-      const result = spawnSync("sh", ["-c", command], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TMPDIR: temporary, SCENARIO: scenario, FIXTURE: fixture, REPORT: report, SUDO_REPORT: sudoReport }, encoding: "utf8" });
+      const result = spawnSync("sh", ["-c", command], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TMPDIR: temporary, SCENARIO: scenario, FIXTURE: fixture, REPORT: report, SUDO_REPORT: sudoReport, PRINTF_REPORT: printfReport }, encoding: "utf8" });
       expect(result.status).toBe(scenario === "installer failure" ? 7 : scenario === "download failure" ? 22 : scenario === "checksum mismatch" ? 1 : 0);
       expect(readdirSync(temporary)).toEqual([]);
+      expect(readdirSync(root)).not.toContain("printf.log");
       if (scenario === "download failure" || scenario === "checksum mismatch") {
         expect(readdirSync(root)).not.toContain("report.json");
         expect(readdirSync(root)).not.toContain("sudo.json");

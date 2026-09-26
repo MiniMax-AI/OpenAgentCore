@@ -6,15 +6,17 @@ import { useCopy } from "../api-keys/IssuedKey";
 import { hostRequirements, userModePrerequisites, USER_MANAGER_RESTART, type HostPrerequisite } from "./node-enrollment";
 
 /** A multi-line command to paste into a terminal, with its copy button. Key it by the command so its copy state starts over. */
-export function CommandBlock({ value, label, copyLabel, extra, autoFocus = false }: {
+export function CommandBlock({ value, label, copyName, extra, autoFocus = false, onCopy }: {
   value: string;
   /** Names the command's field for assistive technology. */
   label: string;
-  /** Names the copy button until it has copied. */
-  copyLabel: string;
+  /** Names the copy button when a dialog has more than one; it starts with the visible "Copy command". */
+  copyName?: string;
   /** Shown in the heading before the copy button, such as the command's expiry. */
   extra?: ReactNode;
   autoFocus?: boolean;
+  /** Called when the administrator copies this command. */
+  onCopy?: () => void;
 }) {
   const { t } = useTranslation("sandbox");
   const { state, copy } = useCopy(value);
@@ -23,7 +25,7 @@ export function CommandBlock({ value, label, copyLabel, extra, autoFocus = false
       <div className="sandbox-command-heading">
         <span><Terminal size={15} />{t("Terminal")}</span>
         {extra}
-        <button type="button" className="button outline" autoFocus={autoFocus} aria-label={state === "copied" ? t("Copied") : copyLabel} onClick={() => void copy()}>
+        <button type="button" className="button outline" autoFocus={autoFocus} aria-label={state === "copied" ? t("Copied") : copyName} onClick={() => { onCopy?.(); void copy(); }}>
           {state === "copied" ? <Check size={14} /> : <Copy size={14} />}{state === "copied" ? t("Copied") : t("Copy command")}
         </button>
       </div>
@@ -89,24 +91,25 @@ export function HostRequirements({ provider, sized, values, open, onToggle }: {
  * user who runs it, with what that user needs. Before a command exists it
  * shows only the preparation.
  */
-export function NoSudoGuide({ provider, values, command, open, onToggle }: {
+export function NoSudoGuide({ provider, values, command, open, onToggle, onCopy }: {
   provider: "docker" | "microsandbox";
   values: RequirementValues;
   command: string;
   open: boolean;
   onToggle: (open: boolean) => void;
+  onCopy: () => void;
 }) {
   const { t } = useTranslation("sandbox");
   return <details className="sandbox-host-requirements sandbox-no-sudo" open={open} onToggle={(event) => onToggle(event.currentTarget.open)}>
     <summary>{t("No sudo on this host?")}</summary>
     <div className="sandbox-no-sudo-body">
-      <p>{t("Without sudo, the node runs as a user service of the user who runs the command. That user needs:")}</p>
+      <p>{t("Without sudo, the node runs as a user service of the user who runs the command. An administrator prepares that user once:")}</p>
       <PrerequisiteList items={userModePrerequisites(provider)} values={values} />
       <div className="sandbox-host-requirements-note">
         <p>{t("After a group change, sign in again as that user. If its systemd manager was already running, restart it (or reboot):")}</p>
         <CopyCommand value={USER_MANAGER_RESTART} />
       </div>
-      {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command without sudo")} copyLabel={t("Copy the command without sudo")} /> : null}
+      {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command without sudo")} copyName={t("Copy command without sudo")} onCopy={onCopy} /> : null}
     </div>
   </details>;
 }

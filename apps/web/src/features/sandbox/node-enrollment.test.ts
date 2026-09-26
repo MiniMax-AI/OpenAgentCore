@@ -20,7 +20,7 @@ describe("node enrollment", () => {
     expect(enrolledNode([node("old"), fresh, other], command)?.id).toBe("new");
     expect(enrolledNode([node("old"), other], command)).toBeNull();
     // A command without an ID matches nothing, not even nodes without one.
-    expect(enrolledNode([node("old"), node("absent", { enrollment_id: undefined })], { enrollment_id: "" })).toBeNull();
+    expect(enrolledNode([node("old"), node("absent", { enrollment_id: null })], { enrollment_id: "" })).toBeNull();
   });
 
   it("follows the node from registered to ready, and reports it once the installer's wait has passed", () => {

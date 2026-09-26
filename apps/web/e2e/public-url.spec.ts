@@ -65,4 +65,9 @@ test("warns on Nodes about a node bound to an old Core address until it is remov
   await page.getByRole("dialog", { name: "Remove node" }).getByRole("button", { name: "Confirm removal" }).click();
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("core-01");
   await expect(warning).toHaveCount(0);
+  // Its host's uninstall confirms the removal at that old address; if it no longer answers, --force skips the check.
+  const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
+  await cleanup.getByText("Old Core address gone?").click();
+  await expect(cleanup).toContainText("core-01 still points at the old Core address https://core-old.example.com.");
+  await expect(cleanup.getByLabel("Uninstall command with --force", { exact: true })).toHaveValue(/--uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f' --force\)$/);
 });

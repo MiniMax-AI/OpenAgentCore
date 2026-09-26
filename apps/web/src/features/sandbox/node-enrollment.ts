@@ -21,13 +21,16 @@ export interface HostPrerequisite {
  * and the node as the `parsar-node` system service (sudo mode), as the command
  * and deploy/install/node_install.py check it:
  * - the command runs curl, sha256sum and python3 (enrollment-command.ts), and
- *   `sudo` unless the shell is root; `host_checks` needs Python 3.9+, Linux amd64
- *   and systemd as the init system;
- * - Docker: `provider_group` needs Docker Engine running with a group-accessible
- *   socket, enforcing CPU and memory limits (the node is ready only then:
- *   services/agents-api/internal/sandbox/config/probe.go); it installs nothing;
- * - microsandbox: `provider_group` needs /dev/kvm, and `prepare_runtime` the
- *   libraries its binaries link (the ldd check);
+ *   `sudo` unless the shell is root; `host_checks` needs Python 3.9+, Linux amd64,
+ *   systemd as the init system, and SELinux not enforcing;
+ * - Docker: `provider_group` needs rootful Docker Engine running, its socket
+ *   group-accessible (0660) and, through `device_group`, owned by the docker
+ *   group, which the service user joins; and CPU and memory limits enforced (the
+ *   node is ready only then: services/agents-api/internal/sandbox/config/probe.go).
+ *   It installs nothing;
+ * - microsandbox: `provider_group` needs /dev/kvm, readable and writable by all or
+ *   group-accessible in the kvm group, and `prepare_runtime` the libraries its
+ *   binaries link (the ldd check);
  * - `host_capacity`: the host's CPUs and memory hold one sandbox of the
  *   deployment's size (else the node reports capacity_insufficient); the Runtime
  *   image needs about 2 GB of disk;
@@ -39,9 +42,10 @@ export interface HostPrerequisite {
 export function hostRequirements(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
   return [
     { label: "Linux amd64 with systemd; Python 3.9+, curl and sha256sum; root or sudo" },
+    { label: "SELinux is not enforcing (otherwise use the no-sudo command)" },
     provider === "docker"
-      ? { label: "Docker Engine installed and running, enforcing CPU and memory limits (cgroup v2)" }
-      : { label: "/dev/kvm (hardware or nested virtualization) and the libraries microsandbox links (glibc)" },
+      ? { label: "Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)" }
+      : { label: "/dev/kvm in the kvm group (hardware or nested virtualization) and the libraries microsandbox links (glibc)" },
     { label: sized ? "CPUs and memory for at least one sandbox: {{size}}; about 2 GB of disk for the Runtime image" : "CPUs and memory for at least one sandbox; about 2 GB of disk for the Runtime image" },
     { label: "Reaches {{console}} and {{core}}; sandboxes reach {{core}}" },
   ];
@@ -56,8 +60,9 @@ export function hostRequirements(provider: "docker" | "microsandbox", sized: boo
  *   included, keep the groups it started with; so the group change comes first,
  *   or that manager is restarted after it (USER_MANAGER_RESTART). A shell open
  *   before the change lacks the group too, so the user signs in again;
- * - the user's own systemd session (`systemctl --user`), which sudo -u and su
- *   don't provide;
+ * - the user's systemd manager (`systemctl --user`): from an SSH session, or from
+ *   su or sudo -iu, which leave no session bus, through the bus lingering keeps
+ *   running (`user_bus`);
  * - microsandbox: a home short enough for ~/.parsar/m/<12 hex> to fit in 48 bytes
  *   (`micro_home`): at most 48 - len("/.parsar/m/") - 12 = 25 bytes.
  */
@@ -69,7 +74,7 @@ export function userModePrerequisites(provider: "docker" | "microsandbox"): Host
       : { label: "Read and write access to /dev/kvm for that user", command: "sudo usermod -aG kvm NODE_USER" },
     { label: "systemd lingering for that user, enabled after the group change", command: "sudo loginctl enable-linger NODE_USER" },
     ...(provider === "microsandbox" ? [{ label: "A home directory of 25 bytes or less, such as /home/parsar" } satisfies HostPrerequisite] : []),
-    { label: "Run the command signed in as that user: over SSH, or with", command: "sudo machinectl shell NODE_USER@" },
+    { label: "Run the command as that user: over SSH, or from a root shell with", command: "su - NODE_USER" },
   ];
 }
 
