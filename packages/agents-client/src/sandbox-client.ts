@@ -75,11 +75,8 @@ export interface SandboxNode {
   created_at: string;
   /** Read-only: the Core address this node enrolled with. When it differs from the installation public URL, the node receives no new sandboxes and must be re-added. */
   readonly core_url: string;
-  /**
-   * Read-only: the `enrollment_id` of the command that registered this node; null for nodes enrolled
-   * before Core recorded it. Core always sends the member; it is optional here only until Web's fixtures include it.
-   */
-  readonly enrollment_id?: string | null;
+  /** Read-only: the `enrollment_id` of the command that registered this node; null for nodes enrolled before Core recorded it. Core always sends the member. */
+  readonly enrollment_id: string | null;
 }
 /** A one-time node enrollment command issued by Core. */
 export interface SandboxEnrollment {
