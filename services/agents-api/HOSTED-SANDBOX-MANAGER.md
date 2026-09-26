@@ -327,8 +327,8 @@ then. The installer's checksum is `node_installer_sha256` in the console's
 `/console/config`. Uninstall proceeds only when Core answers 401 to the node's
 credential, or with `--force` for a Core that no longer exists. It stops and removes
 the service, the node state and the Docker network. The `parsar-node` account is
-deleted only when the installer created it and no node remains; an adopted account
-is left as found, minus the groups the installer added. Uninstall never removes
+deleted only when the installer created it and no node remains. An adopted account
+and its home directory stay; uninstall removes only the groups the installer added. Uninstall never removes
 sandboxes, volumes or images: it keeps the Runtime image and a microsandbox node's
 store (`/var/lib/parsar-node/.parsar/m/<hash>`, its images and any sandbox state),
 prints how to remove them, and keeps a created account until that store is gone.
