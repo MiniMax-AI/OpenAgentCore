@@ -826,7 +826,8 @@ as a user service, or, run as root, as a root-owned system service for the dedic
 `parsar-node` user it prepares; it performs no SSH installation, Session creation or
 model call.
 
-The [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md) is a
+Node management (Web's **Nodes** page; see the
+[operator reference](services/agents-api/HOSTED-SANDBOX-MANAGER.md)) is a
 deployment-level admin surface, separate from Project credentials. The paired
 console's Core key stays on its server. Enrollment credentials authorize
 initial node configuration reads and registration; durable node credentials authorize
@@ -1703,15 +1704,13 @@ packaged operators and public protocol, not private Store provisioning. Preserve
 the database and native history when replacing the API package. This target does
 not publish a release or provide an installer/supervisor.
 
-`AGENTS_API_RELEASE_RUNTIME_IMAGE=sha256:<image ID>` adds an explicitly qualified
-Linux amd64 Runtime to the same release builder. The Docker archive contains that
-immutable image export, the committed seccomp policy and hosted operator guide,
-with hashes in its manifest and checksums. The default Core-only archive remains
-Docker-free. Image selection and packaging do not qualify an arbitrary image or
-prove compatibility between unrelated Core/Runtime versions: accept the exact
-package with a fresh database, extracted binaries, loaded image and real public
-workflow. Keep model/operator credentials external and Provider ownership stable
-across upgrades. This is the same managed Runtime, not user-managed enrollment.
+The archive stays Docker-free. Its former Docker-hosted variant
+(`AGENTS_API_RELEASE_RUNTIME_IMAGE`) is retired and the builder refuses the variable:
+an image ID alone is not the complete Runtime release a Docker deployment needs.
+Docker-hosted deployments use the matched Core distribution below. The archive and
+the standalone container are advanced paths for running Core alone; keep them off the
+newcomer installation path and document them under
+[Maintainers and advanced deployments](docs/maintainers.md).
 
 #### Matched Core and console distribution
 
@@ -1742,8 +1741,21 @@ contract.
 The installer packages Core and the Web console together,
 with independent `--core-only` and `--web-only` modes. `site/` is the public static
 landing, separate from `apps/web`; it must not create an onboarding prerequisite,
-call a model, or claim complete protocol compatibility. Operator installation,
-optional API examples and service diagnostics live in `docs/getting-started/`.
+call a model, or claim complete protocol compatibility. The root README starts with
+the three newcomer steps (install, sign in and issue a key, add a node), each linking
+to `docs/getting-started/`: installation, nodes, self-hosted executors, operations and
+the application developer quickstart. `docs/configuration.md` is the single settings
+reference; building distributions and running Core alone live in `docs/maintainers.md`.
+Use Web's page and action names in docs, and `OPENAI_BASE_URL` and `OPENAI_API_KEY` for
+application examples.
+
+A distribution carries a fixed list of docs (`BUNDLED_DOCS` in
+`scripts/core-distribution-manifest.py`). The build keeps relative links between
+bundled docs, rewrites every other relative link to the same file on GitHub at the
+bundle's commit (`@SOURCE_REVISION@`), and fails on a link or anchor that does not
+resolve; `make check-distribution` runs the same check on the repository's docs. Keep
+the list self-consistent when adding or moving a doc the installer or its output
+refers to.
 
 `make build-core-distribution` builds from clean committed source and reuses the
 existing API, Runtime, SDK, helper and Web builders. Artifacts record source and
@@ -1884,8 +1896,8 @@ recovery path. Node services restart after failures without a start limit, so a 
 outlasts a Core outage, and stop restarting when the node program exits 78
 because Core answered 401 to its credential (a removed or retired node).
 The basic API image and binary builds remain independent artifacts.
-The standalone API release and Core distribution both include the Hosted Sandbox
-Manager guide at the relative path used by their packaged README. Include the
+The standalone API release and Core distribution both include the nodes operator
+reference (`HOSTED-SANDBOX-MANAGER.md`) at the relative path used by their packaged README. Include the
 guide in each artifact checksum list so extracted documentation matches its build.
 The node asset includes the sandbox-node binary. The installer's Docker and
 microsandbox selections use Web's Standard size from
@@ -1940,13 +1952,13 @@ dialog, using the deployment's `core_url` (the installation public URL).
 Do not expose routine network wiring or manual runtime setup as the primary flow.
 Generate a one-time command only on user intent, never retry enrollment writes
 automatically, and discard credentials and late responses when the dialog closes
-or the Core connection changes. Web detects successful addition against the node
-IDs present before enrollment; an existing node reconnecting is not a new
-enrollment. Core also reports the command's `enrollment_id` on the node it
-registered (null for nodes enrolled before Core recorded it); Web's exact match on
-it lands with the Web follow-up.
+or the Core connection changes. Core reports the command's `enrollment_id` on the
+node it registered (null for nodes enrolled before Core recorded it), and Web follows
+the added node by an exact match on it; an existing node reconnecting is not a new
+enrollment.
 The command verifies the installer checksum before execution, retains normal TLS
-verification, and passes the enrollment credential only to the installer process.
+verification, and passes the enrollment credential only to the installer process,
+on standard input.
 
 
 The `/core/v1` proxy retains fixed-origin, cross-site, safe-path, redirect and Upgrade

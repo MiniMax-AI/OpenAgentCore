@@ -36,15 +36,12 @@
           <div class="stage-label"><span aria-hidden="true">↳</span> Your application. Your endpoint.</div>
           <div class="code-panel">
             <div class="panel-header"><span class="file-label"><span aria-hidden="true">&lt;/&gt;</span> connect.py</span><span class="panel-tag">PYTHON</span></div>
-            <pre aria-label="Python example listing saved agents from your Core"><code><span class="syntax-keyword">import</span> os
-<span class="syntax-keyword">from</span> openai <span class="syntax-keyword">import</span> OpenAI
+            <pre aria-label="Python example listing saved agents from your Core"><code><span class="syntax-keyword">from</span> openai <span class="syntax-keyword">import</span> OpenAI
 
-client = OpenAI(
-    base_url=<span class="syntax-string">"http://localhost:8091/v1"</span>,
-    api_key=os.environ[<span class="syntax-string">"PARSAR_CORE_API_KEY"</span>],
-)
+<span class="syntax-comment"># OPENAI_BASE_URL: your Core's /v1 address</span>
+<span class="syntax-comment"># OPENAI_API_KEY: a project API key from Web</span>
+client = OpenAI()
 
-<span class="syntax-comment"># Use the same client with your Core.</span>
 <span class="syntax-keyword">for</span> agent <span class="syntax-keyword">in</span> client.beta.agents.list():
     <span class="syntax-function">print</span>(agent.id)</code></pre>
             <div class="code-caption"><span>Official Python client</span><span>3.13.0 <span aria-hidden="true">·</span> agents=v1</span></div>
@@ -76,18 +73,18 @@ client = OpenAI(
         <div class="install-copy">
           <p class="eyebrow">02 / Get started</p>
           <h2 id="install-title">Install. Sign in.<br> Add a node.</h2>
-          <p>Install Core and Web together. Add execution nodes when you need them.</p>
+          <p>Install Core and Web together with one command. Add nodes when you need them.</p>
           <a class="text-link" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Read the installation guide <span aria-hidden="true">→</span></a>
-          <div class="install-prerequisites"><span class="note-label">BEFORE YOU START</span><p>Use a verified Linux amd64 bundle. Choose an HTTPS address reachable from your nodes and sandboxes, and configure DNS/TLS before the first install.</p><p>Download a matching bundle from <a href="https://github.com/MiniMax-AI/parsar-core/releases">GitHub Releases</a>, signing in if GitHub asks. For unreleased changes, <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md#build-a-distribution">build from source</a>.</p></div>
+          <div class="install-prerequisites"><span class="note-label">BEFORE YOU START</span><p>A Linux amd64 host with Docker. For nodes, an HTTPS address behind your reverse proxy; you can add it after installing.</p><p>Download a bundle from <a href="https://github.com/MiniMax-AI/parsar-core/releases">GitHub Releases</a> with <code>gh release download</code>. The repository is internal for now, so run <code>gh auth login</code> first. For unreleased changes, <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/maintainers.md#build-a-distribution">build a distribution</a>.</p></div>
         </div>
         <div class="setup-path">
           <ol class="setup-steps">
             <li class="setup-step"><span class="step-number" aria-hidden="true">01</span><div class="step-content"><div class="step-title"><h3>Install Core + Web</h3><span class="badge">ZERO NODES</span></div><p>Run from your extracted bundle. Core, Web and PostgreSQL start together. No model key required.</p><pre class="install-command"><code>./install.sh \
     --public-url https://core.example</code></pre></div></li>
-            <li class="setup-step"><span class="step-number" aria-hidden="true">02</span><div class="step-content"><h3>Sign in to your console</h3><p>Open the address printed by the installer. Sign in with the Core key in this private file:</p><div class="file-path"><code>~/.parsar/core/secrets/core.key</code></div><p class="step-detail">The paired console is already connected to Core.</p></div></li>
-            <li class="setup-step"><span class="step-number" aria-hidden="true">03</span><div class="step-content"><h3>Bring a node online</h3><p>Open <strong>Nodes</strong>, choose Docker or microsandbox, then <strong>Save configuration</strong>. Select <strong>Add node</strong>, then copy and run the command on a prepared Linux host.</p><div class="provider-options"><span>Docker</span><span>microsandbox</span></div><p class="step-detail">Web shows when the node is online and its provider is ready. All nodes use the same provider.</p></div></li>
+            <li class="setup-step"><span class="step-number" aria-hidden="true">02</span><div class="step-content"><h3>Sign in and issue a key</h3><p>Open the address printed by the installer. Sign in with the Core key in this private file:</p><div class="file-path"><code>~/.parsar/core/secrets/core.key</code></div><p class="step-detail">Set a default model on <strong>System</strong>, then create a project and issue a key on <strong>Projects and keys</strong>.</p></div></li>
+            <li class="setup-step"><span class="step-number" aria-hidden="true">03</span><div class="step-content"><h3>Add a node</h3><p>Open <strong>Nodes</strong>, choose <strong>Add node</strong>, then <strong>Generate command</strong>. Paste the command on a Linux host with sudo; it prepares the host itself.</p><div class="provider-options"><span>Docker</span><span>microsandbox</span></div><p class="step-detail">Web shows when the node is online and ready. All nodes use the same provider.</p></div></li>
           </ol>
-          <p class="setup-footnote">Installation and enrollment do not call a model. <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md#installation-choices">Other installation options <span aria-hidden="true">↗</span></a></p>
+          <p class="setup-footnote">Installation and enrollment do not call a model. <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md#installer-options">Other installation options <span aria-hidden="true">↗</span></a></p>
         </div>
       </section>
 

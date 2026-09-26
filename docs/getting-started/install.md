@@ -1,553 +1,398 @@
 # Install Core and Web
 
-Install one matching Parsar Core distribution. By default it starts PostgreSQL,
-Core and the existing Web console in containers, then selects Docker sandboxes at
-Web's Standard size through the administrator API, with zero execution nodes.
-It does not import Runtime images, mount the Docker socket or host devices into
-Core, or add this host as a node. [`--sandbox`](#installation-choices) selects
-microsandbox, E2B or no backend instead; afterwards, change the provider,
-per-sandbox resources and immutable Runtime through Web or the administrator API.
-No model key, Environment wizard or sample task is required during installation.
-See [Configuration](../configuration.md) for setting ownership, paths, defaults,
-units, change restrictions and restart behavior.
+One command installs Core, the Web console and PostgreSQL on a Linux host. Web is
+the administrator console: you sign in with the Core key, issue Project API keys and
+add nodes. Applications call Core's API with those keys.
 
-Recommended path: [install](#verify-extract-and-install) →
-[sign in to Web](#sign-in-to-web) →
-[add a node](#add-nodes-after-a-default-installation).
-You can leave the deployment with zero nodes until you need execution.
+1. [Check the prerequisites](#prerequisites).
+2. [Download a release bundle](#download-a-release).
+3. [Run the installer](#install).
+4. [Put Core and Web behind HTTPS](#https-and-the-reverse-proxy), or
+   [try it locally first](#try-it-locally-with-a-quick-tunnel).
+5. [Sign in to Web and issue a key](#sign-in-to-web).
+6. [Add a node](nodes.md).
 
-## Host requirements
+These pages describe the current source. Every bundle carries the docs that match it
+under `docs/`; if you install an older bundle, follow those.
 
-The first distribution targets Linux amd64 with Python 3.9+, Docker and Docker
-Compose 2.26.0 or newer. Run the installer as a non-root user who can use Docker.
-The default installation requires neither KVM nor systemd user services.
-Node-host requirements are listed in the
-[add-node steps](#add-nodes-after-a-default-installation).
+## Prerequisites
 
-## Verify, extract and install
+**The Core host**
 
-Download the matching Linux amd64 archive and its `.sha256` file from
-[GitHub Releases](https://github.com/MiniMax-AI/parsar-core/releases). Use one
-release for the entire installation. If GitHub requires sign-in, use an authenticated
-browser or `gh release download RELEASE --repo MiniMax-AI/parsar-core`.
-Choose the ordinary `.tar.gz` for a zero-node installation, or `-offline.tar.gz`
-when you also need all execution assets locally. A source checkout alone is not
-an installable binary bundle; [build a distribution](#build-a-distribution) for
-unreleased changes.
+- Linux amd64 with Python 3.9 or newer.
+- Docker Engine with Docker Compose 2.26.0 or newer (`docker compose version`).
+- A non-root user who can run `docker`. The installer refuses root.
+- Free loopback ports 8091 (Core) and 8080 (Web), or [other ports](#ports-and-directory).
+- The GitHub CLI, `gh`, to download the bundle.
 
-For the recommended node workflow, choose an HTTPS address that both node hosts
-and their sandbox guests can reach, such as `https://core.example`. Configure
-your DNS/TLS reverse proxy as described in [Expose Core and Web](#expose-core-and-web),
-and pass that address on the first install. The installer does not create DNS
-records or certificates. You can set or change the public URL later in `config.json`
-(see [Change settings](#change-settings-after-installation)). The command below
-selects Docker sandboxes and still installs zero execution nodes.
+The Core host needs no KVM and no systemd user services, unless you choose
+[native Core](#native-core).
+
+**Network, for nodes and remote access**
+
+- A DNS name for Core and Web, such as `core.example`, with a TLS certificate.
+- A reverse proxy on the Core host that sends three routes to the right service; see
+  [HTTPS and the reverse proxy](#https-and-the-reverse-proxy).
+
+Node hosts and their sandboxes, E2B sandboxes and self-hosted executors all reach
+Core at this HTTPS address. A local trial needs none of this: install without a
+public URL and set it later.
+
+## Download a release
+
+The repository is internal for now, so GitHub asks you to sign in first:
 
 ```sh
-sha256sum -c parsar-core-<commit>-linux-amd64.tar.gz.sha256
-mkdir -p "$HOME/.parsar/releases"
-tar -xzf parsar-core-<commit>-linux-amd64.tar.gz -C "$HOME/.parsar/releases"
-cd "$HOME/.parsar/releases/parsar-core-<commit>-linux-amd64"
+gh auth login
+```
+
+Pick a release, download its offline bundle and check it:
+
+```sh
+gh release list --repo MiniMax-AI/parsar-core
+mkdir -p "$HOME/.parsar/releases" && cd "$HOME/.parsar/releases"
+gh release download <tag> --repo MiniMax-AI/parsar-core --pattern '*-linux-amd64-offline.tar.gz*'
+sha256sum -c parsar-core-<commit>-linux-amd64-offline.tar.gz.sha256
+tar -xzf parsar-core-<commit>-linux-amd64-offline.tar.gz
+cd parsar-core-<commit>-linux-amd64
+```
+
+`<tag>` is the release tag from the list, and `<commit>` is the source commit in the
+asset names. The installer also checks every file in the bundle against its
+`SHA256SUMS` before it changes anything.
+
+Each release has two bundles:
+
+| Bundle | Contains | Use it for |
+| --- | --- | --- |
+| `parsar-core-<commit>-linux-amd64-offline.tar.gz` | Core, Web and PostgreSQL images, the installers and every node and Runtime file | Any installation. Web serves the node files to your nodes and self-hosted executors |
+| `parsar-core-<commit>-linux-amd64.tar.gz` | The same without the node and Runtime files | E2B-only or Web-only hosts. Web can't add nodes until the files are present |
+
+To add the node files to the smaller bundle, download the release's other
+`parsar-core-<commit>-linux-amd64-*` assets (not the two bundles) into the extracted
+bundle's `artifacts/` directory, then run `./install.sh`, or rerun it if the
+installation already exists. Nodes download these files only from your Web console,
+never from GitHub, so node hosts need no GitHub access.
+
+## Install
+
+From the extracted bundle:
+
+```sh
 ./install.sh --public-url https://core.example
 ```
 
-The thin bundle contains same-revision Core and Web service images, PostgreSQL,
-native Core binaries, installer bootstraps, documentation and checksums. Node,
-Runtime and microsandbox binaries are separate prebuilt assets. Installing the
-default zero-node deployment downloads none of those execution assets and needs
-no Go, Node, Rust or source checkout.
+The installer:
 
-The manifest identifies every asset by immutable revision, SHA-256 and byte size.
-Adding a node downloads only its selected provider's assets. Runtime images use
-compressed archives; verified local files and already imported images are reused.
-Downloads use private partial files and bounded retries: an interrupted download,
-or a rerun after one, asks the console only for the missing bytes, and a file is used
-only after its size and SHA-256 match the manifest. An optional `-offline.tar.gz` bundle contains the
-same assets locally.
+1. checks the host and the bundle, and loads the Core, Web and PostgreSQL images;
+2. creates the installation directory `~/.parsar/core` with the Core key, `config.json`
+   and the `parsar` command ([what it creates](#what-the-installer-creates));
+3. starts PostgreSQL, Core and Web with Docker Compose, on loopback ports only;
+4. selects Docker sandboxes at Web's Standard size (2 CPUs and 2 GiB each). It adds
+   no node; you add nodes in Web.
 
-Nodes download these assets only from the console (Web) that generated their
-command, never from a release URL the build recorded, so node hosts need no access
-to GitHub. The installer copies them into the console's node payload from the
-offline bundle, or from the release's `parsar-core-<commit>-linux-amd64-*` assets
-if you download them into the thin bundle's `artifacts/` directory before running
-`install.sh`. A console without them does not offer Add node for that provider.
+It creates no Project or API key, makes no model request and runs no sample task.
+It ends by printing the console address, the API base URL and the next steps.
+
+Without `--public-url`, the installation serves only this host
+(`http://127.0.0.1:8080` for Web, `http://127.0.0.1:8091/v1` for the API). Set
+`public_url` in `config.json` later and run `parsar apply`; you don't reinstall. Nodes,
+E2B and self-hosted executors need the public URL.
+
+### Installer options
+
+Flags only seed `config.json` for a new installation. Afterwards you change settings in
+`config.json` with [`parsar apply`](../configuration.md#process-settings-configjson),
+and rerunning `install.sh` accepts no flag except `--install-dir`.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--public-url URL` | none: local access only | Public origin of Core and Web behind your reverse proxy, such as `https://core.example`: HTTPS, no path. Plain HTTP only for a loopback host. Seeds `public_url` |
+| `--sandbox docker\|microsandbox\|e2b\|none` | `docker` (`none` with `--web-only`) | [Sandbox backend](#sandbox-backend) to start with. A one-time choice saved in the database; change it later in Web |
+| `--e2b-api-key-file FILE` | | With `--sandbox e2b`: absolute path of a private file (no group or other access, at most 4 KiB) holding the E2B API key |
+| `--e2b-template ID:BUILD` | | With `--sandbox e2b`: the ready template build, `template-id:build-uuid` |
+| `--core-only` | | [Mode](#modes): Core and PostgreSQL, without Web |
+| `--web-only` | | [Mode](#modes): Web only, connected to an existing Core. Needs `--core-url` and `--core-key-file` |
+| `--core-url URL` | | With `--web-only`: origin of the existing Core, HTTPS or loopback HTTP. Seeds `web.core_url` |
+| `--core-key-file FILE` | | With `--web-only`: absolute path of a private file holding that Core's Core key (at least 32 characters) |
+| `--native-core` | off | Run [Core as a systemd user service](#native-core) instead of a container |
+| `--core-port PORT` | `8091` | Loopback port of Core. Seeds `ports.core` |
+| `--web-port PORT` | `8080` | Loopback port of Web. Seeds `ports.web` |
+| `--install-dir DIR` | `~/.parsar/core` | Absolute installation directory. It must be empty or missing |
+| `--config FILE` | | Seed `config.json` from a prepared file instead of the setting flags above (`--public-url`, the mode flags, `--native-core`, ports, `--core-url`) |
+| `--convert`, `--yes` | | [Convert an installation](operations.md#convert-an-earlier-installation) made before `config.json`; `--yes` skips the confirmation |
+
+#### Sandbox backend
+
+A deployment runs its sandboxes on exactly one backend:
+
+| `--sandbox` | Sandboxes run on | You then |
+| --- | --- | --- |
+| `docker` (default) | Docker on your nodes, 2 CPUs and 2 GiB each | [Add nodes](nodes.md) in Web |
+| `microsandbox` | microVMs on your nodes (KVM), 2 CPUs, 4 GiB memory and two 8 GiB disks each | [Add nodes](nodes.md) in Web |
+| `e2b` | E2B's cloud, with the CPU and memory of your template build | Nothing: E2B needs no nodes |
+| `none` | Nothing yet | Choose the backend on the **Nodes** page in Web |
+
+The Standard sizes come from the bundle's copy of Web's
+[`standard-sizes.json`](../../apps/web/src/features/sandbox/standard-sizes.json). The
+installer saves the choice through the same administrator API that Web uses once the
+services are healthy. If Core refuses it, for example because E2B rejects the key,
+the installer prints Core's message and exits with an error; the services keep
+running, and you choose the backend on the Nodes page.
+
+E2B also needs an HTTPS public URL that is not loopback, because E2B's sandboxes
+call Core from E2B's cloud. The installer refuses `--sandbox e2b` without one, before
+it installs anything:
+
+```sh
+./install.sh --public-url https://core.example --sandbox e2b \
+  --e2b-api-key-file "$HOME/.parsar/e2b-api-key" --e2b-template '<template-id>:<build-uuid>'
+```
+
+Prepare the template build with the [E2B guide](../../services/agents-api/deploy/e2b/README.md).
+To change the backend or the sandbox size later, use the Nodes page in Web; see
+[Nodes](nodes.md#change-the-sandbox-backend-or-size).
+
+#### Modes
+
+| Mode | Runs | Use it for |
+| --- | --- | --- |
+| all (default) | PostgreSQL, Core and Web | Most installations |
+| `--core-only` | PostgreSQL and Core | A Core whose Web runs on another host, or scripts only. Without Web there is no Add node command |
+| `--web-only` | Web | A second host for the console, paired with an existing Core |
+
+A Web-only installation needs the Core's origin and a private copy of its Core key:
+
+```sh
+./install.sh --web-only --install-dir "$HOME/.parsar/core-console" \
+  --public-url https://console.example \
+  --core-url https://core.example \
+  --core-key-file "$HOME/core.key"
+```
+
+Its `--public-url` is the address browsers use for this console. Copy the key file
+from the Core host's `secrets/core.key` with mode `0600`; the installer keeps its own
+copy. After the Core key is rotated, copy the new key again; see
+[Rotate the Core key](operations.md#rotate-the-core-key). Web-only installs select no
+sandbox backend; do that on the Core host.
+
+The mode and native Core are fixed once installed. To change them, install into a
+new directory.
+
+#### Native Core
+
+`--native-core` runs Core as a systemd user service of the installing user;
+PostgreSQL and Web stay in containers. It needs a running systemd user manager and
+lingering for that user (`sudo loginctl enable-linger <user>`), and the bundle's
+native binaries must load on the host. PostgreSQL then listens on a loopback port
+the installer picks (`ports.database`), and Web uses the host network. Native Core
+needs no KVM and is unrelated to the sandbox backend.
+
+#### Ports and directory
+
+Core and Web listen on `127.0.0.1` only; the reverse proxy reaches them there. The
+installer refuses a port that is in use. Several installations can share a host with
+their own `--install-dir` and ports, for example
+`--install-dir "$HOME/.parsar/core-2" --core-port 8092 --web-port 8081`. Each has its
+own database, Core key and nodes.
+
+## HTTPS and the reverse proxy
+
+Core and Web share one public origin. Your reverse proxy terminates TLS and routes by
+path:
+
+| Path | Goes to | Callers |
+| --- | --- | --- |
+| `/v1`, `/v1/*` | Core, `127.0.0.1:8091` | Applications, with a Project API key |
+| `/api/v1/*` | Core, `127.0.0.1:8091` | Nodes, sandboxes and self-hosted executors, with their own machine credentials. Uses WebSockets |
+| Everything else | Web, `127.0.0.1:8080` | Browsers: the console, its sign-in, `/core/v1/*` and `/node-install/*` |
+
+The proxy must:
+
+- **Preserve Host.** Web accepts only requests for the host of its public URL.
+- **Pass WebSocket upgrades** on `/api/v1`. Nodes and Runtime daemons hold long-lived
+  WebSocket connections.
+- **Not buffer or time out streams.** `/v1` streams Session events (server-sent events).
+- **Accept large uploads.** Core enforces its own limits; source files may reach
+  512 MiB.
+
+Web answers 404 on `/v1` and `/api/v1` and never forwards them. If those paths reach
+Web, application calls, node enrollment and every sandbox connection fail. Run the
+proxy on the Core host, since Core and Web listen on loopback. `parsar status` prints
+the routes with this installation's ports.
+
+**Caddy** (obtains and renews the certificate itself; passes Host and WebSockets by
+default):
+
+```caddyfile
+core.example {
+	@core path /v1 /v1/* /api/v1/*
+	handle @core {
+		reverse_proxy 127.0.0.1:8091
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
+}
+```
+
+**nginx** (for example `/etc/nginx/conf.d/parsar-core.conf`, inside the `http` block;
+use your certificate paths):
+
+```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name core.example;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name core.example;
+    ssl_certificate     /etc/letsencrypt/live/core.example/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/core.example/privkey.pem;
+
+    client_max_body_size 0;          # Core enforces its own upload limits
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_buffering off;             # server-sent events on /v1
+    proxy_request_buffering off;
+    proxy_read_timeout 1h;           # long-lived WebSockets and streams
+    proxy_send_timeout 1h;
+
+    location = /v1    { proxy_pass http://127.0.0.1:8091; }
+    location /v1/     { proxy_pass http://127.0.0.1:8091; }
+    location /api/v1/ { proxy_pass http://127.0.0.1:8091; }
+    location /        { proxy_pass http://127.0.0.1:8080; }
+}
+```
+
+Replace `core.example` and, if you changed them, the ports. To check the routing:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -H 'OpenAI-Beta: agents=v1' https://core.example/v1/agents
+```
+
+`401` means `/v1` reached Core, which asks for a key; `404` means it reached Web.
+
+Install with `--public-url https://core.example`, or, for an existing installation,
+set `public_url` in `~/.parsar/core/config.json` and run `~/.parsar/core/parsar apply`.
+Core derives every address it hands out from this one setting. If you change it while
+nodes, sandboxes or self-hosted executors use the old address, `parsar apply` lists
+them and asks you to confirm; those nodes must then be added again. See
+[Changing the public URL](../configuration.md#changing-the-public-url).
+
+TLS verification stays on everywhere. With a private certificate authority, node
+hosts, executor hosts and the Runtime image must trust it.
+
+## Try it locally with a quick tunnel
+
+For a trial without DNS or certificates, a
+[Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)
+gives the installation a temporary public HTTPS address. It forwards to one local
+port, so put a plain-HTTP proxy with the same three routes in front, for example this
+Caddyfile on `127.0.0.1:8443`:
+
+```caddyfile
+http://:8443 {
+	bind 127.0.0.1
+	@core path /v1 /v1/* /api/v1/*
+	handle @core {
+		reverse_proxy 127.0.0.1:8091
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
+}
+```
+
+1. Install, with or without a public URL (`./install.sh`).
+2. Start the local proxy: `caddy run --config Caddyfile`.
+3. Start the tunnel: `cloudflared tunnel --url http://127.0.0.1:8443`. It prints an
+   address such as `https://random-words.trycloudflare.com`.
+4. Set `"public_url": "https://random-words.trycloudflare.com"` in
+   `~/.parsar/core/config.json` and run `~/.parsar/core/parsar apply`.
+5. Open that address and [sign in](#sign-in-to-web).
+
+A quick tunnel is for trials only. Its address changes whenever `cloudflared`
+restarts; nodes and executors bound to the old address must then be added again.
+Its throughput is low, so the first node download of the Runtime (about 500 MB) can
+be slow; see [slow links](nodes.md#rerun-expiry-and-slow-links). Nodes and E2B need a
+reachable HTTPS address, so a loopback-only installation can't have nodes: Web says so
+at Add node.
 
 ## Sign in to Web
 
-Installation creates the private installation directory `~/.parsar/core`, with
-its settings in `config.json`, its secrets in `secrets/` and the `parsar`
-management command, plus a dedicated PostgreSQL volume. Installation creates no
-Project or application API key. Projects and their keys are managed in the database;
-configuration files contain deployment settings only. New installations create one
-management credential, the [Core key](operations.md#core-key). Secret values are
-not printed.
-
-Open the console address printed by the installer (`https://core.example` in
-the example above) and sign in with the Core key from
-`~/.parsar/core/secrets/core.key`. The console has no user accounts or passwords, and
-one role: administrator, with access to every console operation. The paired
-console already connects to Core with the same key on the server side.
-
-Use Web's **Projects and keys** page or the administrator API to create a Project,
-then issue a named API key within it and save the one-time plaintext response
-privately. Core stores only its digest. Multiple keys in a Project
-share its assets and execution principal; writes record the actual key separately.
-Rotate by issuing another key in that Project and revoking the old one. Archiving
-the Project disables all its keys and retains assets for inspection and deletion.
-API callers use their own keys and the public API endpoint. The Core key cannot
-call `/v1`; the console cannot execute or create Agent resources on their behalf.
-See the [management contract](../../contracts/agents-api/admin-api.md).
-
-Hosts registered through the console supply sandbox resources for hosted Sessions;
-self-hosted Sessions use application-managed environments. Neither installation
-nor key creation calls a model. Run examples separately with the issued API key
-and your model provider key, as described in the [API guide](quickstart.md).
-
-Default local ports and private files:
-
-- API: `http://127.0.0.1:8091/v1`
-- Web upstream: `http://127.0.0.1:8080`; use the configured public URL in your browser
-- Settings: `~/.parsar/core/config.json`
-- Core key: `~/.parsar/core/secrets/core.key`
-- Core key digest: `~/.parsar/core/generated/core-key-digests.json`
-
-Use exactly the displayed console address; the production proxy validates its
-configured origin. Sign-in sessions live in the console's memory. They expire after
-12 hours, and you sign in again after a console restart or a Core key rotation.
-Sign-in, status and sign-out use private `/console/auth` routes and do not extend
-the public Agent API. The console rejects every `/v1` and `/api/v1` request,
-including requests carrying an explicit Bearer token; it holds no caller key.
-
-Core loads the Core key digest from `AGENTS_API_CORE_KEY_DIGESTS_FILE`. Only the
-Core service reads the digest file; containers mount it read-only. The bundled Web server reads the
-Core key through `CORE_CONSOLE_CORE_KEY_FILE` to check sign-in and to proxy
-authenticated console operations; it never sends the key to the browser. The
-migration service receives neither. A Web-only connection to an external Core uses
-that Core's key, configured server-side. Installations from earlier releases
-move to this layout with [`install.sh --convert`](#convert-an-earlier-installation).
-Choose English or Chinese through the System language selector.
-
-## Add nodes after a default installation
-
-1. Log in to the bundled Web console and open **Nodes**.
-   The paired installation needs no second key or Core connection setup.
-   The installer already saved the sandbox backend (Docker at the Standard size,
-   unless [`--sandbox`](#installation-choices) chose otherwise), so continue with
-   step 4. Nodes need an HTTPS public URL that other machines and their sandboxes
-   can reach; on a loopback installation, set `public_url` first.
-2. After `--sandbox none`, or when the installer could not save the selection,
-   choose **E2B cloud** or **Own machines**. Own machines use Docker or
-   microsandbox; select their per-sandbox resources and matched immutable Runtime
-   release. E2B uses an account key and an exact ready template build, with no node
-   installation; each sandbox gets the build's CPU and memory, so setup asks for no
-   size. The paired console address is used automatically. If your network requires
-   a different address for nodes and guests, change it under advanced network
-   settings during initial setup. When
-   opening the console on localhost or an HTTP address, setup requires a
-   non-loopback HTTPS address that nodes and sandbox guests can reach.
-3. Select **Save configuration**. It takes effect without restarting Core and remains in
-   PostgreSQL across restarts. The provider, limits and Runtime are one saved
-   specification; node files cannot override it. Later changes require global
-   maintenance and completed cleanup. Microsandbox uses a five-minute idle timeout
-   and one-day snapshot retention.
-4. For own-machine hosting, click **Add node**, copy the command, and run it on the target Linux amd64
-   host with sudo, or as root. It prepares the host itself: the `parsar-node` service user, its `docker`
-   or `kvm` group and a system service. For Docker nodes, the `docker` group makes that user, and so the
-   node, root-equivalent on the host; use hosts dedicated to sandboxes. Hosts without sudo use the no-sudo
-   command as a prepared user instead.
-   It downloads the matched bootstrap and execution assets from your console
-   (never from a release URL), verifies
-   checksums, reads the saved generation and specification without consuming enrollment,
-   verifies the payload matches that Runtime, imports the image only when missing,
-   and writes the matching provider configuration,
-   registers the node and starts its service. The service keeps retrying while Core
-   is unreachable and stops for good once the node is removed. The installer waits for Core to confirm
-   connection and provider readiness. Web refreshes node health
-   automatically. Wait for the node to be online and its provider to be ready;
-   registration alone does not mean it can accept work. A registered retry uses its
-   retained node credential and refuses changed resource or Runtime settings.
-
-The target host needs curl, sha256sum, Python 3.9+ and systemd, plus Docker Engine or
-KVM with microsandbox's native libraries; the command never installs them and names
-what is missing. The no-sudo command also needs a user with lingering and Docker or KVM
-access. See [Register a host](https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host)
-for both modes and for removing a node from its host.
-The command checks host access before downloading the Runtime and verifies
-microsandbox's shared libraries after downloading its native programs.
-The console serves only fixed, non-secret distribution files at `/node-install/`;
-private installation configuration is never part of this payload. Retain the
-installed `node-payload/` directory. Manual console deployments enable the same
-flow with `CORE_CONSOLE_NODE_PAYLOAD_DIR` pointing to the matched distribution
-payload. TLS verification stays enabled; deployments using a private certificate
-authority must provision that trust on the target hosts and Runtime image.
-
-See the [Hosted Sandbox Manager guide](https://github.com/MiniMax-AI/parsar-core/blob/main/services/agents-api/HOSTED-SANDBOX-MANAGER.md)
-for host prerequisites and the registration command. The browser does not install
-software on another machine or receive SSH credentials. Adding a remote node does
-not add a Docker socket or KVM permissions to Core. Node installation and Runtime
-storage remain on the selected host.
-
-When a Session needs a sandbox, Core asks the
-enabled Provider to create one from the prepared Runtime image and initializes
-the colocated daemon, native harness and workspace.
-
-Once a node is ready, you can [make an API request](quickstart.md). Hosted Sessions
-take their model from the request, a saved Agent or the deployment default model
-provider that you set per harness in Web (System) with the Core key; node
-installation never needs a model credential. Without any of these, hosted Session
-creation fails with 400 `model_provider_required`.
-
-## Connect a user-managed Runtime
-
-A `self_hosted` Session uses your own execution machine; it does not enroll that
-machine as a shared sandbox node. The application creates the Session through
-`/v1` with its Project API key. The deployment operator then issues a restricted
-credential for the Session's Environment with the Core key, in Web or with a
-script against Core's loopback port:
-
-```sh
-umask 077
-curl -fsS -X POST \
-  "http://127.0.0.1:8091/core/v1/projects/$PROJECT_ID/environments/$ENVIRONMENT_ID/executor-credentials" \
-  -H "Authorization: Bearer $CORE_KEY" -H "Content-Type: application/json" \
-  -d "{\"key_id\":\"$(python3 -c 'import uuid; print(uuid.uuid4())')\"}" \
-  -o executor-key.json
-```
-
-The response is the credential; its secret appears only once. If the
-outcome is uncertain, list the credentials and rotate the same `key_id` instead
-of issuing another. The [credential contract](../../contracts/agents-api/environment-executor-credentials.md)
-describes issuance, rotation and revocation. The Core key and the application's
-`$PROJECT_API_KEY` never leave their own machines.
-
-On the Session's page, Web shows the install command for its Environment. The
-command contains no secret. Run it on the execution machine and paste the
-credential at the hidden prompt:
-
-```sh
-(umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
-curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/self-hosted-install.pyz' -o "$d/install.pyz" &&
-printf '%s  %s\n' 'SHA256' "$d/install.pyz" | sha256sum -c --status &&
-python3 "$d/install.pyz" --source-url 'https://core.example' --environment-id 'ENVIRONMENT_UUID' --remote 'wss://core.example/api/v1/agent-daemon/ws')
-```
-
-Web fills in the public URL, the installer's SHA-256 (the
-`self-hosted-install.pyz` line of the console's `/node-install/SHA256SUMS`), the
-Environment ID and the unchanged `remote_url` returned by your Session. The prompt
-accepts the compact or pretty-printed credential and never echoes it. For
-automation without a terminal, add
-`--credential-file /absolute/private/executor-key.json` naming an owned mode-0600
-file instead.
-The Linux amd64 host needs Python 3.9+ and Docker access as a non-root user.
-The installer prepares the matched daemon, native harnesses and local workspace
-inside the same isolated Runtime used for hosted execution. No shared node or
-source build is needed. The Session itself must carry its model: create it with
-`x_agents_core.model_provider` or from a saved Agent that has one. Deployment
-default model providers do not apply to self-hosted Sessions, and creation without
-a provider fails with 400 `model_provider_required`. Core delivers the frozen
-provider only over this Environment's executor connection; the executor host keeps
-it in the Runtime's harness home, which tools and public Files cannot read.
-
-The command waits for Core to confirm that this Environment and its restricted
-credential are connected. It distinguishes a running container from a connected
-Environment. Connection failure or timeout exits with diagnostic and retry
-instructions, preserving the same container, credentials and native history.
-Rerun the command after correcting the reported problem; it does not create
-replacement history. A connected Environment does not prove model availability.
-Submit your task through the Session API to test execution.
-Installation state stays under `~/.parsar/self-hosted/ENVIRONMENT_UUID`; retain its
-credentials, volumes and native history. An uncertain launch gives inspection
-instructions instead of creating replacement history. Session deletion does not
-reclaim user-owned Docker resources.
-
-When the credential is revoked or rotated, the Runtime stops retrying: its log
-shows one message naming the fix, and the container stays up without a restart
-loop. Rotate the same credential in Web, rerun the same command and paste the new
-credential. The installer puts it into the same container, which reconnects with
-its workspace and native history. Issuing a new credential instead does not work
-for an Environment that has already connected. To remove the Runtime, stop its
-container.
-
-## Installation choices
-
-```sh
-./install.sh --sandbox microsandbox --public-url https://core.example
-./install.sh --sandbox e2b --e2b-api-key-file "$HOME/e2b-api-key" \
-  --e2b-template '<template-id>:<build-uuid>' --public-url https://core.example
-./install.sh --sandbox none
-./install.sh --core-only
-./install.sh --native-core --public-url https://core.example
-```
-
-`--sandbox` selects the sandbox backend once the services are healthy, through the
-same administrator API as Web's setup: `docker` (the default), `microsandbox`, `e2b`
-or `none`, the only choice with `--web-only`. Docker and microsandbox get Web's
-Standard size, read from the bundle's copy of
-`apps/web/src/features/sandbox/standard-sizes.json`, and the bundle's Runtime
-release. E2B takes its account key from `--e2b-api-key-file`: the absolute path of a
-regular file, not a symlink, of at most 4 KiB, with no group or other access (for
-example mode 0600). It also takes a ready template build (`--e2b-template
-template-id:build-uuid`); each sandbox gets the build's CPU and memory. E2B needs
-an HTTPS `--public-url` that is not loopback; otherwise the installer refuses it
-before installing anything. A loopback installation keeps a Docker or microsandbox
-selection, but nodes can't serve it: each sandbox calls Core at the public URL, and
-a loopback address reaches only the sandbox itself. Set `public_url` before adding
-nodes.
-
-These flags are one-time install actions, not settings: `config.json` doesn't hold
-them, and PostgreSQL owns the saved selection. Change it later in Web, through
-maintenance. If Core refuses the selection, for example because E2B rejects the key,
-the installer prints Core's message and exits with an error; the services keep
-running, so choose the backend on the Nodes page. A repair run or a conversion
-never selects a backend.
-
-The installer never adds this host as a node: add it like any other host, with
-**Add node** in Web. `--sandbox-provider` and `--provider` are retired and fail.
-`--core-only` installs Core and PostgreSQL without Web.
-
-The provider choice does not select a harness or alter the public `openai_hosted`
-discriminator. Both node providers use the same colocated Runtime. Core has no embedded
-node or file-managed provider selection. Docker access and microsandbox KVM/native
-paths belong to the separate node service; the Core container receives no Docker
-socket or node state mount. Web receives neither provider authority nor node secrets.
-
-Nodes keep configuration and identity under
-`~/.parsar/nodes/<installation-id>/` in the home of the account that runs them
-(`/var/lib/parsar-node` for a node added with sudo). Microsandbox stores its private
-Runtime home under `~/.parsar/m/<installation-hash-prefix>/` in the same home. Preserve these directories and
-backend storage across restarts. A missing identity is a recovery incident, not
-permission to register over existing resources.
-
-`--native-core` selects a native Core user service independently of the sandbox backend;
-PostgreSQL/Web stay in containers. Native Core itself requires no KVM or node
-Runtime files. Without this flag, Core stays in Compose. The standalone node
-service owns provider processes separately from Core.
-Stopping Core does not stop the node or prove its resources have been reclaimed.
-
-See [Configuration](../configuration.md) for the Standard per-sandbox resources,
-administrator-approved node capacity and the five-minute idle suspension policy.
-Change saved resources or Runtime only through the
-[drained deployment procedure](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
-Installation defaults are not evidence of model or workload acceptance.
-
-### Separate Web installation
-
-To install only Web on a Linux host, provide the existing Core origin and a
-private file containing that Core's Core key. A loopback Core uses the same host network namespace;
-a remote Core must use HTTPS.
-
-```sh
-./install.sh --web-only \
-  --install-dir "$HOME/.parsar/core-console" \
-  --core-url http://127.0.0.1:8091 \
-  --core-key-file "$HOME/.parsar/core/secrets/core.key"
-```
-
-Web-only mode starts no database or Core, so it selects no sandbox backend (choose
-it on the Core host), and requires no KVM. Its key remains on the server, outside
-the static Web files.
-The input file must be private (0600) and contain a Core key of at least 32 characters.
-
-The Web-only installation copies the key into its own `secrets/core.key`. After a
-[Core key rotation](operations.md#rotate-the-core-key) on the Core host, copy the
-new file there and run that installation's `parsar apply`.
-
-Use `--install-dir /absolute/path`, `--core-port 8092` and `--web-port 8081` for
-separate installations. Their database volumes, provider identities and Runtime
-state are independent. Native Core connects to PostgreSQL through an automatically
-selected loopback-only port, recorded as `ports.database` in `config.json`.
-
-## Change settings after installation
-
-Flags only seed `config.json` for a new installation. Afterwards, edit
-`~/.parsar/core/config.json` and apply it:
-
-```sh
-~/.parsar/core/parsar apply --dry-run
-~/.parsar/core/parsar apply
-```
-
-`parsar` lives in the installation directory and does not need the extracted
-bundle. [Configuration](../configuration.md#configjson) lists every setting, what
-it restarts and how a public URL change affects nodes. `mode` and `native_core` are
-fixed; install into a new directory to change them.
-
-Rerunning `./install.sh` on an existing installation reads `config.json` and
-rejects every flag except `--install-dir`. Without flags it repairs the
-installation: it reloads missing images, restores a missing `parsar` command,
-applies `config.json` and starts the services. It refuses a bundle from another
-release. `--sandbox` and the E2B flags apply only to a new installation.
-
-## Convert an earlier installation
-
-Installations made before `config.json` have `installation.json`, `config/core.env`
-and `admin/`: those of the installers since the Core key was introduced, including
-the release that added `AGENTS_API_PUBLIC_URL`. Plain `./install.sh` refuses them.
-Convert one with this release's bundle:
-
-```sh
-./install.sh --convert --install-dir "$HOME/.parsar/core"
-```
-
-Conversion is also an upgrade to this release, and its database migrations can't
-be undone: back up the database first (the command prints a `pg_dump` example).
-It reads the old files without changing anything; for an installation made before
-the release that added `AGENTS_API_PUBLIC_URL`, it also reads the sandbox
-deployment's `core_url` from the old Core.
-It then shows the resulting settings and asks for confirmation (`--yes` skips the
-prompt). It writes `config.json` and `state.json`, moves the secrets into `secrets/`
-without copying them, removes the old generated files, and starts the new release
-with the same Compose project, database and installation ID.
-
-It stops before changing anything, and lists each reason, when an item can't be
-converted: an edited `compose.json`, an unknown or edited generated value in
-`core.env`, an external database, or an installation public URL that differs from
-the sandbox deployment's Core URL. For that last case, rerun with `--public-url`
-naming one of the two; choosing the installation's URL means the deployment's nodes
-must be removed and added again. An `AGENTS_API_PUBLIC_URL` set by hand in
-`core.env` is the address Core uses, so it becomes `public_url`, and Core's own
-loopback address there means none. When that would move Web's origin away from the
-installation's public URL, conversion stops and `--public-url` names the one to keep. Hand-set settings such as
-`AGENTS_API_EXECUTION_CONCURRENCY`, `PARSAR_LOG_*` or a Runtime history file move
-into `config.json`. `AGENTS_API_EXECUTION_OPTIONS_FILE` is retired by this release
-and not carried over: set [deployment model providers](../configuration.md#deployment-model-providers)
-instead. Its file is left in place and reported, and `model_provider_sessions.py`
-in the bundle counts the Sessions without a model provider of their own before you
-convert. A
-Runtime history file inside the installation is removed once `config.json` holds
-its settings; one elsewhere is reported as a second copy to delete. Unknown
-files in `config/` and `admin/` are reported and left in place, and a public URL
-that differs from Core's canonical form only by letter case is lowercased. Secret
-files that are links or readable by other users stop the conversion before
-anything changes.
-
-If conversion is interrupted, or the new release fails to start afterwards, fix the
-cause and rerun `./install.sh --convert` with the same bundle to finish it;
-`--public-url` may be repeated but not changed. In a split deployment,
-convert the Core host first, then each Web-only host. A Web-only host converted
-first keeps working; after its Core is converted, run its `parsar apply` to record
-which Core it is paired with.
-
-## Expose Core and Web
-
-For nodes added through Web, install with the intended shared HTTPS endpoint:
-
-```sh
-./install.sh --public-url https://core.example
-```
-
-The installer also uses this origin for the `wss` connection URL returned by
-self-hosted Sessions, so remote Runtime hosts never receive a Compose-only
-hostname. Configure your TLS reverse proxy with these routes:
-
-| Path | Destination | Callers |
-| --- | --- | --- |
-| `/v1`, `/v1/*` | Core (loopback 8091) | Applications, with a Project API key |
-| `/api/v1/*` | Core (loopback 8091) | Nodes and Runtime daemons, with their own machine credentials |
-| Everything else, including `/core/v1/*` and `/node-install/*` | Web (loopback 8080) | Browsers and the console |
-
-Web forwards signed-in `/core/v1` requests to Core with the Core key; operator
-scripts call `/core/v1` on Core's loopback port instead of the public entry.
-Preserve Host and support WebSocket upgrades. Web answers 404 on `/v1` and `/api/v1` and never
-forwards them. A proxy that sends those paths to Web breaks application calls,
-node enrollment and every Runtime daemon connection (`/api/v1/agent-daemon/ws`)
-for Docker, microsandbox, self-hosted and E2B sandboxes alike. When upgrading from
-a release whose Web forwarded node and daemon traffic, change this routing as the
-new release goes live; see [Data and upgrades](operations.md#data-and-upgrades).
-Both the node host and its sandbox guests must reach this address. Installation
-does not create DNS records or certificates, nor expose a host port publicly.
-Without this option, the console uses its loopback address for local access. Do not copy a
-localhost download command to a different machine. Running plain `./install.sh`
-is suitable for local console/API inspection; set `public_url` in `config.json`
-and run `parsar apply` before you enroll nodes. `parsar status` prints the routes
-to configure.
-
-The distribution includes the pinned E2B SDK helper, so selecting E2B does not
-require Python or pip installation on the Core host. Its private receipts live in
-`state/e2b` and are mounted only into Core. Preserve them together with the database
-and credential key when backing up or moving this installation. E2B template
-preparation is described in the [E2B guide](../../services/agents-api/deploy/e2b/README.md).
-
-## After installation
-
-Start with an optional [API request](quickstart.md). The read-only example works
-with the default installation. The execution example requires an installation
-with either E2B configured through Web or a connected, ready Docker/microsandbox node.
-Sandbox setup on the **Nodes** page selects one scheme for the whole deployment.
-E2B uses an account API key and a qualified immutable Runtime template; Core provisions
-sandboxes without a node installer. Own machines use the existing node command.
-Provider, per-sandbox resources and Runtime changes all require maintenance and
-completed resource cleanup; see
-[provider switching](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
-Session creation supplies the model and
-harness; model credentials come from the request, a saved Agent or the deployment
-default model provider. Core owns sandbox preparation and
-Runtime startup. Configuration is never injected into a public Agent instruction
-or baked into a Runtime image.
-
-[Operations](operations.md) covers health, restarts, data and provider changes.
-A service health check proves neither model availability nor complete protocol
-compatibility.
-
-## Build a distribution
-
-Release builders need the repository's full Linux toolchain and Docker. Build from
-clean, committed source, with the pinned Codex platform package and a matching
-MiniMax companion prepared through the existing Runtime build instructions:
-
-```sh
-export AGENTS_RUNTIME_CODEX_PACKAGE=/absolute/path/to/codex-linux-package
-export MCODE_HARNESS_BUILD_DIR=/absolute/path/to/mcode-harness-artifact
-export CORE_DISTRIBUTION_RELEASE_BASE_URL=https://downloads.example/releases/COMMIT
-make build-core-distribution
-```
-
-The builder reuses existing Core, Runtime, SDK and Web build scripts. It records
-the commit, immutable image identities, microsandbox binary hashes and the actual
-Runtime OCI manifest digest. Build output lives under `~/.parsar/build/`; it is
-not automatically published to GitHub, an image registry or a website. Qualify the
-exact bundle before distribution. See the [contributor guide](https://github.com/MiniMax-AI/parsar-core/blob/main/CONTRIBUTING.md).
-
-The release base must host the generated flat asset filenames over HTTPS. Use
-`CORE_DISTRIBUTION_OFFLINE=1` to also emit a full offline archive; a build without
-any release URL must select offline mode. Node installers always obtain assets
-from the console, whichever build recorded a release URL. The release workflow prepares pinned
-harness dependencies, builds versioned assets, and uploads an Actions artifact.
-An explicit manual option can create an unpublished draft release. Neither a
-successful build nor a draft makes a private repository anonymously downloadable;
-publish qualified assets through your chosen distribution channel before sharing
-installation instructions with external users.
-
-## Produce and qualify a release
-
-The `core-release` GitHub Actions workflow builds production assets from a full
-committed source SHA. It uses the existing pinned Runtime builders; acceptance
-credentials and private test certificate authorities must never enter its inputs.
-Run the workflow from the repository's Actions page, or use:
-
-```sh
-revision=$(git rev-parse HEAD)
-gh workflow run core-release --repo MiniMax-AI/parsar-core --ref main \
-  -f ref="$revision" -f offline=true -f draft_release=true
-```
-
-The workflow uploads the matched files as an Actions artifact and creates a draft
-Release tagged `build-<full SHA>`. The manifest records the same tag in every
-asset URL. Do not mix files across releases or resolve individual components
-through `latest`. The node command comes from its connected Core, which selects
-the matching release automatically.
-
-Download the draft assets using repository access, verify their checksums, and
-qualify a fresh installation plus the node/self-hosted connection paths before
-publishing the draft. A workflow build alone is not live acceptance. Retain the
-exact tested assets when publishing; do not rebuild or replace files under the
-same release identity. Publishing a Release does not change repository visibility.
-
-For an offline installation, extract the matching `-offline.tar.gz` archive and run
-its `install.sh`, which copies the bundled assets into the console's node payload.
-`install.sh` has no `--offline-root` option; only `self-hosted-install.pyz` accepts
-one, for an executor host. Node commands always download from the console that
-generated them, so install from the offline bundle (or place the release assets in
-the bundle) to let the console serve nodes. Download access errors should be fixed at the
-distribution source, without passing repository credentials into Runtime or
-changing its executor authorization.
+1. Open the console address the installer printed: your public URL, or
+   `http://127.0.0.1:8080` on the Core host. Use exactly that address; Web refuses
+   other host names. For a loopback installation on a remote machine, forward the port
+   first: `ssh -L 8080:127.0.0.1:8080 <core-host>`.
+2. Sign in with the Core key:
+
+   ```sh
+   cat ~/.parsar/core/secrets/core.key
+   ```
+
+   The Core key is the installation's administrator credential. Keep it private; see
+   [Core key](operations.md#core-key). Web has no user accounts.
+3. **Set a default model.** Open **System**, find **Default model** and choose
+   **Set** for the harness your applications use (Codex unless you changed
+   `core.default_harness`). Enter the model provider's base URL and API key; MiniMax
+   Code also needs the context window and max output tokens. Core encrypts the key and
+   never shows it again. Core-hosted Sessions use this default when the request and the
+   Agent carry no model provider; self-hosted Sessions never do. See
+   [model providers](quickstart.md#model-providers).
+4. **Create a project and issue a key.** Open **Projects and keys**, select
+   **Create project**, then **Issue key** in it. Copy the key: Web shows it once and
+   Core keeps only a digest. Web also shows how to call the API with it.
+5. Give the key and the API base URL to the application developer, who follows the
+   [API quickstart](quickstart.md).
+
+**Overview** shows the same steps as a **Getting started** checklist, including
+[adding a node](nodes.md).
+
+## What the installer creates
+
+The installation directory, `~/.parsar/core` by default, mode `0700`:
+
+| Path | Content |
+| --- | --- |
+| `config.json` | Process settings. The only file you edit; see the [configuration reference](../configuration.md) |
+| `parsar` | The [management command](operations.md#the-parsar-command) |
+| `secrets/core.key` | The Core key |
+| `secrets/credential.key` | Encryption key for credentials stored in the database. Back it up with the database; never replace it |
+| `secrets/database.password` | PostgreSQL password |
+| `state.json` | Installation ID, Compose project name, image IDs and source commit. Written by the tools only |
+| `generated/` | Files derived from `config.json`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json`, `config.schema.json`, and `runtime-history.json` or the native Core unit when used. `parsar apply` rewrites them; don't edit them |
+| `node-payload/` | The node and self-hosted installers, the manifest and the node files that Web serves at `/node-install/` |
+| `state/e2b/` | Private E2B receipts |
+| `native/` | Core binaries, with `--native-core` only |
+
+Web-only installations have only `secrets/core.key` among the secrets, and no
+`state/e2b/`; Core-only installations have no `node-payload/`.
+
+In Docker, the installer creates a Compose project named `parsar-<10 hex digits>`
+(`project` in `state.json`) with the containers `database`, `migrate` (runs the
+migrations, then exits), `core` and `web`, and the volume `<project>_database` that
+holds all data. Core and Web publish only `127.0.0.1:8091` and `127.0.0.1:8080`. The
+database publishes no port unless Core is native.
+
+The database holds the sandbox backend selection, and later your Projects, keys,
+nodes, default models and all execution history. Apart from Docker's own storage,
+nothing is written outside your home directory: no system service and no file under
+`/etc`. Native Core adds a systemd user unit, enabled from `generated/`.
+
+## Rerun the installer
+
+Rerunning `./install.sh` from the same bundle repairs an installation: it reloads
+missing images, restores a missing `parsar` command, copies node files newly placed in
+`artifacts/`, applies `config.json` and starts the services. It accepts only
+`--install-dir`. It refuses a bundle from another release; see
+[Upgrades](operations.md#upgrade-an-installation).

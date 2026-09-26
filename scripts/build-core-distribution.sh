@@ -106,14 +106,8 @@ done
 # Web owns the Standard sandbox sizes; the installer's first deployment uses this copy.
 cp apps/web/src/features/sandbox/standard-sizes.json "$bundle/standard-sizes.json"
 python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoch"
-mkdir -p "$bundle/docs"
-cp -R docs/getting-started "$bundle/docs/"
-cp docs/configuration.md "$bundle/docs/configuration.md"
-cp README.md "$bundle/"
-mkdir -p "$bundle/services/agents-api"
-cp services/agents-api/HOSTED-SANDBOX-MANAGER.md "$bundle/services/agents-api/"
-mkdir -p "$bundle/contracts/agents-api"
-cp contracts/agents-api/environment-executor-credentials.md "$bundle/contracts/agents-api/"
+# The bundled docs (BUNDLED_DOCS); links that leave them point at this commit on GitHub.
+python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
 mkdir -p "$bundle/runtime"
 cp services/agents-api/deploy/codex/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"

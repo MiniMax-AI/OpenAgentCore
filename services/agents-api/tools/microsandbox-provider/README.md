@@ -17,16 +17,15 @@ are checked. This does not claim a new direct root-capacity measurement on resto
 The ordinary standalone sandbox node runs this helper natively on Linux amd64,
 under a dedicated service user with KVM access. Core owns lifecycle intent through
 the node protocol and can run in a container or on another host. Core's
-container image does not execute this helper; only the node does. The installer's local
-microsandbox opt-in still uses native Core packaging; that is an installation
-choice, not an architectural requirement.
+container image does not execute this helper; only the node does. Core packaging,
+container or native, is independent of the provider.
 
 PostgreSQL owns the provider, per-sandbox resources and immutable Runtime release.
 The node installs that specification and retains its generation and digest; local
 provider files cannot override it. See the
 [deployment contract](../../../../contracts/agents-api/sandbox-deployment.md),
-[installation guide](../../../../docs/getting-started/install.md) and
-[Hosted Sandbox Manager](../../HOSTED-SANDBOX-MANAGER.md). Core no longer accepts a
+[nodes guide](../../../../docs/getting-started/nodes.md) and
+[nodes operator reference](../../HOSTED-SANDBOX-MANAGER.md). Core no longer accepts a
 file-managed startup selection or automatically adopts an older file-managed
 database.
 

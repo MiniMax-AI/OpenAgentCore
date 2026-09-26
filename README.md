@@ -4,101 +4,84 @@
 
 **Open-source Agents API infrastructure, with your choice of native harness.**
 
-Run Codex, Claude Code and MiniMax Code behind one execution API. Parsar Core
-owns Sessions, environments, files, credentials and execution history; each
-native harness keeps its own model and tool loop. Core runs independently of the
-Parsar product.
+Run Codex, Claude Code and MiniMax Code behind the OpenAI Agents API, on machines you
+control. Core serves the API and runs each Session in a sandbox; Web is the
+administrator console that issues the keys applications call Core with.
 
-Core and its administrator Web console ship together. Projects own assets; multiple
-API keys in one Project share its assets and execution principal. Projects and API
-keys live in the database. Management credentials cannot call the Agent API. The
-default installation runs Core, Web and PostgreSQL and selects Docker sandboxes,
-with zero execution nodes. Add execution nodes through Web when you are ready. Core creates each required sandbox from the shared Runtime image. Model
-credentials are supplied through the existing write-only API extension.
+## Get started
 
-Hosted deployments select E2B cloud or one provider across their own local/remote
-nodes (Docker or microsandbox). Web's **Nodes** page shows node health, capacity
-and Session placement. Core places new Sessions automatically; existing Sessions
-retain their node across disconnects and resume.
-
-## Start here
-
-1. **Install Core and Web.** Obtain and verify a matching Linux amd64 bundle,
-   then run its installer. For node access, choose a reachable HTTPS address
-   before the first install and configure your DNS/TLS reverse proxy:
+1. **Install Core and Web with one command.** On a Linux amd64 host with Docker,
+   download a release bundle and run its installer. The repository is internal for
+   now, so sign in to GitHub first. Pick `<tag>` from
+   `gh release list --repo MiniMax-AI/parsar-core`:
 
    ```sh
+   gh auth login
+   gh release download <tag> --repo MiniMax-AI/parsar-core --pattern '*-linux-amd64-offline.tar.gz*'
+   sha256sum -c parsar-core-<commit>-linux-amd64-offline.tar.gz.sha256
+   tar -xzf parsar-core-<commit>-linux-amd64-offline.tar.gz
+   cd parsar-core-<commit>-linux-amd64
    ./install.sh --public-url https://core.example
    ```
 
-   This starts Core, Web and PostgreSQL and selects Docker sandboxes at Web's
-   Standard size, with zero execution nodes; `--sandbox` chooses microsandbox, E2B
-   or none instead. The installer never adds this host as a node. Release
-   bundles are tied to a source revision; an older published bundle does not include
-   current management changes. See the [installation guide](docs/getting-started/install.md)
-   for obtaining/building a matching bundle and the host/network prerequisites.
-2. **Sign in to Web.** Open the console address printed by the installer and
-   sign in with the [Core key](docs/getting-started/operations.md#core-key) from
-   `~/.parsar/core/secrets/core.key`. Keep it private. The console connects to Core
-   automatically. Create a Project on the **Projects and keys** page, then
-   issue a key within it for your application. Save the one-time plaintext
-   response privately; Core stores its digest. Rotate by issuing another key in the
-   same Project and revoking the old one.
-3. **Add a node.** Open **Nodes**, select **Add node**, and copy and run the
-   command on a prepared Linux host, this one included. Web shows when the node is
-   online and its provider is ready. All nodes in a deployment use the same
-   provider. Nodes need the HTTPS public URL: a loopback installation keeps its
-   sandbox selection but can't add nodes until `public_url` is set. After
-   `--sandbox none`, **Nodes** first asks for E2B cloud (its account key and a ready
-   template build, with no node installation) or your own machines with
-   Docker/microsandbox and a sandbox size; finish with **Save configuration**.
+   Put your HTTPS reverse proxy in front first, or install without `--public-url` for a
+   local trial and set it later. See the [installation guide](docs/getting-started/install.md).
+2. **Sign in to Web with the Core key**, from `~/.parsar/core/secrets/core.key`. On
+   **System**, set a default model; on **Projects and keys**, create a project and
+   issue a key. See [Sign in to Web](docs/getting-started/install.md#sign-in-to-web).
+3. **Add a node by pasting one command.** On **Nodes**, choose **Add node**, then
+   **Generate command**, and run the command on a Linux host with sudo. See
+   [Nodes](docs/getting-started/nodes.md).
 
-Installation and node enrollment do not call a model. Once a node is ready,
-run an optional API example with your own model credentials.
+Applications then set `OPENAI_BASE_URL` to `https://core.example/v1` and
+`OPENAI_API_KEY` to the Project API key, and use the official OpenAI SDK; see
+[Call the API](docs/getting-started/quickstart.md).
 
-- [Configuration reference](docs/configuration.md)
-- [API documentation: public API and Web management](docs/api/README.md)
-- [Make your first API request](docs/getting-started/quickstart.md)
-- [Service health, data and operations](docs/getting-started/operations.md)
-- [Hosted Sandbox Manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md)
-- [Protocol coverage and native differences](contracts/agents-api/README.md)
-- [Add or select a harness](contracts/agents-api/harness-selection.md)
-- [Public landing page source](site/index.html)
+## What you get
 
-### Other installation options
+- **One API, several harnesses.** Core implements part of the pinned OpenAI Agents API
+  (`openai-python` 3.13.0, `agents=v1`). Each Session runs a native harness, Codex,
+  Claude Code or MiniMax Code, which keeps its own model and tool loop. Core's additions
+  live only in `x_agents_core`: the harness and the model provider.
+- **Durable execution.** Core owns Agents, Sessions, Turns, Items, environments, files
+  and credentials, in its own PostgreSQL database.
+- **Your sandboxes.** Core-hosted Sessions run in sandboxes on your nodes (Docker or
+  microsandbox microVMs) or on E2B. Applications can also connect their own machines as
+  self-hosted executors.
+- **A console for administrators.** Web signs in with the Core key, issues Project API
+  keys, adds nodes, sets default models and shows metrics and Session history. It
+  never runs Agents on anyone's behalf.
+- **Independent of the Parsar product.** Core needs no product service or database.
 
-Run these from an extracted distribution. The plain command uses loopback for
-local console/API access. For node enrollment, use the reachable origin described
-above. Flags only seed the installation's `config.json`; later changes go there
-and take effect with `~/.parsar/core/parsar apply`, and `parsar status`, `start`
-and `stop` replace `install.sh --status` and `--stop`.
-`--sandbox` is a one-time choice of the sandbox backend, saved in the database like
-Web's setup; change it later in Web. `--sandbox-provider` and `--provider` are
-retired: the installer no longer adds its own host as a node.
+A passing workflow does not establish complete OpenAI Agents API compatibility; the
+[protocol coverage](contracts/agents-api/README.md) records what is qualified and the
+native differences.
 
-```sh
-./install.sh                    # Core + Web + PostgreSQL, loopback access, Docker sandboxes, zero nodes
-./install.sh --core-only        # Core + PostgreSQL, Docker sandboxes, zero nodes
-./install.sh --sandbox microsandbox --public-url https://core.example
-./install.sh --sandbox e2b --e2b-api-key-file "$HOME/e2b-api-key" \
-  --e2b-template '<template-id>:<build-uuid>' --public-url https://core.example
-./install.sh --sandbox none     # choose the sandbox backend in Web later
-```
+## Documentation
 
-Web-only installation connects the console server to an existing Core; see the
-installation guide for its URL and private credential-file options. Installation
-creates no Project or application key, never creates a sample Session and calls no
-model. Configuration files hold deployment settings, not business identities. API
-examples are optional.
+| Page | Covers |
+| --- | --- |
+| [Install Core and Web](docs/getting-started/install.md) | Prerequisites, download, installer options, HTTPS and the reverse proxy, first sign-in |
+| [Nodes](docs/getting-started/nodes.md) | Adding, removing and troubleshooting nodes |
+| [Self-hosted executors](docs/getting-started/self-hosted.md) | Connecting an application's own machine to a Session |
+| [Operations](docs/getting-started/operations.md) | The `parsar` command, the Core key, backups, upgrades, troubleshooting |
+| [Configuration reference](docs/configuration.md) | Every setting in `config.json` and in Web |
+| [Call the API](docs/getting-started/quickstart.md) | The application developer's quickstart |
+| [API reference](docs/api/README.md) | The `/v1`, `/core/v1` and `/api/v1` namespaces |
+| [Nodes and sandbox backends: operator reference](services/agents-api/HOSTED-SANDBOX-MANAGER.md) | Node protocol, manual registration, placement, maintenance |
+| [Protocol coverage](contracts/agents-api/README.md) and [harness selection](contracts/agents-api/harness-selection.md) | Supported operations and native differences |
+| [Landing page source](site/index.html) | The public site |
 
-The protocol baseline is `openai-python` 3.13.0 and `agents=v1`. Harness selection,
-model execution configuration and our daemon transport are documented differences.
-A passing workflow does not establish complete OpenAI Agents API compatibility.
+### Maintainers and advanced deployments
+
+Building distributions, producing releases and running Core alone, without Web or the
+installer, are described in [Maintainers and advanced deployments](docs/maintainers.md).
+The standalone Core archive and container are not an installation path for new users.
 
 ## Develop and build
 
 The repository includes the API, its independent PostgreSQL migrations, daemon,
-Runtime/provider adapters, clients, Web console and distribution tools. It has no
+Runtime and provider adapters, clients, Web console and distribution tools. It has no
 Parsar product service, product database or business-user dependency.
 
 ```sh
@@ -107,17 +90,17 @@ make build-daemon
 pnpm dev:web
 ```
 
-Use the toolchain pinned in `go.mod`, Node 22 and pnpm 10.30.3. Build output goes
-under `~/.parsar/build/`. For advanced deployment, see the
-[service guide](services/agents-api/README.md),
+Use the toolchain pinned in `go.mod`, Node 22 and pnpm 10.30.3. Build output goes under
+`~/.parsar/build/`. See the [service guide](services/agents-api/README.md),
 [Docker Runtime](services/agents-api/deploy/codex/README.md),
-[microsandbox provider](services/agents-api/deploy/microsandbox/README.md), and
+[microsandbox provider](services/agents-api/deploy/microsandbox/README.md) and
 [Web development guide](docs/web/README.md).
 
-Core-managed and user-managed environments reuse the colocated daemon, native
-harness, tools and workspace. Caller-owned E2B provisioning uses the official SDK; deployment-managed E2B
-uses the configured SandboxProvider. For caller-owned environments, the returned `remote_url` connects our daemon, not `exec-server`.
-See the [Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment).
+Core-managed and user-managed environments reuse the colocated daemon, native harness,
+tools and workspace. Caller-owned E2B provisioning uses the official SDK;
+deployment-managed E2B uses the configured sandbox provider. For caller-owned
+environments, the returned `remote_url` connects our daemon, not `exec-server`. See the
+[Runtime enrollment guide](services/agents-api/README.md#user-managed-runtime-enrollment).
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before developing. Historical source-copy
 provenance is retained in [provenance/README.md](provenance/README.md). Existing Go

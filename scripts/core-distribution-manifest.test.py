@@ -248,5 +248,51 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual(contents.read("__main__.py"), (self.bundle / script).read_bytes())
 
 
+class BundledDocsTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.source = pathlib.Path(self.temporary.name) / "source"
+        self.bundle = pathlib.Path(self.temporary.name) / "bundle"
+        for name, text in {
+            "README.md": "# Title\n\n![Banner](docs/banner.png)\n[Install](docs/install.md#sign-in-to-web), "
+                         "[API](contracts/api.md#routes), [web](docs/web), `[kept](missing.md)`, "
+                         "[main](https://github.com/MiniMax-AI/parsar-core/blob/main/LICENSE)\n"
+                         "```sh\n[not a link](missing.md)\n```\n",
+            "docs/install.md": "# Install\n## Sign in to Web\n[Back](../README.md#title) [Here](#sign-in-to-web)\n",
+            "docs/banner.png": "",
+            "docs/web/README.md": "# Web\n",
+            "contracts/api.md": "# API\n## Routes\n",
+        }.items():
+            (self.source / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.source / name).write_text(text)
+
+    def test_links_leaving_the_bundle_point_at_the_revision(self):
+        distribution.docs(self.source, self.bundle, REVISION, names=("README.md", "docs/install.md"))
+        versioned = "https://github.com/MiniMax-AI/parsar-core/{}/" + REVISION + "/"
+        self.assertEqual((self.bundle / "README.md").read_text(), (
+            "# Title\n\n![Banner](" + versioned.format("raw") + "docs/banner.png)\n"
+            "[Install](docs/install.md#sign-in-to-web), [API](" + versioned.format("blob") + "contracts/api.md#routes), "
+            "[web](" + versioned.format("tree") + "docs/web), `[kept](missing.md)`, "
+            "[main](" + versioned.format("blob") + "LICENSE)\n```sh\n[not a link](missing.md)\n```\n"))
+        self.assertEqual((self.bundle / "docs/install.md").read_text(), (self.source / "docs/install.md").read_text())
+        self.assertFalse((self.bundle / "contracts").exists())
+
+    def test_broken_links_and_anchors_fail_the_build(self):
+        for text in ("[x](missing.md)", "[x](docs/install.md#no-such-heading)", "[x](../outside.md)", "[x](#nowhere)"):
+            (self.source / "README.md").write_text("# Title\n" + text + "\n")
+            with self.assertRaises(ValueError):
+                distribution.docs(self.source, self.bundle, REVISION, names=("README.md", "docs/install.md"))
+
+    def test_repository_docs_are_self_consistent(self):
+        repository = pathlib.Path(__file__).resolve().parent.parent
+        distribution.docs(repository, self.bundle, REVISION)
+        self.assertEqual({str(path.relative_to(self.bundle)) for path in self.bundle.rglob("*.md")},
+                         set(distribution.BUNDLED_DOCS))
+        for name in distribution.BUNDLED_DOCS:
+            self.assertNotIn("@SOURCE_REVISION@", (self.bundle / name).read_text())
+            self.assertNotIn("/blob/main/", (self.bundle / name).read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

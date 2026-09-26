@@ -3,9 +3,8 @@
 Run the ordinary standalone sandbox node and its microsandbox helper natively on
 Linux amd64 with KVM access. Core owns scheduling and durable recovery over the
 node protocol; it can run independently in a container or on another host.
-PostgreSQL can remain in Docker. The installer’s local microsandbox opt-in still
-runs Core as a native user service, but that packaging choice is not a requirement
-of the provider architecture.
+PostgreSQL can remain in Docker. Core packaging, container or native, is independent
+of the provider.
 
 A hosted Session gets a dedicated microVM with the existing daemon, native harness
 and workspace. Core suspends it only after a completed Turn has remained idle and
@@ -14,8 +13,9 @@ files and configuration. Native harness startup and shutdown retain their existi
 behavior. This profile uses microsandbox v0.7.2; the helper performs one finite
 operation and exits.
 
-Start with the [installation guide](../../../../docs/getting-started/install.md)
-and [Hosted Sandbox Manager](../../HOSTED-SANDBOX-MANAGER.md). The
+Start with the [installation guide](../../../../docs/getting-started/install.md),
+the [nodes guide](../../../../docs/getting-started/nodes.md) and the
+[nodes operator reference](../../HOSTED-SANDBOX-MANAGER.md). The
 [deployment configuration contract](../../../../contracts/agents-api/sandbox-deployment.md)
 defines the saved selection, resources, Runtime identity and node authorization.
 The [provider contract](../../tools/microsandbox-provider/README.md) describes

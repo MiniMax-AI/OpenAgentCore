@@ -1,10 +1,12 @@
-# Agents API distribution
+# Standalone Core archive (advanced)
 
-This Linux amd64 package contains the independent API, embedded migrator and two
-operator commands. It needs PostgreSQL. The Docker variant also includes the
-qualified colocated Runtime image, its seccomp policy and `HOSTED.md`; use that
-guide after the common API setup below. The basic archive needs separately
-installed execution software.
+This is not the installation path for new users. To install Core with Web, nodes and
+the `parsar` command, use the
+[Core distribution and its installer](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/docs/getting-started/install.md).
+
+This Linux amd64 package contains the independent API, embedded migrator, operator
+commands and `parsar-sandbox-node`. It needs your own PostgreSQL and separately
+installed execution software, and it has no Web console.
 It does not need a source checkout, Go, Node, the Parsar product or its database.
 The [coverage ledger](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/README.md)
 describes supported workflows and remaining protocol gaps. Packaging does not
@@ -52,9 +54,7 @@ application key through the [administrator API](../../contracts/agents-api/admin
 Projects and application keys live only in PostgreSQL. Keys in one Project share
 its scope and principal; rotation uses issuance and revocation without a restart.
 
-For the Docker variant, continue in `HOSTED.md` now to configure the Runtime's
-outward connection and provider before starting Core. For the basic archive,
-set the reachable public origin; Core derives the daemon endpoint from it:
+Set the reachable public origin; Core derives the daemon endpoint from it:
 
 ```sh
 export AGENTS_API_PUBLIC_URL=http://127.0.0.1:8091
@@ -164,8 +164,9 @@ profiles, use the [versioned service guide](https://github.com/MiniMax-AI/parsar
 This package does not install PostgreSQL, daemons, harnesses, TLS or a supervisor,
 and it does not switch Parsar's product execution path.
 
-## Hosted sandbox nodes
+## Sandbox nodes
 
 The release includes `parsar-sandbox-node` for local and remote hosts. See the
-[Hosted Sandbox Manager guide](HOSTED-SANDBOX-MANAGER.md) for provider selection,
-registration, administrator credentials, fixed Session placement and maintenance.
+[nodes and sandbox backends reference](HOSTED-SANDBOX-MANAGER.md) for provider
+selection, manual registration, administrator credentials, fixed Session placement
+and maintenance.

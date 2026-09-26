@@ -1,67 +1,53 @@
-# Call your Core
+# Call the API
 
-Install Core using the [installation guide](install.md). Your Core API credential
-authenticates the caller to your installation. It is separate from the model
-provider key used by a native harness. Neither key belongs in source control.
+Core serves the OpenAI Agents API. Applications use the official OpenAI SDK with two
+environment variables, which the SDK reads by default:
 
-Use the fixed client baseline:
+| Variable | Value | From |
+| --- | --- | --- |
+| `OPENAI_BASE_URL` | The installation's API base URL: its public URL followed by `/v1`, such as `https://core.example/v1` | The administrator; Web's **System** page shows it as **API base URL** |
+| `OPENAI_API_KEY` | A Project API key | The administrator issues it on **Projects and keys**; see [Sign in to Web](install.md#sign-in-to-web) |
+
+The Project API key authenticates your application to this Core. It is separate from
+the model provider's key that a harness uses, and neither belongs in source control.
+The API base URL reaches Core directly; Web does not serve `/v1`.
+
+## First request
+
+Use the pinned client version:
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
 pip install openai==3.13.0
+export OPENAI_BASE_URL=https://core.example/v1
+export OPENAI_API_KEY=<project API key>
 ```
-
-The deployment administrator first creates a Project and issues a key within it,
-on Web's **Projects and keys** page or with the [Core key](operations.md#core-key)
-as Bearer credential: `POST /core/v1/projects` with `{"name":"Default"}`, then
-`POST /core/v1/projects/{project_id}/keys` with a descriptive `{"name":"..."}`.
-
-Obtain that key through a private channel and set it as `OPENAI_API_KEY` in your
-application's environment. Set `OPENAI_BASE_URL` to the installation's API base
-URL: `api_base_url` in `GET /core/v1/installation`, which is the public URL followed
-by `/v1`, such as `https://core.example/v1`. The official SDK reads both variables.
-The key's plaintext appears only at issuance; Core stores a digest in its database.
-All keys in the Project share assets, permissions and the same execution principal,
-while write provenance records the actual key. Other Projects remain isolated. The
-installer creates neither a Project nor an API key. The API base URL reaches Core
-directly; the console does not proxy `/v1`.
 
 ```python
 from openai import OpenAI
 
-# Reads OPENAI_API_KEY and OPENAI_BASE_URL.
-client = OpenAI(default_headers={"OpenAI-Beta": "agents=v1"})
+client = OpenAI()  # reads OPENAI_BASE_URL and OPENAI_API_KEY
 print(client.beta.agents.list().data)
 ```
 
-Rotate an application key by issuing a replacement in the same Project and revoking
-the old key. Assets and the Project principal remain unchanged. Archiving a Project
-disables every key while preserving assets and already accepted work. The deployment
-administrator credential cannot substitute for an application key on `/v1`.
+This read checks access; it runs no model and creates no sandbox. The same request
+with curl:
 
-This read verifies API access. It does not invoke a model or create an execution
-environment. Installation has no mandatory sample task.
+```sh
+curl "$OPENAI_BASE_URL/agents" -H "Authorization: Bearer $OPENAI_API_KEY" -H "OpenAI-Beta: agents=v1"
+```
 
-## Run a Session when you are ready
+All keys of a Project share its assets and execution principal; other Projects are
+isolated. When the administrator rotates your key, they issue a new one in the same
+Project and revoke the old one; your assets stay.
 
-This example requires a connected node whose provider is ready. The default
-installation selects Docker sandboxes and has zero execution nodes: sign in to Web
-and [add a node](install.md#add-nodes-after-a-default-installation), the Core host
-included. You do not need to reinstall Core or change installer flags to add nodes
-in Web.
+## Run a Session
 
-Core creates the sandbox through its Provider using the prepared Runtime image,
-then initializes the daemon, native harness and workspace inside it. You do not
-install or start a separate daemon for a Core-managed Session. The public discriminator remains
-`openai_hosted`; in this deployment it means the sandbox managed by Parsar Core.
-The installation's provider can be microsandbox or Docker.
-
-If the administrator set a deployment default model provider for the harness (Web,
-System), a hosted Session needs only `agent.model`. Otherwise, or to use your own
-endpoint, pass the provider with the request. For a Codex-compatible Responses
-endpoint, provide your actual model name, endpoint and key through your
-application's private configuration:
+A Core-hosted Session (`openai_hosted`) runs in a sandbox that Core creates: on a node
+with free capacity, or on E2B. Core prepares the daemon, native harness and workspace
+inside it. The installation needs a ready node or an E2B backend; see
+[Nodes](nodes.md).
 
 ```python
 import os
@@ -86,33 +72,57 @@ session = client.beta.agents.sessions.create(
 print(session.id)
 ```
 
-Running this example makes a real model request and may incur provider charges.
-`extra_body` carries existing Core extensions: harness selection and write-only
-model configuration. They are not fields in the official SDK 3.13.0 protocol.
-The service encrypts model configuration with tenant/Session binding and never
-returns the secret through public resource reads. A `self_hosted` Session must
-always carry its own provider this way or through a saved Agent; deployment
-defaults apply to `openai_hosted` and `none`, never to `self_hosted`. Keep the installation's
-credential encryption key and database together across restarts.
-Keep the complete `agent` object together: SDK 3.13.0 replaces an ordinary body
-field with the corresponding `extra_body` field rather than merging nested fields.
+This makes a real model request and may incur charges. If the administrator set a
+default model for the harness, omit `x_agents_core.model_provider`; `agent.model` is
+still required. SDK 3.13.0 replaces an ordinary body field with the matching
+`extra_body` field instead of merging nested fields, so keep the whole `agent` object
+in `extra_body`.
 
-The model must support the selected harness's native protocol:
+## Core extensions: x_agents_core
 
-| Harness selector | Model protocol | Additional input |
+`/v1` has exactly the official routes. Core's additions are fields inside
+`x_agents_core`, passed through `extra_body`; any other member is rejected with 400.
+
+| Field | Where | Meaning |
 | --- | --- | --- |
-| `codex` | `responses` | Exact provider model ID |
-| `claude_sdk` | `anthropic` | Exact provider model ID |
-| `mcode` | `anthropic` | Actual `context_window` and `max_output_tokens` limits |
+| `x_agents_core.harness` | A saved Agent, or the Session's inline `agent` | Which native harness runs the Agent: `codex`, `claude_sdk` or `mcode`. Omitted: the installation's default harness (`core.default_harness`, Codex unless changed) |
+| `x_agents_core.model_provider` | A saved Agent, or Session creation | The model provider bundle: `protocol`, HTTPS `base_url`, write-only `api_key`, and for `mcode` also `context_window` and `max_output_tokens`. Reads return `api_key_configured` instead of the key |
 
-See [harness selection](https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/harness-selection.md) and
-[model execution](https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/model-execution.md) for the complete
-extension contract. Native capabilities differ; selecting an engine does not make
-an unsupported model or operation work.
+The provider's protocol must match the harness:
+
+| Harness | `protocol` | Also required |
+| --- | --- | --- |
+| `codex` | `responses` | The provider's exact model ID in `agent.model` |
+| `claude_sdk` | `anthropic` | The provider's exact model ID |
+| `mcode` | `anthropic` | `context_window` and `max_output_tokens` |
+
+See [harness selection](../../contracts/agents-api/harness-selection.md) and
+[model execution](../../contracts/agents-api/model-execution.md) for the full contract.
+Selecting a harness doesn't make an unsupported model or operation work.
+
+## Model providers
+
+A Session takes its model provider from the first of these that has one; bundles are
+never merged:
+
+1. `x_agents_core.model_provider` in the Session creation request;
+2. the saved Agent's `x_agents_core.model_provider`;
+3. the installation's default model for the harness, set in Web on **System**,
+   **Default model**.
+
+| Environment | Request or saved Agent | Default model | None of them |
+| --- | --- | --- | --- |
+| `openai_hosted` | Used | Used | 400 `model_provider_required` |
+| `self_hosted` | Used | Never | 400 `model_provider_required` |
+| `none` | Rejected with 400 | Used | Allowed: the device's own environment supplies the model |
+
+A Session freezes its provider when it is created; later changes to the Agent or the
+default affect only new Sessions. Core encrypts the key with the Session and never
+returns it. Self-hosted Sessions always bring their own provider, because the default
+holds the operator's key and the executor host belongs to the application; see
+[Self-hosted executors](self-hosted.md).
 
 ## Observe and recover
-
-Query execution history from your application:
 
 ```python
 current = client.beta.agents.sessions.retrieve(session.id)
@@ -121,12 +131,12 @@ items = client.beta.agents.sessions.items.list(session.id)
 print(current.id, turns.data, items.data)
 ```
 
-Wait for the Turn's terminal result before treating a task as complete. After a
-client disconnect, recover through Session, Turn and Items queries. SSE is a live
-stream, not a historical replay mechanism. Do not automatically submit the same
-work as a new Session when a response is lost.
+Wait for the Turn's final state before treating a task as done. After a disconnect,
+recover through Session, Turn and Items reads: the event stream is live only and does
+not replay history. Don't submit the same work as a new Session when a response is
+lost.
 
-Files, Artifacts, cancellation, credential management and their current limits
-are documented in the [coverage ledger](https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/README.md).
-MCP credentials use the separate Vault API; they are not Core caller keys or
-model-provider credentials.
+Files, Artifacts, cancellation and their current limits are in the
+[coverage ledger](../../contracts/agents-api/README.md). MCP credentials use the
+separate Vault API; they are neither Project API keys nor model provider keys. The
+[API index](../api/README.md) lists every route.

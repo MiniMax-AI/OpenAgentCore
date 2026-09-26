@@ -150,12 +150,12 @@ and memory, and the matched immutable Runtime release in PostgreSQL. Docker does
 not accept independent hard root or workspace disk quotas through this contract.
 The saved public Core origin must be reachable from sandbox guests.
 
-Enroll an ordinary sandbox node using the console's one-line command. It fetches
-and validates the deployment configuration, imports the matched Runtime image and
-actively connects to Core. Core can run independently without a Docker socket;
-the node owns its local Docker access. Node files contain the installed selection
-and host-specific paths, never a separate provider or resource choice. A local
-installation opt-in uses this same node workflow.
+Enroll an ordinary sandbox node with Web's one-command [Add node](../../../../docs/getting-started/nodes.md)
+flow. It fetches and validates the deployment configuration, imports the matched
+Runtime image and actively connects to Core. Core can run independently without a
+Docker socket; the node owns its local Docker access. Node files contain the installed
+selection and host-specific paths, never a separate provider or resource choice. The
+Core host joins through the same command as any other host.
 
 Provider, resource and Runtime changes use deployment maintenance, the current
 generation and verified zero retained or pending execution resources. Stopped

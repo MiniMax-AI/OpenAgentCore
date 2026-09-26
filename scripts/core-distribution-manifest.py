@@ -6,13 +6,14 @@ import hashlib
 import json
 import os
 import pathlib
+import posixpath
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 import zipapp
 
 
@@ -28,6 +29,27 @@ ARTIFACTS = {
     "native/microsandbox/libkrunfw.so.5.6.1": "libkrunfw.so.5.6.1",
     "runtime/seccomp.json": "seccomp.json",
 }
+
+
+# The docs a distribution carries, by repository path. Links between them stay
+# relative; every other relative link points at the same file on GitHub at the
+# bundle's commit, so no bundled link leads outside the bundle.
+BUNDLED_DOCS = (
+    "README.md",
+    "docs/configuration.md",
+    "docs/getting-started/README.md",
+    "docs/getting-started/install.md",
+    "docs/getting-started/nodes.md",
+    "docs/getting-started/operations.md",
+    "docs/getting-started/quickstart.md",
+    "docs/getting-started/self-hosted.md",
+    "services/agents-api/HOSTED-SANDBOX-MANAGER.md",
+    "contracts/agents-api/environment-executor-credentials.md",
+)
+REPOSITORY_URL = "https://github.com/MiniMax-AI/parsar-core"
+MARKDOWN_LINK = re.compile(r"(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")
+FENCE = re.compile(r"\s*(```|~~~)")
+HEADING = re.compile(r"(#{1,6})\s+(.*?)\s*#*\s*\Z")
 
 
 def sha256(path):
@@ -308,12 +330,110 @@ def archive(bundle, epoch, variant=""):
     output.with_name(output.name + ".sha256").write_text(sha256(output) + "  " + output.name + "\n")
 
 
+def markdown_lines(text):
+    """(line, inside a code block) for each line of a Markdown document."""
+    fenced = False
+    for line in text.split("\n"):
+        if FENCE.match(line):
+            fenced = not fenced
+            yield line, True
+        else:
+            yield line, fenced
+
+
+def heading_anchors(text):
+    """GitHub's heading anchors: lowercase, punctuation dropped, spaces to hyphens, repeats numbered."""
+    found, counts = set(), {}
+    for line, code in markdown_lines(text):
+        match = None if code else HEADING.match(line)
+        if match:
+            title = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", match.group(2)).replace("`", "").replace("*", "")
+            base = re.sub(r"[^\w\- ]", "", re.sub(r"<[^>]+>", "", title).strip().lower()).replace(" ", "-")
+            count = counts.get(base, 0)
+            counts[base] = count + 1
+            found.add(base if count == 0 else f"{base}-{count}")
+    return found
+
+
+def rewrite_links(text, rewrite):
+    """Apply rewrite(image, target) to every Markdown link outside code blocks and code spans."""
+    lines = []
+    for line, code in markdown_lines(text):
+        if not code:
+            parts = re.split(r"(`[^`]*`)", line)
+            line = "".join(part if index % 2 else MARKDOWN_LINK.sub(
+                lambda match: f"{match.group(1)}[{match.group(2)}]({rewrite(bool(match.group(1)), match.group(3))}{match.group(4)})",
+                part) for index, part in enumerate(parts))
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def docs(source, bundle, revision, names=BUNDLED_DOCS):
+    """Copy the bundled docs; a link that leaves them points at this revision on GitHub.
+
+    Every relative link must name an existing file, and an anchor an existing heading,
+    so a broken link fails the build instead of shipping.
+    """
+    source, bundle = pathlib.Path(source), pathlib.Path(bundle)
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise ValueError("Bundled docs need the full source commit")
+    bundled = set(names)
+    anchors = {}
+
+    def headings(path):
+        if path not in anchors:
+            anchors[path] = heading_anchors((source / path).read_text(encoding="utf-8"))
+        return anchors[path]
+
+    def versioned(name):
+        def rewrite(image, link):
+            if re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", link):
+                for kind in ("blob", "tree", "raw"):
+                    if link.startswith(f"{REPOSITORY_URL}/{kind}/main/"):
+                        return f"{REPOSITORY_URL}/{kind}/@SOURCE_REVISION@/" + link[len(f"{REPOSITORY_URL}/{kind}/main/"):]
+                return link
+            path, _, anchor = link.partition("#")
+            target = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(path))) if path else name
+            if target == ".." or target.startswith("../") or not (source / target).exists():
+                raise ValueError(f"{name}: link to a missing file: {link}")
+            if anchor and target.endswith(".md") and unquote(anchor) not in headings(target):
+                raise ValueError(f"{name}: link to a missing heading: {link}")
+            if target in bundled:
+                return link
+            kind = "raw" if image else "tree" if (source / target).is_dir() else "blob"
+            return f"{REPOSITORY_URL}/{kind}/@SOURCE_REVISION@/{target}" + ("#" + anchor if anchor else "")
+        return rewrite
+
+    for name in names:
+        text = rewrite_links((source / name).read_text(encoding="utf-8"), versioned(name))
+        target = bundle / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text.replace("@SOURCE_REVISION@", revision), encoding="utf-8")
+    check_docs(bundle, names)
+
+
+def check_docs(bundle, names=BUNDLED_DOCS):
+    """Every relative link in the bundled docs resolves inside the bundle."""
+    bundle = pathlib.Path(bundle)
+    for name in names:
+        def check(image, link):
+            if not re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", link):
+                path, _, anchor = link.partition("#")
+                target = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(path))) if path else name
+                if target not in names or (anchor and unquote(anchor) not in heading_anchors(
+                        (bundle / target).read_text(encoding="utf-8"))):
+                    raise ValueError(f"Bundled {name} links outside the bundle: {link}")
+            return link
+        rewrite_links((bundle / name).read_text(encoding="utf-8"), check)
+
+
 if __name__ == "__main__":
     commands = {"extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image,
-                "built-image": built_image, "manifest": manifest, "archive": archive, "bootstraps": bootstraps, "release-base": release_base}
+                "built-image": built_image, "manifest": manifest, "archive": archive, "bootstraps": bootstraps,
+                "release-base": release_base, "docs": docs}
     try:
         commands[sys.argv[1]](*sys.argv[2:])
     except (KeyError, TypeError):
-        sys.exit("Usage: core-distribution-manifest.py extract-runtime|verify-runtime|verify-image|built-image|manifest|archive|bootstraps|release-base ARGS...")
+        sys.exit("Usage: core-distribution-manifest.py extract-runtime|verify-runtime|verify-image|built-image|manifest|archive|bootstraps|release-base|docs ARGS...")
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         sys.exit(str(error))

@@ -70,7 +70,7 @@ it is operational attribution, not per-key billing.
 ## Sandbox administration
 
 The [deployment configuration contract](../../contracts/agents-api/sandbox-deployment.md),
-[Hosted Sandbox Manager reference](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
+[nodes and sandbox backends reference](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
 and [generated OpenAPI](../../contracts/agents-api/core.openapi.yaml)
 define deployment and node operations:
 

@@ -85,22 +85,13 @@ Linux amd64 archive, with source/protocol identity, checksums, a license and
 [operator instructions](RELEASE.md). Build from a clean Git worktree with Go and
 Python 3.9+; output defaults to `~/.parsar/build/agents-api-release` (or
 `AGENTS_API_RELEASE_DIR`). The extracted API needs no source checkout or compiler.
-For a Docker-hosted package, first qualify an immutable Linux amd64 Runtime built
-with [the existing Runtime builder](deploy/codex/README.md), then run:
-
-```sh
-AGENTS_API_RELEASE_RUNTIME_IMAGE=sha256:<qualified-image-ID> make build-agents-api-release
-```
-
-The resulting `agents-api-docker-<revision>-linux-amd64.tar.gz` also contains the
-Runtime image export, committed seccomp policy and [hosted guide](HOSTED-RELEASE.md).
-The builder records only the selected image ID and file hashes, not the complete
-Runtime release (six distribution identities) that a Docker deployment requires,
-so this package cannot configure hosted execution by itself. For Docker-hosted
-deployments, the Core distribution and its
-[installer](../../docs/getting-started/install.md) replace it: their manifest
-carries the complete release, and Docker nodes are added from Web. The ordinary
-archive remains Docker-free. Database/Docker setup and publication remain separate.
+The archive and the container are advanced paths for running Core alone; see
+[Maintainers and advanced deployments](../../docs/maintainers.md). The Docker-hosted
+archive variant (`AGENTS_API_RELEASE_RUNTIME_IMAGE`) is retired: it recorded only an
+image ID, not the complete Runtime release a Docker deployment requires. Docker-hosted
+deployments use the Core distribution and its
+[installer](../../docs/getting-started/install.md), whose manifest carries the complete
+release; Docker nodes are added from Web.
 
 ## Database ownership
 
@@ -275,7 +266,7 @@ explicit operator configuration. Select the qualified native image using the
 [engine profile guides](../../contracts/agents-api/README.md#public-engine-profiles),
 then follow the [Docker setup](deploy/codex/README.md#standalone-operator-configuration).
 Core-managed hosting supports deployment-selected E2B, Docker or microsandbox;
-see [Hosted Sandbox Manager](HOSTED-SANDBOX-MANAGER.md). For the separate
+see the [nodes and sandbox backends reference](HOSTED-SANDBOX-MANAGER.md). For the separate
 user-managed E2B path, see
 [E2B Runtime packaging](deploy/e2b/README.md).
 Core remains independently deployed with its own database. Public idle and initial
@@ -480,7 +471,7 @@ V1 uses our daemon as the user-side executor. Deploy daemon, selected harness,
 local tools and protected `/workspace` together using the shared Runtime. For this caller-managed path, the user owns local or E2B allocation, renewal
 and destruction; use the official E2B SDK through the
 [E2B guide](deploy/e2b/README.md). Deployment-managed E2B, Docker and microsandbox
-are separate hosted choices in [Hosted Sandbox Manager](HOSTED-SANDBOX-MANAGER.md).
+are separate hosted choices in the [nodes and sandbox backends reference](HOSTED-SANDBOX-MANAGER.md).
 
 Create a Session with `environment={"type":"self_hosted",
 "workspace_directory":"/workspace"}` and empty/default capability directories.
@@ -646,6 +637,7 @@ not changes to the pinned official protocol.
 
 ## Hosted sandbox nodes
 
-The release includes `parsar-sandbox-node` for local and remote hosts. See the
-[Hosted Sandbox Manager guide](HOSTED-SANDBOX-MANAGER.md) for provider selection,
+The release includes `parsar-sandbox-node` for local and remote hosts. Add nodes with
+Web's one-command flow in the [nodes guide](../../docs/getting-started/nodes.md); the
+[operator reference](HOSTED-SANDBOX-MANAGER.md) covers provider selection, manual
 registration, administrator credentials, fixed Session placement and maintenance.

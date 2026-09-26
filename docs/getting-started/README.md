@@ -1,25 +1,21 @@
-# Getting started
+# Parsar Core documentation
 
-Parsar Core is self-deployed, open-source Agents API infrastructure. It provides
-an execution API and an optional Web console, with native harnesses behind one
-Runtime contract. The Parsar product is not required.
+Parsar Core is self-hosted, open-source Agents API infrastructure: Core serves the
+OpenAI Agents API and runs native harnesses (Codex, Claude Code and MiniMax Code) in
+sandboxes on your machines. Web is the administrator console; it issues the keys that
+applications call Core with.
 
-- [Install Core and Web](install.md)
-- [Configuration reference](../configuration.md)
-- [Public API and Web management reference](../api/README.md)
-- [Call the API](quickstart.md)
-- [Operate the installation](operations.md)
-- [Protocol coverage and native differences](https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/README.md)
+| Page | For | What it covers |
+| --- | --- | --- |
+| [Install Core and Web](install.md) | Administrators | Prerequisites, download, the installer and every option, HTTPS and the reverse proxy, a local trial, first sign-in, what is created on disk |
+| [Nodes](nodes.md) | Administrators | Adding a node with one command, sudo and no-sudo modes, removal, logs and troubleshooting |
+| [Self-hosted executors](self-hosted.md) | Administrators and application owners | Connecting an application's own machine to a `self_hosted` Session, rotating and revoking its credential |
+| [Operations](operations.md) | Administrators | The `parsar` command, the Core key, backups, upgrades and troubleshooting |
+| [Configuration reference](../configuration.md) | Administrators | Every `config.json` setting and every runtime setting in Web |
+| [Call the API](quickstart.md) | Application developers | `OPENAI_BASE_URL` and `OPENAI_API_KEY`, running a Session, model providers and `x_agents_core` |
+| [API reference](../api/README.md) | Developers | The `/v1`, `/core/v1` and `/api/v1` namespaces and their contracts |
 
-Core and Web ship together. The default installation runs Core, Web and PostgreSQL
-and selects Docker sandboxes, with zero execution nodes; `--sandbox microsandbox`,
-`--sandbox e2b` or `--sandbox none` choose otherwise. Add nodes, the Core host
-included, with **Add node** on the Nodes page in Web; nodes need an HTTPS public URL
-such as `--public-url https://core.example`. Core then creates the execution sandbox
-when a Session needs it. Installing the service does not require a model key or run
-a model request.
-
-The Web console is a client of Core. API users work with Agents, Sessions and
-Environments; operators also maintain the host, provider, Runtime images and
-durable storage. Those operational needs extend beyond the hosted OpenAI
-Platform experience, without redefining its public resource semantics.
+Deeper references: [nodes and sandbox backends](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
+for operators, [protocol coverage and native differences](../../contracts/agents-api/README.md),
+and [maintainers and advanced deployments](../maintainers.md) for building
+distributions and running Core without the installer.

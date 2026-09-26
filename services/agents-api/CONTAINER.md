@@ -1,4 +1,7 @@
-# Standalone container
+# Standalone container (advanced)
+
+This is not the installation path for new users. To install Core with Web, nodes and
+the `parsar` command, use the [installation guide](../../docs/getting-started/install.md).
 
 This image packages the execution API, its embedded migrator and device operator
 command. It needs a dedicated PostgreSQL database/account and an external daemon
