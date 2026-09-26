@@ -16,7 +16,7 @@ import { sandboxAdmin, sandboxConsoleConfigQuery, sandboxDeploymentQuery, sandbo
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
 import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 import { NodeEnrollment } from "./NodeEnrollment";
-import { NodeList } from "./NodeList";
+import { NodeList, onOldAddress } from "./NodeList";
 import { NodeDetail } from "./NodeDetail";
 import { NodeEditDialog } from "./NodeEditDialog";
 import { NodeCleanupDialog, type NodeCleanup } from "./NodeCleanupDialog";
@@ -188,7 +188,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
           const { deployment } = snapshot;
           setCleanup({ node: {
             name: target.name || target.id, sourceUrl: nodeSourceUrl(installation), installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256,
-            provider: deployment.provider, oldAddress: target.core_url !== deployment.core_url ? target.core_url : null,
+            provider: deployment.provider, oldAddress: onOldAddress(target, deployment.core_url) ? target.core_url : null,
           }, open: true });
         }
       }
@@ -209,7 +209,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     : hostedNodes && fresh && !snapshot.deployment.maintenance ? "ready" : "unavailable";
   useConsoleIntent("add-node", addNodeReadiness, () => setAdding(true));
   // A node enrolled with another address than Core's current one (config.json's public_url) gets no new sandboxes until it is added again.
-  const staleNodes = hostedNodes && snapshot ? nodes.filter((node) => node.core_url !== snapshot.deployment.core_url).map((node) => node.name || node.id) : [];
+  const staleNodes = hostedNodes && snapshot ? nodes.filter((node) => onOldAddress(node, snapshot.deployment.core_url)).map((node) => node.name || node.id) : [];
   const selected = params.id ? nodes.find((node) => node.id === params.id) : undefined;
   const refreshButton = <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy || removing} label={t("Refresh sandbox state")} />;
   const readFailure = error !== null ? sandboxRequestError(error, locale) : null;

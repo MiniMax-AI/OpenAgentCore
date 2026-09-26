@@ -12,13 +12,22 @@ import { nodeHealth, suspendedSandboxes } from "../fleet/fleet-model";
 export type NodeState = "unconfirmed" | "old_address" | "offline" | "degraded" | "attention" | "available";
 
 /**
+ * Whether a node enrolled with another Core address than the deployment's
+ * `coreUrl`. An empty address is unknown, not old: a node Core did not enroll,
+ * such as a file-managed local one, reports none.
+ */
+export function onOldAddress(node: SandboxNode, coreUrl: string): boolean {
+  return Boolean(node.core_url && coreUrl && node.core_url !== coreUrl);
+}
+
+/**
  * One status per node: stale data first; then a node enrolled with another
  * address than the deployment's `coreUrl`, which gets no new sandboxes until it
  * is removed and added again; then reachability, then anything reported to look at.
  */
 export function nodeState(node: SandboxNode, allocations: readonly SandboxAllocation[], stale: boolean, coreUrl: string): NodeState {
   if (stale) return "unconfirmed";
-  if (node.core_url !== coreUrl) return "old_address";
+  if (onOldAddress(node, coreUrl)) return "old_address";
   const health = nodeHealth(node);
   if (health !== "available") return health;
   const attention = node.cleanup_pending > 0 || allocations.some((allocation) => allocation.node_id === node.id && allocation.diagnostic);

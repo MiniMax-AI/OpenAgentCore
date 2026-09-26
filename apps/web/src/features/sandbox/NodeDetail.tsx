@@ -53,8 +53,9 @@ export function NodeDetail({ node, allocations, coreUrl, stale, suspension }: {
   const reporting = !stale && node.online;
   // Only microsandbox suspends sandboxes into snapshots; Docker retains nothing.
   const suspends = node.provider === "microsandbox";
-  const diagnostic = stale ? "" : nodeDiagnostic(node);
   const state = nodeState(node, own, stale, coreUrl);
+  // As in the list, an old address is the status to act on; the node's health would only distract.
+  const diagnostic = stale || state === "old_address" ? "" : nodeDiagnostic(node);
   const count = (value: number) => formatInteger(value, locale);
   return (
     <>
