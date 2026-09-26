@@ -13,9 +13,11 @@ export function sandboxStateLabel(state: string, locale: Locale): string {
 /**
  * What to say about a failed sandbox request. A refusal (a 4xx other than 401
  * and a 408 timeout) is Core's to explain, so its message shows as sent: one
- * code, such as a 409 conflict, covers several reasons. Only an unconfigured
- * console gets the console's own words. An E2B configuration whose reason the
- * client withheld, since it may echo the key, is named as refused without it.
+ * code, such as a 409 conflict, covers several reasons. Only codes with one
+ * exact, stable meaning get the console's own words: an unconfigured console,
+ * and a node that still holds sandboxes or is unavailable. An E2B configuration
+ * whose reason the client withheld, since it may echo the key, is named as
+ * refused without it.
  */
 export function sandboxRequestError(error: unknown, locale: Locale): string {
   let key: MessageKey = "The sandbox request failed. Refresh to check the current state before trying again.";
@@ -25,6 +27,8 @@ export function sandboxRequestError(error: unknown, locale: Locale): string {
     else if (error.status === 401) key = "Sign in to the console again to access sandbox management.";
     else if (error.code === "sandbox_configuration_unconfirmed") { if (refused) key = "Core rejected the E2B configuration."; }
     else if (refused) {
+      if (error.code === "runtime_node_in_use") return translate(locale, "The node has active allocations or retained resources. Clear allocations, snapshots, reservations and pending cleanup before removal.");
+      if (error.code === "runtime_node_unavailable") return translate(locale, "The selected sandbox node is unavailable or has no capacity.");
       if (error.message) return error.message;
       key = "The sandbox request was rejected. Refresh to check the current state.";
     } else if (error.status >= 500) key = "The sandbox service is unavailable. Refresh to check the current state.";

@@ -176,6 +176,8 @@ export const chinese = {
   "Sandbox placement could not be loaded.": "无法加载沙箱分配信息。",
   "The sandbox request failed. Refresh to check the current state before trying again.": "沙箱请求失败。重试前请刷新并检查当前状态。",
   "Core did not confirm node removal. Refresh to check its state.": "Core 未确认节点已移除。请刷新以检查状态。",
+  "The node has active allocations or retained resources. Clear allocations, snapshots, reservations and pending cleanup before removal.": "节点仍有活跃分配或保留资源。请先清理资源分配、快照、预留资源和待清理项，再移除节点。",
+  "The selected sandbox node is unavailable or has no capacity.": "所选沙箱节点不可用或容量不足。",
   "Sign in to the console again to access sandbox management.": "请重新登录控制台以访问沙箱管理。",
   "Sandbox administration is not configured on this console.": "此控制台尚未配置沙箱管理权限。",
   "Core rejected the sandbox change": "Core 拒绝了此次沙箱更改",
