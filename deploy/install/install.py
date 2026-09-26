@@ -321,6 +321,8 @@ def layout(root):
     config, legacy = (root / "config.json").exists(), (root / "installation.json").exists()
     if config and legacy:
         return "interrupted"
+    if not config and not legacy and (root / "state.json").exists():
+        return "incomplete"
     return "config" if config else "legacy" if legacy else "other"
 
 
@@ -345,8 +347,9 @@ def create(root, args, config, manifest, images, provider=None):
              # A requested local node is enrolled once the services first start; a repair retries it.
              "local_node": provider}
     state["secrets_sha256"].pop("core.key")
-    write(root / "config.json", json.dumps(config, indent=2) + "\n")
+    # state.json first: whenever config.json exists, the installation can be repaired.
     write(root / "state.json", json.dumps(state, indent=2) + "\n")
+    write(root / "config.json", json.dumps(config, indent=2) + "\n")
 
 
 def unfinished_conversion(state):
@@ -432,6 +435,10 @@ def main(argv=None):
             raise InstallError("--convert accepts only --install-dir, --yes and --public-url")
         check_host()
         manifest = verify_bundle(bundle)
+        described = json.loads((root / ("state.json" if kind == "interrupted" else "installation.json")).read_text())
+        if described.get("native_core") and described.get("mode") != "web-only":
+            # A host that can't run this release's native Core is refused before anything changes.
+            native_service.preflight(bundle, root)
         convert.convert(root, manifest, image_loader(manifest, bundle), args.public_url, args.yes, run)
         finish(root, bundle, manifest)
         return
@@ -447,6 +454,8 @@ def main(argv=None):
         manifest = verify_bundle(bundle)
         if state["source_commit"] != manifest["source_commit"]:
             raise InstallError("Finish the conversion with the bundle it started with, release " + state["source_commit"])
+        if native_service.is_native(state):
+            native_service.preflight(bundle, root)
         image_loader(manifest, bundle)(list(state["images"]))
         finish(root, bundle, manifest)
         return
@@ -469,6 +478,9 @@ def main(argv=None):
             parsar_cli.save_state(root, dict(state, images=images))
         finish(root, bundle, manifest)
         return
+    if kind == "incomplete":
+        raise InstallError(f"An earlier installation into {root} stopped before writing config.json and started no "
+                           "service. Remove the directory and install again")
     if kind == "other":
         raise InstallError("Installation directory is not empty; refusing to overwrite existing state")
     document = seed_document(args)

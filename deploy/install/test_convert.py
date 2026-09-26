@@ -159,6 +159,32 @@ class ConvertTests(unittest.TestCase):
                                       self.host.commands)
                     self.assertConverted()
 
+    def test_a_local_only_138_install_keeps_no_public_url(self):
+        # The #138 deployment reports Core's loopback fallback; it is derived, not a public URL.
+        for mode in ("all", "core-only"):
+            with self.subTest(mode=mode):
+                self.root, self.host.containers = self.work / f"local-{mode}", {}
+                self.legacy("b37e43b9", mode)
+                self.host.deployment_core_url = "http://127.0.0.1:8091"
+                self.convert()
+                self.assertIsNone(self.document("config.json")["public_url"])
+                environment = configuration.read_environment((self.root / "generated/core.env").read_text())
+                self.assertEqual(environment["AGENTS_API_PUBLIC_URL"], "http://127.0.0.1:8091")
+                services = self.document("generated/compose.json")["services"]
+                if mode == "all":
+                    self.assertEqual(services["web"]["environment"]["CORE_CONSOLE_ORIGIN"], "http://127.0.0.1:8080")
+                self.assertNotIn("/core/v1/sandbox/deployment", json.dumps(self.host.commands))
+                self.assertConverted()
+
+    def test_native_conversion_checks_the_host_first(self):
+        self.legacy(native=True)
+        before = self.snapshot()
+        with mock.patch.object(install.native_service, "preflight",
+                               side_effect=RuntimeError("Native Core shared libraries cannot load on this host")), \
+                self.assertRaisesRegex(RuntimeError, "shared libraries"):
+            self.convert()
+        self.assertEqual(self.snapshot(), before)
+
     def test_hand_set_settings_move_into_config_json(self):
         self.private("config/execution-options.json", '{"codex_provider": {"bearer_token": "model-secret"}}')
         self.private("config/history.json", json.dumps({"endpoint": "collector.example:4317",

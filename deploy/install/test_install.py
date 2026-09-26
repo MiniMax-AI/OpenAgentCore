@@ -136,6 +136,9 @@ class InstallerTests(unittest.TestCase):
         (self.root / "installation.json").write_text("{}")
         with self.assertRaisesRegex(install.InstallError, "predates config.json; run ./install.sh --convert"):
             self.install()
+        (self.root / "installation.json").rename(self.root / "state.json")
+        with self.assertRaisesRegex(install.InstallError, "stopped before writing config.json"):
+            self.install()
 
     def test_web_only_uses_the_existing_core_key_and_records_its_core(self):
         source = self.key_file()

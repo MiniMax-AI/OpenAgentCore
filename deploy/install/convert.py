@@ -284,7 +284,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
     if mode == "web-only":
         config["web"] = {"core_url": canonical(old.get("core_url"), "web.core_url", plan)}
     config["log"] = {"level": "info", "format": "auto", "add_source": False}
-    env_public = None
+    env_public, from_env = None, False
     known = {"config": set(), "admin": {"core.key"}}
     if mode != "web-only":
         known["config"] = {"core.env", "credential.key", "database.password"}
@@ -297,7 +297,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
             plan.problem("config/core.env", "", "must be a private file of double-quoted literal values")
             env = None
         if env is not None:
-            env_public = map_environment(root, old, env, password, config, plan, known)
+            env_public, from_env = map_environment(root, old, env, password, config, plan, known)
         try:
             digests = json.loads((root / "admin/core-key-digests.json").read_text())
         except ValueError:
@@ -309,11 +309,16 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
             plan.notes.append(f"admin/core-key-digests.json lists {len(digests) - 1} more Core key digest(s). "
                               "They are dropped; only admin/core.key works after conversion.")
 
-    public = env_public or canonical(old.get("public_url"), "public_url", plan, public_url_override)
-    if public_url_override is not None and old.get("public_url") and not origin(old["public_url"].lower()):
-        public, public_url_override = public_url_override, None
+    if from_env:
+        public = canonical(env_public, "public_url", plan)
+    else:
+        public = canonical(old.get("public_url"), "public_url", plan, public_url_override)
+        if public_url_override is not None and old.get("public_url") and not origin(old["public_url"].lower()):
+            public, public_url_override = public_url_override, None
     started = False
-    if mode != "web-only" and not plan.problems:
+    # Before #138, nodes enrolled with the sandbox deployment's own core_url. Since then
+    # Core derives that from AGENTS_API_PUBLIC_URL, so core.env already names the address.
+    if mode != "web-only" and not from_env and not plan.problems:
         deployment, started = old_core_deployment(root, old, plan, run)
         if deployment:
             if public is None:
@@ -368,7 +373,11 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
 
 
 def map_environment(root, old, env, password, config, plan, known):
-    """Map config/core.env into config.json; return a public URL set in core.env, if any."""
+    """Map config/core.env into config.json.
+
+    Returns the public URL Core uses when core.env names it (AGENTS_API_PUBLIC_URL,
+    since #138), None for Core's loopback fallback, and whether it did.
+    """
     before, since = legacy_core_environment(root, old, password), legacy138_core_environment(root, old)
     where = "config/core.env"
     for name in DERIVED:
@@ -381,10 +390,15 @@ def map_environment(root, old, env, password, config, plan, known):
     if PASSWORD_FILE in env and env[PASSWORD_FILE] != since[PASSWORD_FILE]:
         plan.problem(where, PASSWORD_FILE, "names another file; only the installation's config/database.password "
                      "can be converted")
-    public = None
-    if PUBLIC_URL in env and env[PUBLIC_URL] != since[PUBLIC_URL]:
+    public, from_env = None, PUBLIC_URL in env
+    if from_env and env[PUBLIC_URL] == since[PUBLIC_URL]:
+        # The #138 installer's own value: the public URL, or the loopback fallback for none.
+        public = old.get("public_url")
+    elif from_env:
         # Set by hand when Core was upgraded in place: it is the address Core uses.
         public = canonical(env[PUBLIC_URL], "AGENTS_API_PUBLIC_URL", plan)
+        if public == f'http://127.0.0.1:{old["core_port"]}':
+            public = None
         plan.notes.append(f"public_url is taken from AGENTS_API_PUBLIC_URL in config/core.env, the address Core uses.")
     for name in sorted(set(env) - set(DERIVED) - set(RETIRED) - {PUBLIC_URL, PASSWORD_FILE} - MAPPED):
         plan.problem(where, name, "is not a setting config.json can hold; remove it")
@@ -448,7 +462,7 @@ def map_environment(root, old, env, password, config, plan, known):
     if any(name.startswith("PARSAR_LOG_") for name in env):
         plan.notes.append("PARSAR_LOG_* had no effect before this release; the log settings now apply.")
     config["core"] = core
-    return public
+    return public, from_env
 
 
 # Steps -----------------------------------------------------------------------
