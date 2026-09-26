@@ -184,6 +184,12 @@ and node connections; it is not a replacement for `expected_generation`.
 Treat `specification_digest` as the server-provided identity of the provider,
 resource limits and Runtime release. Enrollment echoes it unchanged.
 
+The typed `SandboxAdminClient` checks the deployment, node list, node detail and
+allocation responses against exactly these shapes. An unknown or missing member,
+or a wrong type, rejects the whole response with a 502 `invalid_admin_response`
+error. A node's `diagnostic` is absent or a code, never empty; the client reads
+an unknown code as `provider_unavailable`.
+
 ## Initialization and changes
 
 POST validates the candidate before persistence and creates no compute, Session
