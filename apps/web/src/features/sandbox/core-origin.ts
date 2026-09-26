@@ -2,12 +2,15 @@ import type { CoreInstallation } from "@agents-core-web/agents-client";
 
 import { isValidDirectCoreBaseUrl } from "../../lib/connection";
 
-export function sandboxCoreOrigin(value: string): string | null {
-  const candidate = value.trim();
-  if (!/^https?:\/\/[^/?#\\\s]+\/?$/i.test(candidate) || !isValidDirectCoreBaseUrl(candidate)) return null;
-  const url = new URL(candidate);
-  if (url.protocol === "http:" && url.hostname.endsWith(".localhost")) return null;
-  return url.origin;
+/**
+ * The value itself when it is an HTTPS origin: no path, query, fragment or
+ * credentials; a single trailing slash is dropped. Otherwise null. It is kept
+ * as written, not normalized, so an explicit port such as :443 stays exactly
+ * as Core reports it.
+ */
+export function httpsOrigin(value: string): string | null {
+  const candidate = value.trim().replace(/\/$/, "");
+  return /^https:\/\/[^/?#\\\s@]+$/i.test(candidate) && isValidDirectCoreBaseUrl(candidate) ? candidate : null;
 }
 
 /**
@@ -19,5 +22,5 @@ export function sandboxCoreOrigin(value: string): string | null {
  */
 export function nodeSourceUrl(installation: Pick<CoreInstallation, "public_url" | "local_only">): string | null {
   if (installation.local_only || !installation.public_url) return null;
-  return sandboxCoreOrigin(installation.public_url);
+  return httpsOrigin(installation.public_url);
 }

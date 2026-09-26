@@ -12,7 +12,7 @@ import { sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
 import { checklistOpenFor, modelStep, nextStepAfterNode } from "../overview/getting-started";
 import { harnessesQuery } from "../system/harness-queries";
-import { nodeSourceUrl, sandboxCoreOrigin } from "./core-origin";
+import { nodeSourceUrl } from "./core-origin";
 import { nodeFilesAvailable, type SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand, nodeLogCommand, type NodeInstallMode } from "./enrollment-command";
 import { CommandBlock, CopyCommand, HostRequirements, NoSudoGuide } from "./node-commands";
@@ -89,8 +89,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const generation = useRef(0);
   const request = useRef<AbortController | null>(null);
   // Nodes download from, and reach Core at, the public URL; the browser's address may be a tunnel or loopback.
-  const sourceUrl = installation.data ? nodeSourceUrl(installation.data) : null;
-  const coreUrl = sandboxCoreOrigin(deployment.core_url);
+  // The deployment's core_url is the same address, but the installation is read again on each opening, so a fix shows at once.
+  const publicUrl = installation.data ? nodeSourceUrl(installation.data) : null;
   const available = consoleConfig.node_installer;
   const provider = deployment.provider === "docker" || deployment.provider === "microsandbox" ? deployment.provider : null;
   const backend = provider === "microsandbox" ? "microsandbox" : "Docker";
@@ -99,7 +99,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // is issued, nor before the installation is read: a failed read (an older Core, say) proves nothing.
   const blocker: { text: string; failed?: boolean } | null = installation.data === undefined
     ? installation.isError ? { text: t("The installation couldn't be read, so no command can be issued."), failed: true } : { text: t("Checking this installation's public URL…") }
-    : !sourceUrl || !coreUrl
+    : !publicUrl
       ? { text: t("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply") }
       : !nodeFilesAvailable(consoleConfig, deployment.provider)
         ? { text: t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend }) }
@@ -130,8 +130,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const lapsed = Boolean(enrollment && expiresAt <= now);
   // Expired only once a read begun after the expiry found no node for the command.
   const expired = lapsed && checkedAt >= expiresAt;
-  const commandFor = (mode: NodeInstallMode) => enrollment && provider && available && sourceUrl && coreUrl && (registered || !expired) && !ready
-    ? nodeInstallCommand({ token: enrollment.token, coreUrl, sourceUrl, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256, mode }) : "";
+  const commandFor = (mode: NodeInstallMode) => enrollment && provider && available && publicUrl && (registered || !expired) && !ready
+    ? nodeInstallCommand({ token: enrollment.token, coreUrl: publicUrl, sourceUrl: publicUrl, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256, mode }) : "";
   const command = commandFor("sudo");
   const nodeId = node?.id ?? null;
   const polling = open && enrollment !== null && !ready && (registered || !expired);
@@ -230,7 +230,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   }
   const size = deployment.specification?.resources;
   const values = {
-    core: coreUrl ?? "",
+    core: publicUrl ?? "",
     size: size ? t("{{cpus}} CPU · {{memory}}", { cpus: size.cpus, memory: formatBytes(size.memory_mib * 2 ** 20) }) : "",
   };
   const requirements = provider ? <>
