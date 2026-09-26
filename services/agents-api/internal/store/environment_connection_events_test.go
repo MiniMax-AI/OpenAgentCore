@@ -69,7 +69,7 @@ func retainedEnvironmentEvents(t *testing.T, ctx context.Context, s *store.Store
 
 func verifyEnvironmentEventsWithSDK(t *testing.T, root string, events []v1.SessionEvent) {
 	t.Helper()
-	python := os.Getenv("PARSAR_OFFICIAL_SDK_PYTHON")
+	python := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON")
 	if python == "" {
 		t.Fatal("pinned official SDK is required for native Environment event acceptance")
 	}

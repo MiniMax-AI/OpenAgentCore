@@ -646,8 +646,8 @@ and retains queued work. Database fencing does not stop already queued native
 commands, recover missing daemon frames or guarantee exactly-once external effects.
 Session status reflects the latest persisted Turn; usage reports recorded measurements.
 
-Native verification uses `PARSAR_NATIVE_DAEMON_BIN`, `PARSAR_NATIVE_PROOF_DIR` under
-`~/.parsar/`, and `PARSAR_OFFICIAL_SDK_PYTHON` pointing to the pinned SDK environment.
+Native verification uses `OAC_TEST_NATIVE_DAEMON_BIN`, `OAC_TEST_NATIVE_PROOF_DIR` under
+`~/.oac/`, and `OAC_TEST_OFFICIAL_SDK_PYTHON` pointing to the pinned SDK environment.
 The Store native integration test runs `tests/official_execution.py` against a real
 HTTP handler, PostgreSQL, daemon and Codex with a synthetic model provider.
 

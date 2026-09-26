@@ -18,9 +18,9 @@ import (
 )
 
 func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
-	python := os.Getenv("PARSAR_OFFICIAL_SDK_PYTHON")
+	python := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON")
 	if python == "" {
-		t.Skip("PARSAR_OFFICIAL_SDK_PYTHON is required for official-client verification")
+		t.Skip("OAC_TEST_OFFICIAL_SDK_PYTHON is required for official-client verification")
 	}
 	s, _ := store.NewTestStore(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)

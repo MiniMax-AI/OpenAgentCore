@@ -2,8 +2,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${PARSAR_HOME:-$HOME/.parsar}"
-output_dir="${AGENTS_API_BUILD_DIR:-$runtime_root/build/agents-api}"
+runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
+output_dir="${OAC_DEV_CORE_BUILD_DIR:-$runtime_root/build/agents-api}"
 for directory in "$runtime_root" "$output_dir"; do
   if [[ "$directory" != /* ]]; then
     printf 'Agents API build directories must be absolute: %s\n' "$directory" >&2
@@ -11,7 +11,7 @@ for directory in "$runtime_root" "$output_dir"; do
   fi
 done
 
-revision="${AGENTS_API_BUILD_REVISION:-$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || true)}"
+revision="${OAC_DEV_BUILD_REVISION:-$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || true)}"
 if [[ -n "$revision" && ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
   printf 'Invalid Agents API source revision\n' >&2
   exit 1

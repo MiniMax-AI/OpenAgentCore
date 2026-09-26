@@ -37,9 +37,9 @@ def main():
     Path('/environment/staging/request').write_text(CANARY)
     os.environ['DAEMON_PRIVATE_CANARY'] = CANARY
     env = {'INITIALIZATION_VALUE': CANARY, 'WITH_QUOTES': "'\n$(false)"}
-    if os.environ.get('PARSAR_TEST_PACKAGE_PROXY'):
-        env.update(http_proxy=os.environ['PARSAR_TEST_PACKAGE_PROXY'],
-                   https_proxy=os.environ['PARSAR_TEST_PACKAGE_PROXY'])
+    if os.environ.get('OAC_TEST_PACKAGE_PROXY'):
+        env.update(http_proxy=os.environ['OAC_TEST_PACKAGE_PROXY'],
+                   https_proxy=os.environ['OAC_TEST_PACKAGE_PROXY'])
     invoke('configure', env=env)
     skill = [{'path': 'SKILL.md', 'data': base64.b64encode(b'---\nname: proof\ndescription: A proof.\n---\nRead check.sh.').decode()},
              {'path': 'scripts/check.sh', 'data': base64.b64encode(b'#!/bin/sh\nprintf skill-proof').decode(), 'executable': True},

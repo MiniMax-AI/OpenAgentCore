@@ -59,9 +59,9 @@ func TestWriteRejectsUnsafeBindings(t *testing.T) {
 }
 
 func TestWriteReceiptAndCredentialBoundary(t *testing.T) {
-	t.Setenv("PARSAR_PRIVATE_CREDENTIAL", "synthetic-secret")
+	t.Setenv("OAC_TEST_PRIVATE_CREDENTIAL", "synthetic-secret")
 	// Files.create always selects the helper's explicit create mode.
-	b := writableBinding(t, "[ -z \"$PARSAR_PRIVATE_CREDENTIAL\" ] || exit 13\n[ \"$#\" = 5 ] && [ \"$5\" = create ] || exit 14\ncat >/dev/null\nprintf '%s' '{\"version\":1,\"outcome\":\"completed\",\"size_bytes\":3}'\n")
+	b := writableBinding(t, "[ -z \"$OAC_TEST_PRIVATE_CREDENTIAL\" ] || exit 13\n[ \"$#\" = 5 ] && [ \"$5\" = create ] || exit 14\ncat >/dev/null\nprintf '%s' '{\"version\":1,\"outcome\":\"completed\",\"size_bytes\":3}'\n")
 	result, err := b.WriteWorkspaceFile(t.Context(), "file", []byte{0, 1, 2})
 	if err != nil || result.SizeBytes != 3 {
 		t.Fatalf("write: %+v %v", result, err)
@@ -166,7 +166,7 @@ func TestWriteReceiptValidation(t *testing.T) {
 }
 
 func TestLocalWriteNativeInstaller(t *testing.T) {
-	helper := os.Getenv("PARSAR_TEST_LOCAL_WRITE_HELPER")
+	helper := os.Getenv("OAC_TEST_LOCAL_WRITE_HELPER")
 	if helper == "" {
 		t.Skip("requires the built native installer")
 	}

@@ -27,7 +27,7 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 	}
 	binary := filepath.Join(t.TempDir(), "native")
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
-	script := "#!/bin/sh\nexport PARSAR_MCODE_TEST_HELPER=prepared\nexport PARSAR_MCODE_TEST_RECORD=" + quote(record) + "\nexec " + quote(exe) + " -test.run=^TestMCodeProcess$ -- \"$@\"\n"
+	script := "#!/bin/sh\nexport OAC_TEST_MCODE_HELPER=prepared\nexport OAC_TEST_MCODE_RECORD=" + quote(record) + "\nexec " + quote(exe) + " -test.run=^TestMCodeProcess$ -- \"$@\"\n"
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}

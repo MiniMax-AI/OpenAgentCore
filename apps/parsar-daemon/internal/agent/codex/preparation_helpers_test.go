@@ -23,11 +23,11 @@ func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("PARSAR_HOME", root)
-	t.Setenv("PARSAR_PREPARATION_FAKE", "1")
-	t.Setenv("PARSAR_PREPARATION_FRAMES", filepath.Join(root, "frames.jsonl"))
-	t.Setenv("PARSAR_PREPARATION_STATUS", filepath.Join(root, "environment-status"))
-	t.Setenv("PARSAR_PREPARATION_BLOCK", "")
-	t.Setenv("PARSAR_PREPARATION_OBSERVE", "")
+	t.Setenv("OAC_TEST_PREPARATION_FAKE", "1")
+	t.Setenv("OAC_TEST_PREPARATION_FRAMES", filepath.Join(root, "frames.jsonl"))
+	t.Setenv("OAC_TEST_PREPARATION_STATUS", filepath.Join(root, "environment-status"))
+	t.Setenv("OAC_TEST_PREPARATION_BLOCK", "")
+	t.Setenv("OAC_TEST_PREPARATION_OBSERVE", "")
 	for _, key := range []string{"CODEX_EXEC_SERVER_URL", "CODEX_EXEC_SERVER_NOISE_REGISTRY_URL", "CODEX_EXEC_SERVER_NOISE_ENVIRONMENT_ID", "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN"} {
 		t.Setenv(key, "")
 	}
@@ -123,7 +123,7 @@ func waitPreparedRelease(t *testing.T, p *Prepared, root string) {
 }
 
 func TestPreparationFakeCodexProcess(t *testing.T) {
-	if os.Getenv("PARSAR_PREPARATION_FAKE") != "1" {
+	if os.Getenv("OAC_TEST_PREPARATION_FAKE") != "1" {
 		return
 	}
 	for _, arg := range os.Args {
@@ -132,7 +132,7 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 			os.Exit(0)
 		}
 	}
-	log, err := os.OpenFile(os.Getenv("PARSAR_PREPARATION_FRAMES"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	log, err := os.OpenFile(os.Getenv("OAC_TEST_PREPARATION_FRAMES"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		os.Exit(2)
 	}
@@ -153,23 +153,23 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 		case "initialize":
 			result = map[string]string{"userAgent": "fixture-codex"}
 		case "environment/status":
-			if os.Getenv("PARSAR_PREPARATION_BLOCK") == "1" {
+			if os.Getenv("OAC_TEST_PREPARATION_BLOCK") == "1" {
 				for {
 					time.Sleep(time.Second)
 				}
 			}
 			status := "unknown"
-			if data, err := os.ReadFile(os.Getenv("PARSAR_PREPARATION_STATUS")); err == nil {
+			if data, err := os.ReadFile(os.Getenv("OAC_TEST_PREPARATION_STATUS")); err == nil {
 				status = string(data)
 			}
 			result = map[string]string{"status": status}
 		case "config/read":
-			data, err := os.ReadFile(os.Getenv("PARSAR_PREPARATION_MCP_CONFIG"))
+			data, err := os.ReadFile(os.Getenv("OAC_TEST_PREPARATION_MCP_CONFIG"))
 			if err != nil || json.Unmarshal(data, &result) != nil {
 				os.Exit(6)
 			}
 		case "thread/start", "thread/resume":
-			if gate := os.Getenv("PARSAR_PREPARATION_THREAD_GATE"); gate != "" {
+			if gate := os.Getenv("OAC_TEST_PREPARATION_THREAD_GATE"); gate != "" {
 				var state []byte
 				for string(state) != "ready" && string(state) != "failed" {
 					state, _ = os.ReadFile(gate)
@@ -189,7 +189,7 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 		}
 		if frame.Method == "turn/start" {
 			_ = output.Encode(map[string]any{"jsonrpc": "2.0", "method": "turn/started", "params": map[string]any{"threadId": "fixture-native-thread", "turn": map[string]string{"id": "fixture-native-turn"}}})
-			if os.Getenv("PARSAR_PREPARATION_OBSERVE") == "1" {
+			if os.Getenv("OAC_TEST_PREPARATION_OBSERVE") == "1" {
 				for _, raw := range []string{
 					`{"method":"item/completed","params":{"threadId":"fixture-native-thread","turnId":"fixture-native-turn","item":{"type":"agentMessage","id":"message","text":"observed partial answer"}}}`,
 					`{"method":"thread/tokenUsage/updated","params":{"threadId":"fixture-native-thread","turnId":"fixture-native-turn","tokenUsage":{"total":{"inputTokens":30,"cachedInputTokens":4,"outputTokens":10,"reasoningOutputTokens":2,"totalTokens":40}}}}`,

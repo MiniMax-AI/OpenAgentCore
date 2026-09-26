@@ -14,7 +14,7 @@ import (
 // spawnTestChildEnv flips the test binary into "child" mode for fork
 // tests: TestMain writes a marker, blocks until SIGTERM/SIGINT, exits.
 // Lets Spawn re-exec the test binary as the child.
-const spawnTestChildEnv = "PARSAR_DAEMON_SPAWN_TEST_CHILD"
+const spawnTestChildEnv = "OAC_TEST_DAEMON_SPAWN_CHILD"
 
 func TestMain(m *testing.M) {
 	if os.Getenv(spawnTestChildEnv) == "1" {

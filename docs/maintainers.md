@@ -19,7 +19,7 @@ make build-core-distribution
 
 The builder reuses the existing Core, Runtime, SDK and Web build scripts. It records
 the commit, immutable image identities, microsandbox binary hashes and the actual
-Runtime OCI manifest digest. Output goes to `~/.parsar/build/core-distribution/`; it is
+Runtime OCI manifest digest. Output goes to `~/.oac/build/core-distribution/`; it is
 not published anywhere automatically. Qualify the exact bundle before distributing it.
 See the [contributor guide](../CONTRIBUTING.md).
 

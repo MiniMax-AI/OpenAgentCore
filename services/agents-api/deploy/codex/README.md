@@ -102,9 +102,9 @@ this writer profile for public admission. Configuration alone is not that proof.
 
 Build the existing Rust filesystem helpers with `make build-agents-executor`, and
 extract the official npm package `@openai/codex@0.153.4-linux-x64` beneath
-`~/.parsar/`. Set `AGENTS_RUNTIME_CODEX_PACKAGE` to its extracted `package` directory
+`~/.oac/`. Set `AGENTS_RUNTIME_CODEX_PACKAGE` to its extracted `package` directory
 and run `scripts/build-agents-runtime.sh`. It builds the existing daemon and
-prepares a binary-only Docker context at `~/.parsar/build/agents-runtime`; build
+prepares a binary-only Docker context at `~/.oac/build/agents-runtime`; build
 that context with the printed Docker command. This initial image is Linux amd64.
 The package includes the unmodified native executable and matching resources.
 It does not contain the product server, product CLI, credentials or workspace data.

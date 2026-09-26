@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { ToolExecutor } from './tool-executor.mjs';
 
 async function fixture(t, body) {
-  const root = join(homedir(), '.parsar', 'tests');
+  const root = join(homedir(), '.oac', 'tests');
   await mkdir(root, { recursive: true });
   const dir = await mkdtemp(join(root, 'mcode-worker-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

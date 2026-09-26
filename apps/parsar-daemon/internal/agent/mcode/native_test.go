@@ -21,9 +21,9 @@ import (
 
 // Opt in with the installed native CLI; the default test gate uses protocol fixtures.
 func TestNativeMCodeACP(t *testing.T) {
-	binary := os.Getenv("PARSAR_MCODE_INTEGRATION_BIN")
+	binary := os.Getenv("OAC_TEST_MCODE_INTEGRATION_BIN")
 	if binary == "" {
-		t.Skip("set PARSAR_MCODE_INTEGRATION_BIN to run native ACP smoke test")
+		t.Skip("set OAC_TEST_MCODE_INTEGRATION_BIN to run native ACP smoke test")
 	}
 	req := testRequest(t)
 	var mu sync.Mutex

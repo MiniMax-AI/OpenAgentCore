@@ -16,7 +16,7 @@ import distribution
 
 class ArtifactTests(unittest.TestCase):
     def setUp(self):
-        root = Path.home() / '.parsar/tests/distribution'
+        root = Path.home() / '.oac/tests/distribution'
         root.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=root)
         self.addCleanup(self.temp.cleanup)
@@ -239,7 +239,7 @@ class ManifestSourceTests(unittest.TestCase):
         manifest = json.dumps({'source_commit': 'a' * 40, 'platform': 'linux/amd64',
                                'artifact_base_url': 'https://github.com/example/releases/download/tag'}).encode()
         sums = (hashlib.sha256(manifest).hexdigest() + '  manifest.json\n').encode()
-        root = Path.home() / '.parsar/tests/distribution'
+        root = Path.home() / '.oac/tests/distribution'
         root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=root) as bundle:
             (Path(bundle) / 'manifest.json').write_bytes(manifest)

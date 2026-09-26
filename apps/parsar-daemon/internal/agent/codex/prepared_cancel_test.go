@@ -77,7 +77,7 @@ func assertUnstartedCancellation(t *testing.T, p *Prepared) {
 
 func TestPreparedCancelTransferredPreservesObservedOutcome(t *testing.T) {
 	req, cfg, root := preparationFixture(t)
-	t.Setenv("PARSAR_PREPARATION_OBSERVE", "1")
+	t.Setenv("OAC_TEST_PREPARATION_OBSERVE", "1")
 	p, err := newPreparation(t.Context(), req, cfg)
 	if err != nil {
 		t.Fatal(err)

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${PARSAR_HOME:-$HOME/.parsar}"
+runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
 if [[ "$runtime_root" != /* ]]; then
   printf 'Executor runtime directory must be absolute\n' >&2
   exit 1

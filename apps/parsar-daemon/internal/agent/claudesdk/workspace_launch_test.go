@@ -13,12 +13,12 @@ import (
 
 func TestWorkspaceLaunchAndReadinessExcludeParentEnvironment(t *testing.T) {
 	config := workspaceFixture(t)
-	t.Setenv("PARSAR_PARENT_SECRET", "must-not-inherit")
+	t.Setenv("OAC_TEST_PARENT_SECRET", "must-not-inherit")
 	t.Setenv("ANTHROPIC_API_KEY", "unselected")
 	// An owned process fixture verifies both real subprocess launch paths; it is
 	// not a native sandbox or provider acceptance test.
 	script := `#!/bin/sh
-test -z "${PARSAR_PARENT_SECRET+x}" || exit 21
+test -z "${OAC_TEST_PARENT_SECRET+x}" || exit 21
 test -z "${ANTHROPIC_API_KEY+x}" || exit 22
 test "$ANTHROPIC_AUTH_TOKEN" = selected-provider-fixture || exit 23
 test "$TMPDIR" != "$CLAUDE_CONFIG_DIR/tmp" || exit 24

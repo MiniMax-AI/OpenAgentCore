@@ -41,7 +41,7 @@ func workspaceRequest() proto.PromptRequestPayload {
 
 func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 	config := workspaceFixture(t)
-	t.Setenv("PARSAR_PARENT_SECRET", "parent-only")
+	t.Setenv("OAC_TEST_PARENT_SECRET", "parent-only")
 	t.Setenv("ANTHROPIC_API_KEY", "unselected-provider")
 	start, env, err := prepare(config, workspaceRequest())
 	if err != nil {
@@ -59,7 +59,7 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 		name, value, _ := strings.Cut(item, "=")
 		values[name] = value
 	}
-	if _, ok := values["PARSAR_PARENT_SECRET"]; ok {
+	if _, ok := values["OAC_TEST_PARENT_SECRET"]; ok {
 		t.Fatal("inherited parent credential")
 	}
 	if _, ok := values["ANTHROPIC_API_KEY"]; ok {

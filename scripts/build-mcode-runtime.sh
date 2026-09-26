@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${PARSAR_HOME:-$HOME/.parsar}"
+runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
 output="${AGENTS_RUNTIME_BUILD_DIR:-$runtime_root/build/mcode-runtime}"
 companion="${MCODE_HARNESS_BUILD_DIR:?Set MCODE_HARNESS_BUILD_DIR to the built companion}"
 native="$companion/native"

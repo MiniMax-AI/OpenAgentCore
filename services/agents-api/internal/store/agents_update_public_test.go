@@ -15,7 +15,7 @@ import (
 )
 
 func TestAgentUpdateOfficialClient(t *testing.T) {
-	python := os.Getenv("PARSAR_OFFICIAL_SDK_PYTHON")
+	python := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON")
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}

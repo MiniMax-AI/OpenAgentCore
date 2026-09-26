@@ -239,7 +239,7 @@ def package_artifacts(bundle, stage, revision):
 
 
 # The installation's management command; it runs without the bundle directory.
-PARSAR_MODULES = ("parsar_cli.py", "config_model.py", "config.schema.json", "configuration.py",
+OAC_CLI_MODULES = ("parsar_cli.py", "config_model.py", "config.schema.json", "configuration.py",
                   "native_service.py", "distribution.py", "node_spec.py")
 
 
@@ -258,7 +258,7 @@ def bootstraps(bundle, epoch):
                 os.utime(target, (int(epoch), int(epoch)))
             zipapp.create_archive(directory, bundle / output, compressed=True)
     with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
-        for name in PARSAR_MODULES:
+        for name in OAC_CLI_MODULES:
             shutil.copyfile(bundle / name, pathlib.Path(directory) / name)
         (pathlib.Path(directory) / "__main__.py").write_text("import parsar_cli\n\nparsar_cli.entry()\n")
         for path in pathlib.Path(directory).iterdir():

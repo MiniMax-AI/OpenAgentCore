@@ -42,7 +42,7 @@ func (b *lockedBuffer) String() string {
 // no further requests, and SIGTERM ends it with exit 0, so Docker's
 // unless-stopped policy has nothing to restart. Transient failures still exit 1.
 func TestEnvironmentRejectionParksUntilTerminated(t *testing.T) {
-	if argv := os.Getenv("PARSAR_TEST_ENVIRONMENT_CONNECT"); argv != "" {
+	if argv := os.Getenv("OAC_TEST_ENVIRONMENT_CONNECT"); argv != "" {
 		var args []string
 		if json.Unmarshal([]byte(argv), &args) != nil {
 			os.Exit(2)
@@ -78,7 +78,7 @@ func TestEnvironmentRejectionParksUntilTerminated(t *testing.T) {
 			args, _ := json.Marshal([]string{"connect", "--remote", "ws" + strings.TrimPrefix(server.URL, "http") + "/api/v1/agent-daemon/ws",
 				"--environment-id", environment, "--credential-file", credential, "--self-hosted-install"})
 			cmd := exec.Command(os.Args[0], "-test.run=^TestEnvironmentRejectionParksUntilTerminated$")
-			cmd.Env = append(os.Environ(), "PARSAR_TEST_ENVIRONMENT_CONNECT="+string(args), "PARSAR_HOME="+home)
+			cmd.Env = append(os.Environ(), "OAC_TEST_ENVIRONMENT_CONNECT="+string(args), "PARSAR_HOME="+home)
 			var stderr lockedBuffer
 			cmd.Stderr = &stderr
 			if err := cmd.Start(); err != nil {

@@ -9,7 +9,7 @@ if [[ "$(uname -s)" != Linux || "$(uname -m)" != x86_64 ]]; then
   printf 'Build the MiniMax Code Runtime artifact on Linux x86_64\n' >&2
   exit 1
 fi
-root="$HOME/.parsar/build"
+root="$HOME/.oac/build"
 mkdir -p "$root"
 context="$(mktemp -d "$root/mcode-build.XXXXXX")"
 trap 'rm -rf "$context"' EXIT

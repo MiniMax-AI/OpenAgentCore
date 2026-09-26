@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${PARSAR_HOME:-$HOME/.parsar}"
+runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
 output_dir="${AGENTS_RUNTIME_BUILD_DIR:-$runtime_root/build/agents-runtime}"
 # Extract the official @openai/codex@0.153.4-linux-x64 npm package here.
 package_dir="${AGENTS_RUNTIME_CODEX_PACKAGE:?Set AGENTS_RUNTIME_CODEX_PACKAGE to the extracted pinned platform package}"

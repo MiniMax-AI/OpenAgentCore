@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 022
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-output_dir="${E2B_PROVIDER_BUILD_DIR:-${PARSAR_HOME:-$HOME/.parsar}/build/e2b-provider}"
+output_dir="${E2B_PROVIDER_BUILD_DIR:-${OAC_DEV_HOME:-$HOME/.oac}/build/e2b-provider}"
 case "$output_dir" in
   /*) ;;
   *) printf 'E2B_PROVIDER_BUILD_DIR must be absolute\n' >&2; exit 1 ;;

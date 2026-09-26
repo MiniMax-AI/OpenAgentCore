@@ -32,7 +32,7 @@ func (s nativeFunctionSender) Send(ctx context.Context, e proto.Envelope) error 
 }
 
 func TestNativeFunctionBridge(t *testing.T) {
-	root := os.Getenv("PARSAR_NATIVE_PROOF_DIR")
+	root := os.Getenv("OAC_TEST_NATIVE_PROOF_DIR")
 	if root == "" {
 		t.Skip("explicit native Codex binary and proof directory required")
 	}

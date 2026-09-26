@@ -17,9 +17,9 @@ import (
 
 func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("PARSAR_AGENTS_API_TEST_DATABASE_URL")
+	dsn := os.Getenv("OAC_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("PARSAR_AGENTS_API_TEST_DATABASE_URL is not set; dedicated PostgreSQL required")
+		t.Skip("OAC_TEST_DATABASE_URL is not set; dedicated PostgreSQL required")
 	}
 	cfg, err := testDatabaseConfig(dsn)
 	if err != nil {
@@ -50,15 +50,15 @@ func testDatabaseConfig(dsn string) (*pgxpool.Config, error) {
 		return nil, errors.New("invalid test database configuration")
 	}
 	database := cfg.ConnConfig.Database
-	if !strings.HasPrefix(database, "parsar_agents_api_") || !strings.HasSuffix(database, "_tests") {
-		return nil, errors.New("test database must be named parsar_agents_api_*_tests")
+	if !strings.HasPrefix(database, "oac_") || !strings.HasSuffix(database, "_tests") {
+		return nil, errors.New("test database must be named oac_*_tests")
 	}
 	return cfg, nil
 }
 
 func TestDatabaseGuardUsesEffectiveDatabase(t *testing.T) {
 	for _, dsn := range []string{
-		"postgres://localhost/parsar_agents_api_local_tests?dbname=agents_api",
+		"postgres://localhost/oac_local_tests?dbname=agents_api",
 		"host=localhost dbname=agents_api",
 		"postgres://localhost/agents_api",
 	} {
@@ -66,8 +66,8 @@ func TestDatabaseGuardUsesEffectiveDatabase(t *testing.T) {
 			t.Fatalf("unsafe database accepted: %s", dsn)
 		}
 	}
-	cfg, err := testDatabaseConfig("postgres://localhost/parsar_agents_api_local_tests")
-	if err != nil || cfg.ConnConfig.Database != "parsar_agents_api_local_tests" {
+	cfg, err := testDatabaseConfig("postgres://localhost/oac_local_tests")
+	if err != nil || cfg.ConnConfig.Database != "oac_local_tests" {
 		t.Fatalf("valid dedicated database rejected: %v", err)
 	}
 }

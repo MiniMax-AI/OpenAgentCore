@@ -63,8 +63,8 @@ func TestBindingRejectsScopeAndPathOverrides(t *testing.T) {
 
 func TestLocalHelperCannotInheritCredentials(t *testing.T) {
 	b, _ := testBinding(t)
-	t.Setenv("PARSAR_PRIVATE_CREDENTIAL", "synthetic-secret")
-	script := "#!/bin/sh\n[ -z \"$PARSAR_PRIVATE_CREDENTIAL\" ] || exit 13\nprintf '%s' '{\"version\":1,\"directory\":{\"entries\":[],\"truncated\":false}}'\n"
+	t.Setenv("OAC_TEST_PRIVATE_CREDENTIAL", "synthetic-secret")
+	script := "#!/bin/sh\n[ -z \"$OAC_TEST_PRIVATE_CREDENTIAL\" ] || exit 13\nprintf '%s' '{\"version\":1,\"directory\":{\"entries\":[],\"truncated\":false}}'\n"
 	if err := os.WriteFile(b.helper, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}

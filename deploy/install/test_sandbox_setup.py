@@ -12,7 +12,7 @@ INSTALLATION = "94be54a1-138c-4f30-bc87-b13686272dbe"
 
 class SandboxSetupTests(unittest.TestCase):
     def setUp(self):
-        base = Path.home() / ".parsar/tests/sandbox-setup"
+        base = Path.home() / ".oac/tests/sandbox-setup"
         base.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(temporary.cleanup)

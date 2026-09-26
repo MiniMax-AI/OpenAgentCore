@@ -165,7 +165,7 @@ streaming, content-download, live directory, Runtime observation and Runtime
 history routes register an explicit HEAD 405 instead. Every 405 of the API router, unknown methods included, has the JSON
 body and lists the route's methods in `Allow`.
 
-Keep runtime state, test artifacts and build output under `~/.parsar/`. Require
+Keep runtime state, test artifacts and build output under `~/.oac/`. Require
 absolute user-supplied working directories. Keep credentials out of source and
 logs. Update this guide when architecture, ownership or generated contracts change.
 Comments and documentation are English. Reuse existing helpers and error mapping;
@@ -180,7 +180,7 @@ database, byte-for-byte sqlc regeneration checks, standalone API builds, Claude 
 tests and packaging, MiniMax companion checks, and Rust filesystem-helper
 tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing. The test database role
 needs CREATE DATABASE permission: managed-provider tests create and drop isolated
-`parsar_agents_api_*_tests` databases because provider identity is deployment-wide.
+`oac_*_tests` databases because provider identity is deployment-wide.
 Tests must not bypass the production provider-switch guard.
 
 Use Go from `go.mod`, Node 22, pnpm 10.30.3, Python 3.9+, Rust 1.95.0 with rustfmt
@@ -709,7 +709,7 @@ The helper's pinned SDK, dependencies and licenses ship with Core; users do not 
 Python packages after selecting E2B in Web. Application-managed self_hosted tooling
 remains independent and uses the same Runtime. Qualify each changed path using actual
 provider and model execution before claiming acceptance. Run `make check-e2b-provider`
-with `PARSAR_E2B_SDK_PYTHON` pointing to the pinned SDK environment; the packaged
+with `OAC_TEST_E2B_SDK_PYTHON` pointing to the pinned SDK environment; the packaged
 helper build runs the provider tests as well. The SDK gate also covers the
 application-managed launch tests. `make check` covers shared initialization and
 managed initialization using only the Python standard library.
@@ -1667,8 +1667,8 @@ from prior Docker or retired remote-executor evidence.
 #### Independent build artifacts
 
 `make build-agents-api` produces `agents-api`, `agents-api-migrate`,
-`agents-api-device` and `agents-api-environment-key` under `${PARSAR_HOME:-$HOME/.parsar}/build/agents-api`.
-`AGENTS_API_BUILD_DIR` may select another absolute output directory. The build
+`agents-api-device` and `agents-api-environment-key` under `${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api`.
+`OAC_DEV_CORE_BUILD_DIR` may select another absolute output directory. The build
 uses only the explicit source set in `scripts/build-agents-api.sh`: the execution
 service, its Go contracts and required shared daemon/logging packages, plus the
 root Go module manifests. Product server/frontend, other applications and their
@@ -1694,7 +1694,7 @@ Registry publication, additional runtime architectures, daemon packaging and
 product cutover remain separate work.
 
 `make build-agents-api-release` reuses the isolated build for a Linux amd64 archive
-under `~/.parsar/`, with its four commands, license, operator guide, source/tree and
+under `~/.oac/`, with its four commands, license, operator guide, source/tree and
 protocol manifest, and file/archive checksums. It requires clean committed source
 and Python 3.9+, stages output privately, and packages fixed artifacts deterministically.
 Keep runtime configuration, credentials, product sources and separately installed
@@ -2419,8 +2419,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Hosted empty-filter, mismatched-filter cursor and exact error semantics remain
   unverified. Other resource lists do not accept this parameter.
 - `make sqlc-generate` and the drift gate cover both services. Run
-  `make check-agents-api` with `PARSAR_AGENTS_API_TEST_DATABASE_URL` pointing to a
-  dedicated `parsar_agents_api_*_tests` database for Session integration tests.
+  `make check-agents-api` with `OAC_TEST_DATABASE_URL` pointing to a
+  dedicated `oac_*_tests` database for Session integration tests.
   CI provides a separate PostgreSQL service. Migration immutability and ordering
   apply independently to each service directory.
 - Turn writes serialize on the tenant-scoped Session row. An idle message starts
@@ -2480,7 +2480,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   integration is a later cutover, not a side effect of constructing this client.
 - `services/agents-api/tests/official_client.py` verifies the actual server with
   the pinned SDK and strict response validation. It requires a dedicated test DB
-  prepared by the Store tests and `AGENTS_API_SERVER_BIN`; it never starts Docker.
+  prepared by the Store tests and `OAC_TEST_SERVER_BIN`; it never starts Docker.
   The same harness runs the official Go client with fresh execution tenants and
   checks its created Sessions through the Python SDK.
 - Execution devices are operator-provisioned in the Agents API database with
@@ -3489,7 +3489,7 @@ acceptance is opt-in and must use a real provider with private credentials.
 `make build-claude-sdk-runtime` exports the compiled bridge and pinned production
 SDK/MCP dependencies, including the native package for the build host, into a
 platform/architecture/libc-specific `.tar.gz` and SHA256 file under
-`${PARSAR_HOME:-$HOME/.parsar}/build/claude-sdk-runtime`. `CLAUDE_SDK_BUILD_DIR`
+`${OAC_DEV_HOME:-$HOME/.oac}/build/claude-sdk-runtime`. `CLAUDE_SDK_BUILD_DIR`
 may select another absolute output directory. The production dependency closure
 requires Node20 or newer; Node22 is the tested version. Node is operator-supplied
 and is not bundled; the bundle is independent of product sources, services and databases.

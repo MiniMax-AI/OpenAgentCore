@@ -152,7 +152,7 @@ func TestSourceFileReadAdmittedBeforeDeletionCompletes(t *testing.T) {
 }
 
 func TestSourceFileLargeStream(t *testing.T) {
-	if os.Getenv("PARSAR_TEST_SOURCE_FILE_LARGE") != "1" {
+	if os.Getenv("OAC_TEST_SOURCE_FILE_LARGE") != "1" {
 		t.Skip("opt-in 512 MiB source storage acceptance")
 	}
 	s, _ := testStore(t)

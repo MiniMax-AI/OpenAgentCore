@@ -137,7 +137,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			if mode == "resume" {
 				req.AgentSessionID = "fixture-native-thread"
 			}
-			t.Setenv("PARSAR_PREPARATION_STATUS", filepath.Join(root, "unknown-status"))
+			t.Setenv("OAC_TEST_PREPARATION_STATUS", filepath.Join(root, "unknown-status"))
 			if err := os.WriteFile(filepath.Join(root, "unknown-status"), []byte("unknown"), 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -154,7 +154,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			}
 			path := filepath.Join(root, "native-config.json")
 			writeMCPHTTPConfigResponse(t, path, response)
-			t.Setenv("PARSAR_PREPARATION_MCP_CONFIG", path)
+			t.Setenv("OAC_TEST_PREPARATION_MCP_CONFIG", path)
 			p, err := newPreparation(t.Context(), req, cfg)
 			if strings.HasPrefix(mode, "reject") {
 				if err == nil || p != nil {

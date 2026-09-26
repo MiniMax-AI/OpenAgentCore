@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { isAbsolute, join, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const profile = process.env.PARSAR_MCODE_NATIVE_PROFILE;
-const artifact = process.env.PARSAR_MCODE_NATIVE_ARTIFACT;
+const profile = process.env.OAC_TEST_MCODE_NATIVE_PROFILE;
+const artifact = process.env.OAC_TEST_MCODE_NATIVE_ARTIFACT;
 
 test('packaged native tools use writable scratch and retain large output', {
   skip: !profile || !artifact,

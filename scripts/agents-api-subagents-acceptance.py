@@ -2,16 +2,16 @@
 """Real-model acceptance of the six pinned Subagent GET operations.
 
 Install openai 3.13.0 from the commit in contracts/agents-api/upstream.json.
-Required ENV: AGENTS_API_BASE_URL (including /v1), AGENTS_API_TOKEN, and
-AGENTS_API_FOREIGN_TOKEN (a valid key for a different project). Creating a Session
-also requires AGENTS_API_MODEL. AGENTS_API_ENVIRONMENT_JSON defaults to
-{"type":"none"}; AGENTS_API_HARNESS optionally selects the existing Core extension.
-AGENTS_API_SESSION_ID selects an existing Session. Close/resume use the native
+Required ENV: OAC_TEST_BASE_URL (including /v1), OAC_TEST_TOKEN, and
+OAC_TEST_FOREIGN_TOKEN (a valid key for a different project). Creating a Session
+also requires OAC_TEST_MODEL. OAC_TEST_ENVIRONMENT_JSON defaults to
+{"type":"none"}; OAC_TEST_HARNESS optionally selects the existing Core extension.
+OAC_TEST_SESSION_ID selects an existing Session. Close/resume use the native
 conversation context from spawn; nullable names/instructions are not prerequisites.
 
 Run --phase all for the nested/close/resume native profile, --phase spawn-direct
 for common reads with two real children, or spawn, inspect, close, resume using
-the same --evidence directory under ~/.parsar. Inspect never submits model input.
+the same --evidence directory under ~/.oac. Inspect never submits model input.
 For an independently prepared Session, inspect requires two real children and
 proves reads only, not the full lifecycle. Use --require-nested when the native
 profile supports nested delegation; absence is recorded, not fabricated. All/full acceptance requires observed spawn, nested, close and resume
@@ -108,14 +108,14 @@ def main():
     args = parser.parse_args()
     require(1 <= args.timeout <= 1800, "invalid_timeout")
     evidence = args.evidence.expanduser().resolve()
-    require(Path.home().joinpath(".parsar") in evidence.parents, "evidence_must_be_under_parsar_home")
+    require(Path.home().joinpath(".oac") in evidence.parents, "evidence_must_be_under_oac_home")
     evidence.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = evidence / "subagents-proof.json"
     report = json.loads(path.read_text()) if path.exists() else {
         "passed": False, "checks": [], "phases": {}, "nonce": uuid.uuid4().hex,
     }
-    token = os.environ.get("AGENTS_API_TOKEN", "")
-    foreign_token = os.environ.get("AGENTS_API_FOREIGN_TOKEN", "")
+    token = os.environ.get("OAC_TEST_TOKEN", "")
+    foreign_token = os.environ.get("OAC_TEST_FOREIGN_TOKEN", "")
 
     def save():
         raw = json.dumps(report, indent=2) + "\n"
@@ -138,7 +138,7 @@ def main():
         require(distribution.version == pin["sdk_version"] == "3.13.0" and
                 source.get("vcs_info", {}).get("commit_id") == pin["commit"], "pinned_sdk_required")
         report.update(sdk_version=pin["sdk_version"], sdk_commit=pin["commit"], passed=False)
-        base = os.environ.get("AGENTS_API_BASE_URL", "").rstrip("/")
+        base = os.environ.get("OAC_TEST_BASE_URL", "").rstrip("/")
         parsed = urlsplit(base)
         require(parsed.scheme in ("http", "https") and parsed.netloc and parsed.path.endswith("/v1")
                 and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment,
@@ -154,7 +154,7 @@ def main():
         # A bad credential cannot accidentally count as tenant-isolation proof.
         foreign.beta.agents.sessions.list(limit=1)
         sessions = client.beta.agents.sessions
-        supplied = os.environ.get("AGENTS_API_SESSION_ID")
+        supplied = os.environ.get("OAC_TEST_SESSION_ID")
         if supplied:
             require(not report.get("session_id") or report["session_id"] == supplied, "evidence_session_mismatch")
             report["session_id"] = identifier(supplied)
@@ -224,13 +224,13 @@ def main():
             report["pending_phase"] = stage
             save()
             if not report.get("session_id"):
-                model = os.environ.get("AGENTS_API_MODEL")
+                model = os.environ.get("OAC_TEST_MODEL")
                 require(model, "model_required_for_creation")
                 agent = {"model": model, "multi_agent": {"enabled": True, "max_concurrent_subagents": 4}}
-                harness = os.environ.get("AGENTS_API_HARNESS")
+                harness = os.environ.get("OAC_TEST_HARNESS")
                 if harness:
                     agent["x_agents_core"] = {"harness": harness}
-                environment = json.loads(os.environ.get("AGENTS_API_ENVIRONMENT_JSON", '{"type":"none"}'))
+                environment = json.loads(os.environ.get("OAC_TEST_ENVIRONMENT_JSON", '{"type":"none"}'))
                 # The creation stream is the Session stream observed for this phase.
                 observer = StreamObserver(sessions.create(agent=agent, environment=environment, input=prompt, stream=True,
                                                           extra_headers={"Idempotency-Key": report["nonce"] + "-" + stage}), "creation")

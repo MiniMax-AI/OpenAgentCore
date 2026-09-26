@@ -2,11 +2,11 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${PARSAR_HOME:-$HOME/.parsar}"
-output_dir="${AGENTS_API_RELEASE_DIR:-$runtime_root/build/agents-api-release}"
+runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
+output_dir="${OAC_DEV_RELEASE_DIR:-$runtime_root/build/agents-api-release}"
 export GOCACHE="${GOCACHE:-$runtime_root/cache/go-build}"
 export GOMODCACHE="${GOMODCACHE:-$runtime_root/cache/go-mod}"
-python3 - "$HOME/.parsar" "$runtime_root" "$output_dir" "$GOCACHE" "$GOMODCACHE" <<'PY'
+python3 - "$HOME/.oac" "$runtime_root" "$output_dir" "$GOCACHE" "$GOMODCACHE" <<'PY'
 import pathlib
 import sys
 
@@ -16,7 +16,7 @@ base = pathlib.Path(sys.argv[1]).resolve()
 for value in sys.argv[2:]:
     path = pathlib.Path(value)
     if not path.is_absolute() or not path.resolve().is_relative_to(base):
-        sys.exit("Agents API release directories must be absolute and under ~/.parsar")
+        sys.exit("Agents API release directories must be absolute and under ~/.oac")
 PY
 
 if [[ -n "${AGENTS_API_RELEASE_RUNTIME_IMAGE:-}" ]]; then
@@ -52,7 +52,7 @@ if [[ "$go_version" != "$required_go" ]]; then
   printf 'Agents API release requires %s; found %s\n' "$required_go" "$go_version" >&2
   exit 1
 fi
-AGENTS_API_BUILD_REVISION="$source_revision" AGENTS_API_BUILD_DIR="$release_context/package/bin" \
+OAC_DEV_BUILD_REVISION="$source_revision" OAC_DEV_CORE_BUILD_DIR="$release_context/package/bin" \
   "$release_context/source/scripts/build-agents-api.sh"
 require_clean_source
 if [[ "$(git -C "$repo_root" rev-parse HEAD)" != "$source_revision" ]]; then

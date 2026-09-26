@@ -20,13 +20,13 @@ import (
 
 func TestLiveClaudeSDKCancelResume(t *testing.T) {
 	entrypoint := os.Getenv("PARSAR_CLAUDE_SDK_ENTRYPOINT")
-	keyFile := os.Getenv("PARSAR_CLAUDE_SDK_MINIMAX_KEY_FILE")
+	keyFile := os.Getenv("OAC_TEST_CLAUDE_SDK_MINIMAX_KEY_FILE")
 	if entrypoint == "" || keyFile == "" {
 		t.Skip("real cancellation acceptance requires explicit SDK entrypoint and private key file")
 	}
-	proofRoot := os.Getenv("PARSAR_CLAUDE_SDK_PROOF_DIR")
+	proofRoot := os.Getenv("OAC_TEST_CLAUDE_SDK_PROOF_DIR")
 	if !filepath.IsAbs(proofRoot) {
-		t.Fatal("PARSAR_CLAUDE_SDK_PROOF_DIR must be an absolute managed directory")
+		t.Fatal("OAC_TEST_CLAUDE_SDK_PROOF_DIR must be an absolute managed directory")
 	}
 	root, err := os.MkdirTemp(proofRoot, "claude-cancel-")
 	if err != nil {

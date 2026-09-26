@@ -14,7 +14,7 @@ import (
 )
 
 func TestExecutionLeaseCloseWaitsForCancelledConnectionCleanup(t *testing.T) {
-	dsn := os.Getenv("PARSAR_AGENTS_API_TEST_DATABASE_URL")
+	dsn := os.Getenv("OAC_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("dedicated PostgreSQL required")
 	}

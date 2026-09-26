@@ -18,7 +18,7 @@ import (
 // Run inside the qualified Docker Runtime. This checks the real native process
 // and managed requirements, not model execution or public protocol acceptance.
 func TestManagedNetworkNativeLifecycle(t *testing.T) {
-	if os.Getenv("PARSAR_CODEX_MANAGED_NETWORK_LIVE") != "1" {
+	if os.Getenv("OAC_TEST_CODEX_MANAGED_NETWORK_LIVE") != "1" {
 		t.Skip("requires the qualified Docker Runtime and native Codex")
 	}
 	base, err := os.ReadFile(nativeManagedRequirements)

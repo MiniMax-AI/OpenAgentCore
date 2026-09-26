@@ -13,7 +13,7 @@ import (
 )
 
 func TestEnvironmentExecutorOperatorCommand(t *testing.T) {
-	binary := os.Getenv("PARSAR_ENVIRONMENT_KEY_BINARY")
+	binary := os.Getenv("OAC_TEST_ENVIRONMENT_KEY_BINARY")
 	if binary == "" {
 		t.Skip("built environment-key operator executable required")
 	}

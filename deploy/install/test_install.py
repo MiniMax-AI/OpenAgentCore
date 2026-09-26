@@ -25,7 +25,7 @@ BUILD = "base:0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11"
 
 class InstallerTests(unittest.TestCase):
     def setUp(self):
-        temporary_root = Path.home() / ".parsar/tests/install"
+        temporary_root = Path.home() / ".oac/tests/install"
         temporary_root.mkdir(parents=True, exist_ok=True)
         self.temporary = tempfile.TemporaryDirectory(prefix="unit-", dir=temporary_root)
         self.addCleanup(self.temporary.cleanup)

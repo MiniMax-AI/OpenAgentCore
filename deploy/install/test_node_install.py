@@ -43,7 +43,7 @@ class Response(io.BytesIO):
 
 class NodeInstallTests(unittest.TestCase):
     def setUp(self):
-        base = Path.home() / ".parsar/tests/node-install"
+        base = Path.home() / ".oac/tests/node-install"
         base.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(temporary.cleanup)

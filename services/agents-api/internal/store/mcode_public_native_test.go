@@ -21,7 +21,7 @@ import (
 // This opt-in fixture never supplies model responses. The provider options must
 // name a real API; private operator files are deliberately outside the repository.
 func TestNativeMCodePublicExecution(t *testing.T) {
-	python, binary, root, optionsFile := os.Getenv("PARSAR_OFFICIAL_SDK_PYTHON"), os.Getenv("PARSAR_NATIVE_DAEMON_BIN"), os.Getenv("PARSAR_NATIVE_PROOF_DIR"), os.Getenv("PARSAR_MCODE_REAL_OPTIONS")
+	python, binary, root, optionsFile := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON"), os.Getenv("OAC_TEST_NATIVE_DAEMON_BIN"), os.Getenv("OAC_TEST_NATIVE_PROOF_DIR"), os.Getenv("OAC_TEST_MCODE_REAL_OPTIONS")
 	if python == "" || binary == "" || root == "" || optionsFile == "" {
 		t.Skip("native daemon, fixed SDK, private real-model options and proof directory required")
 	}

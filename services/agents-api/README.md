@@ -61,10 +61,10 @@ before relying on optional settings or hosted error/default equivalence.
 ```bash
 make build-agents-api
 # Optional absolute output directory:
-AGENTS_API_BUILD_DIR="$HOME/.parsar/build/agents-api-test" make build-agents-api
+OAC_DEV_CORE_BUILD_DIR="$HOME/.oac/build/agents-api-test" make build-agents-api
 ```
 
-The default output is `${PARSAR_HOME:-$HOME/.parsar}/build/agents-api`:
+The default output is `${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api`:
 
 - `agents-api`: HTTP service and execution worker.
 - `agents-api-migrate`: this service's embedded database migrations.
@@ -83,8 +83,8 @@ container, see [Container deployment](CONTAINER.md).
 `make build-agents-api-release` packages these commands and `parsar-sandbox-node` in a versioned
 Linux amd64 archive, with source/protocol identity, checksums, a license and
 [operator instructions](RELEASE.md). Build from a clean Git worktree with Go and
-Python 3.9+; output defaults to `~/.parsar/build/agents-api-release` (or
-`AGENTS_API_RELEASE_DIR`). The extracted API needs no source checkout or compiler.
+Python 3.9+; output defaults to `~/.oac/build/agents-api-release` (or
+`OAC_DEV_RELEASE_DIR`). The extracted API needs no source checkout or compiler.
 The archive and the container are advanced paths for running Core alone; see
 [Maintainers and advanced deployments](../../docs/maintainers.md). The Docker-hosted
 archive variant (`AGENTS_API_RELEASE_RUNTIME_IMAGE`) is retired: it recorded only an
@@ -357,11 +357,11 @@ the official client installed from the commit in `contracts/agents-api/upstream.
 ```bash
 python -m pip install -r services/agents-api/tests/requirements.txt
 make build-agents-api
-AGENTS_API_SERVER_BIN="${PARSAR_HOME:-$HOME/.parsar}/build/agents-api/agents-api" \
+OAC_TEST_SERVER_BIN="${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api/agents-api" \
   python services/agents-api/tests/official_client.py
 ```
 
-The test uses `PARSAR_AGENTS_API_TEST_DATABASE_URL`, temporary service keys and
+The test uses `OAC_TEST_DATABASE_URL`, temporary service keys and
 fresh tenant IDs. The suite checks upstream and generated response schemas, retries,
 ordering, tenant isolation, unsupported options and reads after a process restart,
 without a model provider. It also runs the
@@ -371,11 +371,11 @@ fresh tenants, and validates its created Sessions through the Python SDK.
 ## Checks
 
 ```bash
-PARSAR_AGENTS_API_TEST_DATABASE_URL='postgres://.../parsar_agents_api_local_tests' \
+OAC_TEST_DATABASE_URL='postgres://.../oac_local_tests' \
   make check-agents-api
 ```
 
-Set `PARSAR_OFFICIAL_SDK_PYTHON` to the fixed SDK interpreter for the Store client
+Set `OAC_TEST_OFFICIAL_SDK_PYTHON` to the fixed SDK interpreter for the Store client
 fixtures, and run the separate official-client command above as well.
 `TestEnvironmentRetrievalOfficialClient` verifies public creation, scoped safe
 Environment reads and retrieval after reopening without execution configuration.
@@ -385,7 +385,7 @@ expires, without fabricating a Turn or changing the Environment status. It is a
 persistence prerequisite test. `TestSelfHostedInitialCreationOfficialClient`
 separately exercises ordinary/streamed public initial creation through the Worker,
 retry identity, disconnect survival and explicitly controlled deadline failure.
-The test database must be named `parsar_agents_api_*_tests` and contain no product
+The test database must be named `oac_*_tests` and contain no product
 workspace tables. Tests apply only this service's migrations and use new tenant
 IDs without truncating tables. Missing test configuration skips DB tests locally;
 the `agents-api` CI workflow always supplies its own PostgreSQL service. Run the

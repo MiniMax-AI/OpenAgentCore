@@ -118,7 +118,7 @@ def run(sid, output=None, expected=None, cancel=False, failed_text=False, valida
 try:
     if stage == "initial":
         import os
-        proof["kind"] = os.environ["PARSAR_FUNCTION_IMAGE_ENGINE"]
+        proof["kind"] = os.environ["OAC_TEST_FUNCTION_IMAGE_ENGINE"]
         colors = ["red", "green", "blue", "yellow"]
         secrets.SystemRandom().shuffle(colors)
         proof["colors"] = colors

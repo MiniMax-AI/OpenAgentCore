@@ -18,7 +18,7 @@ import (
 )
 
 func TestNativeStructuredOutputPublicExecution(t *testing.T) {
-	python, binary, root, optionsFile := os.Getenv("PARSAR_OFFICIAL_SDK_PYTHON"), os.Getenv("PARSAR_NATIVE_DAEMON_BIN"), os.Getenv("PARSAR_NATIVE_PROOF_DIR"), os.Getenv("PARSAR_STRUCTURED_OUTPUT_REAL_OPTIONS")
+	python, binary, root, optionsFile := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON"), os.Getenv("OAC_TEST_NATIVE_DAEMON_BIN"), os.Getenv("OAC_TEST_NATIVE_PROOF_DIR"), os.Getenv("OAC_TEST_STRUCTURED_OUTPUT_REAL_OPTIONS")
 	if python == "" || binary == "" || root == "" || optionsFile == "" {
 		t.Skip("native daemon, fixed SDK, real model options and evidence directory required")
 	}

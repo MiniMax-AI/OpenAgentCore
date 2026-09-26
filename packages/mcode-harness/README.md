@@ -68,8 +68,8 @@ For the packaged Linux regression, provide an operator-owned private profile and
 artifact directory, then run `native.test.mjs` inside the qualified Docker Runtime:
 
 ```sh
-PARSAR_MCODE_NATIVE_PROFILE=/absolute/private-profile.json \
-PARSAR_MCODE_NATIVE_ARTIFACT=/opt/mcode-harness \
+OAC_TEST_MCODE_NATIVE_PROFILE=/absolute/private-profile.json \
+OAC_TEST_MCODE_NATIVE_ARTIFACT=/opt/mcode-harness \
 node --test packages/mcode-harness/native.test.mjs
 ```
 

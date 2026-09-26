@@ -18,7 +18,7 @@ import (
 )
 
 func TestNativeFunctionImagePublicExecution(t *testing.T) {
-	python, binary, root, optionsFile := os.Getenv("PARSAR_OFFICIAL_SDK_PYTHON"), os.Getenv("PARSAR_NATIVE_DAEMON_BIN"), os.Getenv("PARSAR_NATIVE_PROOF_DIR"), os.Getenv("PARSAR_FUNCTION_IMAGE_REAL_OPTIONS")
+	python, binary, root, optionsFile := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON"), os.Getenv("OAC_TEST_NATIVE_DAEMON_BIN"), os.Getenv("OAC_TEST_NATIVE_PROOF_DIR"), os.Getenv("OAC_TEST_FUNCTION_IMAGE_REAL_OPTIONS")
 	if python == "" || binary == "" || root == "" || optionsFile == "" {
 		t.Skip("native daemon, fixed SDK, real model options and evidence directory required")
 	}
@@ -34,7 +34,7 @@ func TestNativeFunctionImagePublicExecution(t *testing.T) {
 	if model == "" {
 		t.Fatal("real model required")
 	}
-	kind := os.Getenv("PARSAR_FUNCTION_IMAGE_ENGINE")
+	kind := os.Getenv("OAC_TEST_FUNCTION_IMAGE_ENGINE")
 	if kind != "codex" && kind != "claude_sdk" {
 		t.Fatal("image acceptance requires a specified native engine")
 	}

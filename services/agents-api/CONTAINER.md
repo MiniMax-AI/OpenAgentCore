@@ -15,7 +15,7 @@ Container packaging does not imply complete protocol compatibility.
 ```bash
 make docker-build-agents-api
 # Optional local image name:
-AGENTS_API_IMAGE=agents-api:local make docker-build-agents-api
+OAC_DEV_CORE_IMAGE=agents-api:local make docker-build-agents-api
 ```
 
 The target needs Go, Docker and access to pinned Go modules and the base image.
@@ -90,12 +90,12 @@ remain separate work.
 
 ## Verify
 
-On Linux, with a non-root host user, a `parsar_agents_api_*_tests` database with API migrations applied
+On Linux, with a non-root host user, an `oac_*_tests` database with API migrations applied
 and the fixed official Python SDK installed:
 
 ```bash
-PARSAR_AGENTS_API_TEST_DATABASE_URL='postgres://.../parsar_agents_api_local_tests' \
-  PARSAR_OFFICIAL_SDK_PYTHON=python3 make check-agents-api-container
+OAC_TEST_DATABASE_URL='postgres://.../oac_local_tests' \
+  OAC_TEST_OFFICIAL_SDK_PYTHON=python3 make check-agents-api-container
 ```
 
 This reuses the existing SDK/raw-HTTP/Go-client suite against read-only containers,

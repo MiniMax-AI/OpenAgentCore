@@ -29,7 +29,7 @@ func TestLiveClaudePreparedWorkspace(t *testing.T) {
 }
 
 func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
-	configFile := os.Getenv("PARSAR_CLAUDE_WORKSPACE_LIVE_CONFIG")
+	configFile := os.Getenv("OAC_TEST_CLAUDE_WORKSPACE_LIVE_CONFIG")
 	if configFile == "" {
 		t.Skip("requires explicit qualified placement and real provider configuration")
 	}
@@ -46,7 +46,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 	}
 	t.Logf("workspace factory proof: %s", root)
 	t.Setenv("PARSAR_HOME", root)
-	t.Setenv("PARSAR_PARENT_SECRET", "parent-must-not-enter-workspace")
+	t.Setenv("OAC_TEST_PARENT_SECRET", "parent-must-not-enter-workspace")
 	key, err := os.ReadFile(placement.KeyFile)
 	if err != nil || len(bytes.TrimSpace(key)) == 0 {
 		t.Fatal("private real-provider key unavailable")

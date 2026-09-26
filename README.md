@@ -97,7 +97,7 @@ pnpm dev:web
 ```
 
 Use the toolchain pinned in `go.mod`, Node 22 and pnpm 10.30.3. Build output goes under
-`~/.parsar/build/`. See the [service guide](services/agents-api/README.md),
+`~/.oac/build/`. See the [service guide](services/agents-api/README.md),
 [Docker Runtime](services/agents-api/deploy/codex/README.md),
 [microsandbox provider](services/agents-api/deploy/microsandbox/README.md) and
 [Web development guide](docs/web/README.md).
@@ -120,7 +120,7 @@ rustfmt/Clippy), OpenSSL development libraries, Chrome for Playwright, and a
 dedicated test PostgreSQL:
 
 ```sh
-export PARSAR_AGENTS_API_TEST_DATABASE_URL='postgres://.../parsar_agents_api_core_tests?sslmode=disable'
+export OAC_TEST_DATABASE_URL='postgres://.../oac_core_tests?sslmode=disable'
 make check
 ```
 

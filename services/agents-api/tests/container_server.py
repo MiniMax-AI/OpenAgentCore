@@ -22,6 +22,6 @@ if credential_key:
     ])
 for name in ("AGENTS_API_DATABASE_URL", "AGENTS_API_ADDR", "AGENTS_API_ENGINE", "AGENTS_API_PUBLIC_URL"):
     args.extend(["--env", name])
-args.append(os.environ["AGENTS_API_IMAGE"])
+args.append(os.environ["OAC_DEV_CORE_IMAGE"])
 # Docker forwards termination to the API and --rm removes the stopped container.
 os.execvp(args[0], args)

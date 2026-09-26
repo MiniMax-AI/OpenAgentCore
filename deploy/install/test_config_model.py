@@ -82,7 +82,7 @@ class ConfigModelTests(unittest.TestCase):
             config_model.validate(dict(base, public_url=origin))
 
     def test_generated_files_hold_no_secret_and_the_snapshot_hides_sensitive_values(self):
-        base = Path.home() / ".parsar/tests/config-model"
+        base = Path.home() / ".oac/tests/config-model"
         base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=base) as temporary:
             root = Path(temporary).resolve()

@@ -12,7 +12,7 @@ On Linux amd64, build the existing shared workspace helpers, then run:
 bash scripts/build-claude-sdk-runtime.sh
 bash scripts/build-claude-runtime.sh
 docker build --platform linux/amd64 -t agents-runtime:claude \
-  "${PARSAR_HOME:-$HOME/.parsar}/build/claude-runtime"
+  "${OAC_DEV_HOME:-$HOME/.oac}/build/claude-runtime"
 ```
 
 The bundle pins SDK `0.3.269` and native Claude Code `2.1.269`. The Dockerfile pins

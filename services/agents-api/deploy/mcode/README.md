@@ -14,7 +14,7 @@ Use the official [`@minimax-ai/code`](https://github.com/MiniMax-AI/minimax-code
 package version **0.4.12**, with Node.js 22.x and its native SQLite dependency. The Docker image pins Node.js
 22.23.1; the text fixture used 22.22.0.
 The inspected upstream source is `33b259bbbeb1c16433390869938191d09bdb0680`.
-Install outside the checkout, under a private operator directory in `~/.parsar/`.
+Install outside the checkout, under a private operator directory in `~/.oac/`.
 Check the native install succeeds and `mcode --version` reports exactly 0.4.12.
 This profile runs on a trusted execution host.
 
@@ -37,7 +37,7 @@ MCODE_CLI_DIR=/absolute/pinned-package bash scripts/build-mcode-harness.sh
 MCODE_HARNESS_BUILD_DIR=/absolute/built-companion \
 bash scripts/build-mcode-runtime.sh
 docker build --platform linux/amd64 -t agents-runtime:mcode \
-  "${PARSAR_HOME:-$HOME/.parsar}/build/mcode-runtime"
+  "${OAC_DEV_HOME:-$HOME/.oac}/build/mcode-runtime"
 ```
 
 Configure Core's existing managed Docker provider with the immutable image ID,
@@ -107,10 +107,10 @@ native ACP context occupancy and cumulative cost are not per-Turn usage.
 
 The opt-in `TestNativeMCodePublicExecution` uses the fixed official Python SDK,
 raw HTTP, actual daemon/gateway/Worker and a dedicated PostgreSQL test database.
-Provide private `PARSAR_MCODE_REAL_OPTIONS` (the provider object above plus the
-`model` string), `PARSAR_MCODE_BIN`, `PARSAR_NATIVE_DAEMON_BIN`,
-`PARSAR_NATIVE_PROOF_DIR`, `PARSAR_OFFICIAL_SDK_PYTHON` and
-`PARSAR_AGENTS_API_TEST_DATABASE_URL`, then run:
+Provide private `OAC_TEST_MCODE_REAL_OPTIONS` (the provider object above plus the
+`model` string), `PARSAR_MCODE_BIN`, `OAC_TEST_NATIVE_DAEMON_BIN`,
+`OAC_TEST_NATIVE_PROOF_DIR`, `OAC_TEST_OFFICIAL_SDK_PYTHON` and
+`OAC_TEST_DATABASE_URL`, then run:
 
 ```sh
 go test ./services/agents-api/internal/store \
@@ -124,7 +124,7 @@ Kimi and MiniMax options. This fixture creates only operator device credentials
 privately; all tested Sessions and inputs enter through public HTTP.
 
 `TestNativeMCodeHistoryIsolation` additionally takes
-`PARSAR_MCODE_FOREIGN_NATIVE_ID` from a successful public run and verifies rejection
+`OAC_TEST_MCODE_FOREIGN_NATIVE_ID` from a successful public run and verifies rejection
 in another private native home, plus rejection of a nonexistent history ID. Run it
 in the daemon's `internal/agent/mcode` package with the same private native/provider
 options. It must fail before model input, without a replacement native Session.

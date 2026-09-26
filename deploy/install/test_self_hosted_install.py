@@ -19,7 +19,7 @@ import self_hosted_install as installer
 
 class SelfHostedInstallTests(unittest.TestCase):
     def setUp(self):
-        base = Path.home() / '.parsar/tests/selfhost-install'
+        base = Path.home() / '.oac/tests/selfhost-install'
         base.mkdir(parents=True, exist_ok=True)
         self.temporary = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(self.temporary.cleanup)

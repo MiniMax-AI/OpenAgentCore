@@ -98,10 +98,10 @@ public operation, without adding engine-name branches to Core.
 
 `TestNativeMessageImagePublicExecution` runs the pinned SDK and raw HTTP against
 Core, a dedicated PostgreSQL database, the real daemon and a native harness.
-Set `PARSAR_MESSAGE_IMAGE_ENGINE` to `codex` or `claude_sdk`, provide private real
-provider options via `PARSAR_MESSAGE_IMAGE_REAL_OPTIONS`, and use the existing
-`PARSAR_NATIVE_DAEMON_BIN`, `PARSAR_NATIVE_PROOF_DIR` and
-`PARSAR_OFFICIAL_SDK_PYTHON` fixture settings. The test never supplies model responses.
+Set `OAC_TEST_MESSAGE_IMAGE_ENGINE` to `codex` or `claude_sdk`, provide private real
+provider options via `OAC_TEST_MESSAGE_IMAGE_REAL_OPTIONS`, and use the existing
+`OAC_TEST_NATIVE_DAEMON_BIN`, `OAC_TEST_NATIVE_PROOF_DIR` and
+`OAC_TEST_OFFICIAL_SDK_PYTHON` fixture settings. The test never supplies model responses.
 
 Real Kimi K3 acceptance on 2026-09-22 used randomized four-color PNGs whose answers
 were absent from the input text. Both adapters passed initial ordered input,

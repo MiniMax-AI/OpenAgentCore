@@ -32,13 +32,13 @@ func helperSession(t *testing.T, scenario string, resume bool) (*Session, <-chan
 	if resume {
 		req.AgentSessionID = "native-1"
 	}
-	t.Setenv("PARSAR_MCODE_TEST_HELPER", scenario)
+	t.Setenv("OAC_TEST_MCODE_HELPER", scenario)
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
 	binary := filepath.Join(t.TempDir(), "mcode")
-	script := "#!/bin/sh\nexport PARSAR_MCODE_TEST_HELPER=" + scenario + "\nexec '" + strings.ReplaceAll(exe, "'", "'\\''") + "' -test.run=^TestMCodeProcess$ -- \"$@\"\n"
+	script := "#!/bin/sh\nexport OAC_TEST_MCODE_HELPER=" + scenario + "\nexec '" + strings.ReplaceAll(exe, "'", "'\\''") + "' -test.run=^TestMCodeProcess$ -- \"$@\"\n"
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestCancelStopsWaitingCLI(t *testing.T) {
 }
 
 func TestMCodeProcess(t *testing.T) {
-	scenario := os.Getenv("PARSAR_MCODE_TEST_HELPER")
+	scenario := os.Getenv("OAC_TEST_MCODE_HELPER")
 	if scenario == "" {
 		return
 	}
@@ -213,7 +213,7 @@ func TestMCodeProcess(t *testing.T) {
 		if scenario == "hang" {
 			continue
 		}
-		if record := os.Getenv("PARSAR_MCODE_TEST_RECORD"); record != "" {
+		if record := os.Getenv("OAC_TEST_MCODE_RECORD"); record != "" {
 			f, err := os.OpenFile(record, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 			if err != nil {
 				os.Exit(10)

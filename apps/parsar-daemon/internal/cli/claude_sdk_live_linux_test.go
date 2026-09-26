@@ -31,11 +31,11 @@ func (s registeredSDKSender) Send(ctx context.Context, env proto.Envelope) error
 }
 
 func TestLiveRegisteredClaudeSDK(t *testing.T) {
-	entrypoint, keyFile := os.Getenv(claudeSDKEntrypointEnv), os.Getenv("PARSAR_CLAUDE_SDK_MINIMAX_KEY_FILE")
+	entrypoint, keyFile := os.Getenv(claudeSDKEntrypointEnv), os.Getenv("OAC_TEST_CLAUDE_SDK_MINIMAX_KEY_FILE")
 	if entrypoint == "" || keyFile == "" {
 		t.Skip("requires explicit SDK runtime and real provider key file")
 	}
-	proofRoot := os.Getenv("PARSAR_CLAUDE_SDK_PROOF_DIR")
+	proofRoot := os.Getenv("OAC_TEST_CLAUDE_SDK_PROOF_DIR")
 	if !filepath.IsAbs(proofRoot) {
 		t.Fatal("real acceptance requires an absolute managed proof directory")
 	}

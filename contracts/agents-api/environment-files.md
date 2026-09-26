@@ -320,7 +320,7 @@ FIFOs, symlink leaves and parents, dangling and inside links, non-directory pare
 races for the destination and a missing parent, a replaced held ancestor, the
 `linkat` fallback and the explicit mode selection. Daemon tests cover the local
 workspace writer's create mode and codes with a scripted helper; its native-helper
-case runs only when `PARSAR_TEST_LOCAL_WRITE_HELPER` names a built helper, so it is
+case runs only when `OAC_TEST_LOCAL_WRITE_HELPER` names a built helper, so it is
 opt-in and was run for this batch by hand and through live Docker acceptance.
 Dispatch and gateway tests cover the rejection reason. Go handler tests cover FW6 and the error mapping. A real-PostgreSQL
 HTTP and Worker test covers the conflict messages, settled `rejected` intents with no

@@ -68,7 +68,7 @@ def verify_source_files(client, foreign, http, environment, directory, cases):
     finally:
         foreign.files.delete(foreign_source.id)
 
-    scratch = Path.home() / ".parsar" / "tmp"
+    scratch = Path.home() / ".oac" / "tmp"
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryFile(dir=scratch) as body:
         chunk = bytes(range(256)) * 1024

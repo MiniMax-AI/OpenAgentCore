@@ -57,8 +57,8 @@ The opt-in `TestNativeToolPolicyPublicExecution` fixture and
 `services/agents-api/tests/official_tool_policy.py` exercise a real PostgreSQL
 database, independent API, Docker daemon and native harness using the pinned
 official SDK with strict response validation and raw HTTP. Supply the existing
-native-test environment variables plus `PARSAR_TOOL_POLICY_ENGINE` and a private
-`PARSAR_TOOL_POLICY_REAL_OPTIONS` file. Each concurrent execution worker requires
+native-test environment variables plus `OAC_TEST_TOOL_POLICY_ENGINE` and a private
+`OAC_TEST_TOOL_POLICY_REAL_OPTIONS` file. Each concurrent execution worker requires
 its own dedicated test database.
 
 On 2026-09-22, Codex and Claude with Kimi K3, and MiniMax Code with MiniMax-M2.7,

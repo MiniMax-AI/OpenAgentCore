@@ -20,19 +20,19 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: parsar_agents_api_core_ci_tests
+          POSTGRES_DB: oac_core_ci_tests
           POSTGRES_USER: agents_api
           POSTGRES_PASSWORD: core_test_only
         ports:
           - 5432/tcp
         options: >-
-          --health-cmd "pg_isready -U agents_api -d parsar_agents_api_core_ci_tests"
+          --health-cmd "pg_isready -U agents_api -d oac_core_ci_tests"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      CARGO_HOME: /home/runner/.parsar/cache/executor-cargo
-      CARGO_TARGET_DIR: /home/runner/.parsar/cache/executor-target
+      CARGO_HOME: /home/runner/.oac/cache/executor-cargo
+      CARGO_TARGET_DIR: /home/runner/.oac/cache/executor-target
       CARGO_BUILD_JOBS: 4
     steps:
       - uses: actions/checkout@v7
@@ -51,8 +51,8 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: |
-            ~/.parsar/cache/executor-cargo
-            ~/.parsar/cache/executor-target
+            ~/.oac/cache/executor-cargo
+            ~/.oac/cache/executor-target
           key: core-executor-${{ runner.os }}-${{ hashFiles('packages/codex-executor/Cargo.lock') }}
       - name: Install Web acceptance browser
         run: |
@@ -60,7 +60,7 @@ jobs:
           pnpm exec playwright install --with-deps chrome
       - name: Check standalone repository
         env:
-          PARSAR_AGENTS_API_TEST_DATABASE_URL: postgres://agents_api:core_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/parsar_agents_api_core_ci_tests?sslmode=disable
+          OAC_TEST_DATABASE_URL: postgres://agents_api:core_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_core_ci_tests?sslmode=disable
         run: make check
       - name: Build execution daemon
         run: make build-daemon

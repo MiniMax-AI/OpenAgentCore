@@ -82,11 +82,11 @@ def main():
     distribution = importlib.metadata.distribution("openai")
     source = json.loads(distribution.read_text("direct_url.json") or "{}")
     assert source.get("vcs_info", {}).get("commit_id") == pin["commit"], "Install the pinned SDK commit first"
-    dsn = os.environ["PARSAR_AGENTS_API_TEST_DATABASE_URL"]
+    dsn = os.environ["OAC_TEST_DATABASE_URL"]
     parts = urlsplit(dsn)
     database = parse_qs(parts.query).get("dbname", [parts.path.lstrip("/")])[0]
-    assert parts.scheme in ("postgres", "postgresql") and database.startswith("parsar_agents_api_") and database.endswith("_tests"), "A dedicated execution test database is required"
-    binary = os.environ["AGENTS_API_SERVER_BIN"]
+    assert parts.scheme in ("postgres", "postgresql") and database.startswith("oac_") and database.endswith("_tests"), "A dedicated execution test database is required"
+    binary = os.environ["OAC_TEST_SERVER_BIN"]
     with socket.socket() as address:
         address.bind(("127.0.0.1", 0))
         port = address.getsockname()[1]
@@ -102,7 +102,7 @@ def main():
         path.touch(mode=0o600)
         path.write_text(json.dumps({"project_ids": project_ids}))
         subprocess.run(["go", "run", "./services/agents-api/tests/fixtures"], cwd=root,
-                       env=dict(os.environ, AGENTS_API_PROJECT_IDENTITIES_FIXTURE=str(path)),
+                       env=dict(os.environ, OAC_TEST_PROJECT_IDENTITIES_FIXTURE=str(path)),
                        check=True, timeout=120)
         return json.loads(path.read_text())["bindings"]
 
@@ -247,7 +247,7 @@ def main():
                     fixture = Path(directory) / "turns.json"
                     fixture.write_text(json.dumps({"tenant": bindings[0]["tenant_id"], "session": turn_session.id}))
                     subprocess.run(["go", "run", "./services/agents-api/tests/fixtures"], cwd=root,
-                                   env=dict(os.environ, AGENTS_API_TURN_FIXTURE=str(fixture)), check=True, timeout=120)
+                                   env=dict(os.environ, OAC_TEST_TURN_FIXTURE=str(fixture)), check=True, timeout=120)
                     turn_ids = json.loads(fixture.read_text())["turns"]
                     turns = sessions.turns
                     recovered = list(turns.list(turn_session.id, limit=1, order="asc"))
@@ -333,8 +333,8 @@ def main():
                     assert sessions.create(**spec, metadata={"workspace": "untrusted-reference"}, extra_headers=headers) == first
                     verify_creator_recovery(client, replacement_key, peer_key, additional_key,
                                             creator_retries, expect_error)
-                go_env = dict(os.environ, AGENTS_API_CLIENT_TEST_BASE_URL=base + "/v1",
-                              AGENTS_API_CLIENT_TEST_KEY=tokens[2], AGENTS_API_CLIENT_TEST_OTHER_KEY=tokens[3])
+                go_env = dict(os.environ, OAC_TEST_CLIENT_BASE_URL=base + "/v1",
+                              OAC_TEST_CLIENT_KEY=tokens[2], OAC_TEST_CLIENT_OTHER_KEY=tokens[3])
                 subprocess.run(["go", "test", "./packages/agents-client/v1", "-run", "^TestService$", "-count=1"],
                                cwd=root, env=go_env, check=True, timeout=120)
                 with client(tokens[2]) as go_tenant:

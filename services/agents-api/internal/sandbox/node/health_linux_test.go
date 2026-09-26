@@ -203,7 +203,7 @@ func TestHostHealthReadOnly(t *testing.T) {
 	if h.AvailableDiskBytes == nil || *h.AvailableDiskBytes < 0 || *h.AvailableDiskBytes > int64(disk.Blocks)*disk.Bsize {
 		t.Fatal("state filesystem free space unavailable or invalid")
 	}
-	if os.Getenv("PARSAR_NODE_HEALTH_PROBE") == "1" {
+	if os.Getenv("OAC_TEST_NODE_HEALTH_PROBE") == "1" {
 		data, err := json.Marshal(h)
 		if err != nil {
 			t.Fatal(err)
@@ -215,7 +215,7 @@ func TestHostHealthReadOnly(t *testing.T) {
 	if err != nil || h.CPUUtilization == nil || *h.CPUUtilization < 0 || *h.CPUUtilization > 1 || !h.ObservedAt.After(before) {
 		t.Fatalf("invalid follow-up observation: %+v, %v", h, err)
 	}
-	if os.Getenv("PARSAR_NODE_HEALTH_PROBE") == "1" {
+	if os.Getenv("OAC_TEST_NODE_HEALTH_PROBE") == "1" {
 		data, _ := json.Marshal(h)
 		t.Log(string(data))
 	}

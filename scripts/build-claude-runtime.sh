@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${PARSAR_HOME:-$HOME/.parsar}"
+runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
 output_dir="${AGENTS_RUNTIME_BUILD_DIR:-$runtime_root/build/claude-runtime}"
 sdk_dir="${CLAUDE_SDK_BUILD_DIR:-$runtime_root/build/claude-sdk-runtime}"
 helpers_dir="${AGENTS_EXECUTOR_BUILD_DIR:-$runtime_root/build/agents-executor}"

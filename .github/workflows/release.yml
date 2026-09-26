@@ -74,10 +74,10 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: |
-            ~/.parsar/cache/go-build
-            ~/.parsar/cache/go-mod
-            ~/.parsar/cache/executor-cargo
-            ~/.parsar/cache/executor-target
+            ~/.oac/cache/go-build
+            ~/.oac/cache/go-mod
+            ~/.oac/cache/executor-cargo
+            ~/.oac/cache/executor-target
           key: core-release-${{ runner.os }}-${{ hashFiles('go.sum', 'packages/codex-executor/Cargo.lock') }}
       - name: Check release metadata and prepare pinned harnesses
         run: |
@@ -90,20 +90,20 @@ jobs:
           RELEASE_REPOSITORY: ${{ github.repository }}
           CORE_DISTRIBUTION_OFFLINE: ${{ inputs.offline && '1' || '0' }}
         run: |
-          inputs="$HOME/.parsar/build/release-inputs/inputs.json"
+          inputs="$HOME/.oac/build/release-inputs/inputs.json"
           AGENTS_RUNTIME_CODEX_PACKAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
           MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
           export AGENTS_RUNTIME_CODEX_PACKAGE MCODE_HARNESS_BUILD_DIR
           export CORE_DISTRIBUTION_RELEASE_BASE_URL="https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_TAG"
           bash scripts/build-core-distribution.sh
-          mkdir -p "$HOME/.parsar/build/release-upload"
-          for asset in "$HOME/.parsar/build/core-distribution/"*; do
-            if [[ -f "$asset" ]]; then ln "$asset" "$HOME/.parsar/build/release-upload/"; fi
+          mkdir -p "$HOME/.oac/build/release-upload"
+          for asset in "$HOME/.oac/build/core-distribution/"*; do
+            if [[ -f "$asset" ]]; then ln "$asset" "$HOME/.oac/build/release-upload/"; fi
           done
       - uses: actions/upload-artifact@v6
         with:
           name: core-release-${{ steps.source.outputs.revision }}
-          path: ~/.parsar/build/release-upload/*
+          path: ~/.oac/build/release-upload/*
           compression-level: 0
           if-no-files-found: error
 

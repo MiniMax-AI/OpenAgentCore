@@ -208,7 +208,7 @@ func TestPreparedSessionConcurrentStartAndClose(t *testing.T) {
 
 func TestPreparedSessionCancellationDuringReadiness(t *testing.T) {
 	req, cfg, root := preparationFixture(t)
-	t.Setenv("PARSAR_PREPARATION_BLOCK", "1")
+	t.Setenv("OAC_TEST_PREPARATION_BLOCK", "1")
 	owner, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	result := make(chan error, 1)

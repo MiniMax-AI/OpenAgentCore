@@ -42,7 +42,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := filepath.Join(home, ".parsar", "placement-tests")
+	base := filepath.Join(home, ".oac", "placement-tests")
 	if err := os.MkdirAll(base, 0700); err != nil {
 		t.Fatal(err)
 	}

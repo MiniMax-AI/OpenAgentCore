@@ -15,7 +15,7 @@ import node_install as installer
 
 class ReadinessTests(unittest.TestCase):
     def setUp(self):
-        base = Path.home() / ".parsar/tests/node-readiness"
+        base = Path.home() / ".oac/tests/node-readiness"
         base.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(temporary.cleanup)

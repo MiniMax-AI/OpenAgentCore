@@ -19,14 +19,14 @@ func executionRequest(t *testing.T) proto.PromptRequestPayload {
 
 func TestExecutionOptionsExcludeAmbientAuthority(t *testing.T) {
 	r := executionRequest(t)
-	t.Setenv("AGENTS_API_SECRET_CANARY", "secret")
+	t.Setenv("OAC_TEST_SECRET_CANARY", "secret")
 	t.Setenv("NODE_OPTIONS", "--import=untrusted")
 	opts, err := prepareOptions(t.Context(), r)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range opts.Env {
-		if strings.HasPrefix(e, "AGENTS_API_SECRET_CANARY=") || strings.HasPrefix(e, "NODE_OPTIONS=") {
+		if strings.HasPrefix(e, "OAC_TEST_SECRET_CANARY=") || strings.HasPrefix(e, "NODE_OPTIONS=") {
 			t.Fatal("ambient authority inherited")
 		}
 	}

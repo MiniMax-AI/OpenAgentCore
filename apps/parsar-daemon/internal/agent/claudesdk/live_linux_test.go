@@ -27,7 +27,7 @@ import (
 
 func TestLiveClaudeSDKTextResume(t *testing.T) {
 	entrypoint := os.Getenv("PARSAR_CLAUDE_SDK_ENTRYPOINT")
-	keyFile := os.Getenv("PARSAR_CLAUDE_SDK_MINIMAX_KEY_FILE")
+	keyFile := os.Getenv("OAC_TEST_CLAUDE_SDK_MINIMAX_KEY_FILE")
 	if entrypoint == "" || keyFile == "" {
 		t.Skip("real SDK/provider acceptance requires explicit entrypoint and private key file")
 	}
@@ -35,9 +35,9 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proofRoot := os.Getenv("PARSAR_CLAUDE_SDK_PROOF_DIR")
+	proofRoot := os.Getenv("OAC_TEST_CLAUDE_SDK_PROOF_DIR")
 	if !filepath.IsAbs(proofRoot) {
-		t.Fatal("PARSAR_CLAUDE_SDK_PROOF_DIR must be an absolute managed proof directory")
+		t.Fatal("OAC_TEST_CLAUDE_SDK_PROOF_DIR must be an absolute managed proof directory")
 	}
 	if err := os.MkdirAll(proofRoot, 0o700); err != nil {
 		t.Fatal(err)

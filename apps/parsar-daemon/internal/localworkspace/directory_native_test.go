@@ -11,7 +11,7 @@ import (
 )
 
 func TestNativeLocalDirectoryConfinement(t *testing.T) {
-	helper := os.Getenv("PARSAR_LOCAL_DIRECTORY_TEST_HELPER")
+	helper := os.Getenv("OAC_TEST_LOCAL_DIRECTORY_HELPER")
 	if helper == "" {
 		t.Skip("actual pinned directory helper required")
 	}

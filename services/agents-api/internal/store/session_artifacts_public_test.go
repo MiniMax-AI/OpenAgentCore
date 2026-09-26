@@ -209,7 +209,7 @@ func TestSessionArtifactListEnvelopeAndEnvironmentFilterPostgres(t *testing.T) {
 // The pinned SDK and raw HTTP verifier used by live acceptance reads the
 // republication result of three Turns, the list envelope and the filter.
 func TestSessionArtifactsOfficialClientPostgres(t *testing.T) {
-	python := os.Getenv("PARSAR_OFFICIAL_SDK_PYTHON")
+	python := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON")
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}

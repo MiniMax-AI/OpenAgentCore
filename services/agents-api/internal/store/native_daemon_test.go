@@ -17,7 +17,7 @@ func nativeDispatchHarness(t *testing.T) (*dispatchHarness, context.Context, str
 
 func nativeDispatchHarnessWithTimeout(t *testing.T, timeout time.Duration) (*dispatchHarness, context.Context, string) {
 	t.Helper()
-	binary, root := os.Getenv("PARSAR_NATIVE_DAEMON_BIN"), os.Getenv("PARSAR_NATIVE_PROOF_DIR")
+	binary, root := os.Getenv("OAC_TEST_NATIVE_DAEMON_BIN"), os.Getenv("OAC_TEST_NATIVE_PROOF_DIR")
 	if binary == "" || root == "" {
 		t.Skip("explicit native daemon binary and evidence directory required")
 	}

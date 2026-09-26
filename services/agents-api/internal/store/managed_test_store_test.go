@@ -19,7 +19,7 @@ import (
 func newManagedTestStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	t.Helper()
 	_, admin := testStore(t)
-	name := "parsar_agents_api_m_" + uuid.NewString()[:8] + "_tests"
+	name := "oac_m_" + uuid.NewString()[:8] + "_tests"
 	quoted := pgx.Identifier{name}.Sanitize()
 	if _, err := admin.Exec(t.Context(), "CREATE DATABASE "+quoted); err != nil {
 		t.Fatal(err)

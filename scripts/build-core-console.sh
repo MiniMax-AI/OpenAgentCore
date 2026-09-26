@@ -2,14 +2,14 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${PARSAR_HOME:-$HOME/.parsar}"
-output_dir="${CORE_CONSOLE_BUILD_DIR:-$runtime_root/build/core-console}"
+runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
+output_dir="${OAC_DEV_WEB_BUILD_DIR:-$runtime_root/build/core-console}"
 export GOCACHE="${GOCACHE:-$runtime_root/cache/go-build}"
 export GOMODCACHE="${GOMODCACHE:-$runtime_root/cache/go-mod}"
 for directory in "$runtime_root" "$output_dir" "$GOCACHE" "$GOMODCACHE"; do
   case "$directory" in
-    "$HOME/.parsar"|"$HOME/.parsar/"*) ;;
-    *) printf 'Core console build directories must be absolute and under ~/.parsar\n' >&2; exit 1 ;;
+    "$HOME/.oac"|"$HOME/.oac/"*) ;;
+    *) printf 'Core console build directories must be absolute and under ~/.oac\n' >&2; exit 1 ;;
   esac
   case "/$directory/" in
     */../*|*/./*) printf 'Core console build directories must not contain dot segments\n' >&2; exit 1 ;;

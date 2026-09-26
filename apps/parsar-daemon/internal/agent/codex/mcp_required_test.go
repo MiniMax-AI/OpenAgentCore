@@ -32,9 +32,9 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 			}
 			config := filepath.Join(root, "mcp-config.json")
 			writeMCPHTTPConfigResponse(t, config, mcpHTTPConfigResponse(declarations))
-			t.Setenv("PARSAR_PREPARATION_MCP_CONFIG", config)
+			t.Setenv("OAC_TEST_PREPARATION_MCP_CONFIG", config)
 			gate := filepath.Join(root, "required-initialization")
-			t.Setenv("PARSAR_PREPARATION_THREAD_GATE", gate)
+			t.Setenv("OAC_TEST_PREPARATION_THREAD_GATE", gate)
 			p, err := newPreparation(t.Context(), req, cfg)
 			if err != nil {
 				t.Fatal(err)

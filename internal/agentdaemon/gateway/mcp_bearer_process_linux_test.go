@@ -25,7 +25,7 @@ import (
 
 func mcpBearerSettings(t *testing.T) (daemon, native, provider, root string) {
 	t.Helper()
-	names := []string{"PARSAR_MCP_BEARER_DAEMON_BIN", "PARSAR_MCP_BEARER_CODEX_BIN", "PARSAR_MCP_BEARER_MODEL_KEY_FILE", "PARSAR_MCP_BEARER_PROOF_DIR"}
+	names := []string{"OAC_TEST_MCP_BEARER_DAEMON_BIN", "OAC_TEST_MCP_BEARER_CODEX_BIN", "OAC_TEST_MCP_BEARER_MODEL_KEY_FILE", "OAC_TEST_MCP_BEARER_PROOF_DIR"}
 	for _, name := range names {
 		if os.Getenv(name) == "" {
 			t.Skip("real MCP bearer acceptance requires all four explicit binary, provider-file and proof settings")
@@ -42,9 +42,9 @@ func mcpBearerSettings(t *testing.T) (daemon, native, provider, root string) {
 	if err != nil {
 		t.Fatal("explicit proof directory must already exist")
 	}
-	managed, err := filepath.EvalSymlinks(filepath.Join(home, ".parsar"))
+	managed, err := filepath.EvalSymlinks(filepath.Join(home, ".oac"))
 	if err != nil || !strings.HasPrefix(proof, managed+string(os.PathSeparator)) {
-		t.Fatal("proof directory must be below ~/.parsar")
+		t.Fatal("proof directory must be below ~/.oac")
 	}
 	root, err = os.MkdirTemp(proof, "mcp-bearer-")
 	if err != nil {
@@ -102,17 +102,17 @@ func mcpBearerStartDaemon(t *testing.T, root, daemon, native, provider, caFile, 
 set -eu
 for argument in "$@"; do
   if [ "$argument" = app-server ]; then
-    printf '%s %s\n' "$$" "$(awk '{print $22}' /proc/$$/stat)" >> "$PARSAR_MCP_BEARER_STARTS"
-    printf '%s\0' "$@" >> "$PARSAR_MCP_BEARER_ARGV"
+    printf '%s %s\n' "$$" "$(awk '{print $22}' /proc/$$/stat)" >> "$OAC_TEST_MCP_BEARER_STARTS"
+    printf '%s\0' "$@" >> "$OAC_TEST_MCP_BEARER_ARGV"
     break
   fi
 done
-exec "$PARSAR_MCP_BEARER_NATIVE" -c 'model_provider="minimax_validation"' -c 'model_providers.minimax_validation.name="MiniMax validation"' -c 'model_providers.minimax_validation.base_url="https://api.minimax.cn/v1"' -c 'model_providers.minimax_validation.env_key="MINIMAX_VALIDATION_KEY"' -c 'model_providers.minimax_validation.wire_api="responses"' "$@"
+exec "$OAC_TEST_MCP_BEARER_NATIVE" -c 'model_provider="minimax_validation"' -c 'model_providers.minimax_validation.name="MiniMax validation"' -c 'model_providers.minimax_validation.base_url="https://api.minimax.cn/v1"' -c 'model_providers.minimax_validation.env_key="MINIMAX_VALIDATION_KEY"' -c 'model_providers.minimax_validation.wire_api="responses"' "$@"
 `
 	if err := os.WriteFile(wrapper, []byte(script), 0700); err != nil {
 		t.Fatal("cannot create owned native wrapper")
 	}
-	env := []string{"HOME=" + filepath.Join(root, "home"), "TMPDIR=" + filepath.Join(root, "tmp"), "PARSAR_HOME=" + filepath.Join(root, "runtime"), "PARSAR_CODEX_BIN=" + wrapper, "MINIMAX_VALIDATION_KEY=" + provider, "SSL_CERT_FILE=" + caFile, "PARSAR_MCP_BEARER_NATIVE=" + native, "PARSAR_MCP_BEARER_STARTS=" + filepath.Join(root, "native-starts"), "PARSAR_MCP_BEARER_ARGV=" + filepath.Join(root, "native-argv")}
+	env := []string{"HOME=" + filepath.Join(root, "home"), "TMPDIR=" + filepath.Join(root, "tmp"), "PARSAR_HOME=" + filepath.Join(root, "runtime"), "PARSAR_CODEX_BIN=" + wrapper, "MINIMAX_VALIDATION_KEY=" + provider, "SSL_CERT_FILE=" + caFile, "OAC_TEST_MCP_BEARER_NATIVE=" + native, "OAC_TEST_MCP_BEARER_STARTS=" + filepath.Join(root, "native-starts"), "OAC_TEST_MCP_BEARER_ARGV=" + filepath.Join(root, "native-argv")}
 	for _, name := range []string{"PATH", "LANG", "LC_ALL", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"} {
 		if value, ok := os.LookupEnv(name); ok {
 			env = append(env, name+"="+value)

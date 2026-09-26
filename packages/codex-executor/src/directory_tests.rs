@@ -14,7 +14,7 @@ impl Fixture {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let guard = TEST_LOCK.lock().unwrap();
         let root = PathBuf::from(std::env::var_os("HOME").expect("HOME required"))
-            .join(".parsar/tests/scoped-directory");
+            .join(".oac/tests/scoped-directory");
         fs::create_dir_all(&root).unwrap();
         let path = root.join(format!(
             "fixture-{}-{}",

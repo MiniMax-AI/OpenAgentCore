@@ -17,7 +17,7 @@ import (
 // The official-client harness starts the actual service with a dedicated test
 // database and fresh tenant keys, then supplies these explicit test variables.
 func TestService(t *testing.T) {
-	base, key, otherKey := os.Getenv("AGENTS_API_CLIENT_TEST_BASE_URL"), os.Getenv("AGENTS_API_CLIENT_TEST_KEY"), os.Getenv("AGENTS_API_CLIENT_TEST_OTHER_KEY")
+	base, key, otherKey := os.Getenv("OAC_TEST_CLIENT_BASE_URL"), os.Getenv("OAC_TEST_CLIENT_KEY"), os.Getenv("OAC_TEST_CLIENT_OTHER_KEY")
 	if base == "" && key == "" && otherKey == "" {
 		t.Skip("real service test is run by services/agents-api/tests/official_client.py")
 	}

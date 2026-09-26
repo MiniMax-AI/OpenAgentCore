@@ -16,7 +16,7 @@ make check-agents-executor
 make build-agents-executor
 ```
 
-Build state stays under `~/.parsar/`. `CARGO_HOME`, `CARGO_TARGET_DIR` and
+Build state stays under `~/.oac/`. `CARGO_HOME`, `CARGO_TARGET_DIR` and
 `AGENTS_EXECUTOR_BUILD_DIR` select absolute cache/output locations. The build
 copies only this package and produces Linux x86_64 GNU binaries. Install helpers
 at operator-controlled paths outside the writable workspace. Runtime packaging

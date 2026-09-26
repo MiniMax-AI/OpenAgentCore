@@ -27,16 +27,16 @@ func main() {
 }
 
 func seed() error {
-	if path := os.Getenv("AGENTS_API_PROJECT_IDENTITIES_FIXTURE"); path != "" {
+	if path := os.Getenv("OAC_TEST_PROJECT_IDENTITIES_FIXTURE"); path != "" {
 		return readProjectIdentities(path)
 	}
-	if path := os.Getenv("AGENTS_API_CREDENTIAL_LIST_FIXTURE"); path != "" {
+	if path := os.Getenv("OAC_TEST_CREDENTIAL_LIST_FIXTURE"); path != "" {
 		return seedCredentialList(path)
 	}
-	if path := os.Getenv("AGENTS_API_VAULT_LIST_FIXTURE"); path != "" {
+	if path := os.Getenv("OAC_TEST_VAULT_LIST_FIXTURE"); path != "" {
 		return seedVaultList(path)
 	}
-	path := os.Getenv("AGENTS_API_TURN_FIXTURE")
+	path := os.Getenv("OAC_TEST_TURN_FIXTURE")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -79,11 +79,11 @@ func seed() error {
 }
 
 func fixturePool(ctx context.Context) (*pgxpool.Pool, error) {
-	cfg, err := pgxpool.ParseConfig(os.Getenv("PARSAR_AGENTS_API_TEST_DATABASE_URL"))
+	cfg, err := pgxpool.ParseConfig(os.Getenv("OAC_TEST_DATABASE_URL"))
 	if err != nil {
 		return nil, err
 	}
-	if !strings.HasPrefix(cfg.ConnConfig.Database, "parsar_agents_api_") || !strings.HasSuffix(cfg.ConnConfig.Database, "_tests") {
+	if !strings.HasPrefix(cfg.ConnConfig.Database, "oac_") || !strings.HasSuffix(cfg.ConnConfig.Database, "_tests") {
 		return nil, errors.New("dedicated test database required")
 	}
 	return pgxpool.NewWithConfig(ctx, cfg)

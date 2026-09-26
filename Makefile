@@ -12,7 +12,7 @@ check: check-distribution check-database check-sqlc check-go check-microsandbox-
 	@printf 'Parsar Core checks passed.\n'
 
 check-database:
-	@test -n "$${PARSAR_AGENTS_API_TEST_DATABASE_URL:-}" || { echo 'Set PARSAR_AGENTS_API_TEST_DATABASE_URL to a dedicated test PostgreSQL database' >&2; exit 1; }
+	@test -n "$${OAC_TEST_DATABASE_URL:-}" || { echo 'Set OAC_TEST_DATABASE_URL to a dedicated test PostgreSQL database' >&2; exit 1; }
 
 sqlc-generate:
 	cd services/agents-api && $(SQLC) generate
@@ -21,7 +21,7 @@ SWAG ?= go run github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION)
 
 .PHONY: openapi
 openapi:
-	@set -e; root="$${PARSAR_HOME:-$$HOME/.parsar}/build"; mkdir -p "$$root"; \
+	@set -e; root="$${OAC_DEV_HOME:-$$HOME/.oac}/build"; mkdir -p "$$root"; \
 	output=$$(mktemp -d "$$root/core-openapi.XXXXXX"); trap 'rm -rf "$$output"' EXIT; \
 	$(SWAG) init \
 	    -g cmd/server/main.go --dir ./services/agents-api,./contracts/agents-api/v1 \
@@ -37,7 +37,7 @@ check-go:
 	go test ./apps/parsar-daemon/... ./internal/... ./contracts/agents-api/... ./scripts/openapi-split -count=1
 
 build-daemon:
-	@set -e; output="$${PARSAR_HOME:-$$HOME/.parsar}/build/daemon"; \
+	@set -e; output="$${OAC_DEV_HOME:-$$HOME/.oac}/build/daemon"; \
 	[[ "$$output" == /* ]] || { echo 'Daemon output directory must be absolute' >&2; exit 1; }; \
 	mkdir -p "$$output"; \
 	CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$$output/parsar-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
@@ -57,7 +57,7 @@ docker-build-agents-api:
 	./scripts/build-agents-api-image.sh
 
 check-agents-api-container: docker-build-agents-api
-	AGENTS_API_IMAGE="$${AGENTS_API_IMAGE:-agents-api:dev}" AGENTS_API_SERVER_BIN="$(CURDIR)/services/agents-api/tests/container_server.py" $${PARSAR_OFFICIAL_SDK_PYTHON:-python3} services/agents-api/tests/official_client.py
+	OAC_DEV_CORE_IMAGE="$${OAC_DEV_CORE_IMAGE:-agents-api:dev}" OAC_TEST_SERVER_BIN="$(CURDIR)/services/agents-api/tests/container_server.py" $${OAC_TEST_OFFICIAL_SDK_PYTHON:-python3} services/agents-api/tests/official_client.py
 
 node-deps:
 	pnpm install --frozen-lockfile
@@ -103,7 +103,7 @@ build-mcode-runtime:
 .PHONY: build-microsandbox-provider check-microsandbox-provider
 build-microsandbox-provider:
 	@test "$$(go env GOOS)" = linux || { echo 'The microsandbox provider helper requires Linux' >&2; exit 1; }
-	@set -e; output="$${PARSAR_HOME:-$$HOME/.parsar}/build/microsandbox-provider"; \
+	@set -e; output="$${OAC_DEV_HOME:-$$HOME/.oac}/build/microsandbox-provider"; \
 	[[ "$$output" == /* ]] || { echo 'Provider output directory must be absolute' >&2; exit 1; }; \
 	mkdir -p "$$output"; \
 	cd services/agents-api/tools/microsandbox-provider; \
@@ -135,5 +135,5 @@ build-e2b-provider:
 
 # The pinned SDK environment is also tested when building the shipped helper.
 check-e2b-provider:
-	PYTHONDONTWRITEBYTECODE=1 $${PARSAR_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/agents-api/deploy/e2b -p '*_test.py'
-	PYTHONDONTWRITEBYTECODE=1 $${PARSAR_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/agents-api/tools/e2b-provider -p '*_test.py'
+	PYTHONDONTWRITEBYTECODE=1 $${OAC_TEST_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/agents-api/deploy/e2b -p '*_test.py'
+	PYTHONDONTWRITEBYTECODE=1 $${OAC_TEST_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/agents-api/tools/e2b-provider -p '*_test.py'

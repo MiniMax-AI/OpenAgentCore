@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Prepare pinned upstream inputs once, then reuse the existing Runtime builders.
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-release_root="$HOME/.parsar/build/release-inputs"
+release_root="$HOME/.oac/build/release-inputs"
 if [[ -e "$release_root" ]]; then
   printf 'Release input directory already exists; use a fresh build host\n' >&2
   exit 1

@@ -30,7 +30,7 @@ def seed_archived_fixture(root, directory, tenant, values):
     path = Path(directory) / "vault-list.json"
     path.write_text(json.dumps({"tenant": tenant, "vaults": [value.id for value in values]}))
     subprocess.run(["go", "run", "./services/agents-api/tests/fixtures"], cwd=root,
-                   env=dict(os.environ, AGENTS_API_VAULT_LIST_FIXTURE=str(path)),
+                   env=dict(os.environ, OAC_TEST_VAULT_LIST_FIXTURE=str(path)),
                    check=True, timeout=120)
 
 

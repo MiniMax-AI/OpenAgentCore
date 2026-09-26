@@ -5,7 +5,7 @@ set -euo pipefail
 umask 022
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${PARSAR_HOME:-$HOME/.parsar}"
+runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
 output_dir="${CORE_DISTRIBUTION_BUILD_DIR:-$runtime_root/build/core-distribution}"
 release_base_url="${CORE_DISTRIBUTION_RELEASE_BASE_URL:-}"
 offline="${CORE_DISTRIBUTION_OFFLINE:-0}"
@@ -22,7 +22,7 @@ export GOCACHE="${GOCACHE:-$runtime_root/cache/go-build}"
 export GOMODCACHE="${GOMODCACHE:-$runtime_root/cache/go-mod}"
 export GOOS=linux GOARCH=amd64 GOAMD64=v1 GOTOOLCHAIN=local
 export GOFLAGS=-buildvcs=false
-python3 - "$HOME/.parsar" "$runtime_root" "$output_dir" "$GOCACHE" "$GOMODCACHE" <<'PY'
+python3 - "$HOME/.oac" "$runtime_root" "$output_dir" "$GOCACHE" "$GOMODCACHE" <<'PY'
 import pathlib, sys
 if sys.version_info < (3, 9):
     sys.exit("Distribution builds require Python 3.9 or newer")
@@ -30,7 +30,7 @@ base = pathlib.Path(sys.argv[1]).resolve()
 for value in sys.argv[2:]:
     path = pathlib.Path(value)
     if not path.is_absolute() or not path.resolve().is_relative_to(base):
-        sys.exit("Distribution build directories must be absolute and under ~/.parsar")
+        sys.exit("Distribution build directories must be absolute and under ~/.oac")
 PY
 if [[ "$(uname -s)" != Linux || "$(uname -m)" != x86_64 ]]; then
   printf 'Build the distribution on Linux x86_64 with a glibc compatible with Debian 12\n' >&2
@@ -113,7 +113,7 @@ cp services/agents-api/deploy/codex/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"
 cp -R site "$bundle/site"
 
-AGENTS_API_BUILD_REVISION="$revision" AGENTS_API_BUILD_DIR="$stage/core/bin" scripts/build-agents-api.sh
+OAC_DEV_BUILD_REVISION="$revision" OAC_DEV_CORE_BUILD_DIR="$stage/core/bin" scripts/build-agents-api.sh
 (
   cd services/agents-api/tools/microsandbox-provider
   GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath \
@@ -147,7 +147,7 @@ docker run --rm --network none --entrypoint /bin/sh \
   "$core_image" -ec \
   'for p in /opt/provider /opt/microsandbox/msb /opt/microsandbox/libkrunfw.so.5.6.1; do ! ldd "$p" | grep "not found"; done; /opt/microsandbox/msb --version'
 
-CORE_CONSOLE_BUILD_DIR="$stage/web" scripts/build-core-console.sh
+OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-core-console.sh
 pnpm install --frozen-lockfile
 AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS=1 AGENTS_CORE_WEB_ENVIRONMENT_FILES=1 pnpm build:web
 cp -R apps/web/dist "$stage/web/dist"

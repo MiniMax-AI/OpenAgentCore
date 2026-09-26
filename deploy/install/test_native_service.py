@@ -13,7 +13,7 @@ import native_service as service
 
 class NativeServiceTests(unittest.TestCase):
     def setUp(self):
-        temporary_root = Path.home() / ".parsar/tests/install-native"
+        temporary_root = Path.home() / ".oac/tests/install-native"
         temporary_root.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=temporary_root)
         self.addCleanup(temporary.cleanup)

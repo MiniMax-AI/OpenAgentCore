@@ -37,7 +37,7 @@ def generator(version):
 
 class ConvertTests(unittest.TestCase):
     def setUp(self):
-        base = Path.home() / ".parsar/tests/convert"
+        base = Path.home() / ".oac/tests/convert"
         base.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(temporary.cleanup)

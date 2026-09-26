@@ -5,7 +5,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
 
 fn fixture() -> tempfile::TempDir {
     let root = std::path::PathBuf::from(std::env::var_os("HOME").expect("HOME required"))
-        .join(".parsar/tests/scoped-write");
+        .join(".oac/tests/scoped-write");
     fs::create_dir_all(&root).unwrap();
     tempfile::tempdir_in(root).unwrap()
 }

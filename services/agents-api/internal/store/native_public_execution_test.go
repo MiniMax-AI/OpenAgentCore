@@ -17,9 +17,9 @@ import (
 
 func verifyNativePublicExecution(t *testing.T, h *dispatchHarness, parent context.Context, evidence string) {
 	t.Helper()
-	python := os.Getenv("PARSAR_OFFICIAL_SDK_PYTHON")
+	python := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON")
 	if python == "" {
-		t.Log("Public SDK proof requires PARSAR_OFFICIAL_SDK_PYTHON")
+		t.Log("Public SDK proof requires OAC_TEST_OFFICIAL_SDK_PYTHON")
 		return
 	}
 	ctx, cancel := context.WithCancel(parent)

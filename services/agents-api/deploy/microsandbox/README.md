@@ -62,7 +62,7 @@ make check-microsandbox-provider
 ```
 
 The helper is written to
-`~/.parsar/build/microsandbox-provider/agents-api-microsandbox-provider`.
+`~/.oac/build/microsandbox-provider/agents-api-microsandbox-provider`.
 Its separate Go module pins the published SDK and embeds its matching FFI library.
 `make check` runs the pure-Go provider tests on every supported host. On Linux it
 also runs the SDK helper module; other hosts print an explicit skip for that
