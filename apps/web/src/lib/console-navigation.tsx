@@ -37,7 +37,7 @@ export function hashWithParams(base: string, params: RouteParams = {}): string {
  * Getting started. It lives only in memory: a reload, Back or any other
  * navigation drops it, so nothing reopens on its own.
  */
-export type ConsoleIntent = "add-node" | "create-project" | "issue-key" | "getting-started";
+export type ConsoleIntent = "add-node" | "create-project" | "issue-key" | "getting-started" | "default-model";
 
 /** Whether a page can act on an intent now, not yet, or not at all (then it drops the intent). */
 export type IntentReadiness = "ready" | "wait" | "unavailable";

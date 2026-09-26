@@ -5,7 +5,15 @@ const rand = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 429496
 const pick = (list) => list[Math.floor(rand() * list.length)];
 const uuid = () => "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => Math.floor(rand() * 16).toString(16));
 
-export function buildDemo(now = Math.floor(Date.now() / 1000)) {
+/** A self-hosted Session's remote_url, as Core derives it from public_url: wss for https, ws for http. */
+function daemonUrl(publicUrl) {
+  const url = new URL(publicUrl);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = "/api/v1/agent-daemon/ws";
+  return url.toString();
+}
+
+export function buildDemo(now = Math.floor(Date.now() / 1000), publicUrl = "https://core.example.com") {
   seed = 42;
   const models = ["gpt-5.1-codex", "claude-sonnet-5", "MiniMax-M2", "gpt-5.1-mini"];
   const agents = agentDefinitions.map((definition, index) => ({
@@ -65,7 +73,7 @@ export function buildDemo(now = Math.floor(Date.now() / 1000)) {
     const { object: _o, metadata: _m, created_at: _c, updated_at: _u, ...snapshot } = agent;
     sessions.push({
       id, object: "agent.session", agent: snapshot,
-      environment: envType === "none" ? { type: "none" } : envType === "self_hosted" ? { type: "self_hosted", id: uuid(), remote_url: "wss://core.example.internal/executor", workspace_directory: "/srv/work", capability_directories: [] } : { type: "openai_hosted", id: uuid(), capability_directories: [], network: { access: "disabled", allowed_domains: [] }, packages: { npm: [], python: [], system: [] }, files: [], plugins: [], skills: [] },
+      environment: envType === "none" ? { type: "none" } : envType === "self_hosted" ? { type: "self_hosted", id: uuid(), remote_url: daemonUrl(publicUrl), workspace_directory: "/srv/work", capability_directories: [] } : { type: "openai_hosted", id: uuid(), capability_directories: [], network: { access: "disabled", allowed_domains: [] }, packages: { npm: [], python: [], system: [] }, files: [], plugins: [], skills: [] },
       status, error: status === "failed" ? pick(["Sandbox allocation failed: node unavailable.", "Model provider returned 429 Too Many Requests.", "Tool call timed out after 300 s."]) : null,
       metadata: {}, required_actions: status === "requires_action" ? [{ type: "function_call", call_id: uuid(), turn_id: sessionTurns.at(-1)?.id ?? uuid(), name: "approve_refund", arguments: {} }] : [],
       vault_ids: [], usage: status === "in_progress" ? null : sessionTurns.length ? { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached }, output_tokens_details: { reasoning_tokens: reasoning } } : null,

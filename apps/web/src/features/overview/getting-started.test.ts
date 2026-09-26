@@ -1,4 +1,4 @@
-import type { SandboxDeployment } from "@agents-core-web/agents-client";
+import type { CoreHarness, SandboxDeployment } from "@agents-core-web/agents-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { FleetState } from "../fleet/use-sandbox-fleet";
@@ -10,7 +10,9 @@ const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployme
   resources: { allocations: 0, pending: 0 }, suspension: null, ...overrides,
 });
 const fleet = (value: SandboxDeployment, nodes = [node("n1")]): FleetState => ({ status: "ready", snapshot: { deployment: value, nodes, allocations: [], loadedAt: 0 }, refreshing: false, error: null });
-const sandboxes = (state: FleetState) => gettingStartedSteps({ fleet: state, projects: [], sessions: 0 }).sandboxes;
+const sandboxes = (state: FleetState) => gettingStartedSteps({ fleet: state, projects: [], sessions: 0, harnesses: [] }).sandboxes;
+const provider = { object: "core.model_provider", protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true, updated_at: "2026-09-25T00:00:00Z" } as const;
+const harness = (id: CoreHarness["id"], fields: Partial<CoreHarness> = {}): CoreHarness => ({ object: "core.harness", id, enabled: true, default: false, model_provider: null, ...fields });
 
 describe("Getting started steps", () => {
   it("counts sandboxes ready with a saved deployment and a ready node, or a saved E2B deployment whose build is not reported unready", () => {
@@ -28,7 +30,7 @@ describe("Getting started steps", () => {
   });
 
   it("needs an active project with an active key, and any Session", () => {
-    const steps = (projects: Parameters<typeof gettingStartedSteps>[0]["projects"], sessions: number | "failed" | null = 0) => gettingStartedSteps({ fleet: { status: "loading" }, projects, sessions });
+    const steps = (projects: Parameters<typeof gettingStartedSteps>[0]["projects"], sessions: number | "failed" | null = 0) => gettingStartedSteps({ fleet: { status: "loading" }, projects, sessions, harnesses: undefined });
     expect(steps([]).key).toEqual({ state: "todo", project: null });
     const older = project("p1", { active_key_count: 0, created_at: 1 });
     const newer = project("p2", { active_key_count: 0, created_at: 2 });
@@ -37,6 +39,17 @@ describe("Getting started steps", () => {
     expect(steps(undefined).key.state).toBeNull();
     expect(steps("failed").key.state).toBe("unknown");
     expect([steps([], 0).session, steps([], 2).session, steps([], null).session, steps([], "failed").session]).toEqual(["todo", "done", null, "unknown"]);
+  });
+
+  it("needs a default model on the default harness, or on any enabled harness when none is default", () => {
+    const model = (harnesses: Parameters<typeof gettingStartedSteps>[0]["harnesses"]) => gettingStartedSteps({ fleet: { status: "loading" }, projects: undefined, sessions: null, harnesses }).model;
+    const on = (id: CoreHarness["id"]) => ({ ...provider, harness: id });
+    expect(model([harness("codex", { default: true }), harness("claude_sdk", { model_provider: on("claude_sdk") })])).toBe("todo");
+    expect(model([harness("codex", { default: true, model_provider: on("codex") })])).toBe("done");
+    expect(model([harness("codex"), harness("mcode", { enabled: false, model_provider: on("mcode") })])).toBe("todo");
+    expect(model([harness("codex"), harness("claude_sdk", { model_provider: on("claude_sdk") })])).toBe("done");
+    expect(model(undefined)).toBeNull();
+    expect(model("failed")).toBe("unknown");
   });
 });
 
@@ -50,6 +63,8 @@ describe("Getting started visibility", () => {
     expect(checklistView(["done", "done", "done"], null)).toBe("hidden");
     expect(checklistView(["done", "done", "done"], "open")).toBe("complete");
     expect(checklistView(["todo", "todo", "todo"], "closed")).toBe("hidden");
+    // A step added later does not reopen a checklist that was closed, by hand or after You're set.
+    expect(checklistView(["done", "todo", "done", "done"], "closed")).toBe("hidden");
   });
 
   afterEach(() => vi.unstubAllGlobals());

@@ -17,8 +17,9 @@ func TestNativePublicFunctionStreamHelper(t *testing.T) {
 		t.Skip("pinned official Python SDK required")
 	}
 	h, ctx, home := nativeDispatchHarness(t)
+	// Codex sends a result made of one input_text item as a plain string output.
 	model, requests := nativeFunctionResultsModel(t, home, []any{
-		[]any{map[string]any{"type": "input_text", "text": "setup complete"}},
+		"setup complete",
 		`{"ticket":"42","status":"open"}`,
 		"Tool handler failed.",
 	})

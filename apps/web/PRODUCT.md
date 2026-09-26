@@ -52,7 +52,9 @@ workbench.
 - The Core key is not an Agents API identity and cannot call `/v1`. An administrator
   who wants to call the Agents API issues a project API key like any other caller.
 - `/console/config` reports the node installer (`node_installer`,
-  `node_installer_sha256`). Signing in grants administration, so sandbox
+  `node_installer_sha256`) and the self-hosted executor installer
+  (`self_hosted_installer`, `self_hosted_installer_sha256`); an installer is
+  offered only with a 64-hex digest. Signing in grants administration, so sandbox
   administration is available unless the console explicitly reports
   `sandbox_admin: false`; then the Nodes page explains that it is not configured
   and the fleet figures show as unavailable.
@@ -78,10 +80,12 @@ workbench.
   template build's), a review, and advanced settings
   with the complete form — then the node list with each node's capacity, host
   figures and allocations, enrollment, renaming, sandbox limits and removal; Add node
-  asks for the node's sandbox limits before it issues the one-time command), System (read-only: the
-  installation's public address, API base URL, installation ID and source commit; Core's
-  startup settings from config.json, with the file and the apply command that change them;
-  and the sandbox configuration every project shares, with a link to Nodes where it changes).
+  asks for the node's sandbox limits before it issues the one-time command), System (the
+  installation's public address, API base URL, installation ID and source commit, read-only;
+  each harness's default model, set, replaced or cleared there beside its read-only startup
+  state; the sandbox configuration every project shares, with a link to Nodes where it
+  changes; and Core's startup settings from config.json, with the file and the apply command
+  that change them).
 - A node whose provider is not ready names the reason (Docker unreachable, no Docker
   limits, missing Runtime image, no KVM, missing microsandbox components, a host too
   small) and its fix in the help tip beside its status, wherever that status shows.
@@ -95,9 +99,10 @@ workbench.
   about when Core reclaims it. Docker never suspends and shows none of it.
 - **Getting started**: signing in opens the console on the Overview; nothing is
   forced first. While a step is to do, a Getting started checklist on the Overview
-  shows three steps, in any order, each with its state and one action: sandboxes
+  shows four steps, in any order, each with its state and one action: sandboxes
   ready (a saved deployment and a node online and ready, or a saved E2B deployment
-  whose template build is not reported as not ready),
+  whose template build is not reported as not ready), a default model on the default
+  harness (on any enabled harness when none is default),
   a project with an active key, and a first Session. Completion comes from reads the
   console already makes. It can be hidden; Show Getting started in the sidebar
   opens it again, and it ends with a brief "You're set". The optional
@@ -136,10 +141,21 @@ workbench.
 - **Executor credentials.** Only Core issues the credential file a self-hosted
   executor needs, with the deployment's Core key. A Session page whose environment
   is self-hosted has an Executor credentials section: issue a credential (shown
-  once as the credential file, to copy or download, never stored), rotate it (the
-  old one stops working immediately) or revoke it (the executor can no longer
-  connect; a running process is not stopped). The file lets one executor connect
-  for that environment only; it cannot call the Agents API.
+  once as one line of JSON, to copy or download, never stored), rotate it (the
+  old one stops working immediately) or revoke it (the executor disconnects and
+  won't retry; its container keeps running until stopped). The file lets one
+  executor connect for that environment only; it cannot call the Agents API.
+- **Connect a host.** When the console serves the self-hosted installer, the
+  section also gives the command that installs the executor on the
+  administrator's host from Core's `public_url` (checksum-verified, no secret in
+  it; the installer asks for the credential at a hidden prompt, or reads
+  `--credential-file`). The same command is safe to rerun. Revoking or rotating
+  disconnects the host's executor; reconnecting takes that same credential,
+  rotated (Rotate on a revoked row restores it), and the same command, because a
+  newly issued credential does not reconnect an environment that already
+  connected. Without a `public_url`, with a loopback one, or when the Session's
+  `remote_url` is not `wss://`, the section says why instead of showing a
+  command.
 - **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
   tool and activity figures are still assembled in the browser from bounded reads
   and state their coverage. Metrics that need new Core endpoints are recorded as
