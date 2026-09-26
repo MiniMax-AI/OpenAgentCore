@@ -362,10 +362,10 @@ function AgentMetricsContent({
             <tbody>
               {metrics.byAgent.map((agent) => {
                 const label = agentLabel(agent.agentId, agent.label);
-                // A saved Agent opens its page, and its failures the Session log of its failed Sessions; an inline Agent has neither.
+                // A saved Agent opens its page, and its failures its Sessions in the Session log; an inline Agent has neither.
                 const saved = agent.projectId !== null && !isInlineAgent(agent.agentId) ? { project: agent.projectId, id: agent.agentId } : null;
-                // The figure counts failed Turns; the link lists the Agent's failed Sessions, and its name and tooltip say so.
-                const openFailed = t("agent.openFailed", { agent: label });
+                // The figure counts failed Turns in the range; the link lists all the Agent's Sessions, and its name and tooltip say so.
+                const openSessions = t("agent.openSessions", { count: agent.failed, agent: label });
                 return (
                   <tr key={agent.id}>
                     <th scope="row" title={agent.agentId}>
@@ -378,7 +378,7 @@ function AgentMetricsContent({
                     <td className="numeric">{integer(agent.requests)}</td>
                     <td className={agent.failed ? "numeric numeric-danger" : "numeric"}>
                       {saved && agent.failed ? (
-                        <button type="button" className="figure-link" aria-label={openFailed} title={openFailed} onClick={() => navigate("sessions", saved, "failed-sessions")}>{integer(agent.failed)}</button>
+                        <button type="button" className="figure-link" aria-label={openSessions} title={openSessions} onClick={() => navigate("sessions", saved, "agent-sessions")}>{integer(agent.failed)}</button>
                       ) : integer(agent.failed)}
                     </td>
                     <td className="numeric">{formatPercent(agent.finished ? agent.failed / agent.finished : null, locale)}</td>

@@ -47,11 +47,18 @@ export function SessionLogPage() {
   const { t, i18n } = useTranslation("sessions");
   const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
-  const { params, navigate } = useConsoleNavigation();
+  const { params, navigate, intent } = useConsoleNavigation();
   const { state: projects, byId, refresh: refreshProjects } = useProjects();
   const [project, setProject] = useState<ProjectFilterValue>(() => params.project ?? remembered.project);
-  // A linked ID (a Session or an Agent) prefills the search, like the other lists.
-  const [filters, setFilters] = useState<SessionLogFilters>(() => (params.id ? { ...initialSessionLogFilters, query: params.id } : remembered.filters));
+  // A linked ID (a Session or an Agent) prefills the search, like the other lists;
+  // a link that says it is an Agent's ("agent-sessions") sets the Agent filter instead.
+  const [filters, setFilters] = useState<SessionLogFilters>(() => (
+    !params.id ? remembered.filters
+      : intent === "agent-sessions" ? { ...initialSessionLogFilters, agentId: params.id }
+        : { ...initialSessionLogFilters, query: params.id }
+  ));
+  // The filter above already acted on it.
+  useConsoleIntent("agent-sessions", "ready", () => undefined);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [deleted, setDeleted] = useState<ReadonlySet<string>>(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState<SessionDeleteTarget | null>(null);
@@ -83,8 +90,6 @@ export function SessionLogPage() {
     setFilters((current) => ({ ...current, ...patch }));
     setLimit(PAGE_SIZE);
   };
-  // Agent metrics opens an Agent's failed Sessions: its ID in the search, then the Failed filter.
-  useConsoleIntent("failed-sessions", "ready", () => update({ status: "failed" }));
   const refresh = () => {
     setDeleted(new Set());
     if (projects.status === "failed") refreshProjects();

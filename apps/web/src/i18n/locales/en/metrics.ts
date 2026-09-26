@@ -82,8 +82,10 @@ export const metrics = {
     agent: "Agent",
     sessions: "Sessions",
     openAgent: "Open Agent {{name}}",
-    openFailed: "Open {{agent}}'s failed Sessions",
-    failedHelp: "Counts failed Turns; the link lists failed Sessions.",
+    openSessions: "{{count}} failed Turns — open {{agent}}'s Sessions",
+    openSessions_one: "{{count}} failed Turn — open {{agent}}'s Sessions",
+    openSessions_other: "{{count}} failed Turns — open {{agent}}'s Sessions",
+    failedHelp: "Failed Turns in the selected range; the link lists this Agent's Sessions.",
   },
   keys: {
     title: "By API key",

@@ -52,14 +52,24 @@ test("keeps a failed Session's reason in sight in the Session log and on its pag
   await expect(page.locator("li.chat-turn:focus")).toContainText("Failed");
 });
 
-test("opens an Agent's failed Sessions from Agent metrics", async ({ page, request }) => {
+test("opens an Agent's Sessions from its failed Turns on Agent metrics", async ({ page, request }) => {
   await openConsole(page, request, "agent-metrics");
-  const failed = page.getByRole("button", { name: /^Open .+'s failed Sessions$/ }).first();
-  await expect(failed).toHaveAttribute("title", /^Open .+'s failed Sessions$/);
+  const link = /^\d+ failed Turns? — open .+'s Sessions$/;
+  const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: link }) }).first();
+  const failed = row.getByRole("button", { name: link });
+  await expect(failed).toHaveAttribute("title", link);
+  const agent = (await row.getByRole("rowheader").innerText()).trim();
+  const project = (await row.getByRole("cell").first().innerText()).trim();
   await failed.click();
   await expect(page.getByRole("heading", { name: "Session log", level: 1 })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /^Failed/ })).toBeChecked();
-  await expect(page.getByRole("searchbox")).toHaveValue(/^agent_/);
+  // The log's own project and Agent filters, with every status.
+  await expect(page.getByRole("combobox", { name: "Project", exact: true })).toHaveText(project);
+  await expect(page.getByRole("combobox", { name: "Agent", exact: true })).toHaveText(agent);
+  await expect(page.getByRole("radio", { name: /^All/ })).toBeChecked();
+  await expect(page.getByRole("searchbox")).toHaveValue("");
+  const sessions = page.getByRole("table", { name: "Session log" }).getByRole("row");
+  await expect(sessions.nth(1)).toContainText(agent);
+  await expect(sessions.filter({ hasNotText: agent })).toHaveCount(1);
 });
 
 test("shows a self-hosted Session's install command, issues its credential once, and revokes and restores it", async ({ page, request }) => {

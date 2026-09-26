@@ -73,8 +73,8 @@ workbench.
   (every Session, read-only, with a failed Session's reason under its status,
   opening one Session's history, which jumps to its failed Turns; a self-hosted
   Session's page also has its environment's executor credentials). Agent
-  metrics' By Agent table opens an Agent's page and its failed Sessions in the
-  Session log.
+  metrics' By Agent table opens an Agent's page and, from its failed Turns, its
+  Sessions in the Session log.
 - **Resources**: Agents, Environment templates, Skills, Files, Vaults. Each list
   shows one project or all projects, with a Project column when all are shown and a
   Creator column naming the creating key. Detail pages show the resource's facts
