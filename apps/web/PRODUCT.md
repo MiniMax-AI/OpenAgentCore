@@ -123,7 +123,9 @@ workbench.
   samples of the newest active project, preferring one with an active key.
   Completion comes from reads the
   console already makes. It can be hidden; Show Getting started in the sidebar
-  opens it again, and it ends with a brief "You're set". The optional
+  opens it again, and it ends with a brief "You're set". While it is open, Add node
+  ends with the next step once its node is ready: the default model while that is to
+  do, otherwise back to the checklist. The optional
   three-chapter tour of the console (Monitor, Resources, Platform) opens from it,
   on the sign-in stage.
 - Terminology: API terms stay in English in the Chinese UI (Agent, Session, Turn,

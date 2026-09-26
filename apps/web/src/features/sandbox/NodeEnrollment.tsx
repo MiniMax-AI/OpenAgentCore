@@ -6,9 +6,12 @@ import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { formatBytes } from "../../lib/format";
+import { useConsoleNavigation } from "../../lib/console-navigation";
 import { installationQuery } from "../../lib/installation";
 import { sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
+import { checklistOpenFor, modelStep, nextStepAfterNode } from "../overview/getting-started";
+import { harnessesQuery } from "../system/harness-queries";
 import { nodeSourceUrl, sandboxCoreOrigin } from "./core-origin";
 import { nodeFilesAvailable, type SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand, nodeLogCommand, type NodeInstallMode } from "./enrollment-command";
@@ -118,6 +121,11 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // the command on that host resumes with the node's retained identity.
   const registered = progress.stage !== "waiting";
   const ready = progress.stage === "ready" && fresh;
+  // While Getting started is open, a ready node points to what comes next: the default model, or the checklist.
+  const { navigate } = useConsoleNavigation();
+  const onboarding = ready && checklistOpenFor(deployment.installation_id);
+  const harnesses = useQuery({ ...harnessesQuery, enabled: onboarding });
+  const next = nextStepAfterNode(onboarding, modelStep(harnesses.data?.data ?? (harnesses.isError ? "failed" : undefined)));
   const expiresAt = enrollment ? Date.parse(enrollment.expires_at) : 0;
   const lapsed = Boolean(enrollment && expiresAt <= now);
   // Expired only once a read begun after the expiry found no node for the command.
@@ -293,6 +301,12 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
               {steps.map((step, index) => <li key={index} className={step.state}><StatusDot tone={step.tone} label={step.label} /></li>)}
             </ol>}
         </div>
+        {next ? <p className="sandbox-next-step">
+          <span>{t(next === "default-model" ? "Next: set a default model." : "Next: finish Getting started.")}</span>
+          <button className="text-action" type="button" onClick={() => { close(); if (next === "default-model") navigate("system", {}, "default-model"); else navigate("overview"); }}>
+            {t(next === "default-model" ? "Open System" : "Open Overview")}
+          </button>
+        </p> : null}
         {problem && !ready ? <div className="sandbox-enrollment-problem" role="alert">
           <p><strong>{problem.label}</strong> {problem.advice}{problem.help ? <HelpTip>{problem.help}</HelpTip> : null}</p>
           <div className="sandbox-log-hint">

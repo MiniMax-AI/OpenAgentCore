@@ -69,7 +69,7 @@ function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
  * Done once the default harness has a deployment default model provider;
  * without a default harness, once any enabled harness has one.
  */
-function modelStep(harnesses: readonly CoreHarness[] | "failed" | undefined): StepState {
+export function modelStep(harnesses: readonly CoreHarness[] | "failed" | undefined): StepState {
   if (!harnesses || harnesses === "failed") return harnesses ? "unknown" : null;
   const target = harnesses.find((harness) => harness.default);
   const set = target ? target.model_provider !== null : harnesses.some((harness) => harness.enabled && harness.model_provider !== null);
@@ -149,6 +149,21 @@ export function readChecklistMemory(key: string): ChecklistMemory {
 
 export function writeChecklistMemory(key: string, value: Exclude<ChecklistMemory, null>): void {
   writeStored(key, value);
+}
+
+/** Whether this browser still has the installation's checklist open: shown with a step to do, and neither hidden nor finished. */
+export function checklistOpenFor(installationId: string): boolean {
+  return readChecklistMemory(installationId ? `${MEMORY_KEY}.${installationId}` : MEMORY_KEY) === "open";
+}
+
+/**
+ * Where Add node points once its node is ready, while the checklist is open:
+ * the default model while that step is to do, otherwise back to the checklist.
+ * Nothing while the checklist is closed or the model step is still being read.
+ */
+export function nextStepAfterNode(checklistOpen: boolean, model: StepState): "default-model" | "getting-started" | null {
+  if (!checklistOpen || model === null) return null;
+  return model === "todo" ? "default-model" : "getting-started";
 }
 
 /**

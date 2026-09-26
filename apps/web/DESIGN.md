@@ -550,7 +550,9 @@ request runs.
   failed read, a public URL other machines can't use (loopback or not HTTPS), or a
   console without the provider's node files replaces the limits with one line
   saying why (the failed read with Try again), and the footer offers nothing to
-  generate.
+  generate. Once the node is ready, while Getting started is open, one line under
+  the green status names the next step (set a default model, or finish Getting
+  started) with a text action to System or the Overview.
 - **Clean up the host**: after a node is removed, a dialog gives the host's
   uninstall command in the same Terminal block, a Graphite line that it deletes no
   sandboxes, volumes or images (and, for microsandbox, keeps its image store and
