@@ -101,7 +101,7 @@ sudo-mode service instead. An administrator prepares that user once:
   running, restart it (`sudo systemctl restart user@$(id -u <user>).service`) or reboot.
 - microsandbox only: a home directory of at most 25 bytes, such as `/home/parsar`,
   because microsandbox's socket paths are short.
-- The host requirements above, except root and the SELinux rule.
+- The host requirements above, except root, SELinux and one Core per host.
 
 Run the command as that user over SSH, or from a root shell with `su - <user>`. The
 node's state then lives in `~/.parsar/nodes/<installation-id>/` of that user. The
