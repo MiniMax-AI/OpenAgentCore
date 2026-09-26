@@ -424,19 +424,31 @@ def heading_anchors(text):
     return found
 
 
+def rewrite_line(line, rewrite):
+    """Apply rewrite(image, target) to each link of one line, and to an image inside link text."""
+    pieces, position = [], 0
+    for match in links(line):
+        pieces.append(line[position:match.start()])
+        text = rewrite_line(match.group(2), rewrite)
+        pieces.append(f"{match.group(1)}[{text}]({rewrite(bool(match.group(1)), match.group(3))}{match.group(4)})")
+        position = match.end()
+    return "".join(pieces) + line[position:]
+
+
 def rewrite_links(text, rewrite):
     """Apply rewrite(image, target) to every Markdown link outside code blocks and code spans."""
-    lines = []
-    for line, code in markdown_lines(text):
-        if not code:
-            pieces, position = [], 0
-            for match in links(line):
-                pieces.append(line[position:match.start()])
-                pieces.append(f"{match.group(1)}[{match.group(2)}]({rewrite(bool(match.group(1)), match.group(3))}{match.group(4)})")
-                position = match.end()
-            line = "".join(pieces) + line[position:]
-        lines.append(line)
-    return "\n".join(lines)
+    return "\n".join(line if code else rewrite_line(line, rewrite) for line, code in markdown_lines(text))
+
+
+def split_links(text):
+    """Line numbers where a link starts on one line and ends on the next; links are read line by line."""
+    lines, found = list(markdown_lines(text)), []
+    for number, ((first, first_code), (second, second_code)) in enumerate(zip(lines, lines[1:]), 1):
+        if not (first_code or second_code or not second.strip()):
+            joined = first + " " + second.lstrip()
+            if any(match.start() < len(first) < match.end() for match in links(joined)):
+                found.append(number)
+    return found
 
 
 def docs(source, bundle, revision, names=BUNDLED_DOCS, files=BUNDLED_FILES):
@@ -477,7 +489,10 @@ def docs(source, bundle, revision, names=BUNDLED_DOCS, files=BUNDLED_FILES):
         return rewrite
 
     for name in names:
-        text = rewrite_links((source / name).read_text(encoding="utf-8"), versioned(name))
+        original = (source / name).read_text(encoding="utf-8")
+        for number in split_links(original):
+            raise ValueError(f"{name}:{number}: keep each link on one line")
+        text = rewrite_links(original, versioned(name))
         target = bundle / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text.replace("@SOURCE_REVISION@", revision), encoding="utf-8")

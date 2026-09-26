@@ -14,14 +14,17 @@ node protocol, manual registration, placement and failure handling.
 
 - **Core has an HTTPS public URL** that the host and its sandboxes can reach: each
   sandbox calls Core at `public_url`. A loopback installation can't have nodes, and
-  Web says so at Add node. See [HTTPS and the reverse proxy](install.md#https-and-the-reverse-proxy).
+  Web says so at Add node. See
+  [HTTPS and the reverse proxy](install.md#https-and-the-reverse-proxy).
 - **Web holds the node files.** Install from the offline bundle, or add the release's
-  node files to the smaller bundle; see [Download a release](install.md#download-a-release).
-  Otherwise Add node says that the console has no node files for the provider.
+  node files to the smaller bundle; see
+  [Download a release](install.md#download-a-release). Otherwise Add node says that
+  the console has no node files for the provider.
 - **A sandbox backend is chosen.** The installer selects Docker unless you chose
   otherwise. After `--sandbox none`, the **Nodes** page first asks you to choose
-  **Own machines**, Docker or microsandbox, and a sandbox size, then
-  **Save configuration**. Every node of a deployment uses that provider.
+  **Own machines**, then microsandbox (preselected as recommended) or Docker, which it
+  asks you to confirm, and a sandbox size, then **Save configuration**. Every node of a
+  deployment uses that provider.
 
 ## Add a node
 
@@ -35,8 +38,7 @@ node protocol, manual registration, placement and failure handling.
    **Generate new command** when it expires.
 4. Run it on the host. Web follows the node from registered to connected to ready.
 
-The command downloads the node installer from the console's public address, checks
-its SHA-256, and
+The command downloads the node installer from your console, checks its SHA-256, and
 runs it with a one-time enrollment token. The installer downloads the node files from
 the same console and checks each against the release manifest, imports the Runtime
 image, registers the node, starts its service and waits until Core reports the node
@@ -125,9 +127,10 @@ Docker group makes this user root-equivalent on the host too.
 | Docker | The Runtime image, imported once, and a network `parsar-node-<installation-id>` |
 
 Root only prepares the account, the group and the unit; everything else, the Docker
-network included, runs as `parsar-node`, in its own session without a terminal. The installer never installs
-Docker, KVM or packages, never starts Docker, never changes device permissions,
-sudoers, firewall or SELinux settings, and never touches other accounts.
+network included, runs as `parsar-node`, in its own session without a terminal. The
+installer never installs Docker, KVM or packages, never starts Docker, never changes
+device permissions, sudoers, firewall or SELinux settings, and never touches other
+accounts.
 
 **Docker mode is root-equivalent.** Membership in the `docker` group lets
 `parsar-node`, and so anything that controls the node, act as root on the host. This
@@ -178,11 +181,12 @@ The installation ID is in the command (`--installation-id`) and on the **System*
 
 ## Remove a node
 
-1. In Web, open **Nodes** and choose **Remove node** on the node's page, or **Remove**
-   in its list row, then **Confirm removal**. Core refuses
-   while the node still holds sandboxes, snapshots or pending cleanup; let them finish,
-   or [archive their Sessions](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)
-   through the Core API. Removal is permanent: the host can come back only as a new node.
+1. In Web, open **Nodes** and choose **Remove node** on the node's page, or
+   **Remove** in its list row, then **Confirm removal**. Core refuses while the node
+   still holds sandboxes, snapshots or pending cleanup; let them finish, or
+   [archive their Sessions](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)
+   through the Core API. Removal is permanent: the host can come back only as a new
+   node.
 2. Web then shows **Clean up the host** with the uninstall command. Run it on the host:
 
    ```sh
@@ -254,7 +258,7 @@ WebSocket doesn't pass the reverse proxy.
 | This host has N CPUs and M MiB of memory; each sandbox needs … | Use a larger host, or change the sandbox size |
 | SELinux is enforcing on this host | Use the no-sudo command as a prepared user |
 | This host already runs a sudo-mode node for another Core | One host serves one Core in sudo mode. Remove that node and uninstall it first |
-| Ask the host administrator to enable user lingering, or No systemd user manager is running | No-sudo mode: `sudo loginctl enable-linger <user>`, or use sudo |
+| Ask the host administrator to enable user lingering, or No systemd user manager is running | No-sudo mode: `sudo loginctl enable-linger NODE_USER`, or use sudo |
 | Core still lists this node | Remove it on the Nodes page first |
 
 ## Change the sandbox backend or size

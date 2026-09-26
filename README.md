@@ -24,10 +24,11 @@ administrator console that issues the keys applications call Core with.
    ./install.sh --public-url https://core.example
    ```
 
-   Put your HTTPS reverse proxy in front first, or install without `--public-url` for a
-   local trial and set it later. See the [installation guide](docs/getting-started/install.md).
-   Follow the docs inside the downloaded bundle (`docs/` and `README.md`): they match
-   its installer, while these pages describe the current source.
+   Put your HTTPS reverse proxy in front first, or install without `--public-url` for
+   a local trial and set it later. See the
+   [installation guide](docs/getting-started/install.md). If you're reading this on
+   GitHub, follow the docs inside the downloaded bundle (`README.md` and `docs/`)
+   instead: they match its installer, while GitHub shows the current source.
 2. **Sign in to Web with the Core key**, from `~/.parsar/core/secrets/core.key`. On
    **System**, set a default model; on **Projects and keys**, create a project and
    issue a key. See [Sign in to Web](docs/getting-started/install.md#sign-in-to-web).

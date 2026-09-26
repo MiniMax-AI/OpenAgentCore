@@ -9,9 +9,10 @@ Every setting of a Core installation has exactly one home. There are two kinds:
 
 Web's **System** page shows both: the installation's addresses, the process settings
 read-only under **Startup settings** with the path of `config.json` and the apply
-command, the default models, and the sandbox configuration. Secrets live in [`secrets/`](#secrets-and-identity),
-one copy each. Each setting is set in one place; the files in `generated/` are only
-derived from `config.json`. No configuration file defines Projects or API keys.
+command, the default models, and the sandbox configuration. Secrets live in
+[`secrets/`](#secrets-and-identity), one copy each. Each setting is set in one place;
+the files in `generated/` are only derived from `config.json`. No configuration file
+defines Projects or API keys.
 
 ## Process settings: config.json
 
@@ -64,8 +65,10 @@ them and asks you to type the new URL (`--confirm-public-url-change URL` when no
 interactive). Afterwards, nodes on the old address get no new sandboxes: remove them
 in Web and add them again. Existing sandboxes and executors keep working only while
 the old address still reaches this Core, and `apply` warns that self-hosted executors
-must restart with the new `remote_url`; their installer refuses to reuse an
-installation made for the old address. Update your reverse proxy first.
+must restart with the new `remote_url`. Their installer refuses to reuse an
+installation made for the old address, and moving an executor isn't supported yet:
+create new self-hosted Sessions and connect their hosts again. Update your reverse
+proxy first.
 
 ### Settings
 
@@ -109,9 +112,10 @@ output or in Core's settings snapshot. Model providers are not process settings;
 | `core.runtime_history.sample_interval_seconds` | integer | none | `all`, `core-only` | `parsar apply` | core | Periodic sampling interval in seconds. |
 <!-- END config-reference -->
 
-The schema is [`deploy/install/config.schema.json`](../deploy/install/config.schema.json);
-each installation keeps a copy in `generated/config.schema.json` for editors. Core
-serves the non-secret settings snapshot, with the path of `config.json` and the apply
+The schema is
+[`deploy/install/config.schema.json`](../deploy/install/config.schema.json); each
+installation keeps a copy in `generated/config.schema.json` for editors. Core serves
+the non-secret settings snapshot, with the path of `config.json` and the apply
 command, at `GET /core/v1/installation`.
 
 ## Runtime settings: Web
@@ -163,13 +167,13 @@ and the [deployment contract](../contracts/agents-api/sandbox-deployment.md).
 
 ### Node capacity
 
-Core approves a node's capacity when you generate its Add node command: **Sandboxes
-at once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes**
+Core approves a node's capacity when you generate its Add node command: **Sandboxes at
+once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes**
 (`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never
 suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to
-`max_active`. Change them later with **Edit node**. Reservations and cleanup that is not
-confirmed count against capacity; lowering a limit stops no running sandbox. A node's own files can't change its
-capacity, size or Runtime.
+`max_active`. Change them later with **Edit node**. Reservations and cleanup that is
+not confirmed count against capacity; lowering a limit stops no running sandbox. A
+node's own files can't change its capacity, size or Runtime.
 
 `core.execution_concurrency` is unrelated: it limits concurrent execution work in Core.
 
@@ -232,13 +236,13 @@ node payload (the installer's `node-payload/`). Without it, Add node and the
 self-hosted install command are unavailable.
 
 Core fails at startup, naming the replacement, while a retired variable is set:
-`AGENTS_API_DAEMON_WS_URL` (use `AGENTS_API_PUBLIC_URL`), `AGENTS_API_CONFIG_FILE`
-(no replacement), `AGENTS_API_EXECUTION_OPTIONS_FILE` (use
+`AGENTS_API_DAEMON_WS_URL` (use `AGENTS_API_PUBLIC_URL`), `AGENTS_API_CONFIG_FILE` (no
+replacement), `AGENTS_API_EXECUTION_OPTIONS_FILE` (use
 [default models](#default-models)), `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` (use
 `AGENTS_API_CORE_KEY_DIGESTS_FILE`), and `AGENTS_API_MANAGED_RUNTIMES_FILE`,
 `AGENTS_API_SANDBOX_NODE_STATE_DIR` and `AGENTS_API_SANDBOX_NODE_CORE_URL` (the
-sandbox deployment lives in the database and nodes enroll separately). Core logs the file paths it loads, never
-environment values or file contents. Native installation paths must be canonical
-absolute paths without control characters, quotes, backslashes or wildcards. Keep the
-installation ID and the database together; Core refuses a missing installation ID
-when its database already has a deployment.
+sandbox deployment lives in the database and nodes enroll separately). Core logs the
+file paths it loads, never environment values or file contents. Native installation
+paths must be canonical absolute paths without control characters, quotes, backslashes
+or wildcards. Keep the installation ID and the database together; Core refuses a
+missing installation ID when its database already has a deployment.

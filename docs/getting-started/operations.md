@@ -191,11 +191,12 @@ docker compose -f "$HOME/.parsar/core/compose.json" exec -T database \
 
 Conversion reads the old files without changing anything, shows the resulting settings
 and the same backup command, and asks for confirmation. `--yes` skips the prompt and
-runs the migrations at once, so use it only after backing up. It then writes `config.json` and `state.json`, moves the secrets
-into `secrets/` without copying them, removes the old generated files, and starts the
-new release with the same Compose project, database and installation ID. Settings set
-by hand, such as `AGENTS_API_EXECUTION_CONCURRENCY`, `PARSAR_LOG_*` or a Runtime history
-file, move into `config.json`.
+runs the migrations at once, so use it only after backing up. It then writes
+`config.json` and `state.json`, moves the secrets into `secrets/` without copying
+them, removes the old generated files, and starts the new release with the same
+Compose project, database and installation ID. Settings set by hand, such as
+`AGENTS_API_EXECUTION_CONCURRENCY`, `PARSAR_LOG_*` or a Runtime history file, move
+into `config.json`.
 
 It stops before changing anything, listing each reason, when something can't be
 converted: an edited `compose.json`, an unknown or edited generated value in
@@ -338,5 +339,6 @@ Core records which key made each public resource write, for the console. Set
 `2160h`) to control how long non-creation history is kept; creation ownership is kept
 for good. Removing keys or resources does not delete these records. See the
 [query contract](../../contracts/agents-api/write-audit.md); administrator mutations
-have a separate [audit log](../../contracts/agents-api/admin-api.md#monitoring-and-audit).
-Neither logs bodies or secrets.
+have a separate
+[audit log](../../contracts/agents-api/admin-api.md#monitoring-and-audit). Neither
+logs bodies or secrets.

@@ -1,8 +1,8 @@
 # Maintainers and advanced deployments
 
 This page is for people who build and publish Parsar Core, or run Core without the
-installer. To install Core and Web, use the [installation guide](getting-started/install.md)
-instead.
+installer. To install Core and Web, use the
+[installation guide](getting-started/install.md) instead.
 
 ## Build a distribution
 
@@ -63,8 +63,8 @@ They are for development, testing and operators who manage Core's process themse
 They are not an installation path for new users.
 
 - [Standalone Core archive](../services/agents-api/RELEASE.md)
-  (`make build-agents-api-release`): Core, its migrator and operator commands for your own
-  PostgreSQL.
+  (`make build-agents-api-release`): Core, its migrator and operator commands for your
+  own PostgreSQL.
 - [Standalone container](../services/agents-api/CONTAINER.md)
   (`make docker-build-agents-api`): the same in a Linux container image.
 - [Service guide](../services/agents-api/README.md): building and running Core from

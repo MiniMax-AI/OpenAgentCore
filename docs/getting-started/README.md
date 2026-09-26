@@ -15,7 +15,9 @@ applications call Core with.
 | [Call the API](quickstart.md) | Application developers | `OPENAI_BASE_URL` and `OPENAI_API_KEY`, running a Session, model providers and `x_agents_core` |
 | [API reference](../api/README.md) | Developers | The `/v1`, `/core/v1` and `/api/v1` namespaces and their contracts |
 
-Deeper references: [nodes and sandbox backends](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
-for operators, [protocol coverage and native differences](../../contracts/agents-api/README.md),
-and [maintainers and advanced deployments](../maintainers.md) for building
-distributions and running Core without the installer.
+Deeper references: the
+[nodes and sandbox backends](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
+reference for operators, the
+[protocol coverage and native differences](../../contracts/agents-api/README.md), and
+[maintainers and advanced deployments](../maintainers.md) for building distributions
+and running Core without the installer.

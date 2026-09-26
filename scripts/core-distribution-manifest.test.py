@@ -260,6 +260,7 @@ class BundledDocsTests(unittest.TestCase):
             "README.md": "# Title\n\n![Banner](docs/banner.png) ![Chart](docs/chart.png)\n"
                          "[Install](docs/install.md#sign-in-to-web), [API](contracts/api.md#routes), [web](docs/web), "
                          "`[kept](missing.md)`, [`schema.json`](contracts/schema.json), "
+                         "[![Chart](docs/chart.png)](contracts/api.md), "
                          "[main](https://github.com/MiniMax-AI/parsar-core/blob/main/LICENSE)\n"
                          "```sh\n[not a link](missing.md)\n```\n\n    [indented code](missing.md)\n",
             "docs/install.md": "# Install\n## Sign in to Web\n## C#\n## _Emphasis_ and snake_case\n"
@@ -285,6 +286,7 @@ class BundledDocsTests(unittest.TestCase):
             "[Install](docs/install.md#sign-in-to-web), [API](" + versioned.format("blob") + "contracts/api.md#routes), "
             "[web](" + versioned.format("tree") + "docs/web), `[kept](missing.md)`, "
             "[`schema.json`](" + versioned.format("blob") + "contracts/schema.json), "
+            "[![Chart](" + versioned.format("raw") + "docs/chart.png)](" + versioned.format("blob") + "contracts/api.md), "
             "[main](" + versioned.format("blob") + "LICENSE)\n```sh\n[not a link](missing.md)\n```\n\n"
             "    [indented code](missing.md)\n"))
         self.assertEqual((self.bundle / "docs/install.md").read_text(), (self.source / "docs/install.md").read_text())
@@ -293,7 +295,8 @@ class BundledDocsTests(unittest.TestCase):
 
     def test_broken_links_and_anchors_fail_the_build(self):
         for text in ("[x](missing.md)", "[x](docs/install.md#no-such-heading)", "[x](../outside.md)", "[x](#nowhere)",
-                     "[`code text`](missing.md)", "See [`a`](docs/install.md#gone) and more"):
+                     "[`code text`](missing.md)", "See [`a`](docs/install.md#gone) and more",
+                     "[![inner](missing.png)](docs/install.md)", "A [link that\nspans lines](docs/install.md)"):
             with self.subTest(text=text):
                 (self.source / "README.md").write_text("# Title\n" + text + "\n")
                 with self.assertRaises(ValueError):

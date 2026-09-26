@@ -76,9 +76,9 @@ print(session.id)
 
 This makes a real model request and may incur charges. If the administrator set a
 default model for the harness, omit `x_agents_core.model_provider`; `agent.model` is
-still required, so ask the administrator which model ID the default provider serves. SDK 3.13.0 replaces an ordinary body field with the matching
-`extra_body` field instead of merging nested fields, so keep the whole `agent` object
-in `extra_body`.
+still required, so ask the administrator which model ID the default provider serves.
+SDK 3.13.0 replaces an ordinary body field with the matching `extra_body` field
+instead of merging nested fields, so keep the whole `agent` object in `extra_body`.
 
 ## Core extensions: x_agents_core
 

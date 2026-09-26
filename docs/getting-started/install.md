@@ -22,7 +22,8 @@ under `docs/`; if you install an older bundle, follow those.
 - Linux amd64 with Python 3.9 or newer.
 - Docker Engine with Docker Compose 2.26.0 or newer (`docker compose version`).
 - A non-root user who can run `docker`. The installer refuses root.
-- Free loopback ports 8091 (Core) and 8080 (Web), or [other ports](#ports-and-directory).
+- Free loopback ports 8091 (Core) and 8080 (Web), or
+  [other ports](#ports-and-directory).
 - The GitHub CLI, `gh`, to download the bundle.
 
 The Core host needs no KVM and no systemd user services, unless you choose
@@ -66,7 +67,7 @@ Each release has two bundles:
 | Bundle | Contains | Use it for |
 | --- | --- | --- |
 | `parsar-core-<commit>-linux-amd64-offline.tar.gz` | Core, Web and PostgreSQL images, the installers and every node and Runtime file | Any installation. Web serves the node files to your nodes and self-hosted executors |
-| `parsar-core-<commit>-linux-amd64.tar.gz` | The same without the node and Runtime files | E2B-only or Web-only hosts. Web can't add nodes until the files are present |
+| `parsar-core-<commit>-linux-amd64.tar.gz` | The same without the node and Runtime files | Core-only hosts, and installations that use only E2B. Web can't add nodes or connect self-hosted executors until the files are present |
 
 To add the node files to the smaller bundle, create an `artifacts/` directory in the
 extracted bundle, download the release's other `parsar-core-<commit>-linux-amd64-*`
@@ -149,8 +150,9 @@ it installs anything:
   --e2b-api-key-file "$HOME/.parsar/e2b-api-key" --e2b-template '<template-id>:<build-uuid>'
 ```
 
-Prepare the template build with the [E2B guide](../../services/agents-api/deploy/e2b/README.md).
-To change the backend or the sandbox size later, use the Nodes page in Web; see
+Prepare the template build with the
+[E2B guide](../../services/agents-api/deploy/e2b/README.md). To change the backend or
+the sandbox size later, use the Nodes page in Web; see
 [Nodes](nodes.md#change-the-sandbox-backend-or-size).
 
 #### Modes
@@ -162,20 +164,22 @@ To change the backend or the sandbox size later, use the Nodes page in Web; see
 | `--web-only` | Web | A second host for the console, paired with an existing Core |
 
 A Web-only console forwards every signed-in `/core/v1` request to its Core with the
-Core key, so `--core-url` must reach Core's `/core/v1` directly. The usual reverse proxy
-sends `/core/v1` to Web, so the Core's public URL doesn't work here:
+Core key, so `--core-url` must reach Core's `/core/v1` directly. The default reverse
+proxy sends `/core/v1` to Web, so the Core's public URL doesn't work here:
 
-- **Web on the Core host:** use Core's loopback port, `--core-url http://127.0.0.1:8091`.
+- **Web on the Core host:** use Core's loopback port,
+  `--core-url http://127.0.0.1:8091`.
 - **Web on another host:** give Core a second HTTPS name whose proxy sends every path to
   Core, such as `https://core-api.example` to `127.0.0.1:8091` on the Core host, and use
-  it as `--core-url`. Anyone who reaches that name still needs the Core key.
+  it as `--core-url`. Allow only the Web host's address on that name; anyone else who
+  reaches it still needs the Core key.
 
-A split deployment then looks like this:
+##### Split deployment
 
 | Host | Install | Reverse proxy |
 | --- | --- | --- |
-| Core | `./install.sh --core-only --public-url https://core.example` | `core.example`: `/v1`, `/v1/*` and `/api/v1/*` to Core (there is no Web here). `core-api.example`: every path to Core |
-| Web | See below | `console.example`: every path to Web |
+| Core | `./install.sh --core-only --public-url https://core.example` | `core.example`: `/v1`, `/v1/*` and `/api/v1/*` to Core; `/node-install/*` to the Web host, with Host rewritten to `console.example`; nothing else. `core-api.example`: every path to Core, for the Web host's address only |
+| Web | `./install.sh --web-only …`, below | `console.example`: every path to Web |
 
 ```sh
 ./install.sh --web-only --install-dir "$HOME/.parsar/core-console" \
@@ -184,11 +188,100 @@ A split deployment then looks like this:
   --core-key-file "$HOME/core.key"
 ```
 
-The Web host's `--public-url` is the address browsers use for this console; nodes also
-download their installer from it. Applications, nodes and sandboxes use the Core
-host's public URL. Copy the key file from the Core host's `secrets/core.key` with mode
-`0600`; the installer keeps its own copy in `secrets/core.key`, so delete
-`$HOME/core.key` afterwards. After the Core key is rotated, copy the new key again; see
+Browsers use `console.example`, and nodes download their installer from it.
+Applications, nodes and sandboxes call Core at `core.example`, and self-hosted
+executors download their installer from there too, which is why `core.example` sends
+`/node-install/*` to the Web host. Web serves those files only for its own name, so the
+proxy rewrites Host. The Web host serves every node and executor file, so install it
+from the offline bundle (or add `artifacts/`) when the deployment has nodes or
+self-hosted executors.
+
+Caddy on the Core host, where `203.0.113.10` stands for the Web host's address:
+
+```caddyfile
+core.example {
+	@core path /v1 /v1/* /api/v1/*
+	handle @core {
+		reverse_proxy 127.0.0.1:8091
+	}
+	handle /node-install/* {
+		reverse_proxy https://console.example {
+			header_up Host console.example
+		}
+	}
+	handle {
+		respond 404
+	}
+}
+
+core-api.example {
+	@web remote_ip 203.0.113.10
+	handle @web {
+		reverse_proxy 127.0.0.1:8091
+	}
+	handle {
+		respond 403
+	}
+}
+```
+
+nginx on the Core host, with the `map` from the
+[main example](#https-and-the-reverse-proxy):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name core.example;
+    ssl_certificate     /etc/letsencrypt/live/core.example/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/core.example/privkey.pem;
+
+    client_max_body_size 0;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 1h;
+    proxy_send_timeout 1h;
+
+    location = /v1    { proxy_pass http://127.0.0.1:8091; }
+    location /v1/     { proxy_pass http://127.0.0.1:8091; }
+    location /api/v1/ { proxy_pass http://127.0.0.1:8091; }
+    location /node-install/ {
+        proxy_pass https://console.example;
+        proxy_set_header Host console.example;   # Web serves node files only for its own name
+        proxy_ssl_server_name on;
+        proxy_ssl_name console.example;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+    }
+    location / { return 404; }
+}
+
+server {
+    listen 443 ssl;
+    server_name core-api.example;
+    ssl_certificate     /etc/letsencrypt/live/core-api.example/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/core-api.example/privkey.pem;
+
+    allow 203.0.113.10;                        # the Web host
+    deny all;
+    client_max_body_size 0;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+    location / { proxy_pass http://127.0.0.1:8091; }
+}
+```
+
+The Web host's proxy sends every path to Web, for example
+`console.example { reverse_proxy 127.0.0.1:8080 }` in Caddy.
+
+Copy the key file from the Core host's `secrets/core.key` with mode `0600`; the
+installer keeps its own copy in `secrets/core.key`, so delete `$HOME/core.key`
+afterwards. After the Core key is rotated, copy the new key again; see
 [Rotate the Core key](operations.md#rotate-the-core-key). A Web-only install selects no
 sandbox backend: the Core host's `--sandbox` does, or later the paired console's
 **Nodes** page.
@@ -200,7 +293,7 @@ new directory.
 
 `--native-core` runs Core as a systemd user service of the installing user;
 PostgreSQL and Web stay in containers. It needs a running systemd user manager and
-lingering for that user (`sudo loginctl enable-linger <user>`), and the bundle's
+lingering for that user (`sudo loginctl enable-linger "$USER"`), and the bundle's
 native binaries must load on the host. PostgreSQL then listens on a loopback port
 the installer picks (`ports.database`), and Web uses the host network. Native Core
 needs no KVM and is unrelated to the sandbox backend.
@@ -215,7 +308,8 @@ own database, Core key and nodes.
 
 ## HTTPS and the reverse proxy
 
-Core and Web share one public origin. Your reverse proxy terminates TLS and routes by
+By default, Core and Web share one public origin; for Web on its own host, see the
+[split deployment](#split-deployment). Your reverse proxy terminates TLS and routes by
 path:
 
 | Path | Goes to | Callers |

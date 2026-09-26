@@ -14,10 +14,11 @@ Agent API, the Core API or node enrollment.
 - **Core has an HTTPS public URL.** The Session's `remote_url` is
   `wss://<public host>/api/v1/agent-daemon/ws`, and the installer connects only over
   `wss://`. Web shows no command until Core has a reachable public URL.
-- **Web holds the installer and the Runtime files.** The installer downloads the Runtime
-  launcher and image from the console's public address, as nodes do; install Core from
-  the offline bundle. A console without the self-hosted installer shows no
-  **Connect a host** section at all.
+- **Web holds the installer and the Runtime files.** The command downloads the
+  installer, the Runtime launcher and the image from Core's public URL, which the
+  reverse proxy sends to Web (in a [split deployment](install.md#split-deployment), to
+  the Web host); install from the offline bundle. A console without the self-hosted
+  installer shows no **Connect a host** section at all.
 - **The host** runs Linux amd64 with Python 3.9+, `curl`, `sha256sum` and the Docker
   CLI, with Docker usable through `/var/run/docker.sock` by the non-root user that runs
   the installer; the installer refuses root. It reaches the public URL over HTTPS.
@@ -74,7 +75,10 @@ named `parsar-selfhost-<32 hex digits>`, and waits until Core confirms that the
 Environment is connected. The Session then runs its Turns there. Rerunning the same
 command resumes the same installation. It refuses, with "This installation belongs to
 another Environment or distribution", once Core runs another release or its public URL
-changed: the host's installation is tied to both.
+changed: the host's installation is tied to both. Moving an executor to a new release
+or address isn't supported yet. A fresh installation would start a new container
+without the old workspace and native history, so the Session can't continue there:
+stop the old container, create a new self-hosted Session and connect a host for it.
 
 For automation without a terminal, choose **Download credential file**, which saves
 `executor-credential-<first 8 characters of the environment ID>.json`, make it private
