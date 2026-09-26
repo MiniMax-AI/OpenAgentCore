@@ -29,7 +29,9 @@ describe("sandbox localization", () => {
   });
   it("maps conflicts and unconfigured access without leaking raw backend diagnostics", () => {
     expect(sandboxRequestError(new AgentCoreError("raw secret", 409, "runtime_node_in_use"), "zh")).toContain("保留资源");
-    expect(sandboxRequestError(new AgentCoreError("raw secret", 503, "sandbox_admin_not_configured"), "zh")).toContain("尚未配置");
+    expect(sandboxRequestError(new AgentCoreError("raw secret", 503, "sandbox_admin_not_configured"), "zh")).toBe("此控制台尚未配置沙箱管理权限。");
+    // Any other refusal is Core's to explain.
+    expect(sandboxRequestError(new AgentCoreError("This console is read-only.", 403), "zh")).toBe("This console is read-only.");
     expect(sandboxRequestError(new Error("raw secret"), "zh")).not.toContain("raw secret");
   });
 });

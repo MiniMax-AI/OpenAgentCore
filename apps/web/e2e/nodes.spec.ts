@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, openConsole, resetFixture, setNode, writes } from "./console";
+import { expectManagementBoundary, failNext, openConsole, resetFixture, setNode, writes } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
@@ -282,16 +282,32 @@ test("keeps the saved size and Runtime for the same backend, and starts another 
 
 test("reports a failed sandbox change in a dialog, then reads the state again", async ({ page, request }) => {
   await openConsole(page, request, "nodes");
+  // Core's answer is lost, so the change may have been saved.
   await page.route("**/core/v1/sandbox/deployment/maintenance", (route) => route.fulfill({
-    status: 409,
+    status: 503,
     contentType: "application/json",
-    body: JSON.stringify({ error: { message: "The deployment changed.", type: "conflict_error", code: "sandbox_deployment_conflict", param: null } }),
+    body: JSON.stringify({ error: { message: "Unavailable.", type: "server_error", code: null, param: null } }),
   }));
   await page.getByRole("button", { name: "Enter maintenance to change provider" }).click();
   const failed = page.getByRole("dialog", { name: "Couldn't confirm the sandbox change" });
   await failed.getByRole("button", { name: "Refresh sandbox state" }).click();
   await expect(failed).toBeHidden();
   await expect(page.getByRole("button", { name: "Enter maintenance to change provider" })).toBeEnabled();
+});
+
+test("keeps the page usable when Core refuses a sandbox change, and shows Core's reason", async ({ page, request }) => {
+  await openConsole(page, request, "nodes", { sandbox: "none" });
+  await failNext(request, { method: "POST", path: "/sandbox/deployment", status: 403, message: "This console is read-only." });
+  await page.getByRole("button", { name: "Own machines" }).click();
+  await page.getByRole("button", { name: "microsandbox Recommended" }).click();
+  await page.getByRole("button", { name: /^Standard/ }).click();
+  const save = page.getByRole("button", { name: "Save configuration" });
+  await save.click();
+  // A clear refusal changed nothing: no "couldn't confirm" dialog, and the same page to try again.
+  await expect(page.getByText("This console is read-only.")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await save.click();
+  await expect(page.getByText("c0ffee000000")).toBeVisible();
 });
 
 test("renames a node and sets how many sandboxes run on it at once", async ({ page, request }) => {

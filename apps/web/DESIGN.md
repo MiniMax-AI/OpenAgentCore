@@ -655,11 +655,13 @@ at zero).
 
 ### Notices
 Errors are popups, never lines inserted into a page. A failed action whose outcome
-needs a decision (an uncertain sandbox change) opens an error dialog with Core's
-reason and the next step as its primary button. A failed refresh that keeps the last
-data on screen, projects that could not be read, and other failed actions are
-reported in an error toast with the reason. Only when a page or section has nothing to show
-does an error state take the place of its content; errors inside a dialog or a form
+needs a decision (a sandbox change with no answer, a timeout or a 5xx) opens an
+error dialog with the reason and the next step as its primary button. A failed
+refresh that keeps the last data on screen, projects that could not be read, and
+other failed actions, Core's clear refusal of a sandbox change among them, are
+reported in an error toast with the reason; a refusal leaves the page usable as it
+was. Only when a page or section has nothing to show does an error state take the
+place of its content; errors inside a dialog or a form
 stay beside what they concern. Coverage notes (Margin Gray, Hairline, 12px corners,
 12.5px Graphite) state bounded aggregation. A standing warning that needs action,
 such as the Nodes page naming nodes still bound to an old Core address, is an

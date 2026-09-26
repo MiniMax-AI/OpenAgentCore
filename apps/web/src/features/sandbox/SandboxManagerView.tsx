@@ -10,7 +10,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { useFailureToast, useToast } from "../../components/Toast";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { installationQuery } from "../../lib/installation";
-import { sandboxConfigurationRejection, sandboxRequestError } from "../../lib/sandbox-labels";
+import { sandboxConfigurationRejection, sandboxRequestError, sandboxWriteUncertain } from "../../lib/sandbox-labels";
 import type { SandboxConsoleConfig } from "./console-config";
 import { sandboxAdmin, sandboxConsoleConfigQuery, sandboxDeploymentQuery, sandboxScope, sandboxSnapshotQuery, type SandboxSnapshot } from "./sandbox-queries";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
@@ -52,7 +52,7 @@ function SandboxAccess() {
   const { data: config, isPending: checking, isFetching, isError, refetch } = useQuery(sandboxConsoleConfigQuery);
   if (isError && config === undefined) return <><NodesPageHeader /><div className="console-page-body"><p role="alert">{t("The console configuration could not be read. Refresh to try again.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></div></>;
   if (checking) return <><NodesPageHeader /><div className="console-page-body"><p role="status">{t("Connecting to this console's Core…")}</p></div></>;
-  if (!config?.sandbox_admin) return <><NodesPageHeader /><div className="console-page-body"><p role="alert">{t("Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></div></>;
+  if (!config?.sandbox_admin) return <><NodesPageHeader /><div className="console-page-body"><p role="alert">{t("Sandbox administration is not configured on this console.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></div></>;
   return <SandboxManager consoleConfig={config} />;
 }
 
@@ -77,14 +77,14 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const [removeError, setRemoveError] = useState<string | null>(null);
   // After a removal, the host's uninstall command; it stays for the closing animation.
   const [cleanup, setCleanup] = useState<{ node: NodeCleanup; open: boolean } | null>(null);
-  // When a deployment write last had an uncertain outcome; only a read begun after it confirms the state again.
+  // When a deployment write last had an uncertain outcome (no response, a timeout or a 5xx); only a read begun after it confirms the state again.
   const [uncertainSince, setUncertainSince] = useState<number | null>(null);
   const setupNeedsRefresh = uncertainSince !== null && !(snapshot && snapshot.readAt > uncertainSince);
   // The state on screen is Core's last successful read, with no uncertain write since.
   const confirmed = snapshot !== null && !query.isError && !setupNeedsRefresh;
   // Writes additionally wait for any read in flight.
   const fresh = confirmed && !loading;
-  // A failed write opens a dialog with Core's reason; the error stays for the closing animation.
+  // A write with an uncertain outcome opens a dialog with the reason; the error stays for the closing animation.
   const [writeFailure, setWriteFailure] = useState<{ error: unknown; open: boolean } | null>(null);
   const { refetch } = query;
   const refresh = useCallback(() => {
@@ -138,9 +138,14 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       if (!controller.signal.aborted) {
         // Core rejected the configuration and saved nothing: the wizard explains why.
         if (fromWizard && sandboxConfigurationRejection(error) !== null) throw error;
-        setUncertainSince(performance.now()); setWriteFailure({ error, open: true });
-        // Nothing re-reads on its own: the operator refreshes to confirm. A later visit reads again.
-        void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
+        if (sandboxWriteUncertain(error)) {
+          setUncertainSince(performance.now()); setWriteFailure({ error, open: true });
+          // Nothing re-reads on its own: the operator refreshes to confirm. A later visit reads again.
+          void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
+        } else {
+          // Core refused the change, so nothing changed: its reason, and the page stays usable as it was.
+          toast.show(t("Core rejected the sandbox change"), { tone: "error", detail: sandboxRequestError(error, locale), key: "sandbox-write" });
+        }
       }
     } finally { if (!controller.signal.aborted) setBusy(false); }
     return false;

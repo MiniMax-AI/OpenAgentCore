@@ -256,7 +256,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     : sandboxDiagnosticMessage(progress.problem, locale);
   return createPortal(<Modal open={open} title={t("Add node")} onClose={close} footer={footer}>
     <div className="sandbox-add-node form-stack">
-      {!available ? <p role="status">{t("Node installation is unavailable. Ask the deployment administrator to enable the node installer on this console.")}</p>
+      {!available ? <p role="status">{t("This console serves no node installer. For a console deployed by hand, point CORE_CONSOLE_NODE_PAYLOAD_DIR at the distribution's node payload and restart it.")}</p>
       : !enrollment && blocker ? blocker.failed
         ? <p role="alert">{blocker.text} <button className="text-action" type="button" disabled={installation.isFetching} onClick={() => void installation.refetch()}>{t("Try again")}</button></p>
         : <p role="status">{blocker.text}</p>

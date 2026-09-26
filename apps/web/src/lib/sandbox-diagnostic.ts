@@ -18,7 +18,7 @@ const diagnostics: Record<string, { label: MessageKey; advice: MessageKey }> = {
   },
   ownership_mismatch: {
     label: "Sandbox ownership mismatch",
-    advice: "Ask the deployment administrator to reconcile the assigned resource and its ownership record before resuming execution.",
+    advice: "Reconcile the assigned resource and its ownership record before resuming execution.",
   },
   provider_unavailable: {
     label: "Sandbox provider unavailable",
@@ -76,7 +76,7 @@ export function sandboxDiagnosticMessage(value?: string, locale: Locale = "en"):
   if (!value) return null;
   const message = Object.hasOwn(diagnostics, value) ? diagnostics[value]! : {
     label: "Sandbox state needs attention",
-    advice: "Ask the deployment administrator to inspect the assigned node and resource, then refresh.",
+    advice: "Inspect the assigned node and resource, then refresh.",
   } as const;
   return { label: translate(locale, message.label), advice: translate(locale, message.advice) };
 }

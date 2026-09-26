@@ -17,12 +17,27 @@ export function sandboxRequestError(error: unknown, locale: Locale): string {
     else if (error.code === "runtime_node_in_use") key = "The node has active allocations or retained resources. Clear allocations, snapshots, reservations and pending cleanup before removal.";
     else if (error.code === "runtime_node_unavailable") key = "The selected sandbox node is unavailable or has no capacity.";
     else if (error.code === "sandbox_deployment_conflict") key = "Sandbox deployment is already configured. Refresh to inspect the saved provider and Core origin.";
+    else if (error.code === "sandbox_admin_not_configured") key = "Sandbox administration is not configured on this console.";
     else if (error.status === 401) key = "Sign in to the console again to access sandbox management.";
-    else if (error.status === 403 || error.code === "sandbox_admin_not_configured") key = "Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.";
+    // Any other refusal is Core's to explain; its message names the reason.
+    else if (error.status === 403 && error.message) return error.message;
     else if (error.status >= 500) key = "The sandbox service is unavailable. Refresh to check the current state.";
     else key = "The sandbox request was rejected. Refresh to check the current state.";
   } else if (error instanceof Error && error.message === "removal_unconfirmed") key = "Core did not confirm node removal. Refresh to check its state.";
   return translate(locale, key);
+}
+
+/**
+ * Whether a failed sandbox write may still have taken effect, so the page must
+ * read Core again before trusting what it shows: no response at all (a network
+ * failure or an abort), a timeout, a 5xx (an unreadable response is a 502),
+ * or a configuration write whose rejection the client withheld. Any other 4xx
+ * is Core's clear refusal, and nothing changed.
+ */
+export function sandboxWriteUncertain(error: unknown): boolean {
+  if (!(error instanceof AgentCoreError)) return true;
+  if (error.code === "sandbox_configuration_unconfirmed") return true;
+  return error.status < 400 || error.status === 408 || error.status >= 500;
 }
 
 /**
