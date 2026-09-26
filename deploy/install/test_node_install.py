@@ -402,6 +402,16 @@ class NodeInstallTests(unittest.TestCase):
         self.assertFalse([call for call, _ in self.calls if call[:1] in (["useradd"], ["usermod"], ["systemctl"])])
         self.assertEqual({path: path.read_bytes() for path in (system / "etc").iterdir()}, before)
 
+    def test_no_sudo_installs_can_share_the_host_lock_root_created(self):
+        locks = self.home / "run"
+        locks.mkdir()
+        previous = os.umask(0o077)  # As the Web command sets it.
+        self.addCleanup(os.umask, previous)
+        with mock.patch.object(installer, "SYSTEM_LOCKS", locks), mock.patch.object(installer.os, "geteuid", return_value=0):
+            with installer.host_lock():
+                pass
+        self.assertEqual(stat.S_IMODE((locks / "parsar-node.lock").stat().st_mode), 0o644)
+
     def test_sudo_mode_refusals_change_nothing(self):
         foreign = SimpleNamespace(pw_name="parsar-node", pw_uid=4242, pw_gid=4242, pw_dir="/home/parsar-node", pw_shell="/bin/bash")
         for case, message in (("selinux", "SELinux is enforcing"), ("docker", "Docker Engine is not installed"),

@@ -651,6 +651,7 @@ def host_lock():
     try:
         if root:
             descriptor = os.open(path, os.O_CREAT | os.O_RDONLY | os.O_NOFOLLOW, 0o644)
+            os.fchmod(descriptor, 0o644)  # Readable by normal users despite the command's umask 077.
         else:
             descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     except OSError:
