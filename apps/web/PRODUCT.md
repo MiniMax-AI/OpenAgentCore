@@ -42,8 +42,8 @@ workbench.
 
 - Paired console (`services/core-console`): the administrator signs in with the
   deployment's Core key, the administration credential the installer writes to
-  `admin/core.key` under the installation directory (by default
-  `~/.parsar/core/admin/core.key`; keeping and rotating it is described in
+  `secrets/core.key` under the installation directory (by default
+  `~/.parsar/core/secrets/core.key`; keeping and rotating it is described in
   [Core key](../../docs/getting-started/operations.md#core-key)). There are no
   console accounts or usernames. The browser sends the key only to sign in and
   keeps only the session cookie; the console server holds the Core key and forwards
