@@ -42,6 +42,26 @@ export function isUsableName(value: string, problem: NameProblem | null): boolea
 }
 
 /**
+ * The active keys archiving revokes: the project read's count, or more when the
+ * project's loaded key list shows more (it may be newer, for example after a
+ * key was issued and the project list could not be read again).
+ */
+export function archiveKeyCount(project: Pick<Project, "id" | "active_key_count">, keys: readonly AdminKey[] | null | undefined): number {
+  const listed = keys ? keys.filter((key) => key.project_id === project.id && key.revoked_at === null).length : 0;
+  return Math.max(project.active_key_count, listed);
+}
+
+/**
+ * Archiving can't be undone and revokes every active key at once, so a
+ * project with active keys is archived only after its name is typed. Only
+ * surrounding spaces are forgiven; both sides compare in NFC, so a name typed
+ * with a decomposed character still matches.
+ */
+export function isArchiveConfirmed(name: string, activeKeys: number, typed: string): boolean {
+  return activeKeys === 0 || typed.trim().normalize("NFC") === name.normalize("NFC");
+}
+
+/**
  * A write either failed before Core acted ("rejected": Core's reason, such as
  * an archived project on a 409; correct and retry) or has an unknown outcome
  * ("uncertain": check the list first; never retried automatically).

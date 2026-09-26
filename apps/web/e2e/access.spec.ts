@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { expectManagementBoundary, FIXTURE_CORE_KEY, openConsole, resetFixture } from "./console";
+import { expectManagementBoundary, FIXTURE_CORE_KEY, issueKeys, openConsole, resetFixture } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
@@ -75,9 +75,24 @@ test("opens a fresh install on the Overview's Getting started: a project and its
   await expect(issued.getByLabel("New key my-app")).toHaveValue(/fixture-secret/);
   await issued.getByRole("button", { name: "I've saved this key" }).click();
   await expect(page.getByLabel("New key my-app")).toHaveCount(0);
+  // More keys make the project's key table tall, so its page settles well below where it first draws.
+  const projectId = new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("id")!;
+  await issueKeys(request, projectId, Array.from({ length: 12 }, (_, index) => `app-${index + 1}`));
 
   await page.getByRole("button", { name: "Overview", exact: true }).click();
+  // A new page load, so the project's page reads its keys again rather than showing the ones it has.
+  await page.reload();
   await expect(step("Create a project and issue a key")).toContainText("Done");
+  // The first Session: the project's call samples, which never hold the key.
+  await step("Run the first Session").getByRole("button", { name: "See how to call" }).click();
+  await expect(page.getByRole("heading", { name: "My app", level: 1 })).toBeVisible();
+  const call = page.getByRole("region", { name: "How to call" });
+  await expect(call.getByRole("heading", { name: "How to call" })).toBeFocused();
+  // Once the keys have drawn, the card's heading is still in view, under the page header.
+  await expect(page.getByRole("table", { name: "Keys of My app" })).toContainText("app-12");
+  await expect(call.getByRole("heading", { name: "How to call" })).toBeInViewport();
+  await expect(page.getByRole("heading", { name: "My app", level: 1 })).toBeInViewport();
+  await expect(call.getByLabel("Shell", { exact: true })).toHaveText('export OPENAI_BASE_URL=https://core.example.com/v1\nexport OPENAI_API_KEY="<project API key>"');
   const stored = await browserStorage(page);
   expect(stored).not.toContain("fixture-secret");
   expect(stored).not.toContain(FIXTURE_CORE_KEY);
@@ -92,6 +107,8 @@ test("leads from Getting started to the default model, and counts it done once t
   // It arrives on the default harness's action.
   const set = page.getByRole("button", { name: "Set the default model for Codex" });
   await expect(set).toBeFocused();
+  // Only the page body scrolls to it: the page header stays in view.
+  await expect(page.getByRole("heading", { name: "System", level: 1 })).toBeInViewport();
   await set.click();
   const form = page.getByRole("dialog", { name: "Set default model for Codex" });
   await form.getByLabel("Base URL").fill("https://model.example/v1");

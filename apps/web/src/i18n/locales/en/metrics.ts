@@ -81,6 +81,11 @@ export const metrics = {
     agentSectionDetail: "Requests, errors and tokens of each Agent in the selected range. An Agent belongs to one project.",
     agent: "Agent",
     sessions: "Sessions",
+    openAgent: "Open Agent {{name}}",
+    openSessions: "{{count}} failed Turns — open {{agent}}'s Sessions",
+    openSessions_one: "{{count}} failed Turn — open {{agent}}'s Sessions",
+    openSessions_other: "{{count}} failed Turns — open {{agent}}'s Sessions",
+    failedHelp: "Failed Turns in the selected range; the link lists this Agent's Sessions.",
   },
   keys: {
     title: "By API key",

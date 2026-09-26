@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { EmptyState, HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
 import { formatDateTime, formatDuration, formatInteger, MISSING } from "../../lib/format";
-import { itemsPerTurn, turnDurationSeconds } from "./session-history";
+import { itemsPerTurn, turnAnchorId, turnDurationSeconds } from "./session-history";
 
 export const turnTone: Record<AgentTurn["status"], Tone> = {
   queued: "pending",
@@ -51,7 +51,7 @@ export function SessionTurnsTable({ turns, items, failure = null }: { turns: rea
             {turns.map((turn, index) => {
               const itemCount = counts.get(turn.id) ?? 0;
               return (
-                <tr key={turn.id}>
+                <tr key={turn.id} id={turnAnchorId(turn.id)} tabIndex={-1}>
                   <th scope="row">
                     <span className="name-cell">
                       <span className="name-cell-title">{t("turnTable.number", { number: index + 1 })}</span>

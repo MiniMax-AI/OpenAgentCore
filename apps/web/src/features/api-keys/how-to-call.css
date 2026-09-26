@@ -77,3 +77,8 @@
 .how-to-call-skeleton .skeleton-bar:last-child {
   width: 48%;
 }
+
+/* Getting started moves the focus to the project page's heading, which is not a control. */
+.project-call h2:focus {
+  outline: none;
+}

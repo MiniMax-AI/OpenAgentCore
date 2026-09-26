@@ -141,11 +141,25 @@ export function PageBody({ children, className }: { children: ReactNode; classNa
   return <div className={["console-page-body", className].filter(Boolean).join(" ")}>{children}</div>;
 }
 
+/**
+ * Scrolls the page body so `element` sits at its top, then focuses `focus`
+ * (the element itself by default). Only the body scrolls: `scrollIntoView`
+ * would also shift the page, whose overflow is hidden, and push the page
+ * header out of sight.
+ */
+export function revealInPageBody(element: HTMLElement | null, focus: HTMLElement | null = element): void {
+  if (!element) return;
+  const body = element.closest<HTMLElement>(".console-page-body");
+  if (body) body.scrollTop += element.getBoundingClientRect().top - body.getBoundingClientRect().top - 12;
+  focus?.focus({ preventScroll: true });
+}
+
 export function Section({
   title,
   help,
   actions,
   headingId,
+  headingFocusable = false,
   children,
   className,
 }: {
@@ -153,6 +167,8 @@ export function Section({
   help?: ReactNode;
   actions?: ReactNode;
   headingId: string;
+  /** The heading can take focus, for a link that opens the page on this section. */
+  headingFocusable?: boolean;
   children: ReactNode;
   className?: string;
 }) {
@@ -160,7 +176,7 @@ export function Section({
     <section className={["console-section", className].filter(Boolean).join(" ")} aria-labelledby={headingId}>
       <header className="console-section-header">
         <div className="console-section-title">
-          <h2 id={headingId}>{title}</h2>
+          <h2 id={headingId} tabIndex={headingFocusable ? -1 : undefined}>{title}</h2>
           {help ? <HelpTip>{help}</HelpTip> : null}
         </div>
         {actions ? <div className="console-section-actions">{actions}</div> : null}

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { StatusDot } from "../../components/console-ui";
 import { formatDateTime, formatDuration, formatInteger } from "../../lib/format";
 import { ThreadItems } from "./items/ItemRenderers";
-import { transcriptGroups, turnDurationSeconds } from "./session-history";
+import { transcriptGroups, turnAnchorId, turnDurationSeconds } from "./session-history";
 import { turnTone } from "./SessionTurnsTable";
 
 /**
@@ -26,7 +26,7 @@ export function SessionTranscript({ turns, items, agentName }: { turns: readonly
         const duration = turn ? turnDurationSeconds(turn, now) : null;
         const key = turn?.id ?? "unassociated";
         return (
-          <li className="chat-turn" key={key}>
+          <li className="chat-turn" key={key} id={turn ? turnAnchorId(turn.id) : undefined} tabIndex={turn ? -1 : undefined}>
             {turn || turns.length ? (
               <header className="chat-turn-meta">
                 <span className="chat-turn-title">{group.number ? t("turnTable.number", { number: group.number }) : t("history.unassociated")}</span>

@@ -81,6 +81,11 @@ export const metrics = {
     agentSectionDetail: "所选时间范围内每个 Agent 的请求、错误与 Token。每个 Agent 属于一个项目。",
     agent: "Agent",
     sessions: "Session",
+    openAgent: "打开 Agent {{name}}",
+    openSessions: "{{count}} 个失败的 Turn，打开 {{agent}} 的 Session",
+    openSessions_one: "{{count}} 个失败的 Turn，打开 {{agent}} 的 Session",
+    openSessions_other: "{{count}} 个失败的 Turn，打开 {{agent}} 的 Session",
+    failedHelp: "所选时间范围内失败的 Turn；链接列出这个 Agent 的 Session。",
   },
   keys: {
     title: "按 API 密钥",

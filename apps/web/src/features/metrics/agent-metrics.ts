@@ -199,6 +199,11 @@ function modelOf(session: AgentSession): string {
 
 export const INLINE_AGENT_ID = "inline";
 
+/** Inline Agents have no ID of their own: they are keyed by `inline`, or `inline:<name>` when named. */
+export function isInlineAgent(agentId: string): boolean {
+  return agentId === INLINE_AGENT_ID || agentId.startsWith(`${INLINE_AGENT_ID}:`);
+}
+
 function agentOf(session: AgentSession): { id: string; label: string } {
   const name = typeof session.agent?.name === "string" && session.agent.name.trim() ? session.agent.name : null;
   if (typeof session.agent?.id === "string" && session.agent.id) return { id: session.agent.id, label: name ?? session.agent.id };

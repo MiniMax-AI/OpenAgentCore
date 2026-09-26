@@ -17,6 +17,11 @@ const SESSION_POLL_MAX_MS = 60_000;
 export const HISTORY_LIMIT = 10_000;
 const HISTORY_PAGE_SIZE = 100;
 
+/** The element of one Turn in the conversation or the Turn table, which a jump to it focuses. */
+export function turnAnchorId(turnId: string): string {
+  return `session-turn-${turnId}`;
+}
+
 /** A Session with queued, running or waiting work can still change. */
 export function isSessionActive(status: string | undefined): boolean {
   return status === "in_progress" || status === "requires_action";

@@ -38,7 +38,6 @@ export const sessions = {
     created: "创建时间",
     lastActive: "最近活跃",
     actions: "操作",
-    errorLabel: "错误信息",
     waitingLabel: "Session 在等待什么",
     exactTokens: "{{tokens}} 个 Token",
     open: "打开 Session {{id}}",
@@ -104,6 +103,8 @@ export const sessions = {
     unassociated: "未关联 Turn",
     steps: "{{n}} 个步骤",
     tokens: "{{value}} token",
+    jumpToFailed: "跳到失败的 Turn",
+    jumpToFailedOfMany: "跳到失败的 Turn（{{count}} 个）",
   },
   turnTable: {
     turn: "Turn",

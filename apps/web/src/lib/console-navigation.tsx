@@ -34,10 +34,12 @@ export function hashWithParams(base: string, params: RouteParams = {}): string {
 
 /**
  * What a link asks its target page to open on arrival, such as Add node from
- * Getting started. It lives only in memory: a reload, Back or any other
- * navigation drops it, so nothing reopens on its own.
+ * Getting started, a project's call samples, or the Session log filtered to an
+ * Agent (whose ID is the link's `id`) from Agent metrics. It lives only in
+ * memory: a reload, Back or any other navigation drops it, so nothing reopens
+ * on its own.
  */
-export type ConsoleIntent = "add-node" | "create-project" | "issue-key" | "getting-started" | "default-model";
+export type ConsoleIntent = "add-node" | "create-project" | "issue-key" | "getting-started" | "default-model" | "how-to-call" | "agent-sessions";
 
 /** Whether a page can act on an intent now, not yet, or not at all (then it drops the intent). */
 export type IntentReadiness = "ready" | "wait" | "unavailable";

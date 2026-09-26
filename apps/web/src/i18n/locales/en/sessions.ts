@@ -41,7 +41,6 @@ export const sessions = {
     created: "Created",
     lastActive: "Last active",
     actions: "Actions",
-    errorLabel: "Error",
     waitingLabel: "What the Session waits for",
     exactTokens: "{{tokens}} tokens",
     open: "Open Session {{id}}",
@@ -107,6 +106,8 @@ export const sessions = {
     unassociated: "Items without a Turn",
     steps: "{{n}} steps",
     tokens: "{{value}} tokens",
+    jumpToFailed: "Jump to the failed Turn",
+    jumpToFailedOfMany: "Jump to a failed Turn ({{count}})",
   },
   turnTable: {
     turn: "Turn",

@@ -1,4 +1,5 @@
 import type { SandboxDeployment, SandboxE2BTemplateBuild, SandboxProvider, SandboxResources, SandboxRuntimeRelease, SandboxSpecification } from "@agents-core-web/agents-client";
+import { RUNTIME_REF_PATTERN } from "./runtime-release";
 import standardSizes from "./standard-sizes.json";
 
 interface Manifest {
@@ -53,7 +54,7 @@ export async function distributionRuntime(signal: AbortSignal): Promise<SandboxR
   const image = /^sha256:[a-f0-9]{64}$/;
   if (manifest.platform !== "linux/amd64" || !/^[a-f0-9]{40}$/.test(manifest.source_commit ?? "")
     || !image.test(manifest.images?.runtime ?? "") || !image.test(manifest.image_manifest_digests?.runtime ?? "")
-    || !/^parsar-core-runtime@sha256:[a-f0-9]{64}$/.test(manifest.runtime_ref ?? "")
+    || !RUNTIME_REF_PATTERN.test(manifest.runtime_ref ?? "")
     || !hash.test(manifest.microsandbox?.runtime_sha256 ?? "") || !hash.test(manifest.microsandbox?.firmware_sha256 ?? "")) throw new Error("invalid distribution");
   return { source_commit: manifest.source_commit!, image_id: manifest.images!.runtime!, image_manifest_digest: manifest.image_manifest_digests!.runtime!,
     microsandbox_ref: manifest.runtime_ref!, runtime_sha256: manifest.microsandbox!.runtime_sha256!, firmware_sha256: manifest.microsandbox!.firmware_sha256! };

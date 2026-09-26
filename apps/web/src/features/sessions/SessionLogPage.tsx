@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useFailureToast } from "../../components/Toast";
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, SegmentedControl } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
-import { useConsoleNavigation } from "../../lib/console-navigation";
+import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatCompact, formatDateTime, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { CreatorCell, CreatorHeading, ProjectFilter, ProjectName, useCreators, useProjectCollection, useProjects, type Creators, type Owned, type ProjectFilterValue } from "../../lib/projects";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
@@ -47,11 +47,18 @@ export function SessionLogPage() {
   const { t, i18n } = useTranslation("sessions");
   const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
-  const { params, navigate } = useConsoleNavigation();
+  const { params, navigate, intent } = useConsoleNavigation();
   const { state: projects, byId, refresh: refreshProjects } = useProjects();
   const [project, setProject] = useState<ProjectFilterValue>(() => params.project ?? remembered.project);
-  // A linked ID (a Session or an Agent) prefills the search, like the other lists.
-  const [filters, setFilters] = useState<SessionLogFilters>(() => (params.id ? { ...initialSessionLogFilters, query: params.id } : remembered.filters));
+  // A linked ID (a Session or an Agent) prefills the search, like the other lists;
+  // a link that says it is an Agent's ("agent-sessions") sets the Agent filter instead.
+  const [filters, setFilters] = useState<SessionLogFilters>(() => (
+    !params.id ? remembered.filters
+      : intent === "agent-sessions" ? { ...initialSessionLogFilters, agentId: params.id }
+        : { ...initialSessionLogFilters, query: params.id }
+  ));
+  // The filter above already acted on it.
+  useConsoleIntent("agent-sessions", "ready", () => undefined);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [deleted, setDeleted] = useState<ReadonlySet<string>>(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState<SessionDeleteTarget | null>(null);
@@ -269,7 +276,7 @@ function SessionLogRow({
         <NameCell name={session.agent.name} id={session.id} fallback={t("common.untitledAgent")} onOpen={open} openLabel={t("log.open", { id: session.id })} />
       </th>
       {projectCell}
-      <td onClick={(event) => event.stopPropagation()}><SessionStatus session={session} /></td>
+      <td onClick={(event) => event.stopPropagation()}><SessionStatus session={session} truncate /></td>
       <td><code>{session.agent.model || MISSING}</code></td>
       <td className="session-nowrap">{t(`environment.${environmentKind(session)}`)}</td>
       <td className="numeric" title={session.usage ? t("log.exactTokens", { tokens: session.usage.total_tokens.toLocaleString(locale) }) : undefined}>

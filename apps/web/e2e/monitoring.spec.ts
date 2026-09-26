@@ -36,6 +36,42 @@ test("opens a Session's conversation from the Session log, read-only", async ({ 
   await expect(page.getByRole("textbox")).toHaveCount(0);
 });
 
+test("keeps a failed Session's reason in sight in the Session log and on its page", async ({ page, request }) => {
+  const reasons = /Sandbox allocation failed: node unavailable\.|Model provider returned 429 Too Many Requests\.|Tool call timed out after 300 s\./;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openConsole(page, request, "sessions");
+  await page.getByRole("radio", { name: /^Failed/ }).click();
+  const row = page.getByRole("row").filter({ hasText: reasons }).first();
+  const reason = (await row.getByText(reasons).textContent())!;
+  await expect(row.getByText(reason)).toHaveAttribute("title", reason);
+  // The reason never widens the table: its last column, Delete, stays in view without scrolling sideways.
+  await expect(row.getByRole("button", { name: /^Delete Session / })).toBeInViewport();
+  await row.getByRole("button", { name: /^Open Session / }).click();
+  await expect(page.getByLabel("Session facts")).toContainText(reason);
+  await page.getByRole("button", { name: /^Jump to (the|a) failed Turn/ }).click();
+  await expect(page.locator("li.chat-turn:focus")).toContainText("Failed");
+});
+
+test("opens an Agent's Sessions from its failed Turns on Agent metrics", async ({ page, request }) => {
+  await openConsole(page, request, "agent-metrics");
+  const link = /^\d+ failed Turns? — open .+'s Sessions$/;
+  const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: link }) }).first();
+  const failed = row.getByRole("button", { name: link });
+  await expect(failed).toHaveAttribute("title", link);
+  const agent = (await row.getByRole("rowheader").innerText()).trim();
+  const project = (await row.getByRole("cell").first().innerText()).trim();
+  await failed.click();
+  await expect(page.getByRole("heading", { name: "Session log", level: 1 })).toBeVisible();
+  // The log's own project and Agent filters, with every status.
+  await expect(page.getByRole("combobox", { name: "Project", exact: true })).toHaveText(project);
+  await expect(page.getByRole("combobox", { name: "Agent", exact: true })).toHaveText(agent);
+  await expect(page.getByRole("radio", { name: /^All/ })).toBeChecked();
+  await expect(page.getByRole("searchbox")).toHaveValue("");
+  const sessions = page.getByRole("table", { name: "Session log" }).getByRole("row");
+  await expect(sessions.nth(1)).toContainText(agent);
+  await expect(sessions.filter({ hasNotText: agent })).toHaveCount(1);
+});
+
 test("shows a self-hosted Session's install command, issues its credential once, and revokes and restores it", async ({ page, request }) => {
   await openConsole(page, request, "sessions");
   await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();

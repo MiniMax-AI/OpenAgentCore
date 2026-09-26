@@ -205,3 +205,15 @@
 .modal-card:has(.plaintext-key) {
   width: min(560px, 100%);
 }
+
+/* The name to type before archiving: exact, inner spaces kept visible. */
+.confirm-name {
+  padding: 0 4px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-subtle);
+  border-radius: 4px;
+}

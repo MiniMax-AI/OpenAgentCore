@@ -1,12 +1,12 @@
 import type { AgentSession } from "@agents-core-web/agents-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useFailureToast } from "../../components/Toast";
 import { DetailSkeleton } from "../../components/Skeleton";
-import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section, SegmentedControl } from "../../components/console-ui";
+import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, revealInPageBody, Section, SegmentedControl } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatDateTime, formatInteger, MISSING } from "../../lib/format";
@@ -16,7 +16,7 @@ import { forgetDeleted } from "../resources/detail-queries";
 import { ExecutorCredentialsSection } from "./ExecutorCredentialsSection";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
 import { sessionKey } from "./session-queries";
-import { isSessionActive } from "./session-history";
+import { isSessionActive, turnAnchorId } from "./session-history";
 import { environmentKind, isDeletable } from "./session-log";
 import { SessionStatus, useWaitingFor } from "./SessionStatus";
 import { hasObservableRuntime } from "./session-runtime";
@@ -54,6 +54,16 @@ export function SessionPage() {
   const queryClient = useQueryClient();
   const history = useSessionHistory(projectId, sessionId);
   const [view, setView] = useState<HistoryView>("conversation");
+  // A jump to a failed Turn: the Turn to show once its view is on screen. Repeated jumps go through every failed Turn.
+  const [jump, setJump] = useState<string | null>(null);
+  const jumps = useRef(0);
+  useEffect(() => {
+    if (!jump) return;
+    const target = document.getElementById(turnAnchorId(jump));
+    if (!target) return;
+    revealInPageBody(target);
+    setJump(null);
+  }, [jump, view]);
   const [deleteTarget, setDeleteTarget] = useState<SessionDeleteTarget | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const waitingFor = useWaitingFor();
@@ -93,6 +103,15 @@ export function SessionPage() {
   } else {
     const items = history.history?.items ?? [];
     const turns = history.history?.turns ?? [];
+    const failedTurns = turns.filter((turn) => turn.status === "failed");
+    const jumpToFailed = () => {
+      const target = failedTurns[jumps.current % failedTurns.length];
+      if (!target) return;
+      jumps.current += 1;
+      // The conversation shows the Turn with its error; without Items, the Turn table does.
+      setView(items.length ? "conversation" : "turns");
+      setJump(target.id);
+    };
     const usage = session.usage;
     const waiting = waitingFor(session);
     const metadata = Object.entries(session.metadata).filter(([key]) => key !== "title");
@@ -156,16 +175,21 @@ export function SessionPage() {
           title={t("history.title")}
           help={t("history.help")}
           actions={(
-            <SegmentedControl
-              label={t("history.view")}
-              value={view}
-              options={[
-                { value: "conversation", label: t("history.conversation") },
-                { value: "trace", label: t("history.trace") },
-                { value: "turns", label: t("history.turns"), count: formatInteger(turns.length, locale) },
-              ]}
-              onChange={setView}
-            />
+            <>
+              {failedTurns.length ? (
+                <button className="button outline" type="button" onClick={jumpToFailed}>{failedTurns.length > 1 ? t("history.jumpToFailedOfMany", { count: failedTurns.length }) : t("history.jumpToFailed")}</button>
+              ) : null}
+              <SegmentedControl
+                label={t("history.view")}
+                value={view}
+                options={[
+                  { value: "conversation", label: t("history.conversation") },
+                  { value: "trace", label: t("history.trace") },
+                  { value: "turns", label: t("history.turns"), count: formatInteger(turns.length, locale) },
+                ]}
+                onChange={setView}
+              />
+            </>
           )}
         >
           {view === "conversation" ? (

@@ -37,6 +37,7 @@ export const overview = {
       title: "Run the first Session",
       body: "Your app calls the /v1 Agents API with the project API key.",
       open: "Projects and keys",
+      howToCall: "See how to call",
     },
     complete: {
       title: "You're set",

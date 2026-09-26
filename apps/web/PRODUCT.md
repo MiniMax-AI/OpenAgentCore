@@ -70,8 +70,11 @@ workbench.
   duration, tokens, models, tools, Agents and API keys for 1 h / 6 h / 24 h / 7 d),
   Sandbox metrics (node capacity and hosted Runtimes across projects; a node or a
   sandbox opens in a dialog with its figures and CPU and memory charts), Session log
-  (every Session, read-only, opening one Session's history; a self-hosted
-  Session's page also has its environment's executor credentials).
+  (every Session, read-only, with a failed Session's reason under its status,
+  opening one Session's history, which jumps to its failed Turns; a self-hosted
+  Session's page also has its environment's executor credentials). Agent
+  metrics' By Agent table opens an Agent's page and, from its failed Turns, its
+  Sessions in the Session log.
 - **Resources**: Agents, Environment templates, Skills, Files, Vaults. Each list
   shows one project or all projects, with a Project column when all are shown and a
   Creator column naming the creating key. Detail pages show the resource's facts
@@ -110,7 +113,9 @@ workbench.
   ready (a saved deployment and a node online and ready, or a saved E2B deployment
   whose template build is not reported as not ready), a default model on the default
   harness (on any enabled harness when none is default),
-  a project with an active key, and a first Session. Completion comes from reads the
+  a project with an active key, and a first Session, whose action opens the call
+  samples of the newest active project, preferring one with an active key.
+  Completion comes from reads the
   console already makes. It can be hidden; Show Getting started in the sidebar
   opens it again, and it ends with a brief "You're set". The optional
   three-chapter tour of the console (Monitor, Resources, Platform) opens from it,
@@ -125,9 +130,13 @@ workbench.
 - **Projects and keys.** A project owns an isolated set of assets shared by all of
   its named API keys; projects do not see each other's assets. Issuing or revoking
   a key never touches assets. Archiving a project revokes every key and keeps its
-  assets viewable and deletable. Key plaintext is shown once, at issuance, and never
-  stored by the console. Beside it the console tells developers to set
-  `OPENAI_BASE_URL` (the installation's API base URL) and `OPENAI_API_KEY` (the key).
+  assets viewable and deletable; it can't be undone, so its confirmation says so,
+  counts the active keys it revokes and, when there are any, asks for the
+  project's name. Key plaintext is shown once, at issuance, and never
+  stored by the console. Beside it, and without the key on an active project's
+  page, the console tells developers to set `OPENAI_BASE_URL` (the installation's
+  API base URL) and `OPENAI_API_KEY` (a key of the project), with curl and Python
+  samples that list Agents and create a Session.
 - **Web API only.** Every read and write goes through `/core/v1/**`. The console
   holds no API key and sends nothing to `/v1`.
 - **No asset writes except delete.** Assets are created and changed only by

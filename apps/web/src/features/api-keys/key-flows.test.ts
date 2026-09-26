@@ -6,6 +6,8 @@ import {
   activeKeyNames,
   flowError,
   idleFlow,
+  archiveKeyCount,
+  isArchiveConfirmed,
   isUsableName,
   keyFlowReducer,
   keyNameProblem,
@@ -115,5 +117,21 @@ describe("helpers", () => {
     expect(matchesProject(project, "prod")).toBe(true);
     expect(matchesProject(project, "7F3A")).toBe(true);
     expect(matchesProject(project, "data")).toBe(false);
+  });
+
+  it("counts the keys archiving revokes from the project read, or from its key list when that shows more", () => {
+    const key = (id: string, projectId = project.id, revoked: number | null = null): AdminKey => ({ id, project_id: projectId, name: id, prefix: `pc_${id}`, created_at: 1, revoked_at: revoked });
+    const stale = { ...project, active_key_count: 0 };
+    expect(archiveKeyCount(stale, undefined)).toBe(0);
+    expect(archiveKeyCount(stale, [key("new"), key("old", project.id, 5), key("other", "proj_other")])).toBe(1);
+    expect(archiveKeyCount({ ...project, active_key_count: 3 }, [key("new")])).toBe(3);
+  });
+
+  it("archives a project with active keys only once its name is typed", () => {
+    expect([isArchiveConfirmed("Production", 1, ""), isArchiveConfirmed("Production", 1, "production"), isArchiveConfirmed("Production", 1, " Production ")]).toEqual([false, false, true]);
+    expect(isArchiveConfirmed("Production", 0, "")).toBe(true);
+    // Inner spaces count; a decomposed é matches the composed one.
+    expect([isArchiveConfirmed("Data  team", 1, "Data team"), isArchiveConfirmed("Data  team", 1, "Data  team")]).toEqual([false, true]);
+    expect(isArchiveConfirmed("Caf\u00e9", 1, "Cafe\u0301")).toBe(true);
   });
 });

@@ -1,10 +1,10 @@
 import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FolderKanban, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 
-import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
+import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, revealInPageBody } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
@@ -12,10 +12,12 @@ import { useFailureToast } from "../../components/Toast";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
-import { activeKeyNames, flowError, isAbort, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
+import { activeKeyNames, archiveKeyCount, flowError, isAbort, isArchiveConfirmed, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
+import { PROJECT_CALL_HEADING_ID } from "./HowToCall";
 import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
-import { invalidateProjects, projectActivityQuery, projectScope } from "./project-queries";
+import { invalidateProjects, projectActivityQuery, projectKeysQuery, projectScope, projectSummaryQuery } from "./project-queries";
+import { installationQuery } from "../../lib/installation";
 import { projectsQuery } from "../../lib/queries";
 import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
@@ -27,7 +29,8 @@ type Dialog =
   /** `thenIssue`: Getting started continues from the new project to its first key. */
   | { kind: "create"; name: string; thenIssue?: boolean }
   | { kind: "rename"; project: Project; name: string }
-  | { kind: "archive"; project: Project }
+  /** `typed`: the project name, required while it has active keys. */
+  | { kind: "archive"; project: Project; typed: string }
   | { kind: "revoke"; project: Project; key: AdminKey; activeCount: number };
 
 const manageable = (project: Project) => project.status === "active";
@@ -92,6 +95,30 @@ export function ProjectsPage() {
   useConsoleIntent("issue-key", selected ? (manageable(selected) && flow.step === "idle" ? "ready" : "unavailable") : state.status === "loading" ? "wait" : "unavailable", () => {
     if (selected) dispatch({ type: "openIssue", project: selected });
   });
+  // Getting started's last step opens a project on its call samples. It waits
+  // until the reads that size the page above them (keys, usage) and the
+  // samples themselves (the installation) settle, so the heading stays in view.
+  // The same reads as the project's page, which shows its call samples only while it is active.
+  const summary = useQuery({ ...projectSummaryQuery(selected?.id ?? ""), enabled: selected !== null });
+  const installation = useQuery({ ...installationQuery, enabled: selected !== null && manageable(selected) });
+  const settled = (query: { isFetching: boolean; isError: boolean; data: unknown }) => !query.isFetching && (query.data !== undefined || query.isError);
+  const callReadiness = !selected
+    ? (state.status === "loading" ? "wait" : "unavailable")
+    : !manageable(selected) ? "unavailable"
+      : keys.status !== "loading" && settled(summary) && settled(installation) ? "ready" : "wait";
+  useConsoleIntent("how-to-call", callReadiness, () => {
+    revealInPageBody(document.getElementById(PROJECT_CALL_HEADING_ID));
+  });
+
+  // The archive dialog counts the keys it revokes from the latest project read,
+  // or from the project's key list when that shows more. While the project list
+  // is read again, or after that read failed, the count may be out of date, so
+  // Archive waits.
+  const archiving = dialog?.kind === "archive" ? byId.get(dialog.project.id) ?? dialog.project : null;
+  const archiveKeys = useQuery({ ...projectKeysQuery(archiving?.id ?? ""), enabled: archiving !== null });
+  const archiveActive = archiving ? archiveKeyCount(archiving, archiveKeys.data) : 0;
+  const projectsStale = state.status === "failed" || refreshError !== null;
+  const projectsSettled = state.status === "ready" && !projectsStale;
 
   const dialogNameProblem = dialog?.kind === "create"
     ? projectNameProblem(dialog.name, names)
@@ -100,7 +127,9 @@ export function ProjectsPage() {
       : null;
   const dialogReady = !dialogBusy && (dialog?.kind === "create" || dialog?.kind === "rename"
     ? isUsableName(dialog.name, dialogNameProblem) && !(dialog.kind === "rename" && normalizeName(dialog.name) === dialog.project.name)
-    : Boolean(dialog));
+    : dialog?.kind === "archive" && archiving
+      ? projectsSettled && isArchiveConfirmed(archiving.name, archiveActive, dialog.typed)
+      : Boolean(dialog));
 
   const runDialog = async () => {
     if (!dialog || !dialogReady) return;
@@ -165,7 +194,7 @@ export function ProjectsPage() {
               {selected && manageable(selected) ? (
                 <>
                   <button className="button outline" type="button" onClick={() => openDialog({ kind: "rename", project: selected, name: selected.name })}>{t("actions.rename")}</button>
-                  <button className="button danger" type="button" aria-label={t("actions.archiveLabel", { name: selected.name })} onClick={() => openDialog({ kind: "archive", project: selected })}>{t("actions.archive")}</button>
+                  <button className="button danger" type="button" aria-label={t("actions.archiveLabel", { name: selected.name })} onClick={() => openDialog({ kind: "archive", project: selected, typed: "" })}>{t("actions.archive")}</button>
                 </>
               ) : null}
             </>
@@ -237,7 +266,7 @@ export function ProjectsPage() {
                           {manageable(project) ? (
                             <RowActions>
                               <button className="text-action" type="button" aria-label={t("actions.renameLabel", { name: project.name })} onClick={() => openDialog({ kind: "rename", project, name: project.name })}>{t("actions.rename")}</button>
-                              <button className="text-action danger" type="button" aria-label={t("actions.archiveLabel", { name: project.name })} onClick={() => openDialog({ kind: "archive", project })}>{t("actions.archive")}</button>
+                              <button className="text-action danger" type="button" aria-label={t("actions.archiveLabel", { name: project.name })} onClick={() => openDialog({ kind: "archive", project, typed: "" })}>{t("actions.archive")}</button>
                             </RowActions>
                           ) : null}
                         </td>
@@ -306,14 +335,26 @@ export function ProjectsPage() {
                 placeholder={t("createDialog.placeholder")}
                 disabled={dialogBusy}
               />
-            ) : dialog.kind === "archive" ? (
-              <p>{t("archiveDialog.prompt", { name: dialog.project.name })}</p>
-            ) : (
+            ) : dialog.kind === "archive" && archiving ? (
+              <>
+                <p><strong>{t("archiveDialog.prompt", { name: archiving.name })}</strong></p>
+                <p>{archiveActive ? t("archiveDialog.keys", { count: archiveActive }) : t("archiveDialog.noKeys")}</p>
+                <p>{t("archiveDialog.kept")}</p>
+                {archiveActive ? (
+                  <label className="field">
+                    {/* The name as typed, inner spaces visible, so it can be read and copied exactly. */}
+                    <span><Trans t={t} i18nKey="archiveDialog.typeName" components={{ name: <code className="confirm-name">{archiving.name}</code> }} /></span>
+                    <input name="archive-confirm-name" value={dialog.typed} onChange={(event) => setDialog({ ...dialog, typed: event.target.value })} disabled={dialogBusy} autoComplete="off" spellCheck={false} />
+                  </label>
+                ) : null}
+                {projectsStale ? <p className="key-flow-error" role="alert">{t("archiveDialog.stale")}</p> : null}
+              </>
+            ) : dialog.kind === "revoke" ? (
               <>
                 <p>{t("revokeDialog.prompt", { name: dialog.key.name, prefix: prefixLabel(dialog.key.prefix) })}</p>
                 {dialog.activeCount <= 1 ? <p>{t("revokeDialog.lastKey", { project: dialog.project.name })}</p> : null}
               </>
-            )}
+            ) : null}
             <FlowErrorMessage error={dialogError} name={dialog.kind === "create" || dialog.kind === "rename" ? normalizeName(dialog.name) : undefined} />
           </form>
         ) : null}
