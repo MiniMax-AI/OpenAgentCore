@@ -566,8 +566,11 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
             raise ParsarError(f"config.json not applied: {describe(error)}. The services were not all running with "
                               f"the previous files, so nothing was rolled back; run parsar status, fix the cause "
                               f"and {retry}") from None
-        # Record the restored files as parsar's own before writing them back.
-        save_state(root, record_digests(load_state(root), {name: data for name, data in disk.items() if data is not None}))
+        # Record the restored files as parsar's own before writing them back; a restored
+        # hand edit stays one.
+        restored = {name: data for name, data in disk.items()
+                    if data is not None and name in (state.get("generated") or {}) and name not in edited}
+        save_state(root, record_digests(load_state(root), restored))
         for name, data in disk.items():
             path = root / "generated" / name
             if data is None:

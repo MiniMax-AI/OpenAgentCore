@@ -296,6 +296,18 @@ class ParsarTests(unittest.TestCase):
                 self.apply()
                 self.assertConverged()
 
+    def test_a_hand_edit_restored_by_a_rollback_is_still_reported(self):
+        self.install()
+        path = self.root / "generated/core.env"
+        path.write_text(path.read_text() + "# hand edit\n")
+        self.host.core["rejects"] = lambda environment: 'AGENTS_API_EXECUTION_CONCURRENCY="5"' in environment
+        self.edit(lambda config: config["core"].update(execution_concurrency=5))
+        with self.assertRaisesRegex(parsar_cli.ParsarError, "services converged on them"):
+            self.apply(discard_edits=True)
+        self.assertIn("# hand edit", path.read_text())
+        self.assertIn("generated/core.env was edited by hand; put the change in config.json and run parsar apply "
+                      "--discard-edits", self.status())
+
     def test_the_next_apply_finishes_any_interrupted_apply_rotation_or_rollback(self):
         compose_stages = {
             "before any file": (parsar_cli, "save_state", lambda *a: True),
