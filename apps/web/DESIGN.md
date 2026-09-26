@@ -489,6 +489,12 @@ Every resource list, the Session log and the project list share one grammar:
   gaps, two columns below 900px). It starts with the ID (with its copy button) and
   the Project and includes the Creator.
 - Sections follow: usage figures in a KPI strip, then tables in cards.
+- A Session's **History** header holds an outline "Jump to the failed Turn" (with
+  the count when several failed) before the view switch while any Turn failed;
+  it shows the conversation (the Turn table when there are no Items), scrolls the
+  page body to the next failed Turn and focuses it.
+- An active project's page ends its keys with a **How to call** section (see
+  Dialogs) before its write operations.
 - A self-hosted Session's **Executor credentials** section ends with a **Connect
   a host** card when the console serves the self-hosted installer: a 13px/600
   title with a help tip (what revoke and rotate do to the host, how to reconnect,
@@ -509,7 +515,10 @@ request runs.
   confirm button (danger), whose label changes while busy. Core's reason for a
   rejection, or an uncertain-outcome warning, appears in red inside the dialog.
   The Skill page's delete dialogs follow the same grammar; deleting a whole Skill
-  also requires typing its name.
+  also requires typing its name. Archiving a project says in bold that it can't be
+  undone, then how many active keys it revokes (from the project read) and that
+  assets and accepted work stay; with active keys it too requires typing the
+  project's name.
 - **Key dialogs**: name fields carry their rules in a help tip and their problem in
   red underneath. The issued key appears in a read-only field with a copy button,
   under a notice that it is shown once; only "I've saved this key" dismisses it.
@@ -553,11 +562,17 @@ request runs.
 - **How to call**: wherever a new key is shown, a card under it gives three
   copyable samples, each a Margin Gray block with a Hairline and its label and copy
   button in a header row: a Shell block exporting `OPENAI_BASE_URL` (the
-  installation's API base URL) and `OPENAI_API_KEY` (the new key) together, a curl
-  request and a Python example with the pinned SDK. A copy the clipboard refuses
-  selects the sample and says so in red underneath. One Graphite line says running
-  an Agent needs a model provider: in each request, saved on the Agent, or the
-  deployment default. When the public address is loopback, a note above the
+  installation's API base URL) and `OPENAI_API_KEY` (the new key) together, then
+  curl and Python (with the pinned SDK), each listing the project's Agents and
+  creating a Session with a first message (`environment`, an inline `agent` with
+  `model: "<model>"`, and `input`). A copy the clipboard refuses
+  selects the sample and says so in red underneath. One Graphite line says to put
+  a model the model provider serves in place of `<model>`, and that running an
+  Agent needs a model provider: in each request, saved on the Agent, or the
+  deployment default. An active project's page shows the same samples as a
+  section without any key: the Shell block exports a quoted placeholder, and a
+  Graphite line above the samples says to use a key issued for this project,
+  shown only once at issuance. When the public address is loopback, a note above the
   samples says the API is reachable only on the Core machine; without a public
   address only a note to set one shows. Before the installation is read, a
   skeleton holds the first sample's place.
@@ -591,9 +606,11 @@ hidden element for assistive technology.
 ### Status dot
 A 7px circle plus a plain label at 12.5px: ok green, warning amber, danger red,
 pending Series 1 with a soft expanding ring while work is in progress, neutral
-Idle Gray. A failed Session's error and a waiting
-Session's required actions sit in a help tip beside the label. Never a coloured
-pill, never colour alone.
+Idle Gray. A waiting Session's required actions sit in a help tip beside the
+label. A failed Session's reason, as Core sent it, stays visible under the label
+in 12px Graphite: in full on the Session page, on one line cut at 220px with the
+full text in its tooltip in the Session log. Never a coloured pill, never colour
+alone.
 
 ### Meter
 A 6px pill rail in Meter Track with a neutral ink fill. The fill turns amber at 90%
@@ -614,7 +631,11 @@ first point; refreshes of the same range redraw in place.
 ### Tables
 A card with a sticky 34px Margin Gray header in Graphite 12px/500, 44px rows divided
 by Faint Rules, hover wash, right-aligned tabular numerics, clickable rows where a
-detail page exists, and the list grammar above.
+detail page exists, and the list grammar above. Agent metrics' By Agent table
+links a saved Agent's name to its page and a nonzero Failed figure (in its red) to
+the Session log filtered to that Agent and Failed; both turn indigo on hover. A
+key count in a section heading reads "3 active · 1 revoked" (revoked left out
+at zero).
 
 ### Notices
 Errors are popups, never lines inserted into a page. A failed action whose outcome
@@ -660,8 +681,11 @@ numbered ring (a check on the tile wash when done), a 13px/600 title over one
 pending, Unknown for a failed read) and one outline action while the step is to
 do: Set up sandboxes, Add node, Open Nodes or Open sandbox backend; Open System;
 Create project (which continues to the new project's first key) or Issue key;
-Projects and keys. Add node, Create project and Issue key open their page with the
-dialog already open; Open System focuses the default harness's Set or Replace. Every step done turns it into one line, "You're set", with Take the tour and
+See how to call (the newest active project, preferring one with an active key), or
+Projects and keys without an active project. Add node, Create project and Issue key
+open their page with the dialog already open; Open System focuses the default
+harness's Set or Replace; See how to call opens the project with its How to call
+heading at the top of the page body, focused. Every step done turns it into one line, "You're set", with Take the tour and
 Dismiss; it stays, through the tour, until dismissed, and the checklist does not
 come back on its own. The choice is kept per installation in the browser, also
 while the deployment cannot be read; Show Getting started, a quiet row above the
