@@ -1323,17 +1323,15 @@ def wait_ready(root, args, timeout=60):
     raise InstallError(detail + "; state and service are retained. Inspect " + journal + ", then rerun the installation command")
 
 
-def read_token(args, parser):
-    """The one-time token comes on standard input, never in argv or a sudo command line."""
-    # Until the Web console's command sends it on standard input, its no-sudo form passes it here.
-    environment = os.environ.pop("PARSAR_NODE_ENROLLMENT_TOKEN", None)
-    if args.enrollment_token_stdin and environment is not None:
-        parser.error("pass the enrollment token on standard input only")
-    if environment is not None and os.geteuid() == 0:
-        # `sudo VAR=... python3` would put the token in sudo's command line and log.
-        parser.error("with sudo or as root, pass the enrollment token on standard input with --enrollment-token-stdin")
+# A token in the environment could reach sudo's log (`sudo VAR=... python3`) and every
+# program the installer starts; it is refused rather than read.
+RETIRED_TOKEN_VARIABLE = "PARSAR_NODE_ENROLLMENT_TOKEN"
+
+
+def read_token(args):
+    """The one-time token comes on standard input, never in argv, the environment or a sudo command line."""
     if not args.enrollment_token_stdin:
-        return environment or ""
+        return ""  # A registered node's rerun uses its retained credential.
     if sys.stdin.isatty():
         return getpass.getpass("Enrollment token: ").strip()
     return sys.stdin.readline(4098).strip()
@@ -1351,12 +1349,14 @@ def main(argv=None):
     parser.add_argument("--uninstall", action="store_true", help="Remove this host's node after it was removed on the Nodes page")
     parser.add_argument("--force", action="store_true", help="With --uninstall: skip the Core check, for a Core that no longer exists")
     args = parser.parse_args(argv)
+    if RETIRED_TOKEN_VARIABLE in os.environ:
+        parser.exit(2, RETIRED_TOKEN_VARIABLE + " is retired: pass the enrollment token on standard input with "
+                       "--enrollment-token-stdin.\n")
     if str(uuid.UUID(args.installation_id)) != args.installation_id:
         raise InstallError("Installation ID must be a canonical UUID")
     if args.uninstall:
         if args.source_url or args.bundle or args.core_url or args.provider or args.enrollment_token_stdin:
             parser.error("--uninstall takes only --installation-id and --force")
-        os.environ.pop("PARSAR_NODE_ENROLLMENT_TOKEN", None)
         (uninstall_system if os.geteuid() == 0 else uninstall_user)(args)
         return
     if args.force:
@@ -1365,7 +1365,7 @@ def main(argv=None):
         parser.error("--source-url (or --bundle) and --core-url are required")
     if args.bundle is not None and (not args.bundle.is_absolute() or args.bundle.resolve() != args.bundle):
         raise InstallError("Local bundle must be an absolute directory without symlinks")
-    token = read_token(args, parser)
+    token = read_token(args)
     if len(token) > 4096 or any(c.isspace() for c in token):
         raise InstallError("A valid one-time enrollment credential is required")
     if os.geteuid() == 0:

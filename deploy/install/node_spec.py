@@ -91,7 +91,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False):
         except (KeyError, ValueError, TypeError, AttributeError):
             raise SpecificationError("Retained node identity differs or is invalid; preserve its state") from None
     elif not token:
-        raise SpecificationError("A one-time enrollment credential is required for a new node")
+        raise SpecificationError("A new node needs its one-time enrollment token on standard input (--enrollment-token-stdin); copy the command from Add node")
     request = urllib.request.Request(args.core_url + "/api/v1/sandbox-node/configuration", headers=headers)
     try:
         try:

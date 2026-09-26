@@ -134,7 +134,9 @@ serves one Core in sudo mode; a command from a second Core is refused. A host al
 can't run the same installation's node both with and without sudo.
 
 **The token.** It is single-use, expires after 10 minutes and only registers the node.
-A sudoers policy with `log_input` records standard input, and so the token.
+The installer takes it only on standard input and refuses it in the environment,
+where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy with
+`log_input` records standard input, and so the token.
 
 ## Rerun, expiry and slow links
 

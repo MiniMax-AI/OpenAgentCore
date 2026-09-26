@@ -203,7 +203,8 @@ and run the Web host's `parsar apply` afterwards.
 ### Upgrade notes
 
 These names are retired. Core and Web refuse to start while a retired setting is
-present, and `install.sh` rejects its retired flags; each error names the replacement:
+present, and the installers reject retired flags and variables; each error names the
+replacement:
 
 | Retired | Replacement | Where |
 | --- | --- | --- |
@@ -217,7 +218,7 @@ present, and `install.sh` rejects its retired flags; each error names the replac
 | `CORE_CONSOLE_AUTH_MODE`, `CORE_CONSOLE_STATE_DIR`, `CORE_CONSOLE_PASSWORD_FILE` | None: Web has no accounts or passwords; sign in with the Core key | Web environment, with their `state/console` and `config/console.password` mounts |
 | `install.sh --sandbox-provider`, `--provider` | `install.sh --sandbox`; add the Core host as a node with Add node | Installer flags |
 | `install.sh --status`, `--stop` | `parsar status`, `parsar stop` | Installer flags |
-| `PARSAR_NODE_ENROLLMENT_TOKEN` | The token on standard input with `--enrollment-token-stdin`, as Web's Add node command passes it | Node installer environment |
+| `PARSAR_NODE_ENROLLMENT_TOKEN` | The token on standard input with `--enrollment-token-stdin`, as Web's Add node command passes it | Node installer; it refuses the variable |
 
 Rename or remove the old names of an installation made before `config.json` before
 converting it. Hosted and self-hosted Sessions that relied on the retired options file
