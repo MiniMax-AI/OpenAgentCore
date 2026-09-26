@@ -30,11 +30,11 @@ value.
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| List projects | `GET /core/v1/projects` | Project filter on every project-scoped page; Projects and keys list; the Overview's Getting started (a project with an active key, and the newest active project, preferring one with an active key, whose call samples the first-Session step opens); `active_key_count` in the archive confirmation |
+| List projects | `GET /core/v1/projects` | Project filter on every project-scoped page; Projects and keys list; the Overview's Getting started (a project with an active key, and the newest active project, preferring one with an active key, whose call samples the first-Session step opens); `active_key_count` in the archive confirmation, which counts more when the project's key list shows more |
 | Create project | `POST /core/v1/projects` | **Create project**, also from Getting started |
 | Rename project | `POST /core/v1/projects/{project_id}` | **Rename** on an active project; the ID stays the same |
 | Archive project | `POST /core/v1/projects/{project_id}/archive` | **Archive**: revokes every key; the project's assets stay readable and deletable |
-| List keys | `GET /core/v1/projects/{project_id}/keys` | Key table of a project: name, prefix, status, creation and revocation time |
+| List keys | `GET /core/v1/projects/{project_id}/keys` | Key table of a project: name, prefix, status, creation and revocation time; the active keys the archive confirmation counts |
 | Issue key | `POST /core/v1/projects/{project_id}/keys` | **Issue key** on an active project, also from Getting started; the plaintext is shown once |
 | Revoke key | `DELETE /core/v1/projects/{project_id}/keys/{key_id}` | **Revoke**, with a warning when it is the project's last active key |
 

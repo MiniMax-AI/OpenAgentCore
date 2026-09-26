@@ -1,7 +1,7 @@
 import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FolderKanban, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, revealInPageBody } from "../../components/console-ui";
@@ -12,11 +12,11 @@ import { useFailureToast } from "../../components/Toast";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
-import { activeKeyNames, flowError, isAbort, isArchiveConfirmed, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
+import { activeKeyNames, archiveKeyCount, flowError, isAbort, isArchiveConfirmed, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
 import { PROJECT_CALL_HEADING_ID } from "./HowToCall";
 import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
-import { invalidateProjects, projectActivityQuery, projectScope } from "./project-queries";
+import { invalidateProjects, projectActivityQuery, projectKeysQuery, projectScope } from "./project-queries";
 import { projectsQuery } from "../../lib/queries";
 import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
@@ -99,8 +99,15 @@ export function ProjectsPage() {
     revealInPageBody(document.getElementById(PROJECT_CALL_HEADING_ID));
   });
 
-  // The archive dialog counts the keys it revokes from the latest project read.
+  // The archive dialog counts the keys it revokes from the latest project read,
+  // or from the project's key list when that shows more. While the project list
+  // is read again, or after that read failed, the count may be out of date, so
+  // Archive waits.
   const archiving = dialog?.kind === "archive" ? byId.get(dialog.project.id) ?? dialog.project : null;
+  const archiveKeys = useQuery({ ...projectKeysQuery(archiving?.id ?? ""), enabled: archiving !== null });
+  const archiveActive = archiving ? archiveKeyCount(archiving, archiveKeys.data) : 0;
+  const projectsStale = state.status === "failed" || refreshError !== null;
+  const projectsSettled = state.status === "ready" && !projectsStale;
 
   const dialogNameProblem = dialog?.kind === "create"
     ? projectNameProblem(dialog.name, names)
@@ -110,7 +117,7 @@ export function ProjectsPage() {
   const dialogReady = !dialogBusy && (dialog?.kind === "create" || dialog?.kind === "rename"
     ? isUsableName(dialog.name, dialogNameProblem) && !(dialog.kind === "rename" && normalizeName(dialog.name) === dialog.project.name)
     : dialog?.kind === "archive" && archiving
-      ? isArchiveConfirmed(archiving, dialog.typed)
+      ? projectsSettled && isArchiveConfirmed(archiving.name, archiveActive, dialog.typed)
       : Boolean(dialog));
 
   const runDialog = async () => {
@@ -320,14 +327,16 @@ export function ProjectsPage() {
             ) : dialog.kind === "archive" && archiving ? (
               <>
                 <p><strong>{t("archiveDialog.prompt", { name: archiving.name })}</strong></p>
-                <p>{archiving.active_key_count ? t("archiveDialog.keys", { count: archiving.active_key_count }) : t("archiveDialog.noKeys")}</p>
+                <p>{archiveActive ? t("archiveDialog.keys", { count: archiveActive }) : t("archiveDialog.noKeys")}</p>
                 <p>{t("archiveDialog.kept")}</p>
-                {archiving.active_key_count ? (
+                {archiveActive ? (
                   <label className="field">
-                    <span>{t("archiveDialog.typeName", { name: archiving.name })}</span>
+                    {/* The name as typed, inner spaces visible, so it can be read and copied exactly. */}
+                    <span><Trans t={t} i18nKey="archiveDialog.typeName" components={{ name: <code className="confirm-name">{archiving.name}</code> }} /></span>
                     <input name="archive-confirm-name" value={dialog.typed} onChange={(event) => setDialog({ ...dialog, typed: event.target.value })} disabled={dialogBusy} autoComplete="off" spellCheck={false} />
                   </label>
                 ) : null}
+                {projectsStale ? <p className="key-flow-error" role="alert">{t("archiveDialog.stale")}</p> : null}
               </>
             ) : dialog.kind === "revoke" ? (
               <>

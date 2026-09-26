@@ -516,9 +516,12 @@ request runs.
   rejection, or an uncertain-outcome warning, appears in red inside the dialog.
   The Skill page's delete dialogs follow the same grammar; deleting a whole Skill
   also requires typing its name. Archiving a project says in bold that it can't be
-  undone, then how many active keys it revokes (from the project read) and that
-  assets and accepted work stay; with active keys it too requires typing the
-  project's name.
+  undone, then how many active keys it revokes (the project read's count, or more
+  when its loaded key list shows more) and that assets and accepted work stay;
+  with active keys it too requires typing the project's name, shown in mono with
+  its inner spaces kept (surrounding spaces are forgiven, Unicode compared in NFC).
+  While the project list is read again Archive waits; if that read failed, a red
+  line says the count may be out of date and Archive stays disabled.
 - **Key dialogs**: name fields carry their rules in a help tip and their problem in
   red underneath. The issued key appears in a read-only field with a copy button,
   under a notice that it is shown once; only "I've saved this key" dismisses it.
