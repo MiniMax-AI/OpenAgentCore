@@ -16,6 +16,9 @@ import node_spec
 
 CHOICES = ("docker", "microsandbox", "e2b", "none")
 NAMES = {"docker": "Docker", "microsandbox": "microsandbox", "e2b": "E2B"}
+# The fields of each provider's size in Web's standard-sizes.json (standard-sizes.md).
+SIZE_FIELDS = {"docker": {"cpus", "memory_mib"},
+               "microsandbox": {"cpus", "memory_mib", "root_disk_mib", "environment_disk_mib"}}
 
 
 class SandboxSetupError(Exception):
@@ -91,7 +94,8 @@ def selection(bundle, manifest, choice, e2b=None):
         resources = json.loads((bundle / "standard-sizes.json").read_text())[choice]
     except (OSError, ValueError, KeyError, TypeError):
         resources = None
-    if not isinstance(resources, dict) or not all(type(value) is int for value in resources.values()):
+    if (not isinstance(resources, dict) or set(resources) != SIZE_FIELDS[choice]
+            or not all(type(value) is int for value in resources.values())):
         raise SandboxSetupError("The bundle's standard-sizes.json is invalid")
     return {"provider": choice, "resources": resources, "runtime": node_spec.release(manifest)}
 

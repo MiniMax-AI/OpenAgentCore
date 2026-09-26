@@ -235,11 +235,18 @@ class InstallerTests(unittest.TestCase):
             with self.subTest(flags=flags), self.assertRaisesRegex(install.InstallError, message):
                 self.install("--sandbox", "e2b", "--e2b-api-key-file", key, "--e2b-template", BUILD, *flags)
             self.assertFalse(self.root.exists())
+        link = self.work / "linked-e2b-key"
+        link.symlink_to(key)
+        large = self.work / "large-e2b-key"
+        large.write_text("x" * 5000)
+        large.chmod(0o600)
         key.chmod(0o644)
-        with self.assertRaisesRegex(install.InstallError, "E2B API key file must be .* private regular file"):
-            self.install("--sandbox", "e2b", "--e2b-api-key-file", key, "--e2b-template", BUILD,
-                         "--public-url", "https://core.example")
-        self.assertFalse(self.root.exists())
+        for source in (key, link, large):
+            with self.subTest(source=source), \
+                    self.assertRaisesRegex(install.InstallError, "E2B API key file must be .* private regular file"):
+                self.install("--sandbox", "e2b", "--e2b-api-key-file", source, "--e2b-template", BUILD,
+                             "--public-url", "https://core.example")
+            self.assertFalse(self.root.exists())
         key.chmod(0o600)
         self.install("--sandbox", "e2b", "--e2b-api-key-file", key, "--e2b-template", BUILD, "--public-url", "https://core.example")
         self.assertEqual(self.host.deployment_posts, [{"provider": "e2b", "e2b": {"api_key": secret, "template": BUILD}}])
@@ -256,6 +263,16 @@ class InstallerTests(unittest.TestCase):
             with self.subTest(flags=flags), self.assertRaisesRegex(install.InstallError, message):
                 self.install(*flags)
             self.assertFalse(self.root.exists())
+
+    def test_a_failed_first_start_says_the_sandbox_backend_was_not_chosen(self):
+        self.host.core["fails"] = True
+        with self.assertRaisesRegex(install.parsar_cli.ParsarError,
+                                    f"rerun ./install.sh --install-dir {self.root}. The sandbox backend was not chosen; "
+                                    "after the repair, choose it on the Nodes page in Web$"):
+            self.install("--sandbox", "microsandbox")
+        self.host.core["fails"] = False
+        self.install()
+        self.assertEqual(self.host.deployment_posts, [])
 
     def test_a_refused_selection_leaves_the_services_running(self):
         secret = "synthetic-e2b-key-0123456789"
@@ -291,9 +308,10 @@ class InstallerTests(unittest.TestCase):
                 path.write_bytes(original)
         checksums = self.bundle / "SHA256SUMS"
         original = checksums.read_text()
-        checksums.write_text("".join(line + "\n" for line in original.splitlines() if not line.endswith("  parsar.pyz")))
-        with self.assertRaisesRegex(install.InstallError, "incomplete"):
-            install.verify_bundle(self.bundle)
+        for name in ("parsar.pyz", "standard-sizes.json"):
+            checksums.write_text("".join(line + "\n" for line in original.splitlines() if not line.endswith("  " + name)))
+            with self.subTest(name=name), self.assertRaisesRegex(install.InstallError, "incomplete"):
+                install.verify_bundle(self.bundle)
         checksums.write_text(original + original.splitlines()[0] + "\n")
         with self.assertRaisesRegex(install.InstallError, "Duplicate"):
             install.verify_bundle(self.bundle)

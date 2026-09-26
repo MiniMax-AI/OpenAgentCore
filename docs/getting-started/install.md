@@ -276,8 +276,9 @@ same administrator API as Web's setup: `docker` (the default), `microsandbox`, `
 or `none`, the only choice with `--web-only`. Docker and microsandbox get Web's
 Standard size, read from the bundle's copy of
 `apps/web/src/features/sandbox/standard-sizes.json`, and the bundle's Runtime
-release. E2B takes its account key from a private file of at most 4 KiB
-(`--e2b-api-key-file`) and a ready template build (`--e2b-template
+release. E2B takes its account key from `--e2b-api-key-file`: the absolute path of a
+regular file, not a symlink, of at most 4 KiB, with no group or other access (for
+example mode 0600). It also takes a ready template build (`--e2b-template
 template-id:build-uuid`); each sandbox gets the build's CPU and memory. E2B needs
 an HTTPS `--public-url` that is not loopback; otherwise the installer refuses it
 before installing anything. A loopback installation keeps a Docker or microsandbox

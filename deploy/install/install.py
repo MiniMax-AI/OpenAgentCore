@@ -233,17 +233,26 @@ def check_public_url(config, choice):
                            "in the --config file)")
 
 
-def read_private_file(source, name):
-    """The one token in an absolute, private regular file of at most 4 KiB."""
+def read_private_file(source, name, limit=4096):
+    """The one token in an absolute, private regular file of at most 4 KiB, never through a symlink."""
+    refused = InstallError(f"{name} must be an absolute, private regular file of at most 4 KiB")
+    if not source.is_absolute():
+        raise refused
     try:
-        info = source.lstat()
+        # O_NONBLOCK: a FIFO in its place must not hang the installer.
+        descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
-        raise InstallError(f"{name} must be an absolute, private regular file") from None
-    if (not source.is_absolute() or not stat.S_ISREG(info.st_mode)
-            or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > 4096):
-        raise InstallError(f"{name} must be an absolute, private regular file")
-    token = source.read_text().strip()
-    if not token or any(c.isspace() for c in token) or "\x00" in token:
+        raise refused from None
+    with os.fdopen(descriptor, "rb") as stream:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > limit:
+            raise refused
+        raw = stream.read(limit + 1)
+    try:
+        token = raw.decode().strip()
+    except UnicodeDecodeError:
+        token = ""
+    if len(raw) > limit or not token or any(c.isspace() for c in token) or "\x00" in token:
         raise InstallError("Invalid " + name)
     return token
 
@@ -399,7 +408,14 @@ def finish(root, bundle, manifest, fresh=False, selection=None):
     native_service.prepare(root, state, bundle, converting)
     install_parsar(root, bundle)
     retry = f"rerun ./install.sh {'--convert ' if converting else ''}--install-dir {root}"
-    parsar_cli.apply(root, start=True, retry=retry)
+    try:
+        parsar_cli.apply(root, start=True, retry=retry)
+    except parsar_cli.ParsarError as error:
+        if not selection:
+            raise
+        # A repair never selects a backend, so the --sandbox choice would otherwise be lost silently.
+        raise parsar_cli.ParsarError(f"{str(error).rstrip('.')}. The sandbox backend was not chosen; after the "
+                                     f"repair, choose it {choose_where(state['mode'])}") from None
     config = parsar_cli.load_config(root)
     mode = config["mode"]
     # An earlier-release Core has no /core/v1/installation (404); apply noted it and Web still works.
@@ -417,10 +433,14 @@ def finish(root, bundle, manifest, fresh=False, selection=None):
         parsar_cli.save_state(root, state)
     summary(root, config, fresh, selection, deployment)
     if failure:
-        where = ("on the Nodes page in Web" if mode == "all" else
-                 "through the Core management API (POST /core/v1/sandbox/deployment)")
         raise InstallError(f"{str(failure).rstrip('.')}. Services are installed and running; "
-                           f"choose the sandbox backend {where}")
+                           f"choose the sandbox backend {choose_where(mode)}")
+
+
+def choose_where(mode):
+    """Where an operator chooses the sandbox backend when the installer did not."""
+    return ("on the Nodes page in Web" if mode == "all" else
+            "through the Core management API (POST /core/v1/sandbox/deployment)")
 
 
 def size(resources):
@@ -432,9 +452,7 @@ def sandbox_lines(root, config, selection, deployment):
     """What a new installation's sandboxes are and how nodes are added."""
     web = config["mode"] == "all"
     if selection is None:
-        return ["Sandboxes: none chosen. Choose a sandbox backend " + (
-            "on the Nodes page in Web." if web else
-            "through the Core management API (POST /core/v1/sandbox/deployment).")]
+        return [f"Sandboxes: none chosen. Choose a sandbox backend {choose_where(config['mode'])}."]
     if deployment is None:
         return []  # The error that follows says what to do.
     if selection["provider"] == "e2b":

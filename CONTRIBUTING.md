@@ -1730,7 +1730,7 @@ environment and has no config loader; it serves the non-secret snapshot at
 (`config_model.py`), the generator and the generated reference table in
 `docs/configuration.md` (`scripts/config-reference.py`) in step. Do not add a
 second operator configuration file, loader precedence, hot reload, compatibility
-reading of retired names, or an embedded Core node. Explicit local-node flags call
+reading of retired names, or an embedded Core node. `install.sh --sandbox` calls
 the ordinary administrator API once; PostgreSQL owns the resulting selection.
 Administrator-issued enrollment approves capacity (default two active/eight
 retained); a node cannot supply or overwrite those limits. Downloaded specification
