@@ -269,7 +269,7 @@ function SessionLogRow({
         <NameCell name={session.agent.name} id={session.id} fallback={t("common.untitledAgent")} onOpen={open} openLabel={t("log.open", { id: session.id })} />
       </th>
       {projectCell}
-      <td onClick={(event) => event.stopPropagation()}><SessionStatus session={session} /></td>
+      <td onClick={(event) => event.stopPropagation()}><SessionStatus session={session} truncate /></td>
       <td><code>{session.agent.model || MISSING}</code></td>
       <td className="session-nowrap">{t(`environment.${environmentKind(session)}`)}</td>
       <td className="numeric" title={session.usage ? t("log.exactTokens", { tokens: session.usage.total_tokens.toLocaleString(locale) }) : undefined}>

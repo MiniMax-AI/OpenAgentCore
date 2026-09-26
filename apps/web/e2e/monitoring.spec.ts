@@ -36,6 +36,19 @@ test("opens a Session's conversation from the Session log, read-only", async ({ 
   await expect(page.getByRole("textbox")).toHaveCount(0);
 });
 
+test("keeps a failed Session's reason in sight in the Session log and on its page", async ({ page, request }) => {
+  const reasons = /Sandbox allocation failed: node unavailable\.|Model provider returned 429 Too Many Requests\.|Tool call timed out after 300 s\./;
+  await openConsole(page, request, "sessions");
+  await page.getByRole("radio", { name: /^Failed/ }).click();
+  const row = page.getByRole("row").filter({ hasText: reasons }).first();
+  const reason = (await row.getByText(reasons).textContent())!;
+  await expect(row.getByText(reason)).toHaveAttribute("title", reason);
+  await row.getByRole("button", { name: /^Open Session / }).click();
+  await expect(page.getByLabel("Session facts")).toContainText(reason);
+  await page.getByRole("button", { name: /^Jump to (the|a) failed Turn/ }).click();
+  await expect(page.locator("li.chat-turn:focus")).toContainText("Failed");
+});
+
 test("shows a self-hosted Session's install command, issues its credential once, and revokes and restores it", async ({ page, request }) => {
   await openConsole(page, request, "sessions");
   await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();

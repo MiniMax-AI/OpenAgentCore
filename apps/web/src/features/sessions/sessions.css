@@ -556,3 +556,43 @@
 .executor-install-separator {
   margin-right: 8px;
 }
+
+/* A failed Session's reason, as Core sent it, under its status: in full on the
+   Session page, one truncated line in the Session log (full text in the tooltip). */
+.session-status {
+  display: inline-flex;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.session-status-reason {
+  padding-left: 13px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.session-status-truncated {
+  display: flex;
+  max-width: 220px;
+}
+
+.session-status-truncated .session-status-reason {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A jump to a failed Turn focuses it; only keyboard focus draws a ring. */
+.chat-turn:focus,
+.session-turns-table tr:focus {
+  outline: none;
+}
+
+.chat-turn:focus-visible,
+.session-turns-table tr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}

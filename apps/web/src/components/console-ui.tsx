@@ -141,6 +141,18 @@ export function PageBody({ children, className }: { children: ReactNode; classNa
   return <div className={["console-page-body", className].filter(Boolean).join(" ")}>{children}</div>;
 }
 
+/**
+ * Scrolls the page body so `element` sits at its top, then focuses it. Only
+ * the body scrolls: `scrollIntoView` would also shift the page, whose
+ * overflow is hidden, and push the page header out of sight.
+ */
+export function revealInPageBody(element: HTMLElement | null): void {
+  if (!element) return;
+  const body = element.closest<HTMLElement>(".console-page-body");
+  if (body) body.scrollTop += element.getBoundingClientRect().top - body.getBoundingClientRect().top - 12;
+  element.focus({ preventScroll: true });
+}
+
 export function Section({
   title,
   help,
