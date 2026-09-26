@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Install and enroll one node from its Core console's matched distribution."""
 import argparse
+import codecs
 import contextlib
+import ctypes
+import errno
 import fcntl
 import getpass
 import grp
@@ -504,53 +507,97 @@ class ChildFailed(Exception):
     """The service-user step failed and already printed why."""
 
 
+# What a service-user step must not send to the administrator's terminal: C0 controls
+# other than tab and newline, DEL and C1. ESC starts OSC 52 clipboard writes, title
+# changes and cursor moves; carriage returns and erases could hide or forge lines.
+TERMINAL_CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def plain(text, encoding=None):
+    """Text the terminal shows as written, in an encoding the stream can write."""
+    encoding = encoding or "utf-8"
+    return TERMINAL_CONTROLS.sub("?", text).encode(encoding, "replace").decode(encoding)
+
+
 def relay(output, errors):
-    """Copy the child's stdout and stderr pipes to ours until both close."""
-    streams = {output: sys.stdout, errors: sys.stderr}
+    """Copy the child's stdout and stderr pipes to ours as plain text until both close."""
+    streams = {output: (sys.stdout, codecs.getincrementaldecoder("utf-8")("replace")),
+               errors: (sys.stderr, codecs.getincrementaldecoder("utf-8")("replace"))}
     with selectors.DefaultSelector() as selector:
         for descriptor in streams:
             selector.register(descriptor, selectors.EVENT_READ)
         while streams:
             for key, _ in selector.select():
                 data = os.read(key.fd, 65536)
+                stream, decoder = streams[key.fd]
+                # The decoder keeps a character split across reads until its last byte arrives.
+                text = plain(decoder.decode(data, final=not data), getattr(stream, "encoding", None))
+                if text:
+                    stream.write(text)
+                    stream.flush()
                 if not data:
                     selector.unregister(key.fd)
                     os.close(key.fd)
                     del streams[key.fd]
-                    continue
-                streams[key.fd].write(data.decode(errors="replace"))
-                streams[key.fd].flush()
+
+
+STOP_WAIT_SECONDS = 5
+
+
+def signal_child(pid, number):
+    # The child's own process group once it has started its session, and the child
+    # itself before then. It is never reaped before this, so pid is still its own.
+    for send in (os.killpg, os.kill):
+        with contextlib.suppress(ProcessLookupError):
+            send(pid, number)
 
 
 def stop_child(pid):
     """End the child and everything it started; its own session gets no terminal signals."""
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(pid, signal.SIGTERM)
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        if os.waitpid(pid, os.WNOHANG)[0]:
-            return
+    def exited():
+        # WNOWAIT leaves the child a zombie, so its process group ID cannot be reused
+        # before the SIGKILL below reaches what the child left running.
+        return os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+    try:
+        exited()
+    except ChildProcessError:
+        return  # Already reaped.
+    signal_child(pid, signal.SIGTERM)
+    deadline = time.monotonic() + STOP_WAIT_SECONDS
+    while not exited() and time.monotonic() < deadline:
         time.sleep(0.1)
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(pid, signal.SIGKILL)
+    signal_child(pid, signal.SIGKILL)
     os.waitpid(pid, 0)
 
 
 def interrupted(number, frame):
-    raise InstallError("The installation was interrupted; run the command again to continue.")
+    raise InstallError(INTERRUPTED)
 
 
+INTERRUPTED = "The command was interrupted; run it again to continue."
 # The child's own session gets none of the terminal's signals, so while it runs the
 # parent turns these into an error that stops the child before the parent exits.
 STOP_SIGNALS = (signal.SIGINT, signal.SIGHUP, signal.SIGTERM)
+KEYCTL_SYSCALL = 250  # x86_64, the only architecture this installer supports.
+KEYCTL_JOIN_SESSION_KEYRING = 1
+PR_SET_PDEATHSIG = 1
+
+
+def libc_call(name, *arguments):
+    function = getattr(ctypes.CDLL(None, use_errno=True), name)
+    function.restype = ctypes.c_long
+    if function(*(ctypes.c_long(argument) for argument in arguments)) == -1:
+        number = ctypes.get_errno()
+        raise OSError(number, os.strerror(number))
 
 
 def as_service_user(account, function, *arguments):
     """Run a step with the service user's credentials in a forked child.
 
     The child starts a new session with /dev/null as standard input and pipes as
-    output, so no program it runs holds the administrator's terminal (TIOCSTI).
-    Interrupting the installer or closing its terminal stops the child too.
+    output, so no program it runs holds the administrator's terminal (TIOCSTI); the
+    parent shows that output only as plain text. Interrupting the installer or
+    closing its terminal stops the child too, and the child dies with the parent.
     Every installer module is already imported, so the child never reads the root
     caller's private copy of this program, and the token stays in memory. Files the
     service user owns are read, written and deleted only here, never by root."""
@@ -558,37 +605,49 @@ def as_service_user(account, function, *arguments):
     sys.stderr.flush()
     output_read, output_write = os.pipe()
     errors_read, errors_write = os.pipe()
+    parent = os.getpid()
     previous = {number: signal.getsignal(number) for number in STOP_SIGNALS}
-    for number, handler in previous.items():
-        if handler is not signal.SIG_IGN:  # As under nohup, an ignored signal stays ignored.
-            signal.signal(number, interrupted)
+    # Held from before the fork until each side has its handlers, so neither a signal
+    # nor the resulting error can reach the wrong process.
+    mask = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+    pid = None
     try:
+        for number, handler in previous.items():
+            if handler is not signal.SIG_IGN:  # As under nohup, an ignored signal stays ignored.
+                signal.signal(number, interrupted)
         pid = os.fork()
         if pid == 0:
-            service_child(account, function, arguments, (output_read, errors_read), output_write, errors_write)
+            service_child(account, function, arguments, parent, mask, (output_read, errors_read), output_write, errors_write)
+        signal.pthread_sigmask(signal.SIG_SETMASK, mask)
         os.close(output_write)
         os.close(errors_write)
-        try:
-            relay(output_read, errors_read)
-            _, status = os.waitpid(pid, 0)
-        except BaseException:
-            for number in STOP_SIGNALS:  # A second signal must not cut the stop short.
-                signal.signal(number, signal.SIG_IGN)
+        relay(output_read, errors_read)
+        _, status = os.waitpid(pid, 0)
+    except BaseException:
+        for number in STOP_SIGNALS:  # A second signal must not cut the stop short.
+            signal.signal(number, signal.SIG_IGN)
+        if pid:
             stop_child(pid)
-            raise
+        raise
     finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, mask)
         for number, handler in previous.items():
             signal.signal(number, handler)
+    if os.WIFSIGNALED(status):
+        number = os.WTERMSIG(status)
+        raise ChildFailed("The step running as " + SERVICE_USER + " was stopped by signal " + str(number)
+                          + " (" + (signal.strsignal(number) or "unknown") + "). Run the command again to continue.")
     if not os.WIFEXITED(status) or os.WEXITSTATUS(status) != 0:
         raise ChildFailed()
 
 
-def service_child(account, function, arguments, read_ends, output_write, errors_write):
+def service_child(account, function, arguments, parent, mask, read_ends, output_write, errors_write):
     """The forked child of as_service_user; it never returns into the root caller's code."""
     code = 1
     try:
         for number in STOP_SIGNALS:
             signal.signal(number, signal.SIG_DFL)
+        signal.pthread_sigmask(signal.SIG_SETMASK, mask)
         for descriptor in read_ends:
             os.close(descriptor)
         os.setsid()
@@ -604,6 +663,19 @@ def service_child(account, function, arguments, read_ends, output_write, errors_
         os.setgroups(os.getgrouplist(account.pw_name, account.pw_gid))
         os.setgid(account.pw_gid)
         os.setuid(account.pw_uid)
+        try:
+            # The session keyring survives fork, setuid and exec and gives its possessor
+            # the administrator's keys (keyrings(7)); join a new, empty one instead.
+            libc_call("syscall", KEYCTL_SYSCALL, KEYCTL_JOIN_SESSION_KEYRING, 0)
+        except OSError as error:
+            if error.errno != errno.ENOSYS:  # Without kernel keyrings there is none to leave.
+                raise InstallError("Cannot give the " + SERVICE_USER + " step its own session keyring: "
+                                   + error.strerror + ". Inspect the host, then rerun the command.") from None
+        # Set after setuid, which clears it: the child dies with the parent, and a
+        # parent that already died is noticed here.
+        libc_call("prctl", PR_SET_PDEATHSIG, signal.SIGKILL)
+        if os.getppid() != parent:
+            os._exit(1)
         os.umask(0o077)
         os.environ.clear()
         os.environ.update(HOME=account.pw_dir, USER=account.pw_name, LOGNAME=account.pw_name, PATH=SAFE_PATH,
@@ -1089,7 +1161,8 @@ def remove_node_files(root, installation_id):
     runtime_home = micro_home(installation_id)
     if root.exists():
         shutil.rmtree(root)
-    if image:
+    # The service user can write provider.json; print only what an image ID can be.
+    if isinstance(image, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", image):
         print("Kept the Runtime image " + image + "; remove it with `docker image rm " + image + "` if no other node uses it.")
     if runtime_home.exists():
         sudo_mode = str(Path.home()) == str(SERVICE_HOME)
@@ -1151,7 +1224,8 @@ def release_account(account, record):
     if record.get("created"):
         stores = [str(SERVICE_HOME / ".parsar/m" / name) for name in listdir_nofollow(SERVICE_HOME, ".parsar", "m")]
         if stores:
-            print("Kept the " + SERVICE_USER + " user while microsandbox stores remain: " + ", ".join(stores)
+            # The names come from the service user's home; show them only as plain text.
+            print("Kept the " + SERVICE_USER + " user while microsandbox stores remain: " + plain(", ".join(stores), sys.stdout.encoding)
                   + ". Remove them with `sudo -u " + SERVICE_USER + " rm -rf <store>`, then rerun this uninstall command.")
             return
         checked(["userdel", SERVICE_USER], "Cannot remove the " + SERVICE_USER + " user; stop its processes and rerun the uninstall command")
@@ -1303,8 +1377,13 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         main()
-    except ChildFailed:
+    except ChildFailed as failure:
+        if str(failure):
+            print(str(failure), file=sys.stderr)
         sys.exit(1)
+    except KeyboardInterrupt:  # Ctrl-C outside the service-user steps, as while waiting for the host lock.
+        print(INTERRUPTED, file=sys.stderr)
+        sys.exit(130)
     except (InstallError, node_spec.SpecificationError, distribution.DistributionError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         print(str(error) if isinstance(error, (InstallError, node_spec.SpecificationError, distribution.DistributionError)) else "Node installation failed; check host prerequisites and retained private files", file=sys.stderr)
         sys.exit(1)

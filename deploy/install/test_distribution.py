@@ -122,6 +122,13 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(self.if_ranges, [None, 'Sat, 26 Sep 2026 00:00:00 GMT'])
         self.assertEqual([path.name for path in self.root.iterdir()], ['node'])
 
+    def test_a_stalled_download_stops_and_keeps_its_part(self):
+        with patch.object(distribution, 'SLOW_SECONDS', 0), \
+                self.assertRaisesRegex(distribution.DistributionError, 'stalled.*rerun the command to resume'):
+            distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
+        self.assertEqual(len(self.requests), 1)  # Not retried as a network error.
+        self.assertEqual([path.name for path in self.root.iterdir()], ['.node.partial'])
+
     def test_offline_and_runtime_expansion_are_verified(self):
         raw = b'synthetic tar contents' * 1000
         self.data = gzip.compress(raw)

@@ -210,6 +210,10 @@ def copy_artifact(source, target, entry, logical_path):
             os.unlink(temporary)
 
 
+# A download that brings fewer bytes than this in a window stops; a rerun resumes it.
+SLOW_SECONDS, SLOW_BYTES = 60, 64 * 1024
+
+
 def download_partial(url, partial, entry, logical_path):
     """Complete the partial file, asking only for the bytes it is missing."""
     size = entry['size']
@@ -247,8 +251,9 @@ def download_partial(url, partial, entry, logical_path):
         flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_APPEND if offset else os.O_TRUNC)
         with os.fdopen(os.open(partial, flags, 0o600), 'ab' if offset else 'wb') as output:
             count, reported = offset, offset * 10 // size
+            window, window_count = time.monotonic(), 0
             while True:
-                block = stream.read(1024 * 1024)
+                block = stream.read1(1024 * 1024)
                 if not block:
                     break
                 count += len(block)
@@ -257,9 +262,21 @@ def download_partial(url, partial, entry, logical_path):
                     discard_partial(partial)
                     raise DistributionError('Artifact exceeds published size: ' + logical_path)
                 output.write(block)
+                window_count += len(block)
+                if time.monotonic() - window >= SLOW_SECONDS:
+                    if window_count < SLOW_BYTES:
+                        raise DistributionError(f'Artifact download stalled (under {SLOW_BYTES // 1024} KiB in {SLOW_SECONDS} s): '
+                                                f'{logical_path}. The downloaded part is kept; check the network, then rerun '
+                                                'the command to resume.')
+                    window, window_count = time.monotonic(), 0
                 if size >= 50 * 1024 * 1024 and count * 10 // size > reported:
                     reported = count * 10 // size
-                    print(f'Downloading {logical_path}: {reported * 10}% of {size // (1024 * 1024)} MiB', flush=True)
+                    try:
+                        print(f'Downloading {logical_path}: {reported * 10}% of {size // (1024 * 1024)} MiB', flush=True)
+                    except BrokenPipeError:
+                        # Nobody reads the output any more (the installer's terminal is gone);
+                        # stop instead of retrying it as a network error.
+                        raise DistributionError('Output closed; stopped downloading ' + logical_path) from None
         if count != size:
             raise http.client.IncompleteRead(b'', size - count)
 

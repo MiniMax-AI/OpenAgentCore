@@ -161,7 +161,8 @@ entries and exact imported images, then waits for Core to confirm connection and
 provider readiness. The enrollment token
 is transient and never a console/project credential; the command passes it to the
 installer on standard input (`--enrollment-token-stdin`), never in a process argument,
-an environment variable or sudo's log.
+an environment variable or sudo's log. A download that brings less than 64 KiB in a
+minute stops; the downloaded part is kept, and running a new command resumes it.
 
 The installer chooses how the node runs from the user that runs it:
 
@@ -185,8 +186,9 @@ The installer chooses how the node runs from the user that runs it:
   without sudo is found in the invoking user's home or, for Docker, by its network
   on the same engine; other users' homes are not searched. The steps that run as
   `parsar-node` start in their own session with no terminal, so nothing they run
-  can reach the administrator's terminal. Interrupting the installer or closing
-  its terminal stops those steps as well.
+  can reach the administrator's terminal, and their output appears only as plain
+  text. Interrupting the installer or closing its terminal stops those steps as
+  well.
 
   **Docker mode is root-equivalent.** Membership in the `docker` group lets
   `parsar-node`, and so anything that controls the node, act as root on that host.

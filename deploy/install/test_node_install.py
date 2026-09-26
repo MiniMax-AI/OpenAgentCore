@@ -1,5 +1,6 @@
 """Exercise node installation without running providers or changing user services."""
 import argparse
+import fcntl
 import hashlib
 import gzip
 import io
@@ -10,6 +11,7 @@ import signal
 import socket
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -20,6 +22,19 @@ from unittest import mock
 import node_install as installer
 import node_spec
 
+
+
+def ended(pid, wait=5):
+    """The process is gone or a zombie waiting for its new parent to reap it."""
+    deadline = time.monotonic() + wait
+    while time.monotonic() < deadline:
+        try:
+            if Path("/proc/%d/stat" % pid).read_text().rsplit(")", 1)[1].split()[0] == "Z":
+                return True
+        except (FileNotFoundError, ProcessLookupError):
+            return True
+        time.sleep(0.05)
+    return False
 
 class Response(io.BytesIO):
     """An HTTP response body with the status and headers the downloader reads."""
@@ -503,41 +518,103 @@ class NodeInstallTests(unittest.TestCase):
         with mock.patch.object(installer.os, "getgrouplist", return_value=[990, 27]):
             self.assertFalse(installer.ours(account))
 
+    def service_step(self, function, output=None, errors=None):
+        """Run function through the real fork of as_service_user, as this test's user."""
+        account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
+                                  pw_dir=str(self.home), pw_shell="/usr/sbin/nologin")
+        with mock.patch.object(installer.os, "setgroups"), mock.patch.object(installer.os, "setgid"), \
+                mock.patch.object(installer.os, "setuid"), mock.patch.object(installer.sys, "stdout", output or io.StringIO()), \
+                mock.patch.object(installer.sys, "stderr", errors or io.StringIO()):
+            installer.as_service_user(account, function)
+
     def test_service_user_step_has_no_terminal_and_reads_nothing(self):
         """The forked child starts its own session with /dev/null as input; its output is relayed."""
-        account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
-                                  pw_dir=str(self.home), pw_shell="/usr/sbin/nologin")
-
         def probe():
-            print("session-leader=%s stdin=%s docker-config=%s" % (os.getsid(0) == os.getpid(),
-                  os.readlink("/proc/self/fd/0"), os.environ["DOCKER_CONFIG"]))
+            try:
+                open("/dev/tty").close()
+                tty = "opened"
+            except OSError:
+                tty = "unavailable"
+            print("session-leader=%s stdin=%s docker-config=%s tty=%s" % (os.getsid(0) == os.getpid(),
+                  os.readlink("/proc/self/fd/0"), os.environ["DOCKER_CONFIG"], tty))
         output = io.StringIO()
-        with mock.patch.object(installer.os, "setgroups"), mock.patch.object(installer.os, "setgid"), \
-                mock.patch.object(installer.os, "setuid"), mock.patch.object(installer.sys, "stdout", output):
-            installer.as_service_user(account, probe)
-        self.assertIn("session-leader=True stdin=/dev/null docker-config=" + str(installer.CHILD_DOCKER_CONFIG), output.getvalue())
+        self.service_step(probe, output)
+        self.assertIn("session-leader=True stdin=/dev/null docker-config=" + str(installer.CHILD_DOCKER_CONFIG) + " tty=unavailable",
+                      output.getvalue())
 
-    def test_closing_the_terminal_stops_the_service_user_step(self):
-        """The child's own session misses SIGHUP; the installer must stop and reap it before it exits."""
-        account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
-                                  pw_dir=str(self.home), pw_shell="/usr/sbin/nologin")
-        record = self.home / "child.pid"
+    def test_service_user_output_reaches_the_terminal_as_plain_text(self):
+        def forge():
+            os.write(1, b"\x1b]52;c;ZWNobyBoaQ==\x07copied\r\x1b[2KFinish with: sudo sh\n")
+            os.write(1, "caf\u00e9".encode()[:-1])  # A character split across two reads.
+            time.sleep(0.2)
+            os.write(1, "caf\u00e9".encode()[-1:] + b"\n")
+            os.write(2, b"\x1b]0;title\x07\xc2\x9bwarning\n")
+        output, errors = io.StringIO(), io.StringIO()
+        self.service_step(forge, output, errors)
+        self.assertEqual(output.getvalue(), "?]52;c;ZWNobyBoaQ==?copied??[2KFinish with: sudo sh\ncaf\u00e9\n")
+        self.assertEqual(errors.getvalue(), "?]0;title??warning\n")
+
+    def test_uninstall_prints_only_an_image_id_from_the_service_home(self):
+        root = self.home / "node"
+        root.mkdir()
+        (root / "provider.json").write_text(json.dumps({"docker": {"image": "x\nFinish with: sudo sh"}}))
+        output = io.StringIO()
+        with mock.patch.object(installer.sys, "stdout", output):
+            installer.remove_node_files(root, self.args.installation_id)
+        self.assertNotIn("Finish", output.getvalue())
+
+    def test_service_user_step_gets_its_own_session_keyring(self):
+        libc = installer.ctypes.CDLL(None, use_errno=True)
+        libc.syscall.restype = installer.ctypes.c_long
+
+        def session_keyring():  # KEYCTL_GET_KEYRING_ID of KEY_SPEC_SESSION_KEYRING
+            return libc.syscall(*(installer.ctypes.c_long(value) for value in (installer.KEYCTL_SYSCALL, 0, -3, 0)))
+        before = session_keyring()
+        if before == -1:
+            self.skipTest("keyctl is unavailable here")
+        output = io.StringIO()
+        self.service_step(lambda: print("keyring=%d" % session_keyring()), output)
+        inside = int(output.getvalue().split("keyring=")[1])
+        self.assertGreater(inside, 0)
+        self.assertNotEqual(inside, before)
+
+    def test_closing_the_terminal_stops_the_step_and_everything_it_started(self):
+        """The child's own session misses SIGHUP; the installer stops it and what it started, and frees the lock."""
+        record = self.home / "pids"
         # As in a terminal session; a runner under nohup would otherwise ignore SIGHUP.
         self.addCleanup(signal.signal, signal.SIGHUP, signal.signal(signal.SIGHUP, signal.SIG_DFL))
 
         def long_step():
-            record.write_text(str(os.getpid()))
+            # A program that ignores SIGTERM: only the SIGKILL to the child's process group ends it.
+            stubborn = subprocess.Popen([sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, "
+                                         "signal.SIG_IGN); print(flush=True); time.sleep(60)"], stdout=subprocess.PIPE)
+            stubborn.stdout.readline()
+            record.write_text("%d %d" % (os.getpid(), stubborn.pid))
             os.kill(os.getppid(), signal.SIGHUP)  # The administrator's terminal closes.
             time.sleep(30)
         started = time.monotonic()
-        with mock.patch.object(installer.os, "setgroups"), mock.patch.object(installer.os, "setgid"), \
-                mock.patch.object(installer.os, "setuid"), mock.patch.object(installer.sys, "stdout", io.StringIO()), \
+        with mock.patch.object(installer, "SYSTEM_LOCKS", self.home), mock.patch.object(installer.os, "geteuid", return_value=0), \
                 self.assertRaisesRegex(installer.InstallError, "interrupted"):
-            installer.as_service_user(account, long_step)
+            with installer.host_lock():
+                self.service_step(long_step)
         self.assertLess(time.monotonic() - started, 15)
-        with self.assertRaises(ProcessLookupError):  # Stopped and reaped, not left running.
-            os.kill(int(record.read_text()), 0)
+        for pid in map(int, record.read_text().split()):
+            self.assertTrue(ended(pid), pid)
+        with open(self.home / "parsar-node.lock") as lock:  # The child held it too; nothing does now.
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
+    def test_an_ignored_hangup_stays_ignored(self):
+        """Under nohup a closed terminal ends neither the installer nor the step."""
+        self.addCleanup(signal.signal, signal.SIGHUP, signal.signal(signal.SIGHUP, signal.SIG_IGN))
+
+        def step():
+            os.kill(os.getppid(), signal.SIGHUP)
+            time.sleep(0.2)
+            print("finished")
+        output = io.StringIO()
+        self.service_step(step, output)
+        self.assertEqual(output.getvalue(), "finished\n")
+        self.assertIs(signal.getsignal(signal.SIGHUP), signal.SIG_IGN)
 
     def test_uninstall_never_follows_a_link_in_the_service_home(self):
         # The service user owns its home; a link it plants must not steer deletion elsewhere.
