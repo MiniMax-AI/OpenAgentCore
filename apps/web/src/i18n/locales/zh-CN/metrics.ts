@@ -82,7 +82,8 @@ export const metrics = {
     agent: "Agent",
     sessions: "Session",
     openAgent: "打开 Agent {{name}}",
-    openFailed: "在 Session 日志中查看 {{name}} 失败的 Session",
+    openFailed: "打开 {{agent}} 失败的 Session",
+    failedHelp: "统计失败的 Turn；链接列出失败的 Session。",
   },
   keys: {
     title: "按 API 密钥",

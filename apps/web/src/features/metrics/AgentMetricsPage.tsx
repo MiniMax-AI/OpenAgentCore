@@ -353,7 +353,7 @@ function AgentMetricsContent({
                 {showProject ? <th scope="col">{tCommon("project.column")}</th> : null}
                 <th scope="col" className="numeric">{t("agent.sessions")}</th>
                 <th scope="col" className="numeric">{t("agent.requests")}</th>
-                <th scope="col" className="numeric">{t("agent.failed")}</th>
+                <th scope="col" className="numeric"><span className="column-help">{t("agent.failed")}<HelpTip>{t("agent.failedHelp")}</HelpTip></span></th>
                 <th scope="col" className="numeric">{t("agent.errorRate")}</th>
                 <th scope="col" className="numeric">{t("agent.latency")}</th>
                 <th scope="col" className="numeric">{t("agent.tokens")}</th>
@@ -364,6 +364,8 @@ function AgentMetricsContent({
                 const label = agentLabel(agent.agentId, agent.label);
                 // A saved Agent opens its page, and its failures the Session log of its failed Sessions; an inline Agent has neither.
                 const saved = agent.projectId !== null && !isInlineAgent(agent.agentId) ? { project: agent.projectId, id: agent.agentId } : null;
+                // The figure counts failed Turns; the link lists the Agent's failed Sessions, and its name and tooltip say so.
+                const openFailed = t("agent.openFailed", { agent: label });
                 return (
                   <tr key={agent.id}>
                     <th scope="row" title={agent.agentId}>
@@ -376,7 +378,7 @@ function AgentMetricsContent({
                     <td className="numeric">{integer(agent.requests)}</td>
                     <td className={agent.failed ? "numeric numeric-danger" : "numeric"}>
                       {saved && agent.failed ? (
-                        <button type="button" className="figure-link" aria-label={t("agent.openFailed", { name: label })} onClick={() => navigate("sessions", saved, "failed-sessions")}>{integer(agent.failed)}</button>
+                        <button type="button" className="figure-link" aria-label={openFailed} title={openFailed} onClick={() => navigate("sessions", saved, "failed-sessions")}>{integer(agent.failed)}</button>
                       ) : integer(agent.failed)}
                     </td>
                     <td className="numeric">{formatPercent(agent.finished ? agent.failed / agent.finished : null, locale)}</td>

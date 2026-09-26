@@ -51,7 +51,9 @@ test("keeps a failed Session's reason in sight in the Session log and on its pag
 
 test("opens an Agent's failed Sessions from Agent metrics", async ({ page, request }) => {
   await openConsole(page, request, "agent-metrics");
-  await page.getByRole("button", { name: /^Open the failed Sessions of / }).first().click();
+  const failed = page.getByRole("button", { name: /^Open .+'s failed Sessions$/ }).first();
+  await expect(failed).toHaveAttribute("title", /^Open .+'s failed Sessions$/);
+  await failed.click();
   await expect(page.getByRole("heading", { name: "Session log", level: 1 })).toBeVisible();
   await expect(page.getByRole("radio", { name: /^Failed/ })).toBeChecked();
   await expect(page.getByRole("searchbox")).toHaveValue(/^agent_/);

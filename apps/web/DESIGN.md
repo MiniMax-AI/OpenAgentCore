@@ -633,7 +633,9 @@ A card with a sticky 34px Margin Gray header in Graphite 12px/500, 44px rows div
 by Faint Rules, hover wash, right-aligned tabular numerics, clickable rows where a
 detail page exists, and the list grammar above. Agent metrics' By Agent table
 links a saved Agent's name to its page and a nonzero Failed figure (in its red) to
-the Session log filtered to that Agent and Failed; both turn indigo on hover. A
+the Session log filtered to that Agent and Failed; both turn indigo on hover. The
+figure counts failed Turns, as the column's help tip says, so the link's name and
+tooltip say it opens the Agent's failed Sessions. A
 key count in a section heading reads "3 active · 1 revoked" (revoked left out
 at zero).
 
