@@ -386,7 +386,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
         "source_commit": bundle_manifest["source_commit"], "images": images,
         "secrets_sha256": {Path(target).name: configuration.sha256((root / source).read_bytes())
                            for source, target in plan.moves if target != "secrets/core.key"},
-        "core_installation_id": None, "generated": {}, "local_node": None,
+        "core_installation_id": None, "generated": {},
         "converted_from": {"source_commit": old["source_commit"],
                            "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                            "remove": [name for name in plan.deletions if name.startswith(("config/", "state/"))]}}

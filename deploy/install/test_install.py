@@ -17,7 +17,10 @@ from unittest import mock
 import config_model
 import distribution
 import install
-from installer_fakes import MANIFEST, FakeHost, make_bundle, run_installer
+import node_spec
+from installer_fakes import MANIFEST, STANDARD_SIZES, FakeHost, make_bundle, run_installer
+
+BUILD = "base:0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11"
 
 
 class InstallerTests(unittest.TestCase):
@@ -88,7 +91,9 @@ class InstallerTests(unittest.TestCase):
                              "API base URL: http://127.0.0.1:8091/v1 (local only)\n",
                              f"Next: sign in to Web with the Core key in {key}, then create a Project and its API key "
                              "on the Projects and keys page.",
-                             "Choose a sandbox backend and add nodes on the Nodes page in Web."]),
+                             # Sandboxes call Core at public_url, so a loopback install has no nodes yet.
+                             "\nNodes need an HTTPS public URL that other machines and their sandboxes can reach: "
+                             "set public_url in {root}/config.json and run {root}/parsar apply, then add nodes.\n"]),
             "core-only": (["--core-only"], ["API base URL: http://127.0.0.1:8091/v1 (local only)\n",
                                             "Next: create a Project and its API key through the Core management API at "
                                             f"http://127.0.0.1:8091/core/v1 (local only) with the Core key in {key}."]),
@@ -128,6 +133,12 @@ class InstallerTests(unittest.TestCase):
             with self.subTest(flag=flag), contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
                 install.arguments(["--install-dir", str(self.root), flag])
             self.assertIn(f"{flag} is retired; run {self.root / command}", output.getvalue())
+        for flags in (["--sandbox-provider"], ["--sandbox-provider", "true", "--provider", "docker"], ["--provider", "docker"]):
+            output = io.StringIO()
+            with self.subTest(flags=flags), contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
+                install.arguments(flags)
+            self.assertIn("are retired: use --sandbox docker|microsandbox|e2b|none. The installer no longer adds this "
+                          "host as a node", output.getvalue())
         output = io.StringIO()
         with contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
             install.arguments(["--admin-token-file", str(self.key_file())])
@@ -194,27 +205,86 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(set(self.document("generated/compose.json")["services"]), {"database", "web"})
         self.assertTrue(self.host.native["active"])
 
-    def test_local_provider_flags_and_enrollment(self):
-        for flags, message in ((("--provider", "docker"), "--provider requires"),
-                               (("--web-only", "--sandbox-provider", "true"), "cannot install a sandbox provider"),
-                               (("--sandbox-provider", "true", "--public-url", "http://localhost:8080"), "requires public_url with HTTPS")):
+    def test_a_new_installation_selects_docker_at_web_standard_size(self):
+        self.install("--public-url", "https://core.example")
+        standard = json.loads(STANDARD_SIZES.read_text())
+        self.assertEqual(self.host.deployment_posts, [
+            {"provider": "docker", "resources": standard["docker"], "runtime": node_spec.release(self.manifest)}])
+        self.assertIn(f'\nSandboxes: Docker, Standard ({install.size(standard["docker"])}).\nAdd nodes: in Web, open '
+                      "Nodes and choose Add node, then paste the command on each host, this one included.\n",
+                      self.output.getvalue())
+        self.assertNotIn("sandbox", json.dumps(self.document("config.json")))
+        # A repair never selects again.
+        self.host.deployment = {"provider": ""}
+        self.install()
+        self.assertEqual(len(self.host.deployment_posts), 1)
+        self.root = self.work / "microsandbox"
+        self.install("--core-only", "--sandbox", "microsandbox")
+        self.assertEqual(self.host.deployment_posts[-1]["resources"], standard["microsandbox"])
+        self.root, self.output = self.work / "none", io.StringIO()
+        self.install("--sandbox", "none")
+        self.assertEqual(len(self.host.deployment_posts), 2)
+        self.assertIn("Sandboxes: none chosen. Choose a sandbox backend on the Nodes page in Web.", self.output.getvalue())
+
+    def test_e2b_needs_a_public_address_a_private_key_file_and_an_exact_build(self):
+        secret = "synthetic-e2b-key-0123456789"
+        key = self.key_file(secret)
+        for flags, message in (((), "E2B needs an HTTPS public_url that is not loopback"),
+                               (("--public-url", "http://localhost:8080"), "E2B needs an HTTPS public_url"),
+                               (("--public-url", "https://core.example", "--e2b-template", "base"), "template-id:build-uuid")):
+            with self.subTest(flags=flags), self.assertRaisesRegex(install.InstallError, message):
+                self.install("--sandbox", "e2b", "--e2b-api-key-file", key, "--e2b-template", BUILD, *flags)
+            self.assertFalse(self.root.exists())
+        link = self.work / "linked-e2b-key"
+        link.symlink_to(key)
+        large = self.work / "large-e2b-key"
+        large.write_text("x" * 5000)
+        large.chmod(0o600)
+        key.chmod(0o644)
+        for source in (key, link, large):
+            with self.subTest(source=source), \
+                    self.assertRaisesRegex(install.InstallError, "E2B API key file must be .* private regular file"):
+                self.install("--sandbox", "e2b", "--e2b-api-key-file", source, "--e2b-template", BUILD,
+                             "--public-url", "https://core.example")
+            self.assertFalse(self.root.exists())
+        key.chmod(0o600)
+        self.install("--sandbox", "e2b", "--e2b-api-key-file", key, "--e2b-template", BUILD, "--public-url", "https://core.example")
+        self.assertEqual(self.host.deployment_posts, [{"provider": "e2b", "e2b": {"api_key": secret, "template": BUILD}}])
+        self.assertIn(f"Sandboxes: E2B template {BUILD} (2 CPUs, 2 GiB). E2B runs them; no nodes are needed.",
+                      self.output.getvalue())
+        self.assertNotIn(secret, self.output.getvalue() + (self.root / "config.json").read_text()
+                         + (self.root / "state.json").read_text())
+
+    def test_sandbox_flag_errors_create_nothing(self):
+        for flags, message in ((("--web-only", "--core-key-file", self.key_file(), "--sandbox", "docker"),
+                                "--web-only has no Core; choose the sandbox backend on the Core host"),
+                               (("--sandbox", "e2b"), "requires --e2b-api-key-file and --e2b-template"),
+                               (("--e2b-template", BUILD), "require --sandbox e2b")):
             with self.subTest(flags=flags), self.assertRaisesRegex(install.InstallError, message):
                 self.install(*flags)
             self.assertFalse(self.root.exists())
-        # A first start that fails leaves the local node to the repair run, which takes no flags.
+
+    def test_a_failed_first_start_says_the_sandbox_backend_was_not_chosen(self):
         self.host.core["fails"] = True
-        with mock.patch.object(install.local_node, "install") as enroll, \
-                self.assertRaisesRegex(install.parsar_cli.ParsarError, f"rerun ./install.sh --install-dir {self.root}$"):
-            self.install("--sandbox-provider", "true", "--provider", "docker", "--public-url", "https://core.example")
-        enroll.assert_not_called()
-        self.assertEqual(self.document("state.json")["local_node"], "docker")
+        with self.assertRaisesRegex(install.parsar_cli.ParsarError,
+                                    f"rerun ./install.sh --install-dir {self.root}. The sandbox backend was not chosen; "
+                                    "after the repair, choose it on the Nodes page in Web$"):
+            self.install("--sandbox", "microsandbox")
         self.host.core["fails"] = False
-        with mock.patch.object(install.local_node, "install") as enroll:
-            self.install()
-        state = enroll.call_args.args[1]
-        self.assertEqual((state["provider"], state["core_port"], state["public_url"]), ("docker", 8091, "https://core.example"))
-        self.assertNotIn("provider", self.document("config.json"))
-        self.assertIsNone(self.document("state.json")["local_node"])
+        self.install()
+        self.assertEqual(self.host.deployment_posts, [])
+
+    def test_a_refused_selection_leaves_the_services_running(self):
+        secret = "synthetic-e2b-key-0123456789"
+        self.host.deployment_refusal = f"E2B rejected the API key {secret}."
+        with self.assertRaises(install.InstallError) as raised:
+            self.install("--sandbox", "e2b", "--e2b-api-key-file", self.key_file(secret), "--e2b-template", BUILD,
+                         "--public-url", "https://core.example")
+        self.assertEqual(str(raised.exception), "Core refused the sandbox setup: E2B rejected the API key [E2B API key]. "
+                         "Services are installed and running; choose the sandbox backend on the Nodes page in Web")
+        self.assertEqual(self.host.running(), {"database", "core", "web"})
+        self.assertIn("Console: https://core.example\n", self.output.getvalue())
+        self.assertNotIn("Sandboxes:", self.output.getvalue())
 
     def test_node_payload_exports_only_matched_distribution_files(self):
         self.install()
@@ -238,9 +308,10 @@ class InstallerTests(unittest.TestCase):
                 path.write_bytes(original)
         checksums = self.bundle / "SHA256SUMS"
         original = checksums.read_text()
-        checksums.write_text("".join(line + "\n" for line in original.splitlines() if not line.endswith("  parsar.pyz")))
-        with self.assertRaisesRegex(install.InstallError, "incomplete"):
-            install.verify_bundle(self.bundle)
+        for name in ("parsar.pyz", "standard-sizes.json"):
+            checksums.write_text("".join(line + "\n" for line in original.splitlines() if not line.endswith("  " + name)))
+            with self.subTest(name=name), self.assertRaisesRegex(install.InstallError, "incomplete"):
+                install.verify_bundle(self.bundle)
         checksums.write_text(original + original.splitlines()[0] + "\n")
         with self.assertRaisesRegex(install.InstallError, "Duplicate"):
             install.verify_bundle(self.bundle)

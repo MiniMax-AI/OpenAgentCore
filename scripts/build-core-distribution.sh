@@ -99,10 +99,12 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   exit 1
 fi
 for file in install.sh install.py configuration.py config_model.py config.schema.json parsar_cli.py convert.py \
-    native_service.py node_install.py node_spec.py local_node.py distribution.py self_hosted_install.py \
+    native_service.py node_install.py node_spec.py sandbox_setup.py distribution.py self_hosted_install.py \
     model_provider_sessions.py; do
   cp "deploy/install/$file" "$bundle/$file"
 done
+# Web owns the Standard sandbox sizes; the installer's first deployment uses this copy.
+cp apps/web/src/features/sandbox/standard-sizes.json "$bundle/standard-sizes.json"
 python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoch"
 mkdir -p "$bundle/docs"
 cp -R docs/getting-started "$bundle/docs/"

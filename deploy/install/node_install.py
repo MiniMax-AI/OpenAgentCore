@@ -1250,7 +1250,7 @@ def wait_ready(root, args, timeout=60):
 
 def read_token(args, parser):
     """The one-time token comes on standard input, never in argv or a sudo command line."""
-    # The installer's own local node, which never runs as root, passes it in this variable.
+    # Until the Web console's command sends it on standard input, its no-sudo form passes it here.
     environment = os.environ.pop("PARSAR_NODE_ENROLLMENT_TOKEN", None)
     if args.enrollment_token_stdin and environment is not None:
         parser.error("pass the enrollment token on standard input only")

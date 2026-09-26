@@ -12,9 +12,8 @@ Parsar product.
 Core and its administrator Web console ship together. Projects own assets; multiple
 API keys in one Project share its assets and execution principal. Projects and API
 keys live in the database. Management credentials cannot call the Agent API. The
-default installation runs Core, Web
-and PostgreSQL with zero execution nodes. Add execution nodes through Web when
-you are ready. Core creates each required sandbox from the shared Runtime image. Model
+default installation runs Core, Web and PostgreSQL and selects Docker sandboxes,
+with zero execution nodes. Add execution nodes through Web when you are ready. Core creates each required sandbox from the shared Runtime image. Model
 credentials are supplied through the existing write-only API extension.
 
 Hosted deployments select E2B cloud or one provider across their own local/remote
@@ -32,7 +31,9 @@ retain their node across disconnects and resume.
    ./install.sh --public-url https://core.example
    ```
 
-   This starts Core, Web and PostgreSQL with zero execution nodes. Release
+   This starts Core, Web and PostgreSQL and selects Docker sandboxes at Web's
+   Standard size, with zero execution nodes; `--sandbox` chooses microsandbox, E2B
+   or none instead. The installer never adds this host as a node. Release
    bundles are tied to a source revision; an older published bundle does not include
    current management changes. See the [installation guide](docs/getting-started/install.md)
    for obtaining/building a matching bundle and the host/network prerequisites.
@@ -43,14 +44,14 @@ retain their node across disconnects and resume.
    issue a key within it for your application. Save the one-time plaintext
    response privately; Core stores its digest. Rotate by issuing another key in the
    same Project and revoking the old one.
-3. **Add a node.** Open **Nodes** and choose E2B cloud or your own machines with
-   Docker/microsandbox. E2B needs its account credentials and qualified Runtime
-   template, with no node installation; your own machines also need a sandbox size.
-   Either way, finish setup with **Save configuration**. The paired console address
-   is used by default; advanced network settings allow a different reachable HTTPS
-   origin. For your own machines, then select **Add node**, and copy and run the
-   command on a prepared Linux host. Web shows when the node is online and its
-   provider is ready. All nodes in a deployment use the same provider.
+3. **Add a node.** Open **Nodes**, select **Add node**, and copy and run the
+   command on a prepared Linux host, this one included. Web shows when the node is
+   online and its provider is ready. All nodes in a deployment use the same
+   provider. Nodes need the HTTPS public URL: a loopback installation keeps its
+   sandbox selection but can't add nodes until `public_url` is set. After
+   `--sandbox none`, **Nodes** first asks for E2B cloud (its account key and a ready
+   template build, with no node installation) or your own machines with
+   Docker/microsandbox and a sandbox size; finish with **Save configuration**.
 
 Installation and node enrollment do not call a model. Once a node is ready,
 run an optional API example with your own model credentials.
@@ -71,14 +72,17 @@ local console/API access. For node enrollment, use the reachable origin describe
 above. Flags only seed the installation's `config.json`; later changes go there
 and take effect with `~/.parsar/core/parsar apply`, and `parsar status`, `start`
 and `stop` replace `install.sh --status` and `--stop`.
-Installing a local provider is optional, needs that HTTPS `--public-url`, and is not
-required for adding nodes in Web.
+`--sandbox` is a one-time choice of the sandbox backend, saved in the database like
+Web's setup; change it later in Web. `--sandbox-provider` and `--provider` are
+retired: the installer no longer adds its own host as a node.
 
 ```sh
-./install.sh                    # Core + Web + PostgreSQL, loopback access, zero nodes
-./install.sh --core-only        # Core + PostgreSQL, zero nodes
-./install.sh --sandbox-provider true --provider microsandbox --public-url https://core.example
-./install.sh --sandbox-provider true --provider docker --public-url https://core.example
+./install.sh                    # Core + Web + PostgreSQL, loopback access, Docker sandboxes, zero nodes
+./install.sh --core-only        # Core + PostgreSQL, Docker sandboxes, zero nodes
+./install.sh --sandbox microsandbox --public-url https://core.example
+./install.sh --sandbox e2b --e2b-api-key-file "$HOME/e2b-api-key" \
+  --e2b-template '<template-id>:<build-uuid>' --public-url https://core.example
+./install.sh --sandbox none     # choose the sandbox backend in Web later
 ```
 
 Web-only installation connects the console server to an existing Core; see the

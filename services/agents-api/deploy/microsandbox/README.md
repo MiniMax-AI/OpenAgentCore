@@ -81,7 +81,8 @@ it does not install or upgrade them.
 For a manual node installation, create a private, short runtime state path, for
 example `~/.parsar/msb`, with mode 0700. The ordinary installer instead selects
 `~/.parsar/m/<installation-hash-prefix>/` and stores node identity/configuration
-under `~/.parsar/nodes/<installation-id>/`. Keep these on persistent local storage
+under `~/.parsar/nodes/<installation-id>/`, both in the home of the account that runs
+the node (`/var/lib/parsar-node` for a node added with sudo). Keep these on persistent local storage
 reserved for this installation. Unix socket path limits apply. Runtime storage
 contains confidential disks, memory snapshots and SDK state; preserve it with the
 node identity and Core database when recovering the host.
@@ -104,12 +105,13 @@ commands or initial file writes.
 
 ## Deployment and node configuration
 
-Initialize microsandbox through Web or `POST /core/v1/sandbox/deployment`, including
-its required `resources` and immutable `runtime` fields. The standalone node
-installer reads `GET /api/v1/sandbox-node/configuration` using an enrollment token,
-or its retained node credential on a registered reinstall. It verifies the saved
-release and resources before registration. Local opt-in uses this same path and
-requires a guest-reachable, non-loopback HTTPS `--public-url`.
+Initialize microsandbox through Web, `POST /core/v1/sandbox/deployment` (including
+its required `resources` and immutable `runtime` fields) or `install.sh --sandbox
+microsandbox`. The standalone node installer reads
+`GET /api/v1/sandbox-node/configuration` using an enrollment token, or its retained
+node credential on a registered reinstall. It verifies the saved release and
+resources before registration. The Core host is added the same way, with Add node,
+and needs a guest-reachable, non-loopback HTTPS public URL like any other node.
 
 Set VM CPU, memory and disk limits in the database-owned specification.
 `root_disk_mib` bounds the managed root disk; `environment_disk_mib` separately

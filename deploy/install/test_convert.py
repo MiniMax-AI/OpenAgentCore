@@ -158,6 +158,8 @@ class ConvertTests(unittest.TestCase):
                         self.assertIn(["systemctl", "--user", "disable", "--now", "parsar-0123456789-core.service"],
                                       self.host.commands)
                     self.assertConverted()
+        # The installation keeps its own sandbox deployment, or its lack of one.
+        self.assertEqual(self.host.deployment_posts, [])
 
     def test_a_local_only_138_install_keeps_no_public_url(self):
         # The #138 deployment reports Core's loopback fallback; it is derived, not a public URL.

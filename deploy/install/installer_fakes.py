@@ -16,8 +16,10 @@ from unittest import mock
 
 import native_service
 import parsar_cli
+import sandbox_setup
 
 LABEL = "io.parsar.inputs"
+STANDARD_SIZES = Path(__file__).resolve().parents[2] / "apps/web/src/features/sandbox/standard-sizes.json"
 
 
 def sha256(data):
@@ -42,10 +44,14 @@ class FakeHost:
         self.nodes = []
         self.remote_core = {}  # web-only: origin -> (status, installation_id)
         self.deployment_core_url = ""  # what an old Core reports for its sandbox deployment
+        self.deployment = {"provider": ""}  # what sandbox_setup reads and posts
+        self.deployment_posts = []
+        self.deployment_refusal = None  # Core's message when it refuses the POST
         for target, name, value in ((subprocess, "run", mock.Mock(side_effect=self.run)),
                                     (parsar_cli, "http", self.http),
                                     (parsar_cli, "time", SimpleNamespace(sleep=lambda seconds: None)),
-                                    (native_service, "_process_environment", self.process_environment)):
+                                    (native_service, "_process_environment", self.process_environment),
+                                    (sandbox_setup, "send", self.sandbox_send)):
             patcher = mock.patch.object(target, name, value)
             patcher.start()
             test.addCleanup(patcher.stop)
@@ -234,6 +240,29 @@ class FakeHost:
             return 200, json.dumps({"core_url": self.deployment_core_url}).encode()
         return 404, b""
 
+    def sandbox_send(self, req):
+        origin, _, path = req.full_url.partition("://")[2].partition("/")
+        port = int(origin.rsplit(":", 1)[1])
+        digests = self.core_listening(port)
+        if digests is None:
+            raise ConnectionRefusedError()
+        if sha256(req.get_header("Authorization", "").removeprefix("Bearer ")) not in digests:
+            return 401, b'{"error": {"message": "Invalid Core key"}}'
+        if path != "core/v1/sandbox/deployment":
+            return 404, b""
+        if req.get_method() == "POST":
+            selection = json.loads(req.data)
+            self.deployment_posts.append(selection)
+            if self.deployment_refusal:
+                return 409, json.dumps({"error": {"message": self.deployment_refusal}}).encode()
+            # E2B adopts the template build's size.
+            self.deployment = {"provider": selection["provider"], "specification": {
+                "resources": selection.get("resources", {"cpus": 2, "memory_mib": 2048})}}
+        native = self.native["active"] and self.native["addr"] == port
+        environment = self.native["environment"] if native else self.core.get("environment", "")
+        installation = re.search(r'^AGENTS_API_SANDBOX_INSTALLATION_ID="([^"]+)"$', environment, re.M)
+        return 200, json.dumps(dict(self.deployment, installation_id=installation and installation[1])).encode()
+
 
 MANIFEST = {
     "source_commit": "a" * 40,
@@ -245,7 +274,7 @@ MANIFEST = {
     "microsandbox": {"runtime_sha256": "5" * 64, "firmware_sha256": "6" * 64},
 }
 MODULES = ("install.py", "configuration.py", "config_model.py", "config.schema.json", "parsar_cli.py", "convert.py",
-           "native_service.py", "local_node.py", "node_spec.py", "distribution.py", "install.sh")
+           "native_service.py", "sandbox_setup.py", "node_spec.py", "distribution.py", "install.sh")
 
 
 def write_checksums(bundle):
@@ -265,6 +294,7 @@ def make_bundle(directory, manifest, commit=None):
     (bundle / "runtime/seccomp.json").write_text('{"defaultAction":"SCMP_ACT_ERRNO"}')
     for name in MODULES:
         (bundle / name).write_bytes(Path(__file__).with_name(name).read_bytes())
+    (bundle / "standard-sizes.json").write_bytes(STANDARD_SIZES.read_bytes())
     for name in ("node-install.pyz", "self-hosted-install.pyz"):
         (bundle / name).write_bytes(b"synthetic verified Python bootstrap")
     (bundle / "parsar.pyz").write_bytes(b"synthetic parsar command " + manifest["source_commit"].encode())
