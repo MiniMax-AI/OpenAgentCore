@@ -21,6 +21,7 @@ import { NodeDetail } from "./NodeDetail";
 import { NodeEditDialog } from "./NodeEditDialog";
 import { NodeCleanupDialog, type NodeCleanup } from "./NodeCleanupDialog";
 import { nodeSourceUrl } from "./core-origin";
+import { sandboxSize } from "./deployment-specification";
 import "./SandboxManagerView.css";
 
 /** Nodes: the deployment provider, the node list and one node's detail (`#nodes?id=…`). */
@@ -263,6 +264,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         key={editTarget?.id ?? "closed"}
         client={client}
         node={editTarget}
+        size={snapshot ? sandboxSize(snapshot.deployment) : null}
         onClose={() => setEditTarget(null)}
         onSaved={() => {
           const saved = editTarget;

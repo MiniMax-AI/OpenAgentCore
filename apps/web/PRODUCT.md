@@ -84,8 +84,10 @@ workbench.
   backend (microsandbox by default; Docker only after a confirmation of its weaker
   isolation) or E2B account, the size of each sandbox (own machines only; E2B takes the
   template build's), a review, and advanced settings
-  with the complete form — then the node list with each node's capacity, host
-  figures and allocations, enrollment, renaming, sandbox limits and removal; Add node
+  with the complete form — then the node list with each node's capacity (active
+  sandboxes against its limit, for every backend), host figures and allocations,
+  enrollment, renaming, sandbox limits (beside the host's CPUs and memory and at most
+  how many sandboxes of the deployment's size they hold) and removal; Add node
   asks for the node's sandbox limits before it issues the one-time command, which installs
   the node with sudo as a system service (a disclosure gives the command without sudo, as a
   user service); both commands download from the installation's public URL, never the

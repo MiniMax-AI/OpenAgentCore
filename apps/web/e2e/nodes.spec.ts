@@ -296,11 +296,17 @@ test("reports a failed sandbox change in a dialog, then reads the state again", 
 
 test("renames a node and sets how many sandboxes run on it at once", async ({ page, request }) => {
   await openConsole(page, request, "nodes?id=node-local");
+  // A Docker node shows its limit too, and the edit shows what the host holds.
+  const capacity = page.getByRole("region", { name: "Capacity" });
+  await expect(capacity).toContainText("Active / limit");
+  await expect(capacity).toContainText("5 / 8");
   await page.getByRole("button", { name: "Edit node" }).click();
   const edit = page.getByRole("dialog", { name: "Edit node" });
+  await expect(edit.getByText("Host: 16 CPU · 64 GiB. Each sandbox: 2 CPU · 4 GiB. Suggested: at most 8 at once.")).toBeVisible();
   await edit.getByLabel("Name").fill("core-01-large");
   await edit.getByLabel("Sandboxes at once").fill("6");
   await edit.getByRole("button", { name: "Save" }).click();
   await expect(edit).toBeHidden();
   await expect(page.getByRole("heading", { name: "core-01-large", level: 1 })).toBeVisible();
+  await expect(capacity).toContainText("5 / 6");
 });

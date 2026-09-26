@@ -42,7 +42,7 @@ export function seconds(value: string | null): number | null {
 
 export function NodeList({ nodes, allocations, stale, disabled, suspends = false, onOpen, onRemove }: {
   nodes: readonly SandboxNode[];
-  /** microsandbox: sandboxes sleep as snapshots, so the list shows active and suspended counts. */
+  /** microsandbox: sandboxes sleep as snapshots, so the list also shows suspended counts. */
   suspends?: boolean;
   allocations: readonly SandboxAllocation[];
   stale: boolean;
@@ -60,7 +60,7 @@ export function NodeList({ nodes, allocations, stale, disabled, suspends = false
           <tr>
             <th scope="col">{t("Node")}</th>
             <th scope="col">{t("Status")}</th>
-            {suspends ? <th scope="col" className="numeric">{t("Active / limit")}</th> : null}
+            <th scope="col" className="numeric">{t("Active / limit")}</th>
             {suspends ? <th scope="col" className="numeric"><span className="column-help">{t("Suspended")}<HelpTip>{t("Suspended sandboxes keep their state as a snapshot on the node and resume on the Session's next Turn. They count toward the retained limit, not the active one.")}</HelpTip></span></th> : null}
             <th scope="col" className="numeric">{t("Last seen")}</th>
             <th scope="col">{t("Added")}</th>
@@ -79,7 +79,7 @@ export function NodeList({ nodes, allocations, stale, disabled, suspends = false
                   <NameCell name={node.name} id={node.id} onOpen={() => onOpen(node)} openLabel={t("Open {{name}}", { name })} idLabel={t("Node ID")} />
                 </th>
                 <td><span className="status-with-help"><NodeStatus state={state} />{diagnostic ? <DiagnosticTip code={diagnostic} /> : null}</span></td>
-                {suspends ? <td className="numeric">{node.active} / {node.max_active}</td> : null}
+                <td className="numeric">{node.active} / {node.max_active}</td>
                 {suspends ? <td className="numeric">{suspendedSandboxes(node)}</td> : null}
                 <td className="numeric" title={node.last_seen_at ? formatDateTime(seconds(node.last_seen_at), locale) : undefined}>
                   {node.last_seen_at ? formatRelative(seconds(node.last_seen_at), now, locale) : t("Never")}

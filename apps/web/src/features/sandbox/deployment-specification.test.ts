@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defaultSandboxResources, distributionRuntime, savedSpecification, validSandboxResources } from "./deployment-specification";
+import { defaultSandboxResources, distributionRuntime, sandboxesThatFit, savedSpecification, validSandboxResources } from "./deployment-specification";
 import { isRuntimeReleaseField } from "./runtime-release";
 import standardSizes from "./standard-sizes.json";
 import type { SandboxSpecification } from "@agents-core-web/agents-client";
@@ -69,5 +69,15 @@ describe("deployment resources and Runtime", () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(invalid))));
       await expect(distributionRuntime(new AbortController().signal)).rejects.toThrow();
     }
+  });
+});
+
+describe("sandboxes a host holds", () => {
+  it("is the smaller of what its CPUs and its memory hold, and unknown without either or the size", () => {
+    const size = { cpus: 2, memory_mib: 4096 };
+    expect(sandboxesThatFit({ cpus: 16, memoryBytes: 64 * 2 ** 30 }, size)).toBe(8);
+    expect(sandboxesThatFit({ cpus: 64, memoryBytes: 18 * 2 ** 30 }, size)).toBe(4);
+    expect(sandboxesThatFit({ cpus: null, memoryBytes: 64 * 2 ** 30 }, size)).toBeNull();
+    expect(sandboxesThatFit({ cpus: 16, memoryBytes: 64 * 2 ** 30 }, null)).toBeNull();
   });
 });

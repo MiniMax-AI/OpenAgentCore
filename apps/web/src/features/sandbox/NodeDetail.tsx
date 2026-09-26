@@ -73,9 +73,10 @@ export function NodeDetail({ node, allocations, stale, suspension }: {
         <div><dt>{t("Added")}</dt><dd>{formatDateTime(seconds(node.created_at), locale)}</dd></div>
       </dl>
 
-      {/* Active slots, cleanup and host resources are on Sandbox metrics; only what it does not show is here. */}
+      {/* Cleanup and host resources are on Sandbox metrics; the node's limit is here as well, beside Edit node that sets it. */}
       <Section headingId="node-capacity-heading" title={t("Capacity")}>
         <KpiStrip label={t("Capacity")}>
+          <Kpi label={t("Active / limit")} help={t("Sandboxes Core has placed on this node, against the most it places here at once.")} value={`${count(node.active)} / ${count(node.max_active)}`} />
           <Kpi label={t("Running")} value={reporting ? count(node.running) : MISSING} />
           {suspends ? <Kpi label={t("Suspended")} help={t("Suspended sandboxes keep their state as a snapshot on the node and resume on the Session's next Turn. They count toward the retained limit, not the active one.")} value={count(suspendedSandboxes(node))} /> : null}
           {suspends ? <Kpi label={t("Retained / limit")} help={t("Sandboxes this node holds, active and suspended, against its retained limit.")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}

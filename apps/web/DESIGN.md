@@ -567,6 +567,11 @@ request runs.
   group) and limited use (trusted workloads, or hosts without KVM). The footer
   holds Use Docker (outline) and Keep microsandbox (primary), which takes focus;
   closing or Escape keeps microsandbox too.
+- **Edit node**: the name, then the sandbox limit with one 12px Graphite line under
+  it once the node's heartbeat has the host's CPUs and memory: the host, each
+  sandbox's size and at most how many fit. The Nodes list and a node's Capacity
+  show "Active / limit" for Docker and microsandbox alike, so a saved limit shows
+  where it was set.
 - **How to call**: wherever a new key is shown, a card under it gives three
   copyable samples, each a Margin Gray block with a Hairline and its label and copy
   button in a header row: a Shell block exporting `OPENAI_BASE_URL` (the
