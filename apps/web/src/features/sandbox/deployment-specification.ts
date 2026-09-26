@@ -10,7 +10,7 @@ interface Manifest {
   microsandbox?: { runtime_sha256?: string; firmware_sha256?: string };
 }
 
-// The Standard sizes are a contract with the node installer; see standard-sizes.md before changing their structure.
+// The Standard sizes are a contract with the Core installer (install.sh); see standard-sizes.md before changing their structure.
 export function defaultSandboxResources(provider: SandboxProvider): SandboxResources {
   return { ...(provider === "microsandbox" ? standardSizes.microsandbox : standardSizes.docker) };
 }

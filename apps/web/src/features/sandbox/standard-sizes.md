@@ -27,12 +27,13 @@ accept.
   `deployment-specification.ts`.
 - The release bundle: `build-core-distribution.sh` copies this file to
   `<bundle>/standard-sizes.json`.
-- The node installer, which reads the bundled copy for its default deployment.
+- The Core installer: `install.sh --sandbox` reads the bundled copy to create
+  the default deployment.
 
 ## Contract
 
-The keys and structure are a contract with the installer. Changing a value is
-fine. Renaming, removing or adding keys, or restructuring the file, must be
-coordinated with the backend first, because the installer parses the bundled copy.
+The keys and structure are a contract with the Core installer. Changing a value
+is fine. Renaming, removing or adding keys, or restructuring the file, must be
+coordinated with the backend first, because `install.sh` parses the bundled copy.
 `deployment-specification.test.ts` pins the structure so that an accidental
 change fails.
