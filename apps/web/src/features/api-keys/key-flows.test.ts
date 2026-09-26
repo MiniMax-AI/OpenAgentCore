@@ -6,6 +6,7 @@ import {
   activeKeyNames,
   flowError,
   idleFlow,
+  isArchiveConfirmed,
   isUsableName,
   keyFlowReducer,
   keyNameProblem,
@@ -115,5 +116,10 @@ describe("helpers", () => {
     expect(matchesProject(project, "prod")).toBe(true);
     expect(matchesProject(project, "7F3A")).toBe(true);
     expect(matchesProject(project, "data")).toBe(false);
+  });
+
+  it("archives a project with active keys only once its name is typed", () => {
+    expect([isArchiveConfirmed(project, ""), isArchiveConfirmed(project, "production"), isArchiveConfirmed(project, " Production ")]).toEqual([false, false, true]);
+    expect(isArchiveConfirmed({ ...project, active_key_count: 0 }, "")).toBe(true);
   });
 });

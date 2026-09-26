@@ -36,6 +36,20 @@ test("creates a project, shows a new key once, revokes it and archives the proje
   await expect(page.getByText("Archived").first()).toBeVisible();
 });
 
+test("archives a project with active keys only once its name is typed", async ({ page, request }) => {
+  await openConsole(page, request, "projects?id=proj_7f3a91c2");
+  await expect(page.getByRole("region", { name: /^Keys/ }).getByRole("heading")).toHaveText("Keys 3 active · 1 revoked");
+  await page.getByRole("button", { name: "Archive Production" }).click();
+  const dialog = page.getByRole("dialog", { name: "Archive project" });
+  await expect(dialog).toContainText("This can't be undone");
+  await expect(dialog).toContainText("Its 3 active keys are revoked at once");
+  const archive = dialog.getByRole("button", { name: "Archive" });
+  await expect(archive).toBeDisabled();
+  await dialog.getByLabel("Type Production to confirm").fill("Production");
+  await archive.click();
+  await expect(page.getByText("Archived").first()).toBeVisible();
+});
+
 test("reports an unconfirmed key issue and never replays it", async ({ page, request }) => {
   await openConsole(page, request, "projects");
   await page.getByRole("button", { name: "Open Production" }).click();

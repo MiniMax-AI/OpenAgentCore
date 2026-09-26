@@ -12,7 +12,7 @@ import { useFailureToast } from "../../components/Toast";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
-import { activeKeyNames, flowError, isAbort, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
+import { activeKeyNames, flowError, isAbort, isArchiveConfirmed, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
 import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
 import { invalidateProjects, projectActivityQuery, projectScope } from "./project-queries";
@@ -27,7 +27,8 @@ type Dialog =
   /** `thenIssue`: Getting started continues from the new project to its first key. */
   | { kind: "create"; name: string; thenIssue?: boolean }
   | { kind: "rename"; project: Project; name: string }
-  | { kind: "archive"; project: Project }
+  /** `typed`: the project name, required while it has active keys. */
+  | { kind: "archive"; project: Project; typed: string }
   | { kind: "revoke"; project: Project; key: AdminKey; activeCount: number };
 
 const manageable = (project: Project) => project.status === "active";
@@ -93,6 +94,9 @@ export function ProjectsPage() {
     if (selected) dispatch({ type: "openIssue", project: selected });
   });
 
+  // The archive dialog counts the keys it revokes from the latest project read.
+  const archiving = dialog?.kind === "archive" ? byId.get(dialog.project.id) ?? dialog.project : null;
+
   const dialogNameProblem = dialog?.kind === "create"
     ? projectNameProblem(dialog.name, names)
     : dialog?.kind === "rename"
@@ -100,7 +104,9 @@ export function ProjectsPage() {
       : null;
   const dialogReady = !dialogBusy && (dialog?.kind === "create" || dialog?.kind === "rename"
     ? isUsableName(dialog.name, dialogNameProblem) && !(dialog.kind === "rename" && normalizeName(dialog.name) === dialog.project.name)
-    : Boolean(dialog));
+    : dialog?.kind === "archive" && archiving
+      ? isArchiveConfirmed(archiving, dialog.typed)
+      : Boolean(dialog));
 
   const runDialog = async () => {
     if (!dialog || !dialogReady) return;
@@ -165,7 +171,7 @@ export function ProjectsPage() {
               {selected && manageable(selected) ? (
                 <>
                   <button className="button outline" type="button" onClick={() => openDialog({ kind: "rename", project: selected, name: selected.name })}>{t("actions.rename")}</button>
-                  <button className="button danger" type="button" aria-label={t("actions.archiveLabel", { name: selected.name })} onClick={() => openDialog({ kind: "archive", project: selected })}>{t("actions.archive")}</button>
+                  <button className="button danger" type="button" aria-label={t("actions.archiveLabel", { name: selected.name })} onClick={() => openDialog({ kind: "archive", project: selected, typed: "" })}>{t("actions.archive")}</button>
                 </>
               ) : null}
             </>
@@ -237,7 +243,7 @@ export function ProjectsPage() {
                           {manageable(project) ? (
                             <RowActions>
                               <button className="text-action" type="button" aria-label={t("actions.renameLabel", { name: project.name })} onClick={() => openDialog({ kind: "rename", project, name: project.name })}>{t("actions.rename")}</button>
-                              <button className="text-action danger" type="button" aria-label={t("actions.archiveLabel", { name: project.name })} onClick={() => openDialog({ kind: "archive", project })}>{t("actions.archive")}</button>
+                              <button className="text-action danger" type="button" aria-label={t("actions.archiveLabel", { name: project.name })} onClick={() => openDialog({ kind: "archive", project, typed: "" })}>{t("actions.archive")}</button>
                             </RowActions>
                           ) : null}
                         </td>
@@ -306,14 +312,24 @@ export function ProjectsPage() {
                 placeholder={t("createDialog.placeholder")}
                 disabled={dialogBusy}
               />
-            ) : dialog.kind === "archive" ? (
-              <p>{t("archiveDialog.prompt", { name: dialog.project.name })}</p>
-            ) : (
+            ) : dialog.kind === "archive" && archiving ? (
+              <>
+                <p><strong>{t("archiveDialog.prompt", { name: archiving.name })}</strong></p>
+                <p>{archiving.active_key_count ? t("archiveDialog.keys", { count: archiving.active_key_count }) : t("archiveDialog.noKeys")}</p>
+                <p>{t("archiveDialog.kept")}</p>
+                {archiving.active_key_count ? (
+                  <label className="field">
+                    <span>{t("archiveDialog.typeName", { name: archiving.name })}</span>
+                    <input name="archive-confirm-name" value={dialog.typed} onChange={(event) => setDialog({ ...dialog, typed: event.target.value })} disabled={dialogBusy} autoComplete="off" spellCheck={false} />
+                  </label>
+                ) : null}
+              </>
+            ) : dialog.kind === "revoke" ? (
               <>
                 <p>{t("revokeDialog.prompt", { name: dialog.key.name, prefix: prefixLabel(dialog.key.prefix) })}</p>
                 {dialog.activeCount <= 1 ? <p>{t("revokeDialog.lastKey", { project: dialog.project.name })}</p> : null}
               </>
-            )}
+            ) : null}
             <FlowErrorMessage error={dialogError} name={dialog.kind === "create" || dialog.kind === "rename" ? normalizeName(dialog.name) : undefined} />
           </form>
         ) : null}

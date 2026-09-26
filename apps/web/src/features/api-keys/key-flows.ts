@@ -42,6 +42,14 @@ export function isUsableName(value: string, problem: NameProblem | null): boolea
 }
 
 /**
+ * Archiving can't be undone and revokes every active key at once, so a
+ * project with active keys is archived only after its name is typed.
+ */
+export function isArchiveConfirmed(project: Pick<Project, "name" | "active_key_count">, typed: string): boolean {
+  return project.active_key_count === 0 || normalizeName(typed) === project.name;
+}
+
+/**
  * A write either failed before Core acted ("rejected": Core's reason, such as
  * an archived project on a 409; correct and retry) or has an unknown outcome
  * ("uncertain": check the list first; never retried automatically).
