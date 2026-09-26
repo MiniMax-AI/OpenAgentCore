@@ -316,6 +316,11 @@ test("keeps the page usable when Core refuses a sandbox change, and shows Core's
   // A clear refusal changed nothing: no "couldn't confirm" dialog, and the same page to try again.
   await expect(page.getByText("This console is read-only.")).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  // One code covers several reasons, so a conflict shows Core's own.
+  await failNext(request, { method: "POST", path: "/sandbox/deployment", status: 409, code: "sandbox_deployment_conflict", message: "Another administrator changed the deployment; it is now at generation 2." });
+  await save.click();
+  await expect(page.getByText("Another administrator changed the deployment; it is now at generation 2.")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await save.click();
   await expect(page.getByText("c0ffee000000")).toBeVisible();
 });
