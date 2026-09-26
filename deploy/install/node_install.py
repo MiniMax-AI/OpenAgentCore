@@ -15,7 +15,9 @@ from pathlib import Path
 import platform
 import pwd
 import re
+import selectors
 import shutil
+import signal
 import socket
 import stat
 import subprocess
@@ -54,6 +56,9 @@ SYSTEMD_RUNNING = Path("/run/systemd/system")
 SELINUX_ENFORCE = Path("/sys/fs/selinux/enforce")
 USER_RUNTIME = Path("/run/user")
 SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# A root-owned, empty Docker configuration for the service user's docker calls, so no
+# CLI plugin or credential helper the service user controls runs in the installer.
+CHILD_DOCKER_CONFIG = Path("/run/parsar-node-docker")
 NOTHING_CHANGED = " Nothing was changed."
 
 
@@ -498,24 +503,73 @@ class ChildFailed(Exception):
     """The service-user step failed and already printed why."""
 
 
+def relay(output, errors):
+    """Copy the child's stdout and stderr pipes to ours until both close."""
+    streams = {output: sys.stdout, errors: sys.stderr}
+    with selectors.DefaultSelector() as selector:
+        for descriptor in streams:
+            selector.register(descriptor, selectors.EVENT_READ)
+        while streams:
+            for key, _ in selector.select():
+                data = os.read(key.fd, 65536)
+                if not data:
+                    selector.unregister(key.fd)
+                    os.close(key.fd)
+                    del streams[key.fd]
+                    continue
+                streams[key.fd].write(data.decode(errors="replace"))
+                streams[key.fd].flush()
+
+
+def stop_child(pid):
+    """End the child and everything it started; its own session gets no terminal signals."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(pid, signal.SIGTERM)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if os.waitpid(pid, os.WNOHANG)[0]:
+            return
+        time.sleep(0.1)
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(pid, signal.SIGKILL)
+    os.waitpid(pid, 0)
+
+
 def as_service_user(account, function, *arguments):
     """Run a step with the service user's credentials in a forked child.
 
+    The child starts a new session with /dev/null as standard input and pipes as
+    output, so no program it runs holds the administrator's terminal (TIOCSTI).
     Every installer module is already imported, so the child never reads the root
-    caller's private copy of this program. The token stays in memory. Files the
+    caller's private copy of this program, and the token stays in memory. Files the
     service user owns are read, written and deleted only here, never by root."""
     sys.stdout.flush()
     sys.stderr.flush()
+    output_read, output_write = os.pipe()
+    errors_read, errors_write = os.pipe()
     pid = os.fork()
     if pid == 0:
         code = 1
         try:
+            os.close(output_read)
+            os.close(errors_read)
+            os.setsid()
+            null = os.open(os.devnull, os.O_RDWR)
+            os.dup2(null, 0)
+            os.dup2(output_write, 1)
+            os.dup2(errors_write, 2)
+            for descriptor in (null, output_write, errors_write):
+                if descriptor > 2:
+                    os.close(descriptor)
+            sys.stdout = open(1, "w", buffering=1, closefd=False)
+            sys.stderr = open(2, "w", buffering=1, closefd=False)
             os.setgroups(os.getgrouplist(account.pw_name, account.pw_gid))
             os.setgid(account.pw_gid)
             os.setuid(account.pw_uid)
             os.umask(0o077)
             os.environ.clear()
-            os.environ.update(HOME=account.pw_dir, USER=account.pw_name, LOGNAME=account.pw_name, PATH=SAFE_PATH, LANG="C.UTF-8")
+            os.environ.update(HOME=account.pw_dir, USER=account.pw_name, LOGNAME=account.pw_name, PATH=SAFE_PATH,
+                              LANG="C.UTF-8", DOCKER_CONFIG=str(CHILD_DOCKER_CONFIG))
             os.chdir(account.pw_dir)
             function(*arguments)
             code = 0
@@ -528,12 +582,30 @@ def as_service_user(account, function, *arguments):
             sys.stdout.flush()
             sys.stderr.flush()
             os._exit(code)
-    _, status = os.waitpid(pid, 0)
+    os.close(output_write)
+    os.close(errors_write)
+    try:
+        relay(output_read, errors_read)
+        _, status = os.waitpid(pid, 0)
+    except BaseException:
+        stop_child(pid)
+        raise
     if not os.WIFEXITED(status) or os.WEXITSTATUS(status) != 0:
         raise ChildFailed()
 
 
 run_as = as_service_user
+
+
+def child_docker_config():
+    """Create the root-owned empty directory the service user's docker calls read."""
+    path = CHILD_DOCKER_CONFIG
+    if not path.exists() and not path.is_symlink():
+        path.mkdir(mode=0o755)
+        os.chmod(path, 0o755)
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o022:
+        raise InstallError(str(path) + " must be a directory only root can write; inspect the host.")
 
 
 @contextlib.contextmanager
@@ -801,6 +873,7 @@ def install_system(args, token):
         account, account_record = account_plan()
         # Every check has passed; from here on the host changes.
         account = prepare_account(account, account_record, group)
+        child_docker_config()
         root = SERVICE_HOME / ".parsar/nodes" / args.installation_id
         unit = SYSTEM_UNITS / unit_name(args.installation_id)
         root_file(SYSTEM_RECORDS / (args.installation_id + ".json"),
@@ -938,6 +1011,7 @@ def uninstall_system(args):
             if core_url is None and not args.force:
                 raise InstallError("This node's record is missing, so Core cannot be asked; rerun with --force only if "
                                    "Core no longer exists." + NOTHING_CHANGED)
+            child_docker_config()
             run_as(account, confirm_removed, root, core_url, args.force)
             if unit.exists():
                 checked(["systemctl", "disable", "--now", unit.name], "Cannot stop the node service " + unit.name)

@@ -349,6 +349,7 @@ class NodeInstallTests(unittest.TestCase):
                 function(*arguments)
         for patch in (mock.patch.multiple(installer, SERVICE_HOME=service_home, SYSTEM_RECORDS=system / "etc",
                                           SYSTEM_UNITS=system / "units", SYSTEM_LOCKS=system / "run",
+                                          CHILD_DOCKER_CONFIG=system / "docker-config",
                                           SYSTEMD_RUNNING=system / "systemd", SELINUX_ENFORCE=system / "selinux",
                                           DOCKER_SOCKET=system / "docker.sock", run_as=run_as,
                                           service_account=lambda: self.account),
@@ -465,6 +466,20 @@ class NodeInstallTests(unittest.TestCase):
             installer.uninstall_system(SimpleNamespace(installation_id=self.args.installation_id, force=True))
         self.assertTrue((victim / "nodes" / self.args.installation_id / "registered.json").exists())
         self.assertTrue((system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).exists())
+
+    def test_service_user_step_has_no_terminal_and_reads_nothing(self):
+        """The forked child starts its own session with /dev/null as input; its output is relayed."""
+        account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
+                                  pw_dir=str(self.home), pw_shell="/usr/sbin/nologin")
+
+        def probe():
+            print("session-leader=%s stdin=%s docker-config=%s" % (os.getsid(0) == os.getpid(),
+                  os.readlink("/proc/self/fd/0"), os.environ["DOCKER_CONFIG"]))
+        output = io.StringIO()
+        with mock.patch.object(installer.os, "setgroups"), mock.patch.object(installer.os, "setgid"), \
+                mock.patch.object(installer.os, "setuid"), mock.patch.object(installer.sys, "stdout", output):
+            installer.as_service_user(account, probe)
+        self.assertIn("session-leader=True stdin=/dev/null docker-config=" + str(installer.CHILD_DOCKER_CONFIG), output.getvalue())
 
     def test_token_comes_on_standard_input_only(self):
         arguments = ["--source-url", self.args.source_url, "--core-url", self.args.core_url, "--installation-id",
