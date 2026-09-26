@@ -20,7 +20,8 @@ export interface GettingStartedSteps {
   model: StepState;
   /** `project` is the active project a key would be issued for; null means create one first. */
   key: { state: StepState; project: Project | null };
-  session: StepState;
+  /** `project` is the active project whose call samples the step opens; null leads to the project list. */
+  session: { state: StepState; project: Project | null };
 }
 
 export function gettingStartedSteps(input: {
@@ -37,7 +38,10 @@ export function gettingStartedSteps(input: {
     sandboxes: sandboxStep(input.fleet),
     model: modelStep(input.harnesses),
     key: keyStep(input.projects),
-    session: sessions === null ? null : sessions === "failed" ? "unknown" : sessions > 0 ? "done" : "todo",
+    session: {
+      state: sessions === null ? null : sessions === "failed" ? "unknown" : sessions > 0 ? "done" : "todo",
+      project: callProject(input.projects),
+    },
   };
 }
 
@@ -72,13 +76,26 @@ function modelStep(harnesses: readonly CoreHarness[] | "failed" | undefined): St
   return set ? "done" : "todo";
 }
 
+/** The newest of the projects, most likely the one just created. */
+function newestOf(projects: readonly Project[]): Project | null {
+  return projects.reduce<Project | null>((best, project) => (!best || project.created_at > best.created_at ? project : best), null);
+}
+
 function keyStep(projects: readonly Project[] | "failed" | undefined): GettingStartedSteps["key"] {
   if (!projects || projects === "failed") return { state: projects ? "unknown" : null, project: null };
   const active = projects.filter((project) => project.status === "active");
   if (active.some((project) => project.active_key_count > 0)) return { state: "done", project: null };
-  // The newest active project, most likely the one just created.
-  const newest = active.reduce<Project | null>((best, project) => (!best || project.created_at > best.created_at ? project : best), null);
-  return { state: "todo", project: newest };
+  return { state: "todo", project: newestOf(active) };
+}
+
+/**
+ * Where the first Session's call samples are: the newest active project with
+ * an active key, else the newest active project (whose page issues one).
+ */
+function callProject(projects: readonly Project[] | "failed" | undefined): Project | null {
+  if (!projects || projects === "failed") return null;
+  const active = projects.filter((project) => project.status === "active");
+  return newestOf(active.filter((project) => project.active_key_count > 0)) ?? newestOf(active);
 }
 
 /**

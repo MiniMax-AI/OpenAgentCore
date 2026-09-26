@@ -78,6 +78,12 @@ test("opens a fresh install on the Overview's Getting started: a project and its
 
   await page.getByRole("button", { name: "Overview", exact: true }).click();
   await expect(step("Create a project and issue a key")).toContainText("Done");
+  // The first Session: the project's call samples, which never hold the key.
+  await step("Run the first Session").getByRole("button", { name: "See how to call" }).click();
+  await expect(page.getByRole("heading", { name: "My app", level: 1 })).toBeVisible();
+  const call = page.getByRole("region", { name: "How to call" });
+  await expect(call.getByRole("heading", { name: "How to call" })).toBeFocused();
+  await expect(call.getByLabel("Shell", { exact: true })).toHaveText('export OPENAI_BASE_URL=https://core.example.com/v1\nexport OPENAI_API_KEY="<project API key>"');
   const stored = await browserStorage(page);
   expect(stored).not.toContain("fixture-secret");
   expect(stored).not.toContain(FIXTURE_CORE_KEY);

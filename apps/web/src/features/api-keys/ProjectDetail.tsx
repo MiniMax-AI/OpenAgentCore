@@ -9,6 +9,7 @@ import { formatCompact, formatDateTime, formatInteger, formatRelative } from "..
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import type { ConsoleView } from "../../lib/console-routes";
 import { admin } from "../../lib/projects";
+import { ProjectHowToCall } from "./HowToCall";
 import { prefixLabel } from "./key-flows";
 import { loadedFrom, projectKeysQuery, projectSummaryQuery, type Loaded } from "./project-queries";
 import { ProjectStatus } from "./ProjectStatus";
@@ -208,6 +209,8 @@ export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
           </div>
         )}
       </Section>
+
+      {project.status === "active" ? <ProjectHowToCall /> : null}
 
       <WriteOperations projectId={project.id} keys={keys.value} />
     </>

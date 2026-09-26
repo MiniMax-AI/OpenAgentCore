@@ -158,6 +158,7 @@ export function Section({
   help,
   actions,
   headingId,
+  headingFocusable = false,
   children,
   className,
 }: {
@@ -165,6 +166,8 @@ export function Section({
   help?: ReactNode;
   actions?: ReactNode;
   headingId: string;
+  /** The heading can take focus, for a link that opens the page on this section. */
+  headingFocusable?: boolean;
   children: ReactNode;
   className?: string;
 }) {
@@ -172,7 +175,7 @@ export function Section({
     <section className={["console-section", className].filter(Boolean).join(" ")} aria-labelledby={headingId}>
       <header className="console-section-header">
         <div className="console-section-title">
-          <h2 id={headingId}>{title}</h2>
+          <h2 id={headingId} tabIndex={headingFocusable ? -1 : undefined}>{title}</h2>
           {help ? <HelpTip>{help}</HelpTip> : null}
         </div>
         {actions ? <div className="console-section-actions">{actions}</div> : null}

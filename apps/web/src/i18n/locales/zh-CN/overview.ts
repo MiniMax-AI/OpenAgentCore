@@ -37,6 +37,7 @@ export const overview = {
       title: "运行第一个 Session",
       body: "你的应用用项目 API Key 调用 /v1 Agents API。",
       open: "项目与 key",
+      howToCall: "查看调用示例",
     },
     complete: {
       title: "一切就绪",

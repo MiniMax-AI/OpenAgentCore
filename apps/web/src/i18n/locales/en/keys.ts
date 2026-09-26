@@ -108,7 +108,10 @@ export const keys = {
     failed: "The API address couldn't be read.",
     localOnly: "Core's API is only reachable on the Core machine. To call it from elsewhere, set public_url in config.json and apply it.",
     noAddress: "Core has no public address yet. Set public_url in config.json and apply it.",
-    model: "Running an Agent needs a model provider: pass one in each request, save one on the Agent, or rely on the deployment default.",
+    model: "To create a Session, replace {{model}} with a model name your model provider serves. Running an Agent needs a model provider: pass one in each request, save one on the Agent, or rely on the deployment default.",
+    keyPlaceholder: "<project API key>",
+    projectKey: "Set OPENAI_API_KEY to an API key issued for this project. A key is shown only once, when it is issued; if it's lost, issue a new one.",
+    projectHelp: "Samples for applications that call the Agents API with this project's API keys. The console never sends these requests.",
   },
   detail: {
     back: "Back",

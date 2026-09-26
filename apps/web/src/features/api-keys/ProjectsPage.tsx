@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
-import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
+import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, revealInPageBody } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
@@ -14,6 +14,7 @@ import { formatDateTime, formatInteger, formatRelative } from "../../lib/format"
 import { admin, useProjects } from "../../lib/projects";
 import { activeKeyNames, flowError, isAbort, isArchiveConfirmed, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
+import { PROJECT_CALL_HEADING_ID } from "./HowToCall";
 import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
 import { invalidateProjects, projectActivityQuery, projectScope } from "./project-queries";
 import { projectsQuery } from "../../lib/queries";
@@ -92,6 +93,10 @@ export function ProjectsPage() {
   useConsoleIntent("create-project", "ready", () => openDialog({ kind: "create", name: "", thenIssue: true }));
   useConsoleIntent("issue-key", selected ? (manageable(selected) && flow.step === "idle" ? "ready" : "unavailable") : state.status === "loading" ? "wait" : "unavailable", () => {
     if (selected) dispatch({ type: "openIssue", project: selected });
+  });
+  // Getting started's last step opens a project on its call samples.
+  useConsoleIntent("how-to-call", selected ? (manageable(selected) ? "ready" : "unavailable") : state.status === "loading" ? "wait" : "unavailable", () => {
+    revealInPageBody(document.getElementById(PROJECT_CALL_HEADING_ID));
   });
 
   // The archive dialog counts the keys it revokes from the latest project read.

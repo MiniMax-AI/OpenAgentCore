@@ -110,7 +110,10 @@ export const keys: TranslationShape<typeof english> = {
     failed: "无法读取 API 地址。",
     localOnly: "Core 的 API 只能在 Core 所在的机器上访问。要从其他机器调用，请在 config.json 中设置 public_url 并应用。",
     noAddress: "Core 还没有公开地址。请在 config.json 中设置 public_url 并应用。",
-    model: "运行 Agent 需要模型服务：在每个请求里传入、保存在 Agent 上，或使用部署默认值。",
+    model: "创建 Session 时，把 {{model}} 换成模型服务提供的模型名。运行 Agent 需要模型服务：在每个请求里传入、保存在 Agent 上，或使用部署默认值。",
+    keyPlaceholder: "<项目 API key>",
+    projectKey: "把 OPENAI_API_KEY 设为这个项目签发的 API key。key 只在签发时显示一次；丢失后请签发新 key。",
+    projectHelp: "应用用这个项目的 API key 调用 Agents API 的示例。控制台不会发送这些请求。",
   },
   detail: {
     back: "返回",

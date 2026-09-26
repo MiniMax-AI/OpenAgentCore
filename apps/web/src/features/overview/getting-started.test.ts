@@ -38,7 +38,17 @@ describe("Getting started steps", () => {
     expect(steps([older, project("p4")]).key.state).toBe("done");
     expect(steps(undefined).key.state).toBeNull();
     expect(steps("failed").key.state).toBe("unknown");
-    expect([steps([], 0).session, steps([], 2).session, steps([], null).session, steps([], "failed").session]).toEqual(["todo", "done", null, "unknown"]);
+    expect([steps([], 0).session.state, steps([], 2).session.state, steps([], null).session.state, steps([], "failed").session.state]).toEqual(["todo", "done", null, "unknown"]);
+  });
+
+  it("opens the call samples of the newest active project with a key, else of the newest active project", () => {
+    const call = (projects: Parameters<typeof gettingStartedSteps>[0]["projects"]) => gettingStartedSteps({ fleet: { status: "loading" }, projects, sessions: 0, harnesses: undefined }).session.project;
+    const keyed = project("p1", { created_at: 1 });
+    const newer = project("p2", { active_key_count: 0, created_at: 2 });
+    const archived = project("p3", { status: "archived", active_key_count: 0, created_at: 3 });
+    expect(call([keyed, newer, archived])).toBe(keyed);
+    expect(call([newer, archived])).toBe(newer);
+    expect([call([archived]), call(undefined), call("failed")]).toEqual([null, null, null]);
   });
 
   it("needs a default model on the default harness, or on any enabled harness when none is default", () => {

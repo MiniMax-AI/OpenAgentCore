@@ -39,7 +39,7 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
     projects: projects.data ?? (projects.isError ? "failed" : undefined),
     harnesses: harnesses.data?.data ?? (harnesses.isError ? "failed" : undefined),
   });
-  const states = [steps.sandboxes.state, steps.model, steps.key.state, steps.session];
+  const states = [steps.sandboxes.state, steps.model, steps.key.state, steps.session.state];
   const allDone = states.every((state) => state === "done");
 
   // Remembered per installation; a choice made here overrides what was read.
@@ -122,6 +122,10 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
   const keyAction = keyProject
     ? { label: t("gettingStarted.key.issue"), run: () => navigate("projects", { id: keyProject.id }, "issue-key") }
     : { label: t("gettingStarted.key.create"), run: () => navigate("projects", {}, "create-project") };
+  const callProject = steps.session.project;
+  const sessionAction = callProject
+    ? { label: t("gettingStarted.session.howToCall"), run: () => navigate("projects", { id: callProject.id }, "how-to-call") }
+    : { label: t("gettingStarted.session.open"), run: () => navigate("projects") };
 
   return (
     <section className="overview-card getting-started" aria-labelledby="getting-started-heading">
@@ -142,7 +146,7 @@ export function GettingStarted({ fleet, sessions }: { fleet: FleetState; session
         <Step index={1} state={sandbox.state} title={t("gettingStarted.sandboxes.title")} body={t(sandbox.cloud ? "gettingStarted.sandboxes.bodyCloud" : "gettingStarted.sandboxes.body")} action={sandboxAction} />
         <Step index={2} state={steps.model} title={t("gettingStarted.model.title")} body={t("gettingStarted.model.body")} action={{ label: t("gettingStarted.model.open"), run: () => navigate("system", {}, "default-model") }} />
         <Step index={3} state={steps.key.state} title={t("gettingStarted.key.title")} body={t("gettingStarted.key.body")} action={keyAction} />
-        <Step index={4} state={steps.session} title={t("gettingStarted.session.title")} body={t("gettingStarted.session.body")} action={{ label: t("gettingStarted.session.open"), run: () => navigate("projects") }} />
+        <Step index={4} state={steps.session.state} title={t("gettingStarted.session.title")} body={t("gettingStarted.session.body")} action={sessionAction} />
       </ol>
     </section>
   );
