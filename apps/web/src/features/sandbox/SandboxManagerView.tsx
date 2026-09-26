@@ -20,7 +20,7 @@ import { NodeList } from "./NodeList";
 import { NodeDetail } from "./NodeDetail";
 import { NodeEditDialog } from "./NodeEditDialog";
 import { NodeCleanupDialog, type NodeCleanup } from "./NodeCleanupDialog";
-import { sandboxCoreOrigin } from "./core-origin";
+import { nodeSourceUrl } from "./core-origin";
 import "./SandboxManagerView.css";
 
 /** Nodes: the deployment provider, the node list and one node's detail (`#nodes?id=…`). */
@@ -176,12 +176,12 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         setRemoveTarget(null);
         if (params.id === target.id) navigate("nodes");
         refresh();
-        // The host still runs the node's service until it is uninstalled there.
-        const sourceUrl = sandboxCoreOrigin(window.location.origin);
-        if (consoleConfig.node_installer && sourceUrl && snapshot) {
+        // The host still runs the node's service until it is uninstalled there. Add node has read the installation.
+        const installation = queryClient.getQueryData(installationQuery.queryKey);
+        if (consoleConfig.node_installer && installation && snapshot) {
           const { deployment } = snapshot;
           setCleanup({ node: {
-            name: target.name || target.id, sourceUrl, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256,
+            name: target.name || target.id, sourceUrl: nodeSourceUrl(installation), installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256,
             provider: deployment.provider, oldAddress: target.core_url !== deployment.core_url ? target.core_url : null,
           }, open: true });
         }

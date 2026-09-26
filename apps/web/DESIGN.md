@@ -544,17 +544,22 @@ request runs.
   and, for Docker, that the docker group is root-equivalent), and "No sudo on this
   host?", with what the node's own user needs and the command without sudo. The
   log command follows the command last copied; after the no-sudo one it adds the
-  system service's, for a root shell. Until the installation is read, a line says
-  it is being checked; a failed read, a loopback public URL, or a console without
-  the provider's node files replaces the limits with one line saying why (the
-  failed read with Try again), and the footer offers nothing to generate.
+  system service's, for a root shell. The command downloads from the
+  installation's public URL, never the browser's address, so it works as shown on
+  any host. Until the installation is read, a line says it is being checked; a
+  failed read, a public URL other machines can't use (loopback or not HTTPS), or a
+  console without the provider's node files replaces the limits with one line
+  saying why (the failed read with Try again), and the footer offers nothing to
+  generate.
 - **Clean up the host**: after a node is removed, a dialog gives the host's
   uninstall command in the same Terminal block, a Graphite line that it deletes no
   sandboxes, volumes or images (and, for microsandbox, keeps its image store and
   data), and the no-sudo form behind an "Installed without sudo?" disclosure. A
   node enrolled with an earlier Core address adds an "Old Core address gone?"
-  disclosure with the `--force` form; a loopback console carries Add node's amber
-  note. Done dismisses it and focus returns to the page heading.
+  disclosure with the `--force` form. The command, too, downloads from the public
+  URL; without one other machines can use, a single line says the service stays on
+  the host and no command can be given. Done dismisses it and focus returns to the
+  page heading.
 - **Use Docker instead of microsandbox?**: choosing Docker in sandbox setup lists
   what it gives up, each point a 600 Ink lead over a Graphite line: weaker
   isolation (containers share the host kernel; microsandbox gives each sandbox

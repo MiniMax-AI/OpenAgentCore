@@ -1,16 +1,14 @@
-import { TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Modal } from "../../components/Modal";
-import { sandboxSetupOrigin } from "./core-origin";
 import { nodeUninstallCommand, type NodeInstallMode } from "./enrollment-command";
 import { CommandBlock } from "./node-commands";
 
 /** A node Core has just removed, with what builds its host's uninstall command. */
 export interface NodeCleanup {
   name: string;
-  /** This console's address, which the command downloads the installer from. */
-  sourceUrl: string;
+  /** The installation's public URL, which the command downloads the installer from; null when other machines can't use it. */
+  sourceUrl: string | null;
   installationId: string;
   scriptDigest: string;
   provider: string;
@@ -26,19 +24,20 @@ export interface NodeCleanup {
  * itself, so a node installed without sudo gets its own command, run as that
  * node's user. A node enrolled with an earlier address may find it gone; then
  * `--force` skips only that confirmation. Nothing deletes sandboxes, volumes or
- * images.
+ * images. Like Add node's, the command downloads from the installation's public
+ * URL; while other machines can't use it (loopback, say) the dialog says so instead.
  */
 export function NodeCleanupDialog({ cleanup, open, onClose }: { cleanup: NodeCleanup | null; open: boolean; onClose: () => void }) {
   const { t, i18n } = useTranslation("sandbox");
   // Sentences run on with a space in English and without one in Chinese.
   const join = (...sentences: string[]) => sentences.join(i18n.resolvedLanguage?.startsWith("zh") ? "" : " ");
-  const command = (mode: NodeInstallMode, force = false) => cleanup
+  const command = (mode: NodeInstallMode, force = false) => cleanup?.sourceUrl
     ? nodeUninstallCommand({ sourceUrl: cleanup.sourceUrl, installationId: cleanup.installationId, scriptDigest: cleanup.scriptDigest, mode, force }) : "";
   return <Modal open={open} title={t("Clean up the host")} onClose={onClose} footer={<button className="button primary" type="button" onClick={onClose}>{t("Done")}</button>}>
-    {cleanup ? <div className="sandbox-add-node form-stack">
+    {cleanup && !cleanup.sourceUrl ? <div className="sandbox-add-node form-stack">
+      <p>{t("{{name}} is removed from Core, but its service and files stay on the host. An uninstall command needs an HTTPS public URL that other machines can reach, and this installation has none.", { name: cleanup.name })}</p>
+    </div> : cleanup ? <div className="sandbox-add-node form-stack">
       <p>{t("{{name}} is removed from Core. To remove its service and files from the host, run:", { name: cleanup.name })}</p>
-      {/* Like Add node's command, this one downloads from the console's own address. */}
-      {sandboxSetupOrigin(cleanup.sourceUrl) === null ? <p className="sandbox-add-node-warning" role="note"><TriangleAlert size={14} aria-hidden="true" /><span>{t("This console is open at {{origin}}, which other machines can't reach. On another machine, replace it in the command with the console's HTTPS address.", { origin: cleanup.sourceUrl })}</span></p> : null}
       <CommandBlock key={command("sudo")} value={command("sudo")} label={t("Uninstall command")} autoFocus />
       <p className="sandbox-cleanup-note">{join(t("It never deletes sandboxes, volumes or images."),
         ...(cleanup.provider === "microsandbox" ? [t("It keeps microsandbox's image store and sandbox data, and prints how to remove them by hand.")] : []))}</p>

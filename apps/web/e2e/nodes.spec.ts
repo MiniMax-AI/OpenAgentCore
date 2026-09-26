@@ -20,13 +20,11 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   await expect(add.getByText("SELinux is not enforcing (otherwise use the no-sudo command)")).toBeVisible();
   await expect(add.getByText("One Core per host: a host already running a node for another Core is refused.")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
-  await expect(add.getByText(/^Reaches http:\/\/127\.0\.0\.1:\d+ and https:\/\/core\.example\.com; sandboxes reach https:\/\/core\.example\.com$/)).toBeVisible();
+  await expect(add.getByText("Reaches https://core.example.com, as do its sandboxes")).toBeVisible();
   await expect(add.getByText("parsar-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
   await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
   // Preparing a user instead of using sudo waits behind its disclosure.
   await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeHidden();
-  // The fixture console runs on loopback, where another machine can't download from it.
-  await expect(add.getByRole("note")).toContainText("other machines can't reach");
   await add.getByLabel("Sandboxes at once").fill("3");
   const tokenRequest = () => page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
   const issued = tokenRequest();
@@ -38,6 +36,9 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   // The token goes on stdin to the checked installer, run with sudo unless the shell is root.
   await expect(field).toHaveValue(/^ \(umask 077;.*\|\| s=sudo\n/);
   await expect(field).toHaveValue(/\| \$s python3 "\$d\/node-install\.pyz" --enrollment-token-stdin /);
+  // It downloads from, and names as its source, the public URL, not the loopback address this browser uses.
+  await expect(field).toHaveValue(/curl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' /);
+  await expect(field).toHaveValue(/ --source-url 'https:\/\/core\.example\.com' --core-url 'https:\/\/core\.example\.com' /);
   await expect(add.getByText("If the command is interrupted or the download stalls, run the same command again: the download resumes.")).toBeVisible();
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
   const progress = add.getByRole("status", { name: "Registration progress" });
@@ -132,9 +133,8 @@ test("issues no command before the installation is read, for a loopback public U
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   await page.unroute("**/core/v1/installation");
   await add.getByRole("button", { name: "Try again" }).click();
-  // Nodes on other machines can't reach a loopback public_url; this replaces the note about the browser's address.
+  // Nodes on other machines can't reach a loopback public_url.
   await expect(add.getByRole("status")).toHaveText("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply");
-  await expect(add.getByRole("note")).toHaveCount(0);
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   await add.getByRole("button", { name: "Close dialog" }).click();
 
@@ -160,7 +160,7 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("edge-03");
   // The host still runs the node until it is uninstalled there: with sudo, or as the user that installed it.
   const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
-  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\n[^]*\n\$s python3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\ncurl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' [^]*\n\$s python3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
   await cleanup.getByText("Installed without sudo?").click();
   await expect(cleanup.getByLabel("Uninstall command without sudo", { exact: true })).toHaveValue(/\npython3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
   // Nothing to force for a node on the current address; closing leaves focus on the page, as the row is gone.

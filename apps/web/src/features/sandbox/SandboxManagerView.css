@@ -56,7 +56,6 @@
 
 /* Add node: the countdown sits beside Copy; requirements fold away once seen. */
 .sandbox-command-heading .sandbox-command-expiry { margin-left: auto; color: var(--fg-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sandbox-add-node-warning,
 .sandbox-enrollment-problem {
   padding: 10px 12px;
   font-size: 12.5px;
@@ -64,8 +63,6 @@
   border: 1px solid color-mix(in srgb, var(--warning) 26%, var(--line));
   border-radius: 8px;
 }
-.sandbox-add-node .sandbox-add-node-warning { display: flex; gap: 8px; align-items: flex-start; color: var(--fg); }
-.sandbox-add-node-warning svg { flex-shrink: 0; margin-top: 3px; color: var(--warning); }
 .sandbox-enrollment-problem { display: grid; gap: 6px; }
 .sandbox-add-node .sandbox-enrollment-problem p { color: var(--fg); }
 .sandbox-enrollment-problem p .help-tip { margin-left: 2px; vertical-align: -4px; }
