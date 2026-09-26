@@ -22,6 +22,11 @@ class ModelProviderSessionsTests(unittest.TestCase):
             self.assertEqual(model_provider_sessions.count(self.root), {"openai_hosted": 0, "self_hosted": 2})
         command = run.call_args.args[0]
         self.assertIn("PGOPTIONS=-c default_transaction_read_only=on", command)
+        (self.root / "generated").mkdir()
+        (self.root / "generated/compose.json").write_text(json.dumps({"services": {"database": {}}}))
+        with mock.patch.object(model_provider_sessions.subprocess, "run", return_value=result) as run:
+            model_provider_sessions.count(self.root)
+        self.assertIn(str(self.root / "generated/compose.json"), run.call_args.args[0])
         self.assertTrue(command[-1].lstrip().startswith("SELECT"))
 
     def test_refuses_web_only_and_unexpected_output(self):

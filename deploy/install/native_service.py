@@ -9,8 +9,6 @@ import shutil
 import subprocess
 import tempfile
 
-from configuration import read_core_environment
-
 
 REQUIRED = ("bin/agents-api", "bin/agents-api-migrate", "e2b/agents-api-e2b-provider")
 
@@ -19,7 +17,7 @@ def is_native(state):
     return state["mode"] != "web-only" and state["native_core"]
 
 
-def _unit_name(state):
+def unit_name(state):
     project = state.get("project", "")
     if not isinstance(project, str) or not re.fullmatch(r"parsar-[0-9a-f]{10}", project):
         raise RuntimeError("Native Core requires its installation's generated project name")
@@ -103,36 +101,22 @@ def _digest(path):
     return digest.digest()
 
 
-def _private_write(path, content):
-    if path.is_symlink() or (path.exists() and not path.is_file()):
-        raise RuntimeError("Native Core configuration must be a regular private file")
-    if path.exists() and path.read_text() == content:
-        os.chmod(path, 0o600)
-        return
-    descriptor, temporary = tempfile.mkstemp(prefix=".core-", dir=path.parent)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            stream.write(content)
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
-
-
-def prepare(root, state, bundle):
+def prepare(root, state, bundle, replace=False):
+    """Install the bundle's native Core binaries. Only a conversion replaces different ones."""
     if not is_native(state):
         return
     try:
         root, bundle = _path(root), _path(bundle)
-        unit_name = _unit_name(state)
-        read_core_environment(root, state)
+        unit_name(state)
         source, target = bundle / "native", root / "native"
         incoming = _files(source)
         if target.exists() or target.is_symlink():
             installed = _files(target)
-            if incoming.keys() != installed.keys() or any(_digest(path) != _digest(installed[name]) for name, path in incoming.items()):
+            if incoming.keys() == installed.keys() and all(_digest(path) == _digest(installed[name]) for name, path in incoming.items()):
+                replace = False
+            elif not replace:
                 raise RuntimeError("Installed native Core files differ; preserve the installation and follow the upgrade guide")
-        else:
+        if not target.exists() or replace:
             root.mkdir(parents=True, mode=0o700, exist_ok=True)
             with tempfile.TemporaryDirectory(prefix=".native-", dir=root) as temporary:
                 staged = Path(temporary) / "native"
@@ -140,46 +124,86 @@ def prepare(root, state, bundle):
                     destination = staged / name
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(path, destination)
+                if target.exists():
+                    os.replace(target, Path(temporary) / "previous")
                 os.replace(staged, target)
         for path in [target, target / "bin", target / "e2b", *(target / name for name in REQUIRED)]:
             os.chmod(path, 0o700)
-        config = root / "config"
-        if config.is_symlink():
-            raise RuntimeError("Native Core configuration directory must not be a symlink")
-        config.mkdir(mode=0o700, exist_ok=True)
-        os.chmod(config, 0o700)
-        # ':' disables command-line environment substitution. The executable is
-        # still Core itself; no shell, wrapper or provider shutdown hook is used.
-        executable = str(target / "bin/agents-api").replace("%", "%%").replace('"', '\\"')
-        unit = ("[Unit]\nDescription=Parsar Core\n\n[Service]\nType=exec\n"
-                + 'ExecStart=:"' + executable + '"\n'
-                + "WorkingDirectory=" + str(root).replace("%", "%%") + "\n"
-                + "EnvironmentFile=" + str(config / "core.env").replace("%", "%%") + "\n"
-                + "Restart=on-failure\nKillMode=process\nUMask=0077\n\n[Install]\nWantedBy=default.target\n")
-        _private_write(config / unit_name, unit)
     except (OSError, UnicodeError):
         raise RuntimeError("Cannot prepare private native Core files; existing state was not removed") from None
 
 
+def unit_text(root, header, inputs=None):
+    """The unit. PARSAR_INPUTS carries the inputs digest the running Core started with."""
+    root = _path(root)
+    # ':' disables command-line environment substitution. The executable is
+    # still Core itself; no shell, wrapper or provider shutdown hook is used.
+    executable = str(root / "native/bin/agents-api").replace("%", "%%").replace('"', '\\"')
+    return ("# " + header + "\n"
+            + "[Unit]\nDescription=Parsar Core\n\n[Service]\nType=exec\n"
+            + 'ExecStart=:"' + executable + '"\n'
+            + "WorkingDirectory=" + str(root).replace("%", "%%") + "\n"
+            + "EnvironmentFile=" + str(root / "generated/core.env").replace("%", "%%") + "\n"
+            + ("Environment=PARSAR_INPUTS=" + inputs + "\n" if inputs else "")
+            + "Restart=on-failure\nKillMode=process\nUMask=0077\n\n[Install]\nWantedBy=default.target\n")
+
+
+def daemon_reload():
+    _checked(["systemctl", "--user", "daemon-reload"], "Cannot reload the systemd user manager")
+
+
 def start(root, state):
+    """Enable the generated unit by path and start it."""
     if not is_native(state):
         return
-    unit = _path(root) / "config" / _unit_name(state)
+    unit = _path(root) / "generated" / unit_name(state)
     if unit.is_symlink() or not unit.is_file():
-        raise RuntimeError("Native Core service must be prepared before starting it")
-    _checked(["systemctl", "--user", "daemon-reload"], "Cannot reload the systemd user manager")
+        raise RuntimeError("Native Core service must be generated before starting it; run parsar apply")
+    daemon_reload()
     _checked(["systemctl", "--user", "enable", "--now", str(unit)], "Cannot enable or start this installation's native Core service")
+
+
+def restart(state):
+    if is_native(state):
+        _checked(["systemctl", "--user", "restart", unit_name(state)], "Cannot restart this installation's native Core service")
 
 
 def stop(root, state):
     if is_native(state):
         _path(root)
-        _checked(["systemctl", "--user", "stop", _unit_name(state)], "Cannot stop this installation's native Core service")
+        _checked(["systemctl", "--user", "stop", unit_name(state)], "Cannot stop this installation's native Core service")
+
+
+def disable(state):
+    """Stop the unit and remove its enablement link, as a conversion does before moving it."""
+    if is_native(state):
+        _checked(["systemctl", "--user", "disable", "--now", unit_name(state)],
+                 "Cannot disable this installation's native Core service")
+
+
+def _process_environment(pid):
+    try:
+        raw = Path(f"/proc/{pid}/environ").read_bytes()
+    except OSError:
+        return {}
+    return dict(item.split("=", 1) for item in raw.decode(errors="replace").split("\0") if "=" in item)
+
+
+def running_inputs(state):
+    """PARSAR_INPUTS of the running Core process, or None when it is not running."""
+    if not is_native(state):
+        return None
+    result = _run(["systemctl", "--user", "show", "--property=MainPID", "--value", unit_name(state)],
+                  "Cannot query this installation's native Core service")
+    pid = result.stdout.strip()
+    if result.returncode or not pid.isdigit() or pid == "0":
+        return None
+    return _process_environment(int(pid)).get("PARSAR_INPUTS")
 
 
 def active(state):
     if not is_native(state):
         return False
-    result = _run(["systemctl", "--user", "is-active", "--quiet", _unit_name(state)],
+    result = _run(["systemctl", "--user", "is-active", "--quiet", unit_name(state)],
                   "Cannot query this installation's native Core service")
     return result.returncode == 0

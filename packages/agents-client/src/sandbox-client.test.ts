@@ -30,6 +30,15 @@ describe("Core sandbox credential boundaries", () => {
     expect(data[0]?.diagnostic).toBe("kvm_unavailable");
     expectTypeOf<SandboxNode["diagnostic"]>().toEqualTypeOf<undefined | "" | "provider_unavailable" | "docker_unavailable" | "docker_limits_unsupported" | "runtime_image_unavailable" | "kvm_unavailable" | "microsandbox_artifacts_unavailable" | "capacity_insufficient">();
   });
+  it("requires each node's enrollment ID: a string, or null for nodes enrolled before Core recorded it", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ data: [{ id: "enrolled", enrollment_id: "3b0c1f4e-8a2d-4c6b-9e7f-1a2b3c4d5e6f" }, { id: "legacy", enrollment_id: null }] }));
+    const { data } = await new SandboxAdminClient({ fetch }).listNodes();
+    expect(data.map((node) => node.enrollment_id)).toEqual(["3b0c1f4e-8a2d-4c6b-9e7f-1a2b3c4d5e6f", null]);
+    expectTypeOf<SandboxNode["enrollment_id"]>().toEqualTypeOf<string | null>();
+    expectTypeOf<{ enrollment_id: string }>().toExtend<Pick<SandboxNode, "enrollment_id">>();
+    expectTypeOf<{ enrollment_id: null }>().toExtend<Pick<SandboxNode, "enrollment_id">>();
+    expectTypeOf<Omit<SandboxNode, "enrollment_id">>().not.toExtend<SandboxNode>();
+  });
   it("does not retry an enrollment write with an uncertain outcome", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Network failed"));
     const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch });

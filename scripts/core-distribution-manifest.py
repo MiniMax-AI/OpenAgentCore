@@ -213,6 +213,11 @@ def package_artifacts(bundle, stage, revision):
     return result
 
 
+# The installation's management command; it runs without the bundle directory.
+PARSAR_MODULES = ("parsar_cli.py", "config_model.py", "config.schema.json", "configuration.py",
+                  "native_service.py", "distribution.py", "local_node.py", "node_spec.py")
+
+
 def bootstraps(bundle, epoch):
     bundle = pathlib.Path(bundle)
     for source, output in (("node_install.py", "node-install.pyz"),
@@ -227,6 +232,13 @@ def bootstraps(bundle, epoch):
                 shutil.copyfile(bundle / "node_spec.py", target)
                 os.utime(target, (int(epoch), int(epoch)))
             zipapp.create_archive(directory, bundle / output, compressed=True)
+    with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
+        for name in PARSAR_MODULES:
+            shutil.copyfile(bundle / name, pathlib.Path(directory) / name)
+        (pathlib.Path(directory) / "__main__.py").write_text("import parsar_cli\n\nparsar_cli.entry()\n")
+        for path in pathlib.Path(directory).iterdir():
+            os.utime(path, (int(epoch), int(epoch)))
+        zipapp.create_archive(directory, bundle / "parsar.pyz", interpreter="/usr/bin/env python3", compressed=True)
 
 
 def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline="0"):

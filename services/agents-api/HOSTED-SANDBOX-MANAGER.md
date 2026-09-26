@@ -27,7 +27,7 @@ removal; deployment identifiers are available in secondary details. Animated lin
 indicate live connections, not measured traffic. Offline links are static, and
 reduced-motion preferences disable decorative animation.
 
-The installer creates the separate key under the private `admin/` directory,
+The installer creates the separate key under the private `secrets/` directory,
 including zero-node installs. Core receives its digest; the bundled Web server
 receives the original private key. Neither is included in static assets or the
 node installation payload. Project keys cannot register, edit or remove nodes.

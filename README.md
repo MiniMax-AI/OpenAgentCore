@@ -38,7 +38,7 @@ retain their node across disconnects and resume.
    for obtaining/building a matching bundle and the host/network prerequisites.
 2. **Sign in to Web.** Open the console address printed by the installer and
    sign in with the [Core key](docs/getting-started/operations.md#core-key) from
-   `~/.parsar/core/admin/core.key`. Keep it private. The console connects to Core
+   `~/.parsar/core/secrets/core.key`. Keep it private. The console connects to Core
    automatically. Create a Project on the **Projects and keys** page, then
    issue a key within it for your application. Save the one-time plaintext
    response privately; Core stores its digest. Rotate by issuing another key in the
@@ -68,7 +68,9 @@ run an optional API example with your own model credentials.
 
 Run these from an extracted distribution. The plain command uses loopback for
 local console/API access. For node enrollment, use the reachable origin described
-above; the installer does not change an existing installation's public URL.
+above. Flags only seed the installation's `config.json`; later changes go there
+and take effect with `~/.parsar/core/parsar apply`, and `parsar status`, `start`
+and `stop` replace `install.sh --status` and `--stop`.
 Installing a local provider is optional, needs that HTTPS `--public-url`, and is not
 required for adding nodes in Web.
 

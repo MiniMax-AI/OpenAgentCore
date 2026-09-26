@@ -9,7 +9,6 @@ import unittest
 from unittest import mock
 
 import native_service as service
-from configuration import environment_text, read_core_environment
 
 
 class NativeServiceTests(unittest.TestCase):
@@ -22,15 +21,11 @@ class NativeServiceTests(unittest.TestCase):
         self.root = self.directory / 'install space %n $HOME'
         self.bundle = self.directory / "bundle"
         self.state = {"mode": "all", "native_core": True, "project": "parsar-0123456789", "installation_id": "fixture-installation"}
-        self.environment = {"DATABASE_URL": 'synthetic:"quoted"\\path$HOME`value`%n', "PORT": "8091"}
         for name in service.REQUIRED:
             path = self.bundle / "native" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"\x7fELFfixture-" + name.encode())
-        self.environment.update(AGENTS_API_SANDBOX_INSTALLATION_ID=self.state["installation_id"])
-        (self.root / "config").mkdir(parents=True, mode=0o700)
-        (self.root / "config/core.env").write_text(environment_text(self.environment))
-        (self.root / "config/core.env").chmod(0o600)
+        (self.root / "generated").mkdir(parents=True, mode=0o700)
         self.commands = mock.patch.object(service.subprocess, "run")
         self.run = self.commands.start()
         self.addCleanup(self.commands.stop)
@@ -40,7 +35,10 @@ class NativeServiceTests(unittest.TestCase):
         service.prepare(self.root, self.state, self.bundle)
 
     def unit_path(self):
-        return self.root / "config" / "parsar-0123456789-core.service"
+        path = self.root / "generated" / "parsar-0123456789-core.service"
+        if not path.exists():
+            path.write_text(service.unit_text(self.root, "fixture header"))
+        return path
 
     def host_ready(self):
         for patch in (mock.patch.object(service.platform, "system", return_value="Linux"),
@@ -72,15 +70,14 @@ class NativeServiceTests(unittest.TestCase):
         helper = self.root / "native/e2b/agents-api-e2b-provider"
         self.assertEqual(stat.S_IMODE(helper.stat().st_mode), 0o700)
 
-    def test_prepare_preserves_direct_core_and_runtime_process_lifetime(self):
-        self.prepare()
+    def test_unit_preserves_direct_core_and_runtime_process_lifetime(self):
         unit = configparser.ConfigParser(interpolation=None)
         unit.read(self.unit_path())
         directives = unit["Service"]
         executable = str(self.root / "native/bin/agents-api").replace("%", "%%").replace('"', '\\"')
         self.assertEqual(directives["ExecStart"], ':"' + executable + '"')
         self.assertEqual(directives["WorkingDirectory"], str(self.root).replace("%", "%%"))
-        self.assertEqual(directives["EnvironmentFile"], str(self.root / "config/core.env").replace("%", "%%"))
+        self.assertEqual(directives["EnvironmentFile"], str(self.root / "generated/core.env").replace("%", "%%"))
         self.assertEqual(directives["KillMode"], "process")
         self.assertEqual(directives["Restart"], "on-failure")
         self.assertEqual(directives["UMask"], "0077")
@@ -89,22 +86,18 @@ class NativeServiceTests(unittest.TestCase):
         self.assertNotIn("DATABASE_URL", self.unit_path().read_text())
         self.run.assert_not_called()
 
-    def test_private_files_and_environment_literal_values(self):
-        self.prepare()
-        env = self.root / "config/core.env"
-        self.assertEqual(read_core_environment(self.root, self.state), self.environment)
-        for path in (env, self.unit_path()):
-            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
-        for path in (self.root / "config", *(self.root / "native" / name for name in service.REQUIRED)):
-            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
-
-    def test_repeat_keeps_binary_and_private_file_inodes(self):
+    def test_repeat_keeps_binary_inodes_and_only_a_conversion_replaces_them(self):
         self.prepare()
         paths = [self.root / "native" / name for name in service.REQUIRED]
-        paths += [self.root / "config/core.env", self.unit_path()]
+        for path in (self.root / "native", *paths):
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
         original = [(path.stat().st_ino, path.stat().st_mtime_ns, path.read_bytes()) for path in paths]
         self.prepare()
         self.assertEqual(original, [(path.stat().st_ino, path.stat().st_mtime_ns, path.read_bytes()) for path in paths])
+        (self.bundle / "native/bin/agents-api").write_bytes(b"\x7fELFnewer release")
+        service.prepare(self.root, self.state, self.bundle, replace=True)
+        self.assertEqual((self.root / "native/bin/agents-api").read_bytes(), b"\x7fELFnewer release")
+        self.assertEqual(sorted(path.name for path in self.root.iterdir()), ["generated", "native"])
 
     def test_changed_payload_refuses_without_overwriting_installed_binary(self):
         self.prepare()
@@ -115,16 +108,6 @@ class NativeServiceTests(unittest.TestCase):
             self.prepare()
         self.assertEqual(installed.read_bytes(), before)
         self.run.assert_not_called()
-
-    def test_prepare_preserves_user_environment_edits(self):
-        self.prepare()
-        env = self.root / "config/core.env"
-        environment = dict(self.environment, PORT="19091", EXTRA='edited $value "quote" \\ path')
-        env.write_text(environment_text(environment))
-        before = env.read_bytes()
-        self.prepare()
-        self.assertEqual(env.read_bytes(), before)
-        self.assertEqual(read_core_environment(self.root, self.state), environment)
 
     def test_ambiguous_paths_and_foreign_units_refuse(self):
         for suffix in ("bad\npath", "bad*path", "bad\\path", "bad\x7fpath", 'bad"path', "bad'path"):
@@ -150,17 +133,6 @@ class NativeServiceTests(unittest.TestCase):
             self.prepare()
         self.assertEqual(outside.read_bytes(), b"unchanged")
         self.assertFalse((self.root / "native").exists())
-
-    def test_symlink_configuration_does_not_overwrite_target(self):
-        self.prepare()
-        env = self.root / "config/core.env"
-        env.unlink()
-        outside = self.directory / "outside"
-        outside.write_text("unchanged")
-        env.symlink_to(outside)
-        with self.assertRaisesRegex(RuntimeError, "unsafe"):
-            self.prepare()
-        self.assertEqual(outside.read_text(), "unchanged")
 
     def test_preflight_checks_host_and_libraries_without_running_provider(self):
         self.host_ready()
@@ -188,6 +160,7 @@ class NativeServiceTests(unittest.TestCase):
             service.preflight(self.bundle, self.root)
         self.assertNotIn("synthetic-secret", str(error.exception))
         self.prepare()
+        self.unit_path()
         self.run.side_effect = OSError("synthetic-secret")
         with self.assertRaises(RuntimeError) as error:
             service.start(self.root, self.state)
@@ -202,6 +175,7 @@ class NativeServiceTests(unittest.TestCase):
 
     def test_commands_target_only_this_installation(self):
         self.prepare()
+        unit = self.unit_path()
         service.start(self.root, self.state)
         service.stop(self.root, self.state)
         self.assertTrue(service.active(self.state))
@@ -209,7 +183,7 @@ class NativeServiceTests(unittest.TestCase):
         self.assertFalse(service.active(self.state))
         self.assertEqual([call.args[0] for call in self.run.call_args_list], [
             ["systemctl", "--user", "daemon-reload"],
-            ["systemctl", "--user", "enable", "--now", str(self.unit_path())],
+            ["systemctl", "--user", "enable", "--now", str(unit)],
             ["systemctl", "--user", "stop", "parsar-0123456789-core.service"],
             ["systemctl", "--user", "is-active", "--quiet", "parsar-0123456789-core.service"],
             ["systemctl", "--user", "is-active", "--quiet", "parsar-0123456789-core.service"],

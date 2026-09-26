@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Install one matched Core distribution without changing execution ownership."""
+"""Install one matched Core distribution, repair it, or convert an earlier installation.
+
+A new installation's flags seed <install-dir>/config.json. Afterwards, edit that file
+and run <install-dir>/parsar apply; rerunning this installer only repairs.
+"""
 import argparse
 import base64
 import hashlib
-import json
 import ipaddress
+import json
 import os
 from pathlib import Path
 import platform
@@ -16,16 +20,19 @@ import stat
 import subprocess
 import sys
 import tempfile
-import time
-import urllib.error
-import urllib.request
-from urllib.parse import urlsplit
 import uuid
+from urllib.parse import urlsplit
 
-from configuration import compose_config, core_environment, environment_text, read_core_environment, valid_core_origin
+import config_model
+import configuration
+from configuration import valid_core_origin
+import convert
 import local_node
 import native_service
+import parsar_cli
 from distribution import DistributionError, artifact, image_identities, ensure_docker_image
+
+SETTING_FLAGS = ("core_only", "web_only", "native_core", "core_port", "web_port", "core_url", "public_url")
 
 
 class InstallError(Exception):
@@ -35,16 +42,6 @@ class InstallError(Exception):
 def run(args, **kwargs):
     # Never print a generated Compose file, process environment or secret value.
     return subprocess.run(args, check=True, **kwargs)
-
-
-def private_write(path, value):
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "w") as stream:
-        stream.write(value)
-
-
-def write_json(path, value):
-    private_write(path, json.dumps(value, indent=2) + "\n")
 
 
 def digest(path):
@@ -67,7 +64,10 @@ def verify_bundle(bundle):
             raise InstallError("Invalid distribution path")
         if digest(path) != expected:
             raise InstallError("Distribution checksum mismatch: " + name)
-    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "native_service.py", "local_node.py", "node_spec.py", "node-install.pyz", "self-hosted-install.pyz", "distribution.py", "runtime/seccomp.json"}
+    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "config_model.py",
+                "config.schema.json", "parsar_cli.py", "convert.py", "parsar.pyz", "native_service.py",
+                "local_node.py", "node_spec.py", "node-install.pyz", "self-hosted-install.pyz", "distribution.py",
+                "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "database"))
     required.update("native/bin/" + name for name in ("agents-api", "agents-api-migrate"))
     required.add("native/e2b/agents-api-e2b-provider")
@@ -97,30 +97,6 @@ def database_port():
         return sock.getsockname()[1]
 
 
-def core_target(value):
-    from urllib.parse import urlsplit
-    parsed = urlsplit(value)
-    if (parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or
-            parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
-        raise argparse.ArgumentTypeError("Core URL must be an HTTP(S) origin without credentials")
-    if parsed.scheme != "https" and parsed.hostname not in ("127.0.0.1", "localhost"):
-        raise argparse.ArgumentTypeError("Remote Core requires HTTPS")
-    return value.rstrip("/")
-
-
-def loopback_origin(value):
-    hostname = urlsplit(value or "").hostname
-    try:
-        return ipaddress.ip_address(hostname).is_loopback
-    except ValueError:
-        return hostname == "localhost"
-
-
-def origin_port(value):
-    parsed = urlsplit(value)
-    return parsed.port or (443 if parsed.scheme == "https" else 80)
-
-
 def public_origin(value):
     # Normalize case and a trailing slash, then apply Core's exact origin rule.
     try:
@@ -139,53 +115,122 @@ def public_origin(value):
 def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
-    modes.add_argument("--core-only", action="store_true")
-    modes.add_argument("--web-only", action="store_true")
-    parser.add_argument("--native-core", action="store_true", help="Run Core as a systemd user service")
-    parser.add_argument("--sandbox-provider", choices=("true", "false"), nargs="?", const="true", default="false",
+    modes.add_argument("--core-only", action="store_true", default=None)
+    modes.add_argument("--web-only", action="store_true", default=None)
+    parser.add_argument("--native-core", action="store_true", default=None, help="Run Core as a systemd user service")
+    parser.add_argument("--sandbox-provider", choices=("true", "false"), nargs="?", const="true",
                         help="Prepare a local sandbox provider (default: false)")
     parser.add_argument("--provider", choices=("microsandbox", "docker"),
                         help="Local sandbox provider when enabled (default: microsandbox)")
     parser.add_argument("--install-dir", type=Path, default=Path.home() / ".parsar/core")
-    parser.add_argument("--core-port", type=int, default=8091)
-    parser.add_argument("--web-port", type=int, default=8080)
-    parser.add_argument("--core-url", type=core_target)
-    parser.add_argument("--public-url", type=public_origin, help="Public HTTPS Core/Web origin behind your TLS reverse proxy")
+    parser.add_argument("--core-port", type=int)
+    parser.add_argument("--web-port", type=int)
+    parser.add_argument("--core-url", type=public_origin, help="Web-only: origin of the existing Core")
+    parser.add_argument("--public-url", type=public_origin, help="Public HTTPS origin behind your TLS reverse proxy")
     parser.add_argument("--core-key-file", type=Path, help="Web-only: private file containing the existing Core's Core key")
+    parser.add_argument("--config", type=Path, help="Seed a new installation's config.json from this file")
+    parser.add_argument("--convert", action="store_true",
+                        help="Convert an installation made before config.json; also upgrades it to this release")
+    parser.add_argument("--yes", action="store_true", help="With --convert: do not ask for confirmation")
     parser.add_argument("--admin-token-file", type=Path, help=argparse.SUPPRESS)
-    parser.add_argument("--status", action="store_true", help="Read installation health; never invoke a model")
-    parser.add_argument("--stop", action="store_true", help="Stop installed services; retain all data")
+    parser.add_argument("--status", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--stop", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.admin_token_file:
         parser.error("--admin-token-file was renamed; use --core-key-file")
-    if args.web_only and args.native_core:
-        parser.error("--web-only cannot install native Core")
-    args.sandbox_provider = args.sandbox_provider == "true"
-    if args.provider and not args.sandbox_provider:
-        parser.error("--provider requires --sandbox-provider true")
-    if args.web_only and args.sandbox_provider:
-        parser.error("--web-only cannot install a sandbox provider")
-    args.provider = (args.provider or "microsandbox") if args.sandbox_provider else None
-    if args.provider and not (args.status or args.stop):
-        if urlsplit(args.public_url or "").scheme != "https" or loopback_origin(args.public_url):
-            parser.error("Local sandbox installation requires --public-url with HTTPS reachable from sandbox guests; loopback origins cannot be used")
-    if args.status and args.stop:
-        parser.error("Choose status or stop")
+    for retired in ("status", "stop"):
+        if getattr(args, retired):
+            parser.error(f"--{retired} is retired; run {args.install_dir / 'parsar'} {retired}")
     if not args.install_dir.is_absolute():
         parser.error("--install-dir must be absolute")
-    if any(not 1024 <= p <= 65535 for p in (args.core_port, args.web_port)):
-        parser.error("Ports must be between 1024 and 65535")
-    if not args.core_only and not args.web_only and args.core_port == args.web_port:
-        parser.error("Core and Web need different ports")
-    if args.web_only and not (args.core_url and args.core_key_file):
-        parser.error("--web-only requires --core-url and --core-key-file")
-    if not args.web_only and (args.core_url or args.core_key_file):
-        parser.error("Existing Core connection flags require --web-only")
+    args.given = [name for name, value in vars(args).items()
+                  if name not in ("install_dir", "given") and value not in (None, False)]
     return args
 
 
-def compose(root, *args, **kwargs):
-    return run(["docker", "compose", "-f", str(root / "compose.json"), *args], **kwargs)
+def seed_document(args):
+    """The --config file, which replaces the setting flags."""
+    if args.config is None:
+        return None
+    if any(getattr(args, name) is not None for name in SETTING_FLAGS):
+        raise InstallError("--config replaces the setting flags; put those settings in the file")
+    try:
+        document = json.loads(args.config.read_text())
+    except (OSError, ValueError):
+        raise InstallError("--config must name a readable JSON file") from None
+    if not isinstance(document, dict):
+        raise InstallError("--config must hold a JSON object")
+    return document
+
+
+def check_flags(args, document):
+    """Flag combinations for a new installation, before config.json is seeded."""
+    if document is None:
+        mode, native = ("core-only" if args.core_only else "web-only" if args.web_only else "all"), args.native_core
+    else:
+        mode, native = document.get("mode"), document.get("native_core")
+    sandbox = args.sandbox_provider == "true"
+    if args.provider and not sandbox:
+        raise InstallError("--provider requires --sandbox-provider true")
+    if mode == "web-only" and sandbox:
+        raise InstallError("--web-only cannot install a sandbox provider")
+    if mode == "web-only" and native:
+        raise InstallError("--web-only cannot install native Core")
+    if mode == "web-only" and not args.core_key_file:
+        raise InstallError("--web-only requires --core-key-file (and --core-url, or web.core_url in --config)")
+    if mode != "web-only" and args.core_key_file:
+        raise InstallError("--core-key-file requires --web-only")
+    return (args.provider or "microsandbox") if sandbox else None
+
+
+def seed_config(args, document):
+    """config.json for a new installation, from flags or from --config."""
+    if document is not None:
+        document.setdefault("$schema", "generated/config.schema.json")
+        if document.get("native_core"):
+            document.setdefault("ports", {}).setdefault("database", database_port())
+        return config_model.validate(document)
+    mode = "core-only" if args.core_only else "web-only" if args.web_only else "all"
+    native = bool(args.native_core)
+    return config_model.initial(mode, native, public_url=args.public_url, **{
+        "ports.core": args.core_port, "ports.web": args.web_port, "web.core_url": args.core_url,
+        "ports.database": database_port() if native else None})
+
+
+def loopback_origin(value):
+    hostname = urlsplit(value or "").hostname
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return hostname == "localhost"
+
+
+def origin_port(value):
+    parsed = urlsplit(value)
+    return parsed.port or (443 if parsed.scheme == "https" else 80)
+
+
+def check_public_url(config, provider):
+    if provider:
+        if urlsplit(config["public_url"] or "").scheme != "https" or loopback_origin(config["public_url"]):
+            raise InstallError("Local sandbox installation requires public_url with HTTPS reachable from sandbox "
+                               "guests; loopback origins cannot be used")
+
+
+def read_core_key_file(source):
+    try:
+        info = source.lstat()
+    except OSError:
+        raise InstallError("Core key file must be an absolute, private regular file") from None
+    if (not source.is_absolute() or not stat.S_ISREG(info.st_mode)
+            or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > 4096):
+        raise InstallError("Core key file must be an absolute, private regular file")
+    token = source.read_text().strip()
+    if not token or any(c.isspace() for c in token) or "\x00" in token:
+        raise InstallError("Invalid Core key file")
+    if len(token) < 32:
+        raise InstallError("The Core key must have at least 32 characters")
+    return token
 
 
 def check_compose():
@@ -195,125 +240,28 @@ def check_compose():
         raise InstallError("Docker Compose 2.26.0 or newer is required for literal Core environment values")
 
 
-def wait_http(url, headers=None, attempts=60):
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, response_headers, newurl):
-            return None
-
-    # Probe credentials belong only to this endpoint, never a redirect or an
-    # ambient HTTP proxy. This also applies to the remote web-only Core probe.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    for attempt in range(attempts):
-        try:
-            request = urllib.request.Request(url, headers=headers or {})
-            with opener.open(request, timeout=2) as response:
-                if response.status == 200:
-                    return True
-        except (urllib.error.URLError, TimeoutError):
-            pass
-        if attempt + 1 < attempts:
-            time.sleep(1)
-    return False
+def check_host():
+    if platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64") or os.getuid() == 0:
+        raise InstallError("Run as a non-root user on Linux amd64 with Docker access")
+    check_compose()
+    run(["docker", "info", "--format", "{{.ServerVersion}}"], stdout=subprocess.DEVNULL)
 
 
-def status(root, state):
-    output = compose(root, "ps", "--all", "--format", "json", capture_output=True, text=True).stdout
-    # Compose versions may return one array or one object per line.
-    rows = json.loads(output) if output.lstrip().startswith("[") else [json.loads(line) for line in output.splitlines() if line]
-    required = {"web"} if state["mode"] == "web-only" else {"database", "core"}
-    if state["mode"] == "all":
-        required.add("web")
-    observed = {row["Service"]: row for row in rows}
-    if native_service.is_native(state):
-        observed["core"] = {"State": "running" if native_service.active(state) else "stopped"}
-        print("Core service: " + observed["core"]["State"])
-    healthy = all(name in observed and observed[name]["State"] == "running"
-                  and observed[name].get("Health", "") in ("", "healthy") for name in required)
-    for row in rows:
-        print(f'{row["Service"]}: {row["State"]} {row.get("Health", "")}')
-    if state["mode"] != "web-only":
-        core_ok = wait_http(f'http://127.0.0.1:{state["core_port"]}/healthz', attempts=1)
-        healthy = healthy and core_ok
-        print("Core API: " + ("healthy" if core_ok else "unavailable"))
-    if state["mode"] != "core-only":
-        web_ok = wait_http(f'http://127.0.0.1:{state["web_port"]}/healthz', attempts=1)
-        healthy = healthy and web_ok
-        print("Web: " + ("healthy" if web_ok else "unavailable"))
-    print("Service health does not prove model execution. This check makes no model requests.")
-    if not healthy:
-        raise InstallError("One or more installed services are unavailable")
-
-
-def initialize(root, args, manifest):
-    mode = "core-only" if args.core_only else "web-only" if args.web_only else "all"
-    if (root / "installation.json").exists():
-        state = json.loads((root / "installation.json").read_text())
-        wanted = (mode, args.native_core, args.core_port, args.web_port, args.core_url, args.public_url)
-        actual = (state["mode"], state["native_core"], state["core_port"], state["web_port"], state.get("core_url"), state.get("public_url"))
-        if wanted != actual or state["source_commit"] != manifest["source_commit"]:
-            raise InstallError("Existing installation differs; preserve it and follow the upgrade guide")
-        services = json.loads((root / "compose.json").read_text())["services"]
-        for service, config in services.items():
-            name = "core" if service == "migrate" else service
-            if config.get("image") != manifest["images"].get(name):
-                raise InstallError("Retained Docker image differs; preserve the installation and inspect its configuration")
-        if (root / "config/managed-runtimes.json").exists():
-            raise InstallError("Retired file-managed provider configuration exists; preserve its resources and follow the deployment replacement guide")
-        if mode != "web-only":
-            read_core_environment(root, state)
-            directory = root / "state/e2b"
-            if (not directory.is_dir() or directory.is_symlink() or
-                    stat.S_IMODE(directory.stat().st_mode) & 0o077):
-                raise InstallError("Private provider receipts are missing or unsafe; restore the retained installation")
-        return state
-    if root.exists() and any(root.iterdir()):
-        raise InstallError("Installation directory is not empty; refusing to overwrite existing state")
+def image_names(mode, native):
     if mode == "web-only":
-        source = args.core_key_file
-        info = source.stat()
-        if (not source.is_absolute() or source.is_symlink() or not stat.S_ISREG(info.st_mode)
-                or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > 4096):
-            raise InstallError("Core key file must be an absolute, private regular file")
-        token = source.read_text().strip()
-        if not token or any(c.isspace() for c in token) or "\x00" in token:
-            raise InstallError("Invalid Core key file")
-        if len(token) < 32:
-            raise InstallError("The Core key must have at least 32 characters")
-    if mode != "web-only":
-        free_port(args.core_port)
-    if mode != "core-only":
-        free_port(args.web_port)
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(root, 0o700)
-    directories = ["config", "admin"]
-    if mode != "web-only":
-        directories += ["state", "state/e2b"]
-    for name in directories:
-        (root / name).mkdir(mode=0o700)
-    state = {"version": 1, "source_commit": manifest["source_commit"], "mode": mode,
-             "native_core": args.native_core, "installation_id": str(uuid.uuid4()),
-             "project": "parsar-" + secrets.token_hex(5), "uid": os.getuid(), "gid": os.getgid(),
-             "core_port": args.core_port, "web_port": args.web_port, "core_url": args.core_url, "public_url": args.public_url}
-    if native_service.is_native(state):
-        state["database_port"] = database_port()
-    config = root / "config"
-    if mode != "web-only":
-        private_write(config / "credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
-        private_write(config / "database.password", secrets.token_hex(32))
-        core_key = secrets.token_hex(32)
-        private_write(root / "admin/core.key", core_key)
-        write_json(root / "admin/core-key-digests.json", [hashlib.sha256(core_key.encode()).hexdigest()])
-    if mode == "web-only":
-        private_write(root / "admin/core.key", token)
-    password = (config / "database.password").read_text() if mode != "web-only" else ""
-    if mode != "web-only":
-        private_write(config / "core.env", environment_text(core_environment(root, state)))
-    write_json(root / "compose.json", compose_config(root, state, manifest, password))
-    write_json(root / "installation.json", state)
-    return state
+        return ["web"]
+    names = ["database"] if native else ["core", "database"]
+    return names + (["web"] if mode == "all" else [])
 
 
-def prepare_node_payload(root, state, bundle):
+def image_loader(manifest, bundle):
+    def load(names):
+        return {name: ensure_docker_image(manifest, name, lambda name=name: bundle / f"images/{name}.tar")
+                for name in names}
+    return load
+
+
+def prepare_node_payload(root, state, bundle, replace=False):
     if state["mode"] == "core-only":
         return
     destination = root / "node-payload"
@@ -330,6 +278,8 @@ def prepare_node_payload(root, state, bundle):
                     or source.stat().st_size != entry["size"] or digest(source) != entry["sha256"]):
                 raise InstallError("Offline artifact verification failed: " + logical)
             names.append(name)
+    if replace and destination.is_dir() and not destination.is_symlink():
+        shutil.rmtree(destination)
     for name in names:
         source, target = bundle / name, destination / name
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -347,102 +297,233 @@ def prepare_node_payload(root, state, bundle):
                     os.unlink(temporary)
 
 
+def install_parsar(root, bundle):
+    """Copy the parsar command into the installation; replace a missing or different copy."""
+    target = root / "parsar"
+    source = bundle / "parsar.pyz"
+    if target.is_file() and not target.is_symlink() and digest(target) == digest(source):
+        os.chmod(target, 0o700)
+        return
+    descriptor, temporary = tempfile.mkstemp(prefix=".parsar-", dir=root)
+    os.close(descriptor)
+    try:
+        shutil.copyfile(source, temporary)
+        os.chmod(temporary, 0o700)
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def layout(root):
+    if not root.exists() or not any(root.iterdir()):
+        return "empty"
+    config, legacy = (root / "config.json").exists(), (root / "installation.json").exists()
+    if config and legacy:
+        return "interrupted"
+    if config or legacy:
+        return "config" if config else "legacy"
+    generated = root / "generated"
+    never_applied = not (generated.is_dir() and any(generated.iterdir()))
+    if (root / "state.json").exists():
+        try:
+            recorded = json.loads((root / "state.json").read_text()).get("generated")
+        except (OSError, ValueError, AttributeError):
+            recorded = True
+        # Never applied: nothing started, so nothing depends on these secrets yet.
+        return "incomplete" if never_applied and not recorded else "missing-config"
+    if never_applied and {path.name for path in root.iterdir()} <= {"secrets", "generated", "state", ".parsar.lock"}:
+        return "incomplete"
+    return "other"
+
+
+def create(root, args, config, manifest, images, provider=None):
+    """Write the new installation's secrets, config.json and state.json."""
+    mode = config["mode"]
+    token = read_core_key_file(args.core_key_file) if mode == "web-only" else secrets.token_hex(32)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(root, 0o700)
+    for name in ["secrets", "generated"] + ([] if mode == "web-only" else ["state", "state/e2b"]):
+        (root / name).mkdir(mode=0o700)
+    write = parsar_cli.create_private
+    write(root / "secrets/core.key", token)
+    if mode != "web-only":
+        write(root / "secrets/credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
+        write(root / "secrets/database.password", secrets.token_hex(32))
+    state = {"format": 1, "installation_id": str(uuid.uuid4()), "project": "parsar-" + secrets.token_hex(5),
+             "uid": os.getuid(), "gid": os.getgid(), "mode": mode, "native_core": config.get("native_core", False),
+             "source_commit": manifest["source_commit"], "images": images,
+             "secrets_sha256": configuration.secret_digests(root, mode), "core_installation_id": None,
+             "converted_from": None, "generated": {},
+             # A requested local node is enrolled once the services first start; a repair retries it.
+             "local_node": provider}
+    state["secrets_sha256"].pop("core.key")
+    # state.json first: whenever config.json exists, the installation can be repaired.
+    write(root / "state.json", json.dumps(state, indent=2) + "\n")
+    write(root / "config.json", json.dumps(config, indent=2) + "\n")
+
+
+def unfinished_conversion(state):
+    return bool(state.get("converted_from")) and not state["converted_from"].get("finished")
+
+
+def finish(root, bundle, manifest, fresh=False):
+    """Put the bundle's files in place, apply config.json and start the services."""
+    state = parsar_cli.load_state(root)
+    converting = unfinished_conversion(state)
+    # A converted installation replaces the earlier release's binaries and payload once.
+    prepare_node_payload(root, state, bundle, converting)
+    native_service.prepare(root, state, bundle, converting)
+    install_parsar(root, bundle)
+    retry = f"rerun ./install.sh {'--convert ' if converting else ''}--install-dir {root}"
+    parsar_cli.apply(root, start=True, retry=retry)
+    config = parsar_cli.load_config(root)
+    mode = config["mode"]
+    # An earlier-release Core has no /core/v1/installation (404); apply noted it and Web still works.
+    if mode == "web-only" and parsar_cli.paired_core(root, config)[0] not in (200, 404):
+        raise InstallError("Core key authentication failed. Inspect secrets/core.key and web.core_url; no model was called")
+    provider = state.get("local_node")
+    if provider:
+        local_node.install(root, dict(state, provider=provider, core_port=config["ports"]["core"],
+                                      public_url=config["public_url"]), manifest, bundle, run)
+    state = parsar_cli.load_state(root)
+    if provider or converting:
+        state["local_node"] = None
+        if converting:
+            state["converted_from"] = dict(state["converted_from"], finished=True)
+        parsar_cli.save_state(root, state)
+    summary(root, config, provider, fresh)
+
+
+def summary(root, config, provider, fresh):
+    mode, public_url, ports = config["mode"], config["public_url"], config["ports"]
+    if mode != "core-only":
+        # The console accepts only its configured origin, so a public URL has no loopback console.
+        console = public_url or f'http://127.0.0.1:{ports["web"]}'
+        print("Console: " + console + (" (local only)" if loopback_origin(console) else ""))
+    if mode != "web-only":
+        api = f'http://127.0.0.1:{ports["core"]}/v1'
+        if public_url and not loopback_origin(public_url):
+            print("API base URL: " + public_url + "/v1")
+            print("Local-only API on this host: " + api)
+        elif public_url and origin_port(public_url) != ports.get("web"):
+            print("API base URL: " + public_url + "/v1 (local only)")
+        else:
+            # Web answers 404 on /v1, so only Core's own port serves the API locally.
+            print("API base URL: " + api + " (local only)")
+    core_key = root / "secrets/core.key"
+    if mode == "core-only":
+        print(f'Next: create a Project and its API key through the Core management API at '
+              f'http://127.0.0.1:{ports["core"]}/core/v1 (local only) with the Core key in {core_key}.')
+    else:
+        print(f"Next: sign in to Web with the Core key in {core_key}, then create a Project and its API key on the Projects and keys page.")
+    print("Keep the Core key private; it also authorizes the Core management API.")
+    print(f"Settings: {root / 'config.json'}. Edit it, then run {root / 'parsar'} apply.")
+    print(f"Manage the services with {root / 'parsar'} status, start and stop.")
+    if provider:
+        print("Provider: " + provider + ". Local node enrolled; Core provisions Sessions on demand.")
+    # Only a new installation says it has no nodes; a repaired or converted one keeps its own.
+    elif fresh and mode == "all":
+        print("No execution node was installed by this run. Choose a sandbox backend and add nodes on the Nodes page in Web.")
+    elif fresh and mode == "core-only":
+        print("No execution node was installed by this run.")
+    print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
+
+
 def main(argv=None):
     args = arguments(argv)
     root = args.install_dir
     if root.is_symlink() or root.resolve() != root:
         raise InstallError("Installation directory must be canonical and not a symlink")
-    if args.status or args.stop:
-        state = json.loads((root / "installation.json").read_text())
-        if args.stop:
-            if native_service.is_native(state):
-                native_service.stop(root, state)
-            compose(root, "stop")
-            print("Control-plane services stopped. Sandbox resources and data retained; running sandbox work may continue.")
-        else:
-            status(root, state)
-        return
-    if platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64") or os.getuid() == 0:
-        raise InstallError("Run as a non-root user on Linux amd64 with Docker access")
-    check_compose()
-    run(["docker", "info", "--format", "{{.ServerVersion}}"], stdout=subprocess.DEVNULL)
     bundle = Path(__file__).resolve().parent
+    kind = layout(root)
+    if kind in ("legacy", "interrupted") and not args.convert:
+        raise InstallError("This installation predates config.json; run ./install.sh --convert --install-dir "
+                           f"{root}" if kind == "legacy" else
+                           f"A conversion was interrupted; run ./install.sh --convert --install-dir {root} to finish it")
+    if kind in ("legacy", "interrupted"):
+        if set(args.given) - {"convert", "yes", "public_url"}:
+            raise InstallError("--convert accepts only --install-dir, --yes and --public-url")
+        check_host()
+        manifest = verify_bundle(bundle)
+        described = convert.detect(root) if kind == "legacy" else json.loads((root / "state.json").read_text())
+        if described.get("native_core") and described.get("mode") != "web-only":
+            # A host that can't run this release's native Core is refused before anything changes.
+            native_service.preflight(bundle, root)
+        convert.convert(root, manifest, image_loader(manifest, bundle), args.public_url, args.yes, run)
+        finish(root, bundle, manifest)
+        return
+    if kind == "config" and args.convert:
+        state = parsar_cli.load_state(root)
+        # The layout is converted, but the new release has not started successfully yet.
+        if not unfinished_conversion(state):
+            raise InstallError(f"{root} already uses config.json; edit it and run {root / 'parsar'} apply")
+        if set(args.given) - {"convert", "yes", "public_url"}:
+            raise InstallError("Finishing a conversion accepts only --install-dir, --yes and --public-url")
+        convert.check_resumed_public_url(root, args.public_url)
+        check_host()
+        manifest = verify_bundle(bundle)
+        if state["source_commit"] != manifest["source_commit"]:
+            raise InstallError("Finish the conversion with the bundle it started with, release " + state["source_commit"])
+        if native_service.is_native(state):
+            native_service.preflight(bundle, root)
+        image_loader(manifest, bundle)(list(state["images"]))
+        finish(root, bundle, manifest)
+        return
+    if args.convert:
+        raise InstallError("--convert needs an installation made by an earlier release in --install-dir")
+    if kind == "config":
+        if args.given:
+            raise InstallError(f"This installation is configured by {root / 'config.json'}. Edit it and run "
+                               f"{root / 'parsar'} apply; install.sh accepts only --install-dir to repair it")
+        state = parsar_cli.load_state(root)
+        check_host()
+        manifest = verify_bundle(bundle)
+        if state["source_commit"] != manifest["source_commit"]:
+            raise InstallError("This installation runs another release; upgrading an installation arrives with "
+                               "parsar upgrade")
+        if native_service.is_native(state):
+            native_service.preflight(bundle, root)
+        images = image_loader(manifest, bundle)(list(state["images"]))
+        if images != state["images"]:
+            parsar_cli.save_state(root, dict(state, images=images))
+        finish(root, bundle, manifest)
+        return
+    if kind == "missing-config":
+        raise InstallError(f"{root / 'config.json'} is missing. Restore it from a backup; "
+                           f"{root / 'generated/settings.json'} lists the last applied values. The secrets and "
+                           "database belong to this installation, so keep the directory. Nothing was changed")
+    if kind == "incomplete":
+        raise InstallError(f"An earlier installation into {root} stopped before writing config.json and started no "
+                           "service. Remove the directory and install again")
+    if kind == "other":
+        raise InstallError("Installation directory is not empty; refusing to overwrite existing state")
+    document = seed_document(args)
+    provider = check_flags(args, document)
+    config = seed_config(args, document)
+    check_public_url(config, provider)
+    if config["mode"] == "web-only":
+        read_core_key_file(args.core_key_file)
+    check_host()
     manifest = verify_bundle(bundle)
-    if args.native_core:
+    if config.get("native_core"):
         native_service.preflight(bundle, root)
-    if args.web_only:
-        images = ["web"]
-    elif args.native_core:
-        images = ["database"]
-    else:
-        images = ["core", "database"]
-    if not args.core_only and not args.web_only:
-        images.append("web")
-    local_images = dict(manifest["images"])
-    for name in images:
-        archive = lambda name=name: bundle / f"images/{name}.tar"
-        local_images[name] = ensure_docker_image(manifest, name, archive)
-    # Deployment configuration uses Docker's local IDs; published metadata is unchanged.
-    deployment = dict(manifest, images=local_images)
-    state = initialize(root, args, deployment)
-    prepare_node_payload(root, state, bundle)
-    if native_service.is_native(state):
-        native_service.prepare(root, state, bundle)
-    compose(root, "up", "--detach", "--wait")
-    if native_service.is_native(state):
-        migration_environment = read_core_environment(root, state)
-        run([str(root / "native/bin/agents-api-migrate")], env=dict(os.environ, **migration_environment),
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        native_service.start(root, state)
-    if state["mode"] != "web-only" and not wait_http(f'http://127.0.0.1:{state["core_port"]}/healthz'):
-        raise InstallError("Core did not become healthy. Use --status; retained state has not been removed")
-    if args.provider:
-        local_node.install(root, dict(state, provider=args.provider), manifest, bundle, run)
-    public_url = state.get("public_url")
-    if state["mode"] != "core-only":
-        url = f'http://127.0.0.1:{state["web_port"]}'
-        host = urlsplit(public_url or url).netloc
-        if not wait_http(url + "/console/auth", {"Host": host}):
-            raise InstallError("Web sign-in is unavailable. Use --status and inspect the Web service")
-        core_url = state.get("core_url") or f'http://127.0.0.1:{state["core_port"]}'
-        token = (root / "admin/core.key").read_text().strip()
-        if not wait_http(core_url + "/core/v1/projects", {"Authorization": "Bearer " + token}):
-            raise InstallError("Core key authentication failed. Inspect private configuration; no model was called")
-        # The console accepts only its configured origin, so a public URL has no loopback console.
-        console = public_url or url
-        print("Console: " + console + (" (local only)" if loopback_origin(console) else ""))
-    if state["mode"] != "web-only":
-        api = f'http://127.0.0.1:{state["core_port"]}/v1'
-        if public_url and not loopback_origin(public_url):
-            print("API base URL: " + public_url + "/v1")
-            print("Local-only API on this host: " + api)
-        elif public_url and origin_port(public_url) != state["web_port"]:
-            print("API base URL: " + public_url + "/v1 (local only)")
-        else:
-            # Web answers 404 on /v1, so only Core's own port serves the API locally.
-            print("API base URL: " + api + " (local only)")
-    core_key = root / "admin/core.key"
-    if state["mode"] == "core-only":
-        print(f'Next: create a Project and its API key through the Core management API at '
-              f'http://127.0.0.1:{state["core_port"]}/core/v1 (local only) with the Core key in {core_key}.')
-    else:
-        print(f"Next: sign in to Web with the Core key in {core_key}, then create a Project and its API key on the Projects and keys page.")
-    print("Keep the Core key private; it also authorizes the Core management API.")
-    if state["mode"] != "web-only":
-        print("Core configuration file: " + str(root / "config/core.env"))
-        if args.provider:
-            print("Provider: " + args.provider + ". Local node enrolled; Core provisions Sessions on demand.")
-        elif state["mode"] == "all":
-            print("No execution node was installed by this run. Choose a sandbox backend and add nodes on the Nodes page in Web.")
-        else:
-            print("No execution node was installed by this run.")
-    print("Services installed. No model request was made. See docs/getting-started/quickstart.md.")
+    for key in ("core", "web", "database"):
+        if key in config["ports"]:
+            free_port(config["ports"][key])
+    images = image_loader(manifest, bundle)(image_names(config["mode"], config.get("native_core", False)))
+    create(root, args, config, manifest, images, provider)
+    finish(root, bundle, manifest, fresh=True)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except (InstallError, local_node.LocalNodeError, DistributionError, RuntimeError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
+    except (InstallError, convert.ConvertError, parsar_cli.ParsarError, config_model.ConfigError,
+            local_node.LocalNodeError, DistributionError, RuntimeError) as error:
+        print(str(error), file=sys.stderr)
+        sys.exit(1)
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
         # Errors never include generated configuration or external process output.
-        print(str(error) if isinstance(error, (InstallError, local_node.LocalNodeError, DistributionError, RuntimeError)) else "Installation failed; inspect prerequisites and private deployment files", file=sys.stderr)
+        print("Installation failed; inspect prerequisites and private deployment files", file=sys.stderr)
         sys.exit(1)

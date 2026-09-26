@@ -1716,15 +1716,28 @@ across upgrades. This is the same managed Runtime, not user-managed enrollment.
 #### Matched Core and console distribution
 
 [Configuration](docs/configuration.md) is the canonical operator parameter reference.
-Compose and native launchers load the same private `config/core.env`; the installer
-creates it once, validates retained literal values and never replaces user edits.
-Core logs the loaded path without values. The installation receipt records packaging
-and identity, not provider overrides. Explicit local-node flags call the ordinary
-administrator API once; PostgreSQL owns the resulting selection. Administrator-issued
-enrollment approves capacity (default two active/eight retained); a node cannot
-supply or overwrite those limits. Downloaded specification copies remain validated
-against the existing database-owned resources/Runtime contract. Do not add a new
-configuration format, loader precedence, hot reload or embedded Core node.
+Every process setting has one home: the installation's private `config.json`,
+described by `deploy/install/config.schema.json`. The operator edits only that
+file; `parsar apply` validates it, derives `generated/` (Compose file, `core.env`,
+native unit, Core key digest file, settings snapshot) and converges on what actually
+runs: each service carries the digest of its inputs (Compose label
+`io.parsar.inputs`, native `PARSAR_INPUTS`), and exactly the services whose running
+inputs differ are recreated or restarted. Decide restarts from what runs, never
+from recorded bookkeeping, so the next apply finishes any interrupted one. Installation flags only seed it, and
+rerunning the installer rejects them. Runtime settings stay in PostgreSQL and
+change through Web or `/core/v1`. Secrets live once each in `secrets/`; identity and
+install facts live in tool-written `state.json`. Core still reads only its
+environment and has no config loader; it serves the non-secret snapshot at
+`GET /core/v1/installation`. Keep the schema, the subset validator
+(`config_model.py`), the generator and the generated reference table in
+`docs/configuration.md` (`scripts/config-reference.py`) in step. Do not add a
+second operator configuration file, loader precedence, hot reload, compatibility
+reading of retired names, or an embedded Core node. Explicit local-node flags call
+the ordinary administrator API once; PostgreSQL owns the resulting selection.
+Administrator-issued enrollment approves capacity (default two active/eight
+retained); a node cannot supply or overwrite those limits. Downloaded specification
+copies remain validated against the existing database-owned resources/Runtime
+contract.
 
 The installer packages Core and the Web console together,
 with independent `--core-only` and `--web-only` modes. `site/` is the public static
@@ -1805,7 +1818,8 @@ allocates, wakes a sandbox or grants project resource access. It is an `/api/v1`
 machine route that reaches Core directly, never through the console. Bounded
 polling and reruns retain the original container and history; timeout is a
 diagnostic failure, not permission to relaunch. The installation public URL
-(`AGENTS_API_PUBLIC_URL`, from the installer's `--public-url`) is the one origin for
+(`public_url` in the installation's `config.json`, seeded by `--public-url`, and
+`AGENTS_API_PUBLIC_URL` for Core) is the one origin for
 applications, nodes, sandbox guests and self-hosted executors, and also the console
 origin. Core derives the daemon `wss` URL, the self-hosted `remote_url`, hosted
 Runtime bootstrap and the deployment's read-only `core_url` from it; the deployment

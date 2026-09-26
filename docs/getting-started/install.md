@@ -39,8 +39,9 @@ For the recommended node workflow, choose an HTTPS address that both node hosts
 and their sandbox guests can reach, such as `https://core.example`. Configure
 your DNS/TLS reverse proxy as described in [Expose Core and Web](#expose-core-and-web),
 and pass that address on the first install. The installer does not create DNS
-records or certificates. It does not change an existing installation's public URL.
-The command below still installs zero execution nodes.
+records or certificates. You can set or change the public URL later in `config.json`
+(see [Change settings](#change-settings-after-installation)). The command below
+still installs zero execution nodes.
 
 ```sh
 sha256sum -c parsar-core-<commit>-linux-amd64.tar.gz.sha256
@@ -73,16 +74,17 @@ if you download them into the thin bundle's `artifacts/` directory before runnin
 
 ## Sign in to Web
 
-Installation creates private configuration under `~/.parsar/core`, a dedicated
-PostgreSQL volume and a credential encryption key. Installation creates no Project
-or application API key. Projects and their keys are managed in the database;
+Installation creates the private installation directory `~/.parsar/core`, with
+its settings in `config.json`, its secrets in `secrets/` and the `parsar`
+management command, plus a dedicated PostgreSQL volume. Installation creates no
+Project or application API key. Projects and their keys are managed in the database;
 configuration files contain deployment settings only. New installations create one
 management credential, the [Core key](operations.md#core-key). Secret values are
 not printed.
 
 Open the console address printed by the installer (`https://core.example` in
 the example above) and sign in with the Core key from
-`~/.parsar/core/admin/core.key`. The console has no user accounts or passwords, and
+`~/.parsar/core/secrets/core.key`. The console has no user accounts or passwords, and
 one role: administrator, with access to every console operation. The paired
 console already connects to Core with the same key on the server side.
 
@@ -105,8 +107,9 @@ Default local ports and private files:
 
 - API: `http://127.0.0.1:8091/v1`
 - Web upstream: `http://127.0.0.1:8080`; use the configured public URL in your browser
-- Core key: `~/.parsar/core/admin/core.key`
-- Core key digest: `~/.parsar/core/admin/core-key-digests.json`
+- Settings: `~/.parsar/core/config.json`
+- Core key: `~/.parsar/core/secrets/core.key`
+- Core key digest: `~/.parsar/core/generated/core-key-digests.json`
 
 Use exactly the displayed console address; the production proxy validates its
 configured origin. Sign-in sessions live in the console's memory. They expire after
@@ -116,13 +119,12 @@ the public Agent API. The console rejects every `/v1` and `/api/v1` request,
 including requests carrying an explicit Bearer token; it holds no caller key.
 
 Core loads the Core key digest from `AGENTS_API_CORE_KEY_DIGESTS_FILE`. Only the
-Core container mounts the digest file, read-only. The bundled Web server reads the
+Core service reads the digest file; containers mount it read-only. The bundled Web server reads the
 Core key through `CORE_CONSOLE_CORE_KEY_FILE` to check sign-in and to proxy
 authenticated console operations; it never sends the key to the browser. The
 migration service receives neither. A Web-only connection to an external Core uses
-that Core's key, configured server-side. Existing installations from earlier
-releases must rename these files and settings before upgrading; see
-[Upgrade an existing installation](operations.md#upgrade-an-existing-installation).
+that Core's key, configured server-side. Installations from earlier releases
+move to this layout with [`install.sh --convert`](#convert-an-earlier-installation).
 Choose English or Chinese through the System language selector.
 
 ## Add nodes after a default installation
@@ -325,21 +327,92 @@ a remote Core must use HTTPS.
 ./install.sh --web-only \
   --install-dir "$HOME/.parsar/core-console" \
   --core-url http://127.0.0.1:8091 \
-  --core-key-file "$HOME/.parsar/core/admin/core.key"
+  --core-key-file "$HOME/.parsar/core/secrets/core.key"
 ```
 
 Web-only mode cannot enable a sandbox provider. It starts no database or Core and
 requires no KVM. Its key remains on the server, outside the static Web files.
 The input file must be private (0600) and contain a Core key of at least 32 characters.
 
+The Web-only installation copies the key into its own `secrets/core.key`. After a
+[Core key rotation](operations.md#rotate-the-core-key) on the Core host, copy the
+new file there and run that installation's `parsar apply`.
+
 Use `--install-dir /absolute/path`, `--core-port 8092` and `--web-port 8081` for
 separate installations. Their database volumes, provider identities and Runtime
-state are independent. The microsandbox installation mode connects native Core to PostgreSQL through an
-automatically selected loopback-only port, recorded in private installation state. Repeating the same installation command retains its
-identities, secrets and data. The installer refuses mode, sandbox-provider and
-revision changes on an existing installation. This includes enabling a sandbox
-provider on an installation originally created without one; rerunning with new
-flags does not migrate it.
+state are independent. Native Core connects to PostgreSQL through an automatically
+selected loopback-only port, recorded as `ports.database` in `config.json`.
+
+## Change settings after installation
+
+Flags only seed `config.json` for a new installation. Afterwards, edit
+`~/.parsar/core/config.json` and apply it:
+
+```sh
+~/.parsar/core/parsar apply --dry-run
+~/.parsar/core/parsar apply
+```
+
+`parsar` lives in the installation directory and does not need the extracted
+bundle. [Configuration](../configuration.md#configjson) lists every setting, what
+it restarts and how a public URL change affects nodes. `mode` and `native_core` are
+fixed; install into a new directory to change them.
+
+Rerunning `./install.sh` on an existing installation reads `config.json` and
+rejects every flag except `--install-dir`. Without flags it repairs the
+installation: it reloads missing images, restores a missing `parsar` command,
+applies `config.json` and starts the services. It refuses a bundle from another
+release. `--sandbox-provider` and `--provider` apply only to a new installation.
+
+## Convert an earlier installation
+
+Installations made before `config.json` have `installation.json`, `config/core.env`
+and `admin/`: those of the installers since the Core key was introduced, including
+the release that added `AGENTS_API_PUBLIC_URL`. Plain `./install.sh` refuses them.
+Convert one with this release's bundle:
+
+```sh
+./install.sh --convert --install-dir "$HOME/.parsar/core"
+```
+
+Conversion is also an upgrade to this release, and its database migrations can't
+be undone: back up the database first (the command prints a `pg_dump` example).
+It reads the old files without changing anything; for an installation made before
+the release that added `AGENTS_API_PUBLIC_URL`, it also reads the sandbox
+deployment's `core_url` from the old Core.
+It then shows the resulting settings and asks for confirmation (`--yes` skips the
+prompt). It writes `config.json` and `state.json`, moves the secrets into `secrets/`
+without copying them, removes the old generated files, and starts the new release
+with the same Compose project, database and installation ID.
+
+It stops before changing anything, and lists each reason, when an item can't be
+converted: an edited `compose.json`, an unknown or edited generated value in
+`core.env`, an external database, or an installation public URL that differs from
+the sandbox deployment's Core URL. For that last case, rerun with `--public-url`
+naming one of the two; choosing the installation's URL means the deployment's nodes
+must be removed and added again. An `AGENTS_API_PUBLIC_URL` set by hand in
+`core.env` is the address Core uses, so it becomes `public_url`, and Core's own
+loopback address there means none. When that would move Web's origin away from the
+installation's public URL, conversion stops and `--public-url` names the one to keep. Hand-set settings such as
+`AGENTS_API_EXECUTION_CONCURRENCY`, `PARSAR_LOG_*` or a Runtime history file move
+into `config.json`. `AGENTS_API_EXECUTION_OPTIONS_FILE` is retired by this release
+and not carried over: set [deployment model providers](../configuration.md#deployment-model-providers)
+instead. Its file is left in place and reported, and `model_provider_sessions.py`
+in the bundle counts the Sessions without a model provider of their own before you
+convert. A
+Runtime history file inside the installation is removed once `config.json` holds
+its settings; one elsewhere is reported as a second copy to delete. Unknown
+files in `config/` and `admin/` are reported and left in place, and a public URL
+that differs from Core's canonical form only by letter case is lowercased. Secret
+files that are links or readable by other users stop the conversion before
+anything changes.
+
+If conversion is interrupted, or the new release fails to start afterwards, fix the
+cause and rerun `./install.sh --convert` with the same bundle to finish it;
+`--public-url` may be repeated but not changed. In a split deployment,
+convert the Core host first, then each Web-only host. A Web-only host converted
+first keeps working; after its Core is converted, run its `parsar apply` to record
+which Core it is paired with.
 
 ## Expose Core and Web
 
@@ -371,8 +444,9 @@ Both the node host and its sandbox guests must reach this address. Installation
 does not create DNS records or certificates, nor expose a host port publicly.
 Without this option, the console uses its loopback address for local access. Do not copy a
 localhost download command to a different machine. Running plain `./install.sh`
-is suitable for local console/API inspection; prepare the shared endpoint before
-installing a deployment that will enroll nodes.
+is suitable for local console/API inspection; set `public_url` in `config.json`
+and run `parsar apply` before you enroll nodes. `parsar status` prints the routes
+to configure.
 
 The distribution includes the pinned E2B SDK helper, so selecting E2B does not
 require Python or pip installation on the Core host. Its private receipts live in

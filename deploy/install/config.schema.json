@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Parsar Core installation configuration",
+  "description": "Process settings of one installation. Edit config.json, then run parsar apply.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "mode"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Editor hint that points at the installed copy of this schema. Ignored.",
+      "x-parsar": {"setting": false}
+    },
+    "format": {
+      "const": 1,
+      "description": "Configuration format. Only an upgrade changes it.",
+      "x-parsar": {"setting": false, "changeable": false}
+    },
+    "mode": {
+      "enum": ["all", "core-only", "web-only"],
+      "default": "all",
+      "description": "Which services this installation runs.",
+      "x-parsar": {"changeable": false, "install_flag": "--core-only or --web-only"}
+    },
+    "native_core": {
+      "type": "boolean",
+      "default": false,
+      "description": "Run Core as a systemd user service instead of a container.",
+      "x-parsar": {"changeable": false, "modes": ["all", "core-only"], "install_flag": "--native-core"}
+    },
+    "public_url": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1.",
+      "x-parsar": {
+        "check": "origin",
+        "restarts": ["core", "web"],
+        "derives": ["AGENTS_API_PUBLIC_URL", "CORE_CONSOLE_ORIGIN"],
+        "install_flag": "--public-url"
+      }
+    },
+    "ports": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "core": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 8091,
+          "description": "Loopback port of the Core API. With native Core, Web follows it.",
+          "x-parsar": {
+            "modes": ["all", "core-only"],
+            "restarts": ["core"],
+            "native_restarts": ["core", "web"],
+            "derives": ["Core port mapping or AGENTS_API_ADDR"],
+            "install_flag": "--core-port"
+          }
+        },
+        "web": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 8080,
+          "description": "Loopback port of Web.",
+          "x-parsar": {
+            "modes": ["all", "web-only"],
+            "restarts": ["web"],
+            "derives": ["Web port mapping or CORE_CONSOLE_ADDR"],
+            "install_flag": "--web-port"
+          }
+        },
+        "database": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port.",
+          "x-parsar": {
+            "modes": ["all", "core-only"],
+            "restarts": ["database", "core"],
+            "derives": ["database port mapping", "AGENTS_API_DATABASE_URL"]
+          }
+        }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-parsar": {"modes": ["web-only"]},
+      "properties": {
+        "core_url": {
+          "type": "string",
+          "description": "Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host.",
+          "x-parsar": {
+            "check": "origin",
+            "restarts": ["web"],
+            "derives": ["CORE_CONSOLE_UPSTREAM"],
+            "install_flag": "--core-url"
+          }
+        }
+      }
+    },
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info",
+          "description": "Minimum log level of Core and Web.",
+          "x-parsar": {"restarts": ["core", "web"], "derives": ["PARSAR_LOG_LEVEL"]}
+        },
+        "format": {
+          "enum": ["auto", "text", "json"],
+          "default": "auto",
+          "description": "Log format. auto writes text to a terminal and JSON otherwise.",
+          "x-parsar": {"restarts": ["core", "web"], "derives": ["PARSAR_LOG_FORMAT"]}
+        },
+        "add_source": {
+          "type": "boolean",
+          "default": false,
+          "description": "Add the source file and line to each log record.",
+          "x-parsar": {"restarts": ["core", "web"], "derives": ["PARSAR_LOG_ADD_SOURCE"]}
+        }
+      }
+    },
+    "core": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-parsar": {"modes": ["all", "core-only"]},
+      "properties": {
+        "execution_concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 4,
+          "description": "Concurrent execution work units in Core. Unrelated to node sandbox capacity.",
+          "x-parsar": {"restarts": ["core"], "derives": ["AGENTS_API_EXECUTION_CONCURRENCY"]}
+        },
+        "harnesses": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["claude_sdk", "codex", "mcode"]},
+          "default": ["claude_sdk", "codex", "mcode"],
+          "description": "Harnesses that Sessions may select.",
+          "x-parsar": {"restarts": ["core"], "derives": ["AGENTS_API_HARNESSES"]}
+        },
+        "default_harness": {
+          "enum": ["claude_sdk", "codex", "mcode"],
+          "default": "codex",
+          "description": "Harness used when a Session names none. It must be listed in core.harnesses.",
+          "x-parsar": {"restarts": ["core"], "derives": ["AGENTS_API_ENGINE"]}
+        },
+        "write_audit_retention": {
+          "type": "string",
+          "default": "2160h",
+          "description": "How long non-creation write history is kept, as a Go duration of at least 1h.",
+          "x-parsar": {"check": "go_duration_min_1h", "restarts": ["core"], "derives": ["AGENTS_API_WRITE_AUDIT_RETENTION"]}
+        },
+        "oauth_trusted_origins": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "x-parsar": {"check": "https_origin"}},
+          "default": [],
+          "description": "Extra HTTPS origins trusted as private OAuth issuers.",
+          "x-parsar": {"restarts": ["core"], "derives": ["AGENTS_API_OAUTH_TRUSTED_ORIGINS"]}
+        },
+        "database_pool": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_conns": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "default": null,
+              "description": "Maximum database connections. null keeps the driver default, max(4, CPU count).",
+              "x-parsar": {"restarts": ["core"], "derives": ["pool_max_conns in AGENTS_API_DATABASE_URL"]}
+            },
+            "min_conns": {
+              "type": ["integer", "null"],
+              "minimum": 0,
+              "default": null,
+              "description": "Minimum idle database connections. null keeps the driver default, 0.",
+              "x-parsar": {"restarts": ["core"], "derives": ["pool_min_conns in AGENTS_API_DATABASE_URL"]}
+            },
+            "max_conn_lifetime": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Go duration. null keeps the driver default, 1h.",
+              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_lifetime in AGENTS_API_DATABASE_URL"]}
+            },
+            "max_conn_idle_time": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Go duration. null keeps the driver default, 30m.",
+              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_idle_time in AGENTS_API_DATABASE_URL"]}
+            },
+            "health_check_period": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Go duration. null keeps the driver default, 1m.",
+              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_health_check_period in AGENTS_API_DATABASE_URL"]}
+            }
+          }
+        },
+        "runtime_history": {
+          "type": ["object", "null"],
+          "default": null,
+          "additionalProperties": false,
+          "description": "Runtime history collection and OTLP export. null keeps local collection with Core's defaults. Core checks the values at startup.",
+          "x-parsar": {"restarts": ["core"], "derives": ["generated/runtime-history.json", "AGENTS_API_RUNTIME_HISTORY_FILE"]},
+          "properties": {
+            "transport": {
+              "type": "string",
+              "description": "OTLP export transport.",
+              "x-parsar": {"restarts": ["core"]}
+            },
+            "endpoint": {
+              "type": "string",
+              "description": "OTLP collector endpoint. Omit it to keep history local.",
+              "x-parsar": {"restarts": ["core"]}
+            },
+            "insecure": {
+              "type": "boolean",
+              "description": "Export without TLS.",
+              "x-parsar": {"restarts": ["core"]}
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {"type": "string"},
+              "description": "Headers sent with each export, such as credentials. Never shown by parsar or Core.",
+              "x-parsar": {"sensitive": true, "restarts": ["core"]}
+            },
+            "queue_capacity": {
+              "type": "integer",
+              "description": "Export queue capacity.",
+              "x-parsar": {"restarts": ["core"]}
+            },
+            "timeout_seconds": {
+              "type": "integer",
+              "description": "Export and query timeout in seconds.",
+              "x-parsar": {"restarts": ["core"]}
+            },
+            "sample_interval_seconds": {
+              "type": "integer",
+              "description": "Periodic sampling interval in seconds.",
+              "x-parsar": {"restarts": ["core"]}
+            }
+          }
+        }
+      }
+    }
+  }
+}

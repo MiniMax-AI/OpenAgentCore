@@ -30,7 +30,9 @@ class CheckError(Exception):
 
 def count(root):
     """Return {environment: count} for Sessions without a frozen provider."""
-    compose = Path(root) / "compose.json"
+    # An installation made with config.json keeps its Compose file under generated/.
+    compose = next((path for path in (Path(root) / "generated/compose.json", Path(root) / "compose.json")
+                    if path.exists()), Path(root) / "compose.json")
     try:
         services = json.loads(compose.read_text())["services"]
     except (OSError, ValueError, KeyError, TypeError):
@@ -46,7 +48,7 @@ def count(root):
     except (OSError, subprocess.SubprocessError):
         raise CheckError("Cannot run the database query; is Docker available?") from None
     if result.returncode:
-        raise CheckError("The database query failed; start the installation (install.sh --status shows its state) and retry")
+        raise CheckError("The database query failed; start the installation and retry")
     counts = dict.fromkeys(ENVIRONMENTS, 0)
     for line in result.stdout.splitlines():
         if not line.strip():

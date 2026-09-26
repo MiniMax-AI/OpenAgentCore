@@ -232,12 +232,15 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(json.loads((self.bundle / "manifest.json").read_text())["artifact_base_url"], "")
 
     def test_bootstraps_include_shared_downloader_and_are_reproducible(self):
-        for name in ("node_install.py", "self_hosted_install.py", "distribution.py", "node_spec.py"):
+        for name in ("node_install.py", "self_hosted_install.py", *distribution.PARSAR_MODULES):
             (self.bundle / name).write_text("# " + name + "\n")
         distribution.bootstraps(self.bundle, "1700000000")
-        first = (self.bundle / "node-install.pyz").read_bytes()
+        first = [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "parsar.pyz")]
         distribution.bootstraps(self.bundle, "1700000000")
-        self.assertEqual(first, (self.bundle / "node-install.pyz").read_bytes())
+        self.assertEqual(first, [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "parsar.pyz")])
+        self.assertTrue(first[1].startswith(b"#!/usr/bin/env python3\n"))
+        with zipfile.ZipFile(self.bundle / "parsar.pyz") as contents:
+            self.assertEqual(set(contents.namelist()), {"__main__.py", *distribution.PARSAR_MODULES})
         for script, filename in (("node_install.py", "node-install.pyz"),
                                  ("self_hosted_install.py", "self-hosted-install.pyz")):
             with zipfile.ZipFile(self.bundle / filename) as contents:

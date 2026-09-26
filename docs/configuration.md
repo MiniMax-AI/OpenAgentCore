@@ -1,15 +1,16 @@
 # Configuration
 
-This is the configuration reference for Core, hosted nodes and the execution
+This is the configuration reference for Core, Web, hosted nodes and the execution
 daemon. Installation and operations guides describe workflows and link here for
-parameters. Each setting has one owner; reinstalling does not restore defaults.
+parameters. Each setting has one home; reinstalling does not restore defaults.
 
 ## Ownership and changes
 
-| Settings | Authoritative source | How changes take effect |
+| Settings | Home | How changes take effect |
 | --- | --- | --- |
-| Core database/pool, listener, execution concurrency, logging, audit retention | `<installation>/config/core.env` | Edit the private file; restart Core |
-| Core key | `<installation>/admin/core.key` (Web) and `admin/core-key-digests.json` (Core) | Replace both files; restart Core and Web ([rotation](getting-started/operations.md#rotate-the-core-key)) |
+| Core and Web process settings: public URL, ports, logging, execution concurrency, harnesses, audit retention, OAuth origins, database pool, Runtime history | `<installation>/config.json` | Edit the file, then run `<installation>/parsar apply` |
+| Core key | `<installation>/secrets/core.key` | `parsar rotate-core-key` ([rotation](getting-started/operations.md#rotate-the-core-key)) |
+| Credential encryption key and database password | `<installation>/secrets/` | Fixed after installation; `parsar apply` refuses a changed file |
 | Hosted provider, uniform guest resources, immutable Runtime specification, E2B credentials | Core PostgreSQL | Web or deployment API; existing maintenance/generation checks |
 | Node registration and sandbox capacity | Core PostgreSQL | Administrator enrollment and node updates |
 | Node host paths, Docker socket and local network wiring | Node `provider.json` | Edit host-local fields; restart the node |
@@ -20,78 +21,147 @@ There is no node enable/disable switch. Registration and guarded removal control
 membership. Core execution concurrency limits concurrent execution and directory/file
 work; node capacity limits reserved/running sandboxes. They are independent.
 
-## Core process file
+## Installation directory
 
-Both Compose and native systemd installations load the same private `core.env`.
-The installer writes it once. Keep its directory mode `0700` and the file `0600`,
-owned by the service account. Reinstallation validates and preserves existing
-content; missing, unsafe or conflicting identity files fail rather than regenerate.
-The installation record stores packaging and identity receipts, not a second
-editable set of process parameters.
+The installer creates the installation directory (default `~/.parsar/core`) with
+mode `0700`. Keep every file in it private to the installation user.
 
-Use one double-quoted literal value per line:
+| Path | Content |
+| --- | --- |
+| `config.json` | Operator settings; the only file you edit |
+| `parsar` | Management command: `status`, `start`, `stop`, `apply`, `rotate-core-key` |
+| `secrets/` | `core.key`, `credential.key` and `database.password`, one copy each |
+| `state.json` | Installation ID, Compose project, images and the digests of written files; written by tools only |
+| `generated/` | Files derived from `config.json`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json`, the native unit and `runtime-history.json` when set |
+| `state/e2b/`, `native/`, `node-payload/` | E2B receipts, native Core binaries and the public node payload |
 
-```dotenv
-AGENTS_API_EXECUTION_CONCURRENCY="4"
-PARSAR_LOG_LEVEL="info"
-AGENTS_API_WRITE_AUDIT_RETENTION="2160h"
-```
+`parsar apply` overwrites `generated/` and records the digests of the files it
+writes. A generated file that matches neither those digests nor what `config.json`
+renders now was edited by hand: `apply` refuses to run until you move the change
+into `config.json` and run `parsar apply --discard-edits`, which keeps the edited
+copy as `generated/<file>.edited-<time>`. A missing generated file is simply
+written again. `parsar status` reports edited files, `config.json` changes that are
+not applied yet and services that run with other inputs than `config.json` renders.
 
-Comments and blank lines are allowed. Escape backslashes, double quotes and dollar
-signs with a backslash. Do not use `export`, duplicate names, variable references,
-command substitution, unquoted values or multiline values. Nothing is expanded by
-the installer's reader. Compose requires version **2.26.0 or newer** for the same
-literal escaping behavior. Do not source this file as a shell script.
+## config.json
 
-Compose uses `env_file` for Core and migrations; the native service uses
-`EnvironmentFile`, and native migrations read the same persisted file. Do not add
-parallel Core values in Compose `environment`, systemd `Environment` or installation
-flags. Changing `core.env` does not require editing those launcher files.
-
-| Parameter | Default / unit | Restrictions and effect |
-| --- | --- | --- |
-| `AGENTS_API_DATABASE_URL` | Required PostgreSQL connection string; generated for the dedicated database without a password | Includes pool settings; with `AGENTS_API_DATABASE_PASSWORD_FILE`, the password comes only from that file |
-| Pool options in the URL | Existing pgx defaults: `pool_max_conns=max(4, CPU count)`, `pool_min_conns=0`, `pool_max_conn_lifetime=1h`, `pool_max_conn_idle_time=30m`, `pool_health_check_period=1m` | For example append `&pool_max_conns=16`; counts are integers and times are Go durations; no separate pool env layer |
-| `AGENTS_API_ADDR` | Binary: `127.0.0.1:8091`; installer: container `:8091` or native loopback installation port | Listen address; container port publishing and reverse-proxy routing are deployment wiring and must match |
-| `AGENTS_API_EXECUTION_CONCURRENCY` | `4` concurrent execution work units | Integer `1..1024`; explicit empty/invalid values fail startup; unrelated to node sandbox capacity |
-| `PARSAR_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`; Web reads the same three logging settings |
-| `PARSAR_LOG_FORMAT` | Automatic for the output destination | `text` or `json` |
-| `PARSAR_LOG_ADD_SOURCE` | Disabled | `1` enables source locations; `0` disables |
-| `AGENTS_API_WRITE_AUDIT_RETENTION` | `2160h` (90 days) | Go duration, minimum `1h`; permanent creation ownership is retained |
-| `AGENTS_API_ENGINE` | `codex` | Default harness; accepted Session choices remain frozen |
-| `AGENTS_API_HARNESSES` | Binary: default harness; installer: `codex,claude_sdk,mcode` | Comma-separated supported harness IDs; unknown IDs fail startup |
-| `AGENTS_API_PUBLIC_URL` | Installer: `--public-url`, or `http://127.0.0.1:<core port>` without one | The one origin applications, nodes, sandbox guests and self-hosted executors use: canonical HTTPS origin without path, or HTTP only for a loopback host. Enables daemon transport; Core derives the daemon WebSocket URL, self-hosted `remote_url`, hosted bootstrap and the deployment's read-only `core_url` from it. Required with `AGENTS_API_SANDBOX_INSTALLATION_ID`. The retired `AGENTS_API_DAEMON_WS_URL` fails startup |
-| `AGENTS_API_DATABASE_PASSWORD_FILE` | Installer: private `database.password` path | The database password, which `AGENTS_API_DATABASE_URL` then must not contain; also read by migrations and the maintenance commands |
-| `AGENTS_API_SETTINGS_FILE` | Unset | The installer's non-secret settings snapshot, reported by `GET /core/v1/installation`; Core does not act on it |
-| `AGENTS_API_SANDBOX_INSTALLATION_ID` | Installer-generated canonical UUID | Stable identity pinned to the database, not provider selection; preserve it |
-| `AGENTS_API_CORE_KEY_DIGESTS_FILE` | Generated private `admin/core-key-digests.json` path | JSON array of [Core key](getting-started/operations.md#core-key) SHA-256 digests that authorize `/core/v1`; the key itself stays in Web's `CORE_CONSOLE_CORE_KEY_FILE`. The old name `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` fails startup |
-| `AGENTS_API_CREDENTIAL_KEY_FILE` | Generated private encryption-key path | Preserve with the database; never regenerate to repair credentials |
-| `AGENTS_API_RUNTIME_HISTORY_FILE` | Unset | Optional existing Runtime history/export JSON; local collection defaults to 30 seconds, retention to 7 days; see [history contract](../contracts/agents-api/runtime-history-api.md) |
-| `AGENTS_API_E2B_PROVIDER_BIN` / `AGENTS_API_E2B_STATE_DIR` | Matching helper / private persistent receipt directory from installer | Paths only; the E2B account credential and template belong to the database |
-| `AGENTS_API_OAUTH_TRUSTED_ORIGINS` | Public HTTPS origins | Additional exact trusted HTTPS origins for private issuers; use the [OAuth contract](../services/agents-api/oauth-credentials.md) |
-
-Core reports loaded configuration paths on startup, without environment values or
-file contents. The existing history JSON format remains a separate specialized
-file referenced from `core.env`; this change does not introduce a new loader or
-consolidate secrets into one file. The former `AGENTS_API_EXECUTION_OPTIONS_FILE`
-is retired and stops startup: remove it and set
-[deployment model providers](#deployment-model-providers) in Web or through Core. Internal polling/queue controls
-remain internal. Runtime history retention remains its existing fixed policy.
-
-A process-only change requires restart. In Compose, recreate Core so it rereads
-`env_file` (a container restart alone retains its old environment):
+The installer writes every setting that applies to the installation's mode, so
+the file shows each value. Installation flags such as `--public-url`,
+`--core-port` and `--web-port` only seed it; `install.sh --config FILE` seeds it
+from a prepared file instead. Afterwards edit it and run:
 
 ```sh
-docker compose -f "$HOME/.parsar/core/compose.json" up -d --no-deps --force-recreate core
+~/.parsar/core/parsar apply --dry-run   # show changed settings, files and restarts
+~/.parsar/core/parsar apply
 ```
 
-Native installation paths must be canonical absolute paths without control
-characters, quotes, backslashes or wildcard characters.
+`apply` validates the file first and changes nothing when a value is invalid. It
+then writes the generated files and compares them with what actually runs: each
+Compose container carries the digest of its inputs in the `io.parsar.inputs`
+label, and native Core carries it as `PARSAR_INPUTS` in its process environment.
+`apply` recreates or restarts exactly the services whose running inputs differ,
+Core first, then Web; a Web restart ends every Web sign-in session. When no service
+runs (after `parsar stop`), `apply` only writes the files and the installation
+stays stopped; while any service runs, `apply` also starts the ones that are
+stopped. Because the comparison is with what runs, an interrupted `apply`,
+rotation or rollback is finished by the next `apply`. If Core rejects a value at
+startup and every service was running with the previous files, `apply` restores
+those files, converges on them again and prints Core's startup error line;
+otherwise it reports the failure and leaves the next `apply` to finish. `mode` and
+`native_core` are fixed; install into a new directory to change them. `state.json`
+records both at installation and wins: `apply` refuses a `config.json` that differs,
+and `parsar status` reports it.
 
-For native Core, restart the installation's generated `parsar-<id>-core.service`
-with `systemctl --user restart`. Do not change installation UUID or backend paths
-as a substitute for provider maintenance. Core refuses a missing installation
-setting when its database already has a claimed deployment.
+Changing `public_url` moves everything Core derives from it: the daemon
+WebSocket URL, the self-hosted `remote_url`, the hosted sandbox bootstrap URL and
+node configuration. When nodes, hosted sandboxes or self-hosted executors are bound
+to the current address, `apply` lists them and asks you to type the new URL
+(`--confirm-public-url-change URL` when non-interactive); it also asks when the
+applied value can't be read. Nodes on the old address
+then get no new sandboxes and must be removed and added again. With
+`public_url: null`, Core uses `http://127.0.0.1:<ports.core>` and only local access
+works; set a real HTTPS URL later without reinstalling.
+
+`core.runtime_history.headers` may hold export credentials. They stay in the 0600
+`config.json` and the generated file Core reads, and never appear in `parsar`
+output or in Core's settings snapshot. Model provider settings are not part of
+`config.json`.
+
+<!-- BEGIN config-reference: generated by scripts/config-reference.py from deploy/install/config.schema.json -->
+| Key | Type | Default | Modes | Change | Restarts | Meaning |
+| --- | --- | --- | --- | --- | --- | --- |
+| `$schema` | string | none | all | any time | none | Editor hint that points at the installed copy of this schema. Ignored. |
+| `format` | `1` | none | all | fixed | none | Configuration format. Only an upgrade changes it. |
+| `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. Install flag: `--core-only` or `--web-only`. |
+| `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. Install flag: `--native-core`. |
+| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `parsar apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1. Install flag: `--public-url`. |
+| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `parsar apply` | core (core, web with native Core) | Loopback port of the Core API. With native Core, Web follows it. Install flag: `--core-port`. |
+| `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `parsar apply` | web | Loopback port of Web. Install flag: `--web-port`. |
+| `ports.database` | integer 1024–65535 | none | `all`, `core-only` | `parsar apply` | database, core | Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port. |
+| `web.core_url` | string (canonical origin; HTTP only on loopback) | none | `web-only` | `parsar apply` | web | Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host. Install flag: `--core-url`. |
+| `log.level` | `"debug"` \| `"info"` \| `"warn"` \| `"error"` | `"info"` | all | `parsar apply` | core, web | Minimum log level of Core and Web. |
+| `log.format` | `"auto"` \| `"text"` \| `"json"` | `"auto"` | all | `parsar apply` | core, web | Log format. auto writes text to a terminal and JSON otherwise. |
+| `log.add_source` | boolean | `false` | all | `parsar apply` | core, web | Add the source file and line to each log record. |
+| `core.execution_concurrency` | integer 1–1024 | `4` | `all`, `core-only` | `parsar apply` | core | Concurrent execution work units in Core. Unrelated to node sandbox capacity. |
+| `core.harnesses` | array of `"claude_sdk"` \| `"codex"` \| `"mcode"` | `["claude_sdk", "codex", "mcode"]` | `all`, `core-only` | `parsar apply` | core | Harnesses that Sessions may select. |
+| `core.default_harness` | `"claude_sdk"` \| `"codex"` \| `"mcode"` | `"codex"` | `all`, `core-only` | `parsar apply` | core | Harness used when a Session names none. It must be listed in core.harnesses. |
+| `core.write_audit_retention` | string (Go duration, at least `1h`) | `"2160h"` | `all`, `core-only` | `parsar apply` | core | How long non-creation write history is kept, as a Go duration of at least 1h. |
+| `core.oauth_trusted_origins` | array of string (canonical HTTPS origin) | `[]` | `all`, `core-only` | `parsar apply` | core | Extra HTTPS origins trusted as private OAuth issuers. |
+| `core.database_pool.max_conns` | integer or null ≥ 1 | `null` | `all`, `core-only` | `parsar apply` | core | Maximum database connections. null keeps the driver default, max(4, CPU count). |
+| `core.database_pool.min_conns` | integer or null ≥ 0 | `null` | `all`, `core-only` | `parsar apply` | core | Minimum idle database connections. null keeps the driver default, 0. |
+| `core.database_pool.max_conn_lifetime` | string or null (Go duration) | `null` | `all`, `core-only` | `parsar apply` | core | Go duration. null keeps the driver default, 1h. |
+| `core.database_pool.max_conn_idle_time` | string or null (Go duration) | `null` | `all`, `core-only` | `parsar apply` | core | Go duration. null keeps the driver default, 30m. |
+| `core.database_pool.health_check_period` | string or null (Go duration) | `null` | `all`, `core-only` | `parsar apply` | core | Go duration. null keeps the driver default, 1m. |
+| `core.runtime_history` | object or null | `null` | `all`, `core-only` | `parsar apply` | core | Runtime history collection and OTLP export. null keeps local collection with Core's defaults. Core checks the values at startup. |
+| `core.runtime_history.transport` | string | none | `all`, `core-only` | `parsar apply` | core | OTLP export transport. |
+| `core.runtime_history.endpoint` | string | none | `all`, `core-only` | `parsar apply` | core | OTLP collector endpoint. Omit it to keep history local. |
+| `core.runtime_history.insecure` | boolean | none | `all`, `core-only` | `parsar apply` | core | Export without TLS. |
+| `core.runtime_history.headers` | object of string values | none | `all`, `core-only` | `parsar apply` | core | Headers sent with each export, such as credentials. Never shown by parsar or Core. Sensitive. |
+| `core.runtime_history.queue_capacity` | integer | none | `all`, `core-only` | `parsar apply` | core | Export queue capacity. |
+| `core.runtime_history.timeout_seconds` | integer | none | `all`, `core-only` | `parsar apply` | core | Export and query timeout in seconds. |
+| `core.runtime_history.sample_interval_seconds` | integer | none | `all`, `core-only` | `parsar apply` | core | Periodic sampling interval in seconds. |
+<!-- END config-reference -->
+
+The schema is `deploy/install/config.schema.json`; the installation keeps a copy
+in `generated/config.schema.json` for editors. Core serves the non-secret settings
+snapshot, with the path of `config.json` and the apply command, at
+`GET /core/v1/installation`.
+
+## Core environment for standalone Core
+
+Core reads only its environment. The installer generates `generated/core.env`
+from `config.json`; operators who run Core without the installer set these names
+themselves. Compose loads the file with `env_file` and systemd with
+`EnvironmentFile`, so Compose must be **2.26.0 or newer**.
+
+| Variable | Set from |
+| --- | --- |
+| `AGENTS_API_PUBLIC_URL` | `public_url`, or Core's loopback origin. The one origin applications, nodes, sandbox guests and self-hosted executors use; Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted bootstrap and the deployment's read-only `core_url` from it. Required with `AGENTS_API_SANDBOX_INSTALLATION_ID` |
+| `AGENTS_API_ADDR` | `ports.core` (native Core) or the container port |
+| `AGENTS_API_DATABASE_URL` | The installation's PostgreSQL without a password, plus `core.database_pool` as `pool_*` query parameters |
+| `AGENTS_API_DATABASE_PASSWORD_FILE` | `secrets/database.password`. `AGENTS_API_DATABASE_URL` must then not contain a password; migrations and the maintenance commands read the file too |
+| `AGENTS_API_CREDENTIAL_KEY_FILE` | `secrets/credential.key`; never regenerate it to repair credentials |
+| `AGENTS_API_CORE_KEY_DIGESTS_FILE` | `generated/core-key-digests.json`, the SHA-256 of the [Core key](getting-started/operations.md#core-key) |
+| `AGENTS_API_SANDBOX_INSTALLATION_ID` | `state.json`; pinned to the database |
+| `AGENTS_API_SETTINGS_FILE` | `generated/settings.json`, the snapshot Core serves at `GET /core/v1/installation`; Core does not act on it |
+| `AGENTS_API_EXECUTION_CONCURRENCY`, `AGENTS_API_ENGINE`, `AGENTS_API_HARNESSES`, `AGENTS_API_WRITE_AUDIT_RETENTION`, `AGENTS_API_OAUTH_TRUSTED_ORIGINS` | The matching `core.*` settings |
+| `AGENTS_API_RUNTIME_HISTORY_FILE` | `generated/runtime-history.json` when `core.runtime_history` is set; see the [history contract](../contracts/agents-api/runtime-history-api.md) |
+| `PARSAR_LOG_LEVEL`, `PARSAR_LOG_FORMAT`, `PARSAR_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
+| `AGENTS_API_E2B_STATE_DIR`, `AGENTS_API_E2B_PROVIDER_BIN` | Receipt directory and, for native Core, the bundled helper; the E2B account credential and template belong to the database |
+
+`AGENTS_API_DAEMON_WS_URL` is retired in favor of `AGENTS_API_PUBLIC_URL`,
+`AGENTS_API_CONFIG_FILE` with no replacement, and `AGENTS_API_EXECUTION_OPTIONS_FILE`
+in favor of [deployment model providers](#deployment-model-providers); Core fails at
+startup while any of them is set and says what to do. Core reports loaded file
+paths on startup, without environment values or file contents. Internal
+polling/queue controls remain internal. Runtime history retention remains its
+existing fixed policy.
+
+Native installation paths must be canonical absolute paths without control
+characters, quotes, backslashes or wildcard characters. Do not change the
+installation UUID or backend paths as a substitute for provider maintenance. Core
+refuses a missing installation setting when its database already has a claimed
+deployment.
 
 ## Deployment model providers
 
