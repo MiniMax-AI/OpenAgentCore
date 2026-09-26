@@ -136,9 +136,23 @@ class InstallerTests(unittest.TestCase):
         (self.root / "installation.json").write_text("{}")
         with self.assertRaisesRegex(install.InstallError, "predates config.json; run ./install.sh --convert"):
             self.install()
-        (self.root / "installation.json").rename(self.root / "state.json")
+        # A fresh install stopped before config.json started nothing: starting over is safe.
+        (self.root / "installation.json").unlink()
+        (self.root / "secrets").mkdir()
         with self.assertRaisesRegex(install.InstallError, "stopped before writing config.json"):
             self.install()
+        (self.root / "state.json").write_text('{"format": 1, "generated": {}}')
+        with self.assertRaisesRegex(install.InstallError, "stopped before writing config.json"):
+            self.install()
+
+    def test_a_live_installation_missing_config_json_is_never_told_to_start_over(self):
+        self.install()
+        (self.root / "config.json").unlink()
+        before = self.snapshot()
+        with self.assertRaisesRegex(install.InstallError, "config.json is missing. Restore it from a backup; "
+                                    ".*generated/settings.json lists the last applied values"):
+            self.install()
+        self.assertEqual(self.snapshot(), before)
 
     def test_web_only_uses_the_existing_core_key_and_records_its_core(self):
         source = self.key_file()

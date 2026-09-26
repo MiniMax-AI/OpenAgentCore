@@ -321,9 +321,20 @@ def layout(root):
     config, legacy = (root / "config.json").exists(), (root / "installation.json").exists()
     if config and legacy:
         return "interrupted"
-    if not config and not legacy and (root / "state.json").exists():
+    if config or legacy:
+        return "config" if config else "legacy"
+    generated = root / "generated"
+    never_applied = not (generated.is_dir() and any(generated.iterdir()))
+    if (root / "state.json").exists():
+        try:
+            recorded = json.loads((root / "state.json").read_text()).get("generated")
+        except (OSError, ValueError, AttributeError):
+            recorded = True
+        # Never applied: nothing started, so nothing depends on these secrets yet.
+        return "incomplete" if never_applied and not recorded else "missing-config"
+    if never_applied and {path.name for path in root.iterdir()} <= {"secrets", "generated", "state", ".parsar.lock"}:
         return "incomplete"
-    return "config" if config else "legacy" if legacy else "other"
+    return "other"
 
 
 def create(root, args, config, manifest, images, provider=None):
@@ -435,7 +446,7 @@ def main(argv=None):
             raise InstallError("--convert accepts only --install-dir, --yes and --public-url")
         check_host()
         manifest = verify_bundle(bundle)
-        described = json.loads((root / ("state.json" if kind == "interrupted" else "installation.json")).read_text())
+        described = convert.detect(root) if kind == "legacy" else json.loads((root / "state.json").read_text())
         if described.get("native_core") and described.get("mode") != "web-only":
             # A host that can't run this release's native Core is refused before anything changes.
             native_service.preflight(bundle, root)
@@ -478,6 +489,10 @@ def main(argv=None):
             parsar_cli.save_state(root, dict(state, images=images))
         finish(root, bundle, manifest)
         return
+    if kind == "missing-config":
+        raise InstallError(f"{root / 'config.json'} is missing. Restore it from a backup; "
+                           f"{root / 'generated/settings.json'} lists the last applied values. The secrets and "
+                           "database belong to this installation, so keep the directory. Nothing was changed")
     if kind == "incomplete":
         raise InstallError(f"An earlier installation into {root} stopped before writing config.json and started no "
                            "service. Remove the directory and install again")
