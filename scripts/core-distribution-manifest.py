@@ -215,7 +215,7 @@ def package_artifacts(bundle, stage, revision):
 
 # The installation's management command; it runs without the bundle directory.
 PARSAR_MODULES = ("parsar_cli.py", "config_model.py", "config.schema.json", "configuration.py",
-                  "native_service.py", "distribution.py", "local_node.py", "node_spec.py")
+                  "native_service.py", "distribution.py", "node_spec.py")
 
 
 def bootstraps(bundle, epoch):

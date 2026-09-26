@@ -831,9 +831,9 @@ initial node configuration reads and registration; durable node credentials auth
 retained configuration reads and node transport. Project keys cannot read nodes,
 placement or allocations.
 
-One execution owner manages local and remote nodes through the same finite
-Provider protocol. Local opt-in uses the same standalone node installer and
-service as a remote host, with a guest-reachable, non-loopback HTTPS origin.
+One execution owner manages every node through the same finite Provider protocol.
+The Core host joins through the same standalone node installer and service as any
+other host; every node needs a guest-reachable, non-loopback HTTPS origin.
 All managed nodes actively connect over authenticated TLS. Persist private node
 identity and highest owner epoch; refuse another process using the same identity
 or a changed backend namespace. Reserve each NodeID before transport upgrade and
@@ -1835,14 +1835,15 @@ The first installer targets a trusted Linux amd64 Docker host. It installs a
 private dedicated PostgreSQL service and separate Core and console services in
 Compose by default, with zero execution nodes. The default requires neither KVM
 nor systemd user services, imports no Runtime image, mounts neither the Docker
-socket nor host devices into Core, and generates no managed Provider configuration.
-Local sandbox placement is opt-in: `--sandbox-provider true --provider microsandbox`
-or `--sandbox-provider true --provider docker`. Enabling the option without naming
-a provider selects microsandbox; `--provider` without enabling the option is an
-error. Local opt-in requires a non-loopback HTTPS `--public-url` reachable from
-sandbox guests. Web-only mode cannot enable a sandbox provider. Core-only mode retains the
-same opt-in rule. Missing KVM fails when microsandbox is selected without changing
-that choice.
+socket nor host devices into Core, and never adds its own host as a node.
+`--sandbox docker|microsandbox|e2b|none` (default `docker`; `none` and nothing else
+with `--web-only`) is a one-time install action: once the services are healthy, the
+installer POSTs `/core/v1/sandbox/deployment` as Web's setup would, and never on a
+repair or conversion. It is not written to `config.json`; PostgreSQL owns the
+selection. E2B needs a non-loopback HTTPS `public_url`, `--e2b-api-key-file` and
+`--e2b-template`, and is refused before anything is installed. A loopback Docker or
+microsandbox selection is saved, but no node can serve it until `public_url` is
+guest-reachable HTTPS. `--sandbox-provider` and `--provider` are retired and fail.
 The thin distribution supplies native Core binaries. Provider helpers, the node
 agent, Runtime launcher and pinned msb runtime/firmware are separate, same-revision
 assets. Nodes obtain them only from the console's payload, so a console serves
@@ -1866,11 +1867,11 @@ The basic API image and binary builds remain independent artifacts.
 The standalone API release and Core distribution both include the Hosted Sandbox
 Manager guide at the relative path used by their packaged README. Include the
 guide in each artifact checksum list so extracted documentation matches its build.
-The node asset includes the sandbox-node binary. Local opt-in initializes an empty
-deployment through the same administrator API, then invokes the ordinary node
-installer. Its initial size matches Web's setup proposal: 2 CPUs with 2048 MiB for
-Docker, or 4096 MiB and 8192 MiB for each disk for microsandbox. An existing
-database selection is never overwritten by installer defaults. Node configuration and identity live under
+The node asset includes the sandbox-node binary. The installer's Docker and
+microsandbox selections use Web's Standard size from
+`apps/web/src/features/sandbox/standard-sizes.json`, which the distribution build
+copies into the bundle; keep no second copy of those values. An existing database
+selection is never overwritten by installer defaults. Node configuration and identity live under
 `~/.parsar/nodes/<installation-id>/`; microsandbox uses its separate short private
 Runtime home. Zero-node installs create no node identity state but retain the paired
 Core key for first setup.
@@ -1878,9 +1879,9 @@ Core key for first setup.
 One Runtime image contains the existing daemon, shared helpers and three native
 harness packages. Their differences remain in the adapters. Core keeps exclusive
 ownership of Session allocation, initialization, cancellation, snapshots and
-cleanup. When a sandbox provider is enabled, the installer imports its Runtime
-image and prepares running conditions; it never creates an execution Session or
-supplies a model credential. Applications use the
+cleanup. The node installer imports the Runtime image and prepares running
+conditions; neither installer creates an execution Session or supplies a model
+credential. Applications use the
 existing write-only model execution extension, with the installation's persistent
 credential encryption key. Provider identity/backend namespace and native history
 must not change on a repeated install.

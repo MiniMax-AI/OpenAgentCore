@@ -1,10 +1,9 @@
 # Operate your Core
 
 The installation operator owns the host, storage and service availability.
-The default installation has zero execution nodes. After nodes are added in Web,
-their operators maintain the node services, containers or microVMs on those hosts.
-A local node requested during installation runs as the same separate node service
-on the Core host. Service
+The default installation selects Docker sandboxes and has zero execution nodes.
+After nodes are added in Web, the Core host included, their operators maintain the
+node services, containers or microVMs on those hosts. Service
 health and provider state are separate from a Session's public execution state.
 
 Use [Configuration](../configuration.md) for the authoritative setting locations,
@@ -199,14 +198,12 @@ Retain together:
   directory on its host (`~/.parsar/nodes/<installation-id>/` for the Web-generated
   installer), as described in the
   [node guide](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host);
-- the same `~/.parsar/nodes/<installation-id>/` identity for a local node, including
-  its credential, generation, specification digest and highest accepted owner epoch;
 - E2B's private `state/e2b` receipts and SDK connection materials when selected;
 - microsandbox's private state/cache/disks/snapshots, or Docker-owned Runtime
   volumes and histories;
 - the exact distribution and private deployment configuration needed to recover.
 
-Do not replace a missing local node identity directory with a fresh registration;
+Do not replace a missing node identity directory with a fresh registration;
 restore its original saved state alongside the database and provider storage.
 Restarting the same installation preserves the directory.
 

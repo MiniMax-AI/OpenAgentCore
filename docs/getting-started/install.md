@@ -1,11 +1,12 @@
 # Install Core and Web
 
 Install one matching Parsar Core distribution. By default it starts PostgreSQL,
-Core and the existing Web console in containers, with zero execution nodes.
+Core and the existing Web console in containers, then selects Docker sandboxes at
+Web's Standard size through the administrator API, with zero execution nodes.
 It does not import Runtime images, mount the Docker socket or host devices into
-Core, or generate a managed Provider configuration. Select the provider, per-sandbox
-resources and immutable Runtime through Web or the administrator API after installation. A local node is an optional installation
-choice and uses the same database-managed configuration.
+Core, or add this host as a node. [`--sandbox`](#installation-choices) selects
+microsandbox, E2B or no backend instead; afterwards, change the provider,
+per-sandbox resources and immutable Runtime through Web or the administrator API.
 No model key, Environment wizard or sample task is required during installation.
 See [Configuration](../configuration.md) for setting ownership, paths, defaults,
 units, change restrictions and restart behavior.
@@ -20,9 +21,8 @@ You can leave the deployment with zero nodes until you need execution.
 The first distribution targets Linux amd64 with Python 3.9+, Docker and Docker
 Compose 2.26.0 or newer. Run the installer as a non-root user who can use Docker.
 The default installation requires neither KVM nor systemd user services.
-The optional local provider has additional requirements described under
-[installation choices](#installation-choices). Node-host requirements are listed
-in the [add-node steps](#add-nodes-after-a-default-installation).
+Node-host requirements are listed in the
+[add-node steps](#add-nodes-after-a-default-installation).
 
 ## Verify, extract and install
 
@@ -41,7 +41,7 @@ your DNS/TLS reverse proxy as described in [Expose Core and Web](#expose-core-an
 and pass that address on the first install. The installer does not create DNS
 records or certificates. You can set or change the public URL later in `config.json`
 (see [Change settings](#change-settings-after-installation)). The command below
-still installs zero execution nodes.
+selects Docker sandboxes and still installs zero execution nodes.
 
 ```sh
 sha256sum -c parsar-core-<commit>-linux-amd64.tar.gz.sha256
@@ -130,7 +130,12 @@ Choose English or Chinese through the System language selector.
 
 1. Log in to the bundled Web console and open **Nodes**.
    The paired installation needs no second key or Core connection setup.
-2. Choose **E2B cloud** or **Own machines**. Own machines use Docker or
+   The installer already saved the sandbox backend (Docker at the Standard size,
+   unless [`--sandbox`](#installation-choices) chose otherwise), so continue with
+   step 4. Nodes need an HTTPS public URL that other machines and their sandboxes
+   can reach; on a loopback installation, set `public_url` first.
+2. After `--sandbox none`, or when the installer could not save the selection,
+   choose **E2B cloud** or **Own machines**. Own machines use Docker or
    microsandbox; select their per-sandbox resources and matched immutable Runtime
    release. E2B uses an account key and an exact ready template build, with no node
    installation; each sandbox gets the build's CPU and memory, so setup asks for no
@@ -258,52 +263,58 @@ container.
 ## Installation choices
 
 ```sh
-./install.sh --sandbox-provider true --provider microsandbox --public-url https://core.example
-./install.sh --sandbox-provider true --provider docker --public-url https://core.example
+./install.sh --sandbox microsandbox --public-url https://core.example
+./install.sh --sandbox e2b --e2b-api-key-file "$HOME/e2b-api-key" \
+  --e2b-template '<template-id>:<build-uuid>' --public-url https://core.example
+./install.sh --sandbox none
 ./install.sh --core-only
 ./install.sh --native-core --public-url https://core.example
-./install.sh --core-only --sandbox-provider true --provider docker --public-url https://core.example
 ```
 
-`--sandbox-provider true` installs a local node through the ordinary node installer, using the node assets in
-the bundle: use the offline bundle, or place the release assets in its `artifacts/` directory. If `--provider` is
-omitted, it selects microsandbox. Supplying `--provider` without enabling the
-sandbox provider is an error. `--core-only` installs Core and PostgreSQL without
-Web and has no sandbox provider unless explicitly enabled.
+`--sandbox` selects the sandbox backend once the services are healthy, through the
+same administrator API as Web's setup: `docker` (the default), `microsandbox`, `e2b`
+or `none`, the only choice with `--web-only`. Docker and microsandbox get Web's
+Standard size, read from the bundle's copy of
+`apps/web/src/features/sandbox/standard-sizes.json`, and the bundle's Runtime
+release. E2B takes its account key from a private file of at most 4 KiB
+(`--e2b-api-key-file`) and a ready template build (`--e2b-template
+template-id:build-uuid`); each sandbox gets the build's CPU and memory. E2B needs
+an HTTPS `--public-url` that is not loopback; otherwise the installer refuses it
+before installing anything. A loopback installation keeps a Docker or microsandbox
+selection, but nodes can't serve it: each sandbox calls Core at the public URL, and
+a loopback address reaches only the sandbox itself. Set `public_url` before adding
+nodes.
 
-Local opt-in requires a non-loopback HTTPS `--public-url` reachable from both the
-node service and its guests. Set up the reverse proxy before installation; the
-installer does not create DNS or certificates. It starts Core, initializes an empty
-deployment through the administrator API and invokes the ordinary node installer.
-An existing database specification is never replaced by installer defaults.
+These flags are one-time install actions, not settings: `config.json` doesn't hold
+them, and PostgreSQL owns the saved selection. Change it later in Web, through
+maintenance. If Core refuses the selection, for example because E2B rejects the key,
+the installer prints Core's message and exits with an error; the services keep
+running, so choose the backend on the Nodes page. A repair run or a conversion
+never selects a backend.
+
+The installer never adds this host as a node: add it like any other host, with
+**Add node** in Web. `--sandbox-provider` and `--provider` are retired and fail.
+`--core-only` installs Core and PostgreSQL without Web.
 
 The provider choice does not select a harness or alter the public `openai_hosted`
-discriminator. Both providers use the same colocated Runtime. Core has no embedded
+discriminator. Both node providers use the same colocated Runtime. Core has no embedded
 node or file-managed provider selection. Docker access and microsandbox KVM/native
 paths belong to the separate node service; the Core container receives no Docker
 socket or node state mount. Web receives neither provider authority nor node secrets.
 
-Local and remote nodes keep configuration and identity under
+Nodes keep configuration and identity under
 `~/.parsar/nodes/<installation-id>/`. Microsandbox stores its private Runtime home
 under `~/.parsar/m/<installation-hash-prefix>/`. Preserve these directories and
 backend storage across restarts. A missing identity is a recovery incident, not
 permission to register over existing resources.
 
-### Local provider requirements
-
-Both node providers require a systemd user session with lingering enabled.
-Docker requires access to the host's Unix socket. Microsandbox additionally requires
-glibc, the matched native libraries and user read/write access to `/dev/kvm`;
-nested cloud hosts must expose hardware virtualization. The installer checks these
-prerequisites without granting permissions or falling back to another provider.
-
-`--native-core` selects a native Core user service independently of the provider;
+`--native-core` selects a native Core user service independently of the sandbox backend;
 PostgreSQL/Web stay in containers. Native Core itself requires no KVM or node
 Runtime files. Without this flag, Core stays in Compose. The standalone node
 service owns provider processes separately from Core.
 Stopping Core does not stop the node or prove its resources have been reclaimed.
 
-See [Configuration](../configuration.md) for initial per-sandbox resources,
+See [Configuration](../configuration.md) for the Standard per-sandbox resources,
 administrator-approved node capacity and the five-minute idle suspension policy.
 Change saved resources or Runtime only through the
 [drained deployment procedure](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance).
@@ -322,8 +333,9 @@ a remote Core must use HTTPS.
   --core-key-file "$HOME/.parsar/core/secrets/core.key"
 ```
 
-Web-only mode cannot enable a sandbox provider. It starts no database or Core and
-requires no KVM. Its key remains on the server, outside the static Web files.
+Web-only mode starts no database or Core, so it selects no sandbox backend (choose
+it on the Core host), and requires no KVM. Its key remains on the server, outside
+the static Web files.
 The input file must be private (0600) and contain a Core key of at least 32 characters.
 
 The Web-only installation copies the key into its own `secrets/core.key`. After a
@@ -354,7 +366,7 @@ Rerunning `./install.sh` on an existing installation reads `config.json` and
 rejects every flag except `--install-dir`. Without flags it repairs the
 installation: it reloads missing images, restores a missing `parsar` command,
 applies `config.json` and starts the services. It refuses a bundle from another
-release. `--sandbox-provider` and `--provider` apply only to a new installation.
+release. `--sandbox` and the E2B flags apply only to a new installation.
 
 ## Convert an earlier installation
 

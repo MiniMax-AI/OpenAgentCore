@@ -177,21 +177,26 @@ See [model execution](../contracts/agents-api/model-execution.md#deployment-defa
 
 ## Database-owned deployment
 
-Choose exactly one provider through Web or `/core/v1/sandbox/deployment`:
-Docker, microsandbox or E2B. Core packaging is independent: `--native-core` does
-not select microsandbox or install a local execution node.
+Exactly one provider serves the deployment: Docker, microsandbox or E2B. A new
+installation selects it once with `install.sh --sandbox` (Docker unless chosen
+otherwise, none with `--web-only`); afterwards Web or `/core/v1/sandbox/deployment`
+change it. Core packaging is independent: `--native-core` does not select
+microsandbox or add an execution node.
 
 Setup requests supply `resources` and, for Docker/microsandbox, the matching
 `runtime` release. Core saves them as `specification` with a digest and generation.
-Web proposes defaults from its distribution; PostgreSQL owns the submitted values.
+Web's setup and the installer propose the Standard size from Web's
+`apps/web/src/features/sandbox/standard-sizes.json` (bundled as
+`standard-sizes.json`); Web derives Small and Large from it. PostgreSQL owns the
+submitted values.
 See the [deployment contract](../contracts/agents-api/sandbox-deployment.md) for
 request shapes, immutable identities and provider validation.
 
-| Setting | Initial Web proposal | Meaning |
+| Setting | Standard | Meaning |
 | --- | --- | --- |
-| `resources.cpus` | `2` | Integer vCPUs per sandbox, 1 through 255 |
-| `resources.memory_mib` | Docker `2048`, microsandbox `4096` | MiB per sandbox, 512 through 1048576 |
-| `resources.root_disk_mib`, `environment_disk_mib` | Microsandbox `8192` each | At least 1024 MiB; omitted for Docker/E2B |
+| `resources.cpus` | Per provider in `standard-sizes.json` | Integer vCPUs per sandbox, 1 through 255 |
+| `resources.memory_mib` | Per provider in `standard-sizes.json` | MiB per sandbox, 512 through 1048576 |
+| `resources.root_disk_mib`, `environment_disk_mib` | Microsandbox only, in `standard-sizes.json` | At least 1024 MiB; omitted for Docker/E2B |
 | `runtime` | Matching distribution manifest | Source revision, exact image ID/manifest/ref and runtime/firmware hashes; no mutable tags |
 | Idle interval / snapshot retention | `300` / `86400` seconds | Database-owned microsandbox policy; no node-file override |
 
@@ -256,7 +261,8 @@ an execution configuration source. Retain credentials, native history, private
 receipts and files independently of process configuration.
 
 The old `AGENTS_API_MANAGED_RUNTIMES_FILE`, embedded Core node and local-node Core
-environment overrides are retired and rejected. Installation may connect an
-explicitly requested local node through the same administrator API and registration
-used for remote hosts. Provider flags are one-time setup inputs, never a persisted
-override. No old file-managed deployment is migrated or adopted.
+environment overrides are retired and rejected. Installation selects the sandbox
+backend through the same administrator API as Web and never adds a node; every host,
+the Core host included, joins through Web's Add node. `--sandbox` is a one-time
+setup input, never a persisted override. No old file-managed deployment is migrated
+or adopted.

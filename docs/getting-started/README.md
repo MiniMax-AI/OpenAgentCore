@@ -12,10 +12,10 @@ Runtime contract. The Parsar product is not required.
 - [Protocol coverage and native differences](https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/README.md)
 
 Core and Web ship together. The default installation runs Core, Web and PostgreSQL
-with zero execution nodes. To prepare a local sandbox provider, install with
-`--sandbox-provider true --provider microsandbox --public-url https://core.example` or
-`--sandbox-provider true --provider docker --public-url https://core.example`, using
-your HTTPS address. Core then creates the execution sandbox
+and selects Docker sandboxes, with zero execution nodes; `--sandbox microsandbox`,
+`--sandbox e2b` or `--sandbox none` choose otherwise. Add nodes, the Core host
+included, with **Add node** on the Nodes page in Web; nodes need an HTTPS public URL
+such as `--public-url https://core.example`. Core then creates the execution sandbox
 when a Session needs it. Installing the service does not require a model key or run
 a model request.
 

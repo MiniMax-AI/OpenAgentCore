@@ -34,8 +34,10 @@ node installation payload. Project keys cannot register, edit or remove nodes.
 
 ## Start with zero nodes
 
-Default installation starts Core, Web and PostgreSQL without local compute.
-Setup on the **Nodes** page first asks for **E2B cloud** or **Own machines**. Own
+Default installation starts Core, Web and PostgreSQL without local compute, and
+selects Docker sandboxes at Web's Standard size through the route below;
+`install.sh --sandbox` chooses microsandbox, E2B or none instead. Without a
+selection, setup on the **Nodes** page first asks for **E2B cloud** or **Own machines**. Own
 machines then choose Docker or microsandbox. Supply the per-sandbox resources and
 matched Runtime release as part of initial setup. E2B takes an account API key and
 a qualified immutable Runtime template build (`template-id:build-uuid`) that must be
@@ -123,13 +125,12 @@ E2B selects its immutable Runtime through the template build instead. See the
 validation and safe response shapes. The response's `specification.resources`
 contains limits; its top-level `resources` contains cleanup counts.
 
-An explicitly requested local node uses the ordinary node installer and service,
-with the same database selection and registration checks as a remote node. Local
-means the Core host, not the browser. The installation option requires a
-non-loopback HTTPS `--public-url` reachable from sandbox guests. Node identity and
-configuration live under `~/.parsar/nodes/<installation-id>/`; preserve that private
-directory and its backend storage together. Core has no embedded local provider
-configuration or node identity mount.
+The Core installer never enrolls its own host. The Core host joins like any other
+host, through **Add node**, with the same database selection and registration
+checks. Node identity and configuration live under
+`~/.parsar/nodes/<installation-id>/`; preserve that private directory and its
+backend storage together. Core has no embedded local provider configuration or node
+identity mount.
 
 ## Older file-managed installations
 
@@ -276,8 +277,7 @@ The node program then exits with status 78 when Core answers 401 to its credenti
 and the installed service does not restart it. Other failures, including an
 unreachable Core or a 403 from a proxy in front of it, restart the service every
 5 seconds without a start limit.
-Ordinary disconnects and host restarts reuse the original identity. A local node
-uses the same removal and resource checks as any other enrolled node.
+Ordinary disconnects and host restarts reuse the original identity.
 
 Provider, resource-limit and Runtime changes share one deployment-wide procedure:
 
