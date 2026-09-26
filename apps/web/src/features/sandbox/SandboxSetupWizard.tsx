@@ -3,10 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
 import { ArrowLeft, ArrowRight, Box, Cloud, Cpu, Server, SlidersHorizontal, type LucideIcon } from "lucide-react";
-import { useId, useState, type FormEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip } from "../../components/console-ui";
+import { Modal } from "../../components/Modal";
 import { CopyableId } from "../../components/list-ui";
 import { formatBytes } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
@@ -62,13 +64,15 @@ function presetOf(provider: SandboxProvider, resources: SandboxResources): Prese
 
 /**
  * Hosted sandbox setup as pages, one decision each: where sandboxes run,
- * which backend (own machines) or the E2B account, how big each sandbox is
- * (own machines only: E2B sandboxes take the template build's size), then a
- * review. Advanced settings hold the complete form. The Runtime
+ * which backend (own machines, microsandbox preselected) or the E2B account,
+ * how big each sandbox is (own machines only: E2B sandboxes take the template
+ * build's size), then a review. Advanced settings hold the complete form. The Runtime
  * release comes from this console's distribution manifest when it serves one.
  * `current` pre-selects the saved choices when a deployment changes. Keeping
  * the backend keeps its saved size and Runtime; another backend starts from its
  * defaults and this console's Runtime. An E2B key must be entered again.
+ * Docker isolates less than microsandbox, so choosing it takes a confirmation,
+ * once per wizard session; a saved Docker deployment has already made it.
  * Core's address is config.json's `public_url`: the review only shows it, and
  * a configuration Core rejects for it is explained here, where it was saved.
  */
@@ -92,6 +96,9 @@ export function SandboxSetupWizard({ coreUrl, current, disabled, switching = fal
   const [template, setTemplate] = useState(current?.e2bTemplate ?? "");
   const [runtime, setRuntime] = useState<Partial<SandboxRuntimeRelease>>({});
   const [busy, setBusy] = useState(false);
+  const [dockerConfirmed, setDockerConfirmed] = useState(current?.provider === "docker");
+  const [confirmingDocker, setConfirmingDocker] = useState(false);
+  const keepMicrosandbox = useRef<HTMLButtonElement>(null);
   // Core's reason for rejecting the saved configuration, such as E2B with a loopback public_url.
   const [rejection, setRejection] = useState<string | null>(null);
   const installation = useQuery(installationQuery);
@@ -128,6 +135,13 @@ export function SandboxSetupWizard({ coreUrl, current, disabled, switching = fal
     setProvider(next);
   }
 
+  function selectDocker() {
+    setConfirmingDocker(false);
+    setDockerConfirmed(true);
+    choose("docker");
+    setStep("size");
+  }
+
   async function save(event?: FormEvent) {
     event?.preventDefault();
     if (!ready || !provider) return;
@@ -156,19 +170,19 @@ export function SandboxSetupWizard({ coreUrl, current, disabled, switching = fal
   let page: ReactNode;
   if (step === "where") {
     page = (
-      <Question title={t("Where should sandboxes run?")} help={t("E2B runs sandboxes in its cloud: no machines to manage, billed by E2B. Own machines run them on hosts you add, with Docker or microsandbox.")}>
+      <Question title={t("Where should sandboxes run?")} help={t("E2B runs sandboxes in its cloud: no machines to manage, billed by E2B. Own machines run them on hosts you add, with microsandbox (recommended) or Docker.")}>
         <div className="wizard-choices">
           <Choice icon={Cloud} title={t("E2B cloud")} selected={where === "direct"} onClick={() => { setWhere("direct"); choose("e2b"); setStep("e2b"); }} />
-          <Choice icon={Server} title={t("Own machines")} selected={where === "nodes"} onClick={() => { setWhere("nodes"); setApiKey(""); if (provider === "e2b") setProvider(null); setStep("backend"); }} />
+          <Choice icon={Server} title={t("Own machines")} selected={where === "nodes"} onClick={() => { setWhere("nodes"); setApiKey(""); if (provider === null || provider === "e2b") choose("microsandbox"); setStep("backend"); }} />
         </div>
       </Question>
     );
   } else if (step === "backend") {
     page = (
-      <Question title={t("Which sandbox backend?")} help={t("Docker runs each sandbox as a container: quick to set up on any Docker host, with CPU and memory limits but no disk quota. microsandbox runs each sandbox as a lightweight virtual machine: stronger isolation and its own root and data disks with size limits, but the host needs KVM.")}>
+      <Question title={t("Which sandbox backend?")} help={t("microsandbox, the recommended default, runs each sandbox as a lightweight virtual machine: stronger isolation and its own root and data disks with size limits, but the host needs KVM. Docker runs each sandbox as a container on the host's kernel: CPU and memory limits but no disk quota, for trusted workloads or hosts without KVM.")}>
         <div className="wizard-choices">
-          <Choice icon={Box} title="Docker" selected={provider === "docker"} onClick={() => { choose("docker"); setStep("size"); }} />
-          <Choice icon={Cpu} title="microsandbox" selected={provider === "microsandbox"} onClick={() => { choose("microsandbox"); setStep("size"); }} />
+          <Choice icon={Cpu} title="microsandbox" badge={t("Recommended")} selected={provider === "microsandbox"} onClick={() => { choose("microsandbox"); setStep("size"); }} />
+          <Choice icon={Box} title="Docker" selected={provider === "docker"} onClick={() => { if (dockerConfirmed) selectDocker(); else setConfirmingDocker(true); }} />
         </div>
         <Nav onBack={back} t={t} />
       </Question>
@@ -324,6 +338,26 @@ export function SandboxSetupWizard({ coreUrl, current, disabled, switching = fal
           {page}
         </m.div>
       </AnimatePresence>
+      {/* Portaled: the sliding page's transform would otherwise contain the fixed backdrop. */}
+      {createPortal(
+        <Modal
+          open={confirmingDocker}
+          title={t("Use Docker instead of microsandbox?")}
+          initialFocus={keepMicrosandbox}
+          onClose={() => setConfirmingDocker(false)}
+          footer={<>
+            <button type="button" className="button outline" onClick={selectDocker}>{t("Use Docker")}</button>
+            <button ref={keepMicrosandbox} type="button" className="button primary" onClick={() => setConfirmingDocker(false)}>{t("Keep microsandbox")}</button>
+          </>}
+        >
+          <ul className="wizard-docker-risks">
+            <li><strong>{t("Weaker isolation")}</strong>{t("Containers share the host's kernel, so a container escape reaches the host. microsandbox runs each sandbox in its own microVM.")}</li>
+            <li><strong>{t("Root-equivalent access")}</strong>{t("The node's service account joins the docker group, which is equivalent to root on that host.")}</li>
+            <li><strong>{t("Limited use")}</strong>{t("Docker suits only trusted workloads, or hosts without KVM.")}</li>
+          </ul>
+        </Modal>,
+        document.body,
+      )}
     </section>
   );
 }
@@ -337,12 +371,12 @@ function Question({ title, help, children }: { title: string; help?: string; chi
   );
 }
 
-/** A large option that selects and moves on in one click. */
-function Choice({ icon: Icon, title, value, detail, selected, onClick }: { icon?: LucideIcon; title: string; value?: string; detail?: string; selected: boolean; onClick: () => void }) {
+/** A large option that selects and moves on in one click; a badge, such as Recommended, sits beside its title. */
+function Choice({ icon: Icon, title, badge, value, detail, selected, onClick }: { icon?: LucideIcon; title: string; badge?: string; value?: string; detail?: string; selected: boolean; onClick: () => void }) {
   return (
     <button type="button" className={selected ? "wizard-choice selected" : "wizard-choice"} aria-pressed={selected} onClick={onClick}>
       {Icon ? <span className="wizard-choice-icon"><Icon size={20} strokeWidth={1.5} aria-hidden="true" /></span> : null}
-      <span className="wizard-choice-title">{title}</span>
+      <span className="wizard-choice-heading"><span className="wizard-choice-title">{title}</span>{badge ? <span className="pill">{badge}</span> : null}</span>
       {value ? <span className="wizard-choice-value">{value}</span> : null}
       {detail ? <span className="wizard-choice-value">{detail}</span> : null}
     </button>

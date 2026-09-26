@@ -78,7 +78,8 @@ workbench.
   and offer Delete.
 - **Platform**: Projects and keys (projects, their assets and usage, named keys,
   write history), Nodes (sandbox setup as pages — where sandboxes run, the
-  backend or E2B account, the size of each sandbox (own machines only; E2B takes the
+  backend (microsandbox by default; Docker only after a confirmation of its weaker
+  isolation) or E2B account, the size of each sandbox (own machines only; E2B takes the
   template build's), a review, and advanced settings
   with the complete form — then the node list with each node's capacity, host
   figures and allocations, enrollment, renaming, sandbox limits and removal; Add node
