@@ -249,46 +249,69 @@ class DistributionTests(unittest.TestCase):
 
 
 class BundledDocsTests(unittest.TestCase):
+    NAMES = ("README.md", "docs/install.md")
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.source = pathlib.Path(self.temporary.name) / "source"
         self.bundle = pathlib.Path(self.temporary.name) / "bundle"
         for name, text in {
-            "README.md": "# Title\n\n![Banner](docs/banner.png)\n[Install](docs/install.md#sign-in-to-web), "
-                         "[API](contracts/api.md#routes), [web](docs/web), `[kept](missing.md)`, "
+            "README.md": "# Title\n\n![Banner](docs/banner.png) ![Chart](docs/chart.png)\n"
+                         "[Install](docs/install.md#sign-in-to-web), [API](contracts/api.md#routes), [web](docs/web), "
+                         "`[kept](missing.md)`, [`schema.json`](contracts/schema.json), "
                          "[main](https://github.com/MiniMax-AI/parsar-core/blob/main/LICENSE)\n"
-                         "```sh\n[not a link](missing.md)\n```\n",
-            "docs/install.md": "# Install\n## Sign in to Web\n[Back](../README.md#title) [Here](#sign-in-to-web)\n",
-            "docs/banner.png": "",
+                         "```sh\n[not a link](missing.md)\n```\n\n    [indented code](missing.md)\n",
+            "docs/install.md": "# Install\n## Sign in to Web\n## C#\n## _Emphasis_ and snake_case\n"
+                               "[Back](../README.md#title) [Here](#sign-in-to-web) [C](#c) [E](#emphasis-and-snake_case)\n"
+                               "- A list item\n\n    [continued](#install)\n",
+            "docs/banner.png": "png",
+            "docs/chart.png": "png",
             "docs/web/README.md": "# Web\n",
             "contracts/api.md": "# API\n## Routes\n",
+            "contracts/schema.json": "{}",
         }.items():
             (self.source / name).parent.mkdir(parents=True, exist_ok=True)
             (self.source / name).write_text(text)
 
+    def bundle_docs(self):
+        distribution.docs(self.source, self.bundle, REVISION, names=self.NAMES, files=("docs/banner.png",))
+
     def test_links_leaving_the_bundle_point_at_the_revision(self):
-        distribution.docs(self.source, self.bundle, REVISION, names=("README.md", "docs/install.md"))
+        self.bundle_docs()
         versioned = "https://github.com/MiniMax-AI/parsar-core/{}/" + REVISION + "/"
         self.assertEqual((self.bundle / "README.md").read_text(), (
-            "# Title\n\n![Banner](" + versioned.format("raw") + "docs/banner.png)\n"
+            "# Title\n\n![Banner](docs/banner.png) ![Chart](" + versioned.format("raw") + "docs/chart.png)\n"
             "[Install](docs/install.md#sign-in-to-web), [API](" + versioned.format("blob") + "contracts/api.md#routes), "
             "[web](" + versioned.format("tree") + "docs/web), `[kept](missing.md)`, "
-            "[main](" + versioned.format("blob") + "LICENSE)\n```sh\n[not a link](missing.md)\n```\n"))
+            "[`schema.json`](" + versioned.format("blob") + "contracts/schema.json), "
+            "[main](" + versioned.format("blob") + "LICENSE)\n```sh\n[not a link](missing.md)\n```\n\n"
+            "    [indented code](missing.md)\n"))
         self.assertEqual((self.bundle / "docs/install.md").read_text(), (self.source / "docs/install.md").read_text())
+        self.assertEqual((self.bundle / "docs/banner.png").read_text(), "png")
         self.assertFalse((self.bundle / "contracts").exists())
 
     def test_broken_links_and_anchors_fail_the_build(self):
-        for text in ("[x](missing.md)", "[x](docs/install.md#no-such-heading)", "[x](../outside.md)", "[x](#nowhere)"):
-            (self.source / "README.md").write_text("# Title\n" + text + "\n")
-            with self.assertRaises(ValueError):
-                distribution.docs(self.source, self.bundle, REVISION, names=("README.md", "docs/install.md"))
+        for text in ("[x](missing.md)", "[x](docs/install.md#no-such-heading)", "[x](../outside.md)", "[x](#nowhere)",
+                     "[`code text`](missing.md)", "See [`a`](docs/install.md#gone) and more"):
+            with self.subTest(text=text):
+                (self.source / "README.md").write_text("# Title\n" + text + "\n")
+                with self.assertRaises(ValueError):
+                    self.bundle_docs()
+
+    def test_the_bundle_check_reads_code_span_links(self):
+        self.bundle_docs()
+        (self.bundle / "README.md").write_text("# Title\n[`schema.json`](contracts/schema.json)\n")
+        with self.assertRaises(ValueError):
+            distribution.check_docs(self.bundle, self.NAMES, ("docs/banner.png",))
 
     def test_repository_docs_are_self_consistent(self):
         repository = pathlib.Path(__file__).resolve().parent.parent
         distribution.docs(repository, self.bundle, REVISION)
         self.assertEqual({str(path.relative_to(self.bundle)) for path in self.bundle.rglob("*.md")},
                          set(distribution.BUNDLED_DOCS))
+        for name in distribution.BUNDLED_FILES:
+            self.assertTrue((self.bundle / name).is_file())
         for name in distribution.BUNDLED_DOCS:
             self.assertNotIn("@SOURCE_REVISION@", (self.bundle / name).read_text())
             self.assertNotIn("/blob/main/", (self.bundle / name).read_text())

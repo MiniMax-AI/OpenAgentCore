@@ -46,10 +46,13 @@ BUNDLED_DOCS = (
     "services/agents-api/HOSTED-SANDBOX-MANAGER.md",
     "contracts/agents-api/environment-executor-credentials.md",
 )
+# Files the bundled docs show, copied as they are, so they work offline.
+BUNDLED_FILES = ("docs/assets/openagentcore-banner.png",)
 REPOSITORY_URL = "https://github.com/MiniMax-AI/parsar-core"
 MARKDOWN_LINK = re.compile(r"(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")
-FENCE = re.compile(r"\s*(```|~~~)")
-HEADING = re.compile(r"(#{1,6})\s+(.*?)\s*#*\s*\Z")
+FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
+HEADING = re.compile(r" {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*\Z")
+LIST_ITEM = re.compile(r" {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|\Z)")
 
 
 def sha256(path):
@@ -331,14 +334,81 @@ def archive(bundle, epoch, variant=""):
 
 
 def markdown_lines(text):
-    """(line, inside a code block) for each line of a Markdown document."""
-    fenced = False
+    """(line, inside a code block) for each line of a Markdown document.
+
+    Fenced blocks close only with a fence of the same character, at least as long.
+    A line indented by four or more columns after a blank line is an indented code
+    block, except inside a list, where indentation continues the list item.
+    """
+    fence, in_list, previous_blank, previous_code = None, False, True, False
     for line in text.split("\n"):
-        if FENCE.match(line):
-            fenced = not fenced
+        opening = FENCE.match(line)
+        if fence is not None:
+            closes = opening and opening.group(1)[0] == fence[0] and len(opening.group(1)) >= len(fence) \
+                and not line[opening.end():].strip()
+            if closes:
+                fence = None
             yield line, True
+            continue
+        if opening:
+            fence = opening.group(1)
+            yield line, True
+            continue
+        blank = not line.strip()
+        indent = len(line.expandtabs(4)) - len(line.expandtabs(4).lstrip(" "))
+        code = not blank and indent >= 4 and not in_list and (previous_blank or previous_code)
+        if not blank and not code:
+            if LIST_ITEM.match(line):
+                in_list = True
+            elif indent == 0:
+                in_list = False
+        previous_blank, previous_code = blank, code or (previous_code and blank)
+        yield line, code
+
+
+def code_span_end(line, position):
+    """The end of the code span opening at position, or None when its backticks never close."""
+    run = re.match(r"`+", line[position:]).group(0)
+    closing = re.compile(r"(?<!`)" + run + r"(?!`)").search(line, position + len(run))
+    return closing.end() if closing else None
+
+
+def links(line):
+    """The Markdown links of one line, skipping code spans outside link text."""
+    position = 0
+    while position < len(line):
+        if line[position] == "`":
+            end = code_span_end(line, position)
+            position = end if end is not None else position + len(re.match(r"`+", line[position:]).group(0))
+            continue
+        match = MARKDOWN_LINK.match(line, position) if line[position] in "![" else None
+        if match:
+            yield match
+            position = match.end()
         else:
-            yield line, fenced
+            position += 1
+
+
+def heading_text(title):
+    """A heading's rendered text: code spans keep their content; links, tags and emphasis markers go."""
+    rendered, text, position = [], "", 0
+    while position < len(title):
+        end = code_span_end(title, position) if title[position] == "`" else None
+        if end is None:
+            text += title[position]
+            position += 1
+            continue
+        rendered.append(plain(text) + title[position:end].strip("`"))
+        text, position = "", end
+    return "".join(rendered) + plain(text)
+
+
+def plain(text):
+    """Markdown text without link syntax, HTML tags and emphasis markers; intraword underscores stay."""
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"(?<![^\W_])_+|_+(?![^\W_])", "", text)
+    return re.sub(r"[*~]", "", text)
 
 
 def heading_anchors(text):
@@ -347,8 +417,7 @@ def heading_anchors(text):
     for line, code in markdown_lines(text):
         match = None if code else HEADING.match(line)
         if match:
-            title = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", match.group(2)).replace("`", "").replace("*", "")
-            base = re.sub(r"[^\w\- ]", "", re.sub(r"<[^>]+>", "", title).strip().lower()).replace(" ", "-")
+            base = re.sub(r"[^\w\- ]", "", heading_text(match.group(2) or "").strip().lower()).replace(" ", "-")
             count = counts.get(base, 0)
             counts[base] = count + 1
             found.add(base if count == 0 else f"{base}-{count}")
@@ -360,16 +429,19 @@ def rewrite_links(text, rewrite):
     lines = []
     for line, code in markdown_lines(text):
         if not code:
-            parts = re.split(r"(`[^`]*`)", line)
-            line = "".join(part if index % 2 else MARKDOWN_LINK.sub(
-                lambda match: f"{match.group(1)}[{match.group(2)}]({rewrite(bool(match.group(1)), match.group(3))}{match.group(4)})",
-                part) for index, part in enumerate(parts))
+            pieces, position = [], 0
+            for match in links(line):
+                pieces.append(line[position:match.start()])
+                pieces.append(f"{match.group(1)}[{match.group(2)}]({rewrite(bool(match.group(1)), match.group(3))}{match.group(4)})")
+                position = match.end()
+            line = "".join(pieces) + line[position:]
         lines.append(line)
     return "\n".join(lines)
 
 
-def docs(source, bundle, revision, names=BUNDLED_DOCS):
-    """Copy the bundled docs; a link that leaves them points at this revision on GitHub.
+def docs(source, bundle, revision, names=BUNDLED_DOCS, files=BUNDLED_FILES):
+    """Copy the bundled docs and the files they show; a link that leaves them points at
+    this revision on GitHub.
 
     Every relative link must name an existing file, and an anchor an existing heading,
     so a broken link fails the build instead of shipping.
@@ -377,7 +449,7 @@ def docs(source, bundle, revision, names=BUNDLED_DOCS):
     source, bundle = pathlib.Path(source), pathlib.Path(bundle)
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("Bundled docs need the full source commit")
-    bundled = set(names)
+    bundled = set(names) | set(files)
     anchors = {}
 
     def headings(path):
@@ -409,10 +481,13 @@ def docs(source, bundle, revision, names=BUNDLED_DOCS):
         target = bundle / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text.replace("@SOURCE_REVISION@", revision), encoding="utf-8")
-    check_docs(bundle, names)
+    for name in files:
+        (bundle / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source / name, bundle / name)
+    check_docs(bundle, names, files)
 
 
-def check_docs(bundle, names=BUNDLED_DOCS):
+def check_docs(bundle, names=BUNDLED_DOCS, files=BUNDLED_FILES):
     """Every relative link in the bundled docs resolves inside the bundle."""
     bundle = pathlib.Path(bundle)
     for name in names:
@@ -420,8 +495,9 @@ def check_docs(bundle, names=BUNDLED_DOCS):
             if not re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", link):
                 path, _, anchor = link.partition("#")
                 target = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(path))) if path else name
-                if target not in names or (anchor and unquote(anchor) not in heading_anchors(
-                        (bundle / target).read_text(encoding="utf-8"))):
+                if target not in set(names) | set(files) or not (bundle / target).is_file() or (
+                        anchor and target.endswith(".md")
+                        and unquote(anchor) not in heading_anchors((bundle / target).read_text(encoding="utf-8"))):
                     raise ValueError(f"Bundled {name} links outside the bundle: {link}")
             return link
         rewrite_links((bundle / name).read_text(encoding="utf-8"), check)
