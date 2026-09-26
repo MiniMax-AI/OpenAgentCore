@@ -543,6 +543,13 @@ request runs.
   node enrolled with an earlier Core address adds an "Old Core address gone?"
   disclosure with the `--force` form; a loopback console carries Add node's amber
   note. Done dismisses it and focus returns to the page heading.
+- **Use Docker instead of microsandbox?**: choosing Docker in sandbox setup lists
+  what it gives up, each point a 600 Ink lead over a Graphite line: weaker
+  isolation (containers share the host kernel; microsandbox gives each sandbox
+  its own microVM), root-equivalent access (the node's account joins the docker
+  group) and limited use (trusted workloads, or hosts without KVM). The footer
+  holds Use Docker (outline) and Keep microsandbox (primary), which takes focus;
+  closing or Escape keeps microsandbox too.
 - **How to call**: wherever a new key is shown, a card under it gives three
   copyable samples, each a Margin Gray block with a Hairline and its label and copy
   button in a header row: a Shell block exporting `OPENAI_BASE_URL` (the
@@ -662,20 +669,22 @@ sidebar's account controls, opens it again at any time.
 
 ### Sandbox setup
 Setting up hosted sandboxes, and changing the provider or resources in maintenance,
-is a set of pages inside the Nodes page, one decision each: where sandboxes run (own machines
-or E2B), then the backend (Docker or microsandbox, compared behind a help tip) or
-the E2B account, then the size of each sandbox (three presets; E2B skips it, since
-each sandbox takes the template build's size), then a review.
-Choices are large cards that advance on a click; short indigo dashes show the
-progress; pages slide and blur across. The review states where sandboxes run,
-the size, the Runtime (taken from this console's distribution manifest) and the
-Core address, read-only: it is config.json's `public_url`, and the console never
-asks for it. A loopback address carries an amber line under it: only the Core
-machine reaches it. When Core rejects the configuration for it (E2B with a
-loopback `public_url`), a red-tinted block under the review keeps Core's message
-and adds the config file and apply command as copyable values. A save attempt
-clears the E2B key, so the review then says to enter it again, with a link to
-that step.
+is a set of pages inside the Nodes page, one decision each: where sandboxes run (own
+machines or E2B), then the backend or the E2B account, then the size of each sandbox
+(three presets; E2B skips it, since each sandbox takes the template build's size),
+then a review. Choices are large cards that advance on a click; short indigo dashes
+show the progress; pages slide and blur across. The backend page compares
+microsandbox and Docker behind a help tip; microsandbox comes first, preselected (a
+saved backend stays selected), with a neutral Recommended pill beside its title.
+Docker takes a confirmation (see Dialogs) once per visit to setup; a saved Docker
+deployment has already made it. The review states where sandboxes run, the size, the
+Runtime (taken from this console's distribution manifest) and the Core address,
+read-only: it is config.json's `public_url`, and the console never asks for it. A
+loopback address carries an amber line under it: only the Core machine reaches it.
+When Core rejects the configuration for it (E2B with a loopback `public_url`), a
+red-tinted block under the review keeps Core's message and adds the config file and
+apply command as copyable values. A save attempt clears the E2B key, so the review
+then says to enter it again, with a link to that step.
 Advanced settings, one link away, hold the complete form: resources (not for
 E2B), the Runtime release and the E2B template. A change keeps the saved size
 and Runtime while the backend stays the same (a saved size outside the presets is

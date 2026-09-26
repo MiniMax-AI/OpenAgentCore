@@ -9,7 +9,7 @@ test("sets up sandboxes with Core's address read-only, never sending it", async 
   page.on("request", (sent) => { if (sent.url().includes("/core/v1/sandbox/deployment")) bodies.push(sent.postData() ?? ""); });
   await openConsole(page, request, "nodes", { sandbox: "none" });
   await page.getByRole("button", { name: "Own machines" }).click();
-  await page.getByRole("button", { name: "Docker" }).click();
+  await page.getByRole("button", { name: "microsandbox Recommended" }).click();
   await page.getByRole("button", { name: /^Standard/ }).click();
   const review = page.getByRole("definition").filter({ hasText: "https://core.example.com" });
   await expect(review).toContainText("Set by public_url in config.json");

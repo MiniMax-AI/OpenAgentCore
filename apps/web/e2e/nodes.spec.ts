@@ -174,7 +174,7 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   await openConsole(page, request, "nodes", { sandbox: "none" });
   await expect(page.getByRole("heading", { name: "Where should sandboxes run?" })).toBeVisible();
   await page.getByRole("button", { name: "Own machines" }).click();
-  await page.getByRole("button", { name: "Docker" }).click();
+  await page.getByRole("button", { name: "microsandbox Recommended" }).click();
   await page.getByRole("button", { name: /^Standard/ }).click();
   await expect(page.getByRole("heading", { name: "Review and save" })).toBeVisible();
   await page.getByRole("button", { name: "Save configuration" }).click();
@@ -187,6 +187,34 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   const tokenRequested = await page.waitForRequest((sent) => sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"), { timeout: 1000 }).then(() => true, () => false);
   expect(tokenRequested).toBe(false);
   expect(await writes(request)).toEqual(["POST /core/v1/sandbox/deployment"]);
+});
+
+test("preselects microsandbox and asks once before switching to Docker", async ({ page, request }) => {
+  await openConsole(page, request, "nodes", { sandbox: "none" });
+  await page.getByRole("button", { name: "Own machines" }).click();
+  const microsandbox = page.getByRole("button", { name: "microsandbox Recommended" });
+  const docker = page.getByRole("button", { name: "Docker", exact: true });
+  const confirm = page.getByRole("dialog", { name: "Use Docker instead of microsandbox?" });
+  const sizeStep = page.getByRole("heading", { name: "How big is each sandbox?" });
+  await expect(microsandbox).toHaveAttribute("aria-pressed", "true");
+
+  // Keeping microsandbox is the default action; it leaves microsandbox selected.
+  await docker.click();
+  const keep = confirm.getByRole("button", { name: "Keep microsandbox" });
+  await expect(keep).toBeFocused();
+  await keep.click();
+  await expect(confirm).toBeHidden();
+  await expect(microsandbox).toHaveAttribute("aria-pressed", "true");
+
+  // Confirmed, Docker is selected and the wizard does not ask again.
+  await docker.click();
+  await confirm.getByRole("button", { name: "Use Docker" }).click();
+  await expect(sizeStep).toBeVisible();
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(docker).toHaveAttribute("aria-pressed", "true");
+  await docker.click();
+  await expect(sizeStep).toBeVisible();
+  await expect(confirm).toHaveCount(0);
 });
 
 test("saves E2B without opening Add node, as it has no machines", async ({ page, request }) => {

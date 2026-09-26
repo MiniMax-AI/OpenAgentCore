@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type PropsWithChildren, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 interface ModalProps extends PropsWithChildren {
@@ -9,18 +9,22 @@ interface ModalProps extends PropsWithChildren {
   onClose: () => void;
   /** A wider dialog for charts and facts; the default suits a form. */
   wide?: boolean;
+  /** What takes focus on open, such as a confirmation's default action; otherwise the first field, then the first control. */
+  initialFocus?: RefObject<HTMLElement | null>;
 }
 
-export function Modal({ open, title, footer, onClose, wide = false, children }: ModalProps) {
+export function Modal({ open, title, footer, onClose, wide = false, initialFocus, children }: ModalProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
+  const initialFocusRef = useRef(initialFocus);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const wasOpenRef = useRef(false);
   const titleId = useId();
   const [mounted, setMounted] = useState(open);
   const [closing, setClosing] = useState(false);
   onCloseRef.current = onClose;
+  initialFocusRef.current = initialFocus;
 
   useEffect(() => {
     if (open) {
@@ -57,7 +61,7 @@ export function Modal({ open, title, footer, onClose, wide = false, children }: 
     ].join(",");
     const frame = window.requestAnimationFrame(() => {
       const preferred = dialog?.querySelector<HTMLElement>("input:not([disabled]), textarea:not([disabled]), select:not([disabled])");
-      const first = preferred ?? dialog?.querySelector<HTMLElement>(focusableSelector) ?? dialog;
+      const first = initialFocusRef.current?.current ?? preferred ?? dialog?.querySelector<HTMLElement>(focusableSelector) ?? dialog;
       first?.focus();
     });
 

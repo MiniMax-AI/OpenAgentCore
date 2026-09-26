@@ -324,3 +324,38 @@
 .wizard-key-again .wizard-link {
   color: var(--accent);
 }
+
+/* A choice's title with its badge, such as Recommended. */
+.wizard-choice-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 8px;
+}
+
+.wizard-choice-heading .pill {
+  margin: 0;
+}
+
+/* What Docker gives up against microsandbox, in its confirmation. */
+.wizard-docker-risks {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  list-style: none;
+}
+
+.wizard-docker-risks li {
+  display: grid;
+  gap: 2px;
+  color: var(--ink-2);
+}
+
+.wizard-docker-risks strong {
+  color: var(--ink);
+  font-weight: 600;
+}
