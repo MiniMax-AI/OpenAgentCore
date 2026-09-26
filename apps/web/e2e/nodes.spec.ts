@@ -180,6 +180,18 @@ test("marks a node on an old Core address in its row, beside each node's limit",
   await expect(row).toContainText("5 / 8");
 });
 
+test("gives the host's uninstall command even when the installation must be read again", async ({ page, request }) => {
+  await openConsole(page, request, "nodes");
+  await page.route("**/core/v1/installation", (route) => route.fulfill({ status: 500, json: { error: { message: "Unavailable.", type: "server_error", code: null, param: null } } }));
+  await page.getByRole("button", { name: "Remove edge-03" }).click();
+  await page.getByRole("dialog", { name: "Remove node" }).getByRole("button", { name: "Confirm removal" }).click();
+  const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
+  await expect(cleanup.getByRole("alert")).toContainText("The installation couldn't be read, so no command can be issued.");
+  await page.unroute("**/core/v1/installation");
+  await cleanup.getByRole("button", { name: "Try again" }).click();
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/'https:\/\/core\.example\.com\/node-install\/node-install\.pyz'/);
+});
+
 test("sets up own-machine sandboxes page by page, with the Runtime from the distribution", async ({ page, request }) => {
   await openConsole(page, request, "nodes", { sandbox: "none" });
   await expect(page.getByRole("heading", { name: "Where should sandboxes run?" })).toBeVisible();

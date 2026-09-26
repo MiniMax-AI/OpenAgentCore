@@ -559,9 +559,11 @@ request runs.
   data), and the no-sudo form behind an "Installed without sudo?" disclosure. A
   node enrolled with an earlier Core address adds an "Old Core address gone?"
   disclosure with the `--force` form. The command, too, downloads from the public
-  URL; without one other machines can use, a single line says the service stays on
-  the host and no command can be given. Done dismisses it and focus returns to the
-  page heading.
+  URL, which the dialog reads again if it is not at hand: until then one line says
+  it is being checked, a failed read says so with Try again, and a public URL other
+  machines can't use (loopback, or none) gets a line saying the service stays on the
+  host and no command can be given. Done dismisses it and focus returns to the page
+  heading.
 - **Use Docker instead of microsandbox?**: choosing Docker in sandbox setup lists
   what it gives up, each point a 600 Ink lead over a Graphite line: weaker
   isolation (containers share the host kernel; microsandbox gives each sandbox

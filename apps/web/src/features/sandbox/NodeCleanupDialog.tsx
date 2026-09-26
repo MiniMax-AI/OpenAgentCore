@@ -1,14 +1,15 @@
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { Modal } from "../../components/Modal";
+import { installationQuery } from "../../lib/installation";
+import { nodeSourceUrl } from "./core-origin";
 import { nodeUninstallCommand, type NodeInstallMode } from "./enrollment-command";
 import { CommandBlock } from "./node-commands";
 
 /** A node Core has just removed, with what builds its host's uninstall command. */
 export interface NodeCleanup {
   name: string;
-  /** The installation's public URL, which the command downloads the installer from; null when other machines can't use it. */
-  sourceUrl: string | null;
   installationId: string;
   scriptDigest: string;
   provider: string;
@@ -25,17 +26,28 @@ export interface NodeCleanup {
  * node's user. A node enrolled with an earlier address may find it gone; then
  * `--force` skips only that confirmation. Nothing deletes sandboxes, volumes or
  * images. Like Add node's, the command downloads from the installation's public
- * URL; while other machines can't use it (loopback, say) the dialog says so instead.
+ * URL, which the dialog reads (again, if it is not at hand): until it is read, if
+ * the read fails (with Try again), or while other machines can't use it, the
+ * dialog says so in place of the command. It never opens empty.
  */
 export function NodeCleanupDialog({ cleanup, open, onClose }: { cleanup: NodeCleanup | null; open: boolean; onClose: () => void }) {
   const { t, i18n } = useTranslation("sandbox");
   // Sentences run on with a space in English and without one in Chinese.
   const join = (...sentences: string[]) => sentences.join(i18n.resolvedLanguage?.startsWith("zh") ? "" : " ");
-  const command = (mode: NodeInstallMode, force = false) => cleanup?.sourceUrl
-    ? nodeUninstallCommand({ sourceUrl: cleanup.sourceUrl, installationId: cleanup.installationId, scriptDigest: cleanup.scriptDigest, mode, force }) : "";
+  const installation = useQuery({ ...installationQuery, enabled: cleanup !== null });
+  const sourceUrl = installation.data ? nodeSourceUrl(installation.data) : null;
+  const command = (mode: NodeInstallMode, force = false) => cleanup && sourceUrl
+    ? nodeUninstallCommand({ sourceUrl, installationId: cleanup.installationId, scriptDigest: cleanup.scriptDigest, mode, force }) : "";
+  const stays = cleanup ? t("{{name}} is removed from Core, but its service and files stay on the host.", { name: cleanup.name }) : "";
   return <Modal open={open} title={t("Clean up the host")} onClose={onClose} footer={<button className="button primary" type="button" onClick={onClose}>{t("Done")}</button>}>
-    {cleanup && !cleanup.sourceUrl ? <div className="sandbox-add-node form-stack">
-      <p>{t("{{name}} is removed from Core, but its service and files stay on the host. An uninstall command needs an HTTPS public URL that other machines can reach, and this installation has none.", { name: cleanup.name })}</p>
+    {cleanup && !installation.data ? <div className="sandbox-add-node form-stack">
+      {installation.isError
+        ? <p role="alert">{join(stays, t("The installation couldn't be read, so no command can be issued."))} <button className="text-action" type="button" disabled={installation.isFetching} onClick={() => void installation.refetch()}>{t("Try again")}</button></p>
+        : <p role="status">{t("Checking this installation's public URL…")}</p>}
+    </div> : cleanup && !sourceUrl ? <div className="sandbox-add-node form-stack">
+      <p>{join(stays, installation.data?.local_only && installation.data.public_url
+        ? t("Other machines can't reach this installation's public URL, {{url}}, so no uninstall command can be given.", { url: installation.data.public_url })
+        : t("An uninstall command needs an HTTPS public URL that other machines can reach, and this installation has none."))}</p>
     </div> : cleanup ? <div className="sandbox-add-node form-stack">
       <p>{t("{{name}} is removed from Core. To remove its service and files from the host, run:", { name: cleanup.name })}</p>
       <CommandBlock key={command("sudo")} value={command("sudo")} label={t("Uninstall command")} autoFocus />
