@@ -26,7 +26,7 @@ def sha256(data):
 
 class FakeHost:
     def __init__(self, test):
-        self.commands = []
+        self.commands, self.requests = [], []
         self.containers = {}  # service -> {hash, inputs, running}
         self.project = None
         self.recreated = []
@@ -202,6 +202,7 @@ class FakeHost:
         return None
 
     def http(self, url, headers=None, timeout=5):
+        self.requests.append(url)
         headers = headers or {}
         origin, _, path = url.partition("://")[2].partition("/")
         path = "/" + path

@@ -12,6 +12,7 @@ config.json both exist.
 """
 import datetime
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -214,10 +215,19 @@ def canonical(value, key, plan, override=None):
         plan.notes.append(f"{key} {value} is written as {value.lower()}, the canonical form Core requires.")
         return value.lower()
     if override is None:
-        remedy = ("rerun with --public-url naming the canonical origin" if key == "public_url"
-                  else "install Web again with a canonical --core-url")
+        remedy = {"public_url": "rerun with --public-url naming the canonical origin",
+                  "AGENTS_API_PUBLIC_URL": "write the canonical origin in config/core.env and rerun"}.get(
+                      key, "install Web again with a canonical --core-url")
         plan.problem("installation.json", key, f"{value} is not a canonical origin ({config_model.CHECKS['origin'][1]}); {remedy}")
     return value
+
+
+def loopback(value):
+    host = urlsplit(value).hostname or ""
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == "localhost"
 
 
 def old_core_deployment(root, old, plan, run):
@@ -310,7 +320,16 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
                               "They are dropped; only admin/core.key works after conversion.")
 
     if from_env:
-        public = canonical(env_public, "public_url", plan)
+        public = env_public
+        if mode == "all" and public != old.get("public_url"):
+            # Web's origin follows public_url, so a hand-set Core address would move it.
+            if public_url_override is not None and public_url_override in (public, old.get("public_url")):
+                public, public_url_override = public_url_override, None
+            else:
+                plan.problem("config/core.env", PUBLIC_URL, f"is {public or 'the loopback fallback'}, but "
+                             f"installation.json's public_url, which Web uses, is {old.get('public_url') or 'none'}. "
+                             f"Rerun with --public-url naming the one to keep"
+                             + ("" if public and old.get("public_url") else ", or make them agree in config/core.env"))
     else:
         public = canonical(old.get("public_url"), "public_url", plan, public_url_override)
         if public_url_override is not None and old.get("public_url") and not origin(old["public_url"].lower()):
@@ -320,6 +339,8 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
     # Core derives that from AGENTS_API_PUBLIC_URL, so core.env already names the address.
     if mode != "web-only" and not from_env and not plan.problems:
         deployment, started = old_core_deployment(root, old, plan, run)
+        if deployment == f'http://127.0.0.1:{old["core_port"]}':
+            deployment = None  # Core's loopback address, saved by a local-only setup: no public URL.
         if deployment:
             if public is None:
                 public = deployment
@@ -391,14 +412,18 @@ def map_environment(root, old, env, password, config, plan, known):
         plan.problem(where, PASSWORD_FILE, "names another file; only the installation's config/database.password "
                      "can be converted")
     public, from_env = None, PUBLIC_URL in env
+    fallback = f'http://127.0.0.1:{old["core_port"]}'
     if from_env and env[PUBLIC_URL] == since[PUBLIC_URL]:
         # The #138 installer's own value: the public URL, or the loopback fallback for none.
         public = old.get("public_url")
     elif from_env:
         # Set by hand when Core was upgraded in place: it is the address Core uses.
         public = canonical(env[PUBLIC_URL], "AGENTS_API_PUBLIC_URL", plan)
-        if public == f'http://127.0.0.1:{old["core_port"]}':
+        if public == fallback:
             public = None
+        elif public and configuration.valid_core_origin(public) and loopback(public):
+            plan.problem(where, PUBLIC_URL, f"is a loopback address other than Core's own {fallback}; set the public "
+                         "HTTPS origin there, or remove the line")
         plan.notes.append(f"public_url is taken from AGENTS_API_PUBLIC_URL in config/core.env, the address Core uses.")
     for name in sorted(set(env) - set(DERIVED) - set(RETIRED) - {PUBLIC_URL, PASSWORD_FILE} - MAPPED):
         plan.problem(where, name, "is not a setting config.json can hold; remove it")

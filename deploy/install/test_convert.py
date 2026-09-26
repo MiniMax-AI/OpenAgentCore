@@ -173,16 +173,26 @@ class ConvertTests(unittest.TestCase):
                 services = self.document("generated/compose.json")["services"]
                 if mode == "all":
                     self.assertEqual(services["web"]["environment"]["CORE_CONSOLE_ORIGIN"], "http://127.0.0.1:8080")
-                self.assertNotIn("/core/v1/sandbox/deployment", json.dumps(self.host.commands))
+                self.assertFalse([url for url in self.host.requests if url.endswith("/core/v1/sandbox/deployment")])
                 self.assertConverted()
 
     def test_native_conversion_checks_the_host_first(self):
         self.legacy(native=True)
         before = self.snapshot()
-        with mock.patch.object(install.native_service, "preflight",
-                               side_effect=RuntimeError("Native Core shared libraries cannot load on this host")), \
-                self.assertRaisesRegex(RuntimeError, "shared libraries"):
+        refused = mock.patch.object(install.native_service, "preflight",
+                                    side_effect=RuntimeError("Native Core shared libraries cannot load on this host"))
+        with refused, self.assertRaisesRegex(RuntimeError, "shared libraries"):
             self.convert()
+        self.assertEqual(self.snapshot(), before)
+        # Finishing a conversion whose first start failed checks the host again.
+        self.host.core["fails"] = True
+        with self.assertRaises(parsar_cli.ParsarError):
+            self.convert()
+        self.host.core["fails"] = False
+        before = self.snapshot()
+        with refused, mock.patch.object(install, "finish") as finish, self.assertRaisesRegex(RuntimeError, "shared libraries"):
+            self.convert()
+        finish.assert_not_called()
         self.assertEqual(self.snapshot(), before)
 
     def test_hand_set_settings_move_into_config_json(self):
@@ -214,15 +224,31 @@ class ConvertTests(unittest.TestCase):
         self.assertNotIn("No execution node was installed", self.output.getvalue())
         self.assertConverted()
 
-    def test_a_core_upgraded_in_place_keeps_its_public_url(self):
+    def test_a_core_upgraded_in_place_keeps_the_address_it_uses(self):
         # Following the #138 upgrade note: retired lines removed, the deployment's address set by hand.
-        self.legacy("5c3dcc16", drop=("AGENTS_API_DAEMON_WS_URL", "AGENTS_API_CONFIG_FILE"), environment={
-            "AGENTS_API_PUBLIC_URL": "https://nodes.example"})
-        self.host.deployment_core_url = "https://nodes.example"
+        upgraded = {"drop": ("AGENTS_API_DAEMON_WS_URL", "AGENTS_API_CONFIG_FILE")}
+        self.legacy("5c3dcc16", "core-only", environment={"AGENTS_API_PUBLIC_URL": "https://nodes.example"}, **upgraded)
         self.convert()
         self.assertEqual(self.document("config.json")["public_url"], "https://nodes.example")
         self.assertIn("taken from AGENTS_API_PUBLIC_URL", self.output.getvalue())
         self.assertConverted()
+        # Core's own loopback fallback set by hand means no public URL.
+        self.root, self.host.containers = self.work / "fallback", {}
+        self.legacy("5c3dcc16", "core-only", environment={"AGENTS_API_PUBLIC_URL": "http://127.0.0.1:8091"}, **upgraded)
+        self.convert()
+        self.assertIsNone(self.document("config.json")["public_url"])
+        # Another loopback address, or one that would move Web's origin, is reported.
+        for name, mode, value, message in (
+                ("localhost", "core-only", "http://localhost:8091", "is a loopback address other than Core's own"),
+                ("web", "all", "https://nodes.example", "which Web uses, is none")):
+            self.root, self.host.containers = self.work / name, {}
+            self.legacy("5c3dcc16", mode, environment={"AGENTS_API_PUBLIC_URL": value}, **upgraded)
+            before = self.snapshot()
+            with self.assertRaisesRegex(convert.ConvertError, message):
+                self.convert()
+            self.assertEqual(self.snapshot(), before)
+        self.convert("--public-url", "https://nodes.example")
+        self.assertEqual(self.document("config.json")["public_url"], "https://nodes.example")
 
     def test_web_only_converts_before_its_core(self):
         self.legacy(mode="web-only", core_url="https://core.example")

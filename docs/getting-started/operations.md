@@ -159,9 +159,11 @@ The old account state is not read; delete it after the upgrade or keep it as a
 backup. Then start the services and sign in with the Core key.
 
 The deployment no longer stores the Core address, and nodes keep the one they
-enrolled with. `install.sh --convert` takes the public URL from the sandbox
-deployment's `core_url` when the installation had none, and stops when the two
-differ, so existing nodes stay bound. It also moves the database password into
+enrolled with. For an installation made before `AGENTS_API_PUBLIC_URL` existed,
+`install.sh --convert` takes the public URL from the sandbox deployment's
+`core_url` when the installation had none, and stops when the two differ, so
+existing nodes stay bound. Later installations already name the address in
+`config/core.env`, and conversion keeps it. It also moves the database password into
 `secrets/database.password`. For a Core you run without the installer, read
 `GET /core/v1/sandbox/deployment` with the Core key before upgrading and set
 `AGENTS_API_PUBLIC_URL` to its `core_url`; with any other value, every existing

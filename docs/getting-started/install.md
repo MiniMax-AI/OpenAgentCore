@@ -369,7 +369,9 @@ Convert one with this release's bundle:
 
 Conversion is also an upgrade to this release, and its database migrations can't
 be undone: back up the database first (the command prints a `pg_dump` example).
-It reads the old files and Core's sandbox deployment without changing anything.
+It reads the old files without changing anything; for an installation made before
+the release that added `AGENTS_API_PUBLIC_URL`, it also reads the sandbox
+deployment's `core_url` from the old Core.
 It then shows the resulting settings and asks for confirmation (`--yes` skips the
 prompt). It writes `config.json` and `state.json`, moves the secrets into `secrets/`
 without copying them, removes the old generated files, and starts the new release
@@ -378,10 +380,12 @@ with the same Compose project, database and installation ID.
 It stops before changing anything, and lists each reason, when an item can't be
 converted: an edited `compose.json`, an unknown or edited generated value in
 `core.env`, an external database, or an installation public URL that differs from
-the sandbox deployment's Core URL. An `AGENTS_API_PUBLIC_URL` set by hand in
-`core.env` is the address Core uses, so it becomes `public_url`. For the last case, rerun with
-`--public-url` naming one of the two; choosing the installation's URL means the
-deployment's nodes must be removed and added again. Hand-set settings such as
+the sandbox deployment's Core URL. For that last case, rerun with `--public-url`
+naming one of the two; choosing the installation's URL means the deployment's nodes
+must be removed and added again. An `AGENTS_API_PUBLIC_URL` set by hand in
+`core.env` is the address Core uses, so it becomes `public_url`, and Core's own
+loopback address there means none. When that would move Web's origin away from the
+installation's public URL, conversion stops and `--public-url` names the one to keep. Hand-set settings such as
 `AGENTS_API_EXECUTION_CONCURRENCY`, `PARSAR_LOG_*` or a Runtime history file move
 into `config.json`. `AGENTS_API_EXECUTION_OPTIONS_FILE` is retired by this release
 and not carried over: set [deployment model providers](../configuration.md#deployment-model-providers)

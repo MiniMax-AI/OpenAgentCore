@@ -42,6 +42,8 @@ class ConfigModelTests(unittest.TestCase):
         self.assertEqual(list(config_model.values(config_model.initial("all"))), expected["all"])
         web = config_model.initial("web-only", **{"web.core_url": "https://core.example"})
         self.assertEqual(list(config_model.values(web)), expected["web-only"])
+        self.assertEqual(config_model.initial("core-only", True, **{"ports.database": 15432})["ports"],
+                         {"core": 8091, "database": 15432})
         native = config_model.initial("all", True, **{"ports.database": 15432})
         self.assertEqual(native["ports"], {"core": 8091, "web": 8080, "database": 15432})
         restarts = {item["key"]: item["restarts"] for item in config_model.settings(native)}
