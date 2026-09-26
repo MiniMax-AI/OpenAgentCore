@@ -15,7 +15,7 @@ test("sets, replaces and clears a harness's default model, and keeps its key out
   await expect(codex).toContainText("Enabled");
   await expect(codex).toContainText("Default");
   await expect(codex).toContainText("Not set");
-  await expect(section.getByRole("article", { name: "Claude SDK" })).toContainText("Not set");
+  await expect(section.getByRole("article", { name: "Claude Code" })).toContainText("Not set");
   await expect(mcode).toContainText("Disabled");
 
   await codex.getByRole("button", { name: "Set the default model for Codex" }).click();

@@ -12,7 +12,7 @@ export const sessions = {
   },
   sessionStatus: { all: "全部", in_progress: "运行中", requires_action: "等待操作", failed: "失败", idle: "空闲", other: "其他" },
   environment: { none: "无环境", self_hosted: "自托管", openai_hosted: "托管沙箱", other: "其他" },
-  harness: { claude_sdk: "Claude SDK", codex: "Codex", mcode: "MiniMax Code" },
+  harness: { claude_sdk: "Claude Code", codex: "Codex", mcode: "MiniMax Code" },
   usage: { input: "输入", output: "输出", total: "总计", cached: "缓存", reasoning: "推理" },
   log: {
     title: "Session 日志",

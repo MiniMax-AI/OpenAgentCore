@@ -15,7 +15,7 @@ export const sessions = {
   },
   sessionStatus: { all: "All", in_progress: "Running", requires_action: "Waiting for input", failed: "Failed", idle: "Idle", other: "Other" },
   environment: { none: "No environment", self_hosted: "Self-hosted", openai_hosted: "Hosted sandbox", other: "Other" },
-  harness: { claude_sdk: "Claude SDK", codex: "Codex", mcode: "MiniMax Code" },
+  harness: { claude_sdk: "Claude Code", codex: "Codex", mcode: "MiniMax Code" },
   usage: { input: "Input", output: "Output", total: "Total", cached: "Cached", reasoning: "Reasoning" },
   log: {
     title: "Session log",
