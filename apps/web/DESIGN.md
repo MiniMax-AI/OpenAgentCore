@@ -685,9 +685,10 @@ do: Set up sandboxes, Add node, Open Nodes or Open sandbox backend; Open System;
 Create project (which continues to the new project's first key) or Issue key;
 See how to call (the newest active project, preferring one with an active key), or
 Projects and keys without an active project. Add node, Create project and Issue key
-open their page with the dialog already open; Open System focuses the default
-harness's Set or Replace; See how to call opens the project with its How to call
-heading at the top of the page body, focused. Every step done turns it into one line, "You're set", with Take the tour and
+open their page with the dialog already open; Open System brings the Default
+model section to the top of the page body and focuses the default harness's Set or
+Replace; See how to call opens the project with its How to call heading at the top
+of the page body, focused. Only the page body scrolls; the page header stays. Every step done turns it into one line, "You're set", with Take the tour and
 Dismiss; it stays, through the tour, until dismissed, and the checklist does not
 come back on its own. The choice is kept per installation in the browser, also
 while the deployment cannot be read; Show Getting started, a quiet row above the

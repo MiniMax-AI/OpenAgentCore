@@ -83,6 +83,7 @@ test("opens a fresh install on the Overview's Getting started: a project and its
   await expect(page.getByRole("heading", { name: "My app", level: 1 })).toBeVisible();
   const call = page.getByRole("region", { name: "How to call" });
   await expect(call.getByRole("heading", { name: "How to call" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "My app", level: 1 })).toBeInViewport();
   await expect(call.getByLabel("Shell", { exact: true })).toHaveText('export OPENAI_BASE_URL=https://core.example.com/v1\nexport OPENAI_API_KEY="<project API key>"');
   const stored = await browserStorage(page);
   expect(stored).not.toContain("fixture-secret");
@@ -98,6 +99,8 @@ test("leads from Getting started to the default model, and counts it done once t
   // It arrives on the default harness's action.
   const set = page.getByRole("button", { name: "Set the default model for Codex" });
   await expect(set).toBeFocused();
+  // Only the page body scrolls to it: the page header stays in view.
+  await expect(page.getByRole("heading", { name: "System", level: 1 })).toBeInViewport();
   await set.click();
   const form = page.getByRole("dialog", { name: "Set default model for Codex" });
   await form.getByLabel("Base URL").fill("https://model.example/v1");

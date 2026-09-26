@@ -4,7 +4,7 @@ import { useCallback, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { EmptyState, HelpTip, Section, StatusDot } from "../../components/console-ui";
+import { EmptyState, HelpTip, revealInPageBody, Section, StatusDot } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
 import { Modal } from "../../components/Modal";
 import { TableSkeleton } from "../../components/Skeleton";
@@ -72,8 +72,7 @@ export function DefaultModelsSection() {
     window.requestAnimationFrame(() => {
       const section = document.getElementById("system-models-heading")?.closest("section");
       const action = section?.querySelector<HTMLButtonElement>("article[data-default] .system-model-actions button") ?? section?.querySelector<HTMLButtonElement>(".system-model-actions button");
-      section?.scrollIntoView({ block: "start" });
-      action?.focus();
+      revealInPageBody(section ?? null, action ?? null);
     });
   });
 
