@@ -1,4 +1,4 @@
-import type { SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxEnrollment, SandboxNode } from "@agents-core-web/agents-client";
 
 import type { MessageKey } from "../../lib/locale-strings";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
@@ -37,10 +37,10 @@ export interface HostPrerequisite {
  *   (probe.go:43 and 75, config/capacity.go:9), else the node reports capacity_insufficient;
  * - node_install.py:70 needs the user's own systemd session (`systemctl --user`),
  *   which sudo -u and su don't provide;
- * - network: node files from the console (node_install.py:94-106), artifacts from
- *   the manifest's artifact_base_url, the console by default (node_install.py:139-140,
- *   distribution.py:150-154), Core's /api/v1 (node_spec.py:89, node_install.py:385),
- *   and sandboxes reach Core as well (node_install.py:213, 220-233).
+ * - network: node files and artifacts only from the console (`fetch` and
+ *   `metadata` in node_install.py, which never use a release URL), Core's /api/v1
+ *   (node_spec.py:89, the `register` call in node_install.py), and sandboxes reach
+ *   Core as well (`provider_config` in node_install.py).
  * `sized` says whether the deployment's sandbox size is known for the capacity item.
  */
 export function hostPrerequisites(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
@@ -58,7 +58,7 @@ export function hostPrerequisites(provider: "docker" | "microsandbox", sized: bo
     ...microsandbox,
     { label: sized ? "CPUs and memory for at least one sandbox: {{size}}" : "CPUs and memory for at least one sandbox" },
     { label: "Run the command signed in as that user: over SSH, or with", command: "sudo machinectl shell NODE_USER@" },
-    { label: "Can reach {{console}}, {{core}} and the release downloads; sandboxes must reach {{core}}" },
+    { label: "Can reach {{console}} and {{core}}; sandboxes must reach {{core}}" },
   ];
 }
 
@@ -74,27 +74,14 @@ export function formatCountdown(milliseconds: number): string {
   return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
 }
 
-/** What identifies the node a command enrolls: nodes that existed before it, and the limits it approved. */
-export interface EnrollmentTarget {
-  known: ReadonlySet<string>;
-  max_active: number;
-  max_retained: number;
-}
-
 /**
- * The newest node registered since the command was issued with the command's
- * limits, which Core copies onto the node it enrolls
- * (services/agents-api/internal/store/runtime_nodes.go:166); a node from another
- * command with other limits is not this one. Only microsandbox keeps its own
- * retained limit; Core sets Docker's to the active one.
+ * The node this command registered: Core copies the command's `enrollment_id`
+ * onto the node it enrolls. A node enrolled before Core recorded it reports null
+ * and never matches, nor does anything for a command without an ID.
  */
-export function enrolledNode(nodes: readonly SandboxNode[], target: EnrollmentTarget, suspends: boolean): SandboxNode | null {
-  let newest: SandboxNode | null = null;
-  for (const node of nodes) {
-    if (target.known.has(node.id) || node.max_active !== target.max_active || (suspends && node.max_retained !== target.max_retained)) continue;
-    if (!newest || Date.parse(node.created_at) > Date.parse(newest.created_at)) newest = node;
-  }
-  return newest;
+export function enrolledNode(nodes: readonly SandboxNode[], command: Pick<SandboxEnrollment, "enrollment_id">): SandboxNode | null {
+  if (!command.enrollment_id) return null;
+  return nodes.find((node) => node.enrollment_id === command.enrollment_id) ?? null;
 }
 
 export type EnrollmentStage = "waiting" | "registered" | "connected" | "ready";

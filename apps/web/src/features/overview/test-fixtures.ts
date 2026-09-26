@@ -39,7 +39,7 @@ export function node(id: string, overrides: Partial<SandboxNode> = {}): SandboxN
     cpu_count: 8, available_memory_bytes: 1024, available_disk_bytes: 2048,
     running: 1, snapshots: 0, last_seen_at: "2026-09-24T00:00:00Z",
     max_active: 4, max_retained: 8, active: 1, reserved: 0, retained: 0, cleanup_pending: 0,
-    created_at: "2026-09-01T00:00:00Z", core_url: "https://core.example",
+    created_at: "2026-09-01T00:00:00Z", core_url: "https://core.example", enrollment_id: null,
     ...overrides,
   };
 }

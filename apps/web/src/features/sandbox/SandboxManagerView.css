@@ -70,6 +70,7 @@
 .sandbox-add-node-warning svg { flex-shrink: 0; margin-top: 3px; color: var(--warning); }
 .sandbox-enrollment-problem { display: grid; gap: 6px; }
 .sandbox-add-node .sandbox-enrollment-problem p { color: var(--fg); }
+.sandbox-enrollment-problem p .help-tip { margin-left: 2px; vertical-align: -4px; }
 .sandbox-log-hint { display: grid; gap: 4px; color: var(--fg-muted); font-size: 12px; }
 .sandbox-enrollment-progress { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; }
 .sandbox-enrollment-progress .future .status-dot { color: var(--fg-muted); }
