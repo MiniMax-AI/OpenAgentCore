@@ -9,7 +9,7 @@ import { nodeProviderDiagnostic, sandboxDiagnosticMessage } from "../../lib/sand
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { phaseTiming } from "./allocation-phase";
-import { nodeState, NodeStatus, seconds } from "./NodeList";
+import { nodeState, NodeStatus, OldAddressHint, seconds } from "./NodeList";
 
 /** Why a node is not serving: disconnected, or the reason its provider is not ready. */
 function nodeDiagnostic(node: SandboxNode): string {
@@ -36,9 +36,11 @@ function PhaseTime({ allocation, retentionSeconds, now }: { allocation: SandboxA
   return <td className="nodes-nowrap" title={formatDateTime(timing.since, locale)}>{text}</td>;
 }
 
-export function NodeDetail({ node, allocations, stale, suspension }: {
+export function NodeDetail({ node, allocations, coreUrl, stale, suspension }: {
   node: SandboxNode;
   allocations: readonly SandboxAllocation[];
+  /** The deployment's address; a node enrolled with another one is on an old address. */
+  coreUrl: string;
   stale: boolean;
   /** The deployment's idle suspension policy; only microsandbox has one. */
   suspension: SandboxDeployment["suspension"];
@@ -52,6 +54,7 @@ export function NodeDetail({ node, allocations, stale, suspension }: {
   // Only microsandbox suspends sandboxes into snapshots; Docker retains nothing.
   const suspends = node.provider === "microsandbox";
   const diagnostic = stale ? "" : nodeDiagnostic(node);
+  const state = nodeState(node, own, stale, coreUrl);
   const count = (value: number) => formatInteger(value, locale);
   return (
     <>
@@ -60,8 +63,9 @@ export function NodeDetail({ node, allocations, stale, suspension }: {
         <div>
           <dt>{t("Status")}</dt>
           <dd className="node-status-fact">
-            <NodeStatus state={nodeState(node, own, stale)} />
+            <NodeStatus state={state} />
             {diagnostic ? <DiagnosticTip code={diagnostic} /> : null}
+            {state === "old_address" ? <OldAddressHint /> : null}
           </dd>
         </div>
         <div>

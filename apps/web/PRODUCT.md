@@ -102,6 +102,9 @@ workbench.
 - A node whose provider is not ready names the reason (Docker unreachable, no Docker
   limits, missing Runtime image, no KVM, missing microsandbox components, a host too
   small) and its fix in the help tip beside its status, wherever that status shows.
+- A node enrolled with an earlier Core address gets no new sandboxes, so on the Nodes
+  list and its page its status is Old address, with "Remove and add again", never
+  Available.
 - **E2B deployments** have no machines: the Nodes entry becomes Sandbox backend,
   and Overview and Sandbox metrics show the sandboxes Core holds in E2B's cloud
   (running, starting, size, template build) instead of node capacity, with no node column

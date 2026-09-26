@@ -665,9 +665,10 @@ place of its content; errors inside a dialog or a form
 stay beside what they concern. Coverage notes (Margin Gray, Hairline, 12px corners,
 12.5px Graphite) state bounded aggregation. A standing warning that needs action,
 such as the Nodes page naming nodes still bound to an old Core address, is an
-amber-tinted line at the top of the page body. Partial-data chips are amber-tinted pills
-with a help tip. Safety notices (a key shown once, a destructive consequence) stay
-visible in body text.
+amber-tinted line at the top of the page body; each of those nodes' status reads
+Old address (amber dot) with "Remove and add again" under it in 12px Graphite.
+Partial-data chips are amber-tinted pills with a help tip. Safety notices (a key
+shown once, a destructive consequence) stay visible in body text.
 
 ### Onboarding
 Signing in and the console tour share one frame: a dark stage on the left (always

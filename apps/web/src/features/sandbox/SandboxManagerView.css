@@ -52,6 +52,10 @@
 /* Node list and node detail. */
 .nodes-nowrap { white-space: nowrap; }
 .node-status-fact, .node-diagnostic { display: inline-flex; align-items: center; gap: 4px; }
+/* A node on an old address: what to do, under its status. */
+.node-status-hint { display: block; color: var(--fg-muted); font-size: 12px; }
+.node-status-fact { flex-wrap: wrap; }
+.node-status-fact .node-status-hint { flex-basis: 100%; }
 .sandbox-manager-page .console-section-title h2 .heading-count { margin-left: 6px; }
 
 /* Add node: the countdown sits beside Copy; requirements fold away once seen. */

@@ -170,6 +170,16 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await expect(page.getByRole("heading", { name: "Nodes", level: 1 })).toBeFocused();
 });
 
+test("marks a node on an old Core address in its row, beside each node's limit", async ({ page, request }) => {
+  await openConsole(page, request, "nodes", { installation: "stale" });
+  const row = page.getByRole("row", { name: /core-01/ });
+  await expect(row).toContainText("Old address");
+  await expect(row).toContainText("Remove and add again");
+  await expect(row).not.toContainText("Available");
+  // Docker nodes show their limit too.
+  await expect(row).toContainText("5 / 8");
+});
+
 test("sets up own-machine sandboxes page by page, with the Runtime from the distribution", async ({ page, request }) => {
   await openConsole(page, request, "nodes", { sandbox: "none" });
   await expect(page.getByRole("heading", { name: "Where should sandboxes run?" })).toBeVisible();
