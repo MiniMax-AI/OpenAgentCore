@@ -196,8 +196,8 @@ The installer chooses how the node runs from the user that runs it:
   mode. Add Docker nodes only on hosts dedicated to running sandboxes. Microsandbox
   nodes need only the `kvm` group.
 
-  Pass the token on standard input, as the command does. In sudo mode the installer
-  refuses `PARSAR_NODE_ENROLLMENT_TOKEN`, because `sudo VAR=… python3` records the
+  Pass the token on standard input, as the command does. The installer refuses a
+  token in the environment, because `sudo VAR=… python3` records the
   variable in sudo's log. A sudoers policy with `log_input` records standard input
   as well; the token is single-use and expires after ten minutes.
 - **As a normal user (for hosts without sudo).** The node runs as that user's

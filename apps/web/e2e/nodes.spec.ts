@@ -205,7 +205,8 @@ test("keeps the saved size and Runtime for the same backend, and starts another 
     microsandbox_ref: `parsar-core-runtime@sha256:${"b".repeat(64)}`, runtime_sha256: "c".repeat(64), firmware_sha256: "d".repeat(64) };
   const current = { resources: { cpus: 7, memory_mib: 8192 }, runtime };
   const deployment = { installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", maintenance: true,
-    owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: current };
+    owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),
+    suspension: null };
   let submitted: Record<string, unknown> | null = null;
   await page.route("**/core/v1/sandbox/deployment", async (route) => {
     if (route.request().method() === "PUT") submitted = route.request().postDataJSON() as Record<string, unknown>;
