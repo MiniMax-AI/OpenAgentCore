@@ -512,17 +512,19 @@ class NodeInstallTests(unittest.TestCase):
         account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
                                   pw_dir=str(self.home), pw_shell="/usr/sbin/nologin")
         record = self.home / "child.pid"
+        # As in a terminal session; a runner under nohup would otherwise ignore SIGHUP.
+        self.addCleanup(signal.signal, signal.SIGHUP, signal.signal(signal.SIGHUP, signal.SIG_DFL))
 
         def long_step():
             record.write_text(str(os.getpid()))
             os.kill(os.getppid(), signal.SIGHUP)  # The administrator's terminal closes.
-            time.sleep(60)
+            time.sleep(30)
         started = time.monotonic()
         with mock.patch.object(installer.os, "setgroups"), mock.patch.object(installer.os, "setgid"), \
                 mock.patch.object(installer.os, "setuid"), mock.patch.object(installer.sys, "stdout", io.StringIO()), \
                 self.assertRaisesRegex(installer.InstallError, "interrupted"):
             installer.as_service_user(account, long_step)
-        self.assertLess(time.monotonic() - started, 30)
+        self.assertLess(time.monotonic() - started, 15)
         with self.assertRaises(ProcessLookupError):  # Stopped and reaped, not left running.
             os.kill(int(record.read_text()), 0)
 
