@@ -225,6 +225,12 @@ loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose mu
 | `PARSAR_LOG_LEVEL`, `PARSAR_LOG_FORMAT`, `PARSAR_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
 | `AGENTS_API_E2B_STATE_DIR`, `AGENTS_API_E2B_PROVIDER_BIN` | The E2B receipt directory and, for native Core, the bundled helper. The E2B key and template live in the database |
 
+A Web you run without the installer reads the variables in
+[Connecting the administrator console to Core](web/core-connection.md#server-configuration-and-login),
+plus `CORE_CONSOLE_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's
+node payload (the installer's `node-payload/`). Without it, Add node and the
+self-hosted install command are unavailable.
+
 Core fails at startup, naming the replacement, while a retired variable is set:
 `AGENTS_API_DAEMON_WS_URL` (use `AGENTS_API_PUBLIC_URL`), `AGENTS_API_CONFIG_FILE`
 (no replacement), `AGENTS_API_EXECUTION_OPTIONS_FILE` (use
