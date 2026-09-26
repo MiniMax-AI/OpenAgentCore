@@ -139,8 +139,8 @@ INSPECT = ('{{index .Config.Labels "com.docker.compose.service"}}\t{{index .Conf
 def observe(state):
     """{service: {running, inputs, health}} of this installation's containers and native Core."""
     result = {}
-    ids = run(["docker", "ps", "-aq", "--filter", f'label=com.docker.compose.project={state["project"]}'],
-              capture_output=True, text=True).stdout.split()
+    ids = run(["docker", "ps", "-aq", "--filter", f'label=com.docker.compose.project={state["project"]}',
+               "--filter", "label=com.docker.compose.oneoff=False"], capture_output=True, text=True).stdout.split()
     if ids:
         for line in run(["docker", "inspect", "--format", INSPECT, *ids], capture_output=True, text=True).stdout.splitlines():
             service, inputs, status, health = (line.split("\t") + ["", "", "", ""])[:4]
@@ -218,7 +218,9 @@ def core_error_line(root, state):
 def describe(error):
     """A failure message without command paths, output or environment."""
     if isinstance(error, subprocess.CalledProcessError):
-        words = [word for word in error.cmd if not word.startswith(("/", "-"))][:3]
+        # A command's own path shows as its name; other paths and options are left out.
+        words = [Path(word).name if index == 0 else word for index, word in enumerate(error.cmd)
+                 if index == 0 or not word.startswith(("/", "-"))][:3]
         return f"`{' '.join(words)}` failed"
     if isinstance(error, KeyboardInterrupt):
         return "it was interrupted"
@@ -408,6 +410,7 @@ def confirm_public_url(root, config, old, port, core_answered, args, interactive
         status, body = http(base + "/core/v1/installation", bearer(key))
         if status == 200:
             counts = json.loads(body).get("address_bindings") or {}
+            # The node list only names them; the count comes from Core's own bindings.
             status, body = http(base + "/core/v1/sandbox/nodes", bearer(key))
             nodes = [node for node in (json.loads(body).get("data", []) if status == 200 else [])
                      if node.get("core_url") == old]
@@ -416,7 +419,7 @@ def confirm_public_url(root, config, old, port, core_answered, args, interactive
     else:
         out(f"The public URL changes from {old} to {new}.")
     if counts is not None:
-        bound = len(nodes)
+        bound = max(0, counts.get("nodes", 0) - counts.get("nodes_on_other_address", 0))
         out(f'Bound to the current address: {bound} node(s), {counts.get("hosted_sandboxes", 0)} hosted sandbox(es), '
             f'{counts.get("self_hosted_executors", 0)} self-hosted executor credential(s).')
         for node in nodes:
@@ -563,14 +566,20 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
             raise ParsarError(f"config.json not applied: {describe(error)}. The services were not all running with "
                               f"the previous files, so nothing was rolled back; run parsar status, fix the cause "
                               f"and {retry}") from None
+        # Record the restored files as parsar's own before writing them back.
+        save_state(root, record_digests(load_state(root), {name: data for name, data in disk.items() if data is not None}))
         for name, data in disk.items():
             path = root / "generated" / name
             if data is None:
                 path.unlink(missing_ok=True)
             else:
                 write_private(path, data)
-        with contextlib.suppress(ParsarError, RuntimeError, subprocess.CalledProcessError):
+        try:
             converge(root, state, written_inputs, will_run)
+        except (ParsarError, RuntimeError, subprocess.CalledProcessError) as second:
+            raise ParsarError(f"config.json not applied: {describe(error)}. The previous generated files were restored, "
+                              f"but the services could not be started with them either ({describe(second)}); run "
+                              f"parsar status, fix the cause and {retry}") from None
         raise ParsarError(f"config.json not applied: {describe(error)}. The previous generated files were restored "
                           f"and the services converged on them; fix config.json and {retry}") from None
     out("Applied config.json.")
@@ -702,6 +711,7 @@ def start(root, out=print):
 
 def stop(root, out=print):
     with locked(root):
+        check_directories(root)
         state = load_state(root)
         native_service.stop(root, state)
         if (root / "generated/compose.json").exists():

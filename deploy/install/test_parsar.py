@@ -243,6 +243,17 @@ class ParsarTests(unittest.TestCase):
         self.assertEqual(self.generated("core.env"), before)
         self.apply(confirm_public_url_change="https://new.example")
         self.assertEqual(self.environment()["AGENTS_API_PUBLIC_URL"], '"https://new.example"')
+        # The count comes from Core's bindings, so a failed node list read still needs confirmation.
+        self.host.bindings.update(nodes=1, nodes_on_other_address=0, hosted_sandboxes=0)
+        self.edit(lambda config: config.update(public_url="https://fourth.example"))
+        http = self.host.http
+        with mock.patch.object(parsar_cli, "http", side_effect=lambda url, *a, **k: (
+                (500, b"") if url.endswith("/core/v1/sandbox/nodes") else http(url, *a, **k))), \
+                self.assertRaisesRegex(parsar_cli.ParsarError, "--confirm-public-url-change https://fourth.example"):
+            self.apply()
+        self.assertIn("Bound to the current address: 1 node(s), 0 hosted sandbox(es), 0 self-hosted executor credential(s).",
+                      self.output)
+        self.edit(lambda config: config.update(public_url="https://new.example"))
         # With Core stopped and core.env gone, the address in use is unknown: confirmation is needed.
         parsar_cli.stop(self.root, out=self.output.append)
         (self.root / "generated/core.env").unlink()
@@ -267,6 +278,23 @@ class ParsarTests(unittest.TestCase):
         self.host.core["fails"] = False
         self.apply()
         self.assertConverged()
+
+    def test_repeated_rolled_back_applies_leave_no_false_edit(self):
+        for native in (False, True):
+            with self.subTest(native=native):
+                self.root = self.work / f"repeated-{native}"
+                self.host.native_root, self.host.containers = self.root, {}
+                self.host.native.update(active=False, inputs=None, loaded=None)
+                self.install(native=native)
+                self.host.core["rejects"] = lambda environment: 'AGENTS_API_EXECUTION_CONCURRENCY="4"' not in environment
+                for value in (5, 6, 7, 8):
+                    self.edit(lambda config: config["core"].update(execution_concurrency=value))
+                    with self.assertRaisesRegex(parsar_cli.ParsarError, "services converged on them"):
+                        self.apply()
+                self.host.core["rejects"] = lambda environment: False
+                self.edit(lambda config: config["core"].update(execution_concurrency=4))
+                self.apply()
+                self.assertConverged()
 
     def test_the_next_apply_finishes_any_interrupted_apply_rotation_or_rollback(self):
         compose_stages = {

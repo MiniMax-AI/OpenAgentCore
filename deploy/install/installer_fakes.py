@@ -32,7 +32,8 @@ class FakeHost:
         self.recreated = []
         self.native = {"active": False, "starts": 0, "restarts": 0, "reloads": 0, "addr": None, "digests": [],
                        "inputs": None, "loaded": None, "environment": ""}
-        self.core = {"port": None, "digests": [], "fails": False, "log": ""}
+        # fails: Core never starts; rejects(core.env text): Core refuses that configuration.
+        self.core = {"port": None, "digests": [], "fails": False, "log": "", "rejects": lambda environment: False}
         self.web_port = None
         self.native_root = None  # the installation whose native unit systemctl manages
         self.missing_images = set()
@@ -130,7 +131,9 @@ class FakeHost:
                 web = services["web"]
                 self.web_port = int(web["ports"][0].split(":")[1]) if "ports" in web else int(
                     web["environment"]["CORE_CONSOLE_ADDR"].rsplit(":", 1)[1])
-            if "core" in names and self.core["fails"]:
+            environment = path.parent / "core.env"
+            if "core" in names and (self.core["fails"] or
+                                    self.core["rejects"](environment.read_text() if environment.exists() else "")):
                 self.containers["core"]["running"] = False
                 self.core["failed"] = True
                 return 1, ""
@@ -161,8 +164,10 @@ class FakeHost:
             native["starts" if args[0] != "restart" else "restarts"] += 1
             if native["loaded"] is None:
                 native["loaded"] = self.unit_file()
-            native["active"] = not self.core["fails"]
-            self.core["failed"] = self.core.get("failed") or self.core["fails"]
+            environment = self.native_root / "generated/core.env"
+            refused = self.core["fails"] or self.core["rejects"](environment.read_text() if environment.exists() else "")
+            native["active"] = not refused
+            self.core["failed"] = self.core.get("failed") or refused
             match = re.search(r"^Environment=PARSAR_INPUTS=(\w+)$", native["loaded"], re.M)
             native["inputs"] = match[1] if match and native["active"] else None
             root = self.native_root
