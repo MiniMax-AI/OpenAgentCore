@@ -49,6 +49,14 @@ test("keeps a failed Session's reason in sight in the Session log and on its pag
   await expect(page.locator("li.chat-turn:focus")).toContainText("Failed");
 });
 
+test("opens an Agent's failed Sessions from Agent metrics", async ({ page, request }) => {
+  await openConsole(page, request, "agent-metrics");
+  await page.getByRole("button", { name: /^Open the failed Sessions of / }).first().click();
+  await expect(page.getByRole("heading", { name: "Session log", level: 1 })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /^Failed/ })).toBeChecked();
+  await expect(page.getByRole("searchbox")).toHaveValue(/^agent_/);
+});
+
 test("shows a self-hosted Session's install command, issues its credential once, and revokes and restores it", async ({ page, request }) => {
   await openConsole(page, request, "sessions");
   await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();

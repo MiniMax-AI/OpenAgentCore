@@ -20,11 +20,13 @@ import {
 } from "../../components/console-ui";
 import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useFailureToast } from "../../components/Toast";
+import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatCompact, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { ProjectFilter, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
 import {
   agentMetricsOutcome,
   INLINE_AGENT_ID,
+  isInlineAgent,
   OTHER_SERIES_ID,
   type AgentMetrics,
   type AgentMetricsRange,
@@ -179,6 +181,7 @@ function AgentMetricsContent({
   const { t, i18n } = useTranslation("metrics");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
+  const { navigate } = useConsoleNavigation();
   const { window, totals, series } = metrics;
   const bucket = bucketLabel(window.bucketSeconds, t);
   const modelLabel = (id: string) => (id === OTHER_SERIES_ID ? t("chart.other") : id === "unknown" ? t("agent.unknownModel") : id);
@@ -357,18 +360,31 @@ function AgentMetricsContent({
               </tr>
             </thead>
             <tbody>
-              {metrics.byAgent.map((agent) => (
-                <tr key={agent.id}>
-                  <th scope="row" title={agent.agentId}><span className="table-primary">{agentLabel(agent.agentId, agent.label)}</span></th>
-                  {showProject ? <td><ProjectName project={projectOf(agent.projectId)} /></td> : null}
-                  <td className="numeric">{integer(agent.sessions)}</td>
-                  <td className="numeric">{integer(agent.requests)}</td>
-                  <td className={agent.failed ? "numeric numeric-danger" : "numeric"}>{integer(agent.failed)}</td>
-                  <td className="numeric">{formatPercent(agent.finished ? agent.failed / agent.finished : null, locale)}</td>
-                  <td className="numeric">{formatDuration(agent.averageLatencySeconds)}</td>
-                  <td className="numeric">{agent.reportedTurns ? compact(agent.tokens) : MISSING}</td>
-                </tr>
-              ))}
+              {metrics.byAgent.map((agent) => {
+                const label = agentLabel(agent.agentId, agent.label);
+                // A saved Agent opens its page, and its failures the Session log of its failed Sessions; an inline Agent has neither.
+                const saved = agent.projectId !== null && !isInlineAgent(agent.agentId) ? { project: agent.projectId, id: agent.agentId } : null;
+                return (
+                  <tr key={agent.id}>
+                    <th scope="row" title={agent.agentId}>
+                      {saved ? (
+                        <button type="button" className="name-cell-link table-primary" aria-label={t("agent.openAgent", { name: label })} onClick={() => navigate("agents", saved)}>{label}</button>
+                      ) : <span className="table-primary">{label}</span>}
+                    </th>
+                    {showProject ? <td><ProjectName project={projectOf(agent.projectId)} /></td> : null}
+                    <td className="numeric">{integer(agent.sessions)}</td>
+                    <td className="numeric">{integer(agent.requests)}</td>
+                    <td className={agent.failed ? "numeric numeric-danger" : "numeric"}>
+                      {saved && agent.failed ? (
+                        <button type="button" className="figure-link" aria-label={t("agent.openFailed", { name: label })} onClick={() => navigate("sessions", saved, "failed-sessions")}>{integer(agent.failed)}</button>
+                      ) : integer(agent.failed)}
+                    </td>
+                    <td className="numeric">{formatPercent(agent.finished ? agent.failed / agent.finished : null, locale)}</td>
+                    <td className="numeric">{formatDuration(agent.averageLatencySeconds)}</td>
+                    <td className="numeric">{agent.reportedTurns ? compact(agent.tokens) : MISSING}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

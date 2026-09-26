@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useFailureToast } from "../../components/Toast";
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, SegmentedControl } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
-import { useConsoleNavigation } from "../../lib/console-navigation";
+import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatCompact, formatDateTime, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { CreatorCell, CreatorHeading, ProjectFilter, ProjectName, useCreators, useProjectCollection, useProjects, type Creators, type Owned, type ProjectFilterValue } from "../../lib/projects";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
@@ -83,6 +83,8 @@ export function SessionLogPage() {
     setFilters((current) => ({ ...current, ...patch }));
     setLimit(PAGE_SIZE);
   };
+  // Agent metrics opens an Agent's failed Sessions: its ID in the search, then the Failed filter.
+  useConsoleIntent("failed-sessions", "ready", () => update({ status: "failed" }));
   const refresh = () => {
     setDeleted(new Set());
     if (projects.status === "failed") refreshProjects();
