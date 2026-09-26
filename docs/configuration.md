@@ -95,7 +95,7 @@ output or in Core's settings snapshot. Model provider settings are not part of
 | `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. Install flag: `--core-only` or `--web-only`. |
 | `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. Install flag: `--native-core`. |
 | `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `parsar apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1. Install flag: `--public-url`. |
-| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `parsar apply` | core | Loopback port of the Core API. With native Core, Web follows it. Install flag: `--core-port`. |
+| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `parsar apply` | core (core, web with native Core) | Loopback port of the Core API. With native Core, Web follows it. Install flag: `--core-port`. |
 | `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `parsar apply` | web | Loopback port of Web. Install flag: `--web-port`. |
 | `ports.database` | integer 1024–65535 | none | `all`, `core-only` | `parsar apply` | database, core | Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port. |
 | `web.core_url` | string (canonical origin; HTTP only on loopback) | none | `web-only` | `parsar apply` | web | Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host. Install flag: `--core-url`. |

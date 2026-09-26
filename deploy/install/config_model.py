@@ -13,7 +13,8 @@ SERVICES = {"all": ("core", "web", "database"), "core-only": ("core", "database"
 KEYWORDS = {"$schema", "title", "type", "enum", "const", "default", "description", "minimum", "maximum",
             "pattern", "items", "minItems", "uniqueItems", "properties", "required",
             "additionalProperties", "x-parsar"}
-ANNOTATIONS = {"changeable", "modes", "restarts", "sensitive", "derives", "install_flag", "check", "setting"}
+ANNOTATIONS = {"changeable", "modes", "restarts", "native_restarts", "sensitive", "derives", "install_flag", "check",
+               "setting"}
 
 
 def _schema_text():
@@ -112,7 +113,7 @@ def _validate(node, value, key, mode, problems):
         if not any(_type_ok(value, name) for name in types):
             problems.append(f"{label}: must be {' or '.join(types)}")
             return
-    if "const" in node and value != node["const"]:
+    if "const" in node and (value != node["const"] or type(value) is not type(node["const"])):
         problems.append(f"{label}: must be {json.dumps(node['const'])}")
         return
     if "enum" in node and value not in node["enum"]:
@@ -250,9 +251,12 @@ def settings(config):
         item = {"key": key, "value": None if sensitive else value}
         if sensitive:
             item["configured"] = bool(value)
+        # With native Core some settings restart more; native_restarts names them all.
+        restarts = annotation(node, "native_restarts" if config.get("native_core") and
+                              annotation(node, "native_restarts") else "restarts", [])
         item.update({"default": node.get("default"), "changeable": annotation(node, "changeable", True),
                      "sensitive": sensitive,
-                     "restarts": [name for name in annotation(node, "restarts", []) if name in SERVICES[mode]]})
+                     "restarts": [name for name in restarts if name in SERVICES[mode]]})
         items.append(item)
     return items
 

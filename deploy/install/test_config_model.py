@@ -42,8 +42,12 @@ class ConfigModelTests(unittest.TestCase):
         self.assertEqual(list(config_model.values(config_model.initial("all"))), expected["all"])
         web = config_model.initial("web-only", **{"web.core_url": "https://core.example"})
         self.assertEqual(list(config_model.values(web)), expected["web-only"])
-        native = config_model.initial("core-only", True, **{"ports.database": 15432})
-        self.assertEqual(native["ports"], {"core": 8091, "database": 15432})
+        native = config_model.initial("all", True, **{"ports.database": 15432})
+        self.assertEqual(native["ports"], {"core": 8091, "web": 8080, "database": 15432})
+        restarts = {item["key"]: item["restarts"] for item in config_model.settings(native)}
+        self.assertEqual(restarts["ports.core"], ["core", "web"])
+        self.assertEqual({item["key"]: item["restarts"] for item in config_model.settings(config_model.initial("all"))}
+                         ["ports.core"], ["core"])
 
     def test_invalid_settings_name_their_key_without_their_value(self):
         base = {"format": 1, "mode": "all"}
@@ -63,6 +67,8 @@ class ConfigModelTests(unittest.TestCase):
             ({"core": {"write_audit_retention": "59m"}}, "core.write_audit_retention: must be a Go duration of at least 1h"),
             ({"core": {"runtime_history": {"headers": {"Authorization": 7}}}}, "core.runtime_history.headers.Authorization: must be string"),
             ({"mode": "web-only"}, "web.core_url: required for a web-only installation"),
+            ({"format": True}, "format: must be 1"),
+            ({"format": 1.0}, "format: must be 1"),
         ]
         for change, message in cases:
             with self.subTest(change=change), self.assertRaises(config_model.ConfigError) as raised:
@@ -70,7 +76,7 @@ class ConfigModelTests(unittest.TestCase):
             self.assertIn(message, str(raised.exception))
             self.assertNotIn("Core.example", str(raised.exception))
         for origin in ("http://127.0.0.1:8080", "http://localhost:8080", "https://core.example:8443",
-                       "https://[2001:db8::1]:8443", "http://[::1]:8080"):
+                       "https://[2001:db8::1]:8443", "http://[::1]:8080", "http://[::ffff:127.0.0.1]:8080"):
             config_model.validate(dict(base, public_url=origin))
 
     def test_generated_files_hold_no_secret_and_the_snapshot_hides_sensitive_values(self):

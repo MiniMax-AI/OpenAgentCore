@@ -52,6 +52,7 @@
           "x-parsar": {
             "modes": ["all", "core-only"],
             "restarts": ["core"],
+            "native_restarts": ["core", "web"],
             "derives": ["Core port mapping or AGENTS_API_ADDR"],
             "install_flag": "--core-port"
           }

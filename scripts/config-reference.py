@@ -70,6 +70,8 @@ def table():
         change = ("fixed" if not annotation("changeable", True)
                   else "`parsar apply`" if annotation("setting", True) else "any time")
         restarts = ", ".join(annotation("restarts", [])) or "none"
+        if annotation("native_restarts"):
+            restarts += " (" + ", ".join(annotation("native_restarts")) + " with native Core)"
         meaning = node.get("description", "")
         if annotation("sensitive"):
             meaning += " Sensitive."

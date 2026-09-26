@@ -48,7 +48,10 @@ def valid_core_origin(value):
     if port and not (port.isdigit() and str(int(port)) == port and 1 <= int(port) <= 65535):
         return False
     try:
-        loopback = ipaddress.ip_address(host).is_loopback
+        address = ipaddress.ip_address(host)
+        # Go's IsLoopback also counts an IPv4-mapped loopback address.
+        mapped = getattr(address, "ipv4_mapped", None)
+        loopback = address.is_loopback or bool(mapped and mapped.is_loopback)
     except ValueError:
         if netloc.startswith("[") or len(host) > 253 or not all(_HOST_LABEL.fullmatch(label) for label in host.split(".")):
             return False
