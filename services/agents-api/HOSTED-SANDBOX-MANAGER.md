@@ -177,9 +177,13 @@ The installer chooses how the node runs from the user that runs it:
   the account, the group, the unit and the Docker network. It never installs
   Docker, KVM or packages, never changes device permissions and refuses
   SELinux-enforcing hosts; a missing prerequisite stops it with a one-line hint
-  before anything changes. A foreign account named `parsar-node`, or another node
-  for the same installation on the host (any user's `~/.parsar/nodes/<installation-id>`
-  or the same Docker engine), is refused.
+  before anything changes. A foreign account named `parsar-node` is refused. Sudo
+  mode serves **one Core per host**: every sudo-mode node shares `parsar-node`, so a
+  node for a second Core is refused. A node for the same installation installed
+  without sudo is found in the invoking user's home or, for Docker, by its network
+  on the same engine; other users' homes are not searched. The steps that run as
+  `parsar-node` start in their own session with no terminal, so nothing they run
+  can reach the administrator's terminal.
 
   **Docker mode is root-equivalent.** Membership in the `docker` group lets
   `parsar-node`, and so anything that controls the node, act as root on that host.
@@ -331,7 +335,8 @@ deleted only when the installer created it and no node remains. An adopted accou
 and its home directory stay; uninstall removes only the groups the installer added. Uninstall never removes
 sandboxes, volumes or images: it keeps the Runtime image and a microsandbox node's
 store (`/var/lib/parsar-node/.parsar/m/<hash>`, its images and any sandbox state),
-prints how to remove them, and keeps a created account until that store is gone.
+prints how to remove them (`sudo -u parsar-node rm -rf <store>`), and keeps a
+created account until that store is gone.
 With `--force`, microVMs that `KillMode=process` left running may still use the
 store, so check `pgrep -u parsar-node` first. The host can then be added again with
 a new command.

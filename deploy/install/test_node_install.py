@@ -116,6 +116,8 @@ class NodeInstallTests(unittest.TestCase):
             self.account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
                                            pw_dir=str(installer.SERVICE_HOME), pw_shell="/usr/sbin/nologin")
         if arguments[:1] == ["usermod"]:
+            if getattr(self, "fail_usermod", False):
+                raise installer.InstallError(failure)
             self.joined = True
         if "{{json .}}" in arguments:
             return json.dumps({"MemoryLimit": True, "CpuCfsQuota": True, "NCPU": 8, "MemTotal": 16 << 30})
@@ -344,7 +346,10 @@ class NodeInstallTests(unittest.TestCase):
         service_home = self.home / "service"
         self.root = service_home / ".parsar/nodes" / self.args.installation_id
 
+        self.service_steps = []
+
         def run_as(account, function, *arguments):
+            self.service_steps.append("wait_ready" if function is installer.wait_ready else function.__name__)
             with mock.patch.object(installer.Path, "home", return_value=Path(account.pw_dir)):
                 function(*arguments)
         for patch in (mock.patch.multiple(installer, SERVICE_HOME=service_home, SYSTEM_RECORDS=system / "etc",
@@ -374,6 +379,9 @@ class NodeInstallTests(unittest.TestCase):
                      "RestartPreventExitStatus=78", "StartLimitIntervalSec=0"):
             self.assertIn(line, unit)
         self.assertNotIn("synthetic-once-token", unit)
+        self.assertNotIn("Group=", unit)
+        # Every step that touches the service user's files runs as that user.
+        self.assertEqual(self.service_steps, ["prepare_service_node", "wait_ready"])
         self.assertTrue((self.root / "registered.json").exists())
         self.assertFalse((self.root / ("parsar-node-" + self.args.installation_id + ".service")).exists())
         account = json.loads((system / "etc/account.json").read_text())
@@ -429,6 +437,7 @@ class NodeInstallTests(unittest.TestCase):
         with mock.patch.object(installer, "open_request", side_effect=rejected):
             installer.uninstall_system(uninstall)
         commands = [call for call, _ in self.calls]
+        self.assertEqual(self.service_steps[-2:], ["confirm_removed", "remove_node_files"])
         self.assertIn(["systemctl", "disable", "--now", "parsar-node-" + self.args.installation_id + ".service"], commands)
         self.assertIn(["userdel", "parsar-node"], commands)
         self.assertIn(["systemctl", "reset-failed", "parsar-node-" + self.args.installation_id + ".service"], commands)
@@ -439,7 +448,8 @@ class NodeInstallTests(unittest.TestCase):
 
     def test_uninstall_leaves_an_adopted_account_as_found(self):
         system = self.sudo_host()
-        (self.home / "service").mkdir(mode=0o700)
+        (self.home / "service").mkdir()
+        os.chmod(self.home / "service", 0o755)
         self.account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
                                        pw_dir=str(self.home / "service"), pw_shell="/usr/sbin/nologin")
         installer.install_system(self.args, "synthetic-once-token")
@@ -452,20 +462,34 @@ class NodeInstallTests(unittest.TestCase):
         self.assertNotIn(["userdel", "parsar-node"], commands)
         self.assertIn(["gpasswd", "--delete", "parsar-node", "docker"], commands)
         self.assertTrue((self.home / "service").is_dir())
+        self.assertEqual(stat.S_IMODE((self.home / "service").stat().st_mode), 0o755)
         self.assertFalse((system / "etc").exists())
 
-    def test_uninstall_never_follows_a_link_in_the_service_home(self):
-        # The service user owns its home; a link it plants must not steer deletion elsewhere.
+    def test_sudo_mode_serves_one_core_per_host(self):
         system = self.sudo_host()
         installer.install_system(self.args, "synthetic-once-token")
-        victim = self.home / "victim"
-        (self.home / "service/.parsar").rename(victim)
-        (self.home / "service/.parsar").symlink_to(victim)
-        with mock.patch.object(installer, "open_request", side_effect=urllib.error.HTTPError("https://core.example", 401, "", {}, None)), \
-                self.assertRaisesRegex(installer.InstallError, "symbolic link.*Nothing was changed"):
-            installer.uninstall_system(SimpleNamespace(installation_id=self.args.installation_id, force=True))
-        self.assertTrue((victim / "nodes" / self.args.installation_id / "registered.json").exists())
-        self.assertTrue((system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).exists())
+        self.args.installation_id, self.calls[:] = "0c6f35d2-6d7c-4a53-8d5c-3a3b1d3a0f11", []
+        with self.assertRaisesRegex(installer.InstallError, "one Core per host.*Nothing was changed"):
+            installer.install_system(self.args, "synthetic-once-token")
+        self.assertFalse([call for call, _ in self.calls if call[:1] in (["useradd"], ["usermod"], ["systemctl"])])
+        self.assertEqual(installer.node_records(), ["94be54a1-138c-4f30-bc87-b13686272dbe"])
+
+    def test_created_account_is_recorded_before_any_later_step(self):
+        system = self.sudo_host()
+        self.fail_usermod = True
+        with self.assertRaises(installer.InstallError):
+            installer.install_system(self.args, "synthetic-once-token")
+        self.assertEqual(json.loads((system / "etc/account.json").read_text())["created"], True)
+
+    def test_adoption_refuses_root_ids_and_extra_groups(self):
+        service = str(installer.SERVICE_HOME)
+        account = SimpleNamespace(pw_name="parsar-node", pw_uid=990, pw_gid=990, pw_dir=service, pw_shell="/usr/sbin/nologin")
+        with mock.patch.object(installer.os, "getgrouplist", return_value=[990]):
+            self.assertTrue(installer.ours(account))
+            self.assertFalse(installer.ours(SimpleNamespace(**dict(vars(account), pw_uid=0))))
+            self.assertFalse(installer.ours(SimpleNamespace(**dict(vars(account), pw_gid=0))))
+        with mock.patch.object(installer.os, "getgrouplist", return_value=[990, 27]):
+            self.assertFalse(installer.ours(account))
 
     def test_service_user_step_has_no_terminal_and_reads_nothing(self):
         """The forked child starts its own session with /dev/null as input; its output is relayed."""
@@ -480,6 +504,20 @@ class NodeInstallTests(unittest.TestCase):
                 mock.patch.object(installer.os, "setuid"), mock.patch.object(installer.sys, "stdout", output):
             installer.as_service_user(account, probe)
         self.assertIn("session-leader=True stdin=/dev/null docker-config=" + str(installer.CHILD_DOCKER_CONFIG), output.getvalue())
+
+
+    def test_uninstall_never_follows_a_link_in_the_service_home(self):
+        # The service user owns its home; a link it plants must not steer deletion elsewhere.
+        system = self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
+        victim = self.home / "victim"
+        (self.home / "service/.parsar").rename(victim)
+        (self.home / "service/.parsar").symlink_to(victim)
+        with mock.patch.object(installer, "open_request", side_effect=urllib.error.HTTPError("https://core.example", 401, "", {}, None)), \
+                self.assertRaisesRegex(installer.InstallError, "symbolic link.*Nothing was changed"):
+            installer.uninstall_system(SimpleNamespace(installation_id=self.args.installation_id, force=True))
+        self.assertTrue((victim / "nodes" / self.args.installation_id / "registered.json").exists())
+        self.assertTrue((system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).exists())
 
     def test_token_comes_on_standard_input_only(self):
         arguments = ["--source-url", self.args.source_url, "--core-url", self.args.core_url, "--installation-id",

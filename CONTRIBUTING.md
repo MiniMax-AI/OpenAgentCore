@@ -1847,11 +1847,14 @@ installed by a normal user runs as a systemd user service and needs linger. Run 
 root (sudo mode), the installer instead prepares the host: it creates or adopts the
 `parsar-node` system user, adds it to the `docker` or `kvm` device group (no other
 group), and installs one root-owned system service per installation that runs the
-same node program with `User=parsar-node`. Docker group membership makes that user,
+same node program with `User=parsar-node`. Sudo mode serves one Core per host,
+because its nodes share that account. Docker group membership makes that user,
 and so the node, root-equivalent on the host; that is inherent to Docker sandboxes,
 not a least-privilege boundary. Microsandbox needs only `kvm`. Files the service
 user owns are read, written and deleted only with its credentials, never by root,
-and root never runs a file that user can write or opens a URL it wrote. Sudo mode
+in a child that starts its own session with /dev/null as input, so nothing it runs
+can reach the administrator's terminal; root never runs a file that user can write,
+opens a URL it wrote, or follows a link in its home. Sudo mode
 never installs Docker, KVM or packages, never changes device permissions, refuses
 SELinux-enforcing hosts and a token in the environment, and changes nothing when a
 check fails. `--uninstall` removes a node only after Core rejects its credential,
