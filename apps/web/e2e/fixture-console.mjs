@@ -35,6 +35,8 @@ const LOCAL_URL = "http://127.0.0.1:8091";
 /** The address a node enrolled with before public_url last changed. */
 const OLD_URL = "https://core-old.example.com";
 const publicUrl = () => (state.installation === "local" ? LOCAL_URL : PUBLIC_URL);
+/** The digest the console reports for its self-hosted executor installer; the same value as in monitoring.spec.ts. */
+const SELF_HOSTED_INSTALLER_SHA256 = "5e1f".repeat(16);
 /** Core reports one installation ID, a canonical UUID, in the installation and the deployment. */
 const INSTALLATION_ID = "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f";
 
@@ -80,8 +82,9 @@ function e2bDeployment() {
   return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
 }
 
-function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured") {
-  const base = buildDemo();
+function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured", installers = true) {
+  // Self-hosted Sessions get their remote_url from public_url, as in Core.
+  const base = buildDemo(undefined, address === "local" ? LOCAL_URL : PUBLIC_URL);
   const now = Math.floor(Date.now() / 1000);
   const resources = buildResources(now, base.agents, base.sessions);
   const admin = buildAdmin(now, base, resources);
@@ -109,6 +112,8 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     },
     // "none": the deployment is not configured yet, so the Nodes page offers setup.
     deployment: null,
+    // Whether the console has its node installation payload, and so serves both installers.
+    installers,
   };
   state.deployment = sandbox === "none" ? null : sandbox === "e2b" ? e2bDeployment() : configuredDeployment();
   // Each node reports the address it enrolled with; in "stale" mode the first one enrolled before public_url changed.
@@ -182,8 +187,13 @@ async function consoleRoute(request, response, url) {
     return send(response, 200, { mode: "login" }, { "set-cookie": `${SESSION_COOKIE.split("=")[0]}=; Path=/; Max-Age=0` });
   }
   if (url.pathname === "/console/config") {
-    // Signing in grants administration, so the console reports only its node installer.
-    return send(response, 200, { node_installer: true, node_installer_sha256: "a".repeat(64) });
+    // As Core's console: signing in grants administration, so it reports only its installers,
+    // both served from the node installation payload, and without that payload neither.
+    const served = state.installers;
+    return send(response, 200, {
+      node_installer: served, node_installer_sha256: served ? "a".repeat(64) : "",
+      self_hosted_installer: served, self_hosted_installer_sha256: served ? SELF_HOSTED_INSTALLER_SHA256 : "",
+    });
   }
   return error(response, 404, "Not found.");
 }
@@ -478,7 +488,7 @@ async function harnessRoute(request, response, path) {
 async function fixtureRoute(request, response, url) {
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("credentials") ?? "configured");
+    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("credentials") ?? "configured", url.searchParams.get("installers") !== "none");
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/fail-next" && request.method === "POST") {

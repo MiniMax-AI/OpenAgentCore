@@ -7,12 +7,23 @@ describe("bundled console capabilities", () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ node_installer: true, node_installer_sha256: "a".repeat(64) })));
     vi.stubGlobal("fetch", fetch);
     const controller = new AbortController();
-    expect(await sandboxConsoleConfig(controller.signal)).toEqual({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) });
+    expect(await sandboxConsoleConfig(controller.signal)).toEqual({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64), self_hosted_installer: false, self_hosted_installer_sha256: "" });
     expect(fetch).toHaveBeenCalledWith("/console/config", { credentials: "include", signal: controller.signal });
   });
   it.each([{}, { sandbox_admin: "true", node_installer: true }, { sandbox_admin: false, node_installer: true, node_installer_sha256: "bad" }])("does not enable installation without a verified digest %j", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(body))));
     expect((await sandboxConsoleConfig(new AbortController().signal))?.node_installer).toBe(false);
+  });
+  it.each([
+    [{ self_hosted_installer: true, self_hosted_installer_sha256: "b".repeat(64) }, true],
+    [{ self_hosted_installer: false, self_hosted_installer_sha256: "b".repeat(64) }, false],
+    [{ self_hosted_installer: "true", self_hosted_installer_sha256: "b".repeat(64) }, false],
+    [{ self_hosted_installer: true }, false],
+    [{ self_hosted_installer: true, self_hosted_installer_sha256: "B".repeat(64) }, false],
+    [{ self_hosted_installer: true, self_hosted_installer_sha256: "b".repeat(63) }, false],
+  ])("offers the self-hosted installer only when enabled with a verified digest %j", async (body, offered) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(body))));
+    expect((await sandboxConsoleConfig(new AbortController().signal))?.self_hosted_installer).toBe(offered);
   });
   it("reports unavailable capability on an absent console endpoint", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Not found", { status: 404 })));

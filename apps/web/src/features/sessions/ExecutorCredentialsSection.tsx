@@ -1,8 +1,8 @@
 import { AgentCoreError, type ExecutorCredential, type IssuedExecutorCredential } from "@agents-core-web/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, Download, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, Section, StatusDot } from "../../components/console-ui";
@@ -16,6 +16,7 @@ import { formatDateTime, shortId } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
 import { useCopy } from "../api-keys/IssuedKey";
 import { saveBlob } from "../skills/skill-operations";
+import { ExecutorInstallPanel, InstallCommand, useExecutorInstall, useSelectWhenCopyFails } from "./ExecutorInstallPanel";
 import { executorCredentialsQuery } from "./session-queries";
 
 /** An issuance that gets no answer in this time has an unknown outcome. */
@@ -31,10 +32,15 @@ function newKeyId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/** The self-hosted executor's credential file. */
-function credentialFile(credential: IssuedExecutorCredential): string {
+/**
+ * The self-hosted executor's credential as one line of JSON. The installer
+ * also accepts it pretty-printed, but a one-line paste survives terminals that
+ * warn about or bracket multi-line pastes; `--credential-file` reads the same
+ * JSON from the downloaded file.
+ */
+function credentialText(credential: IssuedExecutorCredential): string {
   const { key_id, environment_id, executor_token } = credential;
-  return `${JSON.stringify({ key_id, environment_id, executor_token }, null, 2)}\n`;
+  return JSON.stringify({ key_id, environment_id, executor_token });
 }
 
 /**
@@ -71,15 +77,21 @@ function seconds(value: string | null): number | null {
  * unknown outcome keeps its key ID, and after the list is refreshed the
  * administrator rotates it (issued, secret lost) or issues it again (not
  * issued). A kept key ID that is listed is never sent again: its row's actions
- * own it. An archived project's credentials are listed and revoked but neither
- * issued nor rotated.
+ * own it. Rotating a revoked credential restores it with a new secret, which
+ * is how a host whose credential was revoked reconnects: its installer accepts
+ * only the same key ID. An archived project's credentials are listed and
+ * revoked but neither issued nor rotated. Below the list, Connect a host gives
+ * the command that installs the executor with one of these credentials.
  */
-export function ExecutorCredentialsSection({ projectId, sessionId, environmentId }: { projectId: string; sessionId: string; environmentId: string }) {
+export function ExecutorCredentialsSection({ projectId, sessionId, environmentId, remoteUrl }: { projectId: string; sessionId: string; environmentId: string; remoteUrl: string }) {
   const { t, i18n } = useTranslation("sessions");
   const locale = i18n.resolvedLanguage;
   const toast = useToast();
   const { byId, refresh: refreshProjects } = useProjects();
   const archived = byId.get(projectId)?.status === "archived";
+  const install = useExecutorInstall(environmentId, remoteUrl);
+  // The one-time dialog repeats the command, so it is copied and run before the credential is pasted.
+  const command = install.kind === "ready" ? install.command : null;
   const query = useQuery(executorCredentialsQuery(projectId, sessionId, environmentId));
   const credentials = query.data ?? null;
   const { refetch } = query;
@@ -92,7 +104,8 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   const [issuing, setIssuing] = useState(false);
   // The unknown-outcome dialog; the key ID stays for its closing animation.
   const [uncertain, setUncertain] = useState<{ keyId: string; open: boolean } | null>(null);
-  const [rotation, setRotation] = useState<{ keyId: string; lost: boolean } | null>(null);
+  // Why a credential is rotated: an active one on request, a revoked one to restore it, or one whose secret was lost.
+  const [rotation, setRotation] = useState<{ keyId: string; reason: "active" | "revoked" | "lost" } | null>(null);
   const [rotating, setRotating] = useState(false);
   const [rotationError, setRotationError] = useState<string | null>(null);
   // The credential shown once: in its dialog, or on the page once the dialog is dismissed, until Done.
@@ -121,7 +134,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
     return () => window.removeEventListener("beforeunload", guard);
   }, [held]);
 
-  const openRotation = (keyId: string, lost: boolean) => { setRotationError(null); setRotation({ keyId, lost }); };
+  const openRotation = (keyId: string, reason: "active" | "revoked" | "lost") => { setRotationError(null); setRotation({ keyId, reason }); };
 
   // Reads the list again and finds a key ID in it; undefined when the read failed.
   const findListed = async (keyId: string): Promise<ExecutorCredential | null | undefined> => {
@@ -132,7 +145,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   // An issued key ID whose secret never arrived is rotated for a fresh one, if it is still active.
   const recoverLost = (found: ExecutorCredential): boolean => {
     const rotatable = found.revoked_at === null && !archived;
-    if (rotatable) openRotation(found.key_id, true);
+    if (rotatable) openRotation(found.key_id, "lost");
     return rotatable;
   };
 
@@ -250,16 +263,18 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
                     </span>
                   </td>
                   <td className="actions-cell">
-                    {revoked ? null : (
+                    {revoked && archived ? null : (
                       <RowActions>
                         {archived ? null : (
-                          <button className="text-action" type="button" aria-label={t("executor.rotateLabel", { id })} disabled={busy} onClick={() => openRotation(credential.key_id, false)}>
+                          <button className="text-action" type="button" aria-label={t("executor.rotateLabel", { id })} disabled={busy} onClick={() => openRotation(credential.key_id, revoked ? "revoked" : "active")}>
                             {t("executor.rotate")}
                           </button>
                         )}
-                        <button className="text-action danger" type="button" aria-label={t("executor.revokeLabel", { id })} disabled={busy} onClick={() => revoke.ask(credential.key_id)}>
-                          {t("executor.revoke")}
-                        </button>
+                        {revoked ? null : (
+                          <button className="text-action danger" type="button" aria-label={t("executor.revokeLabel", { id })} disabled={busy} onClick={() => revoke.ask(credential.key_id)}>
+                            {t("executor.revoke")}
+                          </button>
+                        )}
                       </RowActions>
                     )}
                   </td>
@@ -281,18 +296,19 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       {archived ? <p className="coverage-note">{t("executor.archived")}</p> : null}
       {shown && !shown.open && !shown.done ? (
         <section className="executor-credential-pending" aria-label={t("executor.issued.title")}>
-          <CredentialFile credential={shown.credential} />
-          <div><button className="button primary" type="button" onClick={finishShown}>{t("executor.issued.done")}</button></div>
+          <CredentialFile credential={shown.credential} next={command ? "panel" : "save"} />
+          <div><button className="button outline" type="button" onClick={finishShown}>{t("executor.issued.done")}</button></div>
         </section>
       ) : null}
       {body}
+      <ExecutorInstallPanel install={install} archived={archived} />
       <Modal
         open={shown?.open ?? false}
         title={t("executor.issued.title")}
         onClose={dismissShown}
-        footer={<button className="button primary" type="button" onClick={finishShown}>{t("executor.issued.done")}</button>}
+        footer={<button className="button outline" type="button" onClick={finishShown}>{t("executor.issued.done")}</button>}
       >
-        {shown ? <CredentialFile credential={shown.credential} /> : null}
+        {shown ? <CredentialFile credential={shown.credential} next={command ? "inline" : "save"} command={command} /> : null}
       </Modal>
       <ErrorDialog
         open={uncertain?.open ?? false}
@@ -315,8 +331,10 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       >
         {rotation ? (
           <>
-            <p>{t(rotation.lost ? "executor.rotateDialog.lost" : "executor.rotateDialog.prompt", { id: shortId(rotation.keyId) })}</p>
-            <p>{t("executor.rotateDialog.consequence")}</p>
+            <p>{t(`executor.rotateDialog.${rotation.reason}`, { id: shortId(rotation.keyId) })}</p>
+            {rotation.reason === "revoked" ? null : <p>{t("executor.rotateDialog.consequence")}</p>}
+            {/* A connected host needs the command again; the text names it only when it is shown here. */}
+            {rotation.reason === "lost" ? null : <p>{t(`executor.rotateDialog.${rotation.reason === "revoked" ? "reconnect" : "disconnect"}.${command ? "command" : "installer"}`)}</p>}
           </>
         ) : null}
       </ConfirmDialog>
@@ -341,18 +359,36 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   );
 }
 
-/** The one-time credential file, with copy and download. */
-function CredentialFile({ credential }: { credential: IssuedExecutorCredential }) {
+/**
+ * The one-time credential: copied to paste at the installer's hidden prompt,
+ * or downloaded as a file for automation (`--credential-file`). What to do
+ * next comes first: in the dialog, run the install command shown with it; on
+ * the page, run the Connect a host command below; without the installer, save
+ * the credential.
+ */
+function CredentialFile({ credential, next, command = null }: { credential: IssuedExecutorCredential; next: "inline" | "panel" | "save"; command?: string | null }) {
   const { t } = useTranslation("sessions");
-  const text = credentialFile(credential);
+  const text = credentialText(credential);
   const { state, copy } = useCopy(text);
-  const download = () => saveBlob(new Blob([text], { type: "application/json" }), `executor-credential-${credential.environment_id.slice(0, 8)}.json`);
+  const file = useRef<HTMLPreElement>(null);
+  useSelectWhenCopyFails(state, file);
+  // A downloaded credential's object URL goes with the credential: on Done or when this leaves the page.
+  const downloads = useRef<(() => void)[]>([]);
+  useEffect(() => {
+    const revokes = downloads.current;
+    return () => { for (const revoke of revokes.splice(0)) revoke(); };
+  }, []);
+  const download = () => {
+    downloads.current.push(saveBlob(new Blob([`${text}\n`], { type: "application/json" }), `executor-credential-${credential.environment_id.slice(0, 8)}.json`));
+  };
   return (
     <div className="executor-credential">
       <p className="executor-credential-notice">{t("executor.issued.notice")}</p>
-      <pre className="executor-credential-file" aria-label={t("executor.issued.fileLabel")} tabIndex={0}><code>{text}</code></pre>
+      <p className="executor-credential-next">{t(`executor.issued.next.${next}`)}</p>
+      {command ? <InstallCommand value={command} /> : null}
+      <div role="region" aria-label={t("executor.issued.fileLabel")}><pre ref={file} className="executor-credential-file"><code>{text}</code></pre></div>
       <div className="executor-credential-actions">
-        <button className="button outline" type="button" onClick={() => void copy()}>
+        <button className="button primary" type="button" onClick={() => void copy()}>
           {state === "copied" ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
           {state === "copied" ? t("executor.issued.copied") : t("executor.issued.copy")}
         </button>
@@ -361,6 +397,9 @@ function CredentialFile({ credential }: { credential: IssuedExecutorCredential }
         </button>
       </div>
       {state === "failed" ? <p className="executor-credential-error" role="alert">{t("executor.issued.copyFailed")}</p> : null}
+      <p className="executor-credential-hint">
+        <Trans t={t} i18nKey={next === "save" ? "executor.issued.downloadHint.installer" : "executor.issued.downloadHint.command"} components={{ chmod: <code>chmod 600 &lt;file&gt;</code>, flag: <code>--credential-file &lt;absolute path&gt;</code> }} />
+      </p>
     </div>
   );
 }

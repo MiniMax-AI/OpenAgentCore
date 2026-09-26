@@ -489,6 +489,16 @@ Every resource list, the Session log and the project list share one grammar:
   gaps, two columns below 900px). It starts with the ID (with its copy button) and
   the Project and includes the Creator.
 - Sections follow: usage figures in a KPI strip, then tables in cards.
+- A self-hosted Session's **Executor credentials** section ends with a **Connect
+  a host** card when the console serves the self-hosted installer: a 13px/600
+  title with a help tip (what revoke and rotate do to the host, how to reconnect,
+  how to remove the Runtime), one Graphite line with the steps (run the command,
+  paste a credential at its hidden prompt, safe to rerun), the command in a
+  Margin Gray Terminal block with an icon copy button, and the host requirements
+  on one dot-separated line. The command wraps rather than scrolls. Without a
+  public address, with a loopback one, or with a Session address that is not
+  `wss://`, one Graphite note takes the command's place; an archived project
+  keeps the command and says the host still needs a credential.
 
 ### Dialogs
 Dialogs are 448px Paper cards with 8px corners, a 48px header and a 52px footer
@@ -504,6 +514,15 @@ request runs.
   red underneath. The issued key appears in a read-only field with a copy button,
   under a notice that it is shown once; only "I've saved this key" dismisses it.
   Closing the dialog moves the key into a pending notice card on the page.
+- **Executor credential dialog** (640px): the shown-once notice, then one line
+  saying what to do in order. With Connect a host available, the install
+  command's Terminal block comes first, so it is copied and run before the
+  credential is pasted and Done pressed. Then the credential as one line of JSON
+  (wrapped, never pretty-printed), Copy credential (primary: it is pasted at the
+  installer's hidden prompt) and Download credential file (outline), with a
+  Graphite hint for automation (`chmod 600`, `--credential-file`). Done is
+  outline and forgets the credential; closing the dialog keeps it in a pending
+  card, which points to the Connect a host command below.
 - **How to call**: wherever a new key is shown, a card under it gives three
   copyable samples, each a Margin Gray block with a Hairline and its label and copy
   button in a header row: a Shell block exporting `OPENAI_BASE_URL` (the

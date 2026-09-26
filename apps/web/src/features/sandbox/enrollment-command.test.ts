@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { nodeInstallCommand } from "./enrollment-command";
+import { nodeInstallCommand, selfHostedInstallCommand } from "./enrollment-command";
 
 describe("sandbox connection and enrollment", () => {
   it("creates a compact verified installer command with no credential argument or redirect following", () => {
@@ -18,6 +18,13 @@ describe("sandbox connection and enrollment", () => {
     expect(command).toContain("--source-url 'https://console.example' --core-url 'https://core.example' --provider 'docker' --installation-id 'installation'");
     expect(command).not.toContain("--enrollment-token");
     expect(command.split("\n")).toHaveLength(4);
+  });
+  it("creates the exact self-hosted executor install command, every value quoted", () => {
+    const command = selfHostedInstallCommand({ publicUrl: "https://core.example", digest: "b".repeat(64), environmentId: "env'1", remoteUrl: "wss://core.example/api/v1/agent-daemon/ws" });
+    expect(command).toBe(`(umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
+curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/self-hosted-install.pyz' -o "$d/install.pyz" &&
+printf '%s  %s\\n' '${"b".repeat(64)}' "$d/install.pyz" | sha256sum -c --status &&
+python3 "$d/install.pyz" --source-url 'https://core.example' --environment-id 'env'\\''1' --remote 'wss://core.example/api/v1/agent-daemon/ws')`);
   });
   it.each(["success", "download failure", "checksum mismatch", "installer failure"])("executes safely and cleans private downloads after %s", (scenario) => {
     const parent = join(homedir(), ".parsar", "tests");

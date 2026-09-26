@@ -1,8 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 import { archiveProject, expectManagementBoundary, openConsole } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
+
+/** The self-hosted installer digest the fixture console reports. */
+const SELF_HOSTED_INSTALLER_SHA256 = "5e1f".repeat(16);
 
 test("shows the deployment's health on Overview and each monitor page", async ({ page, request }) => {
   await openConsole(page, request, "overview");
@@ -32,19 +36,36 @@ test("opens a Session's conversation from the Session log, read-only", async ({ 
   await expect(page.getByRole("textbox")).toHaveCount(0);
 });
 
-test("issues an executor credential once on a self-hosted Session and revokes it", async ({ page, request }) => {
+test("shows a self-hosted Session's install command, issues its credential once, and revokes and restores it", async ({ page, request }) => {
   await openConsole(page, request, "sessions");
   await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();
   const section = page.getByRole("region", { name: "Executor credentials" });
   await expect(section).toContainText("No executor credentials yet");
+  const environmentId = await page.getByLabel("Session facts").locator("div").filter({ hasText: /^Environment/ }).locator("code").getAttribute("title");
+
+  // Connect a host: the exact install command, which carries no secret.
+  const install = section.getByRole("region", { name: "Connect a host" });
+  await expect(install.getByLabel("Executor install command").locator("pre")).toHaveText(`(umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
+curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example.com/node-install/self-hosted-install.pyz' -o "$d/install.pyz" &&
+printf '%s  %s\\n' '${SELF_HOSTED_INSTALLER_SHA256}' "$d/install.pyz" | sha256sum -c --status &&
+python3 "$d/install.pyz" --source-url 'https://core.example.com' --environment-id '${environmentId}' --remote 'wss://core.example.com/api/v1/agent-daemon/ws')`);
+  await expect(install.getByRole("list", { name: "Host requirements" })).toContainText("HTTPS access to https://core.example.com");
 
   await section.getByRole("button", { name: "Issue credential" }).click();
   const issued = page.getByRole("dialog", { name: "Executor credential" });
   await expect(issued).toContainText("shown only once");
-  await expect(issued.getByLabel("Executor credential file")).toContainText("exec_fixture_");
+  // The command comes with it, so it can be run before the credential is pasted and the dialog closed.
+  await expect(issued).toContainText("Run this command on the host first, then paste the credential below at its prompt and press Done.");
+  await expect(issued.getByLabel("Executor install command")).toContainText("self-hosted-install.pyz");
+  // One line of JSON to paste at the installer's hidden prompt; the file is for automation.
+  await expect(issued.getByRole("button", { name: "Copy credential" })).toHaveClass(/\bprimary\b/);
+  await expect(issued.getByLabel("Executor credential file")).toHaveText(new RegExp(`^\\{"key_id":"[0-9a-f-]{36}","environment_id":"${environmentId}","executor_token":"exec_fixture_\\d+"\\}$`));
+  await expect(issued).toContainText("run chmod 600 <file> and add --credential-file <absolute path> to the python3 line; the path must not go through a symlink");
   const download = page.waitForEvent("download");
   await issued.getByRole("button", { name: "Download credential file" }).click();
   expect((await download).suggestedFilename()).toMatch(/^executor-credential-[0-9a-f]{8}\.json$/);
+  // The file is the same line, ended by a newline.
+  expect(readFileSync(await (await download).path(), "utf8")).toMatch(/^\{[^\n]*"executor_token":"exec_fixture_\d+"\}\n$/);
   // Dismissing the dialog keeps the credential on the page; only Done forgets it.
   await page.keyboard.press("Escape");
   const pending = section.getByRole("region", { name: "Executor credential", exact: true });
@@ -52,20 +73,54 @@ test("issues an executor credential once on a self-hosted Session and revokes it
   await pending.getByRole("button", { name: "Done" }).click();
   await expect(page.getByLabel("Executor credential file")).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify({ ...window.localStorage, ...window.sessionStorage }))).not.toContain("exec_fixture_");
+  expect(page.url()).not.toContain("exec_fixture_");
 
   const credentials = section.getByRole("table", { name: "Executor credentials" });
   await expect(credentials).toContainText("Active");
   await credentials.getByRole("button", { name: /^Revoke credential / }).click();
   await page.getByRole("dialog", { name: "Revoke credential?" }).getByRole("button", { name: "Revoke" }).click();
   await expect(credentials).toContainText("Revoked");
-  await expect(credentials.getByRole("button", { name: /^Rotate credential / })).toHaveCount(0);
+  await expect(credentials.getByRole("button", { name: /^Revoke credential / })).toHaveCount(0);
+  // Rotating the revoked credential restores it with a new secret: its host reconnects only with the same key ID.
+  await credentials.getByRole("button", { name: /^Rotate credential / }).click();
+  const rotation = page.getByRole("dialog", { name: "Rotate credential?" });
+  await expect(rotation).toContainText("Rotating restores it with a new secret");
+  await expect(rotation).toContainText("rerun the Connect a host command there and paste the new credential at its prompt");
+  await rotation.getByRole("button", { name: "Rotate" }).click();
+  const restored = page.getByRole("dialog", { name: "Executor credential" });
+  await expect(restored.getByLabel("Executor credential file")).toContainText("exec_fixture_2");
+  await restored.getByRole("button", { name: "Done" }).click();
+  await expect(credentials).toContainText("Active");
+  await expect(credentials).not.toContainText("Revoked");
 
   // Archived meanwhile: Core refuses the issuance and the console stops offering it.
   await archiveProject(request, new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("project")!);
   await section.getByRole("button", { name: "Issue credential" }).click();
   await expect(section).toContainText("This project is archived");
   await expect(section.getByRole("button", { name: "Issue credential" })).toHaveCount(0);
-  await expect(credentials).toContainText("Revoked");
+  await expect(credentials.getByRole("button", { name: /^Rotate credential / })).toHaveCount(0);
+  await expect(credentials.getByRole("button", { name: /^Revoke credential / })).toBeVisible();
+  // The command stays; the note says the host still needs a credential.
+  await expect(install).toContainText("It asks for a credential, which this archived project can't issue or rotate");
+});
+
+test("explains instead of giving the install command when Core's public address is loopback", async ({ page, request }) => {
+  await openConsole(page, request, "sessions", { installation: "local" });
+  await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();
+  const install = page.getByRole("region", { name: "Connect a host" });
+  await expect(install).toContainText("Core's public address http://127.0.0.1:8091 is reachable only on the Core machine");
+  await expect(install.locator("pre")).toHaveCount(0);
+});
+
+test("hides Connect a host when the console does not serve the self-hosted installer", async ({ page, request }) => {
+  const config = page.waitForResponse((response) => new URL(response.url()).pathname === "/console/config");
+  await openConsole(page, request, "sessions", { installers: "none" });
+  await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();
+  const section = page.getByRole("region", { name: "Executor credentials" });
+  await expect(section).toContainText("No executor credentials yet");
+  await config;
+  await expect(section.getByRole("region", { name: "Connect a host" })).toHaveCount(0);
+  await expect(section.getByRole("button", { name: "Issue credential" })).toBeVisible();
 });
 
 test("issues a new executor credential after the unanswered one was rotated from its row", async ({ page, request }) => {
@@ -91,6 +146,8 @@ test("issues a new executor credential after the unanswered one was rotated from
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   const credentials = section.getByRole("table", { name: "Executor credentials" });
   await credentials.getByRole("button", { name: /^Rotate credential / }).click();
+  // Rotating an active credential disconnects its host until the command is rerun with the new one.
+  await expect(page.getByRole("dialog", { name: "Rotate credential?" })).toContainText("The host's executor disconnects and won't retry until you rerun the Connect a host command");
   await page.getByRole("dialog", { name: "Rotate credential?" }).getByRole("button", { name: "Rotate" }).click();
   await page.getByRole("dialog", { name: "Executor credential" }).getByRole("button", { name: "Done" }).click();
 

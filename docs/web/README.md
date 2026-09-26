@@ -19,7 +19,7 @@ management client, and it sends nothing to `/v1`.
 | Monitor | Core metrics | The Core process: execution slots, the Turn queue, connected daemons, database latency and pool, background jobs |
 | Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
 | Monitor | Sandbox metrics | Node capacity and hosted Runtime CPU and memory across Projects |
-| Monitor | Session log | Every Session, opening one Session's read-only conversation, trace and Turns; a self-hosted Session's page also manages its executor credentials |
+| Monitor | Session log | Every Session, opening one Session's read-only conversation, trace and Turns; a self-hosted Session's page also manages its executor credentials and gives the command that connects a host |
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion |
 | Platform | Projects and keys, Nodes, System | Project and key lifecycle; sandbox deployment and nodes; System: the installation's public address, API base URL, ID and source commit (read-only), each harness's default model provider (write-only key) beside its read-only startup state, the sandbox configuration every Project shares: provider, sandbox size, Runtime or E2B template build, idle suspension and maintenance, and Core's config.json startup settings with where to change them |
 

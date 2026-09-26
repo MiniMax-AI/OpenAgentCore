@@ -367,7 +367,7 @@
 
 /* The one-time credential file. */
 .modal-card:has(.executor-credential) {
-  width: min(560px, 100%);
+  width: min(640px, 100%);
 }
 
 .executor-credential {
@@ -387,6 +387,8 @@
   margin: 0;
   padding: 11px 13px;
   overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   color: var(--fg);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -394,11 +396,6 @@
   background: var(--surface-subtle);
   border: 1px solid var(--line);
   border-radius: 8px;
-}
-
-.executor-credential-file:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
 }
 
 .executor-credential-actions {
@@ -414,6 +411,27 @@
   line-height: 18px;
 }
 
+.executor-credential-next {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.executor-credential-hint {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.executor-credential-hint code {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* A credential whose dialog was dismissed stays on the page until Done. */
 .executor-credential-pending {
   display: grid;
@@ -422,4 +440,119 @@
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: var(--frame-radius);
+}
+
+/* Connect a host: the command that installs the self-hosted executor. */
+.executor-install {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.executor-install-title {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.executor-install-title h3 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.executor-install-note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.executor-install-command {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.executor-install-command-head {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 0 12px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The command wraps so the whole of it, the remote included, stays in view. */
+.executor-install-command pre {
+  margin: 0;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.executor-install-error {
+  margin: 0;
+  padding: 0 12px 10px;
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.executor-install-skeleton {
+  display: grid;
+  gap: 10px;
+  padding: 14px 12px;
+}
+
+.executor-install-skeleton .skeleton-bar:first-child {
+  width: 62%;
+}
+
+.executor-install-skeleton .skeleton-bar:last-child {
+  width: 48%;
+}
+
+/* Host requirements on one wrapping line, split by middle dots. */
+.executor-install-requirements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.executor-install-requirements > span {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.executor-install-requirements ul {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.executor-install-separator {
+  margin-right: 8px;
 }
