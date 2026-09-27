@@ -108,7 +108,7 @@ func adminCatalogPage(r *http.Request) (string, int, bool, error) {
 // @Param limit query int false "Page size (1-100)"
 // @Param order query string false "asc or desc by Project ID"
 // @Success 200 {object} store.ProjectPage
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/projects [get]
 func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
 	after, limit, ascending, err := adminCatalogPage(r)
@@ -131,7 +131,7 @@ func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param body body api.ProjectRequest true "Project display name"
 // @Success 201 {object} store.Project
-// @Failure 400,401,409,500 {object} v1.ErrorResponse
+// @Failure 400,401,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects [post]
 func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBodyLimit(w, r, 4096, "Project request is too large.")
@@ -161,7 +161,7 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 // @Param project_id path string true "Project UUID"
 // @Param body body api.ProjectRequest true "Project display name"
 // @Success 200 {object} store.Project
-// @Failure 400,401,404,409,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id} [post]
 func (h *Handler) renameProject(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
@@ -191,7 +191,7 @@ func (h *Handler) renameProject(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param project_id path string true "Project UUID"
 // @Success 200 {object} store.Project
-// @Failure 401,404,409,500 {object} v1.ErrorResponse
+// @Failure 401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/archive [post]
 func (h *Handler) archiveProject(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
@@ -215,7 +215,7 @@ func (h *Handler) archiveProject(w http.ResponseWriter, r *http.Request) {
 // @Param limit query int false "Page size (1-100)"
 // @Param order query string false "asc or desc by key ID"
 // @Success 200 {object} store.ProjectAPIKeyPage
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/keys [get]
 func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
@@ -243,7 +243,7 @@ func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Param project_id path string true "Project UUID"
 // @Param body body api.ProjectAPIKeyRequest true "Key display name"
 // @Success 201 {object} store.IssuedProjectAPIKey
-// @Failure 400,401,404,409,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/keys [post]
 func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
@@ -274,7 +274,7 @@ func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 // @Param project_id path string true "Project UUID"
 // @Param key_id path string true "API key UUID"
 // @Success 200 {object} api.SandboxMutationResponse
-// @Failure 401,404,409,500 {object} v1.ErrorResponse
+// @Failure 401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/keys/{key_id} [delete]
 func (h *Handler) revokeProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)

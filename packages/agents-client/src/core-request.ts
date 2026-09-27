@@ -1,6 +1,25 @@
-import { AgentCoreError } from "./client";
+import { AgentCoreError, type CoreErrorDetail, type CoreErrorDetails } from "./client";
 import { isRecord } from "./response-projection";
 import type { ReadOptions } from "./types";
+
+function isCoreErrorDetail(value: unknown): value is CoreErrorDetail {
+  return value === null || typeof value === "string" || typeof value === "boolean"
+    || (typeof value === "number" && Number.isFinite(value))
+    || (Array.isArray(value) && Array.from(value).every((item) => typeof item === "string"));
+}
+
+function coreErrorDetails(value: unknown): CoreErrorDetails | undefined {
+  if (!isRecord(value) || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return undefined;
+  const entries = Object.entries(value);
+  if (entries.length === 0) return undefined;
+  const projected: [string, CoreErrorDetail][] = [];
+  for (const [key, detail] of entries) {
+    if (!key || !isCoreErrorDetail(detail)) return undefined;
+    projected.push([key, Array.isArray(detail) ? Object.freeze([...detail]) : detail]);
+  }
+  // Object.fromEntries keeps a literal __proto__ key from changing the prototype.
+  return Object.freeze(Object.fromEntries(projected));
+}
 
 /** Constructor options of the Core clients that take a plain bearer `token`. */
 export interface CoreClientOptions {
@@ -50,6 +69,7 @@ export class CoreRequester {
         typeof error.code === "string" || error.code === null ? error.code : undefined,
         typeof error.param === "string" || error.param === null ? error.param : undefined,
         typeof error.type === "string" ? error.type : undefined,
+        coreErrorDetails(error.details),
       );
     }
     return response;

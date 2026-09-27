@@ -24,7 +24,7 @@ func WithCoreMetrics(service CoreMetricsService) Option {
 // @Security DeploymentAdminAuth
 // @Param range query string false "Time range (default 1h)" Enums(1h,6h,24h,7d)
 // @Success 200 {object} coremetrics.View
-// @Failure 400,401,503 {object} v1.ErrorResponse
+// @Failure 400,401,503 {object} CoreErrorResponse
 // @Router /core/v1/metrics [get]
 func (h *Handler) getCoreMetrics(w http.ResponseWriter, r *http.Request) {
 	values, err := url.ParseQuery(r.URL.RawQuery)

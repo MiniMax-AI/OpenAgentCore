@@ -18,7 +18,7 @@ import (
 // @Param node_id path string true "Sandbox node UUID"
 // @Param range query string false "Time range (default 1h)" Enums(1h,6h,24h)
 // @Success 200 {object} store.RuntimeNodeDetail
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes/{node_id} [get]
 func (h *Handler) sandboxNodeDetail(w http.ResponseWriter, r *http.Request) {
 	values, err := url.ParseQuery(r.URL.RawQuery)

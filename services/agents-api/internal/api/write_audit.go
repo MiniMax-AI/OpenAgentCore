@@ -65,7 +65,7 @@ func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowe
 // @Param resource_type query string true "Resource type"
 // @Param resource_ids query string true "Comma-separated public resource IDs, maximum 100"
 // @Success 200 {object} api.ResourceOwnerList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/resource-owners [get]
 func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 	values, tenant, ok := h.writeAuditScope(w, r, "resource_type", "resource_ids")
@@ -108,7 +108,7 @@ func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 // @Param limit query int false "Page size, 1-100, default 50"
 // @Param after query string false "Opaque next_cursor from the preceding page"
 // @Success 200 {object} store.WriteOperationPage
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/write-operations [get]
 func (h *Handler) listWriteOperations(w http.ResponseWriter, r *http.Request) {
 	values, tenant, ok := h.writeAuditScope(w, r, "key_id", "resource_type", "resource_id", "created_after", "created_before", "limit", "after")

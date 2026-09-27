@@ -13,7 +13,7 @@ import "net/http"
 // @Param status query string false "Scalar status filter" Enums(active,archived)
 // @Param status[] query []string false "Array status filter; combined with status as a union" collectionFormat(multi) Enums(active,archived)
 // @Success 200 {object} v1.VaultList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/vaults [get]
 func (h *Handler) adminListVaults(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +27,7 @@ func (h *Handler) adminListVaults(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param vault_id path string true "Vault ID"
 // @Success 200 {object} v1.Vault
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/vaults/{vault_id} [get]
 func (h *Handler) adminGetVault(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +41,7 @@ func (h *Handler) adminGetVault(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param vault_id path string true "Vault ID"
 // @Success 200 {object} v1.VaultDeleted
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,413,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/vaults/{vault_id} [delete]
 func (h *Handler) adminDeleteVault(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +60,7 @@ func (h *Handler) adminDeleteVault(w http.ResponseWriter, r *http.Request) {
 // @Param status query string false "Scalar status filter" Enums(active,archived)
 // @Param status[] query []string false "Array status filter; combined with status as a union" collectionFormat(multi) Enums(active,archived)
 // @Success 200 {object} v1.CredentialList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/vaults/{vault_id}/credentials [get]
 func (h *Handler) adminListCredentials(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +75,7 @@ func (h *Handler) adminListCredentials(w http.ResponseWriter, r *http.Request) {
 // @Param vault_id path string true "Vault ID"
 // @Param credential_id path string true "Credential ID"
 // @Success 200 {object} v1.Credential
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id} [get]
 func (h *Handler) adminGetCredential(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +90,7 @@ func (h *Handler) adminGetCredential(w http.ResponseWriter, r *http.Request) {
 // @Param vault_id path string true "Vault ID"
 // @Param credential_id path string true "Credential ID"
 // @Success 200 {object} v1.CredentialDeleted
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,413,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/vaults/{vault_id}/credentials/{credential_id} [delete]
 func (h *Handler) adminDeleteCredential(w http.ResponseWriter, r *http.Request) {

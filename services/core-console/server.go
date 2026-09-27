@@ -93,7 +93,7 @@ func newConsole(c config) (*console, error) {
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
-			http.Error(w, "Core is unavailable", http.StatusBadGateway)
+			consoleCoreError(w, http.StatusBadGateway, "core_unreachable", "Core is unavailable")
 		},
 	}
 	return h, nil
@@ -130,11 +130,19 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.sameOrigin(r) {
-		authError(w, http.StatusForbidden, "Forbidden")
+		if consoleCoreNamespace(r) {
+			consoleCoreError(w, http.StatusForbidden, "console_origin_rejected", "Forbidden")
+		} else {
+			authError(w, http.StatusForbidden, "Forbidden")
+		}
 		return
 	}
 	if !safePath(r.URL.Path) || r.URL.IsAbs() || r.Method == http.MethodConnect || r.Method == http.MethodTrace || r.Header.Get("Upgrade") != "" {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+		if consoleCoreNamespace(r) {
+			consoleCoreError(w, http.StatusBadRequest, "console_request_invalid", "Invalid request")
+		} else {
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+		}
 		return
 	}
 	if r.URL.Path == "/console/auth" || strings.HasPrefix(r.URL.Path, "/console/auth/") {
@@ -146,7 +154,11 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.auth.authenticated(r) {
-		authError(w, http.StatusUnauthorized, "Sign in to the console")
+		if consoleCoreNamespace(r) {
+			consoleCoreError(w, http.StatusUnauthorized, "console_sign_in_required", "Sign in to the console")
+		} else {
+			authError(w, http.StatusUnauthorized, "Sign in to the console")
+		}
 		return
 	}
 	if r.URL.Path == "/console/config" && r.Method == http.MethodGet {

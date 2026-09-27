@@ -3665,3 +3665,12 @@ unchanged. Persisted credential encryption domains and native-session resume key
 also remain stable so existing data can be decrypted and Sessions can resume.
 Conversion inputs, retirement diagnostics and historical evidence must still name
 the identifiers they reject or migrate; current examples use the new names.
+
+
+Core administration error details are scoped by the `/core/v1` router writer mark,
+not a request path test. Use `writeCoreError` with typed `CoreErrorDetails` values
+and document fixed keys in `contracts/agents-api/core-errors.md` when adding a
+code. Include only safe Core-owned facts; never pass submitted values, secrets,
+native text or provider bodies. Invalid/empty details are omitted. Preserve the
+public and machine error serializers, observer callbacks and streaming interfaces.
+The Core client ignores malformed optional details and never retries a mutation.

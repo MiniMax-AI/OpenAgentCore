@@ -44,7 +44,7 @@ type AdminRuntimeObservationList struct {
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
 // @Param order query string false "Session creation order" Enums(asc,desc) default(desc)
 // @Success 200 {object} api.AdminRuntimeObservationList
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/runtime-observations [get]
 func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Request) {
 	if h.runtimeObservations == nil {

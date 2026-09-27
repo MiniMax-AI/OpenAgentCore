@@ -5,6 +5,10 @@ resource inspection, Project and key management, credential issuance, audit, usa
 and sandbox operations. It never calls `/v1` or `/api/v1`, and has no Agent
 execution, copy or arbitrary asset editing operation.
 
+Core request failures use the [Core administration error envelope](../../contracts/agents-api/core-errors.md),
+including optional typed safe details. Console sign-in endpoints retain their
+separate error shape described below.
+
 ## Browser to console
 
 The browser uses the console's own origin and signs in with the

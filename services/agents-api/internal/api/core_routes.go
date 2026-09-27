@@ -14,6 +14,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		return
 	}
 	router.Route("/core/v1", func(r chi.Router) {
+		r.Use(coreErrorResponses)
 		r.Use(h.deploymentAuth.authenticate)
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "This Core operation does not exist.")

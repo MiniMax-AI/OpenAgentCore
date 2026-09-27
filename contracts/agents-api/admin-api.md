@@ -11,6 +11,12 @@ Core records without verifying. Web sends `console`; direct Core key scripts
 normally send none but could set any label. Never use it for authorization or as
 proof of origin.
 
+## Error envelope
+
+See [Core administration errors](core-errors.md) for the optional flat `details`
+object and the distinct console proxy failure codes. Public and machine response
+shapes remain unchanged.
+
 ## Projects and keys
 
 A Project owns one tenant and shared principal. Its keys have equal access to all

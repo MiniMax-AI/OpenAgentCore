@@ -118,11 +118,16 @@ interface APIErrorEnvelope {
   };
 }
 
+/** Safe optional facts on Core administration errors; never native error text. */
+export type CoreErrorDetail = string | number | boolean | null | readonly string[];
+export type CoreErrorDetails = Readonly<Record<string, CoreErrorDetail>>;
+
 export class AgentCoreError extends Error {
   readonly status: number;
   readonly code?: string | null;
   readonly param?: string | null;
   readonly errorType?: string;
+  readonly details?: CoreErrorDetails;
 
   constructor(
     message: string,
@@ -130,6 +135,7 @@ export class AgentCoreError extends Error {
     code?: string | null,
     param?: string | null,
     errorType?: string,
+    details?: CoreErrorDetails,
   ) {
     super(message);
     this.name = "AgentCoreError";
@@ -137,6 +143,7 @@ export class AgentCoreError extends Error {
     this.code = code;
     this.param = param;
     this.errorType = errorType;
+    if (details !== undefined) this.details = details;
   }
 }
 

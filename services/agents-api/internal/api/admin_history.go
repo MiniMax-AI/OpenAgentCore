@@ -22,7 +22,7 @@ import (
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(50)
 // @Param after query string false "Opaque next_cursor from the preceding page"
 // @Success 200 {object} store.AdminAuditPage
-// @Failure 400,401,500 {object} v1.ErrorResponse
+// @Failure 400,401,500 {object} CoreErrorResponse
 // @Router /core/v1/audit-log [get]
 func (h *Handler) listAdminAudit(w http.ResponseWriter, r *http.Request) {
 	values, err := url.ParseQuery(r.URL.RawQuery)

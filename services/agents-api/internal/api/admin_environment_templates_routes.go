@@ -11,7 +11,7 @@ import "net/http"
 // @Param limit query integer false "Page size; 0 is treated as 1 and values above 100 as 100" default(20) minimum(0)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.EnvironmentTemplateList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/environment-templates [get]
 func (h *Handler) adminListEnvironmentTemplates(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +25,7 @@ func (h *Handler) adminListEnvironmentTemplates(w http.ResponseWriter, r *http.R
 // @Security DeploymentAdminAuth
 // @Param environment_template_id path string true "Template ID"
 // @Success 200 {object} v1.EnvironmentTemplate
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/environment-templates/{environment_template_id} [get]
 func (h *Handler) adminGetEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +39,7 @@ func (h *Handler) adminGetEnvironmentTemplate(w http.ResponseWriter, r *http.Req
 // @Security DeploymentAdminAuth
 // @Param environment_template_id path string true "Template ID"
 // @Success 200 {object} v1.EnvironmentTemplateDeleted
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/environment-templates/{environment_template_id} [delete]
 func (h *Handler) adminDeleteEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {

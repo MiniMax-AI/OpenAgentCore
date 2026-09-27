@@ -180,6 +180,35 @@ definitions:
       total_sessions:
         type: integer
     type: object
+  api.CoreAPIError:
+    properties:
+      code:
+        type: string
+        x-nullable: true
+      details:
+        description: |-
+          Details contains only documented, Core-owned facts: string, finite number,
+          boolean, null or string array values. Never include request echoes, secrets
+          or native/provider error text. Empty or invalid details are omitted.
+        type: object
+      message:
+        type: string
+      param:
+        type: string
+        x-nullable: true
+      type:
+        type: string
+    required:
+      - message
+      - type
+    type: object
+  api.CoreErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/api.CoreAPIError'
+    required:
+      - error
+    type: object
   api.CoreHarness:
     properties:
       default:
@@ -1177,22 +1206,6 @@ definitions:
       next_cursor:
         type: string
     type: object
-  v1.APIError:
-    properties:
-      code:
-        type: string
-        x-nullable: true
-      message:
-        type: string
-      param:
-        type: string
-        x-nullable: true
-      type:
-        type: string
-    required:
-      - message
-      - type
-    type: object
   v1.Agent:
     properties:
       id:
@@ -1464,13 +1477,6 @@ definitions:
       - data
       - has_more
       - object
-    type: object
-  v1.ErrorResponse:
-    properties:
-      error:
-        $ref: '#/definitions/v1.APIError'
-    required:
-      - error
     type: object
   v1.ExecutionProviderSelection:
     properties:
@@ -3063,15 +3069,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Query committed administrator mutations
@@ -3090,11 +3096,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List harnesses and their deployment default model providers
@@ -3119,15 +3125,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Remove a harness's deployment default model provider
@@ -3155,15 +3161,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve a harness's deployment default model provider
@@ -3199,27 +3205,27 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "413":
           description: Request Entity Too Large
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Replace a harness's deployment default model provider
@@ -3238,11 +3244,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve installation facts and process settings
@@ -3271,15 +3277,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve Core operational metrics
@@ -3310,19 +3316,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List Projects and active key counts
@@ -3348,19 +3354,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Create an empty independent Project
@@ -3392,23 +3398,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Rename a Project
@@ -3451,19 +3457,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List reusable Agents in a Project
@@ -3493,23 +3499,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "413":
           description: Request Entity Too Large
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete a reusable Agent in a Project
@@ -3538,19 +3544,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve a reusable Agent in a Project
@@ -3574,19 +3580,19 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Archive a Project and revoke all its keys while retaining assets
@@ -3629,19 +3635,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List Environment Templates in a Project
@@ -3671,19 +3677,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete an Environment Template in a Project
@@ -3712,19 +3718,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve an Environment Template in a Project
@@ -3754,15 +3760,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List a self_hosted Environment's executor credentials
@@ -3799,23 +3805,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Issue or explicitly rotate a self_hosted Environment executor credential
@@ -3846,15 +3852,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Revoke a self_hosted Environment executor credential
@@ -3902,23 +3908,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List source files in a Project
@@ -3948,23 +3954,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete a source file in a Project
@@ -3993,23 +3999,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve source file metadata in a Project
@@ -4045,19 +4051,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List safe key metadata for a Project
@@ -4088,23 +4094,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Issue an independent secret in an existing Project
@@ -4133,19 +4139,19 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Revoke one Project key while retaining shared assets
@@ -4180,19 +4186,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Batch lookup resource creation keys
@@ -4239,19 +4245,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List execution Sessions in a Project
@@ -4281,27 +4287,27 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "413":
           description: Request Entity Too Large
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete an execution Session in a Project
@@ -4330,19 +4336,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve an execution Session in a Project
@@ -4372,23 +4378,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve a managed Session's resource cleanup state
@@ -4425,31 +4431,31 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "413":
           description: Request Entity Too Large
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Release a managed Session's execution resources while retaining history
@@ -4502,23 +4508,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List immutable Session artifacts in a Project
@@ -4553,23 +4559,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete a published artifact in a Project
@@ -4603,23 +4609,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve immutable artifact metadata in a Project
@@ -4654,23 +4660,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Download immutable artifact bytes in a Project
@@ -4700,23 +4706,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve a Session's frozen execution configuration in a Project
@@ -4764,19 +4770,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List persisted execution Items in a Project
@@ -4826,23 +4832,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve Session Runtime history in a Project
@@ -4872,23 +4878,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve a Session Runtime observation in a Project
@@ -4937,19 +4943,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List execution Turns in a Project
@@ -4984,19 +4990,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve an execution Turn in a Project
@@ -5307,19 +5313,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List Vaults in a Project
@@ -5349,23 +5355,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "413":
           description: Request Entity Too Large
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete a Vault and all its Credentials in a Project
@@ -5394,19 +5400,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve a Vault in a Project
@@ -5470,19 +5476,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List safe Vault Credential metadata in a Project
@@ -5517,23 +5523,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "413":
           description: Request Entity Too Large
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete a Vault Credential in a Project
@@ -5567,19 +5573,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve safe Vault Credential metadata in a Project
@@ -5632,19 +5638,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Query API-key write operations
@@ -5663,27 +5669,27 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve sandbox deployment
@@ -5710,23 +5716,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Initialize the deployment sandbox provider
@@ -5753,23 +5759,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Change a fully drained deployment's sandbox configuration
@@ -5797,23 +5803,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Pause or resume new hosted allocations
@@ -5841,27 +5847,27 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Create a ten-minute one-use node enrollment token
@@ -5880,27 +5886,27 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List deployment sandbox nodes
@@ -5925,27 +5931,27 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Remove a sandbox node with no retained resources
@@ -5977,23 +5983,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve sandbox node and host history
@@ -6025,27 +6031,27 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Update sandbox node name and capacity
@@ -6070,27 +6076,27 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List retained allocations on a sandbox node
@@ -6129,23 +6135,23 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List Runtime observations across managed Projects
@@ -6205,19 +6211,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/v1.ErrorResponse'
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Summarize resource counts and Session usage by Project, Agent or creator key

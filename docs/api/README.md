@@ -94,3 +94,7 @@ Generated schemas do not establish complete compatibility or real execution
 support. The [coverage record](../../contracts/agents-api/README.md) identifies
 qualified workflows, native differences and unresolved behavior. Update the
 relevant contract and this index when adding or moving an API surface.
+
+Core administration failures use the [Core error envelope](../../contracts/agents-api/core-errors.md),
+including typed optional safe details and distinct console proxy rejection codes.
+The public and machine error contracts remain unchanged.

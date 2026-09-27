@@ -70,7 +70,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Success 200 {object} store.RuntimeDeploymentView
-// @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/deployment [get]
 func (h *Handler) sandboxDeployment(w http.ResponseWriter, r *http.Request) {
 	value, err := h.sandboxStore.GetRuntimeDeployment(r.Context())
@@ -87,7 +87,7 @@ func (h *Handler) sandboxDeployment(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Success 200 {object} api.SandboxNodeList
-// @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes [get]
 func (h *Handler) sandboxNodes(w http.ResponseWriter, r *http.Request) {
 	value, err := h.sandboxStore.ListRuntimeNodes(r.Context())
@@ -107,7 +107,7 @@ func (h *Handler) sandboxNodes(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Param body body store.RuntimeNodeUpdate true "Request"
 // @Success 200 {object} api.SandboxMutationResponse
-// @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes/{node_id} [patch]
 func (h *Handler) updateSandboxNode(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBody(w, r)
@@ -134,7 +134,7 @@ func (h *Handler) updateSandboxNode(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param node_id path string true "Sandbox node UUID"
 // @Success 200 {object} api.SandboxMutationResponse
-// @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes/{node_id} [delete]
 func (h *Handler) removeSandboxNode(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "node_id")
@@ -152,7 +152,7 @@ func (h *Handler) removeSandboxNode(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param node_id path string true "Sandbox node UUID"
 // @Success 200 {object} api.SandboxAllocationList
-// @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes/{node_id}/allocations [get]
 func (h *Handler) sandboxAllocations(w http.ResponseWriter, r *http.Request) {
 	value, err := h.sandboxStore.ListNodeRuntimeAllocations(r.Context(), chi.URLParam(r, "node_id"))
@@ -171,7 +171,7 @@ func (h *Handler) sandboxAllocations(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Param body body api.SandboxEnrollmentTokenRequest true "Request"
 // @Success 201 {object} api.SandboxEnrollmentToken
-// @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/enrollment-tokens [post]
 func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBody(w, r)

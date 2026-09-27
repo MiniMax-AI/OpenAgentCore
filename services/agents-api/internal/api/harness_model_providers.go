@@ -85,7 +85,7 @@ func knownHarness(w http.ResponseWriter, r *http.Request) (string, bool) {
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Success 200 {object} api.CoreHarnessList
-// @Failure 401,500 {object} v1.ErrorResponse
+// @Failure 401,500 {object} CoreErrorResponse
 // @Router /core/v1/harnesses [get]
 func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request, s DeploymentModelProviderStore) {
 	providers, err := s.ListDeploymentModelProviders(r.Context())
@@ -113,7 +113,7 @@ func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request, s Deploy
 // @Security DeploymentAdminAuth
 // @Param harness path string true "Harness" Enums(claude_sdk,codex,mcode)
 // @Success 200 {object} api.HarnessModelProvider
-// @Failure 401,404,500 {object} v1.ErrorResponse
+// @Failure 401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/harnesses/{harness}/model-provider [get]
 func (h *Handler) getHarnessModelProvider(w http.ResponseWriter, r *http.Request, s DeploymentModelProviderStore) {
 	harness, ok := knownHarness(w, r)
@@ -149,7 +149,7 @@ var harnessModelProviderShape = shape{kind: objectValue, members: []member{
 // @Param harness path string true "Harness" Enums(claude_sdk,codex,mcode)
 // @Param body body v1.ModelProviderInput true "Complete model provider bundle"
 // @Success 200 {object} api.HarnessModelProvider
-// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,413,500,503 {object} CoreErrorResponse
 // @Router /core/v1/harnesses/{harness}/model-provider [put]
 func (h *Handler) setHarnessModelProvider(w http.ResponseWriter, r *http.Request, s DeploymentModelProviderStore) {
 	harness, ok := knownHarness(w, r)
@@ -185,7 +185,7 @@ func (h *Handler) setHarnessModelProvider(w http.ResponseWriter, r *http.Request
 // @Security DeploymentAdminAuth
 // @Param harness path string true "Harness" Enums(claude_sdk,codex,mcode)
 // @Success 204
-// @Failure 401,404,500 {object} v1.ErrorResponse
+// @Failure 401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/harnesses/{harness}/model-provider [delete]
 func (h *Handler) deleteHarnessModelProvider(w http.ResponseWriter, r *http.Request, s DeploymentModelProviderStore) {
 	harness, ok := knownHarness(w, r)

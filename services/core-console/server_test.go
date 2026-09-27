@@ -107,6 +107,8 @@ func TestAuthenticationAndCrossSiteAdmission(t *testing.T) {
 			if response.StatusCode != tc.status {
 				t.Fatalf("status = %d, body = %s", response.StatusCode, body)
 			}
+			code := map[int]string{401: "console_sign_in_required", 403: "console_origin_rejected", 400: "console_request_invalid"}[tc.status]
+			assertConsoleCoreError(t, body, code, tc.status)
 			if strings.Contains(body, "private-") {
 				t.Fatal("rejection exposed a credential")
 			}
@@ -178,6 +180,7 @@ func TestProxyRejectsRedirectWithoutFollowingOrExposingIt(t *testing.T) {
 		http.Redirect(w, r, destination.URL+"/?token=private-core-key", http.StatusTemporaryRedirect)
 	}))
 	response, body := responseBody(t, server, consoleRequest(t, server, "GET", "/core/v1/projects"))
+	assertConsoleCoreError(t, body, "core_unreachable", 502)
 	if response.StatusCode != 502 || response.Header.Get("Location") != "" || strings.Contains(body, "private-core-key") || destinationCalls.Load() != 0 {
 		t.Fatal("upstream redirect escaped the fixed proxy")
 	}

@@ -12,7 +12,7 @@ import "net/http"
 // @Param limit query int false "Page size; 0 is treated as 1 and values above 100 as 100" minimum(0) default(20)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.SessionList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions [get]
 func (h *Handler) adminListSessions(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +26,7 @@ func (h *Handler) adminListSessions(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.Session
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id} [get]
 func (h *Handler) adminGetSession(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +40,7 @@ func (h *Handler) adminGetSession(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.SessionDeleted
-// @Failure 400,401,404,409,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,413,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id} [delete]
 func (h *Handler) adminDeleteSession(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +57,7 @@ func (h *Handler) adminDeleteSession(w http.ResponseWriter, r *http.Request) {
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.TurnList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/turns [get]
 func (h *Handler) adminListTurns(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +72,7 @@ func (h *Handler) adminListTurns(w http.ResponseWriter, r *http.Request) {
 // @Param session_id path string true "Session ID"
 // @Param turn_id path string true "Turn ID"
 // @Success 200 {object} v1.Turn
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/turns/{turn_id} [get]
 func (h *Handler) adminGetTurn(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +89,7 @@ func (h *Handler) adminGetTurn(w http.ResponseWriter, r *http.Request) {
 // @Param limit query int false "Page size; 0 is treated as 1 and values above 100 as 100" minimum(0) default(20)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.ItemList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/items [get]
 func (h *Handler) adminListItems(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +107,7 @@ func (h *Handler) adminListItems(w http.ResponseWriter, r *http.Request) {
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
 // @Param order query string false "Publication order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.SessionArtifactList
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/artifacts [get]
 func (h *Handler) adminListSessionArtifacts(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +122,7 @@ func (h *Handler) adminListSessionArtifacts(w http.ResponseWriter, r *http.Reque
 // @Param session_id path string true "Session ID"
 // @Param artifact_id path string true "Artifact ID"
 // @Success 200 {object} v1.SessionArtifact
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id} [get]
 func (h *Handler) adminGetSessionArtifact(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +137,7 @@ func (h *Handler) adminGetSessionArtifact(w http.ResponseWriter, r *http.Request
 // @Param session_id path string true "Session ID"
 // @Param artifact_id path string true "Artifact ID"
 // @Success 200 {object} v1.SessionArtifactDeleted
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id} [delete]
 func (h *Handler) adminDeleteSessionArtifact(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +152,7 @@ func (h *Handler) adminDeleteSessionArtifact(w http.ResponseWriter, r *http.Requ
 // @Param session_id path string true "Session ID"
 // @Param artifact_id path string true "Artifact ID"
 // @Success 200 {file} binary
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) adminSessionArtifactContent(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +166,7 @@ func (h *Handler) adminSessionArtifactContent(w http.ResponseWriter, r *http.Req
 // @Security DeploymentAdminAuth
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.SessionExecutionConfiguration
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/execution-configuration [get]
 func (h *Handler) adminGetSessionExecutionConfiguration(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +180,7 @@ func (h *Handler) adminGetSessionExecutionConfiguration(w http.ResponseWriter, r
 // @Security DeploymentAdminAuth
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.RuntimeObservation
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/runtime-observation [get]
 func (h *Handler) adminGetRuntimeObservation(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +197,7 @@ func (h *Handler) adminGetRuntimeObservation(w http.ResponseWriter, r *http.Requ
 // @Param end query integer true "Exclusive Unix-second end" minimum(1) maximum(9007199254740991)
 // @Param max_points query integer false "Maximum points per series; defaults to the lower of 120 and the advertised service maximum" minimum(2) maximum(10000)
 // @Success 200 {object} v1.RuntimeHistory
-// @Failure 400,401,404,409,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history [get]
 func (h *Handler) adminGetRuntimeHistory(w http.ResponseWriter, r *http.Request) {

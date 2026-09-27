@@ -112,7 +112,7 @@ func WithInstallation(value Installation, bindings func(context.Context) (store.
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Success 200 {object} api.Installation
-// @Failure 401,500 {object} v1.ErrorResponse
+// @Failure 401,500 {object} CoreErrorResponse
 // @Router /core/v1/installation [get]
 func (h *Handler) getInstallation(w http.ResponseWriter, r *http.Request) {
 	bindings, err := h.installationBindings(r.Context())
