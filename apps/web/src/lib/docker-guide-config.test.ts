@@ -10,8 +10,8 @@ const valid = {
   OAC_WEB_DOCKER_IMAGE: "agents-core-web-executor:2b34ea46-codex-0.153.4",
   OAC_WEB_DOCKER_API_CONTAINER: "agents-core-web-api",
   OAC_WEB_DOCKER_USER: "501:20",
-  OAC_WEB_DOCKER_CREDENTIALS_HOME_PATH: ".parsar/agents-api-web-smoke/executor-key.json",
-  OAC_WEB_DOCKER_RUNTIME_HOME_PATH: ".parsar/agents-api-web-smoke/executors",
+  OAC_WEB_DOCKER_CREDENTIALS_HOME_PATH: ".oac/agents-api-web-smoke/executor-key.json",
+  OAC_WEB_DOCKER_RUNTIME_HOME_PATH: ".oac/agents-api-web-smoke/executors",
 };
 
 describe("local Docker guide configuration", () => {
