@@ -491,7 +491,13 @@ def _convert_installation(root, bundle, manifest, load_images, public_url, yes, 
         if record.get("finished"):
             raise RenameError(f"Conversion already finished; run {root / 'oac'} status")
         if public_url is not None:
-            convert.check_resumed_public_url(root, public_url)
+            if public_url != record["public_url"]:
+                raise RenameError(f"This conversion already set public_url to {record['public_url']}; rerun without "
+                                  "--public-url, and change it in config.json after the conversion")
+            # Volume-copy checkpoints precede the legacy layout's config.json.
+            # Once the layout exists, it must still agree with the journal.
+            if (root / "config.json").exists():
+                convert.check_resumed_public_url(root, public_url)
         return execute(root, Path(record["target_dir"]), state, None, manifest, load_images, run, finish, bundle)
     target = destination(root)
     state, config, plan, problems = preflight(root, target, manifest, public_url, run)

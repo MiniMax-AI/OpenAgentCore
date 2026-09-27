@@ -349,5 +349,28 @@ class ConvertTests(unittest.TestCase):
             self.convert()
 
 
+    def test_legacy_public_url_retry_before_config_exists_uses_the_journal(self):
+        self.legacy(public_url="https://web.example")
+        self.host.deployment_core_url = "https://runtime.example"
+        original = install.run
+        def interrupt_copy(command, **kwargs):
+            if command[-1].startswith("cp -a"):
+                raise KeyboardInterrupt()
+            return original(command, **kwargs)
+        with mock.patch.object(install, "run", side_effect=interrupt_copy), self.assertRaises(KeyboardInterrupt):
+            self.convert("--public-url", "https://runtime.example")
+        self.assertFalse((self.root / "config.json").exists())
+        state = self.document("state.json")
+        self.assertEqual(state["renamed_from"]["public_url"], "https://runtime.example")
+        before = self.snapshot()
+        with self.assertRaisesRegex(convert.ConvertError, "already set public_url"):
+            self.convert("--public-url", "https://web.example")
+        self.assertEqual(self.snapshot(), before)
+        self.convert("--public-url", "https://runtime.example")
+        self.assertEqual(self.document("config.json")["public_url"], "https://runtime.example")
+        self.assertTrue(self.document("state.json")["renamed_from"]["finished"])
+        self.assertConverted()
+
+
 if __name__ == "__main__":
     unittest.main()
