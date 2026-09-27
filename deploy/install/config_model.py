@@ -12,13 +12,13 @@ MODES = ("all", "core-only", "web-only")
 SERVICES = {"all": ("core", "web", "database"), "core-only": ("core", "database"), "web-only": ("web",)}
 KEYWORDS = {"$schema", "title", "type", "enum", "const", "default", "description", "minimum", "maximum",
             "pattern", "items", "minItems", "uniqueItems", "properties", "required",
-            "additionalProperties", "x-parsar"}
+            "additionalProperties", "x-oac"}
 ANNOTATIONS = {"changeable", "modes", "restarts", "native_restarts", "sensitive", "derives", "install_flag", "check",
                "setting"}
 
 
 def _schema_text():
-    # The loader reads from a directory or from inside the parsar zipapp.
+    # The loader reads from a directory or from inside the oac zipapp.
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.schema.json")
     return __loader__.get_data(path).decode("utf-8")
 
@@ -36,7 +36,7 @@ class ConfigError(Exception):
 
 
 def annotation(node, name, default=None):
-    return node.get("x-parsar", {}).get(name, default)
+    return node.get("x-oac", {}).get(name, default)
 
 
 def leaves(node=None, prefix="", modes=MODES):
@@ -60,7 +60,7 @@ def lookup(config, key):
     return value
 
 
-# Checks named by x-parsar.check. Core stays the authority for its own semantic rules.
+# Checks named by x-oac.check. Core stays the authority for its own semantic rules.
 def _origin(value, https_only=False):
     """Core's ValidateSandboxCoreURL rule, through the installer's one implementation of it."""
     from configuration import valid_core_origin  # configuration imports this module at load time

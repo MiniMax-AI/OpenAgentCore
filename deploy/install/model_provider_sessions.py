@@ -62,7 +62,7 @@ def count(root):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--install-dir", type=Path, default=Path.home() / ".parsar/core")
+    parser.add_argument("--install-dir", type=Path, default=Path.home() / ".oac/core")
     parser.add_argument("--json", action="store_true", help="print {environment: count} as JSON")
     args = parser.parse_args(argv)
     counts = count(args.install_dir)

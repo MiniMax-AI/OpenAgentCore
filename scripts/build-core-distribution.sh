@@ -87,7 +87,7 @@ cleanup() {
 }
 trap cleanup EXIT
 source_dir="$stage/source"
-bundle="$stage/parsar-core-$revision-linux-amd64"
+bundle="$stage/oac-$revision-linux-amd64"
 mkdir -p "$source_dir" "$bundle/images" "$stage/core/bin" "$stage/core/microsandbox" "$stage/web" "$stage/tmp"
 export GOTMPDIR="$stage/tmp"
 git -C "$repo_root" archive --format=tar.gz --output="$bundle/source.tar.gz" "$revision"
@@ -98,7 +98,7 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   printf 'Distribution build requires %s\n' "$required_go" >&2
   exit 1
 fi
-for file in install.sh install.py configuration.py config_model.py config.schema.json parsar_cli.py convert.py \
+for file in install.sh install.py configuration.py config_model.py config.schema.json oac_cli.py convert.py rename.py \
     native_service.py node_install.py node_spec.py sandbox_setup.py distribution.py self_hosted_install.py \
     model_provider_sessions.py; do
   cp "deploy/install/$file" "$bundle/$file"

@@ -54,7 +54,7 @@ class DistributionTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.stage = pathlib.Path(self.temporary.name)
-        self.bundle = self.stage / "parsar-core-test-linux-amd64"
+        self.bundle = self.stage / "oac-test-linux-amd64"
         self.bundle.mkdir()
         (self.bundle / "install.sh").write_text("#!/bin/sh\nexit 0\n")
         (self.bundle / "source.tar.gz").write_bytes(b"source archive")
@@ -198,7 +198,7 @@ class DistributionTests(unittest.TestCase):
         for logical, artifact in metadata["artifacts"].items():
             path = self.stage / "artifacts" / artifact["filename"]
             self.assertEqual((self.bundle / logical).exists(), logical == "runtime/seccomp.json")
-            self.assertTrue(artifact["filename"].startswith("parsar-core-" + REVISION + "-linux-amd64-"))
+            self.assertTrue(artifact["filename"].startswith("oac-" + REVISION + "-linux-amd64-"))
             self.assertEqual(artifact["size"], path.stat().st_size)
             self.assertEqual(artifact["sha256"], distribution.sha256(path))
         runtime = self.stage / "artifacts" / metadata["artifacts"]["images/runtime.tar.gz"]["filename"]
@@ -235,11 +235,11 @@ class DistributionTests(unittest.TestCase):
         for name in ("node_install.py", "self_hosted_install.py", *distribution.OAC_CLI_MODULES):
             (self.bundle / name).write_text("# " + name + "\n")
         distribution.bootstraps(self.bundle, "1700000000")
-        first = [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "parsar.pyz")]
+        first = [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "oac.pyz")]
         distribution.bootstraps(self.bundle, "1700000000")
-        self.assertEqual(first, [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "parsar.pyz")])
+        self.assertEqual(first, [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "oac.pyz")])
         self.assertTrue(first[1].startswith(b"#!/usr/bin/env python3\n"))
-        with zipfile.ZipFile(self.bundle / "parsar.pyz") as contents:
+        with zipfile.ZipFile(self.bundle / "oac.pyz") as contents:
             self.assertEqual(set(contents.namelist()), {"__main__.py", *distribution.OAC_CLI_MODULES})
         for script, filename in (("node_install.py", "node-install.pyz"),
                                  ("self_hosted_install.py", "self-hosted-install.pyz")):

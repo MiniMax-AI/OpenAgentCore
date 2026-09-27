@@ -19,8 +19,9 @@ provider or model call. See the [Core OpenAPI](core.openapi.yaml) for the schema
 `configuration` has:
 
 - `path`: the absolute host path of the installation's `config.json`, where every
-  process setting is changed;
-- `apply_command`: the command that applies `config.json` changes;
+  process setting is changed (by default `~/.oac/core/config.json`);
+- `apply_command`: the command that applies `config.json` changes, by default
+  `~/.oac/core/oac apply`;
 - `applied_at`: when the snapshot was last applied;
 - `settings`: one item per `config.json` setting, with its dotted `key`, applied
   `value`, `default`, whether it is `changeable` after installation, whether it is
