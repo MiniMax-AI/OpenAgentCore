@@ -31,7 +31,7 @@ func TestIsolatedConfigRejectsSymlink(t *testing.T) {
 	if err := os.WriteFile(target, []byte("{}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(target, filepath.Join(home, "parsar-sdk-config.json")); err != nil {
+	if err := os.Symlink(target, filepath.Join(home, "oac-sdk-config.json")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := isolatedConfig(home); err == nil {

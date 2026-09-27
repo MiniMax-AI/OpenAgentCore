@@ -107,7 +107,7 @@ Public Environment Templates, the `/v1` contract and
 caller-owned `self_hosted` provisioning remain unchanged.
 
 `GET /api/v1/sandbox-node/configuration` uses an enrollment Bearer token, or a
-retained node Bearer credential with `X-Parsar-Node-ID`. This read does not consume
+retained node Bearer credential with `X-OAC-Node-ID`. This read does not consume
 enrollment. Retained matching nodes can read their configuration during maintenance.
 Installers must verify the returned generation, specification digest and Runtime
 before registration; local files cannot override the saved limits. A mismatch

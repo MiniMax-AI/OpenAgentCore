@@ -40,8 +40,8 @@ class InstallError(Exception):
     pass
 
 
-COMMON = ("native/bin/parsar-sandbox-node", "runtime/seccomp.json")
-MICRO = ("native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
+COMMON = ("native/bin/oac-node", "runtime/seccomp.json")
+MICRO = ("native/bin/oac-microsandbox-provider", "native/microsandbox/msb",
          "native/microsandbox/libkrunfw.so.5.6.1")
 DOCKER = ("docker", "--host", "unix:///var/run/docker.sock")
 DOCKER_SOCKET = Path("/var/run/docker.sock")
@@ -50,9 +50,9 @@ KVM = Path("/dev/kvm")
 # Sudo mode: run as root, the installer prepares the host itself. The node runs as
 # this dedicated service user under a root-owned system unit; root never runs a
 # file the service user can write.
-SERVICE_USER = "parsar-node"
-SERVICE_HOME = Path("/var/lib/parsar-node")
-SYSTEM_RECORDS = Path("/etc/parsar-node")
+SERVICE_USER = "oac-node"
+SERVICE_HOME = Path("/var/lib/oac-node")
+SYSTEM_RECORDS = Path("/etc/oac-node")
 SYSTEM_UNITS = Path("/etc/systemd/system")
 SYSTEM_LOCKS = Path("/run")
 SYSTEMD_RUNNING = Path("/run/systemd/system")
@@ -61,7 +61,7 @@ USER_RUNTIME = Path("/run/user")
 SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # A root-owned, empty Docker configuration for the service user's docker calls, so no
 # CLI plugin or credential helper the service user controls runs in the installer.
-CHILD_DOCKER_CONFIG = Path("/run/parsar-node-docker")
+CHILD_DOCKER_CONFIG = Path("/run/oac-node-docker")
 LOCK_WAIT_SECONDS = 600
 NOTHING_CHANGED = " Nothing was changed."
 
@@ -294,7 +294,7 @@ def download(source, name, root, expected):
 
 
 def micro_home(installation_id):
-    directory = Path.home() / ".parsar/m" / hashlib.sha256(installation_id.encode()).hexdigest()[:12]
+    directory = Path.home() / ".oac/m" / hashlib.sha256(installation_id.encode()).hexdigest()[:12]
     if len(os.fsencode(directory)) > 48:
         raise InstallError("HOME is too long for microsandbox Unix socket paths; use a user with a shorter persistent home directory")
     return directory
@@ -305,7 +305,7 @@ def provider_config(root, args, manifest, runtime_image):
               "specification": args.configuration["specification"], "generation": args.configuration["generation"]}
     if args.provider == "docker":
         result["docker"] = {"host": "unix:///var/run/docker.sock", "image": runtime_image,
-                            "network": "parsar-node-" + args.installation_id,
+                            "network": "oac-node-" + args.installation_id,
                             "seccomp_file": str(root / "runtime/seccomp.json"), "nested_sandbox": True}
     else:
         endpoint = urlsplit(args.core_url)
@@ -331,7 +331,7 @@ def prepare_runtime(root, args, manifest):
         docker = ["docker", "--host", "unix:///var/run/docker.sock"]
         image = distribution.ensure_docker_image(
             manifest, "runtime", lambda: distribution.runtime_archive(manifest, root, getattr(args, "bundle", None)), docker)
-        network = "parsar-node-" + args.installation_id
+        network = "oac-node-" + args.installation_id
         networks = checked(docker + ["network", "ls", "--format", "{{.Name}}"], "Cannot inspect Docker networks").splitlines()
         if network not in networks:
             checked(docker + ["network", "create", network], "Cannot create node Docker network")
@@ -365,7 +365,7 @@ def service_unit(root):
         return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
     # The node keeps retrying while Core is unreachable (no start limit). It exits 78
     # when Core rejects its credential, as after removal; that ends the restarts.
-    return ("[Unit]\nDescription=Parsar sandbox node\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nExecStart=:"
+    return ("[Unit]\nDescription=OpenAgentCore sandbox node\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nExecStart=:"
             + quote(root / COMMON[0]) + " run --config " + quote(root / "provider.json") + " --state-dir " + quote(root / "state/node")
             + "\nWorkingDirectory=" + str(root).replace("%", "%%")
             + "\nRestart=on-failure\nRestartSec=5s\nRestartPreventExitStatus=78\nKillMode=process\nUMask=0077"
@@ -373,12 +373,12 @@ def service_unit(root):
 
 
 def unit_name(installation_id):
-    return "parsar-node-" + installation_id + ".service"
+    return "oac-node-" + installation_id + ".service"
 
 
 def open_node(args, token, system=False):
     """Read the Core specification and check the host; returns the node's state directory."""
-    root = Path.home() / ".parsar/nodes" / args.installation_id
+    root = Path.home() / ".oac/nodes" / args.installation_id
     safe_directory(root)
     identity_file = root / "state/node/identity.json"
     retained = json.loads(identity_file.read_text()) if existing_file(identity_file) else None
@@ -392,7 +392,7 @@ def open_node(args, token, system=False):
     if args.provider == "microsandbox":
         runtime_home = micro_home(args.installation_id)
         safe_directory(runtime_home)
-        owner = runtime_home / "parsar-installation.json"
+        owner = runtime_home / "oac-installation.json"
         if not owner.exists() and any(runtime_home.iterdir()):
             raise InstallError("Microsandbox home contains unowned state; refusing to adopt it")
         write_once(owner, json_text({"installation_id": args.installation_id}))
@@ -469,6 +469,66 @@ def register_node(root, args, token):
         raise InstallError("Registered node identity differs; refusing to replace it")
 
 
+# These paths are inspected only to refuse an unremoved node from an older
+# release. They are never adopted, rewritten or removed by this installer.
+LEGACY_RECORDS = Path("/etc/parsar-node")
+LEGACY_SERVICE_HOME = Path("/var/lib/parsar-node")
+
+
+def refuse_legacy_node(args):
+    """Reject pre-rename resources for this installation, leaving every other one alone."""
+    installation = args.installation_id
+    unit = "parsar-node-" + installation + ".service"
+    homes = {Path.home()}
+    if os.geteuid() == 0:
+        sudo_user = os.environ.get("SUDO_USER", "")
+        if sudo_user and sudo_user != "root":
+            try:
+                home = Path(pwd.getpwnam(sudo_user).pw_dir)
+                if home.is_absolute():
+                    homes.add(home)
+            except KeyError:
+                pass
+    paths = [LEGACY_RECORDS / (installation + ".json"), SYSTEM_UNITS / unit]
+    paths += [home / ".parsar/nodes" / installation for home in homes]
+    paths += [home / ".config/systemd/user" / unit for home in homes]
+    # Non-root users cannot inspect the old mode-0700 service home; its matching
+    # root-owned record and system unit above remain observable without reading it.
+    if os.geteuid() == 0 or os.access(LEGACY_SERVICE_HOME, os.R_OK | os.X_OK):
+        paths.append(LEGACY_SERVICE_HOME / ".parsar/nodes" / installation)
+    found = []
+    for path in paths:
+        try:
+            path.lstat()  # A dangling final symlink is still retained state.
+            found.append(str(path))
+        except FileNotFoundError:
+            pass
+        except OSError:
+            raise InstallError("Cannot inspect possible legacy node state at " + str(path)
+                               + "; check this path before installing." + NOTHING_CHANGED) from None
+    if not found and shutil.which("systemctl") is not None:
+        modes = [[], ["--user"]] if os.geteuid() != 0 else [[]]
+        for mode in modes:
+            result = subprocess.run(["systemctl", *mode, "show", unit, "--property=LoadState", "--value"],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip() not in ("", "not-found"):
+                found.append(unit)
+    # Inspect only the fixed local engine. A microsandbox user without Docker
+    # access does not need that unrelated host capability to install its node.
+    if not found and shutil.which("docker") is not None and DOCKER_SOCKET.exists() and (
+            getattr(args, "provider", None) == "docker" or os.access(DOCKER_SOCKET, os.R_OK | os.W_OK)):
+        network = "parsar-node-" + installation
+        networks = checked(list(DOCKER) + ["network", "ls", "--format", "{{.Name}}"],
+                           "Cannot inspect legacy node networks; check the local Docker engine." + NOTHING_CHANGED).splitlines()
+        if network in networks:
+            found.append("Docker network " + network)
+    if found:
+        raise InstallError("This host still has a node for this installation from before the OpenAgentCore rename ("
+                           + ", ".join(found) + "). Remove it on the Nodes page, then uninstall it with the previous "
+                           "release's node-install.pyz --uninstall --installation-id " + installation
+                           + ", or follow \"Remove a node added before the rename\" in the node guide." + NOTHING_CHANGED)
+
+
 def install(args, token):
     """Non-root mode: the node runs as this user's systemd user service."""
     try:
@@ -478,6 +538,7 @@ def install(args, token):
     if system_node:
         raise InstallError("This host already runs a node for this installation as a system service. Rerun the command "
                            "with sudo, or uninstall that node with sudo first." + NOTHING_CHANGED)
+    refuse_legacy_node(args)
     root = open_node(args, token)
     with host_lock(), install_lock(root):
         register_node(root, args, token)
@@ -717,7 +778,7 @@ def host_lock():
     Root takes it exclusively around every sudo-mode change, so installing one node
     never races removing another's account. Normal users share it when it exists.
     It lives in /run, which the next boot clears."""
-    path = SYSTEM_LOCKS / "parsar-node.lock"
+    path = SYSTEM_LOCKS / "oac-node.lock"
     root = os.geteuid() == 0
     descriptor = None
     try:
@@ -783,7 +844,7 @@ def root_file(path, content, replace=False):
         # Readable by every user, so a no-sudo run can see a sudo-mode node; the caller's umask is 077.
         path.parent.mkdir(parents=True, mode=0o755)
         os.chmod(path.parent, 0o755)
-    descriptor, temporary = tempfile.mkstemp(prefix=".parsar-node-", dir=path.parent)
+    descriptor, temporary = tempfile.mkstemp(prefix=".oac-node-", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w") as stream:
             stream.write(content)
@@ -921,7 +982,7 @@ def device_group(provider, device, gid):
 def other_node(args, provider):
     """Refuse a second sudo-mode Core on this host, or a second node for this installation.
 
-    Sudo-mode nodes share the parsar-node account, so one host serves one Core. Nodes
+    Sudo-mode nodes share the oac-node account, so one host serves one Core. Nodes
     installed without sudo are found in the invoking user's home and, for Docker, by
     their network on this engine; other users' homes are not searched."""
     for installation in node_records():
@@ -935,13 +996,13 @@ def other_node(args, provider):
             home = pwd.getpwnam(sudo_user).pw_dir
         except KeyError:
             home = ""
-        if home.startswith("/") and listdir_nofollow(home, ".parsar", "nodes", args.installation_id):
+        if home.startswith("/") and listdir_nofollow(home, ".oac", "nodes", args.installation_id):
             raise InstallError("This host already runs a node for this installation, installed without sudo by " + sudo_user
                                + ". Remove it on the Nodes page and uninstall it as that user first." + NOTHING_CHANGED)
     if provider == "docker":
         networks = checked(list(DOCKER) + ["network", "ls", "--format", "{{.Name}}"], "Cannot inspect Docker networks").splitlines()
-        if "parsar-node-" + args.installation_id in networks:
-            raise InstallError("Another node for this installation already uses this Docker engine (network parsar-node-"
+        if "oac-node-" + args.installation_id in networks:
+            raise InstallError("Another node for this installation already uses this Docker engine (network oac-node-"
                                + args.installation_id + "). Remove it on the Nodes page and uninstall it first." + NOTHING_CHANGED)
 
 
@@ -995,7 +1056,7 @@ def system_unit(root, provider):
     after = "network-online.target docker.service" if provider == "docker" else "network-online.target"
     # Root owns this file; the service user can change only its own node files. The
     # service runs with the account's own primary group.
-    return ("[Unit]\nDescription=Parsar sandbox node " + root.name + "\nWants=network-online.target\nAfter=" + after
+    return ("[Unit]\nDescription=OpenAgentCore sandbox node " + root.name + "\nWants=network-online.target\nAfter=" + after
             + "\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nUser=" + SERVICE_USER
             + "\nExecStart=:" + quote(root / COMMON[0]) + " run --config " + quote(root / "provider.json")
             + " --state-dir " + quote(root / "state/node") + "\nWorkingDirectory=" + str(root).replace("%", "%%")
@@ -1015,7 +1076,7 @@ def node_record(installation_id):
     """The root-owned record of this installation's sudo-mode node, checked against the fixed paths."""
     record = read_root_json(SYSTEM_RECORDS / (installation_id + ".json"))
     if record is not None:
-        expected = {"installation_id": installation_id, "node_root": str(SERVICE_HOME / ".parsar/nodes" / installation_id),
+        expected = {"installation_id": installation_id, "node_root": str(SERVICE_HOME / ".oac/nodes" / installation_id),
                     "unit": str(SYSTEM_UNITS / unit_name(installation_id))}
         if any(record.get(key) != value for key, value in expected.items()) or record.get("provider") not in DEVICE_GROUPS:
             raise InstallError(str(SYSTEM_RECORDS / (installation_id + ".json")) + " is not this installer's record; preserve "
@@ -1028,6 +1089,7 @@ def install_system(args, token):
     """Sudo mode: prepare the host, then run the node as a root-owned system service."""
     os.environ["PATH"] = SAFE_PATH
     host_checks()
+    refuse_legacy_node(args)
     # Checks that change nothing run first, so a refusal leaves no trace, not even a lock.
     record = node_record(args.installation_id)
     configuration = None
@@ -1052,7 +1114,7 @@ def install_system(args, token):
         # Every check has passed; from here on the host changes.
         account = prepare_account(account, account_record, group)
         child_docker_config()
-        root = SERVICE_HOME / ".parsar/nodes" / args.installation_id
+        root = SERVICE_HOME / ".oac/nodes" / args.installation_id
         unit = SYSTEM_UNITS / unit_name(args.installation_id)
         root_file(SYSTEM_RECORDS / (args.installation_id + ".json"),
                   json_text({"format": 1, "installation_id": args.installation_id, "provider": provider,
@@ -1136,7 +1198,7 @@ def release_docker_network(installation_id):
     """Remove the node's Docker network; never containers, volumes or images."""
     if shutil.which("docker") is None:
         return
-    network = "parsar-node-" + installation_id
+    network = "oac-node-" + installation_id
     try:
         if network not in checked(list(DOCKER) + ["network", "ls", "--format", "{{.Name}}"], "Docker unavailable").splitlines():
             return
@@ -1177,6 +1239,7 @@ def uninstall_system(args):
     os.environ["PATH"] = SAFE_PATH
     if shutil.which("systemctl") is None:
         raise InstallError("systemctl is required." + NOTHING_CHANGED)
+    refuse_legacy_node(args)
     record = node_record(args.installation_id)
     unit = SYSTEM_UNITS / unit_name(args.installation_id)
     # Only root-owned files decide whether a node is installed; the service home is not read here.
@@ -1187,7 +1250,7 @@ def uninstall_system(args):
     with host_lock():
         record = node_record(args.installation_id)
         account, account_record = service_account(), read_root_json(SYSTEM_RECORDS / "account.json")
-        root = SERVICE_HOME / ".parsar/nodes" / args.installation_id
+        root = SERVICE_HOME / ".oac/nodes" / args.installation_id
         if record is None and not unit.exists():
             print("No node for installation " + args.installation_id + " was installed with sudo on this host.")
         else:
@@ -1222,7 +1285,7 @@ def release_account(account, record):
         print("The " + SERVICE_USER + " account differs from the one this installer recorded; it was left alone.")
         return
     if record.get("created"):
-        stores = [str(SERVICE_HOME / ".parsar/m" / name) for name in listdir_nofollow(SERVICE_HOME, ".parsar", "m")]
+        stores = [str(SERVICE_HOME / ".oac/m" / name) for name in listdir_nofollow(SERVICE_HOME, ".oac", "m")]
         if stores:
             # The names come from the service user's home; show them only as plain text.
             print("Kept the " + SERVICE_USER + " user while microsandbox stores remain: " + plain(", ".join(stores), sys.stdout.encoding)
@@ -1250,8 +1313,9 @@ def release_account(account, record):
 
 
 def uninstall_user(args):
+    refuse_legacy_node(args)
     with host_lock():
-        root = Path.home() / ".parsar/nodes" / args.installation_id
+        root = Path.home() / ".oac/nodes" / args.installation_id
         if not root.exists():
             print("No node for installation " + args.installation_id + " is installed for this user. If it was installed "
                   "with sudo, run the uninstall command with sudo.")

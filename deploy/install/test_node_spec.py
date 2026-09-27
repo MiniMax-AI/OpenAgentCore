@@ -41,7 +41,7 @@ class SpecificationTests(unittest.TestCase):
         node_spec.fetch(self.args, "replacement", self.retained, opener)
         headers = dict(opener.call_args.args[0].header_items())
         self.assertEqual(headers["Authorization"], "Bearer " + self.retained["credential"])
-        self.assertEqual(headers["X-parsar-node-id"], self.retained["identity"]["node_id"])
+        self.assertEqual(headers["X-oac-node-id"], self.retained["identity"]["node_id"])
 
     def test_partial_registration_can_use_enrollment_after_unauthenticated_identity(self):
         rejected = urllib.error.HTTPError("https://core.example", 401, "private details", {}, None)

@@ -34,7 +34,7 @@ database.
 From this directory, using the repository Go version:
 
 ```sh
-GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath -o "$HOME/.parsar/bin/agents-api-microsandbox-provider" .
+GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath -o "$HOME/.oac/bin/oac-microsandbox-provider" .
 GOWORK=off go test ./...
 ```
 

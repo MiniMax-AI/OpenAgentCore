@@ -20,8 +20,8 @@ var nodePayloadFiles = map[string]bool{
 
 // An offline distribution exposes only artifacts declared for these payloads.
 var optionalPayloadFiles = map[string]bool{
-	"native/bin/parsar-sandbox-node": true, "native/bin/oac-daemon": true,
-	"native/bin/parsar-runtime": true, "native/bin/agents-api-microsandbox-provider": true,
+	"native/bin/oac-node": true, "native/bin/oac-daemon": true,
+	"native/bin/oac-selfhost": true, "native/bin/oac-microsandbox-provider": true,
 	"native/microsandbox/msb": true, "native/microsandbox/libkrunfw.so.5.6.1": true,
 	"images/runtime.tar.gz": true, "runtime/seccomp.json": true,
 }
@@ -102,8 +102,8 @@ func (h *console) serveNodePayload(w http.ResponseWriter, r *http.Request) {
 // providerArtifacts lists the artifacts a node of each provider downloads from
 // this console, besides the fixed payload files.
 var providerArtifacts = map[string][]string{
-	"docker": {"native/bin/parsar-sandbox-node", "images/runtime.tar.gz"},
-	"microsandbox": {"native/bin/parsar-sandbox-node", "images/runtime.tar.gz", "native/bin/agents-api-microsandbox-provider",
+	"docker": {"native/bin/oac-node", "images/runtime.tar.gz"},
+	"microsandbox": {"native/bin/oac-node", "images/runtime.tar.gz", "native/bin/oac-microsandbox-provider",
 		"native/microsandbox/msb", "native/microsandbox/libkrunfw.so.5.6.1"},
 }
 
