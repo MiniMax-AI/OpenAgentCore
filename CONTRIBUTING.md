@@ -1222,7 +1222,13 @@ Session Artifacts are immutable published output copies, separate from live
 workspace files and general source Files. A private output exporter must reuse
 the authorized workspace path boundary and stream bounded bytes. Require complete
 capture and confirmed helper/transport success before publication; valid archive
-syntax alone is insufficient. Never extract an output archive into Core's
+syntax alone is insufficient. The daemon owns and drains the exporter stdout pipe
+separately from child reaping, so pull-transport backpressure cannot consume a
+process-exit I/O deadline. After helper exit, bound each actual pipe read to one
+second to reject inherited pipes that never close; reset that allowance after
+consumer delays. Cancellation closes the owned reader and the dispatch consumer,
+then waits for child settlement. An arbitrary blocked writer cannot be interrupted
+by the exporter itself. Never extract an output archive into Core's
 filesystem or hold the global execution lease through a large transfer. Keep
 publication ordered with Turn completion, and authorize stored reads independently
 of Environment availability so published outputs can survive its expiration.
