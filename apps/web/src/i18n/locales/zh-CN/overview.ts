@@ -1,6 +1,6 @@
 export const overview = {
   title: "概览",
-  description: "这套 Parsar Core 部署在所有项目下的健康、容量、用量与故障。",
+  description: "这套 OpenAgentCore 部署在所有项目下的健康、容量、用量与故障。",
   gettingStarted: {
     title: "新手引导",
     help: "让部署可用的四步，顺序不限。",

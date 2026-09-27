@@ -1,6 +1,6 @@
 ---
-name: Parsar Core Console
-description: The management console for one self-hosted Parsar Core deployment; projects, their assets and keys, health and capacity, on raised cards over a quiet canvas.
+name: OpenAgentCore Console
+description: The management console for one self-hosted OpenAgentCore deployment; projects, their assets and keys, health and capacity, on raised cards over a quiet canvas.
 colors:
   ink: "#37352f"
   ink-muted: "#787774"
@@ -210,7 +210,7 @@ components:
     height: "6px"
 ---
 
-# Design System: Parsar Core Console
+# Design System: OpenAgentCore Console
 
 ## Overview
 
@@ -257,10 +257,10 @@ A restrained neutral ledger with one indigo voice, three signal colours and a
 separate categorical palette that belongs to multi-series data alone.
 
 ### Primary
-- **Parsar Indigo** (accent): keyboard focus outlines and rings, primary buttons,
+- **OpenAgentCore Indigo** (accent): keyboard focus outlines and rings, primary buttons,
   hover on name links and text actions, text selection wash. Deepens to **Pressed
   Indigo** (accent-emphasis) on primary hover. It is the brand colour shared with
-  the public Parsar landing.
+  the public OpenAgentCore landing.
 - **Data** (`--data`, an alias of accent): the one measured series of a chart that
   has only one, such as Sessions created per hour on Overview, drawn as a tint
   (62% into the surface) rather than full strength.
@@ -418,7 +418,7 @@ or 12×2px strokes for line series. Borders are always 1px.
 Compact and quiet; the primary button is the only filled accent in a header.
 - **Shape:** 6px corners, 28px tall, 0 10px padding, 13px/500 label, optional 14px
   Lucide icon.
-- **Primary:** Parsar Indigo fill, white text, control lift; deepens on hover. Used
+- **Primary:** OpenAgentCore Indigo fill, white text, control lift; deepens on hover. Used
   for the one affirmative header action (Create project) and for the submit button
   of non-destructive dialogs (create, rename, issue, continue).
 - **Outline:** Paper face, Firm Rule border, control lift; hover takes the ink wash.
@@ -698,9 +698,9 @@ Signing in and the console tour share one frame: a dark stage on the left (alway
 dark, whatever the theme) and the task panel on the right, which follows the
 theme. The stage is the product's one authored moment: a flickering indigo dot
 grid under slow light rays (Magic UI's flickering grid and light rays), Core as
-the Parsar mark on a tile with a travelling border beam, and two orbits of
+the OpenAgentCore mark on a tile with a travelling border beam, and two orbits of
 Agents, Sessions, Skills, Vaults, files, templates and machines around it; the
-Parsar mark is itself nodes on a ring. Brand copy sits bottom-left in solid
+OpenAgentCore mark is itself nodes on a ring. Brand copy sits bottom-left in solid
 ink; it is a paragraph, not a heading, because the panel's title names the task.
 Signing in asks for one thing, the deployment's Core key, in a single password
 field; the default key location and a copyable read command stay visible beneath
@@ -801,7 +801,7 @@ once per range, new conversation messages settle 6px upward in 260ms, pages fade
 - **Do** confirm every deletion in ConfirmDialog.
 - **Do** keep meters in neutral ink and let amber and red mean a threshold was
   crossed.
-- **Do** reserve Parsar Indigo for selection, focus, primary actions and the single
+- **Do** reserve OpenAgentCore Indigo for selection, focus, primary actions and the single
   `--data` series.
 - **Do** place figures, charts and tables in one card divided by 1px internal rules.
 - **Do** render missing data as "—", a chart gap, "Unavailable" or "Unknown".

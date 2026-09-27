@@ -127,7 +127,7 @@ function CoreKeyForm({ onAuthenticated }: {
   }
 
   return <form className="console-auth-form form-stack" onSubmit={(event) => void submit(event)}>
-    <h2>{t("Sign in to Parsar Core")}</h2>
+    <h2>{t("Sign in to OpenAgentCore")}</h2>
     <div className="field">
       <span className="field-label-row"><label htmlFor={`${id}-key`}>{t("Core key")}</label>
         <HelpTip>{t("The Core key is an administration credential: it cannot call the /v1 Agents API, and the console never keeps it in your browser.")}</HelpTip></span>

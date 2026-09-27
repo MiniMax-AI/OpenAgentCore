@@ -8,7 +8,7 @@ related_targets: ["src/ConsoleApp.tsx"]
 # Administrator console (operate)
 
 Scope: the signed-in console shell and every page behind it, including Getting started on the Overview and the optional console tour. Visitor mode: Operate.
-Audience: the administrator of one Parsar Core deployment. Task: judge health, capacity, usage and failures; inspect and delete or copy project assets; manage projects, keys, nodes and each harness's default model.
+Audience: the administrator of one OpenAgentCore deployment. Task: judge health, capacity, usage and failures; inspect and delete or copy project assets; manage projects, keys, nodes and each harness's default model.
 Constraints: Web API only (`/core/v1`); missing data stays visibly missing; no small print, explanations live in help tips; API terms stay English in Chinese copy; zh-CN and English, light and dark.
 
 Information architecture: Monitor (Overview, Agent metrics, Sandbox metrics, Session log) · Resources (Agents, Environment templates, Skills, Files, Vaults) · Platform (Projects and keys, Nodes, System).

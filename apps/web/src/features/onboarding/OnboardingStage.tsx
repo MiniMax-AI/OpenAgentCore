@@ -17,7 +17,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 /**
  * The dark stage beside signing in and the tour. Its backdrop (a flickering
  * indigo grid under slow light rays) stays the same throughout; in front of
- * it, Core — the Parsar mark — holds its orbits of Agents, Sessions and the
+ * it, Core — the OpenAgentCore mark — holds its orbits of Agents, Sessions and the
  * rest, and during the tour a screenshot of the console takes its place.
  */
 export function OnboardingStage({ scene, chapter }: { scene: StageScene | null; chapter?: TourChapter }) {
@@ -29,8 +29,8 @@ export function OnboardingStage({ scene, chapter }: { scene: StageScene | null; 
         <div className="onboarding-glow" />
       </div>
       <div className="onboarding-brand">
-        <img src="/parsar-mark-dark.png" width="22" height="22" alt="" aria-hidden="true" />
-        <span>Parsar Core</span>
+        <img src="/oac-mark-dark.png" width="22" height="22" alt="" aria-hidden="true" />
+        <span>OpenAgentCore</span>
       </div>
       {scene === "tour" && chapter ? <TourShowcase chapter={chapter} /> : <Constellation copy={scene === "login"} />}
     </aside>
@@ -60,7 +60,7 @@ function Constellation({ copy }: { copy: boolean }) {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.7, ease: EASE }}
         >
-          <img src="/parsar-mark-dark.png" width="40" height="40" alt="" />
+          <img src="/oac-mark-dark.png" width="40" height="40" alt="" />
           <BorderBeam size={70} duration={7} colorFrom="#818cf8" colorTo="#e879f9" borderWidth={1.5} />
         </m.div>
       </div>

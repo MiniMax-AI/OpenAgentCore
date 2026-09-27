@@ -21,11 +21,11 @@ export async function listAllCollectionPages<T extends { id: string }>(
       signal,
     });
     if (!Array.isArray(page.data) || typeof page.has_more !== "boolean") {
-      throw new Error("Agent Core returned an invalid collection page.");
+      throw new Error("OpenAgentCore returned an invalid collection page.");
     }
     for (const value of page.data) {
       if (!value || typeof value.id !== "string" || value.id.length === 0 || ids.has(value.id)) {
-        throw new Error("Agent Core returned duplicate or invalid collection identities.");
+        throw new Error("OpenAgentCore returned duplicate or invalid collection identities.");
       }
       ids.add(value.id);
       values.push(value);
@@ -34,13 +34,13 @@ export async function listAllCollectionPages<T extends { id: string }>(
 
     const nextAfter = page.last_id ?? page.data.at(-1)?.id;
     if (!nextAfter || nextAfter === after || cursors.has(nextAfter)) {
-      throw new Error("Agent Core returned an invalid collection pagination cursor.");
+      throw new Error("OpenAgentCore returned an invalid collection pagination cursor.");
     }
     cursors.add(nextAfter);
     after = nextAfter;
   }
 
-  throw new Error("Agent Core collection pagination exceeded the Web safety limit.");
+  throw new Error("OpenAgentCore collection pagination exceeded the Web safety limit.");
 }
 
 export async function listStableCollectionPages<T extends { id: string }>(
@@ -70,12 +70,12 @@ export function appendCollectionPage<T extends { id: string }>(
   after?: string,
 ): { values: T[]; nextAfter: string | null } {
   if (!Array.isArray(page.data) || typeof page.has_more !== "boolean") {
-    throw new Error("Agent Core returned an invalid collection page.");
+    throw new Error("OpenAgentCore returned an invalid collection page.");
   }
   const ids = new Set(loaded.map((value) => value.id));
   for (const value of page.data) {
     if (!value || typeof value.id !== "string" || value.id.length === 0 || ids.has(value.id)) {
-      throw new Error("Agent Core returned duplicate or invalid collection identities.");
+      throw new Error("OpenAgentCore returned duplicate or invalid collection identities.");
     }
     ids.add(value.id);
   }
@@ -83,7 +83,7 @@ export function appendCollectionPage<T extends { id: string }>(
   if (!page.has_more) return { values, nextAfter: null };
   const nextAfter = page.last_id ?? page.data.at(-1)?.id;
   if (!nextAfter || nextAfter === after) {
-    throw new Error("Agent Core returned an invalid collection pagination cursor.");
+    throw new Error("OpenAgentCore returned an invalid collection pagination cursor.");
   }
   return { values, nextAfter };
 }

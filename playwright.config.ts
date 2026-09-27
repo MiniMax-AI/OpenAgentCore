@@ -33,7 +33,7 @@ export default defineConfig({
       stderr: "pipe",
     },
     {
-      command: `AGENTS_API_PROXY_TARGET=http://127.0.0.1:${fixturePort} pnpm --filter @agents-core-web/web exec vite --host 127.0.0.1 --mode test --port ${webPort}`,
+      command: `OAC_WEB_DEV_PROXY_TARGET=http://127.0.0.1:${fixturePort} pnpm --filter @agents-core-web/web exec vite --host 127.0.0.1 --mode test --port ${webPort}`,
       url: `http://127.0.0.1:${webPort}`,
       reuseExistingServer,
       timeout: 30_000,

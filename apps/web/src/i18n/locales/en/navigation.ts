@@ -25,7 +25,7 @@ export const navigation = {
   },
   showGettingStarted: "Show Getting started",
   skipToContent: "Skip to main content",
-  configureCore: "Configure Agent Core connection",
+  configureCore: "Configure OpenAgentCore connection",
   coreApi: "Core API",
   coreState: "Core API {{state}}",
   coreConnecting: "Connecting…",

@@ -1,6 +1,6 @@
 export const overview = {
   title: "Overview",
-  description: "Health, capacity, usage and failures across every project of this Parsar Core deployment.",
+  description: "Health, capacity, usage and failures across every project of this OpenAgentCore deployment.",
   gettingStarted: {
     title: "Getting started",
     help: "Four steps to a working deployment, in any order.",

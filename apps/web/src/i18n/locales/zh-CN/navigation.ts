@@ -25,7 +25,7 @@ export const navigation = {
   },
   showGettingStarted: "显示新手引导",
   skipToContent: "跳到主要内容",
-  configureCore: "配置 Agent Core 连接",
+  configureCore: "配置 OpenAgentCore 连接",
   coreApi: "Core API",
   coreState: "Core API {{state}}",
   coreConnecting: "连接中…",

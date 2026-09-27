@@ -60,10 +60,10 @@ export function ConsoleSidebar({
     <aside className="app-sidebar">
       <div className="brand-lockup">
         <span className="brand-mark-frame">
-          <img className="brand-mark brand-mark-light" src="/parsar-mark-light.png" width="18" height="18" alt="" aria-hidden="true" />
-          <img className="brand-mark brand-mark-dark" src="/parsar-mark-dark.png" width="18" height="18" alt="" aria-hidden="true" />
+          <img className="brand-mark brand-mark-light" src="/oac-mark-light.png" width="18" height="18" alt="" aria-hidden="true" />
+          <img className="brand-mark brand-mark-dark" src="/oac-mark-dark.png" width="18" height="18" alt="" aria-hidden="true" />
         </span>
-        <span className="brand-name">Parsar Core</span>
+        <span className="brand-name">OpenAgentCore</span>
         <span className="brand-product">{t("console")}</span>
       </div>
 
