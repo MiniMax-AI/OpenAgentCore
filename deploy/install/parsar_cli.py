@@ -211,7 +211,7 @@ def core_error_line(root, state):
                              capture_output=True, text=True).stdout
     except (subprocess.CalledProcessError, OSError):
         return None
-    lines = [line.strip() for line in output.splitlines() if "agents-api startup failed" in line]
+    lines = [line.strip() for line in output.splitlines() if "oac-core startup failed" in line]
     return lines[-1] if lines else None
 
 

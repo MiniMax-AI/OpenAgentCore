@@ -267,11 +267,11 @@ class ParsarTests(unittest.TestCase):
         before = {name: self.generated(name) for name in ("core.env", "compose.json")}
         self.edit(lambda config: config["core"].update(execution_concurrency=8))
         self.host.core["fails"] = True
-        self.host.core["log"] = 'noise\nlevel=ERROR msg="agents-api startup failed" error="synthetic rejection"\n'
+        self.host.core["log"] = 'noise\nlevel=ERROR msg="oac-core startup failed" error="synthetic rejection"\n'
         with self.assertRaisesRegex(parsar_cli.ParsarError, "previous generated files were restored"):
             self.apply()
         self.assertEqual({name: self.generated(name) for name in before}, before)
-        self.assertIn('level=ERROR msg="agents-api startup failed" error="synthetic rejection"', self.output)
+        self.assertIn('level=ERROR msg="oac-core startup failed" error="synthetic rejection"', self.output)
         # Core is down now, so the next failure has nothing converged to roll back to.
         with self.assertRaisesRegex(parsar_cli.ParsarError, "nothing was rolled back"):
             self.apply()

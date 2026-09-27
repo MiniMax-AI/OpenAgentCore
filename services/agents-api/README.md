@@ -357,7 +357,7 @@ the official client installed from the commit in `contracts/agents-api/upstream.
 ```bash
 python -m pip install -r services/agents-api/tests/requirements.txt
 make build-agents-api
-OAC_TEST_SERVER_BIN="${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api/agents-api" \
+OAC_TEST_SERVER_BIN="${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api/oac-core" \
   python services/agents-api/tests/official_client.py
 ```
 
