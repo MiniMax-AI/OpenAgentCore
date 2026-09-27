@@ -1,0 +1,21 @@
+{
+  "title": "Application API",
+  "pages": [
+    "index",
+    "agents",
+    "environments",
+    "environment-templates",
+    "sessions",
+    "artifacts",
+    "events",
+    "items",
+    "subagents",
+    "turns",
+    "files",
+    "skills",
+    "vaults",
+    "credentials",
+    "core",
+    "machine"
+  ]
+}

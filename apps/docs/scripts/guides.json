@@ -1,0 +1,124 @@
+[
+  {
+    "slug": "index",
+    "source": "docs/getting-started/README.md",
+    "title": "OpenAgentCore documentation",
+    "description": "Install Core and Web, create a Project API key, and add execution capacity.",
+    "zh": "安装 Core 与 Web，用 Core key 登录 Web，创建项目并签发应用 API key，然后添加执行节点。应用使用 /v1；Web 的服务端使用 /core/v1；机器连接使用 /api/v1。"
+  },
+  {
+    "slug": "concepts",
+    "source": "docs/design-principles.md",
+    "title": "Concepts and ownership",
+    "description": "Projects, credentials and the boundary between applications, administration and execution.",
+    "zh": "Project 拥有应用资源和执行身份。同一项目的 API keys 共享资源；Core key 只用于管理。Core 负责执行事实，Web 不复制执行所有权。"
+  },
+  {
+    "slug": "execution-model",
+    "source": "docs/web/architecture.md",
+    "title": "Execution and API architecture",
+    "description": "Applications call the public API; the administrator browser calls Web; Runtime connects to Core.",
+    "zh": "应用直接用 Project API key 调用 Core 的 /v1。管理员浏览器通过 Web 会话操作管理界面，Web 服务端持有 Core key。节点和 Runtime 用专属凭据直接连接 Core。"
+  },
+  {
+    "slug": "install",
+    "source": "docs/getting-started/install.md",
+    "title": "Install Core and Web",
+    "description": "Current distribution, host prerequisites, HTTPS, first sign-in and installation options.",
+    "zh": "安装器默认在 ~/.oac/core 安装 Core、Web 和专用 PostgreSQL，初始没有执行节点。先确定公网 HTTPS 地址，按当前版本的校验步骤下载并安装，再用 Core key 登录 Web。"
+  },
+  {
+    "slug": "configure",
+    "source": "docs/configuration.md",
+    "title": "Configuration reference",
+    "description": "The operator config.json, generated files and database-owned runtime settings.",
+    "zh": "安装配置的唯一编辑入口是 config.json；运行 oac apply 应用变更。generated 目录由安装器生成。运行时后端、节点和默认模型由 Web 管理并保存在 PostgreSQL 中。"
+  },
+  {
+    "slug": "bootstrap-projects-keys",
+    "source": "docs/web/core-connection.md",
+    "title": "Sign in and issue application keys",
+    "description": "Keep the Core key on the management side and issue Project API keys through Web.",
+    "zh": "使用 Core key 登录 Web。应用开发者在项目中获取 Project API key，设置 OPENAI_BASE_URL 与 OPENAI_API_KEY。Core key 不能用来调用 /v1，应用 key 也不能调用管理或机器接口。"
+  },
+  {
+    "slug": "quickstart",
+    "source": "docs/getting-started/quickstart.md",
+    "title": "Call the Agent API",
+    "description": "Use the pinned SDK, a Project API key and an explicit model provider to run a Session.",
+    "zh": "应用设置 OPENAI_BASE_URL=https://core.example.com/v1 和 OPENAI_API_KEY=<project-api-key>，使用文档固定的 SDK 版本。先配置执行后端和模型，再创建 Session 并读取 Turn 结果。"
+  },
+  {
+    "slug": "public-api",
+    "source": "docs/api/README.md",
+    "title": "API namespaces and credentials",
+    "description": "The public application API, private administration API and machine connection interface.",
+    "zh": "/v1 使用 Project API key；/core/v1 使用 Core key，由 Web 服务端或管理员脚本调用；/api/v1 只接受对应的节点、注册、daemon 或 executor 凭据。这三类凭据不能互换。"
+  },
+  {
+    "slug": "agents-and-tools",
+    "source": "contracts/agents-api/execution-tools.md",
+    "title": "Agents, tools and harnesses",
+    "description": "Native harness tools, shared declarations and the limits of execution support.",
+    "zh": "保存 Agent 只保存配置，不启动执行。工具声明由所选原生 harness 执行；Codex、Claude Code 与 MiniMax Code 的能力和限制不同。x_agents_core 保留原有扩展字段名称。"
+  },
+  {
+    "slug": "sessions",
+    "source": "docs/api/public-agent-api.md",
+    "title": "Sessions and public resources",
+    "description": "Agents, Sessions, Turns, events and resources in the pinned public contract.",
+    "zh": "Session 是持久对话上下文，绑定一个 Environment。输入事件启动或引导 Turn。Session、Turn 和 Environment 的状态各有含义，不应互相替代；具体字段以公共参考为准。"
+  },
+  {
+    "slug": "environments-and-files",
+    "source": "contracts/agents-api/environments.md",
+    "title": "Environments and files",
+    "description": "Execution placement, Environment resources and workspace ownership.",
+    "zh": "Environment 与 Session 一起创建。none、self_hosted、openai_hosted 是协议中的执行位置名称；openai_hosted 在这里表示 Core 管理的计算资源。文件和工作区仍由对应资源及执行所有者管理。"
+  },
+  {
+    "slug": "hosted-providers",
+    "source": "docs/getting-started/nodes.md",
+    "title": "Nodes and hosted providers",
+    "description": "Add and remove Docker or microsandbox nodes; diagnose connection and readiness.",
+    "zh": "在 Web 的 Nodes 页面添加节点，并在目标主机执行经过校验的命令。sudo 模式使用 oac-node 系统账户；无 sudo 模式使用用户服务。旧名称的同一安装实例必须先按旧版本流程移除，再添加。"
+  },
+  {
+    "slug": "self-hosted-execution",
+    "source": "docs/getting-started/self-hosted.md",
+    "title": "Self-hosted executors",
+    "description": "Connect a user-owned Runtime to its Environment with a restricted executor credential.",
+    "zh": "self_hosted 执行器由用户拥有，Core 不管理它的容器。通过 Web 为对应 Environment 签发 executor 凭据，安装器通过隐藏输入或私有文件读取凭据；不要把凭据放入命令行。"
+  },
+  {
+    "slug": "console",
+    "source": "docs/web/README.md",
+    "title": "Administrator console",
+    "description": "Monitor Core, inspect resources and manage deployment settings through Web.",
+    "zh": "Web 是管理员控制台，提供 Monitor、Resources 和 Platform 操作。浏览器使用管理会话；Core key 作为上游凭据保留在 Web 服务端。应用 API 的执行请求不经过 Web。",
+    "images": {
+      "docs/web/images/overview.png": "apps/web/public/onboarding/monitor-en.webp"
+    }
+  },
+  {
+    "slug": "admin-api",
+    "source": "docs/api/web-management.md",
+    "title": "Core administration API",
+    "description": "Management operations and their server-side credential boundary.",
+    "zh": "管理员脚本通过 Core 的回环端口调用 /core/v1，并使用 Core key。公网入口的 /core/v1 由 Web 管理会话处理；不能把它当成应用 API 或机器连接的代理。"
+  },
+  {
+    "slug": "observability",
+    "source": "contracts/agents-api/runtime-observability-api.md",
+    "title": "Runtime observations",
+    "description": "Current Runtime observations, recorded history and their availability limits.",
+    "zh": "当前 Runtime 观测与已保存历史是不同的数据。离线或陈旧数据不代表当前健康状态；查看来源、时间和可用性，执行事实仍以 Core 为准。"
+  },
+  {
+    "slug": "troubleshooting",
+    "source": "docs/getting-started/operations.md",
+    "title": "Operations and troubleshooting",
+    "description": "oac lifecycle commands, backups, key rotation, upgrades and diagnostics.",
+    "zh": "使用 oac status 查看安装状态，oac doctor 诊断配置，oac apply 应用 config.json。备份必须同时保留数据库、配置和密钥。升级按当前指南执行；不要假设在线 generation 更新或 reset 已实现。"
+  }
+]

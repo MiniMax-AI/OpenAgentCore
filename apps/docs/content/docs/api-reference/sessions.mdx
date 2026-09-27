@@ -1,0 +1,239 @@
+---
+title: Sessions
+description: >-
+  Sessions. Application API: Project API key. Public schema constrained by the
+  pinned OpenAI Agents API baseline; documented x_agents_core fields remain Core
+  extensions.
+full: true
+_openapi:
+  toc: []
+  structuredData:
+    headings: []
+    contents:
+      - content: >-
+          Cursor and results are scoped to the authenticated execution tenant;
+          an unknown, malformed or foreign after cursor returns not found.
+          Optional agent_id matches the immutable root Agent ID, including
+          inline Agents and historical Sessions whose saved source was updated
+          or deleted. Omission lists all Agents. Returns the same Environment
+          and pending-input activity projection as Session retrieval, including
+          self_hosted Sessions.
+      - content: >-
+          The optional Core model_provider bundle resolves from the Session
+          override, saved Agent defaults, then, for openai_hosted and none, the
+          deployment default of the resolved harness; self_hosted never uses the
+          deployment default and none accepts only it. openai_hosted and
+          self_hosted Sessions that resolve no bundle return 400
+          model_provider_required with param x_agents_core.model_provider before
+          any write. Core encrypts and freezes the resolved bundle; later Agent
+          or deployment default edits and same-key retries cannot change it.
+          Keys are never returned. Supports inline configuration or a
+          tenant-owned saved agent_id with per-Session field replacements.
+          Execution supports model/instructions, text verbosity, non-deferred
+          function tools, adapter-qualified multi_agent with persisted Subagent
+          reads, implicit reasoning, service tier auto and environment type
+          none, subject to the configured engine. Codex additionally supports
+          HTTP MCP with service origin (omitted or null on HTTP transport is
+          saved as service), native allowed_tools and boolean required
+          defaulting to false. Session vault_ids attach only project-owned
+          Vaults; credential_id selects an attached static bearer or OAuth
+          credential for the exact HTTPS URL, while null/omission selects a
+          unique match or remains anonymous. Session reads, lists and event
+          snapshots show that implicitly selected credential ID in a null or
+          omitted credential_id, also after the credential is deleted; anonymous
+          selections stay null and the stored caller intent is unchanged. After
+          the input requirement and before any write, a credential_id without
+          vault_ids, one outside the attached Vaults (one message for missing,
+          foreign and unattached IDs) or one for another server_url returns 400
+          invalid_request_error, and several implicit matches return 409
+          conflict_error. Missing decryption configuration fails dispatch
+          without anonymous fallback. Required initialization uses native
+          startup before the first native Turn, including cold resume, and
+          requires a separately advertised capability; exact hosted creation
+          timing and error parity remain unverified. Other MCP origins and
+          native OAuth login remain unsupported. The self_hosted profile
+          requires Codex, an absolute workspace_directory and empty
+          capability_directories, with optional non-deferred function tools and
+          HTTP MCP using service origin, optionally authenticated by the
+          attached Vault rules. Remote MCP and remote Bearer authentication each
+          require separately advertised combination support; old peers cannot
+          receive unsupported work. Omitted/null capability_directories use the
+          empty-list default; self_hosted requires configured execution plus
+          executor registry. Claude SDK currently requires medium verbosity and
+          object-root function schemas. It supports anonymous or attached
+          static-bearer service-origin HTTP MCP on none with boolean required
+          and separately advertised MCP/bearer/required runtime support.
+          Required servers must be connected before the first native input is
+          released; pending or failed startup rejects execution. The shared
+          Vault selection and immutable binding rules apply; unsupported native
+          labels/tool names reject before persistence. An attached Vault with no
+          matching credential may remain anonymous; missing keys or failed
+          credential lookup/decryption never fall back to anonymous execution.
+          Omitted stream defaults to false; stream and agent_id cannot be null.
+          Metadata may be null; non-string values and limit violations return
+          invalid_request_error with a metadata or metadata.<key> param. The
+          inline agent uses the Agent create configuration validation with
+          agent.-prefixed params, reported before the input requirement and
+          saved-Agent lookup; saved configurations with conflicting tools or
+          schema roots reject admission with the same errors, and execution
+          limits keep unsupported_or_invalid_configuration. Hosted network
+          policy rejections return invalid_request_error with a null param.
+          Initial input accepts a string or ordered user-message array. Codex
+          and Claude SDK on none and qualified openai_hosted also accept inline
+          PNG/JPEG image content; other image combinations and remote URLs are
+          unsupported. None initial input atomically starts a Turn; self_hosted
+          initial input is reserved while returning its Environment connection
+          target, with execution deferred to native readiness and Session
+          failure on initial timeout. Initial input is required for none and for
+          streamed creation outside self_hosted. Omitted/null input remains
+          valid for non-streaming hosted and self_hosted creation. With
+          stream=true, returns live Session events starting with the committed
+          creation snapshot and closes right after the first agent.session.idle
+          recorded when a Turn ends or an input reservation stops being pending,
+          or any agent.session.failed, without sending later events. A creation
+          that admitted nothing closes after the snapshot; a settlement that
+          records no event closes after events up to the cursor read with a
+          settled Session projection. Required actions keep it open; disconnect
+          does not cancel execution. The GET events stream remains live-only.
+          New Sessions retain their authenticated creator; all creation retries
+          require the same typed subject, including across key rotation.
+          Saved-Agent retries and inline requests using Vault attachments or
+          credential references retain caller intent independently of later
+          resource changes; new hosted inline requests also freeze caller intent
+          before deployment defaults resolve; unrelated non-hosted inline
+          retries preserve resolved/default equivalences, and their resolved
+          hash leaves out any deployment default. Provider keys enter retry
+          hashes only as fingerprints keyed by the credential key. Unknown
+          historical creators reject retries; known creators without recorded
+          intent retain resolved-snapshot retry rules. These conflict policies
+          are local and not verified hosted parity. A same-key stream=true retry
+          of an existing creation returns 201 with no events and closes at once;
+          retry with stream=false or use the GET events stream to recover.
+          Claude SDK on none and Core-managed Docker openai_hosted supports
+          qualified object-root json_schema output with medium verbosity,
+          single-Agent execution and ordinary functions. Hosted execution reuses
+          native workspace tools and Files/Artifacts; Skills, Plugins,
+          capability directories, HTTP MCP, Subagent and tool_search
+          combinations remain unqualified, including inherited template
+          contents. Other non-text initial input remains unsupported. Basic
+          Codex and Claude SDK openai_hosted creation requires an explicitly
+          configured managed provider. The Claude workspace profile supports
+          non-deferred function tools with text or successful inline PNG/JPEG
+          results alongside native workspace tools; HTTP MCP remains
+          unsupported. Idle Sessions provision automatically; initial
+          provisioning has no caller connection action. Network defaults to
+          enabled; disabled and restricted exact ASCII hostnames are supported.
+          Restricted policy requires 1–100 allowed domains. Unsupported hostname
+          forms and startup installations are rejected. Confidential env,
+          system/npm/Python packages and ordered setup commands use the shared
+          initialization lifecycle; requested network applies after setup.
+          Initial inline and tenant-owned file_id files freeze encrypted bytes
+          before provisioning, then install through the common Core lifecycle
+          before native execution or live Files access. With a template
+          reference, omitted/null files, env, packages and setup_commands
+          inherit. Non-null files and command lists replace; env overlays by
+          key; each package manager inherits on omission/null and otherwise
+          replaces its list. Empty lists clear their selected field.
+          Tenant-owned environment_template_id references inherit omitted/null
+          network and allow only narrowing overrides. Inline hosted network:null
+          retains the enabled default; updating a Template with network:null
+          resets its saved policy to enabled. Core freezes effective
+          configuration; template updates/deletion do not alter Session
+          snapshots or same-intent creation retries. Inline or tenant-owned
+          skill_reference Skills share initialization. Templates preserve
+          default/latest/explicit selectors; Session creation freezes concrete
+          metadata and encrypted content atomically. Skill, Plugin and
+          capability-directory list omission/null inherit; a non-null list
+          replaces, including empty-list clearing. Omitted/null Skill version
+          selectors resolve the default version. Source deletion/default updates
+          cannot change committed Session Skill contents. Deferred function
+          discovery uses type-only tool_search and per-function defer_loading in
+          the qualified single-agent Claude environment:none function profile,
+          including qualified inline image messages and text results. Explicit
+          web_search mode disabled and programmatic_tool_calling enabled false
+          use frozen common Runtime controls. Enabled forms, including those
+          saved on an Agent, remain unqualified and reject before any write
+          unless the Session replaces tools. Omitted programmatic configuration
+          preserves native behavior, a documented difference from the official
+          default-on behavior. Other combinations remain unqualified; see the
+          operation coverage.
+      - content: >-
+          Returns supported none, self_hosted and basic openai_hosted Session
+          environments. Self-hosted pending input can require a caller
+          connection before a Turn exists. Hosted initial provisioning remains
+          idle until a Turn starts; connection observations are not native
+          execution readiness.
+      - content: >-
+          The metadata field is required in an update body. Send null or {} to
+          clear it, or supply an object to replace all pairs. Up to 16 string
+          pairs, with keys at most 64 characters and values at most 512
+          characters; violations and non-string values return
+          invalid_request_error with a metadata or metadata.<key> param. U+0000
+          is rejected as a local storage limit. Malformed, missing and foreign
+          Session IDs share the not-found response. Execution configuration and
+          activity are unchanged. Returns the same safe Environment and
+          pending-input activity projection as Session retrieval.
+      - content: >-
+          Removes a durably idle or failed Session and its history from the
+          public API. A Session whose root Turn is queued, in progress or
+          waiting (including required actions) or whose input reservation is
+          pending returns 409 conflict_error and is left unchanged; cancel it
+          and wait until it is idle before deleting. Subagent child Turns and
+          pending Environment file writes are not checked and do not block
+          deletion. Repeating the deletion of the caller's own deleted Session
+          returns the same confirmation; missing and foreign Sessions return
+          404. Internal records and native history are retained pending separate
+          physical cleanup; overlapping stream timing remains unverified.
+      - content: >-
+          An empty events array is a resource-authorized no-op; it creates no
+          execution retry identity, Turn, Item or input receipt. For environment
+          none, atomically accepts text messages, cancellation and function
+          results. Messages steer active work or start a queued Turn. The
+          supported self_hosted profile accepts text-only messages; qualified
+          Codex and Claude SDK openai_hosted profiles also accept inline
+          PNG/JPEG. Under the Session lock, matching retries retain their
+          original target; new active messages append to the current Turn, while
+          idle messages reserve work and wait up to the original five-minute
+          connection/admission deadline. Return 202 only after durable
+          admission, without claiming native application; active messages create
+          no Turn or reservation. Cancellation-only prepared-environment batches
+          use existing durable cancellation admission and return 202 without
+          waiting for native exit; a new cancellation conflicts while a pre-Turn
+          reservation is pending. Homogeneous tool_result-only
+          prepared-environment batches reuse existing scoped result admission
+          and application receipts without creating a Turn or bypassing a
+          pending reservation. Mixed prepared-environment batches remain
+          unsupported. HTTP expiry/cancellation use local 409
+          environment_input_expired/environment_input_cancelled errors. New
+          input on a Session whose hosted Environment failed to provision
+          returns the observed 409 conflict_error "the hosted environment failed
+          to provision"; input already waiting when it fails and expired
+          Environments keep the local 409 environment_unavailable. Input the
+          Session cannot accept in its current state, such as a result after
+          cancellation or a batch while earlier input is pending, and a result
+          that differs from the call's saved result return 409 with type and
+          code conflict_error; reusing an Idempotency-Key with a different batch
+          returns the local 409 idempotency_conflict. Inside an owned Session, a
+          result for an unknown call or for a call of another Turn returns 400
+          invalid_request_error and changes nothing; missing and foreign
+          Sessions return 404. Losing execution ownership returns 503. The
+          response write deadline accommodates the admission window for either
+          prepared Environment, independently of new-hosted-admission and
+          executor URL settings. Disconnecting the waiting HTTP request does not
+          cancel retained work or restart its deadline. Retry keys identify the
+          whole ordered batch. Function output accepts text or ordered
+          text/image parts subject to engine support; Claude SDK accepts text
+          results and, on none and qualified openai_hosted, successful inline
+          PNG/JPEG results, preserving ordered content; error images and remote
+          references reject before admission. Native image resizing may change
+          bytes. Runtime image-result support is checked only for image-bearing
+          delivery. Codex and Claude SDK on none and qualified openai_hosted
+          accept ordered inline PNG/JPEG image messages. Self-hosted profiles
+          and other engines remain text-only; remote image URLs are unsupported.
+          Image references are retained unchanged without service-side
+          downloads.
+---
+
+{/* This file was generated by Fumadocs. Do not edit this file directly. Any changes should be made by running the generation command again. */}
+
+<APIPage document={"public-api"} operations={[{"path":"/agents/sessions","method":"get"},{"path":"/agents/sessions","method":"post"},{"path":"/agents/sessions/{session_id}","method":"get"},{"path":"/agents/sessions/{session_id}","method":"post"},{"path":"/agents/sessions/{session_id}","method":"delete"},{"path":"/agents/sessions/{session_id}/events","method":"post"}]} webhooks={[]} hasHead={true} />

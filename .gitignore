@@ -24,3 +24,8 @@ __pycache__/
 /.agents/
 /.issue-agent/
 /ISSUE_AGENT.md
+
+# Documentation site build output.
+/apps/docs/.next/
+/apps/docs/.source/
+/apps/docs/tsconfig.tsbuildinfo

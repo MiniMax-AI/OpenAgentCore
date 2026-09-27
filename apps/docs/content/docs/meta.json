@@ -1,0 +1,27 @@
+{
+  "title": "OpenAgentCore documentation",
+  "pages": [
+    "---Start here---",
+    "index",
+    "concepts",
+    "execution-model",
+    "install",
+    "configure",
+    "---Application access---",
+    "bootstrap-projects-keys",
+    "quickstart",
+    "public-api",
+    "agents-and-tools",
+    "sessions",
+    "---Execution---",
+    "environments-and-files",
+    "hosted-providers",
+    "self-hosted-execution",
+    "---Administration---",
+    "console",
+    "admin-api",
+    "observability",
+    "troubleshooting",
+    "api-reference"
+  ]
+}

@@ -9,7 +9,10 @@
     "test": "pnpm --filter @parsar/claude-sdk-adapter test && pnpm test:core-doctor && pnpm test:web",
     "test:core-doctor": "node --test scripts/core-doctor.test.mjs",
     "test:web": "pnpm --filter @agents-core-web/agents-client test && pnpm --filter @agents-core-web/web test",
-    "test:web:acceptance": "playwright test"
+    "test:web:acceptance": "playwright test",
+    "dev:docs": "pnpm --dir apps/docs dev",
+    "build:docs": "pnpm --dir apps/docs build",
+    "check:docs": "pnpm --dir apps/docs verify && pnpm --dir apps/docs test && pnpm --dir apps/docs typecheck && pnpm --dir apps/docs build"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
