@@ -12,7 +12,7 @@ import (
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-const resourceProofLabel = "io.parsar.resource-proof"
+const resourceProofLabel = "io.oac.resource-proof"
 
 func resourceProof(config wire.Config) string {
 	raw, _ := json.Marshal(struct {

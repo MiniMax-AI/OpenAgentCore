@@ -83,20 +83,20 @@ func TestThreadStartParams_OmitsEmptyOptionalFields(t *testing.T) {
 
 // TestThreadStartParams_ModelProviderIsCamelCaseField confirms the
 // model_provider override (used by injectCodexManagedModel to pin codex
-// to the [model_providers.parsar] config block) actually reaches
+// to the [model_providers.oac] config block) actually reaches
 // codex via the v2 thread/start params, not just via the -c CLI
 // override. Sending it on both paths is belt + suspenders.
 func TestThreadStartParams_ModelProviderIsCamelCaseField(t *testing.T) {
 	params := ThreadStartParams{
 		Cwd:            "/workspace",
 		Model:          "gpt-5.5",
-		ModelProvider:  "parsar",
+		ModelProvider:  "oac",
 		ApprovalPolicy: SilentGranularPolicy(),
 		Sandbox:        SandboxDangerFullAcces,
 	}
 	raw, _ := json.Marshal(params)
 	body := string(raw)
-	if !strings.Contains(body, `"modelProvider":"parsar"`) {
+	if !strings.Contains(body, `"modelProvider":"oac"`) {
 		t.Fatalf("modelProvider missing or wrong case in wire: %s", body)
 	}
 	// snake_case would silently be ignored by codex's serde rename_all

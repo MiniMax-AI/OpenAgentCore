@@ -46,7 +46,7 @@ class InstallerTests(unittest.TestCase):
     def snapshot(self):
         return {str(path.relative_to(self.root)): (stat.S_IMODE(path.stat().st_mode),
                 path.read_bytes() if path.is_file() else None)
-                for path in [self.root, *self.root.rglob("*")] if path.name != ".parsar.lock"}
+                for path in [self.root, *self.root.rglob("*")] if path.name != ".oac.lock"}
 
     def key_file(self, contents="synthetic-existing-core-key-0123456789", mode=0o600):
         path = self.work / "existing-core.key"
@@ -69,12 +69,12 @@ class InstallerTests(unittest.TestCase):
         names = {str(path.relative_to(self.root)) for path in self.root.rglob("*") if path.parent.name != "node-payload"
                  and "runtime" not in path.parts}
         self.assertEqual(names, {
-            ".parsar.lock", "config.json", "state.json", "parsar", "node-payload", "secrets", "secrets/core.key",
+            ".oac.lock", "config.json", "state.json", "oac", "node-payload", "secrets", "secrets/core.key",
             "secrets/credential.key", "secrets/database.password", "generated", "generated/compose.json",
             "generated/core.env", "generated/core-key-digests.json", "generated/settings.json",
             "generated/config.schema.json", "state", "state/e2b"})
         for path in [self.root, *self.root.rglob("*")]:
-            expected = 0o700 if path.is_dir() or path.name == "parsar" else 0o600
+            expected = 0o700 if path.is_dir() or path.name == "oac" else 0o600
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), expected, path)
         self.assertEqual(self.host.running(), {"database", "core", "web"})
         output = self.output.getvalue()
@@ -82,7 +82,7 @@ class InstallerTests(unittest.TestCase):
             self.assertNotIn((self.root / "secrets" / name).read_text(), output)
         self.assertIn("Console: https://core.example\nAPI base URL: https://core.example/v1\n"
                       "Local-only API on this host: http://127.0.0.1:8091/v1\n", output)
-        self.assertIn(f"Settings: {self.root / 'config.json'}. Edit it, then run {self.root / 'parsar'} apply.", output)
+        self.assertIn(f"Settings: {self.root / 'config.json'}. Edit it, then run {self.root / 'oac'} apply.", output)
 
     def test_output_labels_public_and_local_addresses(self):
         key = "{root}/secrets/core.key"
@@ -93,7 +93,7 @@ class InstallerTests(unittest.TestCase):
                              "on the Projects and keys page.",
                              # Sandboxes call Core at public_url, so a loopback install has no nodes yet.
                              "\nNodes need an HTTPS public URL that other machines and their sandboxes can reach: "
-                             "set public_url in {root}/config.json and run {root}/parsar apply first.\nAdd nodes: in "
+                             "set public_url in {root}/config.json and run {root}/oac apply first.\nAdd nodes: in "
                              "Web, open Nodes and choose Add node"]),
             "core-only": (["--core-only"], ["API base URL: http://127.0.0.1:8091/v1 (local only)\n",
                                             "Next: create a Project and its API key through the Core management API at "
@@ -112,24 +112,24 @@ class InstallerTests(unittest.TestCase):
     def test_rerun_reads_config_json_rejects_flags_and_repairs(self):
         self.install()
         before = self.snapshot()
-        with self.assertRaisesRegex(install.InstallError, "config.json. Edit it and run .*parsar apply"):
+        with self.assertRaisesRegex(install.InstallError, "config.json. Edit it and run .*oac apply"):
             self.install("--web-port", "8081")
         self.assertEqual(self.snapshot(), before)
-        (self.root / "parsar").unlink()
+        (self.root / "oac").unlink()
         config = self.document("config.json")
         config["ports"]["web"] = 8181
         (self.root / "config.json").write_text(json.dumps(config))
         self.host.recreated.clear()
         self.install()
-        self.assertEqual((self.root / "parsar").read_bytes(), (self.bundle / "parsar.pyz").read_bytes())
+        self.assertEqual((self.root / "oac").read_bytes(), (self.bundle / "oac.pyz").read_bytes())
         self.assertEqual(self.host.recreated, ["web"])
         other, _ = make_bundle(self.work / "other", MANIFEST, commit="b" * 40)
-        with self.assertRaisesRegex(install.InstallError, "parsar upgrade"):
+        with self.assertRaisesRegex(install.InstallError, "oac upgrade"):
             with contextlib.redirect_stdout(self.output):
                 run_installer(install, other, ["--install-dir", self.root])
 
     def test_retired_flags_and_old_layouts_name_their_replacement(self):
-        for flag, command in (("--status", "parsar status"), ("--stop", "parsar stop")):
+        for flag, command in (("--status", "oac status"), ("--stop", "oac stop")):
             output = io.StringIO()
             with self.subTest(flag=flag), contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
                 install.arguments(["--install-dir", str(self.root), flag])
@@ -202,7 +202,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("database", config["ports"])
         commands = self.host.commands
         migrate = commands.index([str(self.root / "native/bin/oac-core-migrate")])
-        unit = self.root / "generated/parsar-{}-core.service".format(self.document("state.json")["project"][7:])
+        unit = self.root / ("generated/" + self.document("state.json")["project"] + "-core.service")
         self.assertLess(migrate, commands.index(["systemctl", "--user", "enable", "--now", str(unit)]))
         self.assertEqual(set(self.document("generated/compose.json")["services"]), {"database", "web"})
         self.assertTrue(self.host.native["active"])
@@ -297,7 +297,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_a_failed_first_start_says_the_sandbox_backend_was_not_chosen(self):
         self.host.core["fails"] = True
-        with self.assertRaisesRegex(install.parsar_cli.ParsarError,
+        with self.assertRaisesRegex(install.oac_cli.OacError,
                                     f"rerun ./install.sh --install-dir {self.root}. The sandbox backend was not chosen; "
                                     "after the repair, choose it on the Nodes page in Web$"):
             self.install("--sandbox", "microsandbox")
@@ -329,7 +329,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_bundle_verifies_transferred_bytes_and_checksum_list(self):
         self.assertEqual(install.verify_bundle(self.bundle)["source_commit"], "a" * 40)
-        for name in ("images/core.tar", "manifest.json", "parsar.pyz", "config.schema.json"):
+        for name in ("images/core.tar", "manifest.json", "oac.pyz", "config.schema.json"):
             with self.subTest(name=name):
                 path = self.bundle / name
                 original = path.read_bytes()
@@ -339,7 +339,7 @@ class InstallerTests(unittest.TestCase):
                 path.write_bytes(original)
         checksums = self.bundle / "SHA256SUMS"
         original = checksums.read_text()
-        for name in ("parsar.pyz", "standard-sizes.json"):
+        for name in ("oac.pyz", "standard-sizes.json"):
             checksums.write_text("".join(line + "\n" for line in original.splitlines() if not line.endswith("  " + name)))
             with self.subTest(name=name), self.assertRaisesRegex(install.InstallError, "incomplete"):
                 install.verify_bundle(self.bundle)

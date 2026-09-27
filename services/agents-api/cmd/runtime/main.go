@@ -32,7 +32,7 @@ func run(args []string) error {
 	}
 	var input docker.SelfHostedLaunch
 	var credential, seccomp string
-	flags := flag.NewFlagSet("parsar-runtime", flag.ContinueOnError)
+	flags := flag.NewFlagSet("oac-selfhost", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.StringVar(&input.InstallationID, "installation-id", "", "persisted local installation UUID")
 	flags.StringVar(&input.EnvironmentID, "environment-id", "", "Session Environment UUID")
@@ -81,7 +81,7 @@ func run(args []string) error {
 // user-owned Runtime container; its volumes and native history stay.
 func replaceCredential(args []string) error {
 	var name, credential string
-	flags := flag.NewFlagSet("parsar-runtime replace-credential", flag.ContinueOnError)
+	flags := flag.NewFlagSet("oac-selfhost replace-credential", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.StringVar(&name, "container", "", "user-owned Runtime container name")
 	flags.StringVar(&credential, "credential-file", "", "private restricted executor credential JSON")

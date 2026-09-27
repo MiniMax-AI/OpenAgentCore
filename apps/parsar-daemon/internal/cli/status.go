@@ -32,7 +32,7 @@ func runStatus(ctx *runContext, args []string) error {
 	prof, err := auth.Load(*profile)
 	switch {
 	case errors.Is(err, auth.ErrNotPaired):
-		fmt.Fprintln(ctx.stdout, "paired       : no legacy profile (use `parsar-daemon connect --url ... --token ...`)")
+		fmt.Fprintln(ctx.stdout, "paired       : no legacy profile (use `oac-daemon connect --url ... --token ...`)")
 	case err != nil:
 		fmt.Fprintf(ctx.stdout, "paired       : ERROR — %v\n", err)
 	default:

@@ -68,7 +68,7 @@ def table():
         default = code(node["default"]) if "default" in node else "none"
         scope = "all" if set(modes) == set(config_model.MODES) else ", ".join(f"`{mode}`" for mode in modes)
         change = ("fixed" if not annotation("changeable", True)
-                  else "`parsar apply`" if annotation("setting", True) else "any time")
+                  else "`oac apply`" if annotation("setting", True) else "any time")
         restarts = ", ".join(annotation("restarts", [])) or "none"
         if annotation("native_restarts"):
             restarts += " (" + ", ".join(annotation("native_restarts")) + " with native Core)"

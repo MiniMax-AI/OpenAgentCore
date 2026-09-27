@@ -30,7 +30,7 @@ func TestClaudeSDKDiscoveryAndRegistration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			entrypoint := ""
 			if tc.configured {
 				entrypoint = filepath.Join(root, "replaceable bundle", "dist", "main.js")
@@ -45,7 +45,7 @@ func TestClaudeSDKDiscoveryAndRegistration(t *testing.T) {
 			checks := unavailableCLIChecks()
 			checks.ClaudeSDK = func(_ context.Context, config claudesdk.Config) (claudesdk.RuntimeInfo, error) {
 				calls++
-				if config.Node != node || config.Entrypoint != entrypoint || config.StateDir != filepath.Join(root, "parsar-daemon", "test", "runtime", "claude-sdk") || config.Env != nil {
+				if config.Node != node || config.Entrypoint != entrypoint || config.StateDir != filepath.Join(root, "daemon", "test", "runtime", "claude-sdk") || config.Env != nil {
 					t.Fatalf("readiness configuration differs from operator configuration: %+v", config)
 				}
 				if !tc.ready {
@@ -106,12 +106,12 @@ func TestClaudeSDKInvalidPathsFailBeforeProbe(t *testing.T) {
 	for _, relative := range []string{"entrypoint", "home"} {
 		t.Run(relative, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			t.Setenv(claudeSDKEntrypointEnv, filepath.Join(root, "main.js"))
 			if relative == "entrypoint" {
 				t.Setenv(claudeSDKEntrypointEnv, "main.js")
 			} else {
-				t.Setenv("PARSAR_HOME", "relative-home")
+				t.Setenv("OAC_RUNTIME_HOME", "relative-home")
 			}
 			out := discoverClaudeSDK(&runContext{stdout: &strings.Builder{}, stderr: &strings.Builder{}}, "default", func(context.Context, claudesdk.Config) (claudesdk.RuntimeInfo, error) {
 				t.Fatal("invalid paths reached runtime probe")
@@ -126,7 +126,7 @@ func TestClaudeSDKInvalidPathsFailBeforeProbe(t *testing.T) {
 
 func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	t.Setenv(claudeSDKEntrypointEnv, filepath.Join(root, "main.js"))
 	node, err := os.Executable()
 	if err != nil {

@@ -166,8 +166,7 @@ history routes register an explicit HEAD 405 instead. Every 405 of the API route
 body and lists the route's methods in `Allow`.
 
 Keep test artifacts under `~/.oac/` and build output under
-`${OAC_DEV_HOME:-$HOME/.oac}`. Runtime state still uses its existing runtime
-configuration. Require
+`${OAC_DEV_HOME:-$HOME/.oac}`. Runtime state uses `${OAC_RUNTIME_HOME:-$HOME/.oac}`. Require
 absolute user-supplied working directories. Keep credentials out of source and
 logs. Update this guide when architecture, ownership or generated contracts change.
 Comments and documentation are English. Reuse existing helpers and error mapping;
@@ -821,14 +820,14 @@ deployment. Harness selection and public/self-hosted contracts remain unchanged.
 The paired console serves only matched, non-secret distribution artifacts for node
 installation. Never serve private installation files or arbitrary paths. Installation
 reads `GET /api/v1/sandbox-node/configuration` using an unconsumed enrollment token,
-or a retained node credential with `X-Parsar-Node-ID`. Reads never consume enrollment;
+or a retained node credential with `X-OAC-Node-ID`. Reads never consume enrollment;
 registered nodes can read their matching configuration during maintenance. Validate
 installation, generation, specification digest and release before writing node files,
 registering or reconnecting. Reject drift rather than overwriting retained identity
 or using local resource defaults. Registration consumes a token only after these
 checks. The installer verifies downloaded files and starts the ordinary node process
 as a user service, or, run as root, as a root-owned system service for the dedicated
-`parsar-node` user it prepares; it performs no SSH installation, Session creation or
+`oac-node` user it prepares; it performs no SSH installation, Session creation or
 model call.
 
 Node management (Web's **Nodes** page; see the
@@ -1090,7 +1089,7 @@ mechanisms. Remove superseded unused code, configuration, tests, scripts and
 task-owned temporary resources as each replacement is accepted. Preserve necessary
 regressions, still-used official capabilities, product data and others' work.
 
-The opt-in Codex deployment selector `PARSAR_CODEX_PERMISSION_PROFILE` chooses a
+The opt-in Codex deployment selector `OAC_RUNTIME_CODEX_PERMISSION_PROFILE` chooses a
 native named profile at harness startup and on both new/resumed threads, omitting
 the legacy sandbox override. It is operator configuration, never a prompt option,
 and rejects remote, none and temporary read preparations. Native managed
@@ -1249,8 +1248,8 @@ capability advertisement alone does not qualify an operator's deployment.
 Exporter component checks do not establish public Artifact compatibility.
 
 Local inline file delivery uses the same authenticated daemon connection and exact
-Environment/Session binding. The optional startup-owned `PARSAR_RUNTIME_WRITE_HELPER`
-and `PARSAR_RUNTIME_STAGING` enable only the bounded installer primitive; they do
+Environment/Session binding. The optional startup-owned `OAC_RUNTIME_WRITE_HELPER`
+and `OAC_RUNTIME_STAGING` enable only the bounded installer primitive; they do
 not grant public feature admission. Require a canonical executable outside the
 Environment parent, canonical sibling workspace/staging directories on one mount,
 and verified native tool denial of staging and its ancestors. Native credentials
@@ -1722,15 +1721,32 @@ newcomer installation path and document them under
 [Configuration](docs/configuration.md) is the canonical operator parameter reference.
 Every process setting has one home: the installation's private `config.json`,
 described by `deploy/install/config.schema.json`. The operator edits only that
-file; `parsar apply` validates it, derives `generated/` (Compose file, `core.env`,
+file; `oac apply` validates it, derives `generated/` (Compose file, `core.env`,
 native unit, Core key digest file, settings snapshot) and converges on what actually
 runs: each service carries the digest of its inputs (Compose label
-`io.parsar.inputs`, native `PARSAR_INPUTS`), and exactly the services whose running
+`io.oac.inputs`, native `OAC_INPUTS`), and exactly the services whose running
 inputs differ are recreated or restarted. Decide restarts from what runs, never
 from recorded bookkeeping, so the next apply finishes any interrupted one. Installation flags only seed it, and
 rerunning the installer rejects them. Runtime settings stay in PostgreSQL and
 change through Web or `/core/v1`. Secrets live once each in `secrets/`; identity and
-install facts live in tool-written `state.json`. Core process settings use `OAC_*`, Web settings use `OAC_WEB_*`, and shared Go
+install facts live in tool-written `state.json`. State format 2 uses an `oac-` Compose
+project; config.json's independent schema format stays 1. The operator command is
+`oac` (`oac_cli.py`, packaged as `oac.pyz`), with default installation directory
+`~/.oac/core`, private `~/.oac`, generated `x-oac` annotations and `.oac.lock`.
+Only `install.sh --convert` reads pre-rename state. Its `rename.py` coordinator first
+validates the source, target, bundle and generated files. A stopped old Core may be
+started from its own files for authenticated drain checks; refusal restores only
+services the probe started and reports any failed restoration. Require maintenance,
+zero unreleased allocations and pending work, and no registered nodes. One explicit
+confirmation covers legacy config-layout conversion and the rename. Never delete a
+target volume or copy container without matching the recorded conversion ownership;
+copy the stopped PostgreSQL volume, retain the old volume, and carry the atomic
+journal across the default-directory move. Preserve ports, secrets, installation
+identity and stored history. Resume only with the recorded bundle. Docker and
+microsandbox replace the Runtime through the existing guarded PUT and resume
+admission; E2B stays in maintenance for its rebuilt template. Node and self-hosted
+installations are outside this converter.
+ Core process settings use `OAC_*`, Web settings use `OAC_WEB_*`, and shared Go
 logging uses `OAC_LOG_*`. Retired settings fail startup even when empty or when
 the new name is also set; report every matching name without values. Only the
 explicit installer conversion reads pre-rename files. Core and operator executables
@@ -1886,9 +1902,9 @@ preserves resident microVM/helper processes across a node-service restart. User 
 access and the Linux runtime libraries are prerequisites for microsandbox. The node
 installed by a normal user runs as a systemd user service and needs linger. Run as
 root (sudo mode), the installer instead prepares the host: it creates or adopts the
-`parsar-node` system user, adds it to the `docker` or `kvm` device group (no other
+`oac-node` system user, adds it to the `docker` or `kvm` device group (no other
 group), and installs one root-owned system service per installation that runs the
-same node program with `User=parsar-node`. Sudo mode serves one Core per host,
+same node program with `User=oac-node`. Sudo mode serves one Core per host,
 because its nodes share that account. Docker group membership makes that user,
 and so the node, root-equivalent on the host; that is inherent to Docker sandboxes,
 not a least-privilege boundary. Microsandbox needs only `kvm`. Files the service
@@ -1913,15 +1929,30 @@ The basic API image and binary builds remain independent artifacts.
 The standalone API release and Core distribution both include the nodes operator
 reference (`HOSTED-SANDBOX-MANAGER.md`) at the relative path used by their packaged README. Include the
 guide in each artifact checksum list so extracted documentation matches its build.
-The node asset includes the sandbox-node binary. The installer's Docker and
+The node asset includes the `oac-node` binary. The installer's Docker and
 microsandbox selections use Web's Standard size from
 `apps/web/src/features/sandbox/standard-sizes.json`, which the distribution build
 copies into the bundle; keep no second copy of those values. An existing database
 selection is never overwritten by installer defaults. Node configuration and identity live under
-`~/.parsar/nodes/<installation-id>/` in the node account's home (`/var/lib/parsar-node`
+`~/.oac/nodes/<installation-id>/` in the node account's home (`/var/lib/oac-node`
 in sudo mode); microsandbox uses its separate short private
 Runtime home. Zero-node installs create no node identity state but retain the paired
 Core key for first setup.
+
+Node installation refuses pre-rename resources for the same installation ID: old
+records, node directories, units and Docker networks. It never adopts those
+resources or removes another installation. Remove the node on its old Core, then
+uninstall with the previous release before adding it again. The machine
+configuration route rejects `X-Parsar-Node-ID` with `400 invalid_request`; only
+`X-OAC-Node-ID` identifies a retained node credential.
+
+Self-hosted installations use `oac-selfhost` and `~/.oac/self-hosted/<environment-id>`.
+The installer refuses an existing `~/.parsar/self-hosted/<environment-id>` for the
+same Environment, even with a custom new install directory. Old executors keep
+running with their own image and history; operators explicitly stop and remove
+them before replacing them. New installation never adopts their native history.
+Credential replacement for a new installer-owned executor retains its existing
+container and ownership checks.
 
 One Runtime image contains the existing daemon, shared helpers and three native
 harness packages. Their differences remain in the adapters. Core keeps exclusive
@@ -3022,11 +3053,11 @@ See [deployment and engine onboarding](services/agents-api/deploy/claude/README.
 The helper executables retain their historical Codex names; their local directory,
 write and export operations are shared and do not launch an engine.
 
-`PARSAR_CLAUDE_SDK_WORKSPACE=managed` requires the shared dedicated local binding,
+`OAC_RUNTIME_CLAUDE_SDK_WORKSPACE=managed` requires the shared dedicated local binding,
 canonical workspace and its same-inode `/workspace` mount, and explicit immutable
 network policy. Native history, home and scratch live separately under
-`PARSAR_HOME/runtime/claude-sdk`; daemon authentication stays under
-`PARSAR_HOME/parsar-daemon`. The trusted image and protected staging directory
+`OAC_RUNTIME_HOME/runtime/claude-sdk`; daemon authentication stays under
+`OAC_RUNTIME_HOME/daemon`. The trusted image and protected staging directory
 remain outside writable workspace roots. No product state or native user profile
 is imported. The separate unbound `environment:none` profile keeps its behavior.
 
@@ -3336,8 +3367,8 @@ remote tool effects were cancelled. Rich content, native truncation and asynchro
 MCP task results remain unverified.
 
 Daemon `connect` optionally registers this factory as `claude_sdk` when the
-operator sets `PARSAR_CLAUDE_SDK_ENTRYPOINT` to the absolute packaged `dist/main.js`.
-`PARSAR_CLAUDE_SDK_NODE` selects Node (default: `node` on PATH). Discovery resolves
+operator sets `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT` to the absolute packaged `dist/main.js`.
+`OAC_RUNTIME_CLAUDE_SDK_NODE` selects Node (default: `node` on PATH). Discovery resolves
 Node once and checks that exact configuration before pairing; the SDK's bounded
 runtime check is independent of legacy CLI version probes. A ready SDK alone is
 sufficient to start the daemon. No configuration means no SDK probe or descriptor;
@@ -3588,3 +3619,27 @@ audit metadata. Read models are Core-key `/core/v1` routes; keep `/v1` wire
 contracts unchanged. See
 [write-audit.md](contracts/agents-api/write-audit.md) for coverage, retention and
 console integration. Do not confuse key identity with Session creator identity.
+
+
+## OpenAgentCore Runtime names
+
+Runtime distributions use `oac-daemon`, the `oac-*` filesystem and initialization
+helpers, `OAC_RUNTIME_*` settings, and `~/.oac/daemon` state. Provider bootstrap,
+Runtime images and harness adapters must agree on these names. Daemon startup
+rejects renamed settings before any subcommand and reports replacements without
+values; the separate Parsar product integration settings remain unchanged.
+Environment `env` reserves every `OAC_` name. Provider ownership labels use
+`io.oac.*`, and E2B metadata uses `oac_*`; neither accepts old labels as a fallback.
+Before upgrading, use the previous release to drain every hosted allocation,
+including suspended compute and cleanup still awaiting confirmation. Migration
+000078 atomically checks the drain and rewrites the saved microsandbox reference
+to `oac-runtime@sha256:`; its rollback has the same drain requirement. Session
+history and recorded node identities are never rewritten. Replace old E2B
+templates with this release's template builder before resuming admission.
+
+The dormant Pi adapter retains its `parsar` provider slug because the separate
+Parsar product pins model selections to that external identity. This is a product
+boundary exception for the name guard, like the skill-upload integration, rather
+than a legacy Runtime setting. Build the MiniMax companion from this revision's
+patched native sources when packaging a renamed Runtime; an older companion still
+uses the old model-provider, workspace and subagent names and cannot be reused.

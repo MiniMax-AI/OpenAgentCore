@@ -35,11 +35,11 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 				t.Fatal(err)
 			}
 			for key, value := range map[string]string{
-				"PARSAR_RUNTIME_ENVIRONMENT_ID":   environment,
-				"PARSAR_RUNTIME_SESSION_ID":       session,
-				"PARSAR_RUNTIME_WORKSPACE":        req.WorkDir,
-				"PARSAR_RUNTIME_DIRECTORY_HELPER": cfg.codexBinary,
-				"PARSAR_RUNTIME_NETWORK_ACCESS":   "enabled",
+				"OAC_RUNTIME_ENVIRONMENT_ID":   environment,
+				"OAC_RUNTIME_SESSION_ID":       session,
+				"OAC_RUNTIME_WORKSPACE":        req.WorkDir,
+				"OAC_RUNTIME_DIRECTORY_HELPER": cfg.codexBinary,
+				"OAC_RUNTIME_NETWORK_ACCESS":   "enabled",
 			} {
 				t.Setenv(key, value)
 			}

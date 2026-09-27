@@ -83,7 +83,7 @@ func code(err error) string {
 	}
 }
 func allocationLock(q wire.Request) (func(), error) {
-	dir := filepath.Join(q.Config.RuntimeHome, "parsar-locks")
+	dir := filepath.Join(q.Config.RuntimeHome, "oac-locks")
 	if e := os.MkdirAll(dir, 0700); e != nil {
 		return nil, e
 	}
@@ -218,7 +218,7 @@ func runtimeVersion(path string) error {
 
 // An empty JSON object prevents ambient SDK profiles without invalid empty input.
 func isolatedConfig(home string) (string, error) {
-	path := filepath.Join(home, "parsar-sdk-config.json")
+	path := filepath.Join(home, "oac-sdk-config.json")
 	fd, err := syscall.Open(path, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL|syscall.O_NOFOLLOW, 0600)
 	if err == nil {
 		f := os.NewFile(uintptr(fd), path)

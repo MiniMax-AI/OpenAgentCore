@@ -16,7 +16,7 @@ func environmentMCP(local *proto.LocalEnvironment) ([]map[string]any, error) {
 		return nil, fmt.Errorf("mcode: environment MCP requires enabled network")
 	}
 	servers := make([]map[string]any, 0, len(local.MCP))
-	names := map[string]bool{"parsar_workspace": true}
+	names := map[string]bool{"oac_workspace": true}
 	for _, item := range local.MCP {
 		name := item.Server.Name
 		if name == "" || strings.TrimSpace(name) != name || names[name] {

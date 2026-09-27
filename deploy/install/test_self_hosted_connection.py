@@ -18,7 +18,7 @@ class ConnectionTests(unittest.TestCase):
     environment = '55b5311c-4df9-43ce-b875-faf901e6d10f'
     remote = 'wss://core.example:8443/api/v1/agent-daemon/ws'
     key = {'executor_token': 'synthetic-private-token'}
-    container = 'parsar-selfhost-' + 'c' * 32
+    container = 'oac-selfhost-' + 'c' * 32
 
     def response(self, status='connected', environment=None):
         return io.BytesIO(json.dumps({'status': status, 'environment_id': environment or self.environment}).encode())

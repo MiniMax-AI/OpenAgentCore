@@ -16,7 +16,7 @@ import (
 const InstallURL = "https://github.com/openai/codex"
 
 // defaultBinary is the executable to probe and spawn: binpath.Codex()
-// honours the PARSAR_CODEX_BIN override so a bare-name PATH lookup can
+// honours the OAC_RUNTIME_CODEX_BIN override so a bare-name PATH lookup can
 // be bypassed in images where PATH is not under our control. A function
 // rather than a const so the env is read at call time.
 func defaultBinary() string { return binpath.Codex() }

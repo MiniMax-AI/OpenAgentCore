@@ -20,7 +20,7 @@ func TestResumeControlRejectsStaleIdentityAndDiscardsPreParkSignals(t *testing.T
 	}
 	path := filepath.Join(dir, "control.json")
 	t.Setenv(suspendControlEnv, path)
-	t.Setenv("PARSAR_RUNTIME_ENVIRONMENT_ID", "env")
+	t.Setenv("OAC_RUNTIME_ENVIRONMENT_ID", "env")
 	control, err := newSuspendControl()
 	if err != nil {
 		t.Fatal(err)

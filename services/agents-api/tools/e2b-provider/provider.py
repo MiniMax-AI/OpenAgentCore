@@ -14,7 +14,7 @@ from e2b.exceptions import FileNotFoundException, SandboxNotFoundException
 from sdk import connection_material, definitely_rejected, read_metrics, restore, run, validate_deployment
 from state import Failure, Receipt, private_root, read_receipt
 
-PREFIX = 'parsar_'
+PREFIX = 'oac_'
 FIELDS = ('InstallationID', 'TenantID', 'EnvironmentID', 'AllocationID')
 
 
@@ -168,7 +168,7 @@ class Provider:
         if (cloud.state == 'running' and not record.get('bootstrap_complete') and record.get('connection')
                 and record.get('status') not in ('bootstrap_failed', 'killed')):
             try:
-                receipt = json.loads(self.client(cloud).files.read('/root/.parsar/e2b/managed-ready.json',
+                receipt = json.loads(self.client(cloud).files.read('/root/.oac/e2b/managed-ready.json',
                                       user='root', request_timeout=self.remaining()))
             except FileNotFoundException:
                 receipt = None
@@ -206,11 +206,18 @@ class Provider:
             except Failure:
                 self.receipt.save(status='configuration_rejected', settled=True)
                 raise
+        # Refuse a pre-rename template before writing any executor credential.
+        check = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c',
+                    "import os,sys; sys.exit(78 if not os.path.isfile('/opt/oac-e2b/managed_init.py') and os.path.isdir('/opt/parsar-e2b') else 0)"]},
+                    self.remaining, user='root')
+        if check['ExitCode'] != 0:
+            self.receipt.save(status='bootstrap_failed', settled=True)
+            raise Failure('legacy_template' if check['ExitCode'] == 78 else 'unconfirmed')
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'])
-        cloud.files.write('/root/.parsar/e2b/managed-bootstrap.json', json.dumps(payload),
+        cloud.files.write('/root/.oac/e2b/managed-bootstrap.json', json.dumps(payload),
                           user='root', request_timeout=self.remaining())
         self.receipt.save(status='bootstrap_pending')
-        result = run(cloud, {'Args': ['/usr/bin/python3', '-I', '/opt/parsar-e2b/managed_init.py']},
+        result = run(cloud, {'Args': ['/usr/bin/python3', '-I', '/opt/oac-e2b/managed_init.py']},
                      self.remaining, user='root')
         if result['ExitCode'] != 0:
             self.receipt.save(status='bootstrap_failed', settled=True)

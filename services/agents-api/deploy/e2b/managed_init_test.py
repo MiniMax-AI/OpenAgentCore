@@ -37,8 +37,8 @@ class ManagedStartupTest(unittest.TestCase):
             process = Mock(return_value=Mock(pid=456))
             if failed:
                 process.side_effect = RuntimeError('private process diagnostic')
-            image_env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'PARSAR_HOME': '/home/runtime/.parsar',
-                         'PARSAR_RUNTIME_WORKSPACE': '/environment/workspace'}
+            image_env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'OAC_RUNTIME_HOME': '/home/runtime/.oac',
+                         'OAC_RUNTIME_WORKSPACE': '/environment/workspace'}
             with patch.object(managed_init.shared, 'ROOT', root), patch.object(managed_init.shared, 'PROFILE', profile), \
                     patch.object(managed_init.shared, 'prepare_runtime', return_value=image_env), \
                     patch.object(managed_init.os, 'fchown'), patch.object(managed_init.subprocess, 'Popen', process):
@@ -55,7 +55,7 @@ class ManagedStartupTest(unittest.TestCase):
                 self.assertFalse(source.exists())
                 self.assertNotIn(data['Credential'], json.dumps(process.call_args.args))
                 self.assertNotIn(data['Credential'], json.dumps(process.call_args.kwargs['env']))
-                self.assertEqual(process.call_args.kwargs['env']['PARSAR_RUNTIME_ENVIRONMENT_ID'], data['EnvironmentID'])
+                self.assertEqual(process.call_args.kwargs['env']['OAC_RUNTIME_ENVIRONMENT_ID'], data['EnvironmentID'])
                 self.assertEqual(process.call_args.kwargs['user'], 1000)
                 if failed:
                     self.assertFalse((root / 'managed-ready.json').exists())

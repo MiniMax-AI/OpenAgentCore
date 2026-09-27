@@ -48,7 +48,7 @@ type SessionPlan struct {
 	// into <CODEX_HOME>/config.toml. Empty leaves codex on its builtin
 	// "openai" provider (only valid when the caller really wants
 	// public api.openai.com + OPENAI_API_KEY env), so the normal path is
-	// parsarProviderSlug.
+	// oacProviderSlug.
 	ModelProvider string
 
 	// SystemPrompt is forwarded as developerInstructions on thread/start.
@@ -81,7 +81,7 @@ type SessionPlan struct {
 //	                                      to <CODEX_HOME>/config.toml [mcp_servers]
 //	codex_provider        map[string]any  full provider config — written to
 //	                                      <CODEX_HOME>/config.toml
-//	                                      [model_providers.<parsarProviderSlug>].
+//	                                      [model_providers.<oacProviderSlug>].
 //	                                      Required for any real prompt; when
 //	                                      missing, codex falls back to its
 //	                                      builtin "openai" provider which only
@@ -183,7 +183,7 @@ func BuildSessionPlan(runID, agentStateKey, workDir string, opts map[string]any)
 
 	// codex_provider carries the full ModelProviderInfo the server-side
 	// injectCodexManagedModel resolved. When set, we materialise it into
-	// the [model_providers.<parsarProviderSlug>] block and pin
+	// the [model_providers.<oacProviderSlug>] block and pin
 	// thread/start.model_provider to that slug, so codex skips its
 	// builtin "openai" provider entirely.
 	provider, hasProvider, err := normaliseProviderConfig(opts["codex_provider"])
@@ -194,7 +194,7 @@ func BuildSessionPlan(runID, agentStateKey, workDir string, opts map[string]any)
 		if err := writeCodexProviderConfig(codexHome, provider); err != nil {
 			return plan, err
 		}
-		plan.ModelProvider = parsarProviderSlug
+		plan.ModelProvider = oacProviderSlug
 	}
 
 	plan.Env = env
@@ -202,7 +202,7 @@ func BuildSessionPlan(runID, agentStateKey, workDir string, opts map[string]any)
 	plan.ExtraConfig = extraConfigFromOpts(opts)
 	if plan.ModelProvider != "" {
 		// Pin model_provider at the CLI layer so codex skips its builtin
-		// "openai" provider — without this the [model_providers.parsar]
+		// "openai" provider — without this the [model_providers.oac]
 		// block we wrote into config.toml would be loaded but never
 		// selected (the default model_provider is "openai").
 		plan.ExtraConfig = append(plan.ExtraConfig,
@@ -262,7 +262,7 @@ func allocCodexHome(agentStateKey string) (string, error) {
 	if len(safeParts) == 0 {
 		return "", fmt.Errorf("codex: invalid agentStateKey %q", agentStateKey)
 	}
-	dirParts := append([]string{root, "parsar-daemon", "agent-sessions"}, safeParts...)
+	dirParts := append([]string{root, "daemon", "agent-sessions"}, safeParts...)
 	dir := filepath.Join(dirParts...)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("codex: create CODEX_HOME %s: %w", dir, err)

@@ -256,8 +256,8 @@ def wait_connected(remote, environment, key, container, timeout=60):
 
 def inspect_prior_launch(root, state, replacing=False):
     docker = 'docker --host unix:///var/run/docker.sock'
-    filters = (' --filter label=io.parsar.agents-api.installation=' + state['installation_id']
-               + ' --filter label=io.parsar.agents-api.environment=' + state['environment_id'])
+    filters = (' --filter label=io.oac.installation=' + state['installation_id']
+               + ' --filter label=io.oac.environment=' + state['environment_id'])
     guidance = (' Inspect retained resources with: ' + docker + ' ps -a' + filters
                 + '; ' + docker + ' volume ls' + filters
                 + '. Do not delete the receipt or create replacement history.')
@@ -266,7 +266,7 @@ def inspect_prior_launch(root, state, replacing=False):
         raise InstallError('A Runtime launch was already attempted without confirmed startup.' + guidance)
     prior = json.loads(private_read(receipt))
     name = prior.get('container', '') if isinstance(prior, dict) else ''
-    if not re.fullmatch(r'parsar-selfhost-[0-9a-f]{32}', name) or prior.get('status') != 'started':
+    if not re.fullmatch(r'oac-selfhost-[0-9a-f]{32}', name) or prior.get('status') != 'started':
         raise InstallError('Invalid retained Runtime startup receipt.' + guidance)
     try:
         raw = checked(['docker', '--host', 'unix:///var/run/docker.sock', 'container', 'inspect', name,
@@ -275,9 +275,9 @@ def inspect_prior_launch(root, state, replacing=False):
         labels = json.loads(labels)
     except (InstallError, ValueError):
         raise InstallError('The prior Runtime cannot be confirmed.' + guidance) from None
-    expected = {'io.parsar.agents-api.installation': state['installation_id'],
-                'io.parsar.agents-api.environment': state['environment_id'],
-                'io.parsar.agents-api.user-owned': 'true'}
+    expected = {'io.oac.installation': state['installation_id'],
+                'io.oac.environment': state['environment_id'],
+                'io.oac.user-owned': 'true'}
     if not isinstance(labels, dict) or any(labels.get(key) != value for key, value in expected.items()):
         raise InstallError('The retained container does not match this installation and Environment.' + guidance)
     if image not in (state['runtime_image'], state['runtime_manifest']):
@@ -326,7 +326,7 @@ def replace_credential(args, manifest, root, state, stored, rejection, supplied)
         raise InstallError('Core did not accept the replacement credential ('
                            + ('HTTP 401' if verdict == 401 else 'Core unavailable')
                            + '). Nothing was changed; rerun this command with a currently valid credential.')
-    launcher = obtain_artifact(manifest, 'native/bin/parsar-runtime', root / 'native/bin/parsar-runtime', args.offline_root)
+    launcher = obtain_artifact(manifest, 'native/bin/oac-selfhost', root / 'native/bin/oac-selfhost', args.offline_root)
     docker = ['docker', '--host', 'unix:///var/run/docker.sock']
     fd, staged = tempfile.mkstemp(prefix='.executor-key-', dir=root)
     try:
@@ -348,6 +348,7 @@ def replace_credential(args, manifest, root, state, stored, rejection, supplied)
 
 def install(args, root):
     target = identity(args.environment_id, args.remote)
+    refuse_legacy_executor(args.environment_id)
     manifest = load_manifest(source_url=args.source_url, offline_root=args.offline_root)
     revision = manifest.get('source_commit', '')
     runtime_image, runtime_manifest = image_identities(manifest, 'runtime')
@@ -388,7 +389,7 @@ def install(args, root):
         else:
             key = prompt_credential(args.environment_id)
         write_private(key_file, key)
-    launcher = obtain_artifact(manifest, 'native/bin/parsar-runtime', root / 'native/bin/parsar-runtime', args.offline_root)
+    launcher = obtain_artifact(manifest, 'native/bin/oac-selfhost', root / 'native/bin/oac-selfhost', args.offline_root)
     seccomp = obtain_artifact(manifest, 'runtime/seccomp.json', root / 'runtime/seccomp.json', args.offline_root)
     runtime_image = ensure_docker_image(
         manifest, 'runtime', lambda: runtime_archive(manifest, root, args.offline_root),
@@ -401,12 +402,27 @@ def install(args, root):
     write_private(root / 'launch.json', {'installation_id': state['installation_id'], 'environment_id': args.environment_id})
     result = json.loads(checked(command, 'Runtime launch failed or is uncertain. Inspect retained installation state and Docker containers', timeout=150))
     if (not isinstance(result, dict) or result.get('status') != 'started'
-            or not re.fullmatch(r'parsar-selfhost-[0-9a-f]{32}', result.get('container', ''))):
+            or not re.fullmatch(r'oac-selfhost-[0-9a-f]{32}', result.get('container', ''))):
         raise InstallError('Runtime launcher returned an invalid result; inspect the retained container')
     write_private(root / 'started.json', result)
     print('Runtime started: ' + result['container'])
     wait_connected(args.remote, args.environment_id, key, result['container'])
     print('Stop this user-owned Runtime with: docker --host unix:///var/run/docker.sock stop ' + result['container'])
+
+
+def refuse_legacy_executor(environment):
+    """Old executors retain their own image and history; this installer never adopts them."""
+    path = Path.home() / '.parsar/self-hosted' / environment
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return
+    except OSError:
+        raise InstallError('Cannot inspect the previous executor directory ' + str(path)
+                           + '; check its ownership before installing. Nothing was changed.') from None
+    raise InstallError('An executor for this Environment was installed before the OpenAgentCore rename at '
+                       + str(path) + ' (container parsar-selfhost-…). It keeps working with this Core. '
+                       'To replace it, stop and remove that container, then rerun this command; its volumes are not reused.')
 
 
 def main():
@@ -421,7 +437,8 @@ def main():
     args = parser.parse_args()
     preflight()
     identity(args.environment_id, args.remote)
-    root = args.install_dir or Path.home() / '.parsar/self-hosted' / args.environment_id
+    refuse_legacy_executor(args.environment_id)
+    root = args.install_dir or Path.home() / '.oac/self-hosted' / args.environment_id
     if not root.is_absolute() or root.resolve() != root:
         raise InstallError('Installation directory must be absolute and have no symlinks')
     root.mkdir(mode=0o700, parents=True, exist_ok=True)

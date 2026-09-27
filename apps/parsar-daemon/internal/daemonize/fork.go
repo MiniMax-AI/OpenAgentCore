@@ -1,4 +1,4 @@
-// Package daemonize gives `parsar-daemon connect -b` a no-cgo way to
+// Package daemonize gives `oac-daemon connect -b` a no-cgo way to
 // detach from the controlling terminal on macOS + Linux. Strategy is
 // re-exec-the-binary rather than POSIX double-fork: the parent opens
 // connect.log + connect.pid, then starts a fresh copy of its own
@@ -23,7 +23,7 @@ import (
 // environment so the child knows it's the post-fork incarnation and
 // must NOT itself try to re-fork. runConnect inspects via
 // IsBackgroundChild.
-const BackgroundSentinelEnv = "PARSAR_DAEMON_BACKGROUND_CHILD"
+const BackgroundSentinelEnv = "OAC_RUNTIME_DAEMON_BACKGROUND_CHILD"
 
 // IsBackgroundChild reports whether this process was spawned by a
 // `connect -b` re-exec. runConnect skips the fork branch when true,
@@ -76,13 +76,13 @@ func Spawn(argv []string, opts ReExecOptions) (int, error) {
 	defer devNull.Close()
 
 	// Prefer the absolute path the parent was invoked with so a child
-	// started from `./bin/parsar-daemon` doesn't re-exec a different
+	// started from `./bin/oac-daemon` doesn't re-exec a different
 	// binary on PATH.
 	exe, err := os.Executable()
 	if err != nil {
 		// Fall back to argv[0] if /proc/self/exe or
 		// _NSGetExecutablePath fail. Worst case: child re-execs
-		// whatever's on PATH under the same name — still parsar-daemon
+		// whatever's on PATH under the same name — still oac-daemon
 		// in practice.
 		exe = argv[0]
 	}

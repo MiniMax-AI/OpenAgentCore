@@ -26,7 +26,7 @@ func checkEnvironmentTarget(remote, environment string) error {
 	if err != nil {
 		return errors.New("connect: Runtime state unavailable")
 	}
-	raw, err := readEnvironmentPrivateFile(filepath.Join(root, "parsar-daemon", "environment.json"))
+	raw, err := readEnvironmentPrivateFile(filepath.Join(root, "daemon", "environment.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -69,20 +69,20 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	if err = os.MkdirAll(root, 0700); err != nil {
 		return errors.New("connect: Runtime state directory unavailable")
 	}
-	workspace := os.Getenv("PARSAR_RUNTIME_WORKSPACE")
+	workspace := os.Getenv("OAC_RUNTIME_WORKSPACE")
 	if workspace != "/environment/workspace" {
 		return errors.New("connect: packaged /workspace Runtime required")
 	}
 	for key, value := range map[string]string{
-		"PARSAR_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID,
-		"PARSAR_RUNTIME_SESSION_ID":     bound.SessionID,
-		"PARSAR_RUNTIME_NETWORK_ACCESS": "enabled",
+		"OAC_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID,
+		"OAC_RUNTIME_SESSION_ID":     bound.SessionID,
+		"OAC_RUNTIME_NETWORK_ACCESS": "enabled",
 	} {
 		if previous := os.Getenv(key); previous != "" && previous != value {
 			return errors.New("connect: conflicting Runtime identity or policy")
 		}
 	}
-	if domains := os.Getenv("PARSAR_RUNTIME_ALLOWED_DOMAINS"); domains != "" && domains != "[]" {
+	if domains := os.Getenv("OAC_RUNTIME_ALLOWED_DOMAINS"); domains != "" && domains != "[]" {
 		return errors.New("connect: conflicting Runtime network domains")
 	}
 	resolvedRoot, err := filepath.Abs(root)
@@ -100,7 +100,7 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 			}
 		}
 	}
-	private, err := filepath.EvalSymlinks(filepath.Join(root, "parsar-daemon"))
+	private, err := filepath.EvalSymlinks(filepath.Join(root, "daemon"))
 	credentialPath, credentialErr := filepath.EvalSymlinks(credentialFile)
 	if err != nil || credentialErr != nil {
 		return errors.New("connect: protected daemon credential directory required")
@@ -113,7 +113,7 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	if err = saveEnvironmentBinding(root, want); err != nil {
 		return err
 	}
-	for key, value := range map[string]string{"PARSAR_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID, "PARSAR_RUNTIME_SESSION_ID": bound.SessionID, "PARSAR_RUNTIME_NETWORK_ACCESS": "enabled"} {
+	for key, value := range map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bound.SessionID, "OAC_RUNTIME_NETWORK_ACCESS": "enabled"} {
 		if err = os.Setenv(key, value); err != nil {
 			return errors.New("connect: Runtime identity configuration failed")
 		}
@@ -127,7 +127,7 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 
 func saveEnvironmentBinding(root string, want environmentBinding) error {
 	// All three native sandboxes protect this existing daemon state directory.
-	dir := filepath.Join(root, "parsar-daemon")
+	dir := filepath.Join(root, "daemon")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return errors.New("connect: Runtime state directory unavailable")
 	}
@@ -150,7 +150,7 @@ func saveEnvironmentBinding(root string, want environmentBinding) error {
 		}
 	} else if errors.Is(err, os.ErrNotExist) {
 		// Unlabelled native state cannot safely be adopted by a new enrollment.
-		for _, native := range []string{"runtime", "sessions", "parsar-daemon/agent-sessions"} {
+		for _, native := range []string{"runtime", "sessions", "daemon/agent-sessions"} {
 			if _, e := os.Lstat(filepath.Join(root, native)); !errors.Is(e, os.ErrNotExist) {
 				return errors.New("connect: existing Runtime history has no Environment binding")
 			}

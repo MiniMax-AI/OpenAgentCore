@@ -46,7 +46,7 @@ connected and ready. It never installs software, and it stops with a one-line hi
 before changing anything when a prerequisite is missing.
 
 Web's command runs the installer with sudo: it prepares the host itself, creating a
-`parsar-node` service user and a system service. On a host where you have no sudo, the
+`oac-node` service user and a system service. On a host where you have no sudo, the
 dialog's **No sudo on this host?** section gives the same command without sudo; the
 node then runs as a user service of a user that an administrator prepared.
 
@@ -106,39 +106,39 @@ sudo-mode service instead. An administrator prepares that user once:
   group change, sign in again as that user; if the user's systemd manager was already
   running, restart it (`sudo systemctl restart user@$(id -u NODE_USER).service`) or
   reboot.
-- microsandbox only: a home directory of at most 25 bytes, such as `/home/parsar`,
+- microsandbox only: a home directory of at most 28 bytes, such as `/home/oac`,
   because microsandbox's socket paths are short.
 - The host requirements above, except root, SELinux and one Core per host.
 
 `NODE_USER` stands for that user, as in the dialog's commands. Run the command as that
 user over SSH, or from a root shell with `su - NODE_USER`. The
-node's state then lives in `~/.parsar/nodes/<installation-id>/` of that user. The
+node's state then lives in `~/.oac/nodes/<installation-id>/` of that user. The
 Docker group makes this user root-equivalent on the host too.
 
 ## What sudo mode sets up
 
 | Item | Detail |
 | --- | --- |
-| Service user | System user `parsar-node`, home `/var/lib/parsar-node`, no login shell. An existing account with that home and a nologin shell is adopted; any other account named `parsar-node` is refused |
+| Service user | System user `oac-node`, home `/var/lib/oac-node`, no login shell. An existing account with that home and a nologin shell is adopted; any other account named `oac-node` is refused |
 | Group | The group that owns `/var/run/docker.sock` (Docker) or `/dev/kvm` (microsandbox): `docker` or `kvm`, nothing else |
-| Service | `/etc/systemd/system/parsar-node-<installation-id>.service`, a root-owned system unit with `User=parsar-node`, enabled at boot. It restarts every 5 seconds while Core is unreachable and stops for good once Core no longer accepts the node |
-| Node state | `/var/lib/parsar-node/.parsar/nodes/<installation-id>/`: identity, configuration, node files. microsandbox keeps its images and sandboxes under `/var/lib/parsar-node/.parsar/m/` |
-| Records | `/etc/parsar-node/`: what the installer created or changed, used by reruns and uninstall |
-| Docker | The Runtime image, imported once, and a network `parsar-node-<installation-id>` |
+| Service | `/etc/systemd/system/oac-node-<installation-id>.service`, a root-owned system unit with `User=oac-node`, enabled at boot. It restarts every 5 seconds while Core is unreachable and stops for good once Core no longer accepts the node |
+| Node state | `/var/lib/oac-node/.oac/nodes/<installation-id>/`: identity, configuration, node files. microsandbox keeps its images and sandboxes under `/var/lib/oac-node/.oac/m/` |
+| Records | `/etc/oac-node/`: what the installer created or changed, used by reruns and uninstall |
+| Docker | The Runtime image, imported once, and a network `oac-node-<installation-id>` |
 
 Root only prepares the account, the group and the unit; everything else, the Docker
-network included, runs as `parsar-node`, in its own session without a terminal. The
+network included, runs as `oac-node`, in its own session without a terminal. The
 installer never installs Docker, KVM or packages, never starts Docker, never changes
 device permissions, sudoers, firewall or SELinux settings, and never touches other
 accounts.
 
 **Docker mode is root-equivalent.** Membership in the `docker` group lets
-`parsar-node`, and so anything that controls the node, act as root on the host. This
+`oac-node`, and so anything that controls the node, act as root on the host. This
 is inherent to running sandboxes on Docker and equally true without sudo. Add Docker
 nodes only on hosts dedicated to sandboxes. microsandbox nodes need only the `kvm`
 group.
 
-**One Core per host.** All sudo-mode nodes share the `parsar-node` account, so a host
+**One Core per host.** All sudo-mode nodes share the `oac-node` account, so a host
 serves one Core in sudo mode; a command from a second Core is refused. A host also
 can't run the same installation's node both with and without sudo.
 
@@ -160,7 +160,7 @@ where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy wit
 - Downloads resume where they stopped. A download that brings less than 64 KiB in a
   minute stops, keeping what it has; run the command again.
 - The Docker Runtime image is about 500 MB. On a slow link, load it first: copy the
-  release's `parsar-core-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run
+  release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run
   `sudo docker load -i` on it. The installer then finds the exact image and skips the
   download.
 - Interrupting the installer, or closing its terminal, stops it; run the command again
@@ -174,8 +174,8 @@ when it hasn't become connected and ready about a minute after registering.
 
 | Node installed | Command |
 | --- | --- |
-| With sudo, or by root | `sudo journalctl -u parsar-node-<installation-id>.service` |
-| Without sudo, as the node's user | `journalctl --user -u parsar-node-<installation-id>.service` |
+| With sudo, or by root | `sudo journalctl -u oac-node-<installation-id>.service` |
+| Without sudo, as the node's user | `journalctl --user -u oac-node-<installation-id>.service` |
 
 The installation ID is in the command (`--installation-id`) and on the **System** page.
 
@@ -207,15 +207,15 @@ the check; remove the node on the Nodes page first. Without the dialog, take the
 installer's SHA-256 from the `node-install.pyz` line of
 `https://core.example/node-install/SHA256SUMS`. Uninstall
 stops and removes the service, the node state, the records and the Docker network. It
-deletes the `parsar-node` account only if the installer created it and no node remains;
+deletes the `oac-node` account only if the installer created it and no node remains;
 an adopted account only loses the groups the installer added.
 
 It never deletes sandboxes, volumes or images. It keeps the Runtime image and prints
 the `docker image rm` command. For microsandbox it keeps the store under
-`/var/lib/parsar-node/.parsar/m/`, prints how to delete it
-(`sudo -u parsar-node rm -rf <store>`), and keeps a created account until the store is
+`/var/lib/oac-node/.oac/m/`, prints how to delete it
+(`sudo -u oac-node rm -rf <store>`), and keeps a created account until the store is
 gone; rerun uninstall afterwards. With `--force`, microVMs may still use the store, so
-check `pgrep -u parsar-node` first. Uninstall can be rerun until it completes.
+check `pgrep -u oac-node` first. Uninstall can be rerun until it completes.
 
 ## Troubleshooting
 
@@ -239,7 +239,7 @@ the local error behind the code.
 | `provider_unavailable` | Sandbox provider unavailable | Any other failure, and every failure an older node reports | Read the node's log |
 
 A new group membership applies only to a new process. In sudo mode, restart the node
-service: `sudo systemctl restart parsar-node-<installation-id>.service`. Without sudo,
+service: `sudo systemctl restart oac-node-<installation-id>.service`. Without sudo,
 the user's systemd manager keeps the groups it started with, so restart that manager:
 `sudo systemctl restart user@$(id -u NODE_USER).service`. A node that is registered
 but never connects usually can't reach Core at the public URL, or its `/api/v1`
@@ -270,3 +270,35 @@ remove in Web: on each host, run the [uninstall command](#remove-a-node) (Core n
 accepts the node, so it needs no `--force`), then add the host again with a new command.
 The [operator reference](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)
 describes today's procedure and API.
+
+
+## Remove a node added before the rename
+
+A new installer refuses retained state for the same installation under the old
+`parsar-node` names. It does not convert that state or remove nodes belonging to
+another installation. Remove the node on its old Core's Nodes page, then run the
+**previous release's** verified `node-install.pyz --uninstall --installation-id
+<installation-id>`, with `sudo` only if that node was installed with sudo. Use
+`--force` only when that Core no longer exists.
+
+If the previous installer is unavailable, inspect and remove only that
+installation's resources:
+
+1. Stop and disable `parsar-node-<installation-id>.service` with `systemctl`, using
+   `sudo` for a system service or `--user` as the original installing user.
+2. Remove its exact unit file or enablement link. System units live in
+   `/etc/systemd/system/`; user links live in `~/.config/systemd/user/`. Reload the
+   same systemd manager after removing the unit.
+3. After stopping the node, remove its state directory as its owner:
+   `/var/lib/parsar-node/.parsar/nodes/<installation-id>` as `parsar-node` in sudo
+   mode, or `~/.parsar/nodes/<installation-id>` as the original user. Do not run
+   root cleanup through files or links controlled by the service account.
+4. In sudo mode, remove only `/etc/parsar-node/<installation-id>.json`. Keep the
+   account record, the `parsar-node` user and group memberships while any other
+   installation or retained microsandbox store uses them.
+5. For Docker, remove `parsar-node-<installation-id>` only after confirming that
+   its network has no attached containers. Keep Runtime images, volumes and
+   retained microsandbox stores until their owners have explicitly retired them.
+
+Then use the new Core's Add node command. The new account, service and state use
+`oac-node` and `~/.oac/nodes`; historical Core Session records remain in Core.

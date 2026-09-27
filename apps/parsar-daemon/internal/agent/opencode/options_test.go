@@ -68,7 +68,7 @@ func TestBuildArgsCreatesMissingWorkdir(t *testing.T) {
 
 func TestBuildArgsWritesManagedConfigUnderParsarHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("PARSAR_HOME", home)
+	t.Setenv("OAC_RUNTIME_HOME", home)
 	res, err := opencode.BuildArgs("run/id", "hello", "", map[string]any{
 		"opencode_json": `{"provider":{},"permission":{"*":"allow"}}`,
 	})
@@ -79,7 +79,7 @@ func TestBuildArgsWritesManagedConfigUnderParsarHome(t *testing.T) {
 	if configHome == "" {
 		t.Fatalf("XDG_CONFIG_HOME missing in env: %v", res.Env)
 	}
-	wantPrefix := filepath.Join(home, "parsar-daemon", "scratch", "run_id", "config-home")
+	wantPrefix := filepath.Join(home, "daemon", "scratch", "run_id", "config-home")
 	if configHome != wantPrefix {
 		t.Fatalf("configHome = %q, want %q", configHome, wantPrefix)
 	}
@@ -88,14 +88,14 @@ func TestBuildArgsWritesManagedConfigUnderParsarHome(t *testing.T) {
 		t.Fatalf("expected opencode.json at %s: %v", configPath, err)
 	}
 	res.Cleanup()
-	if _, err := os.Stat(filepath.Join(home, "parsar-daemon", "scratch", "run_id")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, "daemon", "scratch", "run_id")); !os.IsNotExist(err) {
 		t.Fatalf("scratch dir still exists after cleanup: %v", err)
 	}
 }
 
 func TestBuildArgsMergesLocalAndRemoteMCPServers(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("PARSAR_HOME", home)
+	t.Setenv("OAC_RUNTIME_HOME", home)
 	res, err := opencode.BuildArgs("run-mcp", "hello", "", map[string]any{
 		"opencode_json": `{"provider":{}}`,
 		"mcp_servers": map[string]any{

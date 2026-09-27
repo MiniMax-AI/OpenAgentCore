@@ -14,7 +14,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier,context);
 }});
 const { execute } = await import(${JSON.stringify(new URL("../dist/adapter.js", import.meta.url).href)});
-const root = realpathSync(mkdtempSync(join(tmpdir(), "parsar-workspace-execute-")));
+const root = realpathSync(mkdtempSync(join(tmpdir(), "oac-workspace-execute-")));
 const dirs = Object.fromEntries(["workspace", "home", "state", "scratch", "deps"].map(name => {
   const path = join(root, name); mkdirSync(path); return [name, path];
 }));

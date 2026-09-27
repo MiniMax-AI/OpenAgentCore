@@ -24,7 +24,7 @@ type WorkspaceConfig struct {
 func ConfigureLocal(binary, node, bridge, root, workspace string, network agentnetwork.Policy, staging string) (WorkspaceConfig, error) {
 	c := WorkspaceConfig{Binary: binary, Node: node, Bridge: bridge, Directory: workspace, Network: network.Access, AllowedDomains: network.Hosts(),
 		Scratch:       filepath.Join(root, "runtime", "mcode-tools", "scratch"),
-		ProtectedDirs: []string{filepath.Join(root, "parsar-daemon"), filepath.Join(root, "runtime", "mcode"), filepath.Dir(workspace), staging}}
+		ProtectedDirs: []string{filepath.Join(root, "daemon"), filepath.Join(root, "runtime", "mcode"), filepath.Dir(workspace), staging}}
 	if network.Validate() != nil {
 		return c, fmt.Errorf("mcode: explicit workspace network policy is required")
 	}
@@ -123,7 +123,7 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	if err = os.WriteFile(path, raw, 0600); err != nil {
 		return opts, err
 	}
-	opts.MCP = []map[string]any{{"name": "parsar_workspace", "command": c.Node, "args": []string{c.Bridge, path}, "env": []map[string]string{}}}
+	opts.MCP = []map[string]any{{"name": "oac_workspace", "command": c.Node, "args": []string{c.Bridge, path}, "env": []map[string]string{}}}
 	opts.MCP = append(opts.MCP, servers...)
 	if !req.DisableSubagents {
 		// This native data directory belongs to one public Session and its

@@ -15,7 +15,7 @@ import config_model
 import native_service
 
 # Where Core and Web containers see secrets and generated inputs.
-RUN = "/run/parsar"
+RUN = "/run/oac"
 POOL = (("max_conns", "pool_max_conns"), ("min_conns", "pool_min_conns"),
         ("max_conn_lifetime", "pool_max_conn_lifetime"), ("max_conn_idle_time", "pool_max_conn_idle_time"),
         ("health_check_period", "pool_health_check_period"))
@@ -94,7 +94,7 @@ def sha256(data):
 
 
 def edit_hint(root):
-    return f"Generated from {Path(root) / 'config.json'}. Do not edit; change config.json and run {Path(root) / 'parsar'} apply."
+    return f"Generated from {Path(root) / 'config.json'}. Do not edit; change config.json and run {Path(root) / 'oac'} apply."
 
 
 def read_core_key(root):
@@ -160,8 +160,13 @@ def core_environment(root, config, state):
 
 def settings_document(root, config, applied_at):
     root = Path(root)
-    return {"path": str(root / "config.json"), "apply_command": f"{root / 'parsar'} apply",
+    return {"path": str(root / "config.json"), "apply_command": f"{root / 'oac'} apply",
             "applied_at": applied_at, "settings": config_model.settings(config)}
+
+
+
+def conversion_labels(state):
+    return {"io.oac.installation": state["installation_id"], "io.oac.conversion": state["renamed_from"]["at"]}
 
 
 def compose_config(root, config, state):
@@ -171,8 +176,8 @@ def compose_config(root, config, state):
     images = state["images"]
     doc = {"name": state["project"],
            # Compose interpolates every string, extension fields included.
-           "x-parsar": {"generated_from": str(root / "config.json").replace("$", "$$"),
-                        "edit": "config.json, then parsar apply"},
+           "x-oac": {"generated_from": str(root / "config.json").replace("$", "$$"),
+                        "edit": "config.json, then oac apply"},
            "services": {}}
     services = doc["services"]
     if mode != "web-only":
@@ -186,6 +191,10 @@ def compose_config(root, config, state):
                             "interval": "2s", "timeout": "5s", "retries": 30},
         }
         doc["volumes"] = {"database": {}}
+        if state.get("renamed_from"):
+            # Keep the exact copied-volume definition: Compose must never offer
+            # to replace a populated conversion volume because its labels differ.
+            doc["volumes"]["database"]["labels"] = conversion_labels(state)
         if native:
             services["database"]["ports"] = [f'127.0.0.1:{config["ports"]["database"]}:5432']
         else:
@@ -227,7 +236,7 @@ def compose_config(root, config, state):
     return doc
 
 
-LABEL = "io.parsar.inputs"
+LABEL = "io.oac.inputs"
 
 
 class Rendered:
@@ -235,7 +244,7 @@ class Rendered:
 
     The digest covers everything a service reads: its Compose definition, the
     env_file content and the files and secrets it mounts. It is the service's
-    `io.parsar.inputs` label, or PARSAR_INPUTS in the native unit, so the running
+    `io.oac.inputs` label, or OAC_INPUTS in the native unit, so the running
     services can be compared with a render at any time.
     """
 
@@ -295,6 +304,6 @@ def rendered_inputs(files, unit):
             return {}
     if unit and files.get(unit):
         text = files[unit].decode() if isinstance(files[unit], bytes) else files[unit]
-        match = re.search(r"^Environment=PARSAR_INPUTS=([0-9a-f]{64})$", text, re.M)
+        match = re.search(r"^Environment=OAC_INPUTS=([0-9a-f]{64})$", text, re.M)
         result["core"] = match[1] if match else None
     return result

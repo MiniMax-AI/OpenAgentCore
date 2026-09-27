@@ -10,7 +10,7 @@ if (!profile || !isAbsolute(profile)) throw new Error('Private workspace profile
 const definitions = JSON.parse(readFileSync(new URL('./dist/tools.json', import.meta.url), 'utf8'));
 const tools = new Map(definitions.map(tool => ['workspace_' + tool.name, tool]));
 const executor = new ToolExecutor(profile);
-const server = new Server({ name: 'parsar-workspace', version: '1' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'oac-workspace', version: '1' }, { capabilities: { tools: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [...tools].map(([name, tool]) => ({ ...tool, name,
     description: 'Bound working directory: /workspace. ' + tool.description })),

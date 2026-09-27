@@ -65,8 +65,8 @@ func TestRuntimeNetworkPolicyRejectsMalformedDeploymentInput(t *testing.T) {
 		{"", `["example.com"]`, false},
 		{"disabled", `[]`, true},
 	} {
-		t.Setenv("PARSAR_RUNTIME_NETWORK_ACCESS", tc.access)
-		t.Setenv("PARSAR_RUNTIME_ALLOWED_DOMAINS", tc.domains)
+		t.Setenv("OAC_RUNTIME_NETWORK_ACCESS", tc.access)
+		t.Setenv("OAC_RUNTIME_ALLOWED_DOMAINS", tc.domains)
 		if _, err := RuntimeNetworkPolicy(); (err == nil) != tc.valid {
 			t.Fatalf("%s/%s: %v", tc.access, tc.domains, err)
 		}

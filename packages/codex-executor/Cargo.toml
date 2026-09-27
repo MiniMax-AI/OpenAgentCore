@@ -6,15 +6,15 @@ license = "Apache-2.0"
 publish = false
 
 [[bin]]
-name = "agents-api-codex-directory"
+name = "oac-codex-directory"
 path = "src/bin/directory.rs"
 
 [[bin]]
-name = "agents-api-codex-write"
+name = "oac-codex-write"
 path = "src/bin/write.rs"
 
 [[bin]]
-name = "agents-api-workspace-export"
+name = "oac-workspace-export"
 path = "src/bin/export.rs"
 
 [dependencies]

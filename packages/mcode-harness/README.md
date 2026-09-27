@@ -50,7 +50,7 @@ native process group. Both boundaries require real Docker cancellation tests.
 The daemon sets the protected `protected-mcp-v1` tool policy independently of
 the concurrency limit. The native catalog applies it to root and child profiles,
 withholding direct native filesystem and process tools. The Session-private
-`parsar_workspace` MCP server supplies the already authorized workspace tools to
+`oac_workspace` MCP server supplies the already authorized workspace tools to
 workers. Other MCP servers retain their existing native selection rules. Native
 Explore/Verifier profiles retain their stricter native capability ceiling. ACP
 initialization reports the applied policy and admission limit; enabled Subagents

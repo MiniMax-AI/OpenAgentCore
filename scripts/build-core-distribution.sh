@@ -87,7 +87,7 @@ cleanup() {
 }
 trap cleanup EXIT
 source_dir="$stage/source"
-bundle="$stage/parsar-core-$revision-linux-amd64"
+bundle="$stage/oac-$revision-linux-amd64"
 mkdir -p "$source_dir" "$bundle/images" "$stage/core/bin" "$stage/core/microsandbox" "$stage/web" "$stage/tmp"
 export GOTMPDIR="$stage/tmp"
 git -C "$repo_root" archive --format=tar.gz --output="$bundle/source.tar.gz" "$revision"
@@ -98,7 +98,7 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   printf 'Distribution build requires %s\n' "$required_go" >&2
   exit 1
 fi
-for file in install.sh install.py configuration.py config_model.py config.schema.json parsar_cli.py convert.py \
+for file in install.sh install.py configuration.py config_model.py config.schema.json oac_cli.py convert.py rename.py \
     native_service.py node_install.py node_spec.py sandbox_setup.py distribution.py self_hosted_install.py \
     model_provider_sessions.py; do
   cp "deploy/install/$file" "$bundle/$file"
@@ -117,7 +117,7 @@ OAC_DEV_BUILD_REVISION="$revision" OAC_DEV_CORE_BUILD_DIR="$stage/core/bin" scri
 (
   cd services/agents-api/tools/microsandbox-provider
   GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath \
-    -o "$stage/core/bin/agents-api-microsandbox-provider" .
+    -o "$stage/core/bin/oac-microsandbox-provider" .
 )
 msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-v0.7.2-linux-x86_64.tar.gz}"
 if [[ ! -f "$msb_archive" ]]; then
@@ -143,7 +143,7 @@ core_image="$(cat "$stage/core.id")"
 # Fail at packaging time if the helper or runtime requires unavailable host libraries.
 docker run --rm --network none --entrypoint /bin/sh \
   --mount "type=bind,src=$stage/core/microsandbox,dst=/opt/microsandbox,readonly" \
-  --mount "type=bind,src=$stage/core/bin/agents-api-microsandbox-provider,dst=/opt/provider,readonly" \
+  --mount "type=bind,src=$stage/core/bin/oac-microsandbox-provider,dst=/opt/provider,readonly" \
   "$core_image" -ec \
   'for p in /opt/provider /opt/microsandbox/msb /opt/microsandbox/libkrunfw.so.5.6.1; do ! ldd "$p" | grep "not found"; done; /opt/microsandbox/msb --version'
 
@@ -156,9 +156,9 @@ build_image web "$stage/web"
 
 export AGENTS_EXECUTOR_BUILD_DIR="$stage/helpers"
 scripts/build-agents-executor.sh
-CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/parsar-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
-cp "$stage/parsar-daemon" "$bundle/native/bin/parsar-daemon"
-CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$bundle/native/bin/parsar-runtime" ./services/agents-api/cmd/runtime
+CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+cp "$stage/oac-daemon" "$bundle/native/bin/oac-daemon"
+CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$bundle/native/bin/oac-selfhost" ./services/agents-api/cmd/runtime
 codex_image="${CORE_DISTRIBUTION_CODEX_IMAGE:-}"
 claude_image="${CORE_DISTRIBUTION_CLAUDE_IMAGE:-}"
 mcode_image="${CORE_DISTRIBUTION_MCODE_IMAGE:-}"
@@ -183,12 +183,12 @@ else
   mcode_image="$(cat "$stage/mcode.id")"
 fi
 for image in "$codex_image" "$claude_image" "$mcode_image"; do
-  python3 scripts/core-distribution-manifest.py verify-runtime "$image" "$stage/parsar-daemon" "$stage/helpers" "$source_dir"
+  python3 scripts/core-distribution-manifest.py verify-runtime "$image" "$stage/oac-daemon" "$stage/helpers" "$source_dir"
 done
 tag_suffix="${stage##*.}"
 for harness in codex claude mcode; do
   image_variable="${harness}_image"
-  tag="parsar-core-distribution:$harness-$revision-$tag_suffix"
+  tag="oac-distribution:$harness-$revision-$tag_suffix"
   docker image tag "${!image_variable}" "$tag"
   image_tags+=("$tag")
 done
@@ -224,8 +224,8 @@ msb=(docker run --rm --network none --user "$(id -u):$(id -g)" \
   --env MSB_HOME=/cache --env MSB_BACKEND=local --env MSB_PATH=/opt/microsandbox/msb \
   --env MSB_LIBKRUNFW_PATH=/opt/microsandbox/libkrunfw.so.5.6.1 \
   --entrypoint /opt/microsandbox/msb "$core_image")
-"${msb[@]}" image load --input /runtime.tar --tag parsar-core-runtime:distribution --quiet
-"${msb[@]}" image inspect parsar-core-runtime:distribution --format json > "$stage/runtime-inspect.json"
+"${msb[@]}" image load --input /runtime.tar --tag oac-runtime:distribution --quiet
+"${msb[@]}" image inspect oac-runtime:distribution --format json > "$stage/runtime-inspect.json"
 python3 scripts/core-distribution-manifest.py manifest "$bundle" "$stage" "$revision" "$source_tree" "$release_base_url" "$offline"
 require_clean_source
 if [[ "$(git -C "$repo_root" rev-parse HEAD)" != "$revision" ]]; then

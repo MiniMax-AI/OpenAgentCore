@@ -46,7 +46,7 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 			t.Fatal("inherited native credential")
 		}
 	}
-	if !found || !strings.HasPrefix(reference, "PARSAR_MCP_BEARER_") || len(start.declaredMCP()) != 2 {
+	if !found || !strings.HasPrefix(reference, "OAC_RUNTIME_MCP_BEARER_") || len(start.declaredMCP()) != 2 {
 		t.Fatal("selected credential or observation declarations missing")
 	}
 }

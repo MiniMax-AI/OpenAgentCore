@@ -32,7 +32,7 @@ if (process.argv[3] === '--tool-environment') {
   if (request.tool === 'bash') {
     const quote = (text: string) => "'" + text.replaceAll("'", "'\\''") + "'";
     request.input.command = systemShell
-      ? '/usr/bin/python3 -I -S /usr/local/bin/agents-api-tool-root ' + quote(request.input.command)
+      ? '/usr/bin/python3 -I -S /usr/local/bin/oac-tool-root ' + quote(request.input.command)
       : '. /environment/initialization/tool-env.sh && eval -- ' + quote(request.input.command);
   }
 }

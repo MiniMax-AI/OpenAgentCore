@@ -73,7 +73,7 @@ func BootstrapWithClient(ctx context.Context, client *http.Client, serverURL, de
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+credential)
 	if daemonVersion != "" {
-		req.Header.Set("User-Agent", "parsar-daemon/"+daemonVersion)
+		req.Header.Set("User-Agent", "oac-daemon/"+daemonVersion)
 	}
 	resp, err := client.Do(req)
 	if err != nil {

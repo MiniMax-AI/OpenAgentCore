@@ -23,7 +23,7 @@ func TestTextFactoryAcceptsRestrictiveCapabilities(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=success", "GORACE=atexit_sleep_ms=0"}}
 			request := proto.PromptRequestPayload{RunID: "restricted-run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", DisableExecutionEnvironment: test.environment, DisableSubagents: test.subagents, ExecutionControls: test.controls, AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)

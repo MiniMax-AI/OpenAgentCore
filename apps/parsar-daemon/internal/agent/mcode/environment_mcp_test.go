@@ -49,12 +49,12 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 					Env           []map[string]string
 				} `json:"mcpServers"`
 			}
-			if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 2 || params.MCP[0].Name != "parsar_workspace" {
+			if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 2 || params.MCP[0].Name != "oac_workspace" {
 				t.Fatal("environment MCP displaced workspace tools")
 			}
 			server := params.MCP[1]
 			if server.Name != "proof.server" || server.Command != "/usr/bin/python3" || server.Env == nil || len(server.Env) != 0 ||
-				!reflect.DeepEqual(server.Args, []string{"-I", "-S", "/usr/local/bin/agents-api-runtime-initialize", "stdio", "plugins/fixture", "proof.server"}) {
+				!reflect.DeepEqual(server.Args, []string{"-I", "-S", "/usr/local/bin/oac-runtime-initialize", "stdio", "plugins/fixture", "proof.server"}) {
 				t.Fatal("ACP declaration bypassed the fixed isolated launcher")
 			}
 			if (params.SessionID != "") != resume || strings.Contains(string(raw), "must-not") || strings.Contains(string(raw), "private-argument") {
@@ -82,7 +82,7 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 			case "duplicate":
 				req.LocalEnvironment.MCP = append(req.LocalEnvironment.MCP, environmentMCPFixture())
 			case "reserved":
-				req.LocalEnvironment.MCP[0].Server.Name = "parsar_workspace"
+				req.LocalEnvironment.MCP[0].Server.Name = "oac_workspace"
 			}
 			if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
 				t.Fatal("unqualified declaration accepted or credential exposed")

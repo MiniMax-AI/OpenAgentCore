@@ -22,7 +22,7 @@ type preparationFrame struct {
 func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig, string) {
 	t.Helper()
 	root := t.TempDir()
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	t.Setenv("OAC_TEST_PREPARATION_FAKE", "1")
 	t.Setenv("OAC_TEST_PREPARATION_FRAMES", filepath.Join(root, "frames.jsonl"))
 	t.Setenv("OAC_TEST_PREPARATION_STATUS", filepath.Join(root, "environment-status"))
@@ -99,7 +99,7 @@ func assertPreparationOnly(t *testing.T, root string) {
 
 func preparedCatalogs(t *testing.T, root string) []string {
 	t.Helper()
-	files, err := filepath.Glob(filepath.Join(root, "parsar-daemon", "agent-sessions", "*", "model-catalog-*.json"))
+	files, err := filepath.Glob(filepath.Join(root, "daemon", "agent-sessions", "*", "model-catalog-*.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

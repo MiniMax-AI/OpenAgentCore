@@ -52,7 +52,7 @@ func (s *Session) askQuestion(frame rpcFrame) error {
 		return fmt.Errorf("mcode: input request belongs to another session")
 	}
 	if request.Mode != "form" || request.Schema.Type != "object" || len(request.Schema.Properties) == 0 {
-		return s.write(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32602, Message: "Parsar requires a nonempty input form"}})
+		return s.write(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32602, Message: "OpenAgentCore requires a nonempty input form"}})
 	}
 	otherFields := questionnaireOtherFields(request.Schema.Properties)
 	for _, key := range otherFields {
@@ -67,7 +67,7 @@ func (s *Session) askQuestion(frame rpcFrame) error {
 	for _, key := range keys {
 		property := request.Schema.Properties[key]
 		if property.Type != "string" && property.Type != "array" {
-			return s.write(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32602, Message: "Parsar supports text and choice input fields"}})
+			return s.write(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32602, Message: "OpenAgentCore supports text and choice input fields"}})
 		}
 		question := proto.PromptForUserChoiceQuestion{ID: key, Question: property.Title, MultiSelect: property.Type == "array", Options: []proto.PromptForUserChoiceOption{}}
 		if question.Question == "" {

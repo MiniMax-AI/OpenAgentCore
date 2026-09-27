@@ -17,7 +17,7 @@ func ConfigureLocal(config Config, root, workspace string, network agentnetwork.
 		Directory: workspace, PublicDirectory: "/workspace", NetworkAccess: network.Access, AllowedDomains: network.Hosts(),
 		HomeDir:        filepath.Join(root, "runtime", "claude-sdk", "home"),
 		ScratchDir:     filepath.Join(root, "runtime", "claude-sdk", "scratch"),
-		ProtectedDirs:  []string{filepath.Join(root, "parsar-daemon"), staging},
+		ProtectedDirs:  []string{filepath.Join(root, "daemon"), staging},
 		DependencyPath: "/usr/local/bin:/usr/bin:/bin",
 	}
 	if network.Validate() != nil {

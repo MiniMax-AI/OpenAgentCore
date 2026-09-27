@@ -88,7 +88,7 @@ can read it.
 ## Executor host
 
 The distribution's `self-hosted-install.pyz` downloads the matching
-`parsar-runtime` launcher, Runtime image and seccomp profile. The local launcher
+`oac-selfhost` launcher, Runtime image and seccomp profile. The local launcher
 uses the same Docker isolation and workspace layout as Core-managed V1, then
 invokes the existing daemon `connect` with the unchanged returned Environment
 ID and `remote_url`. Docker onboarding requires an externally reachable `wss`
@@ -145,7 +145,7 @@ and are retried by the restart policy. The installer's launcher starts the daemo
 with `--self-hosted-install`, so its 401 message names the installer's rerun:
 
 ```text
-parsar-daemon: executor credential KEY_ID for Environment ENVIRONMENT_ID was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then rerun the self-hosted install command on this host and paste it. To remove it instead, stop this container.
+oac-daemon: executor credential KEY_ID for Environment ENVIRONMENT_ID was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then rerun the self-hosted install command on this host and paste it. To remove it instead, stop this container.
 ```
 
 Without that flag (for example a caller-managed E2B Runtime) the message says to
@@ -168,7 +168,7 @@ When Core rejects it, the installer asks for the replacement (or reads
 
 The replacement is then checked the same way; 409 or 401, or no answer, stops
 without changes. The installer stops the container and writes the replacement
-into it with `parsar-runtime replace-credential --container NAME
+into it with `oac-selfhost replace-credential --container NAME
 --credential-file PATH`. That command refuses a running container, one without
 this installation's labels and name or its exact `-home` and `-environment`
 volumes, and a symlinked private credential directory. The installer then starts

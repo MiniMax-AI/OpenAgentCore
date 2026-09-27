@@ -130,7 +130,7 @@ normalization.
 | Harness | Native execution | Verified optional behavior | Explicit limits |
 | --- | --- | --- | --- |
 | Codex 0.153.4 | Native app-server, Kimi K3 Responses | Nested children, successful close and reopen, same-child continuation | Required ToolEnvironment and public function/MCP combinations are not qualified |
-| Claude Agent SDK 0.3.269 | Native Agent/SendMessage, Kimi K3 Anthropic endpoint | Foreground `parsar_worker`, idle-child continuation, protected Bash | No qualified close; running-child messages, background work, alternate child profiles and per-call model overrides are rejected |
+| Claude Agent SDK 0.3.269 | Native Agent/SendMessage, Kimi K3 Anthropic endpoint | Foreground `oac_worker`, idle-child continuation, protected Bash | No qualified close; running-child messages, background work, alternate child profiles and per-call model overrides are rejected |
 | MiniMax Code 0.4.12 | Fixed source `33b259bbbeb1c16433390869938191d09bdb0680` and recorded bounded patch, MiniMax M2.7 | Native task/task_append/task_stop, protected workspace tools | No qualified close/reopen; native workers do not delegate nested work; public function/MCP combinations remain unsupported |
 
 Native probes separately verified concurrency admission, child credential/history

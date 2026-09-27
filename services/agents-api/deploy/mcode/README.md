@@ -18,7 +18,7 @@ Install outside the checkout, under a private operator directory in `~/.oac/`.
 Check the native install succeeds and `mcode --version` reports exactly 0.4.12.
 This profile runs on a trusted execution host.
 
-Set `PARSAR_MCODE_BIN` to that absolute executable and `PARSAR_MCODE_AGENTS_API=1`
+Set `OAC_RUNTIME_MCODE_BIN` to that absolute executable and `OAC_RUNTIME_MCODE_AGENTS_API=1`
 for the daemon. The opt-in only advertises the profile for the qualified version.
 Use the existing authenticated daemon connection and operator device enrollment;
 this is not a new public enrollment API or official `self_hosted` implementation.
@@ -43,7 +43,7 @@ docker build --platform linux/amd64 -t agents-runtime:mcode \
 Configure Core's existing managed Docker provider with the immutable image ID,
 `deploy/codex/seccomp.json` and `nested_sandbox: true`. Core, database ownership,
 enrollment and the public protocol remain shared. The image supplies the private
-`PARSAR_MCODE_WORKSPACE=managed` and companion paths; caller Agent options cannot
+`OAC_RUNTIME_MCODE_WORKSPACE=managed` and companion paths; caller Agent options cannot
 change them. Public Files and Artifacts use the common bound workspace helpers.
 
 The native process and ACP Session use a private control directory, while six
@@ -108,7 +108,7 @@ native ACP context occupancy and cumulative cost are not per-Turn usage.
 The opt-in `TestNativeMCodePublicExecution` uses the fixed official Python SDK,
 raw HTTP, actual daemon/gateway/Worker and a dedicated PostgreSQL test database.
 Provide private `OAC_TEST_MCODE_REAL_OPTIONS` (the provider object above plus the
-`model` string), `PARSAR_MCODE_BIN`, `OAC_TEST_NATIVE_DAEMON_BIN`,
+`model` string), `OAC_RUNTIME_MCODE_BIN`, `OAC_TEST_NATIVE_DAEMON_BIN`,
 `OAC_TEST_NATIVE_PROOF_DIR`, `OAC_TEST_OFFICIAL_SDK_PYTHON` and
 `OAC_TEST_DATABASE_URL`, then run:
 

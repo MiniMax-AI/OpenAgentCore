@@ -20,7 +20,7 @@ class NativeServiceTests(unittest.TestCase):
         self.directory = Path(temporary.name).resolve()
         self.root = self.directory / 'install space %n $HOME'
         self.bundle = self.directory / "bundle"
-        self.state = {"mode": "all", "native_core": True, "project": "parsar-0123456789", "installation_id": "fixture-installation"}
+        self.state = {"mode": "all", "native_core": True, "project": "oac-0123456789", "installation_id": "fixture-installation"}
         for name in service.REQUIRED:
             path = self.bundle / "native" / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -35,7 +35,7 @@ class NativeServiceTests(unittest.TestCase):
         service.prepare(self.root, self.state, self.bundle)
 
     def unit_path(self):
-        path = self.root / "generated" / "parsar-0123456789-core.service"
+        path = self.root / "generated" / "oac-0123456789-core.service"
         if not path.exists():
             path.write_text(service.unit_text(self.root, "fixture header"))
         return path
@@ -113,7 +113,7 @@ class NativeServiceTests(unittest.TestCase):
         for suffix in ("bad\npath", "bad*path", "bad\\path", "bad\x7fpath", 'bad"path', "bad'path"):
             with self.assertRaises(RuntimeError):
                 service.prepare(self.directory / suffix, self.state, self.bundle)
-        for project in ("other-service", "../parsar-0123456789", "parsar-0123456789\n"):
+        for project in ("other-service", "../oac-0123456789", "oac-0123456789\n"):
             state = dict(self.state, project=project)
             with self.assertRaises(RuntimeError):
                 service.prepare(self.root, state, self.bundle)
@@ -184,9 +184,9 @@ class NativeServiceTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in self.run.call_args_list], [
             ["systemctl", "--user", "daemon-reload"],
             ["systemctl", "--user", "enable", "--now", str(unit)],
-            ["systemctl", "--user", "stop", "parsar-0123456789-core.service"],
-            ["systemctl", "--user", "is-active", "--quiet", "parsar-0123456789-core.service"],
-            ["systemctl", "--user", "is-active", "--quiet", "parsar-0123456789-core.service"],
+            ["systemctl", "--user", "stop", "oac-0123456789-core.service"],
+            ["systemctl", "--user", "is-active", "--quiet", "oac-0123456789-core.service"],
+            ["systemctl", "--user", "is-active", "--quiet", "oac-0123456789-core.service"],
         ])
 
 

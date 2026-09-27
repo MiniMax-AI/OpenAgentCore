@@ -56,8 +56,8 @@ func (s EnvironmentSetup) validate(installed bool) error {
 	}
 	for name, value := range s.Env {
 		// The first three reservations are explicitly part of the public guide;
-		// PARSAR_* identifies the actual deployment authority and binding.
-		if !environmentName.MatchString(name) || name == "PATH" || name == "OPENAI_API_KEY" || strings.HasPrefix(name, "CODEX_") || strings.HasPrefix(name, "PARSAR_") || strings.ContainsRune(value, 0) {
+		// OAC_* identifies the actual deployment authority and binding.
+		if !environmentName.MatchString(name) || name == "PATH" || name == "OPENAI_API_KEY" || strings.HasPrefix(name, "CODEX_") || strings.HasPrefix(name, "OAC_") || strings.ContainsRune(value, 0) {
 			return ErrInvalidInput
 		}
 	}

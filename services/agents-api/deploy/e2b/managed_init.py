@@ -49,10 +49,10 @@ def initialize():
     binding = identity(payload)
     shared.write_private(root / 'managed-launch.json', binding)
     environment = shared.prepare_runtime()
-    environment.update(PARSAR_RUNTIME_ENVIRONMENT_ID=payload['EnvironmentID'],
-                       PARSAR_RUNTIME_SESSION_ID=payload['SessionID'],
-                       PARSAR_RUNTIME_NETWORK_ACCESS=payload['NetworkAccess'],
-                       PARSAR_RUNTIME_ALLOWED_DOMAINS=json.dumps(payload['AllowedDomains'] or []))
+    environment.update(OAC_RUNTIME_ENVIRONMENT_ID=payload['EnvironmentID'],
+                       OAC_RUNTIME_SESSION_ID=payload['SessionID'],
+                       OAC_RUNTIME_NETWORK_ACCESS=payload['NetworkAccess'],
+                       OAC_RUNTIME_ALLOWED_DOMAINS=json.dumps(payload['AllowedDomains'] or []))
     shared.write_private(shared.PROFILE / 'auth.json',
                          {'server_url': payload['CoreURL'], 'runtime_id': payload['DeviceID'],
                           'runner_credential': payload['Credential']}, owner=1000)
@@ -60,7 +60,7 @@ def initialize():
     with (shared.PROFILE / 'daemon.log').open('xb') as stream:
         os.fchmod(stream.fileno(), 0o600)
         os.fchown(stream.fileno(), 1000, 1000)
-        child = subprocess.Popen(['/usr/local/bin/parsar-daemon', 'connect', '--profile', 'default'],
+        child = subprocess.Popen(['/usr/local/bin/oac-daemon', 'connect', '--profile', 'default'],
                                  cwd='/environment/workspace', env=environment, user=1000, group=1000,
                                  extra_groups=[], start_new_session=True, stdin=subprocess.DEVNULL,
                                  stdout=stream, stderr=subprocess.STDOUT, umask=0o077)

@@ -13,7 +13,7 @@ const toolEnvironmentHookSource = "/etc/codex/runtime-hooks"
 const toolEnvironmentHookCommand = "/usr/bin/python3 -I -S /etc/codex/tool-env.py"
 
 func prepareSystemToolAnchor() error {
-	const anchor = "/tmp/parsar-tool-root"
+	const anchor = "/tmp/oac-tool-root"
 	if err := os.Mkdir(anchor, 0500); err != nil && !errors.Is(err, os.ErrExist) {
 		return errors.New("codex: system tool temporary anchor unavailable")
 	}

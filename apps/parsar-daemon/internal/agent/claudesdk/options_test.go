@@ -23,7 +23,7 @@ func TestNullableSystemPrompt(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 			start, _, err := prepare(config, proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentOptions: tc.options})
 			if (err != nil) != tc.reject || (!tc.reject && start.SystemPrompt != tc.want) {

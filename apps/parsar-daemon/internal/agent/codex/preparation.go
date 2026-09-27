@@ -117,7 +117,7 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	}
 
 	initParams := InitializeParams{
-		ClientInfo:   InitializeClientInfo{Name: "parsar-daemon", Version: "0.0.0"},
+		ClientInfo:   InitializeClientInfo{Name: "oac-daemon", Version: "0.0.0"},
 		Capabilities: &InitializeCapabilities{ExperimentalAPI: true},
 	}
 	if _, err := rpc.Start(cancelCtx, initParams); err != nil {

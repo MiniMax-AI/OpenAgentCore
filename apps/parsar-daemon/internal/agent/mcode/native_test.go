@@ -97,7 +97,7 @@ func TestNativeMCodeACP(t *testing.T) {
 	digest := sha256.Sum256(archive.Bytes())
 	skill := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(archive.Bytes()) }))
 	defer skill.Close()
-	req.AgentOptions["mcode_provider"] = map[string]any{"name": "Parsar", "kind": "custom", "enabled": true, "npm": "@ai-sdk/anthropic", "options": map[string]any{"apiKey": "fixture-only", "baseURL": model.URL}, "models": map[string]any{"fixture": map[string]any{"name": "Fixture", "tool_call": true, "limit": map[string]int{"context": 64000, "output": 4096}}}}
+	req.AgentOptions["mcode_provider"] = map[string]any{"name": "OpenAgentCore", "kind": "custom", "enabled": true, "npm": "@ai-sdk/anthropic", "options": map[string]any{"apiKey": "fixture-only", "baseURL": model.URL}, "models": map[string]any{"fixture": map[string]any{"name": "Fixture", "tool_call": true, "limit": map[string]int{"context": 64000, "output": 4096}}}}
 	req.AgentOptions["skills"] = []any{map[string]any{"name": "qa-mcode-skill", "version": "1", "download_url": skill.URL, "sha256": hex.EncodeToString(digest[:])}}
 	req.AgentOptions["mcp_servers"] = map[string]any{"qa": map[string]any{"type": "http", "url": mcp.URL}}
 	req.AgentOptions["system_prompt"] = "SP-MCODE-672: use the available tools when requested."

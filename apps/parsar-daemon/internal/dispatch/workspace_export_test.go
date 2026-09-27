@@ -39,7 +39,7 @@ func exporterRouter(t *testing.T, program string) (*Router, exportSender, proto.
 		t.Fatal(err)
 	}
 	environment, session := uuid.NewString(), uuid.NewString()
-	for key, value := range map[string]string{"PARSAR_RUNTIME_ENVIRONMENT_ID": environment, "PARSAR_RUNTIME_SESSION_ID": session, "PARSAR_RUNTIME_WORKSPACE": workspace, "PARSAR_RUNTIME_DIRECTORY_HELPER": helper, "PARSAR_RUNTIME_EXPORT_HELPER": helper, "PARSAR_RUNTIME_WRITE_HELPER": "", "PARSAR_RUNTIME_STAGING": "", "PARSAR_RUNTIME_NETWORK_ACCESS": ""} {
+	for key, value := range map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": environment, "OAC_RUNTIME_SESSION_ID": session, "OAC_RUNTIME_WORKSPACE": workspace, "OAC_RUNTIME_DIRECTORY_HELPER": helper, "OAC_RUNTIME_EXPORT_HELPER": helper, "OAC_RUNTIME_WRITE_HELPER": "", "OAC_RUNTIME_STAGING": "", "OAC_RUNTIME_NETWORK_ACCESS": ""} {
 		t.Setenv(key, value)
 	}
 	binding, err := localworkspace.Load()

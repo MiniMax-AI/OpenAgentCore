@@ -14,8 +14,8 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
-const claudeSDKEntrypointEnv = "PARSAR_CLAUDE_SDK_ENTRYPOINT"
-const claudeSDKNodeEnv = "PARSAR_CLAUDE_SDK_NODE"
+const claudeSDKEntrypointEnv = "OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT"
+const claudeSDKNodeEnv = "OAC_RUNTIME_CLAUDE_SDK_NODE"
 
 type claudeSDKDiscovery struct {
 	Info   proto.SupportedAgentKind
@@ -34,7 +34,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 		ProgrammaticToolCallingDisable: true,
 	}}}
 	fail := func(err error) *claudeSDKDiscovery {
-		fmt.Fprintf(rc.stderr, "parsar-daemon: configured Claude SDK runtime unavailable: %v\n", err)
+		fmt.Fprintf(rc.stderr, "oac-daemon: configured Claude SDK runtime unavailable: %v\n", err)
 		return out
 	}
 	if !filepath.IsAbs(entrypoint) {
@@ -45,7 +45,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 		return fail(err)
 	}
 	if !filepath.IsAbs(profileDir) {
-		return fail(fmt.Errorf("Claude SDK state requires an absolute PARSAR_HOME"))
+		return fail(fmt.Errorf("Claude SDK state requires an absolute OAC_RUNTIME_HOME"))
 	}
 	node := os.Getenv(claudeSDKNodeEnv)
 	if node == "" {
@@ -60,7 +60,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 		return fail(err)
 	}
 	out.Config = claudesdk.Config{Node: node, Entrypoint: entrypoint, StateDir: filepath.Join(profileDir, "runtime", "claude-sdk")}
-	if mode := os.Getenv("PARSAR_CLAUDE_SDK_WORKSPACE"); mode != "" {
+	if mode := os.Getenv("OAC_RUNTIME_CLAUDE_SDK_WORKSPACE"); mode != "" {
 		if mode != "managed" {
 			return fail(fmt.Errorf("unsupported Claude SDK workspace profile"))
 		}
@@ -76,7 +76,7 @@ func discoverClaudeSDK(rc *runContext, profile string, check func(context.Contex
 		if err != nil {
 			return fail(err)
 		}
-		out.Config, err = claudesdk.ConfigureLocal(out.Config, root, os.Getenv("PARSAR_RUNTIME_WORKSPACE"), binding.NetworkPolicy(), os.Getenv("PARSAR_RUNTIME_STAGING"))
+		out.Config, err = claudesdk.ConfigureLocal(out.Config, root, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy(), os.Getenv("OAC_RUNTIME_STAGING"))
 		if err != nil {
 			return fail(err)
 		}

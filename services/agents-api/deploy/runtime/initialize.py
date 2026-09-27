@@ -87,7 +87,7 @@ def install_skill(request):
                     pass
                 else:
                     raise ValueError('duplicate skill member')
-                result = subprocess.run(['/usr/local/bin/agents-api-codex-write', str(SKILLS / name), relative,
+                result = subprocess.run(['/usr/local/bin/oac-codex-write', str(SKILLS / name), relative,
                                          str(len(body)), str(ROOT / 'staging')],
                                         input=body + hashlib.sha256(body).digest(), env=BASE_ENV,
                                         capture_output=True, check=True)
@@ -154,7 +154,7 @@ def sandbox(network, cwd):
     if network not in ('enabled', 'disabled') or not isinstance(cwd, str) or not cwd.startswith('/') or '\x00' in cwd:
         raise ValueError('invalid execution configuration')
     if (CONFIG / 'system-root.json').exists():
-        tools = runpy.run_path('/usr/local/bin/agents-api-tool-root')
+        tools = runpy.run_path('/usr/local/bin/oac-tool-root')
         if not tools['installed']():
             raise ValueError('system tools unavailable')
         return tools['initialization_sandbox'](cwd, network)
@@ -186,7 +186,7 @@ def run(request):
         install_skill(request)
         return
     if action == 'system':
-        runpy.run_path('/usr/local/bin/agents-api-tool-root')['install'](request['packages'])
+        runpy.run_path('/usr/local/bin/oac-tool-root')['install'](request['packages'])
         return
     args = sandbox(request['network'], request.get('cwd', '/workspace'))
     if action == 'setup':
@@ -290,7 +290,7 @@ def stdio(package, server):
     helper = '/tmp/agents-api-mcp-exec'
     # System-package roots predate daemon installation. Mount only the fixed
     # static helper, never native configuration, credentials or Runtime state.
-    args[-1:-1] = ['--ro-bind', '/usr/local/bin/parsar-daemon', helper]
+    args[-1:-1] = ['--ro-bind', '/usr/local/bin/oac-daemon', helper]
     args += [helper, 'runtime-mcp-exec', package, server]
     return stdio_lifetime(args)
 

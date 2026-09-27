@@ -15,10 +15,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 import native_service
-import parsar_cli
+import oac_cli
 import sandbox_setup
 
-LABEL = "io.parsar.inputs"
+LABEL = "io.oac.inputs"
 STANDARD_SIZES = Path(__file__).resolve().parents[2] / "apps/web/src/features/sandbox/standard-sizes.json"
 
 
@@ -46,10 +46,16 @@ class FakeHost:
         self.deployment_core_url = ""  # what an old Core reports for its sandbox deployment
         self.deployment = {"provider": ""}  # what sandbox_setup reads and posts
         self.deployment_posts = []
+        self.volumes = {}
+        self.project_containers = {}
+        self.named_containers = {}
+        self.projects = [{"id": "project_one"}]
+        self.free_space = 100000
+        self.copy_count = 0
         self.deployment_refusal = None  # Core's message when it refuses the POST
         for target, name, value in ((subprocess, "run", mock.Mock(side_effect=self.run)),
-                                    (parsar_cli, "http", self.http),
-                                    (parsar_cli, "time", SimpleNamespace(sleep=lambda seconds: None)),
+                                    (oac_cli, "http", self.http),
+                                    (oac_cli, "time", SimpleNamespace(sleep=lambda seconds: None)),
                                     (native_service, "_process_environment", self.process_environment),
                                     (sandbox_setup, "send", self.sandbox_send)):
             patcher = mock.patch.object(target, name, value)
@@ -70,7 +76,23 @@ class FakeHost:
         args = [str(item) for item in args]
         self.commands.append(args)
         code, stdout = 0, ""
-        if args[:2] == ["docker", "compose"] and args[2:3] == ["-f"]:
+        if args[:3] == ["docker", "volume", "inspect"]:
+            info = self.volumes.get(args[3])
+            code, stdout = (0, json.dumps([{k: v for k, v in info.items() if k != "Data"}])) if info else (1, "")
+        elif args[:3] == ["docker", "volume", "ls"]:
+            stdout = "\n".join(self.volumes)
+        elif args[:3] == ["docker", "volume", "rm"]:
+            self.volumes.pop(args[3], None)
+        elif args[:2] == ["docker", "run"]:
+            mounts = [args[i + 1] for i, x in enumerate(args) if x == "-v"]
+            source = next(x.split(":")[0] for x in mounts if ":/from:" in x)
+            if args[-1].startswith("du "):
+                stdout = f"100 /from\nFilesystem 1024-blocks Used Available Capacity Mounted\nlocal 100000 100 {self.free_space} 1% /from\n"
+            else:
+                target = next(x.split(":")[0] for x in mounts if x.endswith(":/to"))
+                self.volumes[target]["Data"] = dict(self.volumes[source]["Data"])
+                self.copy_count += 1
+        elif args[:2] == ["docker", "compose"] and args[2:3] == ["-f"]:
             code, stdout = self.compose(Path(args[3]), args[4:])
         elif args[:2] == ["docker", "compose"]:
             stdout = "2.30.0"
@@ -78,8 +100,20 @@ class FakeHost:
             code = 1 if args[3] in self.missing_images else 0
             stdout = "" if code else args[3] + " linux/amd64"
         elif args[:2] == ["docker", "ps"]:
-            stdout = "\n".join("id-" + name for name in self.containers)
+            project = next((x.split("=", 2)[-1] for x in args if x.startswith("label=com.docker.compose.project=")), None)
+            if "-aq" in args and "label=com.docker.compose.oneoff=False" not in args:
+                name_filter = next((x.removeprefix("name=") for x in args if x.startswith("name=")), None)
+                found = self.project_containers.get(project, {}) if name_filter is None else {
+                    name: value for name, value in self.named_containers.items() if re.search(name_filter, "/" + name)}
+                stdout = "\n".join(found)
+                return subprocess.CompletedProcess(args, 0, stdout if kwargs.get("text") else stdout.encode(), "")
+            stdout = "\n".join(name for name, item in self.containers.items() if item["running"]) if "--format" in args else "\n".join("id-" + name for name in self.containers)
         elif args[:2] == ["docker", "inspect"]:
+            if "{{json .Config.Labels}}" in args:
+                all_containers = {key: value for items in self.project_containers.values() for key, value in items.items()}
+                all_containers.update(self.named_containers)
+                stdout = "\n".join(json.dumps(all_containers[item]) for item in args[4:])
+                return subprocess.CompletedProcess(args, 0, stdout, "")
             stdout = "\n".join(f'{name}\t{self.containers[name]["inputs"] or ""}\t'
                                f'{"running" if self.containers[name]["running"] else "exited"}\t'
                                for name in (item[3:] for item in args[4:]) if name in self.containers)
@@ -94,6 +128,11 @@ class FakeHost:
         text = kwargs.get("text") or kwargs.get("universal_newlines")
         return subprocess.CompletedProcess(args, code, stdout if text else stdout.encode(), "" if text else b"")
 
+    def add_database(self, project, data=None):
+        self.volumes[project + "_database"] = {"Name": project + "_database", "Driver": "local", "Options": None,
+            "Labels": {"com.docker.compose.project": project, "com.docker.compose.volume": "database"},
+            "Data": data or {"PG_VERSION": b"16", "history": b"retained session history", "credentials": b"encrypted"}}
+
     def service_hash(self, document, name):
         service = document["services"][name]
         text = json.dumps(service, sort_keys=True)
@@ -104,6 +143,19 @@ class FakeHost:
     def compose(self, path, args):
         document = json.loads(path.read_text()) if path.exists() else {"services": {}}
         services = document["services"]
+        if args[:1] == ["create"]:
+            project = document["name"]
+            self.add_database(project, {"interrupted": b"partial"})
+            self.project_containers[project] = {"copy-database": dict(services["database"].get("labels", {}),
+                **{"com.docker.compose.project": project, "com.docker.compose.service": "database"})}
+            self.volumes[project + "_database"]["Labels"].update(document["volumes"]["database"].get("labels", {}))
+            return 0, ""
+        if args[:1] == ["rm"]:
+            self.project_containers.pop(document["name"], None)
+            return 0, ""
+        if args[:1] == ["down"]:
+            self.containers.clear()
+            return 0, ""
         if args[:1] == ["stop"]:
             for name in args[1:] or services:
                 if name in self.containers:
@@ -155,7 +207,7 @@ class FakeHost:
         self.core["environment"] = environment.read_text() if environment.exists() else ""
 
     def unit_file(self):
-        found = sorted(self.native_root.glob("generated/parsar-*-core.service")) + \
+        found = sorted(self.native_root.glob("generated/oac-*-core.service")) + \
             sorted(self.native_root.glob("config/parsar-*-core.service"))
         return found[0].read_text() if found else ""
 
@@ -174,14 +226,14 @@ class FakeHost:
             refused = self.core["fails"] or self.core["rejects"](environment.read_text() if environment.exists() else "")
             native["active"] = not refused
             self.core["failed"] = self.core.get("failed") or refused
-            match = re.search(r"^Environment=PARSAR_INPUTS=(\w+)$", native["loaded"], re.M)
+            match = re.search(r"^Environment=OAC_INPUTS=(\w+)$", native["loaded"], re.M)
             native["inputs"] = match[1] if match and native["active"] else None
             root = self.native_root
             for environment, digests in ((root / "generated/core.env", root / "generated/core-key-digests.json"),
                                          (root / "config/core.env", root / "admin/core-key-digests.json")):
                 if environment.exists():
                     address = next(line for line in environment.read_text().splitlines()
-                                   if line.startswith("OAC_ADDR="))
+                                   if line.startswith(("OAC_ADDR=", "AGENTS_API_ADDR=")))
                     native["addr"] = int(address.rsplit(":", 1)[1].rstrip('"'))
                     native["digests"] = json.loads(digests.read_text())
                     native["environment"] = environment.read_text()
@@ -197,7 +249,7 @@ class FakeHost:
         return 0, ""
 
     def process_environment(self, pid):
-        return {"PARSAR_INPUTS": self.native["inputs"]} if self.native["inputs"] else {}
+        return {"OAC_INPUTS": self.native["inputs"]} if self.native["inputs"] else {}
 
     # HTTP -------------------------------------------------------------------
     def core_listening(self, port):
@@ -237,7 +289,10 @@ class FakeHost:
         if path == "/core/v1/sandbox/nodes":
             return 200, json.dumps({"data": self.nodes}).encode()
         if path == "/core/v1/sandbox/deployment":
-            return 200, json.dumps({"core_url": self.deployment_core_url}).encode()
+            return 200, json.dumps(dict(self.deployment, core_url=self.deployment_core_url,
+                installation_id=self.core_installation_id)).encode()
+        if path.startswith("/core/v1/projects?"):
+            return 200, json.dumps({"data": self.projects, "has_more": False}).encode()
         return 404, b""
 
     def sandbox_send(self, req):
@@ -248,20 +303,24 @@ class FakeHost:
             raise ConnectionRefusedError()
         if sha256(req.get_header("Authorization", "").removeprefix("Bearer ")) not in digests:
             return 401, b'{"error": {"message": "Invalid Core key"}}'
+        if path == "core/v1/sandbox/deployment/maintenance" and req.get_method() == "PATCH":
+            self.deployment["maintenance"] = json.loads(req.data)["maintenance"]
+            return 200, json.dumps(dict(self.deployment, installation_id=self.core_installation_id)).encode()
         if path != "core/v1/sandbox/deployment":
             return 404, b""
-        if req.get_method() == "POST":
+        if req.get_method() in ("POST", "PUT"):
             selection = json.loads(req.data)
             self.deployment_posts.append(selection)
             if self.deployment_refusal:
                 return 409, json.dumps({"error": {"message": self.deployment_refusal}}).encode()
             # E2B adopts the template build's size.
-            self.deployment = {"provider": selection["provider"], "specification": {
-                "resources": selection.get("resources", {"cpus": 2, "memory_mib": 2048})}}
+            self.deployment = {"provider": selection["provider"], "generation": self.deployment.get("generation", 0) + 1,
+                "maintenance": self.deployment.get("maintenance", False), "resources": {"allocations": 0, "pending": 0},
+                "specification": {"runtime": selection.get("runtime"), "resources": selection.get("resources", {"cpus": 2, "memory_mib": 2048})}}
         native = self.native["active"] and self.native["addr"] == port
         environment = self.native["environment"] if native else self.core.get("environment", "")
         installation = re.search(r'^OAC_INSTALLATION_ID="([^"]+)"$', environment, re.M)
-        return 200, json.dumps(dict(self.deployment, installation_id=installation and installation[1])).encode()
+        return 200, json.dumps(dict(self.deployment, installation_id=installation[1] if installation else self.core_installation_id)).encode()
 
 
 MANIFEST = {
@@ -270,10 +329,10 @@ MANIFEST = {
         ("core", "1"), ("runtime", "2"), ("database", "3"), ("web", "4"))},
     "image_manifest_digests": {name: "sha256:" + digit * 64 for name, digit in (
         ("core", "a"), ("runtime", "b"), ("database", "c"), ("web", "d"))},
-    "runtime_ref": "parsar-core-runtime@sha256:" + "b" * 64,
+    "runtime_ref": "oac-runtime@sha256:" + "b" * 64,
     "microsandbox": {"runtime_sha256": "5" * 64, "firmware_sha256": "6" * 64},
 }
-MODULES = ("install.py", "configuration.py", "config_model.py", "config.schema.json", "parsar_cli.py", "convert.py",
+MODULES = ("install.py", "configuration.py", "config_model.py", "config.schema.json", "oac_cli.py", "convert.py", "rename.py",
            "native_service.py", "sandbox_setup.py", "node_spec.py", "distribution.py", "install.sh")
 
 
@@ -297,18 +356,18 @@ def make_bundle(directory, manifest, commit=None):
     (bundle / "standard-sizes.json").write_bytes(STANDARD_SIZES.read_bytes())
     for name in ("node-install.pyz", "self-hosted-install.pyz"):
         (bundle / name).write_bytes(b"synthetic verified Python bootstrap")
-    (bundle / "parsar.pyz").write_bytes(b"synthetic parsar command " + manifest["source_commit"].encode())
+    (bundle / "oac.pyz").write_bytes(b"synthetic oac command " + manifest["source_commit"].encode())
     manifest["artifacts"] = {}
-    for name in ("images/runtime.tar.gz", "native/bin/parsar-sandbox-node",
-                 "native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
+    for name in ("images/runtime.tar.gz", "native/bin/oac-node",
+                 "native/bin/oac-microsandbox-provider", "native/microsandbox/msb",
                  "native/microsandbox/libkrunfw.so.5.6.1"):
-        manifest["artifacts"][name] = {"filename": "parsar-" + manifest["source_commit"] + "-" + name.replace("/", "-"),
+        manifest["artifacts"][name] = {"filename": "oac-" + manifest["source_commit"] + "-" + name.replace("/", "-"),
                                        "sha256": "a" * 64, "size": 1}
     (bundle / "manifest.json").write_text(json.dumps(manifest))
     for name in manifest["images"]:
         (bundle / "images" / (name + ".tar")).write_bytes(("synthetic " + name).encode())
-    for name in ("bin/oac-core", "bin/oac-core-migrate", "bin/agents-api-microsandbox-provider",
-                 "bin/parsar-sandbox-node", "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1",
+    for name in ("bin/oac-core", "bin/oac-core-migrate", "bin/oac-microsandbox-provider",
+                 "bin/oac-node", "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1",
                  "e2b/oac-e2b-provider"):
         path = bundle / "native" / name
         path.parent.mkdir(parents=True, exist_ok=True)

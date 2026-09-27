@@ -29,10 +29,10 @@ func (p *Provider) bootstrap(ctx context.Context, id string, b sandbox.Bootstrap
 		return e
 	}
 	if e = copyRuntimeFiles(ctx, p.client, id, "/home", []entry{
-		{name: "runtime", directory: true}, {name: "runtime/.parsar", directory: true},
-		{name: "runtime/.parsar/parsar-daemon", directory: true},
-		{name: "runtime/.parsar/parsar-daemon/default", directory: true},
-		{name: "runtime/.parsar/parsar-daemon/default/auth.json", content: auth},
+		{name: "runtime", directory: true}, {name: "runtime/.oac", directory: true},
+		{name: "runtime/.oac/daemon", directory: true},
+		{name: "runtime/.oac/daemon/default", directory: true},
+		{name: "runtime/.oac/daemon/default/auth.json", content: auth},
 	}); e != nil {
 		return e
 	}

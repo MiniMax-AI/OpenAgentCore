@@ -21,10 +21,10 @@ RUNTIME_ARCHIVE_SHA256 = "47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 ARTIFACTS = {
     "images/runtime.tar.gz": "runtime.tar.gz",
-    "native/bin/parsar-sandbox-node": "sandbox-node",
-    "native/bin/parsar-daemon": "daemon",
-    "native/bin/parsar-runtime": "runtime-launcher",
-    "native/bin/agents-api-microsandbox-provider": "microsandbox-provider",
+    "native/bin/oac-node": "sandbox-node",
+    "native/bin/oac-daemon": "daemon",
+    "native/bin/oac-selfhost": "runtime-launcher",
+    "native/bin/oac-microsandbox-provider": "microsandbox-provider",
     "native/microsandbox/msb": "msb",
     "native/microsandbox/libkrunfw.so.5.6.1": "libkrunfw.so.5.6.1",
     "runtime/seccomp.json": "seccomp.json",
@@ -161,18 +161,18 @@ def image_identities(archive, build_id):
 def verify_runtime(image, daemon, helpers, source):
     details = verify_image(image)
     helpers, source = pathlib.Path(helpers), pathlib.Path(source)
-    files = {"/usr/local/bin/parsar-daemon": pathlib.Path(daemon)}
-    for name in ("agents-api-codex-directory", "agents-api-codex-write", "agents-api-workspace-export"):
+    files = {"/usr/local/bin/oac-daemon": pathlib.Path(daemon)}
+    for name in ("oac-codex-directory", "oac-codex-write", "oac-workspace-export"):
         files["/usr/local/bin/" + name] = helpers / name
-    files["/usr/local/bin/agents-api-runtime-initialize"] = source / "services/agents-api/deploy/runtime/initialize.py"
-    files["/usr/local/bin/agents-api-tool-root"] = source / "services/agents-api/deploy/runtime/tool-root.py"
+    files["/usr/local/bin/oac-runtime-initialize"] = source / "services/agents-api/deploy/runtime/initialize.py"
+    files["/usr/local/bin/oac-tool-root"] = source / "services/agents-api/deploy/runtime/tool-root.py"
     environment = dict(value.split("=", 1) for value in details["Config"]["Env"] if "=" in value)
-    if "PARSAR_CODEX_BIN" in environment:
+    if "OAC_RUNTIME_CODEX_BIN" in environment:
         files["/etc/codex/requirements.toml"] = source / "services/agents-api/deploy/codex/requirements.toml"
         files["/etc/codex/tool-env.py"] = source / "services/agents-api/deploy/codex/tool-env.py"
-    if "PARSAR_CLAUDE_SDK_ENTRYPOINT" in environment:
-        files["/usr/local/bin/agents-api-claude-shell-prefix"] = source / "services/agents-api/deploy/claude/shell-prefix.py"
-    if "PARSAR_MCODE_BIN" in environment:
+    if "OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT" in environment:
+        files["/usr/local/bin/oac-claude-shell-prefix"] = source / "services/agents-api/deploy/claude/shell-prefix.py"
+    if "OAC_RUNTIME_MCODE_BIN" in environment:
         for name in ("launch.mjs", "bridge.mjs", "check.mjs", "tool-executor.mjs", "subagent-snapshot.mjs", "source.json"):
             files["/opt/mcode-harness/" + name] = source / "packages/mcode-harness" / name
     output = subprocess.check_output(
@@ -226,7 +226,7 @@ def package_artifacts(bundle, stage, revision):
     runtime.unlink()
     result = {}
     for logical, suffix in ARTIFACTS.items():
-        filename = f"parsar-core-{revision}-linux-amd64-{suffix}"
+        filename = f"oac-{revision}-linux-amd64-{suffix}"
         target = assets / filename
         if logical == "runtime/seccomp.json":
             shutil.copyfile(bundle / logical, target)
@@ -239,7 +239,7 @@ def package_artifacts(bundle, stage, revision):
 
 
 # The installation's management command; it runs without the bundle directory.
-OAC_CLI_MODULES = ("parsar_cli.py", "config_model.py", "config.schema.json", "configuration.py",
+OAC_CLI_MODULES = ("oac_cli.py", "config_model.py", "config.schema.json", "configuration.py",
                   "native_service.py", "distribution.py", "node_spec.py")
 
 
@@ -260,10 +260,10 @@ def bootstraps(bundle, epoch):
     with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
         for name in OAC_CLI_MODULES:
             shutil.copyfile(bundle / name, pathlib.Path(directory) / name)
-        (pathlib.Path(directory) / "__main__.py").write_text("import parsar_cli\n\nparsar_cli.entry()\n")
+        (pathlib.Path(directory) / "__main__.py").write_text("import oac_cli\n\noac_cli.entry()\n")
         for path in pathlib.Path(directory).iterdir():
             os.utime(path, (int(epoch), int(epoch)))
-        zipapp.create_archive(directory, bundle / "parsar.pyz", interpreter="/usr/bin/env python3", compressed=True)
+        zipapp.create_archive(directory, bundle / "oac.pyz", interpreter="/usr/bin/env python3", compressed=True)
 
 
 def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline="0"):
@@ -290,7 +290,7 @@ def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline
         "artifacts": package_artifacts(bundle, stage, revision),
         "images": {name: identity[0] for name, identity in identities.items()},
         "image_manifest_digests": {name: identity[1] for name, identity in identities.items()},
-        "runtime_ref": "parsar-core-runtime@" + digest,
+        "runtime_ref": "oac-runtime@" + digest,
         "microsandbox": {
             "version": "0.7.2",
             "runtime_sha256": sha256(stage / "core/microsandbox/msb"),

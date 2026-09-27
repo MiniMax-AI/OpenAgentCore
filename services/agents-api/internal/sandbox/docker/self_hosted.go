@@ -17,7 +17,7 @@ import (
 )
 
 // selfHostedCredentialPath is the daemon's credential file, relative to /home.
-const selfHostedCredentialPath = "runtime/.parsar/parsar-daemon/executor-key.json"
+const selfHostedCredentialPath = "runtime/.oac/daemon/executor-key.json"
 
 // SelfHostedLaunch is local installation input, never a public execution request.
 // The caller retains the container and volumes; Core acquires no compute authority.
@@ -55,7 +55,7 @@ func (c ExecutorCredential) restrictedTo(environment string) bool {
 
 func (v SelfHostedLaunch) Name() string {
 	hash := sha256.Sum256([]byte(v.InstallationID + ":" + v.EnvironmentID))
-	return "parsar-selfhost-" + hex.EncodeToString(hash[:16])
+	return "oac-selfhost-" + hex.EncodeToString(hash[:16])
 }
 
 // LaunchSelfHosted starts the packaged daemon's existing connect path using the
@@ -103,8 +103,8 @@ func LaunchSelfHosted(ctx context.Context, c *client.Client, v SelfHostedLaunch)
 	}
 	credential, _ := json.Marshal(v.Credential)
 	if err = copyRuntimeFiles(ctx, c, created.ID, "/home", []entry{
-		{name: "runtime", directory: true}, {name: "runtime/.parsar", directory: true},
-		{name: "runtime/.parsar/parsar-daemon", directory: true},
+		{name: "runtime", directory: true}, {name: "runtime/.oac", directory: true},
+		{name: "runtime/.oac/daemon", directory: true},
 		{name: selfHostedCredentialPath, content: credential},
 	}); err != nil {
 		return name, errors.New("cannot initialize private Runtime credential; retain partial state")
@@ -141,7 +141,7 @@ func ReplaceSelfHostedCredential(ctx context.Context, c *client.Client, name str
 		return errors.New("stop the Runtime before replacing its executor credential")
 	}
 	// A planted directory symlink would redirect the write out of the private home.
-	for _, path := range []string{"/home/runtime", "/home/runtime/.parsar", "/home/runtime/.parsar/parsar-daemon"} {
+	for _, path := range []string{"/home/runtime", "/home/runtime/.oac", "/home/runtime/.oac/daemon"} {
 		stat, err := c.ContainerStatPath(ctx, current.ID, client.ContainerStatPathOptions{Path: path})
 		if err != nil || !stat.Stat.Mode.IsDir() || stat.Stat.LinkTarget != "" {
 			return errors.New("the Runtime's private credential directory is missing or redirected")

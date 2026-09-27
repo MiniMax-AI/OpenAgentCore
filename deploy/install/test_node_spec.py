@@ -16,7 +16,7 @@ class SpecificationTests(unittest.TestCase):
         self.spec = {"resources": {"cpus": 2, "memory_mib": 4096}, "runtime": {
             "source_commit": "a" * 40, "image_id": "sha256:" + "b" * 64,
             "image_manifest_digest": "sha256:" + "c" * 64,
-            "microsandbox_ref": "parsar-core-runtime@sha256:" + "d" * 64,
+            "microsandbox_ref": "oac-runtime@sha256:" + "d" * 64,
             "runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}}
         self.data = {"installation_id": self.args.installation_id, "provider": "docker", "generation": 3,
                      "specification": self.spec, "specification_digest": node_spec.digest("docker", self.spec),
@@ -41,7 +41,7 @@ class SpecificationTests(unittest.TestCase):
         node_spec.fetch(self.args, "replacement", self.retained, opener)
         headers = dict(opener.call_args.args[0].header_items())
         self.assertEqual(headers["Authorization"], "Bearer " + self.retained["credential"])
-        self.assertEqual(headers["X-parsar-node-id"], self.retained["identity"]["node_id"])
+        self.assertEqual(headers["X-oac-node-id"], self.retained["identity"]["node_id"])
 
     def test_partial_registration_can_use_enrollment_after_unauthenticated_identity(self):
         rejected = urllib.error.HTTPError("https://core.example", 401, "private details", {}, None)

@@ -132,7 +132,7 @@ Docker/microsandbox use all fields of one verified distribution:
 | `source_commit` | Lowercase 40-character commit SHA |
 | `image_id` | Docker image configuration ID, `sha256:` followed by 64 lowercase hex characters |
 | `image_manifest_digest` | OCI image manifest digest, in the same `sha256:` form |
-| `microsandbox_ref` | `parsar-core-runtime@sha256:` followed by 64 lowercase hex characters |
+| `microsandbox_ref` | `oac-runtime@sha256:` followed by 64 lowercase hex characters |
 | `runtime_sha256` | SHA-256 of the native microsandbox Runtime binary |
 | `firmware_sha256` | SHA-256 of the matched firmware |
 
@@ -243,13 +243,17 @@ resources that block replacement.
 
 ## Node configuration and enrollment
 
+The retired `X-Parsar-Node-ID` header is rejected even when empty or accompanied
+by its replacement: `400 invalid_request`, with the message
+`X-Parsar-Node-ID was renamed to X-OAC-Node-ID; use the node command from this Core's Web`. Header values are never included in this diagnostic.
+
 For a new node, send `Authorization: Bearer <enrollment-token>` to the configuration
-GET without `X-Parsar-Node-ID`. The token must be valid, unexpired, unconsumed and
+GET without `X-OAC-Node-ID`. The token must be valid, unexpired, unconsumed and
 belong to this installation. This read does not consume it. Maintenance prevents
 new enrollment configuration reads.
 
 An already registered node sends its durable node credential as Bearer and its
-UUID in `X-Parsar-Node-ID`. Its installation, saved generation and specification
+UUID in `X-OAC-Node-ID`. Its installation, saved generation and specification
 digest must match the active deployment. This read remains available in
 maintenance so the retained node can recover its exact configuration. The old
 enrollment token cannot replace a registered node's credential.
@@ -351,3 +355,14 @@ draining elsewhere; that PUT retires those nodes. See the
 Unit tests, database tests and provider inspection are separate from live
 execution acceptance. This contract does not assert that every resource profile,
 provider deployment or host-reboot recovery path has been qualified.
+
+
+### OpenAgentCore Runtime rename
+
+The immutable microsandbox reference is `oac-runtime@sha256:<64 lowercase hex>`.
+Before upgrading from the former names, drain the deployment with the previous
+release and remove its nodes. The database migration refuses any allocation with
+no `released_at`, including retained snapshots and uncertain cleanup, then rewrites
+only the former `parsar-core-runtime@` reference prefix. The specification digest
+changes, requiring new node enrollment. Historical Session data remains unchanged.
+Old E2B templates must be rebuilt with the matching Runtime release.

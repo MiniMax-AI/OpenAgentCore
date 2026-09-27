@@ -44,7 +44,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("registered SDK evidence: %s", root)
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	key, err := os.ReadFile(keyFile)
 	if err != nil {
 		t.Fatal(err)

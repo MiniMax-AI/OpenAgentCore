@@ -27,7 +27,7 @@ func TestEnvironmentSetupSharedParsingAndConfidentialSnapshot(t *testing.T) {
 	if decoded.initialization.Env["TOKEN"] != input.Initialization.Env["TOKEN"] || len(decoded.initialization.Commands) != 2 {
 		t.Fatal("inline and template parsing diverged")
 	}
-	for _, invalid := range []string{`{"env":{"OPENAI_API_KEY":"x"}}`, `{"env":{"CODEX_HOME":"x"}}`, `{"env":{"PARSAR_HOME":"x"}}`, `{"env":{"BAD-NAME":"x"}}`, `{"env":{"VALUE":null}}`, `{"setup_commands":[null]}`, `{"setup_commands":[{}]}`, `{"setup_commands":[{"command":null}]}`, `{"setup_commands":[{"command":"pwd","cwd":""}]}`, `{"packages":{"python":[null]}}`, `{"packages":{"npm":["--ignore-scripts"]}}`} {
+	for _, invalid := range []string{`{"env":{"OPENAI_API_KEY":"x"}}`, `{"env":{"CODEX_HOME":"x"}}`, `{"env":{"OAC_RUNTIME_HOME":"x"}}`, `{"env":{"BAD-NAME":"x"}}`, `{"env":{"VALUE":null}}`, `{"setup_commands":[null]}`, `{"setup_commands":[{}]}`, `{"setup_commands":[{"command":null}]}`, `{"setup_commands":[{"command":"pwd","cwd":""}]}`, `{"packages":{"python":[null]}}`, `{"packages":{"npm":["--ignore-scripts"]}}`} {
 		if _, err := decodeTemplateInput([]byte(invalid)); err == nil {
 			t.Fatal("invalid setup accepted", invalid)
 		}

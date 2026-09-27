@@ -24,8 +24,8 @@ image = json.loads(subprocess.check_output(['docker', 'image', 'inspect', args.i
 if image['Architecture'] != 'amd64' or image['Os'] != 'linux':
     parser.error('A qualified Linux amd64 image is required')
 environment = dict(value.split('=', 1) for value in image['Config']['Env']
-                   if value.startswith(('HOME=', 'PARSAR_')))
-if environment.get('PARSAR_RUNTIME_WORKSPACE') != '/environment/workspace':
+                   if value.startswith(('HOME=', 'OAC_')))
+if environment.get('OAC_RUNTIME_WORKSPACE') != '/environment/workspace':
     parser.error('Image does not use the colocated Runtime layout')
 dev_home = Path(os.environ.get('OAC_DEV_HOME') or Path.home() / '.oac')
 if not dev_home.is_absolute():
@@ -66,16 +66,16 @@ with tempfile.TemporaryDirectory(dir=state) as temporary:
                          'ca-certificates bash git python3 python3-pip ripgrep bubblewrap socat util-linux '
                          '&& rm -rf /var/lib/apt/lists/*', user='root')
                 .copy('runtime.tar.gz', '/root/runtime.tar.gz', user='root')
-                .copy('runtime-env.json', '/etc/parsar-runtime-env.json', user='root')
-                .copy('init.py', '/opt/parsar-e2b/init.py', user='root')
-                .copy('managed_init.py', '/opt/parsar-e2b/managed_init.py', user='root')
+                .copy('runtime-env.json', '/etc/oac-runtime-env.json', user='root')
+                .copy('init.py', '/opt/oac-e2b/init.py', user='root')
+                .copy('managed_init.py', '/opt/oac-e2b/managed_init.py', user='root')
                 .run_cmd('tar --no-same-owner -xzf /root/runtime.tar.gz -C / && rm /root/runtime.tar.gz '
                          '&& usermod -l runtime -d /home/runtime node '
-                         '&& mkdir -p /home/runtime/.parsar /environment/workspace /environment/staging /environment/initialization /environment/packages /workspace '
+                         '&& mkdir -p /home/runtime/.oac /environment/workspace /environment/staging /environment/initialization /environment/packages /workspace '
                          '&& chown -R 1000:1000 /home/runtime /environment '
-                         '&& chmod 0700 /home/runtime/.parsar /environment/staging '
-                         '&& chmod 0444 /etc/parsar-runtime-env.json '
-                         '&& chmod 0555 /opt/parsar-e2b /opt/parsar-e2b/init.py /opt/parsar-e2b/managed_init.py', user='root')
+                         '&& chmod 0700 /home/runtime/.oac /environment/staging '
+                         '&& chmod 0444 /etc/oac-runtime-env.json '
+                         '&& chmod 0555 /opt/oac-e2b /opt/oac-e2b/init.py /opt/oac-e2b/managed_init.py', user='root')
                 .set_user('runtime').set_workdir('/environment/workspace'))
     result = Template.build(template, name=args.name, cpu_count=2, memory_mb=2048,
                             on_build_logs=lambda entry: print(entry.message, flush=True),

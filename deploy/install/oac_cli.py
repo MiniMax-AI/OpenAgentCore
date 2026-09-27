@@ -1,10 +1,10 @@
-"""parsar: status, start, stop, apply and rotate-core-key for one installation.
+"""oac: status, start, stop, apply and rotate-core-key for one installation.
 
 The installation directory is the directory that holds the command. The bundle it
 was installed from is never needed. config.json is the only file an operator edits;
 apply renders generated/ from it and converges the running services on that render.
 What runs is the truth: each Compose container carries the inputs digest it was
-created with (label io.parsar.inputs) and native Core carries it in PARSAR_INPUTS,
+created with (label io.oac.inputs) and native Core carries it in OAC_INPUTS,
 so an interrupted apply, rotation or rollback is finished by the next apply.
 """
 import argparse
@@ -29,7 +29,7 @@ import configuration
 import native_service
 
 
-class ParsarError(Exception):
+class OacError(Exception):
     pass
 
 
@@ -48,10 +48,10 @@ def check_private(path, what):
     try:
         info = os.lstat(path)
     except FileNotFoundError:
-        raise ParsarError(f"{what} is missing") from None
+        raise OacError(f"{what} is missing") from None
     if (not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) & 0o077
             or info.st_uid != os.geteuid() or info.st_nlink != 1):
-        raise ParsarError(f"{what} must be a regular file with mode 0600, owned by you, and not a link")
+        raise OacError(f"{what} must be a regular file with mode 0600, owned by you, and not a link")
 
 
 def check_directories(root):
@@ -60,10 +60,10 @@ def check_directories(root):
         try:
             info = os.lstat(path)
         except FileNotFoundError:
-            raise ParsarError(f"{what} is missing") from None
+            raise OacError(f"{what} is missing") from None
         if (not stat.S_ISDIR(info.st_mode) or stat.S_IMODE(info.st_mode) & 0o077
                 or info.st_uid != os.geteuid()):
-            raise ParsarError(f"{what} must be a directory with mode 0700, owned by you, and not a link")
+            raise OacError(f"{what} must be a directory with mode 0700, owned by you, and not a link")
 
 
 def read_private(path, what):
@@ -86,7 +86,14 @@ def write_private(path, data):
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(data.encode() if isinstance(data, str) else data)
+            stream.flush()
+            os.fsync(stream.fileno())
         os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
@@ -98,14 +105,14 @@ def load_config(root):
         document = json.loads(raw)
     except ValueError as error:
         line = getattr(error, "lineno", "?")
-        raise ParsarError(f"config.json is not valid JSON (line {line})") from None
+        raise OacError(f"config.json is not valid JSON (line {line})") from None
     return config_model.validate(document)
 
 
 def load_state(root):
     state = json.loads(read_private(root / "state.json", "state.json"))
-    if state.get("format") != 1:
-        raise ParsarError("state.json has an unknown format; use the parsar command of this installation's release")
+    if state.get("format") != 2:
+        raise OacError("state.json has an unknown format; use the oac command of this installation's release")
     return state
 
 
@@ -115,12 +122,12 @@ def save_state(root, state):
 
 @contextlib.contextmanager
 def locked(root):
-    descriptor = os.open(root / ".parsar.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    descriptor = os.open(root / ".oac.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise ParsarError("Another parsar command is running for this installation") from None
+            raise OacError("Another oac command is running for this installation") from None
         yield
     finally:
         os.close(descriptor)
@@ -168,7 +175,7 @@ def converge(root, state, desired, will_run, force=()):
     """Bring every service in will_run to the desired inputs; Core first, then the rest.
 
     Compose recreates exactly the containers whose configuration (and so label)
-    differs; native Core restarts when its running PARSAR_INPUTS differ.
+    differs; native Core restarts when its running OAC_INPUTS differ.
     """
     native = native_service.is_native(state)
     actual = observe(state)
@@ -269,13 +276,13 @@ def health(root, config, expected):
     if "core" in expected:
         base = core_base(config)
         if wait_status(base + "/healthz") is None:
-            raise ParsarError("Core did not become healthy")
+            raise OacError("Core did not become healthy")
         if wait_status(base + "/core/v1/installation", bearer(configuration.read_core_key(root)), attempts=10) is None:
-            raise ParsarError("Core did not accept the Core key at /core/v1/installation")
+            raise OacError("Core did not accept the Core key at /core/v1/installation")
     if "web" in expected:
         url = f'http://127.0.0.1:{config["ports"]["web"]}'
         if wait_status(url + "/console/auth", {"Host": urlsplit(config["public_url"] or url).netloc}) is None:
-            raise ParsarError("Web sign-in is unavailable")
+            raise OacError("Web sign-in is unavailable")
 
 
 # Files -------------------------------------------------------------------------
@@ -284,7 +291,7 @@ def check_fixed(config, state):
     """state.json records mode and native_core at installation; it wins over config.json."""
     for key in ("mode", "native_core"):
         if config.get(key, False) != state[key]:
-            raise ParsarError(f"{key} is fixed after installation ({json.dumps(state[key])}). "
+            raise OacError(f"{key} is fixed after installation ({json.dumps(state[key])}). "
                               "Install into a new directory to change it; nothing was applied.")
 
 
@@ -295,7 +302,7 @@ def check_secrets(root, config, state):
         for name, reason in reasons.items():
             data = read_private(root / "secrets" / name, "secrets/" + name)
             if configuration.sha256(data) != state["secrets_sha256"][name]:
-                raise ParsarError(f"secrets/{name} changed since installation. {reason} "
+                raise OacError(f"secrets/{name} changed since installation. {reason} "
                                   "Restore the original file; nothing was applied.")
     check_private(root / "secrets/core.key", "secrets/core.key")
     configuration.read_core_key(root)
@@ -322,7 +329,7 @@ def comparable(name, data):
 
 
 def edited_files(state, disk, rendered):
-    """Generated files that match neither a digest parsar wrote nor the current render.
+    """Generated files that match neither a digest oac wrote nor the current render.
 
     state.json keeps the last few digests written for each file, so a run
     interrupted between writing files and state.json is not taken for an edit. A
@@ -435,12 +442,12 @@ def confirm_public_url(root, config, old, port, core_answered, args, interactive
         out("Applying this change needs confirmation.")
     elif args.confirm_public_url_change is not None:
         if args.confirm_public_url_change != new:
-            raise ParsarError(f"--confirm-public-url-change must equal the new public URL {new}; nothing was applied")
+            raise OacError(f"--confirm-public-url-change must equal the new public URL {new}; nothing was applied")
     elif interactive:
         if input("Type the new public URL to continue: ").strip() != new:
-            raise ParsarError("The public URL change was not confirmed; nothing was applied")
+            raise OacError("The public URL change was not confirmed; nothing was applied")
     else:
-        raise ParsarError(f"Confirm with --confirm-public-url-change {new}; nothing was applied")
+        raise OacError(f"Confirm with --confirm-public-url-change {new}; nothing was applied")
 
 
 def paired_core(root, config):
@@ -458,10 +465,10 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
     status, installation = paired_core(root, config)
     if status == 401:
         out("Warning: Core rejects this Web host's Core key; the key is out of date. "
-            "Copy secrets/core.key from the Core host, then run parsar apply.")
+            "Copy secrets/core.key from the Core host, then run oac apply.")
     elif status == 404:
         out("Note: the paired Core runs an earlier release without /core/v1/installation. Convert or upgrade the "
-            "Core host, then run parsar apply here to record which Core Web is paired with.")
+            "Core host, then run oac apply here to record which Core Web is paired with.")
     if status != 200:
         return state.get("core_installation_id")
     recorded = state.get("core_installation_id")
@@ -470,7 +477,7 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
         if args.dry_run:
             out("Applying this change needs confirmation.")
         elif not (args.yes or (interactive and input("Type yes to pair Web with this Core: ").strip() == "yes")):
-            raise ParsarError("Pairing Web with a different Core was not confirmed; nothing was applied")
+            raise OacError("Pairing Web with a different Core was not confirmed; nothing was applied")
     return installation
 
 
@@ -484,7 +491,7 @@ def apply(root, dry_run=False, yes=False, discard_edits=False, confirm_public_ur
 
 
 def _apply(root, args, discard_edits, start, interactive, out, rollback=True, retry=None):
-    retry = retry or f"run {root / 'parsar'} apply again"
+    retry = retry or f"run {root / 'oac'} apply again"
     check_directories(root)
     config = load_config(root)
     state = load_state(root)
@@ -496,8 +503,8 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
     rendered, disk, previous = render_now(root, config, state)
     edited = edited_files(state, disk, rendered)
     if edited and not discard_edits:
-        raise ParsarError("\n".join(f"generated/{name} was edited by hand." for name in edited)
-                          + "\nPut the change in config.json and run parsar apply --discard-edits, which keeps the"
+        raise OacError("\n".join(f"generated/{name} was edited by hand." for name in edited)
+                          + "\nPut the change in config.json and run oac apply --discard-edits, which keeps the"
                           " edited copy as generated/<file>.edited-<time>. Nothing was applied.")
     changed = [name for name, text in rendered.files.items() if disk.get(name) != text.encode()]
     removed = [name for name in (state.get("generated") or {}) if name not in rendered.files and disk.get(name) is not None]
@@ -549,7 +556,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     for name in edited:
         create_private(root / "generated" / f"{name}.edited-{stamp}", disk[name])
-    # Digests first: a file written from here on is recognized as parsar's.
+    # Digests first: a file written from here on is recognized as oac's.
     save_state(root, record_digests(dict(state, core_installation_id=core_installation_id), rendered.files))
     for name in sorted(set(changed) | set(edited)):
         write_private(root / "generated" / name, rendered.files[name])
@@ -558,15 +565,15 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
     try:
         converge(root, state, rendered.services, will_run, force)
         health(root, config, will_run)
-    except (ParsarError, RuntimeError, subprocess.CalledProcessError) as error:
+    except (OacError, RuntimeError, subprocess.CalledProcessError) as error:
         line = core_error_line(root, state)
         if line:
             out(line)
         if not (rollback and in_sync):
-            raise ParsarError(f"config.json not applied: {describe(error)}. The services were not all running with "
-                              f"the previous files, so nothing was rolled back; run parsar status, fix the cause "
+            raise OacError(f"config.json not applied: {describe(error)}. The services were not all running with "
+                              f"the previous files, so nothing was rolled back; run oac status, fix the cause "
                               f"and {retry}") from None
-        # Record the restored files as parsar's own before writing them back; a restored
+        # Record the restored files as oac's own before writing them back; a restored
         # hand edit stays one.
         restored = {name: data for name, data in disk.items()
                     if data is not None and name in (state.get("generated") or {}) and name not in edited}
@@ -579,11 +586,11 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
                 write_private(path, data)
         try:
             converge(root, state, written_inputs, will_run)
-        except (ParsarError, RuntimeError, subprocess.CalledProcessError) as second:
-            raise ParsarError(f"config.json not applied: {describe(error)}. The previous generated files were restored, "
+        except (OacError, RuntimeError, subprocess.CalledProcessError) as second:
+            raise OacError(f"config.json not applied: {describe(error)}. The previous generated files were restored, "
                               f"but the services could not be started with them either ({describe(second)}); run "
-                              f"parsar status, fix the cause and {retry}") from None
-        raise ParsarError(f"config.json not applied: {describe(error)}. The previous generated files were restored "
+                              f"oac status, fix the cause and {retry}") from None
+        raise OacError(f"config.json not applied: {describe(error)}. The previous generated files were restored "
                           f"and the services converged on them; fix config.json and {retry}") from None
     out("Applied config.json.")
 
@@ -595,7 +602,7 @@ def written_view(root, state, config):
     values, _ = disk_view(read_generated(root, {"settings.json"}))
     if values is None:
         if config is None:
-            raise ParsarError("Neither config.json nor generated/settings.json can be read")
+            raise OacError("Neither config.json nor generated/settings.json can be read")
         return config
     return {"mode": state["mode"], "public_url": values.get("public_url"),
             "ports": {name: values[f"ports.{name}"] for name in ("core", "web", "database") if f"ports.{name}" in values},
@@ -606,7 +613,7 @@ def load_config_or_report(root, out):
     """config.json, or None after printing why it can't be used; the written files still can."""
     try:
         return load_config(root)
-    except (ParsarError, config_model.ConfigError) as error:
+    except (OacError, config_model.ConfigError) as error:
         out(str(error))
         return None
 
@@ -624,7 +631,7 @@ def status(root, out=print):
     for name, item in sorted(actual.items()):
         line = f'{name}: {"running" if item["running"] else "stopped"} {item["health"]}'.rstrip()
         if rendered and item["running"] and name != "migrate" and item["inputs"] != rendered.services.get(name):
-            line += " (runs with other inputs than config.json renders; run parsar apply)"
+            line += " (runs with other inputs than config.json renders; run oac apply)"
         out(line)
     required = set(config_model.SERVICES[mode])
     healthy = all(actual.get(name, {}).get("running") and actual[name]["health"] in ("", "healthy") for name in required)
@@ -635,9 +642,9 @@ def status(root, out=print):
         key = configuration.read_core_key(root)
         digests = root / "generated/core-key-digests.json"
         if digests.is_file() and configuration.sha256(key) not in json.loads(digests.read_text()):
-            out("secrets/core.key does not match generated/core-key-digests.json; run parsar apply")
+            out("secrets/core.key does not match generated/core-key-digests.json; run oac apply")
         if core_ok and http(core_base(config) + "/core/v1/installation", bearer(key))[0] == 401:
-            out("Core rejects secrets/core.key because it started with another key; run parsar apply")
+            out("Core rejects secrets/core.key because it started with another key; run oac apply")
             healthy = False
     if mode != "core-only":
         web_ok = http(f'http://127.0.0.1:{config["ports"]["web"]}/healthz')[0] == 200
@@ -656,16 +663,16 @@ def status(root, out=print):
                     f"{json.dumps(state[key])} for this installation (state.json); restore it")
     if rendered is not None:
         if any(comparable(name, disk.get(name)) != comparable(name, text) for name, text in rendered.files.items()):
-            out(f"config.json has changes that are not applied; run {root / 'parsar'} apply")
+            out(f"config.json has changes that are not applied; run {root / 'oac'} apply")
         for name in edited_files(state, disk, rendered):
-            out(f"generated/{name} was edited by hand; put the change in config.json and run parsar apply --discard-edits")
+            out(f"generated/{name} was edited by hand; put the change in config.json and run oac apply --discard-edits")
     if mode == "web-only":
         out("Reverse proxy: /v1 and /api/v1 go to Core; everything else goes to "
             f'127.0.0.1:{config["ports"]["web"]}')
         code, installation = paired_core(root, config)
         if code == 401:
             out("Paired Core: rejects this Web host's Core key; the key is out of date. Copy secrets/core.key "
-                "from the Core host, then run parsar apply.")
+                "from the Core host, then run oac apply.")
             healthy = False
         elif code == 404:
             out("Paired Core: runs an earlier release without /core/v1/installation; upgrade or convert the Core host")
@@ -684,7 +691,7 @@ def status(root, out=print):
             f'everything else goes to 127.0.0.1:{config["ports"]["web"]}')
     out("Service health does not prove model execution. This check makes no model requests.")
     if not healthy:
-        raise ParsarError("One or more installed services are unavailable")
+        raise OacError("One or more installed services are unavailable")
 
 
 def start(root, out=print):
@@ -702,7 +709,7 @@ def start(root, out=print):
         for name, image in state["images"].items():
             if run(["docker", "image", "inspect", image], check=False, stdin=subprocess.DEVNULL,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
-                raise ParsarError(f"The {name} image is missing; rerun install.sh from bundle "
+                raise OacError(f"The {name} image is missing; rerun install.sh from bundle "
                                   f'{state["source_commit"]} to reload images')
         unit = native_service.unit_name(state) if native_service.is_native(state) else None
         desired = configuration.rendered_inputs(read_generated(root, {"compose.json"} | ({unit} if unit else set())), unit)
@@ -728,17 +735,17 @@ def rotate_core_key(root, yes=False, interactive=None, out=print):
         check_directories(root)
         state = load_state(root)
         if state["mode"] == "web-only":
-            raise ParsarError("Core owns the Core key. Copy secrets/core.key from the Core host into this "
-                              "installation, then run parsar apply.")
+            raise OacError("Core owns the Core key. Copy secrets/core.key from the Core host into this "
+                              "installation, then run oac apply.")
         config = load_config(root)
         rendered, disk, _ = render_now(root, config, state)
         if any(comparable(name, disk.get(name)) != comparable(name, text) for name, text in rendered.files.items()) \
                 or edited_files(state, disk, rendered):
-            raise ParsarError("config.json has changes that are not applied, or generated files were edited; "
-                              "run parsar apply first")
+            raise OacError("config.json has changes that are not applied, or generated files were edited; "
+                              "run oac apply first")
         out("Rotating the Core key ends every Web sign-in session, and the current key stops working at once.")
         if not (yes or (interactive and input("Type yes to rotate the Core key: ").strip() == "yes")):
-            raise ParsarError("Core key rotation was not confirmed; nothing was changed")
+            raise OacError("Core key rotation was not confirmed; nothing was changed")
         old_key = configuration.read_core_key(root)
         replacement = root / "secrets/core.key.new"
         replacement.unlink(missing_ok=True)
@@ -749,23 +756,25 @@ def rotate_core_key(root, yes=False, interactive=None, out=print):
             if "web" in running:
                 compose(root, "stop", "web")  # Web holds the old key; its sessions end anyway.
             os.replace(replacement, root / "secrets/core.key")
-            _apply(root, args, False, False, False, out, rollback=False, retry="run parsar apply to finish the rotation")
-        except (ParsarError, RuntimeError, subprocess.CalledProcessError, KeyboardInterrupt) as error:
+            _apply(root, args, False, False, False, out, rollback=False, retry="run oac apply to finish the rotation")
+        except (OacError, RuntimeError, subprocess.CalledProcessError, KeyboardInterrupt) as error:
             # Whatever key secrets/core.key holds now, the next apply converges on it.
-            raise ParsarError(f"Core key rotation did not finish: {describe(error)}. secrets/core.key holds the key to "
-                              "use; run parsar apply to finish") from None
+            raise OacError(f"Core key rotation did not finish: {describe(error)}. secrets/core.key holds the key to "
+                              "use; run oac apply to finish") from None
     if "core" in running:
         new = bearer(configuration.read_core_key(root))
         url = core_base(config) + "/core/v1/installation"
         if http(url, new)[0] != 200 or http(url, bearer(old_key))[0] != 401:
-            raise ParsarError("Core did not confirm the new key and reject the old one; run parsar status")
+            raise OacError("Core did not confirm the new key and reject the old one; run oac status")
     out(f"New Core key: {root / 'secrets/core.key'}. Sign in to Web again and update scripts that use the key.")
-    out("A separate Web-only installation keeps its own copy: copy secrets/core.key to that host and run its parsar apply.")
+    out("A separate Web-only installation keeps its own copy: copy secrets/core.key to that host and run its oac apply.")
 
 
 def main(argv=None, root=None, out=print):
     root = Path(root) if root else Path(sys.argv[0]).resolve().parent
-    parser = argparse.ArgumentParser(prog=str(root / "parsar"), description=__doc__.split("\n\n")[0])
+    if Path(sys.argv[0]).name == "parsar":
+        raise OacError(f"parsar was renamed to oac. Run {root / 'oac'} <command>.")
+    parser = argparse.ArgumentParser(prog=str(root / "oac"), description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status", help="Show service health, addresses and configuration drift")
     commands.add_parser("start", help="Start the installed services with the files last written")
@@ -781,7 +790,10 @@ def main(argv=None, root=None, out=print):
     rotate.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
     args = parser.parse_args(argv)
     if not (root / "state.json").exists():
-        raise ParsarError(f"{root} is not an installation directory; run the parsar command inside it")
+        raise OacError(f"{root} is not an installation directory; run the oac command inside it")
+    state = load_state(root)
+    if state.get("renamed_from") and not state["renamed_from"].get("finished"):
+        raise OacError(f"Conversion is unfinished; rerun ./install.sh --convert --install-dir {root}")
     if args.command == "apply":
         apply(root, dry_run=args.dry_run, yes=args.yes, discard_edits=args.discard_edits,
               confirm_public_url_change=args.confirm_public_url_change, out=out)
@@ -794,12 +806,12 @@ def main(argv=None, root=None, out=print):
 def entry():
     try:
         main()
-    except (ParsarError, config_model.ConfigError, RuntimeError) as error:
+    except (OacError, config_model.ConfigError, RuntimeError) as error:
         print(str(error), file=sys.stderr)
         sys.exit(1)
     except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
         # Errors never include generated configuration or external process output.
-        print("parsar failed; run parsar status and inspect the installation files", file=sys.stderr)
+        print("oac failed; run oac status and inspect the installation files", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         sys.exit(130)

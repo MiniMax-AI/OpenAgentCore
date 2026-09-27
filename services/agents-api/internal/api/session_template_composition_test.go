@@ -169,7 +169,7 @@ func TestTemplateCompositionRevalidatesCombinedSetupLimit(t *testing.T) {
 
 func TestTemplateInlineCompositionRetainsFieldValidation(t *testing.T) {
 	for _, fields := range []string{
-		`,"env":{"PATH":"private-canary"}`, `,"env":{"PARSAR_HOME":"private-canary"}`, `,"env":{"KEY":null}`,
+		`,"env":{"PATH":"private-canary"}`, `,"env":{"OAC_RUNTIME_HOME":"private-canary"}`, `,"env":{"KEY":null}`,
 		`,"setup_commands":[{"command":"true","cwd":"relative"}]`, `,"packages":{"python":[null]}`, `,"packages":{"npm":["--unsafe"]}`,
 		`,"files":[{"type":"inline","path":"/workspace/../private","data":""}]`,
 		`,"files":[{"type":"inline","path":"/workspace/a","data":""},{"type":"inline","path":"/workspace/a","data":""}]`,

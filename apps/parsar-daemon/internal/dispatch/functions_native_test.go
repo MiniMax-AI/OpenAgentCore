@@ -40,7 +40,7 @@ func TestNativeFunctionBridge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PARSAR_HOME", home)
+	t.Setenv("OAC_RUNTIME_HOME", home)
 	var count atomic.Int32
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any

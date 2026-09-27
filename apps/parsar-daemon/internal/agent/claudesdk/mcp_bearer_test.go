@@ -13,7 +13,7 @@ import (
 
 func TestMCPBearerUsesFreshOwnedEnvironmentReferences(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 	tokens := []string{"first.synthetic+/==", "second-synthetic_token~"}
 	tools := []string{"echo.v1"}
@@ -35,7 +35,7 @@ func TestMCPBearerUsesFreshOwnedEnvironmentReferences(t *testing.T) {
 		}
 		for i, token := range tokens {
 			reference := (*start.MCPHTTPServers)[i].BearerTokenEnvVar
-			if !strings.HasPrefix(reference, "PARSAR_MCP_BEARER_") || seen[reference] || !slices.Contains(env, reference+"="+token) {
+			if !strings.HasPrefix(reference, "OAC_RUNTIME_MCP_BEARER_") || seen[reference] || !slices.Contains(env, reference+"="+token) {
 				t.Fatal("missing exact isolated credential or reused environment reference")
 			}
 			seen[reference] = true
@@ -63,7 +63,7 @@ func TestMCPBearerUsesFreshOwnedEnvironmentReferences(t *testing.T) {
 func TestMCPBearerRejectsInvalidCredentialBeforeStateCreation(t *testing.T) {
 	for _, token := range []string{"", "=", " space", "space ", "has space", "line\r\ninjection", "nul\x00byte", "opaque中文", "middle=padding", "punctuation:invalid"} {
 		root := t.TempDir()
-		t.Setenv("PARSAR_HOME", root)
+		t.Setenv("OAC_RUNTIME_HOME", root)
 		config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 		servers := []proto.MCPHTTPServer{{ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", BearerToken: &token}}
 		req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "fixture"}}

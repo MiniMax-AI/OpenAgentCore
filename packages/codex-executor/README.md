@@ -24,7 +24,7 @@ supplies the selected harness and its native isolation independently.
 
 ## Scoped directory helper
 
-The build emits `agents-api-codex-directory` for the current directory-listing
+The build emits `oac-codex-directory` for the current directory-listing
 adapter gap. Install it at an operator-controlled absolute path on the executor,
 outside the writable workspace. Its three argv values are the authorized absolute
 workspace root, a relative directory (empty for the root), and a limit of 1–4096.
@@ -53,7 +53,7 @@ checks authorization and Files behavior.
 
 ## Scoped output exporter
 
-`agents-api-workspace-export` takes one authorized absolute workspace root and
+`oac-workspace-export` takes one authorized absolute workspace root and
 streams regular files beneath its `outputs` directory as a standard tar archive
 on stdout. It reuses the directory helper's descriptor-relative path protection;
 it does not invoke a shell, model or provider command. The caller must supply the
@@ -76,7 +76,7 @@ the helper alone does not enable public Artifacts.
 
 ## Scoped file installer
 
-The optional `agents-api-codex-write` helper addresses two pinned native write
+The optional `oac-codex-write` helper addresses two pinned native write
 limitations: hard-link targets are modified in place, and base64 encoding a
 50 MiB file exceeds the native 64 MiB message bound. Install this helper outside
 the writable workspace and invoke it locally through the existing Runtime installer, with restricted network
@@ -145,7 +145,7 @@ native exit/output close; exit zero alone is insufficient. Input errors preserve
 the old destination provided staging remains protected; independent workspace
 writers can still change that destination themselves. Temporary-file cleanup
 is best effort: permission or I/O errors, as well as forced termination, can leave
-a `.parsar-upload-*` file in the private staging directory. Never interpret it as a
+a `.oac-upload-*` file in the private staging directory. Never interpret it as a
 completed upload.
 A missing receipt remains unknown and must not trigger automatic replay. This
 helper does not fence a replacement owner after remote transport or service loss;

@@ -43,7 +43,7 @@ build-daemon:
 	@set -e; output="$${OAC_DEV_HOME:-$$HOME/.oac}/build/daemon"; \
 	[[ "$$output" == /* ]] || { echo 'Daemon output directory must be absolute' >&2; exit 1; }; \
 	mkdir -p "$$output"; \
-	CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$$output/parsar-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+	CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$$output/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
 
 build-agents-api:
 	./scripts/build-agents-api.sh
@@ -110,7 +110,7 @@ build-microsandbox-provider:
 	[[ "$$output" == /* ]] || { echo 'Provider output directory must be absolute' >&2; exit 1; }; \
 	mkdir -p "$$output"; \
 	cd services/agents-api/tools/microsandbox-provider; \
-	GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath -o "$$output/agents-api-microsandbox-provider" .
+	GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath -o "$$output/oac-microsandbox-provider" .
 
 check-microsandbox-provider:
 	go test -mod=readonly ./services/agents-api/internal/sandbox/microsandbox/... -count=1

@@ -29,13 +29,13 @@ func TestNewSessionMaterialisesPiProviderModelsJSON(t *testing.T) {
 			"pi_provider": map[string]any{
 				"base_url":    "https://platform-api.example.com",
 				"api":         "anthropic-messages",
-				"api_key_env": "PARSAR_PI_API_KEY",
+				"api_key_env": "OAC_RUNTIME_PI_API_KEY",
 				"model":       "claude-opus-4-6-thinking-max",
 				"headers":     map[string]any{"X-Sub-Module": "claude-code-internal"},
 			},
 			"env": map[string]any{
-				"PI_TESTHELPER_ROLE": "json-success",
-				"PARSAR_PI_API_KEY":  "sk-proxy",
+				"PI_TESTHELPER_ROLE":     "json-success",
+				"OAC_RUNTIME_PI_API_KEY": "sk-proxy",
 			},
 		},
 	}
@@ -61,13 +61,13 @@ func TestNewSessionMaterialisesPiProviderModelsJSON(t *testing.T) {
 		}
 	}
 
-	agentDir := filepath.Join(home, ".parsar", "runtime", "pi", "state", "conv-prov", "agent-prov", "pi", "agent")
+	agentDir := filepath.Join(home, ".oac", "runtime", "pi", "state", "conv-prov", "agent-prov", "pi", "agent")
 	p := readModelsJSON(t, agentDir).Providers[piManagedProviderSlug]
 	if p.BaseURL != "https://platform-api.example.com" {
 		t.Fatalf("models.json baseUrl wrong: %+v", p)
 	}
-	if p.APIKey != "$PARSAR_PI_API_KEY" {
-		t.Fatalf("models.json apiKey = %q, want $PARSAR_PI_API_KEY", p.APIKey)
+	if p.APIKey != "$OAC_RUNTIME_PI_API_KEY" {
+		t.Fatalf("models.json apiKey = %q, want $OAC_RUNTIME_PI_API_KEY", p.APIKey)
 	}
 	if _, err := os.Stat(filepath.Join(agentDir, "sessions")); err != nil {
 		t.Fatalf("session dir not created: %v", err)

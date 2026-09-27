@@ -15,7 +15,7 @@ func TestThreadRequestsApplyDeploymentPolicy(t *testing.T) {
 		t.Run("profile="+profile, func(t *testing.T) {
 			for _, method := range []string{"thread/start", "thread/resume"} {
 				t.Run(method, func(t *testing.T) {
-					t.Setenv("PARSAR_HOME", t.TempDir())
+					t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 					plan, _, err := prepareSessionPlan(context.Background(), proto.PromptRequestPayload{AgentStateKey: "conv/agent/codex", DisableSubagents: true, AgentOptions: map[string]any{"permissions": ":danger-full-access"}}, sessionConfig{permissionProfile: profile})
 					if err != nil {
 						t.Fatal(err)

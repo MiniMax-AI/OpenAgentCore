@@ -20,7 +20,7 @@ func (s *Session) handle(frame rpcFrame) error {
 		if frame.Method == "elicitation/create" && s.active {
 			return s.askQuestion(frame)
 		}
-		return s.write(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32601, Message: "ACP method not supported by Parsar"}})
+		return s.write(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32601, Message: "ACP method not supported by OpenAgentCore"}})
 	}
 	if frame.Method != "session/update" || !s.active {
 		return nil

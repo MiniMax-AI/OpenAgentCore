@@ -71,7 +71,7 @@ Agent API, the Core API or node enrollment.
    × keeps the credential on the page until you choose **Done**.
 
 The installer downloads the Runtime from the console and checks it, starts a container
-named `parsar-selfhost-<32 hex digits>`, and waits until Core confirms that the
+named `oac-selfhost-<32 hex digits>`, and waits until Core confirms that the
 Environment is connected. The Session then runs its Turns there. Rerunning the same
 command resumes the same installation. It refuses, with "This installation belongs to
 another Environment or distribution", once Core runs another release or its public URL
@@ -85,7 +85,7 @@ For automation without a terminal, choose **Download credential file**, which sa
 (`chmod 600`), and add `--credential-file /absolute/path/to/that-file.json` to the
 installer line. The path must not go through a symbolic link.
 
-The host keeps its state in `~/.parsar/self-hosted/<environment-id>/`
+The host keeps its state in `~/.oac/self-hosted/<environment-id>/`
 (`--install-dir` chooses another absolute directory). Keep it with the container's
 volumes: they hold the credential, workspace and native history. The Runtime's log is
 `docker logs <container>`. A connected Environment proves the connection, not that the
@@ -131,7 +131,7 @@ the credential and keep it:
 ```sh
 key_id=$(python3 -c 'import uuid; print(uuid.uuid4())'); echo "credential ID: $key_id"
 (umask 077; curl -fsS -X POST \
-  -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.parsar/core/secrets/core.key")") \
+  -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.oac/core/secrets/core.key")") \
   -H 'Content-Type: application/json' -d "{\"key_id\":\"$key_id\"}" \
   "http://127.0.0.1:8091/core/v1/projects/$PROJECT_ID/environments/$ENVIRONMENT_ID/executor-credentials" \
   -o executor-key.json)
@@ -142,3 +142,23 @@ Rotate with `{"key_id":"…","rotate":true}` on the same route; revoke with
 credentials with `GET` before trying again. The
 [credential contract](../../contracts/agents-api/environment-executor-credentials.md)
 has every rule and error.
+
+
+## Executors installed before the rename
+
+An existing `parsar-selfhost-*` container keeps its own image, daemon and
+`~/.parsar/self-hosted/<environment-id>` directory. It can keep serving its
+Environment after Core is renamed; Core does not upgrade or manage this container.
+
+The new installer refuses when that exact Environment still has a directory under
+`~/.parsar/self-hosted`, including when a different `--install-dir` is supplied.
+Executors for other Environments are unaffected. To replace it, inspect the old
+installation's `started.json` to identify its container, stop and remove that
+exact container, and preserve any history you need before removing the old
+Environment's installation directory. Then rerun the new verified installer. It
+starts `oac-selfhost` with state under `~/.oac/self-hosted/<environment-id>`;
+it does not reuse the old executor's volumes or native history.
+
+Credential replacement for executors created by the new installer still updates
+and restarts the same owned container. The legacy refusal does not authorize
+adopting an old container to replace its credential.

@@ -46,7 +46,7 @@ func BuildArgs(runID, prompt, workDir string, opts map[string]any, resumeSession
 		args = append(args, "--provider", provider)
 	}
 	// A managed api_key is deliberately NOT forwarded as --api-key: secrets
-	// ride the environment (PARSAR_PI_API_KEY, referenced from the
+	// ride the environment (OAC_RUNTIME_PI_API_KEY, referenced from the
 	// materialised models.json) so they never land on the pi child's argv,
 	// where `ps` would leak them. See server injectPiManagedModel.
 

@@ -102,10 +102,10 @@ func runRuntimeSetup(ctx context.Context, provider sandbox.Provider, reference s
 		operation.Name, operation.Files = operation.Skill.Metadata.Name, files
 	}
 	var payload any = operation
-	args := []string{"/usr/bin/python3", "-I", "-S", "/usr/local/bin/agents-api-runtime-initialize"}
+	args := []string{"/usr/bin/python3", "-I", "-S", "/usr/local/bin/oac-runtime-initialize"}
 	if operation.Capabilities != nil {
 		payload = operation.Capabilities
-		args = []string{"/usr/local/bin/parsar-daemon", "runtime-capabilities"}
+		args = []string{"/usr/local/bin/oac-daemon", "runtime-capabilities"}
 	}
 	input, err := json.Marshal(payload)
 	if err != nil {

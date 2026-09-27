@@ -4,7 +4,7 @@ Every setting of a Core installation has exactly one home. There are two kinds:
 
 | Kind | Examples | Home | Change it with | Takes effect |
 | --- | --- | --- | --- | --- |
-| [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, database pool, Runtime history export | `config.json` in the installation directory (default `~/.parsar/core`) | Edit the file, then run `parsar apply` | `parsar apply` restarts the services that read the changed settings |
+| [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, database pool, Runtime history export | `config.json` in the installation directory (default `~/.oac/core`) | Edit the file, then run `oac apply` | `oac apply` restarts the services that read the changed settings |
 | [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | At once, without a restart |
 
 Web's **System** page shows both: the installation's addresses, the process settings
@@ -22,11 +22,11 @@ such as `--public-url`, `--core-port` and `--web-port` only seed it. To change a
 setting, edit the file and apply it:
 
 ```sh
-~/.parsar/core/parsar apply --dry-run   # show the changed settings, files and restarts
-~/.parsar/core/parsar apply
+~/.oac/core/oac apply --dry-run   # show the changed settings, files and restarts
+~/.oac/core/oac apply
 ```
 
-### How parsar apply works
+### How oac apply works
 
 1. It validates `config.json` and changes nothing if a value is invalid. `mode` and
    `native_core` are fixed after installation; to change them, install into a new
@@ -35,21 +35,21 @@ setting, edit the file and apply it:
    `core.env`, `core-key-digests.json`, `settings.json` and, when used,
    `runtime-history.json` and the native Core unit. Don't edit them. A generated file
    edited by hand stops `apply` until you move the change into `config.json` and run
-   `parsar apply --discard-edits`, which keeps the edited copy as
+   `oac apply --discard-edits`, which keeps the edited copy as
    `generated/<file>.edited-<time>`.
 3. It compares what it wrote with what actually runs. Each container carries a digest
-   of its inputs (the `io.parsar.inputs` label; native Core carries `PARSAR_INPUTS`),
+   of its inputs (the `io.oac.inputs` label; native Core carries `OAC_INPUTS`),
    and `apply` recreates or restarts exactly the services whose inputs differ: Core
    first, then Web. The **Restarts** column below says which services a setting
    affects. Restarting Web signs everyone out of the console.
-4. While any service runs, `apply` also starts the stopped ones. After `parsar stop`,
+4. While any service runs, `apply` also starts the stopped ones. After `oac stop`,
    it only writes the files and the installation stays stopped.
 5. If Core refuses a value at startup, `apply` prints Core's startup error. If every
    service was running with the previous files, it restores them and starts the
    services again; otherwise it reports the failure, and the next `apply` finishes
    the work.
 
-`parsar status` reports changes to `config.json` that are not applied yet and
+`oac status` reports changes to `config.json` that are not applied yet and
 generated files edited by hand.
 
 ### Changing the public URL
@@ -59,7 +59,7 @@ executors use; Core derives the daemon WebSocket URL, the self-hosted `remote_ur
 each sandbox's connection address from it. With `null`, Core uses
 `http://127.0.0.1:<ports.core>` and only this host can reach it.
 
-You can set or change it at any time with `parsar apply`. When nodes, hosted
+You can set or change it at any time with `oac apply`. When nodes, hosted
 sandboxes or self-hosted executors are bound to the current address, `apply` lists
 them and asks you to type the new URL (`--confirm-public-url-change URL` when not
 interactive). Afterwards, nodes on the old address get no new sandboxes: remove them
@@ -73,7 +73,7 @@ proxy first.
 ### Settings
 
 `core.runtime_history.headers` may hold export credentials. They stay in the
-`0600` `config.json` and the generated file Core reads, and never appear in `parsar`
+`0600` `config.json` and the generated file Core reads, and never appear in `oac`
 output or in Core's settings snapshot. Model providers are not process settings; see
 [Default models](#default-models).
 
@@ -84,32 +84,32 @@ output or in Core's settings snapshot. Model providers are not process settings;
 | `format` | `1` | none | all | fixed | none | Configuration format. Only an upgrade changes it. |
 | `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. Install flag: `--core-only` or `--web-only`. |
 | `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. Install flag: `--native-core`. |
-| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `parsar apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1. Install flag: `--public-url`. |
-| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `parsar apply` | core (core, web with native Core) | Loopback port of the Core API. With native Core, Web follows it. Install flag: `--core-port`. |
-| `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `parsar apply` | web | Loopback port of Web. Install flag: `--web-port`. |
-| `ports.database` | integer 1024–65535 | none | `all`, `core-only` | `parsar apply` | database, core | Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port. |
-| `web.core_url` | string (canonical origin; HTTP only on loopback) | none | `web-only` | `parsar apply` | web | Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host. Install flag: `--core-url`. |
-| `log.level` | `"debug"` \| `"info"` \| `"warn"` \| `"error"` | `"info"` | all | `parsar apply` | core, web | Minimum log level of Core and Web. |
-| `log.format` | `"auto"` \| `"text"` \| `"json"` | `"auto"` | all | `parsar apply` | core, web | Log format. auto writes text to a terminal and JSON otherwise. |
-| `log.add_source` | boolean | `false` | all | `parsar apply` | core, web | Add the source file and line to each log record. |
-| `core.execution_concurrency` | integer 1–1024 | `4` | `all`, `core-only` | `parsar apply` | core | Concurrent execution work units in Core. Unrelated to node sandbox capacity. |
-| `core.harnesses` | array of `"claude_sdk"` \| `"codex"` \| `"mcode"` | `["claude_sdk", "codex", "mcode"]` | `all`, `core-only` | `parsar apply` | core | Harnesses that Sessions may select. |
-| `core.default_harness` | `"claude_sdk"` \| `"codex"` \| `"mcode"` | `"codex"` | `all`, `core-only` | `parsar apply` | core | Harness used when a Session names none. It must be listed in core.harnesses. |
-| `core.write_audit_retention` | string (Go duration, at least `1h`) | `"2160h"` | `all`, `core-only` | `parsar apply` | core | How long non-creation write history is kept, as a Go duration of at least 1h. |
-| `core.oauth_trusted_origins` | array of string (canonical HTTPS origin) | `[]` | `all`, `core-only` | `parsar apply` | core | Extra HTTPS origins trusted as private OAuth issuers. |
-| `core.database_pool.max_conns` | integer or null ≥ 1 | `null` | `all`, `core-only` | `parsar apply` | core | Maximum database connections. null keeps the driver default, max(4, CPU count). |
-| `core.database_pool.min_conns` | integer or null ≥ 0 | `null` | `all`, `core-only` | `parsar apply` | core | Minimum idle database connections. null keeps the driver default, 0. |
-| `core.database_pool.max_conn_lifetime` | string or null (Go duration) | `null` | `all`, `core-only` | `parsar apply` | core | Go duration. null keeps the driver default, 1h. |
-| `core.database_pool.max_conn_idle_time` | string or null (Go duration) | `null` | `all`, `core-only` | `parsar apply` | core | Go duration. null keeps the driver default, 30m. |
-| `core.database_pool.health_check_period` | string or null (Go duration) | `null` | `all`, `core-only` | `parsar apply` | core | Go duration. null keeps the driver default, 1m. |
-| `core.runtime_history` | object or null | `null` | `all`, `core-only` | `parsar apply` | core | Runtime history collection and OTLP export. null keeps local collection with Core's defaults. Core checks the values at startup. |
-| `core.runtime_history.transport` | string | none | `all`, `core-only` | `parsar apply` | core | OTLP export transport. |
-| `core.runtime_history.endpoint` | string | none | `all`, `core-only` | `parsar apply` | core | OTLP collector endpoint. Omit it to keep history local. |
-| `core.runtime_history.insecure` | boolean | none | `all`, `core-only` | `parsar apply` | core | Export without TLS. |
-| `core.runtime_history.headers` | object of string values | none | `all`, `core-only` | `parsar apply` | core | Headers sent with each export, such as credentials. Never shown by parsar or Core. Sensitive. |
-| `core.runtime_history.queue_capacity` | integer | none | `all`, `core-only` | `parsar apply` | core | Export queue capacity. |
-| `core.runtime_history.timeout_seconds` | integer | none | `all`, `core-only` | `parsar apply` | core | Export and query timeout in seconds. |
-| `core.runtime_history.sample_interval_seconds` | integer | none | `all`, `core-only` | `parsar apply` | core | Periodic sampling interval in seconds. |
+| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1. Install flag: `--public-url`. |
+| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `oac apply` | core (core, web with native Core) | Loopback port of the Core API. With native Core, Web follows it. Install flag: `--core-port`. |
+| `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `oac apply` | web | Loopback port of Web. Install flag: `--web-port`. |
+| `ports.database` | integer 1024–65535 | none | `all`, `core-only` | `oac apply` | database, core | Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port. |
+| `web.core_url` | string (canonical origin; HTTP only on loopback) | none | `web-only` | `oac apply` | web | Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host. Install flag: `--core-url`. |
+| `log.level` | `"debug"` \| `"info"` \| `"warn"` \| `"error"` | `"info"` | all | `oac apply` | core, web | Minimum log level of Core and Web. |
+| `log.format` | `"auto"` \| `"text"` \| `"json"` | `"auto"` | all | `oac apply` | core, web | Log format. auto writes text to a terminal and JSON otherwise. |
+| `log.add_source` | boolean | `false` | all | `oac apply` | core, web | Add the source file and line to each log record. |
+| `core.execution_concurrency` | integer 1–1024 | `4` | `all`, `core-only` | `oac apply` | core | Concurrent execution work units in Core. Unrelated to node sandbox capacity. |
+| `core.harnesses` | array of `"claude_sdk"` \| `"codex"` \| `"mcode"` | `["claude_sdk", "codex", "mcode"]` | `all`, `core-only` | `oac apply` | core | Harnesses that Sessions may select. |
+| `core.default_harness` | `"claude_sdk"` \| `"codex"` \| `"mcode"` | `"codex"` | `all`, `core-only` | `oac apply` | core | Harness used when a Session names none. It must be listed in core.harnesses. |
+| `core.write_audit_retention` | string (Go duration, at least `1h`) | `"2160h"` | `all`, `core-only` | `oac apply` | core | How long non-creation write history is kept, as a Go duration of at least 1h. |
+| `core.oauth_trusted_origins` | array of string (canonical HTTPS origin) | `[]` | `all`, `core-only` | `oac apply` | core | Extra HTTPS origins trusted as private OAuth issuers. |
+| `core.database_pool.max_conns` | integer or null ≥ 1 | `null` | `all`, `core-only` | `oac apply` | core | Maximum database connections. null keeps the driver default, max(4, CPU count). |
+| `core.database_pool.min_conns` | integer or null ≥ 0 | `null` | `all`, `core-only` | `oac apply` | core | Minimum idle database connections. null keeps the driver default, 0. |
+| `core.database_pool.max_conn_lifetime` | string or null (Go duration) | `null` | `all`, `core-only` | `oac apply` | core | Go duration. null keeps the driver default, 1h. |
+| `core.database_pool.max_conn_idle_time` | string or null (Go duration) | `null` | `all`, `core-only` | `oac apply` | core | Go duration. null keeps the driver default, 30m. |
+| `core.database_pool.health_check_period` | string or null (Go duration) | `null` | `all`, `core-only` | `oac apply` | core | Go duration. null keeps the driver default, 1m. |
+| `core.runtime_history` | object or null | `null` | `all`, `core-only` | `oac apply` | core | Runtime history collection and OTLP export. null keeps local collection with Core's defaults. Core checks the values at startup. |
+| `core.runtime_history.transport` | string | none | `all`, `core-only` | `oac apply` | core | OTLP export transport. |
+| `core.runtime_history.endpoint` | string | none | `all`, `core-only` | `oac apply` | core | OTLP collector endpoint. Omit it to keep history local. |
+| `core.runtime_history.insecure` | boolean | none | `all`, `core-only` | `oac apply` | core | Export without TLS. |
+| `core.runtime_history.headers` | object of string values | none | `all`, `core-only` | `oac apply` | core | Headers sent with each export, such as credentials. Never shown by oac or Core. Sensitive. |
+| `core.runtime_history.queue_capacity` | integer | none | `all`, `core-only` | `oac apply` | core | Export queue capacity. |
+| `core.runtime_history.timeout_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | Export and query timeout in seconds. |
+| `core.runtime_history.sample_interval_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | Periodic sampling interval in seconds. |
 <!-- END config-reference -->
 
 The schema is
@@ -199,9 +199,9 @@ The operator file `AGENTS_API_EXECUTION_OPTIONS_FILE` is retired; see
 
 | File | Content | Changed by |
 | --- | --- | --- |
-| `secrets/core.key` | The [Core key](getting-started/operations.md#core-key) | `parsar rotate-core-key` |
-| `secrets/credential.key` | Encryption key for what Core stores sealed in the database: model providers, the E2B key, Vault credentials, Skills, initial files and environment setup | Nothing. Keep it with the database; `parsar apply` refuses a changed file |
-| `secrets/database.password` | PostgreSQL password | Nothing. PostgreSQL reads it only when the database is created; `parsar apply` refuses a changed file |
+| `secrets/core.key` | The [Core key](getting-started/operations.md#core-key) | `oac rotate-core-key` |
+| `secrets/credential.key` | Encryption key for what Core stores sealed in the database: model providers, the E2B key, Vault credentials, Skills, initial files and environment setup | Nothing. Keep it with the database; `oac apply` refuses a changed file |
+| `secrets/database.password` | PostgreSQL password | Nothing. PostgreSQL reads it only when the database is created; `oac apply` refuses a changed file |
 | `state.json` | Installation ID, Compose project, image IDs, source commit and the digests of generated files | The tools only |
 
 A Web-only installation has only `secrets/core.key`, a copy of its Core's key.

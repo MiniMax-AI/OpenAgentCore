@@ -6,8 +6,8 @@ import sys
 
 
 MCP_ENTRY = ['/usr/bin/python3', '-I', '-S',
-             '/usr/local/bin/agents-api-runtime-initialize', 'stdio']
-TOOL_ROOT = '/usr/local/bin/agents-api-tool-root'
+             '/usr/local/bin/oac-runtime-initialize', 'stdio']
+TOOL_ROOT = '/usr/local/bin/oac-tool-root'
 
 
 def invocation(command):

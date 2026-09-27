@@ -5,7 +5,7 @@ the `parsar` command, use the
 [Core distribution and its installer](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/docs/getting-started/install.md).
 
 This Linux amd64 package contains the independent API, embedded migrator, operator
-commands and `parsar-sandbox-node`. It needs your own PostgreSQL and separately
+commands and `oac-node`. It needs your own PostgreSQL and separately
 installed execution software, and it has no Web console.
 It does not need a source checkout, Go, Node, the Parsar product or its database.
 The [coverage ledger](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/README.md)
@@ -123,7 +123,7 @@ administrator audit entry, so use the Core-key route whenever Core is running.
 
 Deploy the qualified V1 Runtime containing our daemon, selected native harness,
 local tools and workspace. Transfer the host file `$core_config_dir/executor-key.json`
-into the Runtime as `$PARSAR_HOME/executor-key.json`; the host path is not available
+into the Runtime as `$OAC_RUNTIME_HOME/executor-key.json`; the host path is not available
 inside the Runtime. Keep only this scoped key in the protected daemon
 state directory as an owned mode-0600 file. Keep API caller and database credentials
 outside Runtime. Configure the model through the existing private adapter options;
@@ -132,9 +132,9 @@ native tools must not inherit model credentials or read native history.
 Inside that Runtime, use the exact values returned by Session creation:
 
 ```sh
-parsar-daemon connect --remote "$REMOTE_URL" \
+oac-daemon connect --remote "$REMOTE_URL" \
   --environment-id "$ENVIRONMENT_ID" \
-  --credential-file "$PARSAR_HOME/parsar-daemon/executor-key.json"
+  --credential-file "$OAC_RUNTIME_HOME/daemon/executor-key.json"
 ```
 
 The daemon fills the executor role. No separate Codex executor or service-side
@@ -168,7 +168,7 @@ and it does not switch Parsar's product execution path.
 
 ## Sandbox nodes
 
-The release includes `parsar-sandbox-node` for local and remote hosts. See the
+The release includes `oac-node` for local and remote hosts. See the
 [nodes and sandbox backends reference](HOSTED-SANDBOX-MANAGER.md) for provider
 selection, manual registration, administrator credentials, fixed Session placement
 and maintenance.

@@ -66,7 +66,7 @@ def validate(data, args):
         runtime = spec["runtime"]
         patterns = {"source_commit": r"[0-9a-f]{40}", "image_id": r"sha256:[0-9a-f]{64}",
                     "image_manifest_digest": r"sha256:[0-9a-f]{64}",
-                    "microsandbox_ref": r"parsar-core-runtime@sha256:[0-9a-f]{64}",
+                    "microsandbox_ref": r"oac-runtime@sha256:[0-9a-f]{64}",
                     "runtime_sha256": r"[0-9a-f]{64}", "firmware_sha256": r"[0-9a-f]{64}"}
         if set(runtime) != set(patterns) or any(not isinstance(runtime[key], str) or not re.fullmatch(pattern, runtime[key])
                                                for key, pattern in patterns.items()):
@@ -87,7 +87,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False):
             if (str(uuid.UUID(node_id)) != node_id or identity["installation_id"] != args.installation_id
                     or retained["core_url"] != args.core_url or not re.fullmatch(r"[0-9a-f]{64}", retained["credential"])):
                 raise ValueError()
-            headers = {"Authorization": "Bearer " + retained["credential"], "X-Parsar-Node-ID": node_id}
+            headers = {"Authorization": "Bearer " + retained["credential"], "X-OAC-Node-ID": node_id}
         except (KeyError, ValueError, TypeError, AttributeError):
             raise SpecificationError("Retained node identity differs or is invalid; preserve its state") from None
     elif not token:

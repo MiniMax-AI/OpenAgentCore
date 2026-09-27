@@ -20,7 +20,7 @@ func TestOfflineArtifactsAreManifestAllowlisted(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(payload, "artifacts"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	manifest := map[string]any{"artifacts": map[string]any{"native/bin/parsar-sandbox-node": map[string]string{"filename": "matched-node"}, "private/key": map[string]string{"filename": "private-key"}}}
+	manifest := map[string]any{"artifacts": map[string]any{"native/bin/oac-node": map[string]string{"filename": "matched-node"}, "private/key": map[string]string{"filename": "private-key"}}}
 	raw, _ := json.Marshal(manifest)
 	if err := os.WriteFile(filepath.Join(payload, "manifest.json"), raw, 0600); err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 	write(filepath.Join(payload, "node-install.pyz"), "bootstrap")
 	write(filepath.Join(payload, "self-hosted-install.pyz"), "executor bootstrap")
 	artifacts := map[string]any{}
-	for logical := range map[string]bool{"native/bin/parsar-sandbox-node": true, "images/runtime.tar.gz": true, "native/microsandbox/msb": true} {
+	for logical := range map[string]bool{"native/bin/oac-node": true, "images/runtime.tar.gz": true, "native/microsandbox/msb": true} {
 		name := strings.ReplaceAll(logical, "/", "-")
 		artifacts[logical] = map[string]any{"filename": name, "size": len("runtime-bytes")}
 		write(filepath.Join(payload, "artifacts", name), "runtime-bytes")

@@ -1,4 +1,4 @@
-// Package proto defines the JSON wire format spoken by parsar-daemon over
+// Package proto defines the JSON wire format spoken by oac-daemon over
 // the reverse WebSocket tunnel to the Parsar server. Both ends import
 // this package; adding an event means editing one file here and both
 // sides at once.

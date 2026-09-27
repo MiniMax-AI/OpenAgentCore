@@ -6,7 +6,7 @@
 // control: e2b's base image, for instance, ships its own
 // /usr/local/bin entries that can shadow the ones we install, and a
 // bare-name lookup then resolves to the wrong (or no) binary. The
-// symptom is the worst kind — `parsar-daemon connect` reports
+// symptom is the worst kind — `oac-daemon connect` reports
 // "no supported agent CLI available" and the device never dials in,
 // with no indication of which lookup failed.
 //
@@ -26,11 +26,11 @@ import (
 // Env var names for the per-engine executable overrides. Empty or unset
 // means "look up the default name on PATH".
 const (
-	EnvClaudeCode = "PARSAR_CLAUDE_BIN"
-	EnvCodex      = "PARSAR_CODEX_BIN"
-	EnvPi         = "PARSAR_PI_BIN"
-	EnvOpenCode   = "PARSAR_OPENCODE_BIN"
-	EnvMCode      = "PARSAR_MCODE_BIN"
+	EnvClaudeCode = "OAC_RUNTIME_CLAUDE_BIN"
+	EnvCodex      = "OAC_RUNTIME_CODEX_BIN"
+	EnvPi         = "OAC_RUNTIME_PI_BIN"
+	EnvOpenCode   = "OAC_RUNTIME_OPENCODE_BIN"
+	EnvMCode      = "OAC_RUNTIME_MCODE_BIN"
 )
 
 // Default executable names, used when the matching env var is unset.

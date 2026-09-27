@@ -88,7 +88,7 @@ def main():
     if len(sys.argv) != 2 or not installed():
         raise ValueError('system tools unavailable')
     env = dict(BASE_ENV)
-    scratch = os.environ.get('PARSAR_RUNTIME_TOOL_SCRATCH')
+    scratch = os.environ.get('OAC_RUNTIME_TOOL_SCRATCH')
     if scratch:
         path = Path(scratch)
         temporary = Path(os.environ.get('TMPDIR', scratch))

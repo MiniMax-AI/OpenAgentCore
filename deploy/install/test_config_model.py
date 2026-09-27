@@ -22,7 +22,7 @@ class ConfigModelTests(unittest.TestCase):
     def test_schema_uses_only_the_supported_keyword_subset(self):
         for node in schemas(config_model.SCHEMA):
             self.assertLessEqual(set(node), config_model.KEYWORDS)
-            self.assertLessEqual(set(node.get("x-parsar", {})), config_model.ANNOTATIONS)
+            self.assertLessEqual(set(node.get("x-oac", {})), config_model.ANNOTATIONS)
             if "properties" in node:
                 self.assertIs(node.get("additionalProperties"), False)
 
@@ -90,7 +90,7 @@ class ConfigModelTests(unittest.TestCase):
             secrets = {"core.key": "k" * 64, "credential.key": "credential-secret", "database.password": "database-secret"}
             for name, value in secrets.items():
                 (root / "secrets" / name).write_text(value)
-            state = {"installation_id": "5b7c0f3e-0000-4000-8000-000000000000", "project": "parsar-0123456789",
+            state = {"installation_id": "5b7c0f3e-0000-4000-8000-000000000000", "project": "oac-0123456789",
                      "uid": 1000, "gid": 1000, "mode": "all", "native_core": False,
                      "images": {name: "sha256:" + "1" * 64 for name in ("core", "web", "database")}}
             headers = {"Authorization": "Bearer export-secret"}
@@ -110,8 +110,8 @@ class ConfigModelTests(unittest.TestCase):
                     item = next(item for item in snapshot["settings"] if item["key"] == "core.runtime_history.headers")
                     self.assertEqual((item["value"], item["configured"], item["sensitive"]), (None, True, True))
                     self.assertEqual(snapshot["path"], str(root / "config.json"))
-                    self.assertEqual(snapshot["apply_command"], f"{root / 'parsar'} apply")
-                    self.assertEqual("parsar-0123456789-core.service" in rendered.files, native)
+                    self.assertEqual(snapshot["apply_command"], f"{root / 'oac'} apply")
+                    self.assertEqual("oac-0123456789-core.service" in rendered.files, native)
 
 
 if __name__ == "__main__":

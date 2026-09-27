@@ -1,6 +1,6 @@
 // Called inside the original native task INSERT transaction, before child work
 // is admitted. All descendants share the root Session's concurrency budget.
-export function enforceSubagentAdmission(db, task, configured = process.env.PARSAR_MCODE_MAX_SUBAGENTS) {
+export function enforceSubagentAdmission(db, task, configured = process.env.OAC_RUNTIME_MCODE_MAX_SUBAGENTS) {
   if (task.kind !== 'subagent') return;
   const limit = Number(configured);
   if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('Native Subagent admission is disabled');

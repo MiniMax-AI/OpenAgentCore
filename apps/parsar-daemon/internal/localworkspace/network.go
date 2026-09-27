@@ -10,8 +10,8 @@ import (
 
 // RuntimeNetworkPolicy reads deployment configuration, never caller options.
 func RuntimeNetworkPolicy() (agentnetwork.Policy, error) {
-	policy := agentnetwork.Policy{Access: os.Getenv("PARSAR_RUNTIME_NETWORK_ACCESS")}
-	if raw := os.Getenv("PARSAR_RUNTIME_ALLOWED_DOMAINS"); raw != "" {
+	policy := agentnetwork.Policy{Access: os.Getenv("OAC_RUNTIME_NETWORK_ACCESS")}
+	if raw := os.Getenv("OAC_RUNTIME_ALLOWED_DOMAINS"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &policy.AllowedDomains); err != nil {
 			return policy, errors.New("invalid local Runtime network domains")
 		}

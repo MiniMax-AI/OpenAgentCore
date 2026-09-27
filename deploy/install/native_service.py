@@ -19,7 +19,7 @@ def is_native(state):
 
 def unit_name(state):
     project = state.get("project", "")
-    if not isinstance(project, str) or not re.fullmatch(r"parsar-[0-9a-f]{10}", project):
+    if not isinstance(project, str) or not re.fullmatch(r"oac-[0-9a-f]{10}", project):
         raise RuntimeError("Native Core requires its installation's generated project name")
     return project + "-core.service"
 
@@ -139,17 +139,17 @@ def prepare(root, state, bundle, replace=False):
 
 
 def unit_text(root, header, inputs=None):
-    """The unit. PARSAR_INPUTS carries the inputs digest the running Core started with."""
+    """The unit. OAC_INPUTS carries the inputs digest the running Core started with."""
     root = _path(root)
     # ':' disables command-line environment substitution. The executable is
     # still Core itself; no shell, wrapper or provider shutdown hook is used.
     executable = str(root / "native/bin/oac-core").replace("%", "%%").replace('"', '\\"')
     return ("# " + header + "\n"
-            + "[Unit]\nDescription=Parsar Core\n\n[Service]\nType=exec\n"
+            + "[Unit]\nDescription=OpenAgentCore\n\n[Service]\nType=exec\n"
             + 'ExecStart=:"' + executable + '"\n'
             + "WorkingDirectory=" + str(root).replace("%", "%%") + "\n"
             + "EnvironmentFile=" + str(root / "generated/core.env").replace("%", "%%") + "\n"
-            + ("Environment=PARSAR_INPUTS=" + inputs + "\n" if inputs else "")
+            + ("Environment=OAC_INPUTS=" + inputs + "\n" if inputs else "")
             + "Restart=on-failure\nKillMode=process\nUMask=0077\n\n[Install]\nWantedBy=default.target\n")
 
 
@@ -163,7 +163,7 @@ def start(root, state):
         return
     unit = _path(root) / "generated" / unit_name(state)
     if unit.is_symlink() or not unit.is_file():
-        raise RuntimeError("Native Core service must be generated before starting it; run parsar apply")
+        raise RuntimeError("Native Core service must be generated before starting it; run oac apply")
     daemon_reload()
     _checked(["systemctl", "--user", "enable", "--now", str(unit)], "Cannot enable or start this installation's native Core service")
 
@@ -195,7 +195,7 @@ def _process_environment(pid):
 
 
 def running_inputs(state):
-    """PARSAR_INPUTS of the running Core process, or None when it is not running."""
+    """OAC_INPUTS of the running Core process, or None when it is not running."""
     if not is_native(state):
         return None
     result = _run(["systemctl", "--user", "show", "--property=MainPID", "--value", unit_name(state)],
@@ -203,7 +203,7 @@ def running_inputs(state):
     pid = result.stdout.strip()
     if result.returncode or not pid.isdigit() or pid == "0":
         return None
-    return _process_environment(int(pid)).get("PARSAR_INPUTS")
+    return _process_environment(int(pid)).get("OAC_INPUTS")
 
 
 def active(state):

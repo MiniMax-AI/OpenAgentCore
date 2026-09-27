@@ -13,13 +13,13 @@ COPY --from=codex /usr/local/bin/codex /usr/local/bin/codex
 COPY --from=codex /usr/local/codex-resources /usr/local/codex-resources
 COPY --from=codex /etc/codex /etc/codex
 COPY --from=claude /opt/claude-sdk /opt/claude-sdk
-COPY --from=claude /usr/local/bin/agents-api-claude-shell-prefix /usr/local/bin/agents-api-claude-shell-prefix
+COPY --from=claude /usr/local/bin/oac-claude-shell-prefix /usr/local/bin/oac-claude-shell-prefix
 
-ENV PARSAR_CODEX_BIN=/usr/local/bin/codex \
-    PARSAR_CODEX_PERMISSION_PROFILE=managed-workspace \
-    PARSAR_CLAUDE_SDK_NODE=/usr/local/bin/node \
-    PARSAR_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js \
-    PARSAR_CLAUDE_SDK_WORKSPACE=managed
+ENV OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex \
+    OAC_RUNTIME_CODEX_PERMISSION_PROFILE=managed-workspace \
+    OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node \
+    OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js \
+    OAC_RUNTIME_CLAUDE_SDK_WORKSPACE=managed
 
 USER 1000:1000
 RUN test "$(codex --version)" = "codex-cli 0.153.4" \
