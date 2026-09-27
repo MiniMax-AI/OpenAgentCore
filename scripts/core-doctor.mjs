@@ -860,25 +860,22 @@ export async function runCoreDoctor({
     report.add("PASS", "Configuration", `proxy target is configured (${target.displayOrigin}).`);
   } catch {
     report.add("FAIL", "Configuration", "proxy target must be credential-free HTTPS or a loopback HTTP origin.");
-    exitCode = CORE_DOCTOR_EXIT_CODES.diagnosticFailure;
+    const exitCode = CORE_DOCTOR_EXIT_CODES.diagnosticFailure;
+    stdout.write(report.render(exitCode));
+    return { exitCode, checks: report.checks };
   }
 
   const credentials = await inspectCoreCredentials({ config, cwd, homeDir, platform, report });
   exitCode = Math.max(exitCode, credentials.exitCode);
 
-  if (target) {
-    const core = await probeCore({
-      target,
-      token: credentials.token,
-      timeoutMs: options.timeoutMs,
-      fetchImpl,
-      report,
-    });
-    exitCode = Math.max(exitCode, core.exitCode);
-  } else {
-    report.add("WARN", "Core liveness", "network checks skipped because the proxy target is invalid.");
-    report.add("WARN", "Core API", "authenticated read skipped because the proxy target is invalid.");
-  }
+  const core = await probeCore({
+    target,
+    token: credentials.token,
+    timeoutMs: options.timeoutMs,
+    fetchImpl,
+    report,
+  });
+  exitCode = Math.max(exitCode, core.exitCode);
 
   const daemon = await inspectDaemon({
     parsarPath: options.parsarPath,
