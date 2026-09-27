@@ -28,7 +28,7 @@ import {
  * or it is hidden; Show Getting started in the sidebar opens it again. The
  * optional console tour opens from it.
  */
-export function GettingStarted({ fleet, sessions, localOnly = false }: { fleet: FleetState; sessions: number | "failed" | null; localOnly?: boolean }) {
+export function GettingStarted({ fleet, sessions, localOnly, onRetryInstallation }: { fleet: FleetState; sessions: number | "failed" | null; localOnly: boolean | "failed" | undefined; onRetryInstallation: () => void }) {
   const { t } = useTranslation("overview");
   const { navigate } = useConsoleNavigation();
   const openTour = useConsoleTour();
@@ -63,7 +63,7 @@ export function GettingStarted({ fleet, sessions, localOnly = false }: { fleet: 
     rerender();
   }, [storageKey]);
   const [focusPending, setFocusPending] = useState(false);
-  const view = storageKey === null ? "hidden" : checklistView(states, memory);
+  const view = storageKey === null ? "hidden" : localOnly === "failed" && memory !== "closed" ? "full" : checklistView(states, memory);
 
   // Shown with a step to do, the checklist opens; "You're set" closes it once
   // shown, so a later regression never brings it back; a deployment first seen
@@ -81,7 +81,7 @@ export function GettingStarted({ fleet, sessions, localOnly = false }: { fleet: 
     remember("open");
     setFocusPending(true);
   });
-  const showing = celebrating || view !== "hidden";
+  const showing = (celebrating && allDone) || view !== "hidden";
   useEffect(() => {
     if (!focusPending || !showing) return;
     setFocusPending(false);
@@ -94,7 +94,7 @@ export function GettingStarted({ fleet, sessions, localOnly = false }: { fleet: 
     </button>
   );
 
-  if (celebrating || view === "complete") {
+  if ((celebrating && allDone) || view === "complete") {
     return (
       <section className="overview-card getting-started getting-started-line" aria-labelledby="getting-started-heading">
         <div className="console-section-title">
@@ -113,7 +113,9 @@ export function GettingStarted({ fleet, sessions, localOnly = false }: { fleet: 
 
   const done = states.filter((state) => state === "done").length;
   const sandbox = steps.sandboxes;
-  const sandboxAction = sandbox.action === "setup"
+  const sandboxAction = localOnly === "failed"
+    ? { label: t("actions.retry", { ns: "common" }), run: onRetryInstallation }
+    : sandbox.action === "setup"
     ? { label: t("gettingStarted.sandboxes.setup"), run: () => navigate("nodes") }
     : sandbox.action === "add-node"
       ? { label: t("gettingStarted.sandboxes.addNode"), run: () => navigate("nodes", {}, "add-node") }
@@ -143,7 +145,7 @@ export function GettingStarted({ fleet, sessions, localOnly = false }: { fleet: 
         </div>
       </header>
       <ol className="getting-started-steps">
-        <Step index={1} state={sandbox.state} title={t("gettingStarted.sandboxes.title")} body={localOnly ? t("gettingStarted.sandboxes.localOnly") : t(sandbox.cloud ? "gettingStarted.sandboxes.bodyCloud" : "gettingStarted.sandboxes.body")} action={sandboxAction} />
+        <Step index={1} state={sandbox.state} title={t("gettingStarted.sandboxes.title")} body={localOnly === "failed" ? t("gettingStarted.sandboxes.addressFailed") : localOnly ? t("gettingStarted.sandboxes.localOnly") : t(sandbox.cloud ? "gettingStarted.sandboxes.bodyCloud" : "gettingStarted.sandboxes.body")} action={sandboxAction} />
         <Step index={2} state={steps.model} title={t("gettingStarted.model.title")} body={t("gettingStarted.model.body")} action={{ label: t("gettingStarted.model.open"), run: () => navigate("system", {}, "default-model") }} />
         <Step index={3} state={steps.key.state} title={t("gettingStarted.key.title")} body={t("gettingStarted.key.body")} action={keyAction} />
         <Step index={4} state={steps.session.state} title={t("gettingStarted.session.title")} body={t("gettingStarted.session.body")} action={sessionAction} />

@@ -135,3 +135,45 @@ test("Overview preserves partial activity and visibly qualifies a failed project
   await activity.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(activity.locator(".error-state")).toHaveCount(0);
 });
+
+test("failed summary and Session refreshes preserve their previous evidence until retry succeeds", async ({ page, request }) => {
+  await openConsole(page, request);
+  const activity = page.getByRole("region", { name: "Session activity", exact: true });
+  const attention = page.getByRole("region", { name: "Needs attention", exact: true });
+  const projects = page.getByRole("region", { name: "By project", exact: true });
+  await expect(activity.locator(".ts-chart-plot")).toBeVisible();
+  await expect(attention.getByRole("table")).toBeVisible();
+  const attentionRows = await attention.getByRole("row").count();
+  const projectRows = await projects.getByRole("row").count();
+  const running = page.getByRole("article").filter({ hasText: "Running Sessions" }).locator(".metric-tile-sub");
+  const known = await running.innerText();
+  const summary = /\/core\/v1\/summary(?:\?|$)/;
+  await page.route(summary, (route) => route.fulfill(reject));
+  await page.route(sessionLists, (route) => route.fulfill(reject));
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(activity).toContainText("may be incomplete or out of date");
+  await expect(activity.locator(".ts-chart-plot")).toBeVisible();
+  await expect(running).toHaveText(known);
+  await expect(attention.getByRole("row")).toHaveCount(attentionRows);
+  await expect(projects.getByRole("row")).toHaveCount(projectRows);
+  await expect(projects).toContainText("may be incomplete or out of date");
+  await page.unroute(summary);
+  await page.unroute(sessionLists);
+  await activity.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(failed(page)).toHaveCount(0);
+});
+
+test("installation failure cannot complete onboarding and its retry reveals local-only blockage", async ({ page, request }) => {
+  await page.addInitScript(() => window.localStorage.setItem("agents-core-web.getting-started.7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", "open"));
+  await page.route("**/core/v1/installation", (route) => route.fulfill(reject));
+  await openConsole(page, request, "overview", { installation: "local" });
+  const step = page.locator(".getting-started-step").first();
+  await expect(step).toContainText("Unknown");
+  await expect(step).toContainText("The installation address could not be read");
+  await expect(page.getByText("You're set", { exact: true })).toHaveCount(0);
+  await page.unroute("**/core/v1/installation");
+  await step.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(step).toContainText("To do");
+  await expect(step).toContainText("Fix the public address");
+  await expect(page.locator(".installation-notice")).toBeVisible();
+});

@@ -1,5 +1,5 @@
 import type { AgentSession } from "@agents-core-web/agents-client";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -65,14 +65,13 @@ function errorText(error: unknown): string {
 
 /**
  * The Overview's reads through the query cache: a revisit opens from the cache,
- * a refresh or a changed project list keeps the last figures on screen, and the
+ * a refresh retains figures within the same project scope, and the
  * page polls while it is visible.
  */
 function useOverviewData(projects: readonly Project[], projectsReady: boolean) {
   const query = useQuery({
     ...overviewQuery(projects),
     enabled: projectsReady,
-    placeholderData: keepPreviousData,
     refetchInterval: OVERVIEW_REFRESH_MS,
     refetchIntervalInBackground: false,
   });
@@ -107,7 +106,7 @@ export function OverviewPage() {
   const sessionReadsFailed = readFailed || Boolean(data?.sessions.failures.length);
   const now = Math.floor((data?.loadedAt ?? Date.now()) / 1000);
 
-  const summaryRows = data?.summary.status === "ready" ? data.summary.rows : null;
+  const summaryRows = data?.summary.rows ?? null;
   const totals = useMemo(() => (summaryRows ? summaryTotals(summaryRows) : null), [summaryRows]);
   const usageRows = useMemo(() => (summaryRows ? projectUsageRows(projects, summaryRows) : null), [projects, summaryRows]);
   const sessions = data && (data.sessions.sessions.length || !sessionReadsFailed) ? data.sessions.sessions : null;
@@ -172,8 +171,9 @@ export function OverviewPage() {
       />
       <PageBody>
         <InstallationNotice installation={installation.data} />
-        {!installation.isPending ? <GettingStarted fleet={fleetState} sessions={sessionCount} localOnly={installation.data?.local_only} /> : null}
-        {readFailed && data !== null ? <ReadFailure onRetry={refreshAll} partial /> : null}
+        {installation.isError ? <ReadFailure onRetry={() => void installation.refetch()} partial={installation.data !== undefined} /> : null}
+        <GettingStarted fleet={fleetState} sessions={sessionCount} localOnly={installation.isError ? "failed" : installation.data?.local_only} onRetryInstallation={() => void installation.refetch()} />
+        {(readFailed || summaryError !== null) && data !== null ? <ReadFailure onRetry={refreshAll} partial /> : null}
         <div className="overview-tiles" aria-label={t("kpi.label")}>
           <MetricTile
             index={0}

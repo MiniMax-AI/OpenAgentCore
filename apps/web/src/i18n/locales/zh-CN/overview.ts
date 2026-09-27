@@ -14,6 +14,7 @@ export const overview = {
       unknown: "未知",
     },
     sandboxes: {
+      addressFailed: "无法读取安装地址，请重试后再确认沙箱是否就绪。",
       localOnly: "请修复公开地址，让其他机器上的应用、节点和 executor 能够连接。",
       title: "准备好沙箱",
       body: "保存沙箱的运行位置，再接入一台在线且就绪的节点。",
@@ -78,7 +79,7 @@ export const overview = {
     projects: "无法加载项目：{{reason}}",
   },
   activity: {
-    unreadHelp: "{{names}} 的 Session 列表读取失败，图中缺少这些 Session。",
+    unreadHelp: "无法刷新 {{names}} 的 Session；保留的数据可能已过期，其余数据缺失。",
     title: "Session 活动",
     range: "最近 24 小时",
     help: "所有项目每小时新建的 Session。悬停柱子时同时显示失败的 Session（按最近活跃时间归入小时）。",

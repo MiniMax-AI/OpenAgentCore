@@ -663,7 +663,9 @@ its contents with ErrorState and Retry. Partial or stale reads keep useful rows
 and figures, with a durable ErrorState and Retry beside them explaining that
 coverage may be incomplete or out of date. A failed read never supplies a zero
 chart or an all-clear; successfully read zero values stay zero. Session log status
-counts stay missing until the reads succeed.
+counts stay missing until the reads succeed. A failed summary retains its last
+rows, and a failed project Session read retains only that project's last rows;
+successful sources update independently. Retention never crosses project scopes.
 
 A failed action whose outcome needs a decision (a sandbox change with no answer,
 a timeout or a 5xx) opens an error dialog with the reason and the next step as its
@@ -683,7 +685,8 @@ other machines cannot connect, followed by Core's configuration path and apply
 command as copyable values. If Core has no configuration snapshot, state that
 those instructions are unavailable; never fill in a path or command. Add node is
 disabled with its reason beside the action, and Getting started leaves its first
-step to do with the address fix visible.
+step to do with the address fix visible. A pending or failed installation read
+cannot complete that step; a failed read shows Unknown and Retry.
 
 ### Onboarding
 Signing in and the console tour share one frame: a dark stage on the left (always

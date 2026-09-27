@@ -14,6 +14,7 @@ export const overview = {
       unknown: "Unknown",
     },
     sandboxes: {
+      addressFailed: "The installation address could not be read. Retry before confirming sandbox readiness.",
       localOnly: "Fix the public address so applications, nodes and executors on other machines can connect.",
       title: "Get sandboxes ready",
       body: "Save where sandboxes run, then connect a node that is online and ready.",
@@ -78,7 +79,7 @@ export const overview = {
     projects: "Projects could not be loaded: {{reason}}",
   },
   activity: {
-    unreadHelp: "Sessions of {{names}} could not be read and are missing from this chart.",
+    unreadHelp: "Sessions of {{names}} could not be refreshed. Any retained values may be out of date; other values are missing.",
     title: "Session activity",
     range: "Last 24 hours",
     help: "Sessions created per hour across every project. Hovering a column also shows failed Sessions, placed by their last activity.",

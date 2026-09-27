@@ -26,7 +26,8 @@ export interface GettingStartedSteps {
 
 export function gettingStartedSteps(input: {
   fleet: FleetState;
-  localOnly?: boolean;
+  /** Undefined while reading; a failed installation read cannot confirm readiness. */
+  localOnly?: boolean | "failed";
   /** Undefined until the project list is read. */
   projects: readonly Project[] | "failed" | undefined;
   /** Sessions in every project, by Core's summary; null until it is read. */
@@ -36,7 +37,9 @@ export function gettingStartedSteps(input: {
 }): GettingStartedSteps {
   const { sessions } = input;
   return {
-    sandboxes: input.localOnly ? { state: "todo", action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.provider === "e2b" } : sandboxStep(input.fleet),
+    sandboxes: input.localOnly === undefined || input.localOnly === "failed"
+      ? { state: input.localOnly === "failed" ? "unknown" : null, action: "nodes", cloud: false }
+      : input.localOnly ? { state: "todo", action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.provider === "e2b" } : sandboxStep(input.fleet),
     model: modelStep(input.harnesses),
     key: keyStep(input.projects),
     session: {

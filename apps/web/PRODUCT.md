@@ -188,7 +188,8 @@ workbench.
   `local_only`, with the configuration path and apply command Core supplies as
   copyable instructions. Without a configuration snapshot they state what is
   missing. Add node is unavailable with a reason; Getting started keeps the first
-  step to do until the public address is fixed.
+  step to do until the public address is fixed. An unread installation address
+  cannot complete that step, and a failed read offers Retry.
 - **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
   tool and activity figures are still assembled in the browser from bounded reads
   and state their coverage. Metrics that need new Core endpoints are recorded as

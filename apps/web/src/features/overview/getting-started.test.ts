@@ -10,11 +10,19 @@ const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployme
   resources: { allocations: 0, pending: 0 }, suspension: null, ...overrides,
 });
 const fleet = (value: SandboxDeployment, nodes = [node("n1")]): FleetState => ({ status: "ready", snapshot: { deployment: value, nodes, allocations: [], loadedAt: 0 }, refreshing: false, error: null });
-const sandboxes = (state: FleetState) => gettingStartedSteps({ fleet: state, projects: [], sessions: 0, harnesses: [] }).sandboxes;
+const sandboxes = (state: FleetState) => gettingStartedSteps({ fleet: state, localOnly: false, projects: [], sessions: 0, harnesses: [] }).sandboxes;
 const provider = { object: "core.model_provider", protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true, updated_at: "2026-09-25T00:00:00Z" } as const;
 const harness = (id: CoreHarness["id"], fields: Partial<CoreHarness> = {}): CoreHarness => ({ object: "core.harness", id, enabled: true, default: false, model_provider: null, ...fields });
 
 describe("Getting started steps", () => {
+  it("cannot complete onboarding while the installation read is pending or failed", () => {
+    for (const localOnly of [undefined, "failed"] as const) {
+      const steps = gettingStartedSteps({ localOnly, fleet: fleet(deployment()), projects: [project("p")], sessions: 1,
+        harnesses: [harness("codex", { default: true, model_provider: { ...provider, harness: "codex" } })] });
+      expect(steps.sandboxes.state).toBe(localOnly === "failed" ? "unknown" : null);
+      expect(checklistView([steps.sandboxes.state, steps.model, steps.key.state, steps.session.state], "open")).toBe("full");
+    }
+  });
   it("keeps local-only installations to do even with a ready node or cloud deployment", () => {
     for (const provider of ["docker", "e2b"] as const) {
       const steps = gettingStartedSteps({ fleet: fleet(deployment({ provider })), projects: [], sessions: 1, harnesses: [], localOnly: true });

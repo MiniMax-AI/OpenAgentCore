@@ -12,13 +12,17 @@ export interface OverviewSessions {
   /** Projects whose read stopped at the cap before covering the window or every Session needing attention. */
   truncated: Project[];
   failures: ProjectReadFailure[];
+  /** Failed projects whose previously read Sessions are retained. */
+  stale: Project[];
 }
 
 export type OverviewSummary =
   | { status: "ready"; rows: ProjectSummary[] }
-  | { status: "failed"; error: unknown };
+  | { status: "failed"; error: unknown; rows?: ProjectSummary[] };
 
 export interface OverviewData {
+  /** Retention is allowed only within this exact project scope. */
+  projectIds: string[];
   summary: OverviewSummary;
   sessions: OverviewSessions;
   /** Epoch milliseconds. */
@@ -48,13 +52,16 @@ export async function loadOverview(
   source: OverviewSource,
   nowSeconds: number,
   signal: AbortSignal,
+  previous?: OverviewData,
 ): Promise<OverviewData> {
+  const projectIds = projects.map((project) => project.id);
+  const prior = previous?.projectIds.length === projectIds.length && previous.projectIds.every((id, index) => id === projectIds[index]) ? previous : undefined;
   let summary: OverviewSummary;
   try {
     summary = { status: "ready", rows: await source.summary(signal) };
   } catch (error) {
     if (signal.aborted) throw error;
-    summary = { status: "failed", error };
+    summary = { status: "failed", error, ...(prior?.summary.rows ? { rows: prior.summary.rows } : {}) };
   }
   const since = activityStart(nowSeconds);
   const rows = summary.status === "ready" ? new Map(projectRows(summary.rows).map((row) => [row.project_id, row])) : null;
@@ -65,12 +72,21 @@ export async function loadOverview(
     return { signal, maxSessions: OVERVIEW_SESSION_CAP, enough: (sessions) => overviewReadDone(sessions, since, expected) };
   });
   if (signal.aborted) throw new DOMException("The overview load was aborted.", "AbortError");
+  // A failed source must not erase its last successful evidence. Other projects
+  // still replace their own rows, including a successful empty read.
+  const stale = failures.filter(({ project }) => prior && (
+    !prior.sessions.failures.some((failure) => failure.project.id === project.id)
+    || prior.sessions.stale.some((entry) => entry.id === project.id)
+  )).map(({ project }) => project);
+  const staleIds = new Set(stale.map((project) => project.id));
   return {
+    projectIds,
     summary,
     sessions: {
-      sessions: reads.flatMap((read) => read.sessions.map((value) => ({ project: read.project, value }))),
-      truncated: reads.filter((read) => !read.complete).map((read) => read.project),
+      sessions: [...reads.flatMap((read) => read.sessions.map((value) => ({ project: read.project, value }))), ...(prior?.sessions.sessions.filter((entry) => staleIds.has(entry.project.id)) ?? [])],
+      truncated: [...reads.filter((read) => !read.complete).map((read) => read.project), ...(prior?.sessions.truncated.filter((project) => staleIds.has(project.id)) ?? [])],
       failures,
+      stale,
     },
     loadedAt: Date.now(),
   };

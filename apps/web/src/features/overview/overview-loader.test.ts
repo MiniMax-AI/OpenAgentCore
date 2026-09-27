@@ -80,3 +80,58 @@ describe("loadOverview", () => {
     await expect(load).rejects.toMatchObject({ name: "AbortError" });
   });
 });
+
+describe("Overview refresh retention", () => {
+  const controller = new AbortController();
+  const projects = [project("a"), project("b")];
+  const original = () => loadOverview(projects, {
+    summary: async () => projects.map(({ id }) => summary(id, { sessions: { total: 1, idle: 0, in_progress: 0, failed: 1, requires_action: 0 }, last_active_at: NOW })),
+    sessions: ({ id }) => sessionLister([session(id, { status: "failed", created_at: NOW, last_active_at: NOW })]),
+  }, NOW, controller.signal);
+  const unavailable = { listSessionsTolerant: async () => { throw new Error("unavailable"); } };
+
+  it("retains a failed summary and failed project's rows while replacing successful project reads", async () => {
+    const prior = await original();
+    const current = await loadOverview(projects, {
+      summary: async () => { throw new Error("summary unavailable"); },
+      sessions: ({ id }) => id === "a" ? unavailable : sessionLister([]),
+    }, NOW, controller.signal, prior);
+    expect(current.summary).toMatchObject({ status: "failed", rows: prior.summary.rows });
+    expect(current.sessions.sessions.map(({ value }) => value.id)).toEqual(["a"]);
+    expect(current.sessions.stale.map(({ id }) => id)).toEqual(["a"]);
+    expect(current.sessions.failures.map(({ project }) => project.id)).toEqual(["a"]);
+    const repeated = await loadOverview(projects, {
+      summary: async () => { throw new Error("still unavailable"); },
+      sessions: () => unavailable,
+    }, NOW, controller.signal, current);
+    expect(repeated.summary.rows).toEqual(prior.summary.rows);
+    expect(repeated.sessions.sessions.map(({ value }) => value.id)).toEqual(["a"]);
+    expect(repeated.sessions.stale.map(({ id }) => id)).toEqual(["a", "b"]);
+    const recovered = await loadOverview(projects, {
+      summary: async () => projects.map(({ id }) => summary(id)),
+      sessions: () => sessionLister([]),
+    }, NOW, controller.signal, repeated);
+    expect(recovered.summary.status).toBe("ready");
+    expect(recovered.sessions).toEqual({ sessions: [], failures: [], truncated: [], stale: [] });
+  });
+
+  it("keeps fresh summary values while retaining only the failed Session source", async () => {
+    const prior = await original();
+    const fresh = [summary("a", { sessions: { total: 2, idle: 0, in_progress: 0, failed: 2, requires_action: 0 }, last_active_at: NOW }), summary("b")];
+    const current = await loadOverview(projects, { summary: async () => fresh, sessions: () => unavailable }, NOW, controller.signal, prior);
+    expect(current.summary).toEqual({ status: "ready", rows: fresh });
+    expect(current.sessions.sessions.map(({ value }) => value.id)).toEqual(["a"]);
+    expect(current.sessions.stale.map(({ id }) => id)).toEqual(["a"]);
+  });
+
+  it("never carries prior rows across project scopes or invents rows on a first failure", async () => {
+    const prior = await original();
+    const source = { summary: async () => { throw new Error("unavailable"); }, sessions: () => unavailable };
+    for (const previous of [undefined, prior]) {
+      const current = await loadOverview([project("a")], source, NOW, controller.signal, previous);
+      expect(current.summary.rows).toBeUndefined();
+      expect(current.sessions.sessions).toEqual([]);
+      expect(current.sessions.stale).toEqual([]);
+    }
+  });
+});
