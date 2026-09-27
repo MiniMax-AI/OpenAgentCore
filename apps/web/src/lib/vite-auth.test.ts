@@ -1,5 +1,5 @@
 import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -8,7 +8,9 @@ import { loadProxyBearerAuth, resolveProxyTokenFile } from "../../vite-auth.ts";
 const temporaryDirectories: string[] = [];
 
 function makeTemporaryDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), "agents-core-web-auth-"));
+  const parent = join(homedir(), ".oac", "tests");
+  mkdirSync(parent, { recursive: true });
+  const directory = mkdtempSync(join(parent, "oac-web-auth-"));
   temporaryDirectories.push(directory);
   return directory;
 }

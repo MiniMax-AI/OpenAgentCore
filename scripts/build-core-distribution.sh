@@ -149,7 +149,7 @@ docker run --rm --network none --entrypoint /bin/sh \
 
 OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-core-console.sh
 pnpm install --frozen-lockfile
-AGENTS_CORE_WEB_OPENAI_HOSTED_SESSIONS=1 AGENTS_CORE_WEB_ENVIRONMENT_FILES=1 pnpm build:web
+OAC_WEB_OPENAI_HOSTED_SESSIONS=1 OAC_WEB_ENVIRONMENT_FILES=1 pnpm build:web
 cp -R apps/web/dist "$stage/web/dist"
 cp services/core-console/Dockerfile "$stage/web/Dockerfile"
 build_image web "$stage/web"

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -10,6 +10,9 @@ import {
   parseDaemonStatus,
   runCoreDoctor,
 } from "./core-doctor.mjs";
+
+const testRoot = join(homedir(), ".oac", "tests");
+await mkdir(testRoot, { recursive: true });
 
 const fixtureRoot = new URL("./fixtures/core-doctor/", import.meta.url);
 const fixtureToken = "fixture-bearer";
@@ -33,10 +36,10 @@ function captureStream() {
 }
 
 async function createLocalState(t, { token = fixtureToken } = {}) {
-  const root = await mkdtemp(join(tmpdir(), "agents-core-doctor-"));
+  const root = await mkdtemp(join(testRoot, "agents-core-doctor-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const homeDir = join(root, "home");
-  const stateDir = join(homeDir, ".parsar", "agents-api");
+  const stateDir = join(homeDir, ".oac", "dev");
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   await writeFile(join(stateDir, "web-token"), token, { mode: 0o600 });
   await chmod(join(stateDir, "web-token"), 0o600);
@@ -143,7 +146,7 @@ test("documents the read-only command and exit-code contract", async () => {
     argv: ["--help"],
     env: {},
     cwd: process.cwd(),
-    homeDir: tmpdir(),
+    homeDir: testRoot,
     fetchImpl: async () => assert.fail("help must not make a request"),
     runCommand: async () => assert.fail("help must not inspect a daemon"),
   });
@@ -164,7 +167,7 @@ test("authenticates a basic GET without leaking the token or daemon output", asy
   let commandCall;
   const result = await runScenario({
     env: {
-      AGENTS_API_PROXY_TARGET: fixtureTarget,
+      OAC_WEB_DEV_PROXY_TARGET: fixtureTarget,
       OPENAI_API_KEY: "provider-secret-marker",
       PATH: "/synthetic/bin",
       HOME: state.homeDir,
@@ -199,11 +202,11 @@ test("authenticates a basic GET without leaking the token or daemon output", asy
 });
 
 test("reports missing conventional credential files and skips the authenticated read", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "agents-core-doctor-missing-"));
+  const root = await mkdtemp(join(testRoot, "agents-core-doctor-missing-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const { fetchImpl, requests } = await successfulFetchRecorder();
   const result = await runScenario({
-    env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
+    env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget },
     cwd: root,
     homeDir: root,
     fetchImpl,
@@ -220,7 +223,7 @@ test("refuses to read a group/world-accessible token file", async (t) => {
   await chmod(join(state.stateDir, "web-token"), 0o644);
   const { fetchImpl, requests } = await successfulFetchRecorder();
   const result = await runScenario({
-    env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
+    env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget },
     cwd: state.root,
     homeDir: state.homeDir,
     fetchImpl,
@@ -233,13 +236,13 @@ test("refuses to read a group/world-accessible token file", async (t) => {
 });
 
 test("accepts an issued caller token using the authenticated GET probe", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "agents-core-doctor-inline-"));
+  const root = await mkdtemp(join(testRoot, "agents-core-doctor-inline-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const { fetchImpl, requests } = await successfulFetchRecorder();
   const result = await runScenario({
     env: {
-      AGENTS_API_PROXY_TARGET: fixtureTarget,
-      AGENTS_API_PROXY_TOKEN: fixtureToken,
+      OAC_WEB_DEV_PROXY_TARGET: fixtureTarget,
+      OAC_WEB_DEV_PROXY_TOKEN: fixtureToken,
     },
     cwd: root,
     homeDir: root,
@@ -256,9 +259,9 @@ test("treats conflicting server-side token sources as an actionable configuratio
   const { fetchImpl } = await successfulFetchRecorder();
   const result = await runScenario({
     env: {
-      AGENTS_API_PROXY_TARGET: fixtureTarget,
-      AGENTS_API_PROXY_TOKEN: fixtureToken,
-      AGENTS_API_PROXY_TOKEN_FILE: join(state.stateDir, "web-token"),
+      OAC_WEB_DEV_PROXY_TARGET: fixtureTarget,
+      OAC_WEB_DEV_PROXY_TOKEN: fixtureToken,
+      OAC_WEB_DEV_PROXY_TOKEN_FILE: join(state.stateDir, "web-token"),
     },
     cwd: state.root,
     homeDir: state.homeDir,
@@ -273,7 +276,7 @@ test("distinguishes an unreachable Core without retrying", async (t) => {
   const state = await createLocalState(t);
   let calls = 0;
   const result = await runScenario({
-    env: { AGENTS_API_PROXY_TARGET: "http://127.0.0.1:1" },
+    env: { OAC_WEB_DEV_PROXY_TARGET: "http://127.0.0.1:1" },
     cwd: state.root,
     homeDir: state.homeDir,
     fetchImpl: async () => {
@@ -295,7 +298,7 @@ test("distinguishes a 401 from liveness and discards the response body", async (
     apiBody: JSON.stringify({ error: { message: "session-private-marker", code: "invalid_api_key" } }),
   });
   const result = await runScenario({
-    env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
+    env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget },
     cwd: state.root,
     homeDir: state.homeDir,
     fetchImpl,
@@ -312,7 +315,7 @@ test("accepts only HTTP 200 for health and authenticated Agents reads", async (t
     await t.test(`health HTTP ${status}`, async () => {
       const { fetchImpl, requests } = await successfulFetchRecorder({ healthStatus: status });
       const result = await runScenario({
-        env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
+        env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget },
         cwd: state.root,
         homeDir: state.homeDir,
         fetchImpl,
@@ -326,7 +329,7 @@ test("accepts only HTTP 200 for health and authenticated Agents reads", async (t
     await t.test(`Agents HTTP ${status}`, async () => {
       const { fetchImpl, requests } = await successfulFetchRecorder({ apiStatus: status });
       const result = await runScenario({
-        env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
+        env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget },
         cwd: state.root,
         homeDir: state.homeDir,
         fetchImpl,
@@ -375,7 +378,7 @@ test("accepts a canonical non-empty page with additive and unknown tool variants
     }), { additive_page: true })),
   });
   const result = await runScenario({
-    env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
+    env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget },
     cwd: state.root,
     homeDir: state.homeDir,
     fetchImpl,
@@ -511,7 +514,7 @@ test("rejects malformed or non-canonical Agents list pages", async (t) => {
     await t.test(name, async () => {
       const { fetchImpl, requests } = await successfulFetchRecorder({ apiBody: JSON.stringify(payload) });
       const result = await runScenario({
-        env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
+        env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget },
         cwd: state.root,
         homeDir: state.homeDir,
         fetchImpl,
@@ -528,7 +531,7 @@ test("does not read or authorize from a token file when private permissions cann
   const state = await createLocalState(t);
   const { fetchImpl, requests } = await successfulFetchRecorder();
   const result = await runScenario({
-    env: { AGENTS_API_PROXY_TARGET: fixtureTarget },
+    env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget },
     cwd: state.root,
     homeDir: state.homeDir,
     platform: "win32",
@@ -546,12 +549,12 @@ test("does not read or authorize from a token file when private permissions cann
 test("loads Vite-style proxy dotenv configuration without exposing unrelated values", async (t) => {
   const state = await createLocalState(t);
   const { fetchImpl, requests } = await successfulFetchRecorder();
-  await writeFile(join(state.root, ".env"), "AGENTS_API_PROXY_TARGET=https://base.fixture.invalid\n");
+  await writeFile(join(state.root, ".env"), "OAC_WEB_DEV_PROXY_TARGET=https://base.fixture.invalid\n");
   await writeFile(
     join(state.root, ".env.local"),
     [
-      "AGENTS_API_PROXY_TARGET='https://dotenv.fixture.invalid' # local override",
-      "AGENTS_API_PROXY_TOKEN_FILE=${HOME}/.parsar/agents-api/web-token",
+      "OAC_WEB_DEV_PROXY_TARGET='https://dotenv.fixture.invalid' # local override",
+      "OAC_WEB_DEV_PROXY_TOKEN_FILE=${HOME}/.oac/dev/web-token",
       "OPENAI_API_KEY=provider-secret-marker",
     ].join("\n"),
     { mode: 0o600 },
@@ -568,14 +571,81 @@ test("loads Vite-style proxy dotenv configuration without exposing unrelated val
   assert.doesNotMatch(result.stdout, /provider-secret-marker/);
 });
 
+for (const [retiredName, replacement] of [
+  ["AGENTS_API_PROXY_TARGET", "OAC_WEB_DEV_PROXY_TARGET"],
+  ["AGENTS_API_PROXY_TOKEN", "OAC_WEB_DEV_PROXY_TOKEN"],
+  ["AGENTS_API_PROXY_TOKEN_FILE", "OAC_WEB_DEV_PROXY_TOKEN_FILE"],
+]) {
+  for (const value of ["", "retired-private-value-marker"]) {
+    test(`rejects retired ${retiredName} (${value ? "set" : "empty"}) before reads or daemon inspection`, async (t) => {
+      const state = await createLocalState(t);
+      const result = await runScenario({
+        env: { [retiredName]: value, [replacement]: "current-private-value-marker" },
+        cwd: state.root,
+        homeDir: state.homeDir,
+        fetchImpl: async () => assert.fail("retired settings must not make requests"),
+        runCommand: async () => assert.fail("retired settings must not inspect a daemon"),
+      });
+      assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
+      assert.deepEqual(result.result.checks, [{
+        level: "FAIL", layer: "Configuration",
+        message: `Retired Web settings: ${retiredName} is no longer supported; use ${replacement}.`,
+      }]);
+      assert.doesNotMatch(result.stdout + result.stderr, /private-value-marker|fixture-bearer/);
+      assert.equal(result.stderr, "");
+    });
+  }
+}
+
+for (const file of [".env", ".env.local", ".env.development", ".env.development.local"]) {
+  test(`rejects all retired proxy settings in ${file} without expanding or printing their values`, async (t) => {
+    const state = await createLocalState(t);
+    await writeFile(join(state.root, file), [
+      "AGENTS_API_PROXY_TARGET=https://${OPENAI_API_KEY}.invalid",
+      "AGENTS_API_PROXY_TOKEN=retired-token-marker",
+      "AGENTS_API_PROXY_TOKEN_FILE=/private/retired-file-marker",
+    ].join("\n"));
+    const result = await runScenario({
+      env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget, OPENAI_API_KEY: "provider-secret-marker" },
+      cwd: state.root,
+      homeDir: state.homeDir,
+      fetchImpl: async () => assert.fail("retired settings must not make requests"),
+      runCommand: async () => assert.fail("retired settings must not inspect a daemon"),
+    });
+    assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
+    assert.match(result.stdout, /AGENTS_API_PROXY_TARGET is no longer supported; use OAC_WEB_DEV_PROXY_TARGET/);
+    assert.match(result.stdout, /AGENTS_API_PROXY_TOKEN is no longer supported; use OAC_WEB_DEV_PROXY_TOKEN/);
+    assert.match(result.stdout, /AGENTS_API_PROXY_TOKEN_FILE is no longer supported; use OAC_WEB_DEV_PROXY_TOKEN_FILE/);
+    assert.doesNotMatch(result.stdout + result.stderr, /retired-token-marker|retired-file-marker|provider-secret-marker|fixture-bearer/);
+    assert.equal(result.result.checks.length, 1);
+  });
+}
+
+test("never falls back to the retired conventional token file", async (t) => {
+  const state = await createLocalState(t);
+  await rm(join(state.stateDir, "web-token"));
+  const retiredDirectory = join(state.homeDir, ".parsar", "agents-api");
+  await mkdir(retiredDirectory, { recursive: true });
+  await writeFile(join(retiredDirectory, "web-token"), fixtureToken, { mode: 0o600 });
+  const { fetchImpl, requests } = await successfulFetchRecorder();
+  const result = await runScenario({
+    env: { OAC_WEB_DEV_PROXY_TARGET: fixtureTarget },
+    cwd: state.root, homeDir: state.homeDir, fetchImpl,
+  });
+  assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
+  assert.match(result.stdout, /Caller token: file is missing or unreadable/);
+  assert.deepEqual(requests.map(({ url }) => url.pathname), ["/healthz"]);
+  assert.equal(requests[0].headers.has("authorization"), false);
+});
+
 test("fails closed when a network target tries to expand an unrelated secret", async (t) => {
   const state = await createLocalState(t);
   await writeFile(
     join(state.root, ".env.local"),
     [
       "OPENAI_API_KEY=provider-secret-marker",
-      "AGENTS_API_PROXY_TARGET=https://${OPENAI_API_KEY}.invalid",
-      "AGENTS_API_PROXY_TOKEN_FILE=${HOME}/.parsar/agents-api/web-token",
+      "OAC_WEB_DEV_PROXY_TARGET=https://${OPENAI_API_KEY}.invalid",
+      "OAC_WEB_DEV_PROXY_TOKEN_FILE=${HOME}/.oac/dev/web-token",
     ].join("\n"),
     { mode: 0o600 },
   );
@@ -607,7 +677,7 @@ test("uses an explicit Parsar checkout only for an allowlisted daemon status com
   const result = await runScenario({
     argv: ["--parsar", parsarPath, "--profile", "fixture-profile"],
     env: {
-      AGENTS_API_PROXY_TARGET: fixtureTarget,
+      OAC_WEB_DEV_PROXY_TARGET: fixtureTarget,
       HOME: state.homeDir,
       PATH: "/synthetic/bin",
       OPENAI_API_KEY: "provider-secret-marker",
@@ -642,7 +712,7 @@ test("parses only allowlisted daemon state and treats absence as non-fatal", asy
 });
 
 test("never includes credential, response, URL suffix, provider, or private-path markers", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "agents-core-doctor-redaction-"));
+  const root = await mkdtemp(join(testRoot, "agents-core-doctor-redaction-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const privateDir = join(root, "synthetic-private-doctor-state");
   await mkdir(privateDir, { recursive: true, mode: 0o700 });
@@ -658,8 +728,8 @@ test("never includes credential, response, URL suffix, provider, or private-path
   });
   const result = await runScenario({
     env: {
-      AGENTS_API_PROXY_TARGET: fixtureTarget,
-      AGENTS_API_PROXY_TOKEN: token,
+      OAC_WEB_DEV_PROXY_TARGET: fixtureTarget,
+      OAC_WEB_DEV_PROXY_TOKEN: token,
       OPENAI_API_KEY: "provider-secret-marker",
       HOME: root,
       PATH: "/synthetic/bin",
@@ -685,7 +755,7 @@ test("rejects credential-bearing target suffixes without reflecting them", async
   const state = await createLocalState(t);
   const result = await runScenario({
     env: {
-      AGENTS_API_PROXY_TARGET: "https://core.fixture.invalid/?access=query-secret-marker#fragment-secret-marker",
+      OAC_WEB_DEV_PROXY_TARGET: "https://core.fixture.invalid/?access=query-secret-marker#fragment-secret-marker",
       HOME: state.homeDir,
     },
     cwd: state.root,
@@ -703,7 +773,7 @@ test("invalid options use exit 2 without reflecting untrusted argv", async () =>
     argv: ["--profile", "../../query-secret-marker"],
     env: {},
     cwd: process.cwd(),
-    homeDir: tmpdir(),
+    homeDir: testRoot,
     fetchImpl: async () => assert.fail("invalid options must not make a request"),
   });
 

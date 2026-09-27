@@ -45,7 +45,7 @@ python3 "$d/install.pyz" --source-url 'https://core.example' --environment-id 'e
   });
   // "as root": a root shell runs the sudo command without sudo; "no sudo": the no-sudo command.
   it.each(["success", "download failure", "checksum mismatch", "installer failure", "as root", "no sudo"])("executes safely, passes the token only on stdin and cleans private downloads after %s", (scenario) => {
-    const parent = join(homedir(), ".parsar", "tests");
+    const parent = join(homedir(), ".oac", "tests");
     mkdirSync(parent, { recursive: true });
     const root = mkdtempSync(join(parent, "node-command-"));
     const bin = join(root, "bin"), temporary = join(root, "tmp");
