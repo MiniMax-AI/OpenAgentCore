@@ -87,7 +87,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False):
             if (str(uuid.UUID(node_id)) != node_id or identity["installation_id"] != args.installation_id
                     or retained["core_url"] != args.core_url or not re.fullmatch(r"[0-9a-f]{64}", retained["credential"])):
                 raise ValueError()
-            headers = {"Authorization": "Bearer " + retained["credential"], "X-Parsar-Node-ID": node_id}
+            headers = {"Authorization": "Bearer " + retained["credential"], "X-OAC-Node-ID": node_id}
         except (KeyError, ValueError, TypeError, AttributeError):
             raise SpecificationError("Retained node identity differs or is invalid; preserve its state") from None
     elif not token:

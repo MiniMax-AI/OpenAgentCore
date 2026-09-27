@@ -55,7 +55,7 @@ func TestSandboxNodeRoutesAuthenticateBeforeDeploymentState(t *testing.T) {
 				r.Header.Set("Authorization", test.authorization)
 			}
 			if test.nodeHeader != "" {
-				r.Header.Set("X-Parsar-Node-ID", test.nodeHeader)
+				r.Header.Set("X-OAC-Node-ID", test.nodeHeader)
 			}
 			r.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()

@@ -62,7 +62,7 @@ make check-microsandbox-provider
 ```
 
 The helper is written to
-`~/.oac/build/microsandbox-provider/agents-api-microsandbox-provider`.
+`~/.oac/build/microsandbox-provider/oac-microsandbox-provider`.
 Its separate Go module pins the published SDK and embeds its matching FFI library.
 `make check` runs the pure-Go provider tests on every supported host. On Linux it
 also runs the SDK helper module; other hosts print an explicit skip for that
@@ -79,10 +79,10 @@ the provider configuration. The helper verifies both files on every invocation;
 it does not install or upgrade them.
 
 For a manual node installation, create a private, short runtime state path, for
-example `~/.parsar/msb`, with mode 0700. The ordinary installer instead selects
-`~/.parsar/m/<installation-hash-prefix>/` and stores node identity/configuration
-under `~/.parsar/nodes/<installation-id>/`, both in the home of the account that runs
-the node (`/var/lib/parsar-node` for a node added with sudo). Keep these on persistent local storage
+example `~/.oac/msb`, with mode 0700. The ordinary installer instead selects
+`~/.oac/m/<installation-hash-prefix>/` and stores node identity/configuration
+under `~/.oac/nodes/<installation-id>/`, both in the home of the account that runs
+the node (`/var/lib/oac-node` for a node added with sudo). Keep these on persistent local storage
 reserved for this installation. Unix socket path limits apply. Runtime storage
 contains confidential disks, memory snapshots and SDK state; preserve it with the
 node identity and Core database when recovering the host.

@@ -38,7 +38,7 @@ func TestAllocationLockSurvivesCallerDeadlineUntilExplicitSettlement(t *testing.
 func TestLockDirectoryCannotRedirectIntoAnotherHome(t *testing.T) {
 	home := t.TempDir()
 	foreign := t.TempDir()
-	if e := os.Symlink(foreign, filepath.Join(home, "parsar-locks")); e != nil {
+	if e := os.Symlink(foreign, filepath.Join(home, "oac-locks")); e != nil {
 		t.Fatal(e)
 	}
 	_, e := allocationLock(wire.Request{Config: wire.Config{RuntimeHome: home}, Deadline: time.Now().Add(time.Second)})

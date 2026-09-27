@@ -326,7 +326,7 @@ def replace_credential(args, manifest, root, state, stored, rejection, supplied)
         raise InstallError('Core did not accept the replacement credential ('
                            + ('HTTP 401' if verdict == 401 else 'Core unavailable')
                            + '). Nothing was changed; rerun this command with a currently valid credential.')
-    launcher = obtain_artifact(manifest, 'native/bin/parsar-runtime', root / 'native/bin/parsar-runtime', args.offline_root)
+    launcher = obtain_artifact(manifest, 'native/bin/oac-selfhost', root / 'native/bin/oac-selfhost', args.offline_root)
     docker = ['docker', '--host', 'unix:///var/run/docker.sock']
     fd, staged = tempfile.mkstemp(prefix='.executor-key-', dir=root)
     try:
@@ -348,6 +348,7 @@ def replace_credential(args, manifest, root, state, stored, rejection, supplied)
 
 def install(args, root):
     target = identity(args.environment_id, args.remote)
+    refuse_legacy_executor(args.environment_id)
     manifest = load_manifest(source_url=args.source_url, offline_root=args.offline_root)
     revision = manifest.get('source_commit', '')
     runtime_image, runtime_manifest = image_identities(manifest, 'runtime')
@@ -388,7 +389,7 @@ def install(args, root):
         else:
             key = prompt_credential(args.environment_id)
         write_private(key_file, key)
-    launcher = obtain_artifact(manifest, 'native/bin/parsar-runtime', root / 'native/bin/parsar-runtime', args.offline_root)
+    launcher = obtain_artifact(manifest, 'native/bin/oac-selfhost', root / 'native/bin/oac-selfhost', args.offline_root)
     seccomp = obtain_artifact(manifest, 'runtime/seccomp.json', root / 'runtime/seccomp.json', args.offline_root)
     runtime_image = ensure_docker_image(
         manifest, 'runtime', lambda: runtime_archive(manifest, root, args.offline_root),
@@ -409,6 +410,21 @@ def install(args, root):
     print('Stop this user-owned Runtime with: docker --host unix:///var/run/docker.sock stop ' + result['container'])
 
 
+def refuse_legacy_executor(environment):
+    """Old executors retain their own image and history; this installer never adopts them."""
+    path = Path.home() / '.parsar/self-hosted' / environment
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return
+    except OSError:
+        raise InstallError('Cannot inspect the previous executor directory ' + str(path)
+                           + '; check its ownership before installing. Nothing was changed.') from None
+    raise InstallError('An executor for this Environment was installed before the OpenAgentCore rename at '
+                       + str(path) + ' (container parsar-selfhost-…). It keeps working with this Core. '
+                       'To replace it, stop and remove that container, then rerun this command; its volumes are not reused.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
@@ -421,7 +437,8 @@ def main():
     args = parser.parse_args()
     preflight()
     identity(args.environment_id, args.remote)
-    root = args.install_dir or Path.home() / '.parsar/self-hosted' / args.environment_id
+    refuse_legacy_executor(args.environment_id)
+    root = args.install_dir or Path.home() / '.oac/self-hosted' / args.environment_id
     if not root.is_absolute() or root.resolve() != root:
         raise InstallError('Installation directory must be absolute and have no symlinks')
     root.mkdir(mode=0o700, parents=True, exist_ok=True)

@@ -50,7 +50,7 @@ class NodeInstallTests(unittest.TestCase):
         self.home = Path(temporary.name).resolve()
         self.args = argparse.Namespace(source_url="https://console.example", core_url="https://172.29.144.1:24443",
                                        provider="docker", installation_id="94be54a1-138c-4f30-bc87-b13686272dbe")
-        self.root = self.home / ".parsar/nodes" / self.args.installation_id
+        self.root = self.home / ".oac/nodes" / self.args.installation_id
         self.manifest = {"platform": "linux/amd64", "source_commit": "a" * 40, "images": {"runtime": "sha256:" + "b" * 64},
                          "image_manifest_digests": {"runtime": "sha256:" + "c" * 64},
                          "runtime_ref": "oac-runtime@sha256:" + "c" * 64,
@@ -65,7 +65,8 @@ class NodeInstallTests(unittest.TestCase):
         self.fail_service = False
         self.fail_registration = False
         self.register_stderr = None
-        for patch in (mock.patch.object(installer.Path, "home", return_value=self.home),
+        for patch in (mock.patch.object(installer, "refuse_legacy_node"),
+                      mock.patch.object(installer.Path, "home", return_value=self.home),
                       mock.patch.object(installer, "preflight"),
                       mock.patch.object(installer, "wait_ready"),
                       mock.patch.object(installer, "open_request", side_effect=self.configuration_response),
@@ -130,7 +131,7 @@ class NodeInstallTests(unittest.TestCase):
         if "enable" in arguments and self.fail_service:
             raise installer.InstallError(failure)
         if arguments[:1] == ["useradd"]:
-            self.account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
+            self.account = SimpleNamespace(pw_name="oac-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
                                            pw_dir=str(installer.SERVICE_HOME), pw_shell="/usr/sbin/nologin")
         if arguments[:1] == ["usermod"]:
             if getattr(self, "fail_usermod", False):
@@ -167,7 +168,7 @@ class NodeInstallTests(unittest.TestCase):
         self.assertEqual(config["core_url"], self.args.core_url + "/api/v1")
         self.assertEqual(config["installation_id"], self.args.installation_id)
         self.assertFalse((self.root / installer.MICRO[0]).exists())
-        unit = (self.root / ("parsar-node-" + self.args.installation_id + ".service")).read_text()
+        unit = (self.root / ("oac-node-" + self.args.installation_id + ".service")).read_text()
         self.assertIn(" run --config ", unit)
         self.assertIn("KillMode=process", unit)
         # Keeps retrying while Core is down; stops once Core rejects the removed node's credential.
@@ -355,7 +356,7 @@ class NodeInstallTests(unittest.TestCase):
         os.chmod(system / "docker.sock", 0o660)
         self.account, self.joined, self.docker_installed, self.device_group = None, False, True, "docker"
         service_home = self.home / "service"
-        self.root = service_home / ".parsar/nodes" / self.args.installation_id
+        self.root = service_home / ".oac/nodes" / self.args.installation_id
 
         self.service_steps = []
 
@@ -370,7 +371,7 @@ class NodeInstallTests(unittest.TestCase):
                                           DOCKER_SOCKET=system / "docker.sock", run_as=run_as,
                                           service_account=lambda: self.account),
                       mock.patch.object(installer.shutil, "which", side_effect=lambda tool: None if tool == "docker" and not self.docker_installed else "/usr/bin/" + tool),
-                      mock.patch.object(installer.grp, "getgrnam", side_effect=lambda name: SimpleNamespace(gr_mem=["parsar-node"] if self.joined else [])),
+                      mock.patch.object(installer.grp, "getgrnam", side_effect=lambda name: SimpleNamespace(gr_mem=["oac-node"] if self.joined else [])),
                       mock.patch.object(installer.grp, "getgrgid", side_effect=lambda gid: SimpleNamespace(gr_name=self.device_group))):
             patch.start()
             self.addCleanup(patch.stop)
@@ -382,11 +383,11 @@ class NodeInstallTests(unittest.TestCase):
         commands = [call for call, _ in self.calls]
         self.assertIn(["useradd", "--system", "--user-group", "--no-create-home", "--home-dir", str(self.home / "service"),
                        "--shell", next(path for path in ("/usr/sbin/nologin", "/sbin/nologin", "/bin/false") if os.path.exists(path) or path == "/bin/false"),
-                       "parsar-node"], commands)
+                       "oac-node"], commands)
         self.assertTrue(any(call[:3] == ["usermod", "--append", "--groups"] for call in commands))
-        self.assertIn(["systemctl", "enable", "--now", "parsar-node-" + self.args.installation_id + ".service"], commands)
-        unit = (system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).read_text()
-        for line in ("User=parsar-node", "After=network-online.target docker.service", "WantedBy=multi-user.target",
+        self.assertIn(["systemctl", "enable", "--now", "oac-node-" + self.args.installation_id + ".service"], commands)
+        unit = (system / "units" / ("oac-node-" + self.args.installation_id + ".service")).read_text()
+        for line in ("User=oac-node", "After=network-online.target docker.service", "WantedBy=multi-user.target",
                      "RestartPreventExitStatus=78", "StartLimitIntervalSec=0"):
             self.assertIn(line, unit)
         self.assertNotIn("synthetic-once-token", unit)
@@ -394,7 +395,7 @@ class NodeInstallTests(unittest.TestCase):
         # Every step that touches the service user's files runs as that user.
         self.assertEqual(self.service_steps, ["prepare_service_node", "wait_ready"])
         self.assertTrue((self.root / "registered.json").exists())
-        self.assertFalse((self.root / ("parsar-node-" + self.args.installation_id + ".service")).exists())
+        self.assertFalse((self.root / ("oac-node-" + self.args.installation_id + ".service")).exists())
         account = json.loads((system / "etc/account.json").read_text())
         self.assertEqual((account["created"], account["groups_added"]), (True, ["docker"]))
         self.assertEqual(stat.S_IMODE((system / "etc").stat().st_mode), 0o755)
@@ -419,13 +420,13 @@ class NodeInstallTests(unittest.TestCase):
         with mock.patch.object(installer, "SYSTEM_LOCKS", locks), mock.patch.object(installer.os, "geteuid", return_value=0):
             with installer.host_lock():
                 pass
-        self.assertEqual(stat.S_IMODE((locks / "parsar-node.lock").stat().st_mode), 0o644)
+        self.assertEqual(stat.S_IMODE((locks / "oac-node.lock").stat().st_mode), 0o644)
 
     def test_sudo_mode_refusals_change_nothing(self):
-        foreign = SimpleNamespace(pw_name="parsar-node", pw_uid=4242, pw_gid=4242, pw_dir="/home/parsar-node", pw_shell="/bin/bash")
+        foreign = SimpleNamespace(pw_name="oac-node", pw_uid=4242, pw_gid=4242, pw_dir="/home/oac-node", pw_shell="/bin/bash")
         for case, message in (("selinux", "SELinux is enforcing"), ("docker", "Docker Engine is not installed"),
                               ("account", "not created or adopted by this installer"), ("group", "belongs to the group disk"),
-                              ("home", "does not belong to the parsar-node account")):
+                              ("home", "does not belong to the oac-node account")):
             with self.subTest(case=case):
                 system = self.sudo_host(enforcing=case == "selinux")
                 self.docker_installed = case != "docker"
@@ -459,19 +460,19 @@ class NodeInstallTests(unittest.TestCase):
             installer.uninstall_system(uninstall)
         commands = [call for call, _ in self.calls]
         self.assertEqual(self.service_steps[-2:], ["confirm_removed", "remove_node_files"])
-        self.assertIn(["systemctl", "disable", "--now", "parsar-node-" + self.args.installation_id + ".service"], commands)
-        self.assertIn(["userdel", "parsar-node"], commands)
-        self.assertIn(["systemctl", "reset-failed", "parsar-node-" + self.args.installation_id + ".service"], commands)
+        self.assertIn(["systemctl", "disable", "--now", "oac-node-" + self.args.installation_id + ".service"], commands)
+        self.assertIn(["userdel", "oac-node"], commands)
+        self.assertIn(["systemctl", "reset-failed", "oac-node-" + self.args.installation_id + ".service"], commands)
         self.assertFalse(any(call[-2:] == ["rm", "--force"] or "prune" in call or ("image" in call and "rm" in call) for call in commands))
         self.assertFalse(self.root.exists())
-        self.assertFalse((system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).exists())
+        self.assertFalse((system / "units" / ("oac-node-" + self.args.installation_id + ".service")).exists())
         self.assertFalse((system / "etc").exists())
 
     def test_uninstall_leaves_an_adopted_account_as_found(self):
         system = self.sudo_host()
         (self.home / "service").mkdir()
         os.chmod(self.home / "service", 0o755)
-        self.account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
+        self.account = SimpleNamespace(pw_name="oac-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
                                        pw_dir=str(self.home / "service"), pw_shell="/usr/sbin/nologin")
         installer.install_system(self.args, "synthetic-once-token")
         self.assertFalse([call for call, _ in self.calls if call[:1] == ["useradd"]])
@@ -480,8 +481,8 @@ class NodeInstallTests(unittest.TestCase):
         with mock.patch.object(installer, "open_request", side_effect=urllib.error.HTTPError("https://core.example", 401, "", {}, None)):
             installer.uninstall_system(SimpleNamespace(installation_id=self.args.installation_id, force=False))
         commands = [call for call, _ in self.calls]
-        self.assertNotIn(["userdel", "parsar-node"], commands)
-        self.assertIn(["gpasswd", "--delete", "parsar-node", "docker"], commands)
+        self.assertNotIn(["userdel", "oac-node"], commands)
+        self.assertIn(["gpasswd", "--delete", "oac-node", "docker"], commands)
         self.assertTrue((self.home / "service").is_dir())
         self.assertEqual(stat.S_IMODE((self.home / "service").stat().st_mode), 0o755)
         self.assertFalse((system / "etc").exists())
@@ -504,7 +505,7 @@ class NodeInstallTests(unittest.TestCase):
 
     def test_adoption_refuses_root_ids_and_extra_groups(self):
         service = str(installer.SERVICE_HOME)
-        account = SimpleNamespace(pw_name="parsar-node", pw_uid=990, pw_gid=990, pw_dir=service, pw_shell="/usr/sbin/nologin")
+        account = SimpleNamespace(pw_name="oac-node", pw_uid=990, pw_gid=990, pw_dir=service, pw_shell="/usr/sbin/nologin")
         with mock.patch.object(installer.os, "getgrouplist", return_value=[990]):
             self.assertTrue(installer.ours(account))
             self.assertFalse(installer.ours(SimpleNamespace(**dict(vars(account), pw_uid=0))))
@@ -514,7 +515,7 @@ class NodeInstallTests(unittest.TestCase):
 
     def service_step(self, function, output=None, errors=None):
         """Run function through the real fork of as_service_user, as this test's user."""
-        account = SimpleNamespace(pw_name="parsar-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
+        account = SimpleNamespace(pw_name="oac-node", pw_uid=os.getuid(), pw_gid=os.getgid(),
                                   pw_dir=str(self.home), pw_shell="/usr/sbin/nologin")
         with mock.patch.object(installer.os, "setgroups"), mock.patch.object(installer.os, "setgid"), \
                 mock.patch.object(installer.os, "setuid"), mock.patch.object(installer.sys, "stdout", output or io.StringIO()), \
@@ -594,7 +595,7 @@ class NodeInstallTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 15)
         for pid in map(int, record.read_text().split()):
             self.assertTrue(ended(pid), pid)
-        with open(self.home / "parsar-node.lock") as lock:  # The child held it too; nothing does now.
+        with open(self.home / "oac-node.lock") as lock:  # The child held it too; nothing does now.
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def test_an_ignored_hangup_stays_ignored(self):
@@ -615,13 +616,13 @@ class NodeInstallTests(unittest.TestCase):
         system = self.sudo_host()
         installer.install_system(self.args, "synthetic-once-token")
         victim = self.home / "victim"
-        (self.home / "service/.parsar").rename(victim)
-        (self.home / "service/.parsar").symlink_to(victim)
+        (self.home / "service/.oac").rename(victim)
+        (self.home / "service/.oac").symlink_to(victim)
         with mock.patch.object(installer, "open_request", side_effect=urllib.error.HTTPError("https://core.example", 401, "", {}, None)), \
                 self.assertRaisesRegex(installer.InstallError, "symbolic link.*Nothing was changed"):
             installer.uninstall_system(SimpleNamespace(installation_id=self.args.installation_id, force=True))
         self.assertTrue((victim / "nodes" / self.args.installation_id / "registered.json").exists())
-        self.assertTrue((system / "units" / ("parsar-node-" + self.args.installation_id + ".service")).exists())
+        self.assertTrue((system / "units" / ("oac-node-" + self.args.installation_id + ".service")).exists())
 
     def test_token_comes_on_standard_input_only(self):
         arguments = ["--source-url", self.args.source_url, "--core-url", self.args.core_url, "--installation-id",
@@ -718,6 +719,13 @@ class NodePrerequisiteTests(unittest.TestCase):
             first = installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe")
             self.assertEqual(first, installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe"))
             self.assertLessEqual(len(os.fsencode(first)), 48)
+        for length in (28, 29):
+            with mock.patch.object(installer.Path, "home", return_value=Path("/" + "h" * (length - 1))):
+                if length == 28:
+                    self.assertEqual(len(os.fsencode(installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe"))), 48)
+                else:
+                    with self.assertRaisesRegex(installer.InstallError, "HOME is too long"):
+                        installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe")
         with mock.patch.object(installer.Path, "home", return_value=Path("/home/" + "long" * 20)):
             with self.assertRaisesRegex(installer.InstallError, "HOME is too long"):
                 installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe")

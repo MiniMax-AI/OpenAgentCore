@@ -244,12 +244,12 @@ resources that block replacement.
 ## Node configuration and enrollment
 
 For a new node, send `Authorization: Bearer <enrollment-token>` to the configuration
-GET without `X-Parsar-Node-ID`. The token must be valid, unexpired, unconsumed and
+GET without `X-OAC-Node-ID`. The token must be valid, unexpired, unconsumed and
 belong to this installation. This read does not consume it. Maintenance prevents
 new enrollment configuration reads.
 
 An already registered node sends its durable node credential as Bearer and its
-UUID in `X-Parsar-Node-ID`. Its installation, saved generation and specification
+UUID in `X-OAC-Node-ID`. Its installation, saved generation and specification
 digest must match the active deployment. This read remains available in
 maintenance so the retained node can recover its exact configuration. The old
 enrollment token cannot replace a registered node's credential.
