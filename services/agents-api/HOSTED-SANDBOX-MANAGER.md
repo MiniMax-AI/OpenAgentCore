@@ -24,8 +24,8 @@ remove nodes. The node installation payload that Web serves contains no secret.
 
 ## Sandbox backend selection
 
-A new installation selects Docker sandboxes at Web's Standard size unless
-`install.sh --sandbox` chose microsandbox, E2B or none. Without a selection, the
+A new installation selects microsandbox at Web's Standard size unless
+`install.sh --sandbox` chose Docker, E2B or none. Without a selection, the
 **Nodes** page first asks for **E2B cloud** or **Own machines**; own machines then
 choose Docker or microsandbox, the per-sandbox resources and the matched Runtime
 release. E2B takes an account API key and a qualified immutable Runtime template build

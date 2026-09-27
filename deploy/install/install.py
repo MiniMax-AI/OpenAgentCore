@@ -35,6 +35,12 @@ from distribution import DistributionError, artifact, image_identities, ensure_d
 SETTING_FLAGS = ("core_only", "web_only", "native_core", "core_port", "web_port", "core_url", "public_url")
 RETIRED_NODE_FLAGS = ("--sandbox-provider and --provider are retired: use --sandbox docker|microsandbox|e2b|none. "
                       "The installer no longer adds this host as a node; add it with Add node on the Nodes page in Web.")
+DOCKER_RISKS = """Docker sandboxes isolate less than microsandbox, the default:
+- Containers share the node's kernel, so a container escape reaches the host;
+  microsandbox runs each sandbox in its own microVM.
+- Each node's service account is in the docker group, which is root-equivalent
+  on that host.
+- Choose Docker only for trusted workloads or for node hosts without KVM."""
 
 
 class InstallError(Exception):
@@ -121,8 +127,10 @@ def arguments(argv=None):
     modes.add_argument("--web-only", action="store_true", default=None)
     parser.add_argument("--native-core", action="store_true", default=None, help="Run Core as a systemd user service")
     parser.add_argument("--sandbox", choices=sandbox_setup.CHOICES,
-                        help="Sandbox backend Core starts with, at Web's Standard size (default: docker; "
+                        help="Sandbox backend Core starts with, at Web's Standard size (default: microsandbox; "
                              "none with --web-only). Add nodes afterwards on the Nodes page in Web")
+    parser.add_argument("--accept-docker-risks", action="store_true",
+                        help="With --sandbox docker: accept its weaker isolation without asking")
     parser.add_argument("--e2b-api-key-file", type=Path, help="With --sandbox e2b: private file containing the E2B API key")
     parser.add_argument("--e2b-template", help="With --sandbox e2b: the ready template build, template-id:build-uuid")
     parser.add_argument("--sandbox-provider", nargs="?", const=True, help=argparse.SUPPRESS)
@@ -178,7 +186,9 @@ def check_flags(args, document):
         mode, native = document.get("mode"), document.get("native_core")
     if mode == "web-only" and args.sandbox not in (None, "none"):
         raise InstallError("--web-only has no Core; choose the sandbox backend on the Core host")
-    choice = args.sandbox or ("none" if mode == "web-only" else "docker")
+    choice = args.sandbox or ("none" if mode == "web-only" else "microsandbox")
+    if args.accept_docker_risks and choice != "docker":
+        raise InstallError("--accept-docker-risks requires --sandbox docker")
     if choice == "e2b" and not (args.e2b_api_key_file and args.e2b_template):
         raise InstallError("--sandbox e2b requires --e2b-api-key-file and --e2b-template")
     if choice != "e2b" and (args.e2b_api_key_file or args.e2b_template):
@@ -224,6 +234,20 @@ def origin_port(value):
 def nodes_reach(public_url):
     """Nodes and their sandboxes need an HTTPS public URL that is not loopback."""
     return urlsplit(public_url or "").scheme == "https" and not loopback_origin(public_url)
+
+
+def confirm_docker(accepted):
+    """Docker sandboxes need an explicit yes to their weaker isolation, before anything is created."""
+    print(DOCKER_RISKS, flush=True)
+    if accepted:
+        return
+    try:
+        answer = input("Use Docker sandboxes anyway? [y/N] ").strip().lower() if sys.stdin.isatty() else ""
+    except EOFError:
+        answer = ""
+    if answer not in ("y", "yes"):
+        raise InstallError("Docker sandboxes were not confirmed; nothing was installed. Rerun with "
+                           "--accept-docker-risks, or without --sandbox for microsandbox")
 
 
 def check_public_url(config, choice):
@@ -460,12 +484,16 @@ def sandbox_lines(root, config, selection, deployment):
         built = f" ({size(resources)})" if {"cpus", "memory_mib"} <= set(resources) else ""
         return [f'Sandboxes: E2B template {selection["e2b"]["template"]}{built}. E2B runs them; no nodes are needed.']
     line = f'Sandboxes: {sandbox_setup.NAMES[selection["provider"]]}, Standard ({size(selection["resources"])}).'
+    if selection["provider"] == "microsandbox":
+        # The installer adds no node, so this host needs no KVM of its own.
+        line += " Its nodes need KVM (/dev/kvm); this host needs it only if you add it as a node."
+    add = "in Web, open Nodes and choose Add node" if web else "in a Web console paired with this Core, open Nodes and choose Add node"
+    lines = [line, f"Add nodes: {add}, then paste the command on each host, this one included."]
     if not nodes_reach(config["public_url"]):
         # Each sandbox calls Core at public_url; a loopback address is the sandbox itself.
-        return [line, "Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set "
-                f"public_url in {root / 'config.json'} and run {root / 'parsar'} apply, then add nodes."]
-    add = "in Web, open Nodes and choose Add node" if web else "in a Web console paired with this Core, open Nodes and choose Add node"
-    return [line, f"Add nodes: {add}, then paste the command on each host, this one included."]
+        lines.insert(1, "Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set "
+                        f"public_url in {root / 'config.json'} and run {root / 'parsar'} apply first.")
+    return lines
 
 
 def summary(root, config, fresh, selection=None, deployment=None):
@@ -576,6 +604,8 @@ def main(argv=None):
         read_core_key_file(args.core_key_file)
     e2b = ({"api_key": read_private_file(args.e2b_api_key_file, "E2B API key file"), "template": args.e2b_template}
            if choice == "e2b" else None)
+    if choice == "docker":
+        confirm_docker(args.accept_docker_risks)
     check_host()
     manifest = verify_bundle(bundle)
     if config.get("native_core"):

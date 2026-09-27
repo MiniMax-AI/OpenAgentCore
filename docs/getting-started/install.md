@@ -89,8 +89,8 @@ The installer:
 2. creates the installation directory `~/.parsar/core` with the Core key, `config.json`
    and the `parsar` command ([what it creates](#what-the-installer-creates));
 3. starts PostgreSQL, Core and Web with Docker Compose, on loopback ports only;
-4. selects Docker sandboxes at Web's Standard size (2 CPUs and 2 GiB each). It adds
-   no node; you add nodes in Web.
+4. selects microsandbox at Web's Standard size (2 CPUs, 4 GiB memory and two 8 GiB
+   disks each). It adds no node, so this host needs no KVM; you add nodes in Web.
 
 It creates no Project or API key, makes no model request and runs no sample task.
 It ends by printing the console address, the API base URL and the next steps.
@@ -109,7 +109,8 @@ and rerunning `install.sh` accepts no flag except `--install-dir`.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--public-url URL` | none: local access only | Public origin of Core and Web behind your reverse proxy, such as `https://core.example`: HTTPS, no path. Plain HTTP only for a loopback host. Seeds `public_url` |
-| `--sandbox docker\|microsandbox\|e2b\|none` | `docker` (`none` with `--web-only`) | [Sandbox backend](#sandbox-backend) to start with. A one-time choice saved in the database; change it later in Web |
+| `--sandbox docker\|microsandbox\|e2b\|none` | `microsandbox` (`none` with `--web-only`) | [Sandbox backend](#sandbox-backend) to start with. A one-time choice saved in the database; change it later in Web |
+| `--accept-docker-risks` | | With `--sandbox docker`: accept Docker's [weaker isolation](#sandbox-backend) without the prompt; required without a terminal |
 | `--e2b-api-key-file FILE` | | With `--sandbox e2b`: absolute path of a private file (no group or other access, at most 4 KiB) holding the E2B API key |
 | `--e2b-template ID:BUILD` | | With `--sandbox e2b`: the ready template build, `template-id:build-uuid` |
 | `--core-only` | | [Mode](#modes): Core and PostgreSQL, without Web |
@@ -129,8 +130,8 @@ A deployment runs its sandboxes on exactly one backend:
 
 | `--sandbox` | Sandboxes run on | You then |
 | --- | --- | --- |
-| `docker` (default) | Docker on your nodes, 2 CPUs and 2 GiB each | [Add nodes](nodes.md) in Web |
-| `microsandbox` | microVMs on your nodes (KVM), 2 CPUs, 4 GiB memory and two 8 GiB disks each | [Add nodes](nodes.md) in Web |
+| `microsandbox` (default) | microVMs on your nodes (KVM), 2 CPUs, 4 GiB memory and two 8 GiB disks each | [Add nodes](nodes.md) in Web |
+| `docker` | Docker on your nodes, 2 CPUs and 2 GiB each; weaker isolation, confirmed at install | [Add nodes](nodes.md) in Web |
 | `e2b` | E2B's cloud, with the CPU and memory of your template build | Nothing: E2B needs no nodes |
 | `none` | Nothing yet | Choose the backend on the **Nodes** page in Web |
 
@@ -140,6 +141,14 @@ installer saves the choice through the same administrator API that Web uses once
 services are healthy. If Core refuses it, for example because E2B rejects the key,
 the installer prints Core's message and exits with an error; the services keep
 running, and you choose the backend on the Nodes page.
+
+`--sandbox docker` first prints Docker's drawbacks. Containers share the host kernel,
+so a container escape reaches the node host, while microsandbox runs each sandbox in
+its own microVM. The node service account in the `docker` group is root-equivalent
+on each node host. Choose Docker only for trusted workloads or hosts without KVM.
+The installer then asks for confirmation, defaulting to No; without a terminal, pass
+`--accept-docker-risks`. Unconfirmed, it exits with an error before it installs
+anything.
 
 E2B also needs an HTTPS public URL that is not loopback, because E2B's sandboxes
 call Core from E2B's cloud. The installer refuses `--sandbox e2b` without one, before
