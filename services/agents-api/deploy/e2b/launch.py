@@ -36,16 +36,16 @@ def launch(payload, template, api_key, record_path, timeout=7200):
     try:
         sandbox = Sandbox.create(
             template=template, timeout=timeout, api_key=api_key,
-            metadata={'parsar_launch_id': payload['launch_id'],
-                      'parsar_environment_id': payload['environment_id']},
+            metadata={'oac_launch_id': payload['launch_id'],
+                      'oac_environment_id': payload['environment_id']},
             lifecycle={'on_timeout': 'kill', 'auto_resume': False})
         # Retain the actual provider ID before uploading credentials or starting anything.
         save('created', sandbox_id=sandbox.sandbox_id)
         save('startup_pending')
-        sandbox.files.write('/root/.parsar/e2b/bootstrap.json', json.dumps(payload),
+        sandbox.files.write('/root/.oac/e2b/bootstrap.json', json.dumps(payload),
                             user='root', request_timeout=30)
-        sandbox.commands.run('/usr/bin/python3 /opt/parsar-e2b/init.py', user='root', timeout=60)
-        receipt = json.loads(sandbox.files.read('/root/.parsar/e2b/ready.json',
+        sandbox.commands.run('/usr/bin/python3 /opt/oac-e2b/init.py', user='root', timeout=60)
+        receipt = json.loads(sandbox.files.read('/root/.oac/e2b/ready.json',
                                                user='root', request_timeout=30))
         if (any(receipt.get(key) != value for key, value in identity.items())
                 or receipt.get('status') != 'daemon_started'

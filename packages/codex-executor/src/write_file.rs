@@ -233,7 +233,7 @@ struct Staging<'a> {
 
 impl<'a> Staging<'a> {
     fn new(parent: &'a OwnedFd) -> io::Result<Self> {
-        let name = format!(".parsar-upload-{}", uuid::Uuid::new_v4());
+        let name = format!(".oac-upload-{}", uuid::Uuid::new_v4());
         let file = openat(
             parent,
             name.as_str(),

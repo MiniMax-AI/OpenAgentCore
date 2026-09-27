@@ -168,7 +168,7 @@ Restore creates the precommitted next compute generation. Core invokes the
 existing daemon binary inside that exact VM:
 
 ```sh
-parsar-daemon resume --control-file /run/parsar/daemon-suspend.json \
+oac-daemon resume --control-file /run/oac/daemon-suspend.json \
   --environment-id ENVIRONMENT_ID --suspend-id SUSPENSION_ID
 ```
 

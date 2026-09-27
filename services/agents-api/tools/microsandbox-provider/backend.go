@@ -11,7 +11,7 @@ import (
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-const bootstrapLabel = "io.parsar.bootstrap"
+const bootstrapLabel = "io.oac.bootstrap"
 
 type backend struct{ q wire.Request }
 

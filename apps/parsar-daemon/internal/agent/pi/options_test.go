@@ -29,7 +29,7 @@ func TestBuildArgsUsesModeJsonAndPromptLast(t *testing.T) {
 	}
 	// Secrets must never ride on argv (ps would leak them): a provided
 	// api_key is intentionally dropped here and delivered via env instead
-	// (see server injectPiManagedModel / PARSAR_PI_API_KEY).
+	// (see server injectPiManagedModel / OAC_RUNTIME_PI_API_KEY).
 	if slices.Contains(res.Args, "--api-key") || slices.Contains(res.Args, "sk-test") {
 		t.Fatalf("api_key must not leak onto argv: %v", res.Args)
 	}

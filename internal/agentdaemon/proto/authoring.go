@@ -13,7 +13,7 @@ const (
 	AuthoringPromptRead   = "instructions.read"
 	AuthoringPromptWrite  = "instructions.write"
 	AuthoringMaxBytes     = 1 << 20
-	AuthoringSocketEnv    = "PARSAR_DAEMON_SOCKET"
+	AuthoringSocketEnv    = "OAC_RUNTIME_DAEMON_SOCKET"
 )
 
 // AuthoringRequestPayload uses Envelope.ID for the active run, never a client-supplied workspace or user.

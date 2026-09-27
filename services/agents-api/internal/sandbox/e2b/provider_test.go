@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,5 +157,15 @@ func TestDefinitePreHelperCreateFailureCarriesAbsenceProof(t *testing.T) {
 		} else if info.CreateSettled {
 			t.Fatal("timeout proved absence")
 		}
+	}
+}
+
+func TestLegacyTemplateHasSafeActionableDiagnostic(t *testing.T) {
+	p, f, r := fixture(t)
+	f.response.ErrorCode = "legacy_template"
+	f.response.Info = &sandbox.Info{Reference: r, ProviderID: "owned", State: "running", CreateSettled: true}
+	info, err := p.GetInfo(bounded(t), r)
+	if !errors.Is(err, sandbox.ErrInvalid) || !strings.Contains(err.Error(), "Build a template with this release's build-template.py") || !info.CreateSettled {
+		t.Fatalf("legacy template: %+v %v", info, err)
 	}
 }

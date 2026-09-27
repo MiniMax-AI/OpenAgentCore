@@ -14,9 +14,9 @@ import (
 
 func (b backend) snapshotLabels(operation string, source wire.Compute) map[string]string {
 	labels := wire.Labels(b.q.Config, b.q.Reference)
-	labels["io.parsar.operation"] = operation
-	labels["io.parsar.source_id"] = source.ID
-	labels["io.parsar.source_generation"] = strconv.FormatUint(source.Generation, 10)
+	labels["io.oac.operation"] = operation
+	labels["io.oac.source_id"] = source.ID
+	labels["io.oac.source_generation"] = strconv.FormatUint(source.Generation, 10)
 	labels[resourceProofLabel] = resourceProof(b.q.Config)
 	return labels
 }

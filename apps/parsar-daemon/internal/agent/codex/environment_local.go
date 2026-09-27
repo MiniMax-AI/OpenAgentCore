@@ -9,7 +9,7 @@ import (
 
 // SupportsLocalEnvironment checks deployment prerequisites, not public admission.
 func SupportsLocalEnvironment(version string) bool {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" || !SupportsNativeSessionRecovery(version) || os.Getenv("PARSAR_CODEX_PERMISSION_PROFILE") == "" || os.Getenv("PARSAR_CODEX_HARNESS_BIN") != "" {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" || !SupportsNativeSessionRecovery(version) || os.Getenv("OAC_RUNTIME_CODEX_PERMISSION_PROFILE") == "" || os.Getenv("OAC_RUNTIME_CODEX_HARNESS_BIN") != "" {
 		return false
 	}
 	binding, err := localworkspace.Load()
@@ -19,7 +19,7 @@ func SupportsLocalEnvironment(version string) bool {
 // SupportsLocalNetworkPolicy describes the qualified adapter and bound policy;
 // actual native preparation still validates the managed requirements.
 func SupportsLocalNetworkPolicy(version string) bool {
-	if !SupportsLocalEnvironment(version) || os.Getenv("PARSAR_CODEX_PERMISSION_PROFILE") != "managed-workspace" {
+	if !SupportsLocalEnvironment(version) || os.Getenv("OAC_RUNTIME_CODEX_PERMISSION_PROFILE") != "managed-workspace" {
 		return false
 	}
 	binding, err := localworkspace.Load()

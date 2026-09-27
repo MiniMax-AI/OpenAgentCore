@@ -19,7 +19,7 @@ Stop on any failed assertion. Report INITIAL_FILES_VERIFIED and SKILL_VERIFIED.
 from pathlib import Path
 for name in ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'OPENAI_API_KEY', 'MINIMAX_API_KEY']:
     assert name not in os.environ, 'native credential reached a Skill helper'
-for path in ['/environment/staging/initial-files-private-canary', '/home/runtime/.parsar/parsar-daemon/default/auth.json']:
+for path in ['/environment/staging/initial-files-private-canary', '/home/runtime/.oac/daemon/default/auth.json']:
     assert not os.access(path, os.R_OK), 'private Runtime state reached a Skill helper'
 manifest = Path('/environment/initialization/capabilities/skills/proof-skill/SKILL.md')
 try:

@@ -30,7 +30,7 @@ func (s *Session) emitToolStage(update toolUpdate, stage string) error {
 }
 
 func workspaceToolObservation(update toolUpdate, stage string) *proto.ToolObservation {
-	if update.Name != "mcp__parsar_workspace__workspace_bash" {
+	if update.Name != "mcp__oac_workspace__workspace_bash" {
 		return nil
 	}
 	command, _ := update.RawInput["command"].(string)

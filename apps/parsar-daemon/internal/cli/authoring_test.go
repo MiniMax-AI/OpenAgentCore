@@ -63,7 +63,7 @@ func TestAuthoringRegistryRequiresExplicitCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(root)
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	for _, optIn := range []bool{false, true} {
 		reg := agent.NewRegistry()
 		called := false

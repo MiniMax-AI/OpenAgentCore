@@ -37,7 +37,7 @@ func TestBridgeUsesRunAttributionAndClosesAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer release()
-	if filepath.Dir(path) != filepath.Join(home, ".parsar", "authoring") {
+	if filepath.Dir(path) != filepath.Join(home, ".oac", "authoring") {
 		t.Fatal("socket outside Parsar state")
 	}
 	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {

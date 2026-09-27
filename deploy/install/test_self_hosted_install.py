@@ -76,7 +76,7 @@ class SelfHostedInstallTests(unittest.TestCase):
             if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
             if command[0].endswith('parsar-runtime'):
                 self.assertTrue((self.root / 'launch.json').exists())
-                return json.dumps({'container': 'parsar-selfhost-'+'c'*32, 'status': 'started'})
+                return json.dumps({'container': 'oac-selfhost-'+'c'*32, 'status': 'started'})
             return ''
         with patch.object(installer, 'load_manifest', return_value=self.manifest), \
                 patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest), \
@@ -90,14 +90,14 @@ class SelfHostedInstallTests(unittest.TestCase):
 
     def test_connection_failure_retry_preserves_same_container_and_credential(self):
         commands = []
-        name = 'parsar-selfhost-'+'c'*32
+        name = 'oac-selfhost-'+'c'*32
         def checked(command, message, timeout=30):
             commands.append(command)
             if 'container' in command:
                 state = json.loads(installer.private_read(self.root/'installation.json'))
-                labels = {'io.parsar.agents-api.installation': state['installation_id'],
-                          'io.parsar.agents-api.environment': self.environment,
-                          'io.parsar.agents-api.user-owned': 'true'}
+                labels = {'io.oac.installation': state['installation_id'],
+                          'io.oac.environment': self.environment,
+                          'io.oac.user-owned': 'true'}
                 return json.dumps(labels)+' running '+state['runtime_image']
             if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
             return json.dumps({'container': name, 'status': 'started'})
@@ -141,7 +141,7 @@ class SelfHostedInstallTests(unittest.TestCase):
 
     def launched_runtime(self):
         """Launch with self.key, then rerun without --credential-file; docker commands in `commands`."""
-        name = 'parsar-selfhost-' + 'c' * 32
+        name = 'oac-selfhost-' + 'c' * 32
         commands, interrupt = [], []
         def checked(command, message, timeout=30):
             commands.append(command)
@@ -151,9 +151,9 @@ class SelfHostedInstallTests(unittest.TestCase):
                 raise installer.InstallError(message)
             if 'container' in command:
                 state = json.loads(installer.private_read(self.root/'installation.json'))
-                labels = {'io.parsar.agents-api.installation': state['installation_id'],
-                          'io.parsar.agents-api.environment': self.environment,
-                          'io.parsar.agents-api.user-owned': 'true'}
+                labels = {'io.oac.installation': state['installation_id'],
+                          'io.oac.environment': self.environment,
+                          'io.oac.user-owned': 'true'}
                 return json.dumps(labels)+' running '+state['runtime_image']
             if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
             if command[1:2] == ['replace-credential']:
@@ -241,7 +241,7 @@ class SelfHostedInstallTests(unittest.TestCase):
         def checked(command, message, timeout=30):
             self.assertNotIn('load', command)
             if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
-            return json.dumps({'container': 'parsar-selfhost-'+'c'*32, 'status': 'started'})
+            return json.dumps({'container': 'oac-selfhost-'+'c'*32, 'status': 'started'})
         with patch.object(installer, 'load_manifest', return_value=self.manifest), \
                 patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest), \
                 patch.object(installer, 'runtime_archive') as archive, \
@@ -257,7 +257,7 @@ class SelfHostedInstallTests(unittest.TestCase):
                 raise installer.InstallError('image missing')
             if 'inspect' in command: return self.manifest['images']['runtime'] + ' linux/amd64'
             if command[0].endswith('parsar-runtime'):
-                return json.dumps({'container': 'parsar-selfhost-'+'c'*32, 'status': 'started'})
+                return json.dumps({'container': 'oac-selfhost-'+'c'*32, 'status': 'started'})
             return ''
         with patch.object(installer, 'load_manifest', return_value=self.manifest), \
                 patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest), \
@@ -278,7 +278,7 @@ class SelfHostedInstallTests(unittest.TestCase):
                     raise installer.InstallError('image missing')
                 return expected + ' linux/amd64'
             self.assertEqual(command[command.index('--image') + 1], expected)
-            return json.dumps({'container': 'parsar-selfhost-'+'c'*32, 'status': 'started'})
+            return json.dumps({'container': 'oac-selfhost-'+'c'*32, 'status': 'started'})
         with patch.object(installer, 'load_manifest', return_value=self.manifest), \
                 patch.object(installer, 'obtain_artifact', side_effect=lambda m, n, dest, o: dest), \
                 patch.object(installer, 'runtime_archive', side_effect=AssertionError('warm Runtime download')), \
@@ -311,13 +311,13 @@ class SelfHostedInstallTests(unittest.TestCase):
             self.assertFalse((self.root/'launch.json').exists())
 
     def test_existing_launch_verifies_labels_and_reports_state(self):
-        name = 'parsar-selfhost-'+'c'*32
+        name = 'oac-selfhost-'+'c'*32
         state = {'installation_id': str(uuid.uuid4()), 'environment_id': self.environment,
                  'runtime_image': self.manifest['images']['runtime'],
                  'runtime_manifest': self.manifest['image_manifest_digests']['runtime']}
-        labels = {'io.parsar.agents-api.installation': state['installation_id'],
-                  'io.parsar.agents-api.environment': self.environment,
-                  'io.parsar.agents-api.user-owned': 'true'}
+        labels = {'io.oac.installation': state['installation_id'],
+                  'io.oac.environment': self.environment,
+                  'io.oac.user-owned': 'true'}
         installer.write_private(self.root/'started.json', {'container': name, 'status': 'started'})
         with patch.object(installer, 'checked', return_value=json.dumps(labels)+' running '+state['runtime_image']), \
                 contextlib.redirect_stdout(io.StringIO()) as output:
@@ -336,7 +336,7 @@ class SelfHostedInstallTests(unittest.TestCase):
         with patch.object(installer, 'checked', return_value=json.dumps(labels)+' running sha256:'+'f'*64):
             with self.assertRaisesRegex(installer.InstallError, 'container image does not match'):
                 installer.inspect_prior_launch(self.root, state)
-        labels['io.parsar.agents-api.environment'] = str(uuid.uuid4())
+        labels['io.oac.environment'] = str(uuid.uuid4())
         with patch.object(installer, 'checked', return_value=json.dumps(labels)+' running '+state['runtime_image']):
             with self.assertRaisesRegex(installer.InstallError, 'does not match'):
                 installer.inspect_prior_launch(self.root, state)
@@ -348,7 +348,7 @@ class SelfHostedInstallTests(unittest.TestCase):
         with self.assertRaises(installer.InstallError) as failure:
             installer.inspect_prior_launch(self.root, state)
         message = str(failure.exception)
-        self.assertIn('ps -a --filter label=io.parsar.agents-api.installation='+state['installation_id'], message)
+        self.assertIn('ps -a --filter label=io.oac.installation='+state['installation_id'], message)
         self.assertIn('volume ls --filter', message)
         self.assertIn('Do not delete the receipt', message)
 

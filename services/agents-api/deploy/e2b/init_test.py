@@ -37,7 +37,7 @@ class StartupTest(unittest.TestCase):
             profile = Path(temporary) / 'private/default'
             environment_file = Path(temporary) / 'image.json'
             environment_file.write_text(json.dumps({'HOME': '/home/runtime',
-                'PARSAR_HOME': '/home/runtime/.parsar', 'PARSAR_RUNTIME_WORKSPACE': '/environment/workspace'}))
+                'OAC_RUNTIME_HOME': '/home/runtime/.oac', 'OAC_RUNTIME_WORKSPACE': '/environment/workspace'}))
             (root / 'bootstrap.json').write_text(json.dumps(PAYLOAD))
             real_chmod = Path.chmod
 
@@ -56,7 +56,7 @@ class StartupTest(unittest.TestCase):
                 options = popen.call_args.kwargs
                 self.assertEqual(argv[argv.index('--remote') + 1], PAYLOAD['remote_url'])
                 self.assertNotIn('test-private-key', repr(popen.call_args))
-                self.assertNotIn('PARSAR_RUNTIME_SESSION_ID', options['env'])
+                self.assertNotIn('OAC_RUNTIME_SESSION_ID', options['env'])
                 self.assertEqual((options['user'], options['group'], options['extra_groups']), (1000, 1000, []))
                 self.assertEqual(options['umask'], 0o077)
                 key = profile.parent / 'executor-key.json'

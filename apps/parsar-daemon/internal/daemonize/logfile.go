@@ -133,7 +133,7 @@ func lastLinesOffset(f *os.File, n int) (int64, error) {
 }
 
 // EnsureLogFile creates the log file (0o600) if missing so a
-// `parsar-daemon logs` before the first `connect -b` gets "0 bytes"
+// `oac-daemon logs` before the first `connect -b` gets "0 bytes"
 // instead of "no such file".
 func EnsureLogFile(path string) error {
 	if dir := filepath.Dir(path); dir != "" && dir != "." {

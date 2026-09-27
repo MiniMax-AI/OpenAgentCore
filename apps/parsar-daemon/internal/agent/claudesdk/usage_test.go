@@ -21,7 +21,7 @@ func TestUsageTransportPreservesSnapshotOnFailureAndDone(t *testing.T) {
 	for _, mode := range []string{"success", "native-error", "process-error", "missing", "malformed", "duplicate", "wrong-session", "changed-result"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=usage-" + mode, "GORACE=atexit_sleep_ms=0"}}
 			request := proto.PromptRequestPayload{RunID: "usage-run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

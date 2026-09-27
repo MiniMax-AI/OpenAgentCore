@@ -18,7 +18,7 @@ func TestSpawnReExecsWithSentinelAndPIDFile(t *testing.T) {
 	// becomes child args. Placeholder subcommand so flag parsing
 	// wouldn't choke — runSpawnTestChild short-circuits anyway.
 	pid, err := Spawn(
-		[]string{"parsar-daemon", "child-mode"},
+		[]string{"oac-daemon", "child-mode"},
 		ReExecOptions{
 			LogPath:  logPath,
 			PIDPath:  pidPath,
@@ -77,7 +77,7 @@ func TestSpawnRejectsEmptyArgv(t *testing.T) {
 }
 
 func TestSpawnRejectsMissingPaths(t *testing.T) {
-	_, err := Spawn([]string{"parsar-daemon"}, ReExecOptions{})
+	_, err := Spawn([]string{"oac-daemon"}, ReExecOptions{})
 	if err == nil {
 		t.Fatalf("Spawn(no paths) succeeded; want error")
 	}

@@ -649,7 +649,7 @@ func TestResolveSessionWorkDir_FallbackCreatesDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveSessionWorkDir: %v", err)
 	}
-	want := filepath.Join(tmp, ".parsar", "runtime", "claudecode", "conv-conv-abc-123")
+	want := filepath.Join(tmp, ".oac", "runtime", "claudecode", "conv-conv-abc-123")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}

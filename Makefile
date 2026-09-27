@@ -43,7 +43,7 @@ build-daemon:
 	@set -e; output="$${OAC_DEV_HOME:-$$HOME/.oac}/build/daemon"; \
 	[[ "$$output" == /* ]] || { echo 'Daemon output directory must be absolute' >&2; exit 1; }; \
 	mkdir -p "$$output"; \
-	CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$$output/parsar-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+	CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$$output/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
 
 build-agents-api:
 	./scripts/build-agents-api.sh

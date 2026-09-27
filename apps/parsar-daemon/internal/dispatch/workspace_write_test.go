@@ -37,7 +37,7 @@ func localWriterRouter(t *testing.T, response string) (*dispatch.Router, *recSen
 		t.Fatal(err)
 	}
 	environment, session := uuid.NewString(), uuid.NewString()
-	for k, v := range map[string]string{"PARSAR_RUNTIME_ENVIRONMENT_ID": environment, "PARSAR_RUNTIME_SESSION_ID": session, "PARSAR_RUNTIME_WORKSPACE": workspace, "PARSAR_RUNTIME_DIRECTORY_HELPER": helper, "PARSAR_RUNTIME_WRITE_HELPER": helper, "PARSAR_RUNTIME_STAGING": staging} {
+	for k, v := range map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": environment, "OAC_RUNTIME_SESSION_ID": session, "OAC_RUNTIME_WORKSPACE": workspace, "OAC_RUNTIME_DIRECTORY_HELPER": helper, "OAC_RUNTIME_WRITE_HELPER": helper, "OAC_RUNTIME_STAGING": staging} {
 		t.Setenv(k, v)
 	}
 	binding, err := localworkspace.Load()

@@ -10,7 +10,7 @@ import select, signal
 import subprocess
 import tempfile, threading, time
 
-HELPER = '/usr/local/bin/agents-api-runtime-initialize'
+HELPER = '/usr/local/bin/oac-runtime-initialize'
 SELF = ['/usr/bin/python3', '-I', '-S', str(Path(__file__).resolve())]
 WRITER = "import sys,time\nfor n in range(300):\n with open(sys.argv[1],'ab') as f: f.write(b'x')\n time.sleep(.1)\n"
 SERVER = """import subprocess,sys

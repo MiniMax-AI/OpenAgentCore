@@ -245,7 +245,7 @@ func writeConfigHome(runID, raw string) (string, func(), error) {
 	if err != nil {
 		return "", func() {}, err
 	}
-	scratchRoot := filepath.Join(root, "parsar-daemon", "scratch", safeRunID(runID))
+	scratchRoot := filepath.Join(root, "daemon", "scratch", safeRunID(runID))
 	configHome := filepath.Join(scratchRoot, "config-home")
 	opencodeDir := filepath.Join(configHome, "opencode")
 	if err := os.MkdirAll(opencodeDir, 0o700); err != nil {

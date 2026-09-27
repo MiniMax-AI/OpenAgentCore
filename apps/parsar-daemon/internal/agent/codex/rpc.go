@@ -39,7 +39,7 @@ const rpcStdoutBufferMax = 16 * 1024 * 1024
 // through to sensible defaults.
 type JSONRPCConfig struct {
 	// Binary is the codex executable to spawn. Defaults to defaultBinary():
-	// the bare name "codex" for a PATH lookup, or the PARSAR_CODEX_BIN
+	// the bare name "codex" for a PATH lookup, or the OAC_RUNTIME_CODEX_BIN
 	// override.
 	Binary string
 	// Args added before "app-server --stdio". Useful for `-c key=value`

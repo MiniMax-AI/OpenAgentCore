@@ -13,17 +13,17 @@ done
 test -f "$companion/provenance.json"
 test -f "$companion/native-patch.json"
 test "$(node "$native/cli.js" --version)" = 0.4.12
-mkdir -p "$runtime_root/cache/agents-runtime-builds"
-context="$(mktemp -d "$runtime_root/cache/agents-runtime-builds/mcode.XXXXXX")"
+mkdir -p "$runtime_root/cache/oac-runtime-builds"
+context="$(mktemp -d "$runtime_root/cache/oac-runtime-builds/mcode.XXXXXX")"
 trap 'rm -rf "$context"' EXIT
 mkdir "$context/mcode-harness"
 cp -RL "$companion/." "$context/mcode-harness/"
 (
   cd "$repo_root"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
-    -o "$context/parsar-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+    -o "$context/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
 )
-for helper in agents-api-codex-directory agents-api-codex-write agents-api-workspace-export; do
+for helper in oac-codex-directory oac-codex-write oac-workspace-export; do
   test -x "$helpers/$helper"
   cp "$helpers/$helper" "$context/"
 done

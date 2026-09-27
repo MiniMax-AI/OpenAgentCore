@@ -74,6 +74,17 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(self.record()['connection']['envd_access_token'], 'private-envd-secret')
         self.api.connect.assert_not_called()
 
+    def test_legacy_template_refuses_before_credentials_and_retains_owned_cleanup(self):
+        with patch('provider.run', return_value={'ExitCode': 78, 'Stdout': '', 'Stderr': ''}):
+            result = self.call('create')
+        self.assertEqual(result['ErrorCode'], 'legacy_template')
+        self.assertTrue(result['Info']['CreateSettled'])
+        self.assertFalse(result['Info']['BootstrapComplete'])
+        self.assertEqual(self.record()['ids'], ['owned-id'])
+        self.cloud.files.write.assert_not_called()
+        self.api.kill.assert_not_called()
+        self.assertEqual(self.call('create')['ErrorCode'], 'exists')
+
     def test_unknown_create_empty_lookup_never_proves_cleanup(self):
         self.api.create.side_effect = TimeoutError('confidential SDK diagnostic')
         self.assertEqual(self.call('create')['ErrorCode'], 'unconfirmed')

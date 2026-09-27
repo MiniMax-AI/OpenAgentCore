@@ -9,7 +9,7 @@ import (
 )
 
 // InstallURL points to the official Claude Code install instructions.
-// Surfaced by `parsar-daemon connect` when the CLI is missing so the user
+// Surfaced by `oac-daemon connect` when the CLI is missing so the user
 // has a clear next step instead of an opaque "exec: no such file".
 const InstallURL = "https://docs.anthropic.com/claude/docs/claude-code"
 

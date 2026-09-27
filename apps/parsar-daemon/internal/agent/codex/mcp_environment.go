@@ -42,14 +42,14 @@ func mergeEnvironmentMCP(servers map[string]mcpServerConfig, local *proto.LocalE
 				if !strings.HasPrefix(server.URL, "https://") || !agent.ValidMCPHTTPBearerToken(*item.BearerToken) {
 					return nil, nil, errors.New("codex: unsupported environment MCP bearer")
 				}
-				server.BearerTokenEnvVar = "PARSAR_MCP_BEARER_" + rand.Text()
+				server.BearerTokenEnvVar = "OAC_RUNTIME_MCP_BEARER_" + rand.Text()
 				env = append(env, server.BearerTokenEnvVar+"="+*item.BearerToken)
 			}
 			server.EnvHTTPHeaders = map[string]string{}
 			for key, value := range declaration.HTTPHeaders {
 				// The public value stays literal. This native-only env reference
 				// keeps its bytes out of generated configuration and argv.
-				reference := "PARSAR_MCP_HEADER_" + rand.Text()
+				reference := "OAC_RUNTIME_MCP_HEADER_" + rand.Text()
 				server.EnvHTTPHeaders[key] = reference
 				env = append(env, reference+"="+value)
 			}

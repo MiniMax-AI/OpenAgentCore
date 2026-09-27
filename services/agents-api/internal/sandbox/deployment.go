@@ -56,7 +56,7 @@ func lowerHex(v string, bytes int) bool {
 func (r RuntimeRelease) Validate() error {
 	if !lowerHex(r.SourceCommit, 20) || !strings.HasPrefix(r.ImageID, "sha256:") || !lowerHex(strings.TrimPrefix(r.ImageID, "sha256:"), 32) ||
 		!strings.HasPrefix(r.ImageManifestDigest, "sha256:") || !lowerHex(strings.TrimPrefix(r.ImageManifestDigest, "sha256:"), 32) ||
-		!strings.HasPrefix(r.MicrosandboxRef, "parsar-core-runtime@sha256:") || !lowerHex(strings.TrimPrefix(r.MicrosandboxRef, "parsar-core-runtime@sha256:"), 32) ||
+		!strings.HasPrefix(r.MicrosandboxRef, "oac-runtime@sha256:") || !lowerHex(strings.TrimPrefix(r.MicrosandboxRef, "oac-runtime@sha256:"), 32) ||
 		!lowerHex(r.RuntimeSHA256, 32) || !lowerHex(r.FirmwareSHA256, 32) {
 		return fmt.Errorf("%w: Runtime must reference one immutable distribution", ErrInvalid)
 	}

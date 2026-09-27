@@ -256,8 +256,8 @@ def wait_connected(remote, environment, key, container, timeout=60):
 
 def inspect_prior_launch(root, state, replacing=False):
     docker = 'docker --host unix:///var/run/docker.sock'
-    filters = (' --filter label=io.parsar.agents-api.installation=' + state['installation_id']
-               + ' --filter label=io.parsar.agents-api.environment=' + state['environment_id'])
+    filters = (' --filter label=io.oac.installation=' + state['installation_id']
+               + ' --filter label=io.oac.environment=' + state['environment_id'])
     guidance = (' Inspect retained resources with: ' + docker + ' ps -a' + filters
                 + '; ' + docker + ' volume ls' + filters
                 + '. Do not delete the receipt or create replacement history.')
@@ -266,7 +266,7 @@ def inspect_prior_launch(root, state, replacing=False):
         raise InstallError('A Runtime launch was already attempted without confirmed startup.' + guidance)
     prior = json.loads(private_read(receipt))
     name = prior.get('container', '') if isinstance(prior, dict) else ''
-    if not re.fullmatch(r'parsar-selfhost-[0-9a-f]{32}', name) or prior.get('status') != 'started':
+    if not re.fullmatch(r'oac-selfhost-[0-9a-f]{32}', name) or prior.get('status') != 'started':
         raise InstallError('Invalid retained Runtime startup receipt.' + guidance)
     try:
         raw = checked(['docker', '--host', 'unix:///var/run/docker.sock', 'container', 'inspect', name,
@@ -275,9 +275,9 @@ def inspect_prior_launch(root, state, replacing=False):
         labels = json.loads(labels)
     except (InstallError, ValueError):
         raise InstallError('The prior Runtime cannot be confirmed.' + guidance) from None
-    expected = {'io.parsar.agents-api.installation': state['installation_id'],
-                'io.parsar.agents-api.environment': state['environment_id'],
-                'io.parsar.agents-api.user-owned': 'true'}
+    expected = {'io.oac.installation': state['installation_id'],
+                'io.oac.environment': state['environment_id'],
+                'io.oac.user-owned': 'true'}
     if not isinstance(labels, dict) or any(labels.get(key) != value for key, value in expected.items()):
         raise InstallError('The retained container does not match this installation and Environment.' + guidance)
     if image not in (state['runtime_image'], state['runtime_manifest']):
@@ -401,7 +401,7 @@ def install(args, root):
     write_private(root / 'launch.json', {'installation_id': state['installation_id'], 'environment_id': args.environment_id})
     result = json.loads(checked(command, 'Runtime launch failed or is uncertain. Inspect retained installation state and Docker containers', timeout=150))
     if (not isinstance(result, dict) or result.get('status') != 'started'
-            or not re.fullmatch(r'parsar-selfhost-[0-9a-f]{32}', result.get('container', ''))):
+            or not re.fullmatch(r'oac-selfhost-[0-9a-f]{32}', result.get('container', ''))):
         raise InstallError('Runtime launcher returned an invalid result; inspect the retained container')
     write_private(root / 'started.json', result)
     print('Runtime started: ' + result['container'])

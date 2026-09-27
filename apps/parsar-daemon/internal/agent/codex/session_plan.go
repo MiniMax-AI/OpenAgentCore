@@ -43,13 +43,13 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 			plan.Cleanup()
 			return SessionPlan{}, nil, err
 		}
-		plan.Env = append(plan.Env, "PARSAR_RUNTIME_TOOL_ENV=1")
+		plan.Env = append(plan.Env, "OAC_RUNTIME_TOOL_ENV=1")
 		if req.LocalEnvironment.SystemPackages {
 			if err := prepareSystemToolAnchor(); err != nil {
 				plan.Cleanup()
 				return SessionPlan{}, nil, err
 			}
-			plan.Env = append(plan.Env, "PARSAR_RUNTIME_SYSTEM_PACKAGES=1")
+			plan.Env = append(plan.Env, "OAC_RUNTIME_SYSTEM_PACKAGES=1")
 		}
 		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"features.hooks", "true"})
 	}

@@ -9,7 +9,7 @@ import { immediateInput, parseStart } from "../dist/request.js";
 import { WorkspaceProfile } from "../dist/workspace.js";
 
 const stdio = { server_label: "installed", command: "/usr/bin/python3", allowed_tools: null,
-  args: ["-I", "-S", "/usr/local/bin/agents-api-runtime-initialize", "stdio", "plugins/installed", "installed"] };
+  args: ["-I", "-S", "/usr/local/bin/oac-runtime-initialize", "stdio", "plugins/installed", "installed"] };
 const native = "mcp__installed__echo_v1";
 const statuses = [{ name: "installed", status: "connected", tools: [{ name: "echo.v1" }] }];
 const baseline = ["Bash", "Read", "Edit"];
@@ -87,15 +87,15 @@ test("combined inventory rejects extra servers, tools and normalized identity co
 });
 
 test("workspace bearer references reach native HTTP and stay denied to Bash", t => {
-  const reference = "PARSAR_MCP_BEARER_ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const reference = "OAC_RUNTIME_MCP_BEARER_ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const http = { server_label: "remote", server_url: "https://example.invalid/mcp", allowed_tools: null, bearer_token_env_var: reference };
   const { dirs, config } = fixture(t, [http]);
   process.env[reference] = "selected-user-token";
-  process.env.PARSAR_MCP_BEARER_UNSELECTED = "other-token";
+  process.env.OAC_RUNTIME_MCP_BEARER_UNSELECTED = "other-token";
   const mcp = new MCPProfile([http], []);
   const workspace = new WorkspaceProfile(dirs.work, config, [], mcp);
   assert.equal(workspace.options.env[reference], "selected-user-token");
-  assert.equal(workspace.options.env.PARSAR_MCP_BEARER_UNSELECTED, undefined);
+  assert.equal(workspace.options.env.OAC_RUNTIME_MCP_BEARER_UNSELECTED, undefined);
   assert.deepEqual(mcp.servers.remote.headers, { Authorization: `Bearer \${${reference}}` });
   assert.ok(workspace.options.sandbox.credentials.envVars.some(entry => entry.name === reference && entry.mode === "deny"));
   assert.equal(JSON.stringify(mcp.servers).includes("selected-user-token"), false);

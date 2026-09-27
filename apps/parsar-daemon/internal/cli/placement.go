@@ -12,10 +12,10 @@ import (
 
 func runPlacement(ctx *runContext, args []string) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
-		fmt.Fprintln(ctx.stdout, "Usage: parsar-daemon placement enroll --container <full-id> --owner <label-value> --workspace <absolute-path> [--environment <uuid>]")
-		fmt.Fprintln(ctx.stdout, "       parsar-daemon placement retire --container <full-id> [--environment <uuid>]")
+		fmt.Fprintln(ctx.stdout, "Usage: oac-daemon placement enroll --container <full-id> --owner <label-value> --workspace <absolute-path> [--environment <uuid>]")
+		fmt.Fprintln(ctx.stdout, "       oac-daemon placement retire --container <full-id> [--environment <uuid>]")
 		fmt.Fprintln(ctx.stdout, "Explicit operator-managed local Linux/Docker only; normal harness release is unaffected.")
-		fmt.Fprintln(ctx.stdout, "Enrollment requires label parsar.runtime.placement=<owner> and the qualified private profile.")
+		fmt.Fprintln(ctx.stdout, "Enrollment requires label io.oac.placement=<owner> and the qualified private profile.")
 		fmt.Fprintln(ctx.stdout, "Scoped enrollment requires the same --environment on retirement; this is operator consent, not Core authentication.")
 		return nil
 	}

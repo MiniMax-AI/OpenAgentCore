@@ -145,7 +145,7 @@ and are retried by the restart policy. The installer's launcher starts the daemo
 with `--self-hosted-install`, so its 401 message names the installer's rerun:
 
 ```text
-parsar-daemon: executor credential KEY_ID for Environment ENVIRONMENT_ID was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then rerun the self-hosted install command on this host and paste it. To remove it instead, stop this container.
+oac-daemon: executor credential KEY_ID for Environment ENVIRONMENT_ID was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then rerun the self-hosted install command on this host and paste it. To remove it instead, stop this container.
 ```
 
 Without that flag (for example a caller-managed E2B Runtime) the message says to

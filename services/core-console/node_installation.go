@@ -20,7 +20,7 @@ var nodePayloadFiles = map[string]bool{
 
 // An offline distribution exposes only artifacts declared for these payloads.
 var optionalPayloadFiles = map[string]bool{
-	"native/bin/parsar-sandbox-node": true, "native/bin/parsar-daemon": true,
+	"native/bin/parsar-sandbox-node": true, "native/bin/oac-daemon": true,
 	"native/bin/parsar-runtime": true, "native/bin/agents-api-microsandbox-provider": true,
 	"native/microsandbox/msb": true, "native/microsandbox/libkrunfw.so.5.6.1": true,
 	"images/runtime.tar.gz": true, "runtime/seccomp.json": true,

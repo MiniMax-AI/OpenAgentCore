@@ -47,14 +47,14 @@ func New(environment, session, workspace, helper string) (*Binding, error) {
 }
 
 func Load() (*Binding, error) {
-	values := []string{os.Getenv("PARSAR_RUNTIME_ENVIRONMENT_ID"), os.Getenv("PARSAR_RUNTIME_SESSION_ID"), os.Getenv("PARSAR_RUNTIME_WORKSPACE"), os.Getenv("PARSAR_RUNTIME_DIRECTORY_HELPER")}
+	values := []string{os.Getenv("OAC_RUNTIME_ENVIRONMENT_ID"), os.Getenv("OAC_RUNTIME_SESSION_ID"), os.Getenv("OAC_RUNTIME_WORKSPACE"), os.Getenv("OAC_RUNTIME_DIRECTORY_HELPER")}
 	policy, err := RuntimeNetworkPolicy()
 	if err != nil {
 		return nil, err
 	}
 	network := policy.Access
-	writeHelper, staging := os.Getenv("PARSAR_RUNTIME_WRITE_HELPER"), os.Getenv("PARSAR_RUNTIME_STAGING")
-	exportHelper := os.Getenv("PARSAR_RUNTIME_EXPORT_HELPER")
+	writeHelper, staging := os.Getenv("OAC_RUNTIME_WRITE_HELPER"), os.Getenv("OAC_RUNTIME_STAGING")
+	exportHelper := os.Getenv("OAC_RUNTIME_EXPORT_HELPER")
 	if strings.Join(values, "") == "" && writeHelper == "" && staging == "" && network == "" && exportHelper == "" {
 		return nil, nil
 	}

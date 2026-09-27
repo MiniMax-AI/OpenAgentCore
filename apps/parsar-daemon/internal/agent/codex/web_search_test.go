@@ -8,7 +8,7 @@ import (
 func TestWebSearchConfiguration(t *testing.T) {
 	for _, mode := range []string{"", "disabled", "cached", "live"} {
 		t.Run(mode, func(t *testing.T) {
-			t.Setenv("PARSAR_HOME", t.TempDir())
+			t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 			opts := map[string]any{}
 			var want [][2]string
 			if mode != "" {

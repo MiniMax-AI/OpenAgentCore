@@ -125,10 +125,10 @@ func discoverAgentCLIs(rc *runContext, profile string, checks agentCLIChecks) (a
 		out.ClaudeCode.Version = claudeVersion
 		fmt.Fprintf(rc.stdout, "Claude Code preflight ok (%s)\n", claudeVersion)
 	} else if errors.Is(claudeErr, claudecode.ErrCLINotFound) {
-		fmt.Fprintln(rc.stderr, "parsar-daemon: Claude Code CLI not found on PATH; claude_code unavailable.")
+		fmt.Fprintln(rc.stderr, "oac-daemon: Claude Code CLI not found on PATH; claude_code unavailable.")
 		fmt.Fprintf(rc.stderr, "  Install instructions: %s\n", claudecode.InstallURL)
 	} else {
-		fmt.Fprintf(rc.stderr, "parsar-daemon: `claude --version` failed; claude_code unavailable: %v\n", claudeErr)
+		fmt.Fprintf(rc.stderr, "oac-daemon: `claude --version` failed; claude_code unavailable: %v\n", claudeErr)
 		fmt.Fprintf(rc.stderr, "  Re-install or upgrade: %s\n", claudecode.InstallURL)
 	}
 
@@ -140,10 +140,10 @@ func discoverAgentCLIs(rc *runContext, profile string, checks agentCLIChecks) (a
 		out.OpenCode.Version = opencodeVersion
 		fmt.Fprintf(rc.stdout, "OpenCode preflight ok (%s)\n", opencodeVersion)
 	} else if errors.Is(opencodeErr, opencodeagent.ErrCLINotFound) {
-		fmt.Fprintln(rc.stderr, "parsar-daemon: OpenCode CLI not found on PATH; opencode unavailable.")
+		fmt.Fprintln(rc.stderr, "oac-daemon: OpenCode CLI not found on PATH; opencode unavailable.")
 		fmt.Fprintf(rc.stderr, "  Install instructions: %s\n", opencodeagent.InstallURL)
 	} else {
-		fmt.Fprintf(rc.stderr, "parsar-daemon: `opencode --version` failed; opencode unavailable: %v\n", opencodeErr)
+		fmt.Fprintf(rc.stderr, "oac-daemon: `opencode --version` failed; opencode unavailable: %v\n", opencodeErr)
 		fmt.Fprintf(rc.stderr, "  Re-install or upgrade: %s\n", opencodeagent.InstallURL)
 	}
 
@@ -159,10 +159,10 @@ func discoverAgentCLIs(rc *runContext, profile string, checks agentCLIChecks) (a
 		out.Codex.Capabilities.MCPHTTPRequired = codex.SupportsNativeSessionRecovery(codexVersion)
 		fmt.Fprintf(rc.stdout, "Codex preflight ok (%s)\n", codexVersion)
 	} else if errors.Is(codexErr, codex.ErrCLINotFound) {
-		fmt.Fprintln(rc.stderr, "parsar-daemon: Codex CLI not found on PATH; codex unavailable.")
+		fmt.Fprintln(rc.stderr, "oac-daemon: Codex CLI not found on PATH; codex unavailable.")
 		fmt.Fprintf(rc.stderr, "  Install instructions: %s\n", codex.InstallURL)
 	} else {
-		fmt.Fprintf(rc.stderr, "parsar-daemon: `codex --version` failed; codex unavailable: %v\n", codexErr)
+		fmt.Fprintf(rc.stderr, "oac-daemon: `codex --version` failed; codex unavailable: %v\n", codexErr)
 		fmt.Fprintf(rc.stderr, "  Re-install or upgrade: %s\n", codex.InstallURL)
 	}
 
@@ -174,10 +174,10 @@ func discoverAgentCLIs(rc *runContext, profile string, checks agentCLIChecks) (a
 		out.Pi.Version = piVersion
 		fmt.Fprintf(rc.stdout, "pi preflight ok (%s)\n", piVersion)
 	} else if errors.Is(piErr, pi.ErrCLINotFound) {
-		fmt.Fprintln(rc.stderr, "parsar-daemon: pi CLI not found on PATH; pi unavailable.")
+		fmt.Fprintln(rc.stderr, "oac-daemon: pi CLI not found on PATH; pi unavailable.")
 		fmt.Fprintf(rc.stderr, "  Install instructions: %s\n", pi.InstallURL)
 	} else {
-		fmt.Fprintf(rc.stderr, "parsar-daemon: `pi --version` failed; pi unavailable: %v\n", piErr)
+		fmt.Fprintf(rc.stderr, "oac-daemon: `pi --version` failed; pi unavailable: %v\n", piErr)
 		fmt.Fprintf(rc.stderr, "  Re-install or upgrade: %s\n", pi.InstallURL)
 	}
 

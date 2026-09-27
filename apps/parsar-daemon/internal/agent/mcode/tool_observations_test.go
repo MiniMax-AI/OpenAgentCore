@@ -13,7 +13,7 @@ func TestWorkspaceCommandObservationsWaitForArgumentsAndRetainOutcome(t *testing
 		t.Run(status, func(t *testing.T) {
 			out := make(chan proto.Envelope, 8)
 			s := &Session{ctx: context.Background(), req: proto.PromptRequestPayload{RunID: "run", ObserveToolObservations: true}, out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
-			s.emitTool(toolUpdate{ID: "call", Name: "mcp__parsar_workspace__workspace_bash"})
+			s.emitTool(toolUpdate{ID: "call", Name: "mcp__oac_workspace__workspace_bash"})
 			if len(out) != 0 {
 				t.Fatal("command item emitted before native arguments")
 			}
@@ -41,7 +41,7 @@ func TestWorkspaceCommandObservationsWaitForArgumentsAndRetainOutcome(t *testing
 }
 
 func TestPrivateUtilitiesAreNotInventedPublicFunctionCalls(t *testing.T) {
-	for _, name := range []string{"mcp__parsar_workspace__workspace_read", "skill", "task_query", "task_output", "task_stop", "mcp__unregistered__workspace_bash"} {
+	for _, name := range []string{"mcp__oac_workspace__workspace_read", "skill", "task_query", "task_output", "task_stop", "mcp__unregistered__workspace_bash"} {
 		if workspaceToolObservation(toolUpdate{Name: name}, "before") != nil {
 			t.Fatal(name)
 		}

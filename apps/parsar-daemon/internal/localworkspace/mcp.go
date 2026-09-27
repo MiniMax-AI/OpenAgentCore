@@ -8,7 +8,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
-const MCPInitializer = "/usr/local/bin/agents-api-runtime-initialize"
+const MCPInitializer = "/usr/local/bin/oac-runtime-initialize"
 
 // MCPStdioCommand contains only installed identities. The server's executable,
 // arguments and selected user variables are resolved after entering isolation.

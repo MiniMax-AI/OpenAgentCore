@@ -6,7 +6,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const source = process.env.MCODE_SOURCE;
 if (!source) throw new Error('MCODE_SOURCE is required');
 const revision = '33b259bbbeb1c16433390869938191d09bdb0680';
-if (readFileSync(resolve(source, '.parsar-source-revision'), 'utf8').trim() !== revision)
+if (readFileSync(resolve(source, '.oac-source-revision'), 'utf8').trim() !== revision)
   throw new Error('source revision mismatch');
 const paths = JSON.parse(readFileSync(resolve(source, 'tsconfig.standalone.json'))).compilerOptions.paths;
 const plugin = { name: 'pinned-native-source', setup(builder) {

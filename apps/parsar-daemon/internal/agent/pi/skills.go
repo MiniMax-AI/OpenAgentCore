@@ -328,7 +328,7 @@ func (s skillDescriptor) cacheKey() string {
 }
 
 // resolveSkillsRoot returns the absolute directory under which managed
-// skills install, one subdir per skill. Kept under ~/.parsar/ (runtime
+// skills install, one subdir per skill. Kept under ~/.oac/ (runtime
 // state lives there, not the user's project tree) and scoped per
 // conversation so consecutive turns reuse .cache-key files without two
 // conversations racing the same skill dir. runID scopes the one-shot
@@ -338,7 +338,7 @@ func resolveSkillsRoot(conversationID, runID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("pi skills: resolve home: %w", err)
 	}
-	base := filepath.Join(home, ".parsar", "runtime", "pi")
+	base := filepath.Join(home, ".oac", "runtime", "pi")
 	if id := strings.TrimSpace(conversationID); id != "" {
 		return filepath.Join(base, "conv-"+id, "skills"), nil
 	}

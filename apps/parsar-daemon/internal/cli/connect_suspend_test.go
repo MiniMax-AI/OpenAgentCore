@@ -22,7 +22,7 @@ import (
 func TestPlannedReconnectRequiresAuthenticatedMatchingResume(t *testing.T) {
 	for _, scenario := range []string{"resume", "rollback", "reconnect", "revoked", "wrong_operation"} {
 		t.Run(scenario, func(t *testing.T) {
-			t.Setenv("PARSAR_RUNTIME_WORKSPACE", "")
+			t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 			var connections atomic.Int32
 			peers := make(chan *websocket.Conn, 3)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -181,7 +181,7 @@ func readLifecycleResult(t *testing.T, peer *websocket.Conn, kind string) proto.
 }
 
 func TestRunningSourceOnlyAcceptsExplicitRollbackOrItsReceipt(t *testing.T) {
-	t.Setenv("PARSAR_RUNTIME_WORKSPACE", "")
+	t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 	peers := make(chan *websocket.Conn, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		peer, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
@@ -234,7 +234,7 @@ func TestRunningSourceOnlyAcceptsExplicitRollbackOrItsReceipt(t *testing.T) {
 func TestSuspensionReconnectBeforeConfirmation(t *testing.T) {
 	for _, scenario := range []string{"disconnect", "timeout", "revoked", "cancelled", "deleted"} {
 		t.Run(scenario, func(t *testing.T) {
-			t.Setenv("PARSAR_RUNTIME_WORKSPACE", "")
+			t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 			var attempts atomic.Int32
 			peers := make(chan *websocket.Conn, 2)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -145,7 +145,7 @@ func startNativeEngineDaemon(t *testing.T, h *dispatchHarness, home, binary, eng
 	if h.conn != nil {
 		_ = h.conn.Close()
 	}
-	profile := filepath.Join(home, "parsar-daemon", "execution")
+	profile := filepath.Join(home, "daemon", "execution")
 	if err := os.MkdirAll(profile, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func startNativeEngineDaemon(t *testing.T, h *dispatchHarness, home, binary, eng
 	}
 	old, _ := h.registry.LookupDevice(h.device.ID)
 	cmd := exec.Command(binary, "connect", "--profile", "execution")
-	cmd.Env = append(os.Environ(), "PARSAR_HOME="+home, "PARSAR_MCODE_AGENTS_API=1")
+	cmd.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home, "OAC_RUNTIME_MCODE_AGENTS_API=1")
 	cmd.Stdout, cmd.Stderr = log, log
 	if err = cmd.Start(); err != nil {
 		log.Close()

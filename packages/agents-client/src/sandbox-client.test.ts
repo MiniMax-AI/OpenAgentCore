@@ -36,7 +36,7 @@ const allocation = {
   session_id: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f", environment_id: "3d4e5f6a-7b8c-4d9e-8f1a-2b3c4d5e6f7a",
   state: "running", compute_phase: "running", compute_phase_changed_at: null, diagnostic: "", initialization: "ready", created_at: created,
 };
-const runtime = { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "parsar-core-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) };
+const runtime = { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "oac-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) };
 const unconfigured = { installation_id: "", provider: "", core_url: "https://core.example", maintenance: false, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
 const docker = {
   ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", owner_epoch: 1, generation: 1, mode: "nodes",
@@ -166,7 +166,7 @@ describe("Core sandbox credential boundaries", () => {
   it("forwards one specification with generation and preserves backend conflict details", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_specification_mismatch", message: "Node specification differs" } }, 409));
     const admin = new SandboxAdminClient({ token: "admin-only", fetch });
-    const input = { provider: "docker" as const, resources: { cpus: 2, memory_mib: 2048 }, runtime: { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "parsar-core-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) }, expected_generation: 3 };
+    const input = { provider: "docker" as const, resources: { cpus: 2, memory_mib: 2048 }, runtime: { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "oac-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) }, expected_generation: 3 };
     await expect(admin.updateDeployment(input)).rejects.toMatchObject({ status: 409, code: "sandbox_specification_mismatch" });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual(input);

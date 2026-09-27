@@ -7,23 +7,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mkdir -p /environment/workspace /workspace /home/runtime
 COPY build-system-seed.py /tmp/build-system-seed.py
 RUN python3 -I -S /tmp/build-system-seed.py && rm /tmp/build-system-seed.py
-COPY --chmod=0555 tool-root.py /usr/local/bin/agents-api-tool-root
-COPY --chmod=0555 parsar-daemon agents-api-codex-directory agents-api-codex-write agents-api-workspace-export /usr/local/bin/
+COPY --chmod=0555 tool-root.py /usr/local/bin/oac-tool-root
+COPY --chmod=0555 oac-daemon oac-codex-directory oac-codex-write oac-workspace-export /usr/local/bin/
 COPY mcode-harness /opt/mcode-harness
-COPY --chmod=0444 runtime-initialize.py /usr/local/bin/agents-api-runtime-initialize
-ENV HOME=/home/runtime PARSAR_HOME=/home/runtime/.parsar \
-    PARSAR_MCODE_NODE=/usr/local/bin/node \
-    PARSAR_MCODE_BIN=/opt/mcode-harness/native/cli.js \
-    PARSAR_MCODE_WORKSPACE_BRIDGE=/opt/mcode-harness/bridge.mjs \
-    PARSAR_MCODE_AGENTS_API=1 \
-    PARSAR_MCODE_WORKSPACE=managed \
-    PARSAR_RUNTIME_WORKSPACE=/environment/workspace \
-    PARSAR_RUNTIME_DIRECTORY_HELPER=/usr/local/bin/agents-api-codex-directory \
-    PARSAR_RUNTIME_WRITE_HELPER=/usr/local/bin/agents-api-codex-write \
-    PARSAR_RUNTIME_EXPORT_HELPER=/usr/local/bin/agents-api-workspace-export \
-    PARSAR_RUNTIME_STAGING=/environment/staging
+COPY --chmod=0444 runtime-initialize.py /usr/local/bin/oac-runtime-initialize
+ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \
+    OAC_RUNTIME_MCODE_NODE=/usr/local/bin/node \
+    OAC_RUNTIME_MCODE_BIN=/opt/mcode-harness/native/cli.js \
+    OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE=/opt/mcode-harness/bridge.mjs \
+    OAC_RUNTIME_MCODE_AGENTS_API=1 \
+    OAC_RUNTIME_MCODE_WORKSPACE=managed \
+    OAC_RUNTIME_WORKSPACE=/environment/workspace \
+    OAC_RUNTIME_DIRECTORY_HELPER=/usr/local/bin/oac-codex-directory \
+    OAC_RUNTIME_WRITE_HELPER=/usr/local/bin/oac-codex-write \
+    OAC_RUNTIME_EXPORT_HELPER=/usr/local/bin/oac-workspace-export \
+    OAC_RUNTIME_STAGING=/environment/staging
 USER 1000:1000
 RUN node /opt/mcode-harness/check.mjs && /opt/mcode-harness/native/cli.js --version
 WORKDIR /environment/workspace
-ENTRYPOINT ["/usr/local/bin/parsar-daemon"]
+ENTRYPOINT ["/usr/local/bin/oac-daemon"]
 CMD ["connect", "--profile", "default"]

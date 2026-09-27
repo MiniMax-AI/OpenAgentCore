@@ -18,14 +18,14 @@ import (
 
 func TestScrubInlineConnectArgsRemovesTokenURLAndDeviceName(t *testing.T) {
 	got := scrubInlineConnectArgs([]string{
-		"parsar-daemon", "connect",
+		"oac-daemon", "connect",
 		"--url", "https://parsar.example.com",
 		"--token=rtk_secret",
 		"--device-name", "dev-1",
 		"-b",
 		"--profile", "sandbox",
 	})
-	want := []string{"parsar-daemon", "connect", "-b", "--profile", "sandbox"}
+	want := []string{"oac-daemon", "connect", "-b", "--profile", "sandbox"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("scrubInlineConnectArgs() = %#v, want %#v", got, want)
 	}

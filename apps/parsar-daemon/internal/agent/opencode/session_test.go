@@ -189,7 +189,7 @@ func TestSessionJSONSuccessEmitsDeltaUsageAndDone(t *testing.T) {
 
 func TestSessionInstallsAndRegistersManagedSkills(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("PARSAR_HOME", home)
+	t.Setenv("OAC_RUNTIME_HOME", home)
 	t.Setenv("OPENCODE_CONFIG_DIR", "")
 	userConfigHome := filepath.Join(t.TempDir(), "user-config")
 	t.Setenv("XDG_CONFIG_HOME", userConfigHome)

@@ -10,13 +10,13 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/paths"
 )
 
-// withTempHome points PARSAR_HOME at a fresh tempdir for the test.
+// withTempHome points OAC_RUNTIME_HOME at a fresh tempdir for the test.
 // t.Setenv refuses to run with t.Parallel — the exact constraint
 // we want.
 func withTempHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("PARSAR_HOME", dir)
+	t.Setenv("OAC_RUNTIME_HOME", dir)
 	return dir
 }
 
@@ -56,7 +56,7 @@ func TestRootHonoursParsarHome(t *testing.T) {
 
 func TestProfileDirAndFiles(t *testing.T) {
 	home := withTempHome(t)
-	want := filepath.Join(home, "parsar-daemon", "test")
+	want := filepath.Join(home, "daemon", "test")
 
 	gotDir, err := paths.ProfileDir("test")
 	if err != nil {

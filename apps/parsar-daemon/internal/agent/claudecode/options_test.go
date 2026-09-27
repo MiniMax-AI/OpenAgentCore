@@ -204,7 +204,7 @@ func TestBuildArgsMCPServersWritesTempfile(t *testing.T) {
 	if path == "" {
 		t.Fatalf("--mcp-config path missing, args=%v", res.Args)
 	}
-	if !strings.Contains(path, "parsar-daemon-mcp-") {
+	if !strings.Contains(path, "oac-daemon-mcp-") {
 		t.Errorf("mcp tempfile name unexpected: %q", path)
 	}
 

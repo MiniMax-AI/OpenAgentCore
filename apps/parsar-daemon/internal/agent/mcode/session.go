@@ -201,10 +201,10 @@ func (s *Session) prepareNative() error {
 			Subagents struct {
 				Version, MaxConcurrent int
 				WorkspaceTools         string
-			} `json:"parsar/subagents"`
+			} `json:"oac/subagents"`
 		} `json:"_meta"`
 	}
-	if err := s.call("initialize", map[string]any{"protocolVersion": 1, "clientInfo": map[string]string{"name": "parsar", "version": "1"}, "clientCapabilities": map[string]any{"elicitation": map[string]any{"form": map[string]any{}}}}, &initialized, false); err != nil {
+	if err := s.call("initialize", map[string]any{"protocolVersion": 1, "clientInfo": map[string]string{"name": "oac", "version": "1"}, "clientCapabilities": map[string]any{"elicitation": map[string]any{"form": map[string]any{}}}}, &initialized, false); err != nil {
 		return err
 	}
 	if initialized.ProtocolVersion != 1 {
@@ -235,7 +235,7 @@ func (s *Session) prepareNative() error {
 	model, err := advertisedModel(session.ConfigOptions, s.opts.Model)
 	if err != nil && s.req.AgentSessionID != "" && !slices.ContainsFunc(session.ConfigOptions, func(option configOption) bool { return option.ID == "model" }) {
 		// Native load omits the selector when its persisted model was removed; selection still validates against the current catalog.
-		model = "m:custom_provider%3Aparsar:" + strings.ReplaceAll(url.QueryEscape(s.opts.Model), "+", "%20") + ":v:"
+		model = "m:custom_provider%3Aoac:" + strings.ReplaceAll(url.QueryEscape(s.opts.Model), "+", "%20") + ":v:"
 		err = nil
 	}
 	if err != nil {
@@ -289,7 +289,7 @@ func advertisedModel(options []configOption, model string) (string, error) {
 			if err != nil {
 				continue
 			}
-			if provider == "custom_provider:parsar" && id == model && (parts[3] == "u" || (len(parts) == 5 && parts[3] == "v" && parts[4] == "")) {
+			if provider == "custom_provider:oac" && id == model && (parts[3] == "u" || (len(parts) == 5 && parts[3] == "v" && parts[4] == "")) {
 				return candidate.Value, nil
 			}
 		}

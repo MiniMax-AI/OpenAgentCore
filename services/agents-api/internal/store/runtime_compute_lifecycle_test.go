@@ -167,7 +167,7 @@ func (p *fakeCheckpointProvider) RunCommandCompute(ctx context.Context, r sandbo
 	if _, err := p.GetCompute(ctx, r, c); err != nil {
 		return sandbox.CommandResult{}, err
 	}
-	if len(command.Args) != 8 || command.Args[0] != "parsar-daemon" || command.Args[1] != "resume" || command.Args[5] != r.EnvironmentID {
+	if len(command.Args) != 8 || command.Args[0] != "oac-daemon" || command.Args[1] != "resume" || command.Args[5] != r.EnvironmentID {
 		return sandbox.CommandResult{}, errors.New("unexpected wake command")
 	}
 	p.mu.Lock()

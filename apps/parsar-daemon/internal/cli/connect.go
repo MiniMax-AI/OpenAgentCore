@@ -25,16 +25,16 @@ import (
 
 const (
 	// cliVersionTimeout caps CLI `--version` preflights so a hung agent
-	// binary can't keep `parsar-daemon connect` blocked at startup.
+	// binary can't keep `oac-daemon connect` blocked at startup.
 	cliVersionTimeout = 15 * time.Second
 
 	bootstrapTimeout = 10 * time.Second
 
 	killTimeout = 3 * time.Second
 
-	connectInlineURLEnv        = "PARSAR_DAEMON_CONNECT_URL"
-	connectInlineTokenEnv      = "PARSAR_DAEMON_CONNECT_TOKEN"
-	connectInlineDeviceNameEnv = "PARSAR_DAEMON_CONNECT_DEVICE_NAME"
+	connectInlineURLEnv        = "OAC_RUNTIME_DAEMON_CONNECT_URL"
+	connectInlineTokenEnv      = "OAC_RUNTIME_DAEMON_CONNECT_TOKEN"
+	connectInlineDeviceNameEnv = "OAC_RUNTIME_DAEMON_CONNECT_DEVICE_NAME"
 )
 
 // runConnect dials /agent-daemon/bootstrap, opens /agent-daemon/ws,
@@ -58,7 +58,7 @@ func runConnect(ctx *runContext, args []string) error {
 	var (
 		profile        = fs.String("profile", paths.DefaultProfile, "profile name for reading legacy auth.json state or writing pid/log files")
 		background     = fs.Bool("b", false, "fork into the background; writes connect.pid + connect.log")
-		serverURL      = fs.String("url", "", "Parsar server base URL; with --token, pair inline before connecting")
+		serverURL      = fs.String("url", "", "Core server base URL; with --token, pair inline before connecting")
 		token          = fs.String("token", "", "pairing token; with --url, connect consumes it without writing auth.json")
 		deviceName     = fs.String("device-name", "", "human label for inline pairing (defaults to hostname)")
 		remote         = fs.String("remote", "", "self-hosted Environment remote_url, unchanged")
@@ -71,7 +71,7 @@ func runConnect(ctx *runContext, args []string) error {
 	}
 	// Hydrate inline pairing inputs from env in BOTH parent and the
 	// re-execed background child. Server-spawned sandboxes pass the
-	// token via PARSAR_DAEMON_CONNECT_TOKEN/URL env rather than --url
+	// token via OAC_RUNTIME_DAEMON_CONNECT_TOKEN/URL env rather than --url
 	// /--token flags; without this hydration before the pre-fork
 	// auth.json check below, the parent would take the "rely on
 	// auth.json" branch and bail with "not paired". Idempotent —
@@ -212,7 +212,7 @@ func spawnBackground(rc *runContext, profile string, argv []string, extraEnv []s
 	}
 	// Refuse to start a second background daemon for the same profile.
 	if pid, err := daemonize.ReadPIDFile(pidPath); err == nil {
-		return fmt.Errorf("connect: background daemon already running (pid=%d); run `parsar-daemon stop` first", pid)
+		return fmt.Errorf("connect: background daemon already running (pid=%d); run `oac-daemon stop` first", pid)
 	} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, daemonize.ErrStaleOrCorrupt) {
 		return fmt.Errorf("connect: check pidfile: %w", err)
 	}
@@ -232,10 +232,10 @@ func spawnBackground(rc *runContext, profile string, argv []string, extraEnv []s
 		return fmt.Errorf("connect: spawn background: %w", err)
 	}
 
-	fmt.Fprintf(rc.stdout, "parsar-daemon: backgrounded (pid=%d)\n", pid)
+	fmt.Fprintf(rc.stdout, "oac-daemon: backgrounded (pid=%d)\n", pid)
 	fmt.Fprintf(rc.stdout, "  logs : %s\n", logPath)
 	fmt.Fprintf(rc.stdout, "  pid  : %s\n", pidPath)
-	fmt.Fprintf(rc.stdout, "  stop : parsar-daemon stop --profile %s\n", profile)
+	fmt.Fprintf(rc.stdout, "  stop : oac-daemon stop --profile %s\n", profile)
 	return nil
 }
 

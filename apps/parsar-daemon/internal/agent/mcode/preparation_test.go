@@ -31,7 +31,7 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: r.WorkDir, Network: "disabled", Scratch: t.TempDir(), ProtectedDirs: []string{os.Getenv("PARSAR_HOME")}}, r, record
+	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: r.WorkDir, Network: "disabled", Scratch: t.TempDir(), ProtectedDirs: []string{os.Getenv("OAC_RUNTIME_HOME")}}, r, record
 }
 
 func TestPreparedWorkspaceHasOneInputAndOutputOwner(t *testing.T) {

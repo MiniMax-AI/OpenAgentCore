@@ -11,9 +11,9 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/paths"
 )
 
-// piManagedProviderSlug is the provider key the daemon always writes into
-// models.json, and the server pins opts["model"] to "parsar/<modelKey>" so
-// pi routes through this entry instead of a built-in provider.
+// piManagedProviderSlug belongs to the separate Parsar product integration.
+// Its server pins opts["model"] to "parsar/<modelKey>"; preserve that external
+// identity while the daemon uses the shared OpenAgentCore Runtime settings.
 const piManagedProviderSlug = "parsar"
 
 // piAgentDirEnvVar is pi's sole override for its config directory
@@ -53,7 +53,7 @@ func writePiModelsJSON(agentDir string, cfg piProviderConfig) error {
 		// pi runs apiKey through resolveConfigValue (resolve-config-value.ts):
 		// only a "$NAME" / "${NAME}" template is looked up in process.env; a
 		// bare string is treated as a LITERAL key. So the env var name must be
-		// written with a "$" prefix, otherwise pi sends "PARSAR_PI_API_KEY"
+		// written with a "$" prefix, otherwise pi sends "OAC_RUNTIME_PI_API_KEY"
 		// verbatim to the provider and the request 401s.
 		"apiKey": "$" + cfg.APIKeyEnv,
 		"models": []map[string]any{{"id": cfg.Model}},

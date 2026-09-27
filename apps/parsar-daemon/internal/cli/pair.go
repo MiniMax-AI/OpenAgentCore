@@ -100,7 +100,7 @@ func pairWithServer(ctx context.Context, base string, req pairRequest) (*pairRes
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("User-Agent", "parsar-daemon/"+Version)
+	httpReq.Header.Set("User-Agent", "oac-daemon/"+Version)
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("post: %w", err)

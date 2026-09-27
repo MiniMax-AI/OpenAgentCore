@@ -30,7 +30,7 @@ export class Subagents {
     const value = input.tool_input as Record<string, unknown>;
     if (!value || typeof value !== "object") return deny("Invalid subagent call.");
     const spawn = input.tool_name !== "SendMessage";
-    if (spawn ? value.subagent_type !== "parsar_worker" || typeof value.prompt !== "string" || !value.prompt.trim() ||
+    if (spawn ? value.subagent_type !== "oac_worker" || typeof value.prompt !== "string" || !value.prompt.trim() ||
         value.isolation !== undefined || value.run_in_background === true || value.model !== undefined || value.mode !== undefined
       : typeof value.to !== "string" || !this.known.has(value.to) || (value.type !== undefined && value.type !== "message") ||
         typeof value.message !== "string" || !value.message.trim()) return deny("Unsupported subagent operation.");
@@ -47,7 +47,7 @@ export class Subagents {
     return {};
   };
   readonly childStart: HookCallback = async input => {
-    if (input.hook_event_name !== "SubagentStart" || input.session_id !== this.session || input.agent_type !== "parsar_worker" || !this.running.has(input.agent_id)) throw new Error("invalid native child start");
+    if (input.hook_event_name !== "SubagentStart" || input.session_id !== this.session || input.agent_type !== "oac_worker" || !this.running.has(input.agent_id)) throw new Error("invalid native child start");
     this.known.add(input.agent_id);
     return {};
   };
@@ -56,7 +56,7 @@ export class Subagents {
     return {};
   };
   options(workspace: boolean): Pick<Options, "agents" | "forwardSubagentText"> {
-    return { forwardSubagentText: true, agents: { parsar_worker: {
+    return { forwardSubagentText: true, agents: { oac_worker: {
       description: "A subagent for delegated work in this Session.", prompt: "Complete the delegated task using the available tools.", model: "inherit",
       tools: [...(workspace ? ["Bash"] : []), "Agent", "SendMessage"],
     } } };

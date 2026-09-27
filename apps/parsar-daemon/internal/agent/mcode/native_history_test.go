@@ -14,7 +14,7 @@ import (
 // A successful public real-model run supplies an actual foreign native ID.
 // Neither that history nor a missing ID may silently become a new session.
 func TestNativeMCodeHistoryIsolation(t *testing.T) {
-	binary, options, foreign := os.Getenv("PARSAR_MCODE_BIN"), os.Getenv("OAC_TEST_MCODE_REAL_OPTIONS"), os.Getenv("OAC_TEST_MCODE_FOREIGN_NATIVE_ID")
+	binary, options, foreign := os.Getenv("OAC_RUNTIME_MCODE_BIN"), os.Getenv("OAC_TEST_MCODE_REAL_OPTIONS"), os.Getenv("OAC_TEST_MCODE_FOREIGN_NATIVE_ID")
 	if binary == "" || options == "" || foreign == "" {
 		t.Skip("native executable, private provider options and foreign history ID required")
 	}

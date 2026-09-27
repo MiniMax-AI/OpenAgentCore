@@ -18,7 +18,7 @@ import (
 	"github.com/moby/moby/client"
 )
 
-const labelPrefix = "io.parsar.agents-api."
+const labelPrefix = "io.oac."
 
 // Config is trusted operator configuration, never public Session input. The
 // immutable image contains the qualified native profile and all Runtime binaries.
@@ -59,7 +59,7 @@ func validReference(r sandbox.Reference) bool {
 }
 func (p *Provider) name(r sandbox.Reference) string {
 	h := sha256.Sum256([]byte(p.config.InstallationID + ":" + r.TenantID + ":" + r.EnvironmentID + ":" + r.AllocationID))
-	return "agents-runtime-" + hex.EncodeToString(h[:16])
+	return "oac-runtime-" + hex.EncodeToString(h[:16])
 }
 func (p *Provider) labels(r sandbox.Reference) map[string]string {
 	return map[string]string{
@@ -151,7 +151,7 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 			return info, sandbox.ErrOwnership
 		}
 	}
-	v, e := p.client.ContainerCreate(ctx, runtimeContainerOptions(p.config, name, p.labels(b.Reference), []string{"PARSAR_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "PARSAR_RUNTIME_SESSION_ID=" + b.SessionID, "PARSAR_RUNTIME_NETWORK_ACCESS=" + policy.Access, "PARSAR_RUNTIME_ALLOWED_DOMAINS=" + string(domains)}))
+	v, e := p.client.ContainerCreate(ctx, runtimeContainerOptions(p.config, name, p.labels(b.Reference), []string{"OAC_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "OAC_RUNTIME_SESSION_ID=" + b.SessionID, "OAC_RUNTIME_NETWORK_ACCESS=" + policy.Access, "OAC_RUNTIME_ALLOWED_DOMAINS=" + string(domains)}))
 	if errdefs.IsConflict(e) {
 		return info, sandbox.ErrExists
 	}

@@ -22,7 +22,7 @@ import (
 
 func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := cancellationConfig(root, "wait")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -90,7 +90,7 @@ func TestFailureKeepsOnlyVerifiedNativeIdentity(t *testing.T) {
 	for _, mode := range []string{"failure", "wrong-identity", "before-identity"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 8)
@@ -125,7 +125,7 @@ func TestFailureKeepsOnlyVerifiedNativeIdentity(t *testing.T) {
 
 func TestCancellationDrainsIntoReadyConsumer(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := cancellationConfig(root, "wait")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

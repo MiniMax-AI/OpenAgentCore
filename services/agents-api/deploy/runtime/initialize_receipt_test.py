@@ -54,7 +54,7 @@ class FailureReceiptTest(unittest.TestCase):
         generic = {'version': 1, 'outcome': 'failed'}
         for failure in (
             subprocess.CalledProcessError(2, ['/usr/bin/tar', '-xzf', CANARY]),
-            subprocess.CalledProcessError(1, ['/usr/local/bin/agents-api-codex-write', CANARY]),
+            subprocess.CalledProcessError(1, ['/usr/local/bin/oac-codex-write', CANARY]),
             subprocess.CalledProcessError(-9, SANDBOXED),
             subprocess.CalledProcessError(256, SANDBOXED),
             subprocess.CalledProcessError(3, ' '.join(SANDBOXED)),

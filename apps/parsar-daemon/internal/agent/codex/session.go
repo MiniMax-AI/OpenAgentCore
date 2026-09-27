@@ -38,7 +38,7 @@ func defaultSessionConfig() sessionConfig {
 	policy, err := localworkspace.RuntimeNetworkPolicy()
 	return sessionConfig{
 		codexBinary:       defaultBinary(),
-		permissionProfile: os.Getenv("PARSAR_CODEX_PERMISSION_PROFILE"),
+		permissionProfile: os.Getenv("OAC_RUNTIME_CODEX_PERMISSION_PROFILE"),
 		runtimeNetwork:    policy, runtimeNetworkError: err,
 		logger:      obslog.Bg(),
 		killTimeout: rpcKillTimeout,

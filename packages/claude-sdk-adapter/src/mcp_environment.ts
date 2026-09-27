@@ -22,7 +22,7 @@ export function parseEnvironmentMCP(value: unknown): EnvironmentMCPServer[] | un
           server.server_label === "functions" || server.allowed_tools !== null || server.command !== "/usr/bin/python3" ||
           !Array.isArray(server.args) || server.args.length !== 6 ||
           server.args[0] !== "-I" || server.args[1] !== "-S" ||
-          server.args[2] !== "/usr/local/bin/agents-api-runtime-initialize" || server.args[3] !== "stdio" ||
+          server.args[2] !== "/usr/local/bin/oac-runtime-initialize" || server.args[3] !== "stdio" ||
           typeof server.args[4] !== "string" || !server.args[4] || server.args[4].startsWith("/") ||
           server.args[4].split("/").some((part: string) => !part || part === "." || part === "..") ||
           /[\x00-\x1f\x7f\\]/.test(server.args[4]) || server.args[5] !== server.server_label) throw new Error("invalid_request");

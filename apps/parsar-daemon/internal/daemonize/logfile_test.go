@@ -168,8 +168,8 @@ func TestEnsureLogFileIdempotentOnExisting(t *testing.T) {
 }
 
 func TestEnsureLogFileCreatesMissingParentDir(t *testing.T) {
-	// Regression: first-ever `parsar-daemon connect -b` on a host without
-	// ~/.parsar/parsar-daemon/<profile>/ used to fail with ENOENT —
+	// Regression: first-ever `oac-daemon connect -b` on a host without
+	// ~/.oac/daemon/<profile>/ used to fail with ENOENT —
 	// O_CREATE only creates the file leaf.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "missing", "deeper", "fresh.log")

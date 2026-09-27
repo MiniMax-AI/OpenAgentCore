@@ -12,7 +12,7 @@ import (
 )
 
 func TestMCPHTTPBearerPlanSeparatesServersAndProcesses(t *testing.T) {
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	tokens := []string{"first-synthetic.token+/==", "second-synthetic_token~"}
 	servers := []proto.MCPHTTPServer{
 		{ServerLabel: "first", ServerURL: "https://first.example/mcp", BearerToken: &tokens[0]},
@@ -34,7 +34,7 @@ func TestMCPHTTPBearerPlanSeparatesServersAndProcesses(t *testing.T) {
 		args, _ := json.Marshal(plan.ExtraConfig)
 		for i, server := range servers[:2] {
 			ref := plan.mcpServers[server.ServerLabel].BearerTokenEnvVar
-			if !strings.HasPrefix(ref, "PARSAR_MCP_BEARER_") || seen[ref] || !slices.Contains(plan.Env, ref+"="+tokens[i]) {
+			if !strings.HasPrefix(ref, "OAC_RUNTIME_MCP_BEARER_") || seen[ref] || !slices.Contains(plan.Env, ref+"="+tokens[i]) {
 				t.Fatal("missing exact per-server secret or reused native reference")
 			}
 			seen[ref] = true
@@ -54,7 +54,7 @@ func TestMCPHTTPBearerPlanSeparatesServersAndProcesses(t *testing.T) {
 
 func TestMCPHTTPBearerRejectsInvalidTokensWithoutPersistence(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	for _, token := range []string{"", "=", " has-space", "has-space ", "has space", "line\r\ninjection", "nul\x00byte", "opaque中文", "middle=padding", "punctuation:invalid"} {
 		servers := []proto.MCPHTTPServer{{ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
 		req := proto.PromptRequestPayload{AgentStateKey: "invalid-bearer", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
@@ -72,9 +72,9 @@ func TestMCPHTTPBearerDoesNotReachModelCatalogProbe(t *testing.T) {
 	if !SupportsTextVerbosity {
 		t.Skip("catalog probe requires Unix")
 	}
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	binary := filepath.Join(t.TempDir(), "catalog-probe")
-	script := "#!/bin/sh\nif env | grep -q '^PARSAR_MCP_BEARER_'; then exit 9; fi\nprintf '%s' '{\"models\":[{\"slug\":\"fixture-model\",\"support_verbosity\":true}]}'\n"
+	script := "#!/bin/sh\nif env | grep -q '^OAC_RUNTIME_MCP_BEARER_'; then exit 9; fi\nprintf '%s' '{\"models\":[{\"slug\":\"fixture-model\",\"support_verbosity\":true}]}'\n"
 	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +96,8 @@ func TestMCPHTTPBearerDoesNotReachModelCatalogProbe(t *testing.T) {
 
 func TestMCPHTTPBearerPreflightMatchesOnlyItsServerReference(t *testing.T) {
 	servers := map[string]mcpServerConfig{
-		"first":  {URL: "https://first.example/mcp", BearerTokenEnvVar: "PARSAR_MCP_BEARER_FIRST"},
-		"second": {URL: "https://second.example/mcp", BearerTokenEnvVar: "PARSAR_MCP_BEARER_SECOND"},
+		"first":  {URL: "https://first.example/mcp", BearerTokenEnvVar: "OAC_RUNTIME_MCP_BEARER_FIRST"},
+		"second": {URL: "https://second.example/mcp", BearerTokenEnvVar: "OAC_RUNTIME_MCP_BEARER_SECOND"},
 		"public": {URL: "http://public.example/mcp"},
 	}
 	for _, mutation := range []string{"none", "missing", "ambient", "swapped", "extra", "header", "helper"} {

@@ -19,7 +19,7 @@ const readyReport = `{"type":"runtime_ready","protocol":2,"node":"22.22.2","sdk"
 
 func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
 	}}
@@ -32,7 +32,7 @@ func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 
 func TestHTTPMCPRejectsOldPackagedRuntime(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready", "GORACE=atexit_sleep_ms=0",
 	}}
@@ -76,7 +76,7 @@ func TestRuntimeReadiness(t *testing.T) {
 
 func TestMCPBearerRejectsAnonymousOnlyRuntimeWithoutProbeSecrets(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
 	}}
@@ -124,7 +124,7 @@ func runReadinessHelper() {
 		_, _ = fmt.Fprintln(os.Stdout, readyReport)
 	case "ready-http-mcp":
 		for _, value := range os.Environ() {
-			if strings.HasPrefix(value, "PARSAR_MCP_BEARER_") {
+			if strings.HasPrefix(value, "OAC_RUNTIME_MCP_BEARER_") {
 				os.Exit(5)
 			}
 		}

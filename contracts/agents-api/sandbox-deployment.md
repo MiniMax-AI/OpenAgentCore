@@ -132,7 +132,7 @@ Docker/microsandbox use all fields of one verified distribution:
 | `source_commit` | Lowercase 40-character commit SHA |
 | `image_id` | Docker image configuration ID, `sha256:` followed by 64 lowercase hex characters |
 | `image_manifest_digest` | OCI image manifest digest, in the same `sha256:` form |
-| `microsandbox_ref` | `parsar-core-runtime@sha256:` followed by 64 lowercase hex characters |
+| `microsandbox_ref` | `oac-runtime@sha256:` followed by 64 lowercase hex characters |
 | `runtime_sha256` | SHA-256 of the native microsandbox Runtime binary |
 | `firmware_sha256` | SHA-256 of the matched firmware |
 
@@ -351,3 +351,14 @@ draining elsewhere; that PUT retires those nodes. See the
 Unit tests, database tests and provider inspection are separate from live
 execution acceptance. This contract does not assert that every resource profile,
 provider deployment or host-reboot recovery path has been qualified.
+
+
+### OpenAgentCore Runtime rename
+
+The immutable microsandbox reference is `oac-runtime@sha256:<64 lowercase hex>`.
+Before upgrading from the former names, drain the deployment with the previous
+release and remove its nodes. The database migration refuses any allocation with
+no `released_at`, including retained snapshots and uncertain cleanup, then rewrites
+only the former `parsar-core-runtime@` reference prefix. The specification digest
+changes, requiring new node enrollment. Historical Session data remains unchanged.
+Old E2B templates must be rebuilt with the matching Runtime release.

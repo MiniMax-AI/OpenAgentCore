@@ -14,13 +14,13 @@ import (
 )
 
 func discoverMCodeWorkspace(rc *runContext, discovery *agentCLIDiscovery) {
-	mode := os.Getenv("PARSAR_MCODE_WORKSPACE")
+	mode := os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE")
 	if mode == "" {
 		return
 	}
 	fail := func(err error) {
 		discovery.MCode.Available = false
-		fmt.Fprintf(rc.stderr, "parsar-daemon: mcode workspace unavailable: %v\n", err)
+		fmt.Fprintf(rc.stderr, "oac-daemon: mcode workspace unavailable: %v\n", err)
 	}
 	if mode != "managed" || !discovery.MCode.Available || !mcode.SupportsExecution(discovery.MCode.Version) {
 		fail(fmt.Errorf("managed execution requires the qualified native version and opt-in"))
@@ -36,7 +36,7 @@ func discoverMCodeWorkspace(rc *runContext, discovery *agentCLIDiscovery) {
 		fail(err)
 		return
 	}
-	node := os.Getenv("PARSAR_MCODE_NODE")
+	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
 	if node == "" {
 		node = "node"
 	}
@@ -60,7 +60,7 @@ func discoverMCodeWorkspace(rc *runContext, discovery *agentCLIDiscovery) {
 		fail(err)
 		return
 	}
-	c, err := mcode.ConfigureLocal(binary, node, os.Getenv("PARSAR_MCODE_WORKSPACE_BRIDGE"), root, os.Getenv("PARSAR_RUNTIME_WORKSPACE"), binding.NetworkPolicy(), os.Getenv("PARSAR_RUNTIME_STAGING"))
+	c, err := mcode.ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE"), root, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy(), os.Getenv("OAC_RUNTIME_STAGING"))
 	if err == nil {
 		err = mcode.CheckWorkspace(context.Background(), c)
 	}
