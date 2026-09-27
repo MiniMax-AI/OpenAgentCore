@@ -226,7 +226,7 @@ def package_artifacts(bundle, stage, revision):
     runtime.unlink()
     result = {}
     for logical, suffix in ARTIFACTS.items():
-        filename = f"parsar-core-{revision}-linux-amd64-{suffix}"
+        filename = f"oac-{revision}-linux-amd64-{suffix}"
         target = assets / filename
         if logical == "runtime/seccomp.json":
             shutil.copyfile(bundle / logical, target)
@@ -239,7 +239,7 @@ def package_artifacts(bundle, stage, revision):
 
 
 # The installation's management command; it runs without the bundle directory.
-OAC_CLI_MODULES = ("parsar_cli.py", "config_model.py", "config.schema.json", "configuration.py",
+OAC_CLI_MODULES = ("oac_cli.py", "config_model.py", "config.schema.json", "configuration.py",
                   "native_service.py", "distribution.py", "node_spec.py")
 
 
@@ -260,10 +260,10 @@ def bootstraps(bundle, epoch):
     with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
         for name in OAC_CLI_MODULES:
             shutil.copyfile(bundle / name, pathlib.Path(directory) / name)
-        (pathlib.Path(directory) / "__main__.py").write_text("import parsar_cli\n\nparsar_cli.entry()\n")
+        (pathlib.Path(directory) / "__main__.py").write_text("import oac_cli\n\noac_cli.entry()\n")
         for path in pathlib.Path(directory).iterdir():
             os.utime(path, (int(epoch), int(epoch)))
-        zipapp.create_archive(directory, bundle / "parsar.pyz", interpreter="/usr/bin/env python3", compressed=True)
+        zipapp.create_archive(directory, bundle / "oac.pyz", interpreter="/usr/bin/env python3", compressed=True)
 
 
 def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline="0"):

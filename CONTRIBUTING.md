@@ -1727,15 +1727,32 @@ newcomer installation path and document them under
 [Configuration](docs/configuration.md) is the canonical operator parameter reference.
 Every process setting has one home: the installation's private `config.json`,
 described by `deploy/install/config.schema.json`. The operator edits only that
-file; `parsar apply` validates it, derives `generated/` (Compose file, `core.env`,
+file; `oac apply` validates it, derives `generated/` (Compose file, `core.env`,
 native unit, Core key digest file, settings snapshot) and converges on what actually
 runs: each service carries the digest of its inputs (Compose label
-`io.parsar.inputs`, native `PARSAR_INPUTS`), and exactly the services whose running
+`io.oac.inputs`, native `OAC_INPUTS`), and exactly the services whose running
 inputs differ are recreated or restarted. Decide restarts from what runs, never
 from recorded bookkeeping, so the next apply finishes any interrupted one. Installation flags only seed it, and
 rerunning the installer rejects them. Runtime settings stay in PostgreSQL and
 change through Web or `/core/v1`. Secrets live once each in `secrets/`; identity and
-install facts live in tool-written `state.json`. Core process settings use `OAC_*`, Web settings use `OAC_WEB_*`, and shared Go
+install facts live in tool-written `state.json`. State format 2 uses an `oac-` Compose
+project; config.json's independent schema format stays 1. The operator command is
+`oac` (`oac_cli.py`, packaged as `oac.pyz`), with default installation directory
+`~/.oac/core`, private `~/.oac`, generated `x-oac` annotations and `.oac.lock`.
+Only `install.sh --convert` reads pre-rename state. Its `rename.py` coordinator first
+validates the source, target, bundle and generated files. A stopped old Core may be
+started from its own files for authenticated drain checks; refusal restores only
+services the probe started and reports any failed restoration. Require maintenance,
+zero unreleased allocations and pending work, and no registered nodes. One explicit
+confirmation covers legacy config-layout conversion and the rename. Never delete a
+target volume or copy container without matching the recorded conversion ownership;
+copy the stopped PostgreSQL volume, retain the old volume, and carry the atomic
+journal across the default-directory move. Preserve ports, secrets, installation
+identity and stored history. Resume only with the recorded bundle. Docker and
+microsandbox replace the Runtime through the existing guarded PUT and resume
+admission; E2B stays in maintenance for its rebuilt template. Node and self-hosted
+installations are outside this converter.
+ Core process settings use `OAC_*`, Web settings use `OAC_WEB_*`, and shared Go
 logging uses `OAC_LOG_*`. Retired settings fail startup even when empty or when
 the new name is also set; report every matching name without values. Only the
 explicit installer conversion reads pre-rename files. Core and operator executables

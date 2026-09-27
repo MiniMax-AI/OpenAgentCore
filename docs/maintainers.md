@@ -58,7 +58,7 @@ does not change the repository's visibility.
 
 ## Run Core without the installer
 
-These paths give you Core alone, without Web, the `parsar` command or `config.json`.
+These paths give you Core alone, without Web, the `oac` command or `config.json`.
 They are for development, testing and operators who manage Core's process themselves.
 They are not an installation path for new users.
 

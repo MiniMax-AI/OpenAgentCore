@@ -20,7 +20,7 @@ from unittest import mock
 import configuration
 import convert
 import install
-import parsar_cli
+import oac_cli
 from installer_fakes import MANIFEST, FakeHost, make_bundle, run_installer
 
 OLD_IMAGES = {name: "sha256:" + digit * 64 for name, digit in (("core", "7"), ("database", "8"), ("web", "9"))}
@@ -58,6 +58,7 @@ class ConvertTests(unittest.TestCase):
     def legacy(self, version="5c3dcc16", mode="all", native=False, public_url=None, environment=None, core_url=None,
                drop=()):
         """An installation as that release's installer wrote it, with its services running."""
+        self.host.volumes = {}
         old_generator = generator(version)
         old = {"version": 1, "source_commit": "b" * 40, "mode": mode, "native_core": native,
                "installation_id": "94be54a1-138c-4f30-bc87-b13686272dbe", "project": "parsar-0123456789",
@@ -98,6 +99,9 @@ class ConvertTests(unittest.TestCase):
             for name in ("bin/agents-api", "bin/agents-api-migrate", "e2b/agents-api-e2b-provider"):
                 self.private("native/" + name, "old native binary")
         self.host.remote_core[core_url or "https://unused.example"] = (200, self.host.core_installation_id)
+        self.host.core_installation_id = old["installation_id"]
+        if mode != "web-only":
+            self.host.add_database(old["project"])
         return old
 
     def convert(self, *flags):
@@ -113,9 +117,9 @@ class ConvertTests(unittest.TestCase):
 
     def assertConverted(self):
         state = self.document("state.json")
-        config = parsar_cli.load_config(self.root)
-        rendered, _, _ = parsar_cli.render_now(self.root, config, state)
-        actual = parsar_cli.observe(state)
+        config = oac_cli.load_config(self.root)
+        rendered, _, _ = oac_cli.render_now(self.root, config, state)
+        actual = oac_cli.observe(state)
         for name, digest in rendered.services.items():
             if name != "migrate":
                 self.assertEqual((actual[name]["running"], actual[name]["inputs"]), (True, digest), name)
@@ -176,7 +180,7 @@ class ConvertTests(unittest.TestCase):
                 services = self.document("generated/compose.json")["services"]
                 if mode == "all":
                     self.assertEqual(services["web"]["environment"]["OAC_WEB_ORIGIN"], "http://127.0.0.1:8080")
-                self.assertFalse([url for url in self.host.requests if url.endswith("/core/v1/sandbox/deployment")])
+                self.assertTrue([url for url in self.host.requests if url.endswith("/core/v1/sandbox/deployment")])
                 self.assertConverted()
 
     def test_native_conversion_checks_the_host_first(self):
@@ -189,7 +193,7 @@ class ConvertTests(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
         # Finishing a conversion whose first start failed checks the host again.
         self.host.core["fails"] = True
-        with self.assertRaises(parsar_cli.ParsarError):
+        with self.assertRaises(oac_cli.OacError):
             self.convert()
         self.host.core["fails"] = False
         before = self.snapshot()
@@ -260,7 +264,7 @@ class ConvertTests(unittest.TestCase):
         self.assertIsNone(self.document("state.json")["core_installation_id"])
         self.assertIn("the paired Core runs an earlier release", self.output.getvalue())
         self.host.remote_core["https://core.example"] = (200, self.host.core_installation_id)
-        parsar_cli.apply(self.root, interactive=False, out=lambda line: None)
+        oac_cli.apply(self.root, interactive=False, out=lambda line: None)
         self.assertEqual(self.document("state.json")["core_installation_id"], self.host.core_installation_id)
 
     def test_unconvertible_installations_are_refused_without_changes(self):
@@ -293,7 +297,7 @@ class ConvertTests(unittest.TestCase):
                             if unsafe else ["compose.json: services.web.environment.EXTRA", "config/core.env: AGENTS_API_UNKNOWN",
                                             "config/core.env: AGENTS_API_ADDR", "AGENTS_API_DAEMON_WS_URL: is retired and was "
                                             "edited; remove the line"])
-                for part in expected + ["Nothing was changed."]:
+                for part in expected + ["No installation conversion was performed."]:
                     self.assertIn(part, message)
                 self.assertNotIn("restore", message)
                 self.assertEqual(self.snapshot(), before)
@@ -328,20 +332,20 @@ class ConvertTests(unittest.TestCase):
         # The old native unit is already disabled when the layout moves, so it starts by path.
         with mock.patch.object(convert.os, "rename", side_effect=interrupted), self.assertRaises(OSError):
             self.convert()
-        with self.assertRaisesRegex(install.InstallError, "interrupted"):
+        with self.assertRaisesRegex(install.InstallError, "--convert"):
             run_installer(install, self.bundle, ["--install-dir", self.root])
         other, _ = make_bundle(self.work / "other", MANIFEST, commit="b" * 40)
-        with self.assertRaisesRegex(convert.ConvertError, "bundle it started with"):
+        with self.assertRaisesRegex(convert.ConvertError, "Finish the conversion with bundle"):
             run_installer(install, other, ["--install-dir", self.root, "--convert", "--yes"])
         with self.assertRaisesRegex(convert.ConvertError, "already set public_url"):
             self.convert("--public-url", "https://else.example")
         self.host.core["fails"] = True
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "rerun ./install.sh --convert --install-dir"):
+        with self.assertRaisesRegex(oac_cli.OacError, "rerun ./install.sh --convert --install-dir"):
             self.convert("--public-url", "https://core.example")
         self.host.core["fails"] = False
         self.convert()
         self.assertConverted()
-        with self.assertRaisesRegex(install.InstallError, "already uses config.json"):
+        with self.assertRaisesRegex(convert.ConvertError, "already finished"):
             self.convert()
 
 

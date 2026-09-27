@@ -2,7 +2,7 @@
 """Install one matched Core distribution, repair it, or convert an earlier installation.
 
 A new installation's flags seed <install-dir>/config.json. Afterwards, edit that file
-and run <install-dir>/parsar apply; rerunning this installer only repairs.
+and run <install-dir>/oac apply; rerunning this installer only repairs.
 """
 import argparse
 import base64
@@ -27,8 +27,9 @@ import config_model
 import configuration
 from configuration import valid_core_origin
 import convert
+import rename
 import native_service
-import parsar_cli
+import oac_cli
 import sandbox_setup
 from distribution import DistributionError, artifact, image_identities, ensure_docker_image
 
@@ -49,7 +50,7 @@ class InstallError(Exception):
 
 def run(args, **kwargs):
     # Never print a generated Compose file, process environment or secret value.
-    return subprocess.run(args, check=True, **kwargs)
+    return subprocess.run(args, **dict({"check": True}, **kwargs))
 
 
 def digest(path):
@@ -73,7 +74,7 @@ def verify_bundle(bundle):
         if digest(path) != expected:
             raise InstallError("Distribution checksum mismatch: " + name)
     required = {"manifest.json", "install.sh", "install.py", "configuration.py", "config_model.py",
-                "config.schema.json", "parsar_cli.py", "convert.py", "parsar.pyz", "native_service.py",
+                "config.schema.json", "oac_cli.py", "convert.py", "rename.py", "oac.pyz", "native_service.py",
                 "sandbox_setup.py", "standard-sizes.json", "node_spec.py", "node-install.pyz",
                 "self-hosted-install.pyz", "distribution.py", "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "database"))
@@ -135,7 +136,7 @@ def arguments(argv=None):
     parser.add_argument("--e2b-template", help="With --sandbox e2b: the ready template build, template-id:build-uuid")
     parser.add_argument("--sandbox-provider", nargs="?", const=True, help=argparse.SUPPRESS)
     parser.add_argument("--provider", nargs="?", const=True, help=argparse.SUPPRESS)
-    parser.add_argument("--install-dir", type=Path, default=Path.home() / ".parsar/core")
+    parser.add_argument("--install-dir", type=Path)
     parser.add_argument("--core-port", type=int)
     parser.add_argument("--web-port", type=int)
     parser.add_argument("--core-url", type=public_origin, help="Web-only: origin of the existing Core")
@@ -143,23 +144,25 @@ def arguments(argv=None):
     parser.add_argument("--core-key-file", type=Path, help="Web-only: private file containing the existing Core's Core key")
     parser.add_argument("--config", type=Path, help="Seed a new installation's config.json from this file")
     parser.add_argument("--convert", action="store_true",
-                        help="Convert an installation made before config.json; also upgrades it to this release")
+                        help="Convert a pre-rename installation to OpenAgentCore and this release")
     parser.add_argument("--yes", action="store_true", help="With --convert: do not ask for confirmation")
     parser.add_argument("--admin-token-file", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--status", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--stop", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    args.explicit_install_dir = args.install_dir is not None
+    args.install_dir = rename.choose_root(args.install_dir) if args.convert else (args.install_dir or Path.home() / ".oac/core")
     if args.admin_token_file:
         parser.error("--admin-token-file was renamed; use --core-key-file")
     if args.sandbox_provider is not None or args.provider is not None:
         parser.error(RETIRED_NODE_FLAGS)
     for retired in ("status", "stop"):
         if getattr(args, retired):
-            parser.error(f"--{retired} is retired; run {args.install_dir / 'parsar'} {retired}")
+            parser.error(f"--{retired} is retired; run {args.install_dir / 'oac'} {retired}")
     if not args.install_dir.is_absolute():
         parser.error("--install-dir must be absolute")
     args.given = [name for name, value in vars(args).items()
-                  if name not in ("install_dir", "given") and value not in (None, False)]
+                  if name not in ("install_dir", "given", "explicit_install_dir") and value not in (None, False)]
     return args
 
 
@@ -352,14 +355,14 @@ def prepare_node_payload(root, state, bundle, replace=False):
                     os.unlink(temporary)
 
 
-def install_parsar(root, bundle):
-    """Copy the parsar command into the installation; replace a missing or different copy."""
-    target = root / "parsar"
-    source = bundle / "parsar.pyz"
+def install_oac(root, bundle):
+    """Copy the oac command into the installation; replace a missing or different copy."""
+    target = root / "oac"
+    source = bundle / "oac.pyz"
     if target.is_file() and not target.is_symlink() and digest(target) == digest(source):
         os.chmod(target, 0o700)
         return
-    descriptor, temporary = tempfile.mkstemp(prefix=".parsar-", dir=root)
+    descriptor, temporary = tempfile.mkstemp(prefix=".oac-", dir=root)
     os.close(descriptor)
     try:
         shutil.copyfile(source, temporary)
@@ -387,7 +390,7 @@ def layout(root):
             recorded = True
         # Never applied: nothing started, so nothing depends on these secrets yet.
         return "incomplete" if never_applied and not recorded else "missing-config"
-    if never_applied and {path.name for path in root.iterdir()} <= {"secrets", "generated", "state", ".parsar.lock"}:
+    if never_applied and {path.name for path in root.iterdir()} <= {"secrets", "generated", "state", ".oac.lock"}:
         return "incomplete"
     return "other"
 
@@ -396,16 +399,18 @@ def create(root, args, config, manifest, images):
     """Write the new installation's secrets, config.json and state.json."""
     mode = config["mode"]
     token = read_core_key_file(args.core_key_file) if mode == "web-only" else secrets.token_hex(32)
+    if root.parent == Path.home() / ".oac":
+        rename.private_parent(root)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(root, 0o700)
     for name in ["secrets", "generated"] + ([] if mode == "web-only" else ["state", "state/e2b"]):
         (root / name).mkdir(mode=0o700)
-    write = parsar_cli.create_private
+    write = oac_cli.create_private
     write(root / "secrets/core.key", token)
     if mode != "web-only":
         write(root / "secrets/credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
         write(root / "secrets/database.password", secrets.token_hex(32))
-    state = {"format": 1, "installation_id": str(uuid.uuid4()), "project": "parsar-" + secrets.token_hex(5),
+    state = {"format": 2, "installation_id": str(uuid.uuid4()), "project": "oac-" + secrets.token_hex(5),
              "uid": os.getuid(), "gid": os.getgid(), "mode": mode, "native_core": config.get("native_core", False),
              "source_commit": manifest["source_commit"], "images": images,
              "secrets_sha256": configuration.secret_digests(root, mode), "core_installation_id": None,
@@ -417,7 +422,7 @@ def create(root, args, config, manifest, images):
 
 
 def unfinished_conversion(state):
-    return bool(state.get("converted_from")) and not state["converted_from"].get("finished")
+    return any(bool(state.get(key)) and not state[key].get("finished") for key in ("converted_from", "renamed_from"))
 
 
 def finish(root, bundle, manifest, fresh=False, selection=None):
@@ -425,25 +430,35 @@ def finish(root, bundle, manifest, fresh=False, selection=None):
 
     A new installation then saves its sandbox selection; a repair or conversion never does.
     """
-    state = parsar_cli.load_state(root)
+    state = oac_cli.load_state(root)
     converting = unfinished_conversion(state)
     # A converted installation replaces the earlier release's binaries and payload once.
     prepare_node_payload(root, state, bundle, converting)
     native_service.prepare(root, state, bundle, converting)
-    install_parsar(root, bundle)
+    install_oac(root, bundle)
     retry = f"rerun ./install.sh {'--convert ' if converting else ''}--install-dir {root}"
     try:
-        parsar_cli.apply(root, start=True, retry=retry)
-    except parsar_cli.ParsarError as error:
+        renamed = state.get("renamed_from")
+        confirmed_url = None
+        if renamed and not renamed.get("finished"):
+            config = oac_cli.load_config(root)
+            if config["public_url"] != renamed["public_url"]:
+                raise InstallError("public_url changed during conversion; restore the recorded value and finish conversion first")
+            # The one conversion confirmation already approved this preserved URL.
+            # Normal apply must never read historical environment names.
+            if config["mode"] != "web-only":
+                confirmed_url = configuration.local_public_url(config)
+        oac_cli.apply(root, start=True, retry=retry, confirm_public_url_change=confirmed_url)
+    except oac_cli.OacError as error:
         if not selection:
             raise
         # A repair never selects a backend, so the --sandbox choice would otherwise be lost silently.
-        raise parsar_cli.ParsarError(f"{str(error).rstrip('.')}. The sandbox backend was not chosen; after the "
+        raise oac_cli.OacError(f"{str(error).rstrip('.')}. The sandbox backend was not chosen; after the "
                                      f"repair, choose it {choose_where(state['mode'])}") from None
-    config = parsar_cli.load_config(root)
+    config = oac_cli.load_config(root)
     mode = config["mode"]
     # An earlier-release Core has no /core/v1/installation (404); apply noted it and Web still works.
-    if mode == "web-only" and parsar_cli.paired_core(root, config)[0] not in (200, 404):
+    if mode == "web-only" and oac_cli.paired_core(root, config)[0] not in (200, 404):
         raise InstallError("Core key authentication failed. Inspect secrets/core.key and web.core_url; no model was called")
     deployment = failure = None
     if selection:
@@ -451,10 +466,10 @@ def finish(root, bundle, manifest, fresh=False, selection=None):
             deployment = sandbox_setup.initialize(root, config, state, selection)
         except sandbox_setup.SandboxSetupError as error:
             failure = error
-    if converting:
-        state = parsar_cli.load_state(root)
+    if converting and state.get("converted_from"):
+        state = oac_cli.load_state(root)
         state["converted_from"] = dict(state["converted_from"], finished=True)
-        parsar_cli.save_state(root, state)
+        oac_cli.save_state(root, state)
     summary(root, config, fresh, selection, deployment)
     if failure:
         raise InstallError(f"{str(failure).rstrip('.')}. Services are installed and running; "
@@ -492,7 +507,7 @@ def sandbox_lines(root, config, selection, deployment):
     if not nodes_reach(config["public_url"]):
         # Each sandbox calls Core at public_url; a loopback address is the sandbox itself.
         lines.insert(1, "Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set "
-                        f"public_url in {root / 'config.json'} and run {root / 'parsar'} apply first.")
+                        f"public_url in {root / 'config.json'} and run {root / 'oac'} apply first.")
     return lines
 
 
@@ -519,8 +534,8 @@ def summary(root, config, fresh, selection=None, deployment=None):
     else:
         print(f"Next: sign in to Web with the Core key in {core_key}, then create a Project and its API key on the Projects and keys page.")
     print("Keep the Core key private; it also authorizes the Core management API.")
-    print(f"Settings: {root / 'config.json'}. Edit it, then run {root / 'parsar'} apply.")
-    print(f"Manage the services with {root / 'parsar'} status, start and stop.")
+    print(f"Settings: {root / 'config.json'}. Edit it, then run {root / 'oac'} apply.")
+    print(f"Manage the services with {root / 'oac'} status, start and stop.")
     # Only a new installation reports its sandboxes; a repaired or converted one keeps its own.
     if fresh and mode != "web-only":
         for line in sandbox_lines(root, config, selection, deployment):
@@ -535,56 +550,45 @@ def main(argv=None):
         raise InstallError("Installation directory must be canonical and not a symlink")
     bundle = Path(__file__).resolve().parent
     kind = layout(root)
-    if kind in ("legacy", "interrupted") and not args.convert:
-        raise InstallError("This installation predates config.json; run ./install.sh --convert --install-dir "
-                           f"{root}" if kind == "legacy" else
-                           f"A conversion was interrupted; run ./install.sh --convert --install-dir {root} to finish it")
-    if kind in ("legacy", "interrupted"):
+    if args.convert:
         if set(args.given) - {"convert", "yes", "public_url"}:
             raise InstallError("--convert accepts only --install-dir, --yes and --public-url")
+        if kind not in ("legacy", "interrupted", "config", "missing-config"):
+            raise InstallError("--convert needs a pre-rename installation in --install-dir")
         check_host()
         manifest = verify_bundle(bundle)
-        described = convert.detect(root) if kind == "legacy" else json.loads((root / "state.json").read_text())
-        if described.get("native_core") and described.get("mode") != "web-only":
-            # A host that can't run this release's native Core is refused before anything changes.
-            native_service.preflight(bundle, root)
-        convert.convert(root, manifest, image_loader(manifest, bundle), args.public_url, args.yes, run)
-        finish(root, bundle, manifest)
-        return
-    if kind == "config" and args.convert:
-        state = parsar_cli.load_state(root)
-        # The layout is converted, but the new release has not started successfully yet.
-        if not unfinished_conversion(state):
-            raise InstallError(f"{root} already uses config.json; edit it and run {root / 'parsar'} apply")
-        if set(args.given) - {"convert", "yes", "public_url"}:
-            raise InstallError("Finishing a conversion accepts only --install-dir, --yes and --public-url")
-        convert.check_resumed_public_url(root, args.public_url)
-        check_host()
-        manifest = verify_bundle(bundle)
-        if state["source_commit"] != manifest["source_commit"]:
-            raise InstallError("Finish the conversion with the bundle it started with, release " + state["source_commit"])
+        state = rename.read_state(root) if (root / "state.json").exists() else convert.detect(root)
         if native_service.is_native(state):
-            native_service.preflight(bundle, root)
-        image_loader(manifest, bundle)(list(state["images"]))
-        finish(root, bundle, manifest)
+            native_service.preflight(bundle, rename.destination(root))
+        rename.convert_installation(root, bundle, manifest, image_loader(manifest, bundle),
+                                   args.public_url, args.yes, run, finish)
         return
-    if args.convert:
-        raise InstallError("--convert needs an installation made by an earlier release in --install-dir")
+    if kind in ("legacy", "interrupted"):
+        raise InstallError(f"This installation predates config.json; run ./install.sh --convert --install-dir {root}")
+    if not args.explicit_install_dir:
+        old, _ = rename.defaults()
+        if (old / "state.json").exists() or (old / "installation.json").exists():
+            raise InstallError("An installation made before the OpenAgentCore rename is at ~/.parsar/core. "
+                               "Convert it with ./install.sh --convert (it moves to ~/.oac/core), or pass "
+                               "--install-dir to install another one. Nothing was changed.")
     if kind == "config":
         if args.given:
             raise InstallError(f"This installation is configured by {root / 'config.json'}. Edit it and run "
-                               f"{root / 'parsar'} apply; install.sh accepts only --install-dir to repair it")
-        state = parsar_cli.load_state(root)
+                               f"{root / 'oac'} apply; install.sh accepts only --install-dir to repair it")
+        state = rename.read_state(root)
+        if state.get("format") == 1 or unfinished_conversion(state):
+            raise InstallError(f"Run ./install.sh --convert --install-dir {root} to finish the OpenAgentCore conversion")
+        state = oac_cli.load_state(root)
         check_host()
         manifest = verify_bundle(bundle)
         if state["source_commit"] != manifest["source_commit"]:
             raise InstallError("This installation runs another release; upgrading an installation arrives with "
-                               "parsar upgrade")
+                               "oac upgrade")
         if native_service.is_native(state):
             native_service.preflight(bundle, root)
         images = image_loader(manifest, bundle)(list(state["images"]))
         if images != state["images"]:
-            parsar_cli.save_state(root, dict(state, images=images))
+            oac_cli.save_state(root, dict(state, images=images))
         finish(root, bundle, manifest)
         return
     if kind == "missing-config":
@@ -622,7 +626,7 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         main()
-    except (InstallError, convert.ConvertError, parsar_cli.ParsarError, config_model.ConfigError,
+    except (InstallError, convert.ConvertError, oac_cli.OacError, config_model.ConfigError,
             sandbox_setup.SandboxSetupError, DistributionError, RuntimeError) as error:
         print(str(error), file=sys.stderr)
         sys.exit(1)

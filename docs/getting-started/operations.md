@@ -4,30 +4,30 @@ The installation operator owns the Core host, its storage and its availability. 
 hosts run their own services; see [Nodes](nodes.md). Settings are described in the
 [configuration reference](../configuration.md).
 
-## The parsar command
+## The oac command
 
 Each installation has its own management command in its directory. It needs neither
 the bundle nor root:
 
 ```sh
-~/.parsar/core/parsar status
+~/.oac/core/oac status
 ```
 
 | Command | What it does |
 | --- | --- |
-| `parsar status` | Shows each service and its health, Core and Web health, the public URL, API base URL, console address and source commit, the reverse-proxy routes to configure, `config.json` changes not applied yet and generated files edited by hand. A Web-only installation also checks that its Core accepts its Core key. Exits non-zero when a service is unavailable. It never calls a model |
-| `parsar start` | Starts every service with the files last written by `apply`; warns about unapplied changes |
-| `parsar stop` | Stops PostgreSQL, Core and Web. Data, nodes and sandboxes are kept, and running sandbox work may continue |
-| `parsar apply` | Applies `config.json` and restarts what changed; see [how apply works](../configuration.md#how-parsar-apply-works) |
-| `parsar apply --dry-run` | Shows the changed settings, files and restarts, and changes nothing |
-| `parsar apply --discard-edits` | Overwrites generated files edited by hand, keeping each as `generated/<file>.edited-<time>` |
-| `parsar apply --confirm-public-url-change URL` | Confirms a public URL change without a prompt; must equal the new URL |
-| `parsar apply --yes` | Web-only: pairs Web with a different Core without asking |
-| `parsar rotate-core-key [--yes]` | Replaces the Core key; see [Rotate the Core key](#rotate-the-core-key) |
+| `oac status` | Shows each service and its health, Core and Web health, the public URL, API base URL, console address and source commit, the reverse-proxy routes to configure, `config.json` changes not applied yet and generated files edited by hand. A Web-only installation also checks that its Core accepts its Core key. Exits non-zero when a service is unavailable. It never calls a model |
+| `oac start` | Starts every service with the files last written by `apply`; warns about unapplied changes |
+| `oac stop` | Stops PostgreSQL, Core and Web. Data, nodes and sandboxes are kept, and running sandbox work may continue |
+| `oac apply` | Applies `config.json` and restarts what changed; see [how apply works](../configuration.md#how-oac-apply-works) |
+| `oac apply --dry-run` | Shows the changed settings, files and restarts, and changes nothing |
+| `oac apply --discard-edits` | Overwrites generated files edited by hand, keeping each as `generated/<file>.edited-<time>` |
+| `oac apply --confirm-public-url-change URL` | Confirms a public URL change without a prompt; must equal the new URL |
+| `oac apply --yes` | Web-only: pairs Web with a different Core without asking |
+| `oac rotate-core-key [--yes]` | Replaces the Core key; see [Rotate the Core key](#rotate-the-core-key) |
 
-`install.sh --status` and `--stop` are retired; they name the `parsar` command instead.
+`install.sh --status` and `--stop` are retired; they name the `oac` command instead.
 For a second installation, use its own command, such as
-`~/.parsar/core-console/parsar status`.
+`~/.oac/core-console/oac status`.
 
 ## Service health
 
@@ -35,7 +35,7 @@ Use these observations for different questions:
 
 | Observation | What it establishes |
 | --- | --- |
-| `parsar status`, PostgreSQL health | The database accepts its readiness check |
+| `oac status`, PostgreSQL health | The database accepts its readiness check |
 | Core `/healthz` | Core's process is alive |
 | An authenticated API read | The caller's key works for that resource |
 | Environment connection | The Runtime transport is connected |
@@ -46,8 +46,8 @@ Turn, Items and Usage reads for execution, and Web's **Nodes** page for node con
 readiness and placement. For local diagnosis, use the installation's own Compose file:
 
 ```sh
-docker compose -f "$HOME/.parsar/core/generated/compose.json" ps --all
-docker compose -f "$HOME/.parsar/core/generated/compose.json" logs --tail 200 core
+docker compose -f "$HOME/.oac/core/generated/compose.json" ps --all
+docker compose -f "$HOME/.oac/core/generated/compose.json" logs --tail 200 core
 ```
 
 Native Core logs to its user unit: `journalctl --user -u <project>-core.service`, with
@@ -59,8 +59,8 @@ raw logs into public issue reports.
 Let active work settle before a planned restart:
 
 ```sh
-~/.parsar/core/parsar stop
-~/.parsar/core/parsar start
+~/.oac/core/oac stop
+~/.oac/core/oac start
 ```
 
 Stopping Core stops no node and no sandbox. Node services, their microVMs and Docker
@@ -69,14 +69,14 @@ not continue an interrupted native tool call transparently. After reconnecting, 
 the same Session; don't create a new Session to replay uncertain work. Session event
 streams are live only; recover through Session, Turn and Items reads.
 
-A Web restart, including one caused by `parsar apply`, signs everyone out of the
+A Web restart, including one caused by `oac apply`, signs everyone out of the
 console.
 
 ## Core key
 
 Each installation has one administrator credential, the Core key. The installer
 generates a 64-character random key in `<install dir>/secrets/core.key`, by default
-`~/.parsar/core/secrets/core.key`. The Core key:
+`~/.oac/core/secrets/core.key`. The Core key:
 
 - signs in to Web. The browser gets an HttpOnly session cookie, never the key;
 - authorizes Core API (`/core/v1`) requests sent as `Authorization: Bearer <Core key>`;
@@ -85,36 +85,36 @@ generates a 64-character random key in `<install dir>/secrets/core.key`, by defa
 
 Keep it private: `secrets/` is mode `0700` and its files `0600`. Of the services, only
 Web reads `core.key`; Core reads its SHA-256 from `generated/core-key-digests.json`,
-which `parsar apply` derives from the key. Both read them only at startup. A Core key
+which `oac apply` derives from the key. Both read them only at startup. A Core key
 has at least 32 characters and no whitespace. Web limits failed sign-ins.
 
 Scripts run on the Core host, call Core's loopback port and read the key from its file,
 which keeps it off the command line:
 
 ```sh
-curl -fsS -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.parsar/core/secrets/core.key")") \
+curl -fsS -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.oac/core/secrets/core.key")") \
   http://127.0.0.1:8091/core/v1/projects
 ```
 
 ### Rotate the Core key
 
 ```sh
-~/.parsar/core/parsar rotate-core-key
+~/.oac/core/oac rotate-core-key
 ```
 
 It refuses while `config.json` has changes that are not applied or a generated file was
-edited by hand: run `parsar apply` first. It asks for confirmation (`--yes` skips it),
+edited by hand: run `oac apply` first. It asks for confirmation (`--yes` skips it),
 stops Web, writes a new key to `secrets/core.key` and regenerates the digest file. On a
 running installation it then restarts Core, starts Web and checks that Core accepts the
 new key and refuses the old one; a stopped installation only gets the new files and
-uses the new key at the next `parsar start`. The old key stops working as soon as Core
+uses the new key at the next `oac start`. The old key stops working as soon as Core
 restarts, and every console session ends: sign in again and update your scripts. If the
-command stops early, `secrets/core.key` holds the key to use; run `parsar apply` to
+command stops early, `secrets/core.key` holds the key to use; run `oac apply` to
 finish.
 
 A separate Web-only installation keeps its own copy of the key. After rotating, copy
 `secrets/core.key` from the Core host into that installation's `secrets/core.key`
-(mode `0600`) and run its `parsar apply`. Its `parsar status` reports a key that Core
+(mode `0600`) and run its `oac apply`. Its `oac status` reports a key that Core
 refuses. `rotate-core-key` refuses to run on a Web-only installation.
 
 ## Projects and API keys
@@ -140,8 +140,8 @@ Back up these together; a restore needs all of them:
   objects. A logical dump:
 
   ```sh
-  docker compose -f "$HOME/.parsar/core/generated/compose.json" exec -T database \
-    pg_dump -U agents_api agents_api > parsar-backup.sql
+  docker compose -f "$HOME/.oac/core/generated/compose.json" exec -T database \
+    pg_dump -U agents_api agents_api > oac-backup.sql
   ```
 
 - the installation directory: `config.json`, `state.json` (installation ID) and
@@ -163,52 +163,80 @@ not prove that all provider resources were reclaimed.
 
 | Installation | How to upgrade |
 | --- | --- |
-| Made before `config.json` (it has `installation.json`) | [Convert it](#convert-an-earlier-installation) with the new bundle |
-| Made with `config.json`, same release | Rerun `./install.sh` from the same bundle to repair it |
-| Made with `config.json`, other release | Not supported yet. The installer refuses a bundle from another release and says upgrades arrive with `parsar upgrade`, which doesn't exist yet. Keep running the installed release |
+| Before the OpenAgentCore rename: `state.json` format 1 and a `parsar-…` project, or a legacy `installation.json` layout | [Convert it](#convert-an-earlier-installation) with this bundle |
+| OpenAgentCore, same release | Rerun `./install.sh --install-dir DIR` from the same bundle to repair it |
+| OpenAgentCore, another release | General upgrades are not supported yet; keep the installed release |
 
-There is no downgrade: database migrations can't be undone, so back up before any
-upgrade or conversion.
+There is no downgrade after database migrations. Back up before converting.
 
 ### Convert an earlier installation
 
-Installations made before `config.json` have `installation.json`, `config/core.env` and
-`admin/`: those of every installer since the Core key was introduced. Plain
-`./install.sh` refuses them. Convert one with the new release's bundle:
+Use the old Web and old nodes to drain first: enable maintenance, archive hosted
+Sessions until allocations and pending work are both zero, remove every node on the
+Nodes page, and run each node's uninstall command from the previous release.
+Suspended sandboxes, retained snapshots and uncertain cleanup still count. Archived
+Sessions retain their history but cannot resume their old sandbox. Self-hosted
+executors keep running and are not converted.
+
+Extract the new bundle and run:
 
 ```sh
-./install.sh --convert --install-dir "$HOME/.parsar/core"
+./install.sh --convert
 ```
 
-Conversion is also an upgrade to that release, and its database migrations can't be
-undone. Back up the database first. An installation made before `config.json` keeps its
-Compose file at the top of the installation directory:
+Without `--install-dir`, this converts `~/.parsar/core` into `~/.oac/core`, or resumes
+an unfinished conversion already moved there. An explicit custom directory converts
+in place. `--yes` skips the one confirmation; `--public-url` only settles a legacy
+layout's conflicting public addresses. Convert the Core host before Web-only hosts.
+The latter rename their directory, project and payload without copying a database.
+
+Preflight reports generated-file edits, invalid configuration, destination conflicts,
+insufficient database-copy space, and every available drain blocker. It reads the
+old Core with its Core key. When that Core is stopped and static checks pass, it
+announces a temporary start using only the existing files. Refusal restores the
+services this probe started; a restoration failure is reported explicitly. No
+installation conversion happens before confirmation.
+
+The confirmation prints the backup command for the old project and the directory
+and secret moves. For a config.json installation, take the backup before confirming:
 
 ```sh
-docker compose -f "$HOME/.parsar/core/compose.json" exec -T database \
-  pg_dump -U agents_api agents_api > parsar-backup.sql
+docker compose -f "$HOME/.parsar/core/generated/compose.json" exec -T database \
+  pg_dump -U agents_api agents_api > oac-backup.sql
 ```
 
-Conversion reads the old files without changing anything, shows the resulting settings
-and the same backup command, and asks for confirmation. `--yes` skips the prompt and
-runs the migrations at once, so use it only after backing up. It then writes
-`config.json` and `state.json`, moves the secrets into `secrets/` without copying
-them, removes the old generated files, and starts the new release with the same
-Compose project, database and installation ID. Settings set by hand, such as
-`AGENTS_API_EXECUTION_CONCURRENCY`, `PARSAR_LOG_*` or a Runtime history file, move
-into `config.json`.
+A legacy installation uses `compose.json` at the directory's top level instead.
+Its supported settings move into config.json and secrets move into secrets/ in the
+same run, with no intermediate upgrade or second confirmation. Unknown legacy files
+are reported and left in place; unknown settings and edited derived values refuse.
 
-It stops before changing anything, listing each reason, when something can't be
-converted: an edited `compose.json`, an unknown or edited generated value in
-`core.env`, an external database, or an installation public URL that differs from the
-sandbox deployment's Core URL. For that last case, rerun with `--public-url` naming one
-of the two; choosing the installation's URL means the deployment's nodes must be added
-again. Unknown files in `config/` and `admin/` are reported and left in place.
+Conversion stops the old services, copies the stopped database into
+`oac-<same suffix>_database`, removes the old containers and network, and moves the
+default directory atomically. It retains `parsar-<suffix>_database` as a backup.
+An interrupted copy is restarted only after verifying that its target volume and
+copy container belong to this conversion. A foreign same-name resource is refused.
 
-If conversion is interrupted, or the new release fails to start, fix the cause and rerun
-`./install.sh --convert` with the same bundle; `--public-url` may be repeated but not
-changed. In a split deployment, convert the Core host first, then each Web-only host,
-and run the Web host's `parsar apply` afterwards.
+The new state format is 2; config.json's schema format remains 1. Ports, public URL,
+secrets, Core key, installation ID and database contents are preserved. The old
+`parsar` path becomes a stub naming the new `oac` command. New services use `OAC_*`
+settings and `io.oac.inputs` labels. Docker and microsandbox deployments retain
+their resources, replace their Runtime with the bundle's release through the normal
+maintenance-only API, then resume admission. E2B remains in maintenance: rebuild its
+template with this release's `build-template.py`, replace it in Web, then resume.
+
+Rerun `./install.sh --convert` with the **same bundle** after any interruption,
+including after the directory move. For a custom directory, repeat `--install-dir`.
+The journal rejects a different bundle or installation identity. It verifies Project
+identities and service health before recording completion. Check retained history,
+then add new nodes through **Nodes → Add node**. Keep the old volume until this
+verification is complete; the final output names its exact `docker volume rm`
+command. Never remove the new volume or use a Docker-wide cleanup.
+
+Before the directory move, the old command can restart the old services against the
+untouched old volume. After the move, finish by rerunning conversion. Once new Core
+migrations run, restoring the old release requires the old bundle, old installation
+files and the pre-conversion backup or retained old volume; this is not a downgrade
+of the new database.
 
 ### Upgrade notes
 
@@ -227,14 +255,44 @@ replacement:
 | `CORE_CONSOLE_ADMIN_TOKEN_FILE`, `install.sh --admin-token-file` | `OAC_WEB_CORE_KEY_FILE`, `--core-key-file` | Web environment; installer flag |
 | `CORE_CONSOLE_AUTH_MODE`, `CORE_CONSOLE_STATE_DIR`, `CORE_CONSOLE_PASSWORD_FILE` | None: Web has no accounts or passwords; sign in with the Core key | Web environment, with their `state/console` and `config/console.password` mounts |
 | `install.sh --sandbox-provider`, `--provider` | `install.sh --sandbox`; add the Core host as a node with Add node | Installer flags |
-| `install.sh --status`, `--stop` | `parsar status`, `parsar stop` | Installer flags |
+| `install.sh --status`, `--stop` | `oac status`, `oac stop` | Installer flags |
 | `PARSAR_NODE_ENROLLMENT_TOKEN` | The token on standard input with `--enrollment-token-stdin`, as Web's Add node command passes it | Node installer; it refuses the variable |
+
+The release also renames the following operator identities. Old process settings
+are refused even when empty; errors name all applicable replacements without values.
+These historical names are inputs only to conversion and retirement diagnostics.
+
+| Before | OpenAgentCore |
+| --- | --- |
+| `AGENTS_API_*` process settings | `OAC_*`; `AGENTS_API_ENGINE` becomes `OAC_DEFAULT_HARNESS`, `AGENTS_API_SANDBOX_INSTALLATION_ID` becomes `OAC_INSTALLATION_ID`, and `AGENTS_API_RUNTIME_HISTORY_FILE` becomes `OAC_HISTORY_SETTINGS_FILE` |
+| `CORE_CONSOLE_*` | `OAC_WEB_*`; `CORE_CONSOLE_UPSTREAM` becomes `OAC_WEB_UPSTREAM` |
+| `PARSAR_LOG_*` | `OAC_LOG_*` |
+| Runtime `PARSAR_*`, including `PARSAR_HOME` | `OAC_RUNTIME_*`, including `OAC_RUNTIME_HOME`; separate Parsar-product hooks are unchanged |
+| Developer/build variables and test database/SDK variables | `OAC_DEV_*` and `OAC_TEST_*`; `OAC_TEST_DATABASE_URL` selects the dedicated test database |
+| `~/.parsar/core`, `parsar`, `parsar_cli.py`, `parsar.pyz`, `.parsar.lock` | `~/.oac/core`, `oac`, `oac_cli.py`, `oac.pyz`, `.oac.lock` |
+| `parsar-<hex>` project, containers, default network and database volume | `oac-<same hex>`; the old database volume is retained as a backup |
+| `parsar-<hex>-core.service`, `PARSAR_INPUTS`, `io.parsar.inputs`, `x-parsar`, `/run/parsar` | `oac-<hex>-core.service`, `OAC_INPUTS`, `io.oac.inputs`, `x-oac`, `/run/oac` |
+| `parsar-core-<commit>-linux-amd64` bundle and artifact prefix | `oac-<commit>-linux-amd64` |
+| `agents-api`, `agents-api-migrate`, `agents-api-device`, `agents-api-environment-key`, `core-console` | `oac-core`, `oac-core-migrate`, `oac-core-device`, `oac-core-environment-key`, `oac-web` |
+| `agents-api-e2b-provider`, `/opt/parsar/e2b` | `oac-e2b-provider`, `/opt/oac/e2b` |
+| `parsar-daemon`, Runtime `agents-api-*` helpers | `oac-daemon`, `oac-*` helpers |
+| `~/.parsar/parsar-daemon`, `/home/runtime/.parsar`, `/run/parsar/daemon-suspend.json` | `~/.oac/daemon`, `/home/runtime/.oac`, `/run/oac/daemon-suspend.json` |
+| `parsar-core-runtime@sha256:…`, `agents-runtime-<hex>` | `oac-runtime@sha256:…`, `oac-runtime-<hex>` |
+| Runtime `io.parsar.agents-api.*`, microsandbox `io.parsar.*`, `parsar.runtime.placement` | `io.oac.*`, `io.oac.*`, `io.oac.placement` |
+| E2B `parsar_*` metadata, `/opt/parsar-e2b`, `/root/.parsar/e2b`, `/etc/parsar-runtime-env.json` | `oac_*`, `/opt/oac-e2b`, `/root/.oac/e2b`, `/etc/oac-runtime-env.json` |
+| Model-visible `parsar_workspace`, `parsar_worker`, `parsar_root`, `parsar/subagents`, Codex provider `parsar` | `oac_workspace`, `oac_worker`, `oac_root`, `oac/subagents`, provider `oac` |
+
+The PostgreSQL database and role remain `agents_api`. Public API routes, Go module
+paths, source directory names and npm package names are unchanged. Historical
+Session content is never rewritten. Nodes and self-hosted executors require their
+own [node](nodes.md) and [self-hosted](self-hosted.md) procedures; the Core converter
+does not rename their stores or adopt their resources.
 
 Before converting, rename or remove only the names from before the Core key:
 `admin/sandbox-admin.key`, `admin/digests.json`, `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE`
 and the retired `CORE_CONSOLE_*` settings. Leave `AGENTS_API_DAEMON_WS_URL`,
 `AGENTS_API_CONFIG_FILE` and `AGENTS_API_EXECUTION_OPTIONS_FILE` to `--convert`, which
-maps or reports them. Don't add `OAC_PUBLIC_URL` by hand: when it is present,
+maps or reports them. Don't add `AGENTS_API_PUBLIC_URL` by hand to a legacy installation: when it is present,
 conversion takes it as the address Core uses and skips the check against the sandbox
 deployment's Core address that keeps existing nodes bound. Hosted and self-hosted
 Sessions that relied on the retired options file
@@ -294,18 +352,18 @@ Artifacts remain. E2B deployments from that period are not covered.
 | `Docker Compose 2.26.0 or newer is required …` | Update the Docker Compose plugin |
 | `Port N is already in use; select another port` | Free the port, or install with `--core-port`/`--web-port` |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
-| `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `parsar apply` |
+| `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply` |
 | `This installation predates config.json …` | [Convert it](#convert-an-earlier-installation) |
 | `This installation runs another release …` | See [Upgrade an installation](#upgrade-an-installation) |
-| `generated/<file> was edited by hand` | Put the change in `config.json`, then `parsar apply --discard-edits` |
-| `config.json has changes that are not applied` | Run `parsar apply` |
-| `Core rejects secrets/core.key …` | Run `parsar apply`, which restarts Core with the key's digest |
-| `config.json not applied: …` | `parsar apply` printed Core's startup error above; fix `config.json` and apply again |
-| Web answers 403 `Forbidden` | Open exactly the console address `parsar status` prints; the reverse proxy must pass the original Host |
+| `generated/<file> was edited by hand` | Put the change in `config.json`, then `oac apply --discard-edits` |
+| `config.json has changes that are not applied` | Run `oac apply` |
+| `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
+| `config.json not applied: …` | `oac apply` printed Core's startup error above; fix `config.json` and apply again |
+| Web answers 403 `Forbidden` | Open exactly the console address `oac status` prints; the reverse proxy must pass the original Host |
 | `/v1` or `/api/v1` answers 404 | Those paths reach Web; route them to Core ([reverse proxy](install.md#https-and-the-reverse-proxy)) |
-| Web shows that Core is unavailable (502) | Core is stopped or failing: `parsar status`, then Core's log |
+| Web shows that Core is unavailable (502) | Core is stopped or failing: `oac status`, then Core's log |
 | Session creation returns 400 `model_provider_required` | No model provider: set a [default model](../configuration.md#default-models) for the harness, or pass one; self-hosted Sessions always pass their own |
-| Add node says nodes need an HTTPS public URL | Set `public_url` and run `parsar apply` |
+| Add node says nodes need an HTTPS public URL | Set `public_url` and run `oac apply` |
 | Add node says the console has no node files | Install from the offline bundle, or add the node files and rerun `./install.sh` |
 | A node is not ready | See [node troubleshooting](nodes.md#troubleshooting) |
 

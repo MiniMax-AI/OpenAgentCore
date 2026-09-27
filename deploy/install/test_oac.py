@@ -1,4 +1,4 @@
-"""Acceptance behavior of the parsar command against a fake Docker/systemd host."""
+"""Acceptance behavior of the oac command against a fake Docker/systemd host."""
 import hashlib
 import json
 from pathlib import Path
@@ -11,7 +11,7 @@ from unittest import mock
 import config_model
 import install
 import native_service
-import parsar_cli
+import oac_cli
 from installer_fakes import FakeHost
 
 IMAGES = {name: "sha256:" + digit * 64 for name, digit in (("core", "1"), ("database", "3"), ("web", "4"))}
@@ -38,7 +38,7 @@ def compose_up(*services):
 
 class ParsarTests(unittest.TestCase):
     def setUp(self):
-        base = Path.home() / ".oac/tests/parsar"
+        base = Path.home() / ".oac/tests/oac"
         base.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(temporary.cleanup)
@@ -49,7 +49,7 @@ class ParsarTests(unittest.TestCase):
         self.output = []
         # Each stamp is a new second, so nothing depends on finishing within one.
         clock = iter(range(10 ** 6))
-        patcher = mock.patch.object(parsar_cli, "now", side_effect=lambda: f"2026-09-25T10:{next(clock):06d}Z")
+        patcher = mock.patch.object(oac_cli, "now", side_effect=lambda: f"2026-09-25T10:{next(clock):06d}Z")
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -70,7 +70,7 @@ class ParsarTests(unittest.TestCase):
 
     def apply(self, **options):
         options.setdefault("interactive", False)
-        return parsar_cli.apply(self.root, out=self.output.append, **options)
+        return oac_cli.apply(self.root, out=self.output.append, **options)
 
     def edit(self, change):
         path = self.root / "config.json"
@@ -87,24 +87,24 @@ class ParsarTests(unittest.TestCase):
     def status(self):
         self.output.clear()
         try:
-            parsar_cli.status(self.root, out=self.output.append)
-        except parsar_cli.ParsarError as error:
+            oac_cli.status(self.root, out=self.output.append)
+        except oac_cli.OacError as error:
             self.output.append(str(error))
         return self.output
 
     def assertConverged(self):
-        state, config = parsar_cli.load_state(self.root), parsar_cli.load_config(self.root)
-        rendered, disk, _ = parsar_cli.render_now(self.root, config, state)
-        actual = parsar_cli.observe(state)
+        state, config = oac_cli.load_state(self.root), oac_cli.load_config(self.root)
+        rendered, disk, _ = oac_cli.render_now(self.root, config, state)
+        actual = oac_cli.observe(state)
         for name, digest in rendered.services.items():
             if name != "migrate":
                 self.assertEqual((actual[name]["running"], actual[name]["inputs"]), (True, digest), name)
         for name, text in rendered.files.items():
-            self.assertEqual(parsar_cli.comparable(name, disk[name]), parsar_cli.comparable(name, text), name)
+            self.assertEqual(oac_cli.comparable(name, disk[name]), oac_cli.comparable(name, text), name)
         if config["mode"] != "web-only":
             key = (self.root / "secrets/core.key").read_text()
             url = f'http://127.0.0.1:{config["ports"]["core"]}/core/v1/installation'
-            self.assertEqual(self.host.http(url, parsar_cli.bearer(key))[0], 200)
+            self.assertEqual(self.host.http(url, oac_cli.bearer(key))[0], 200)
         for line in self.status():
             self.assertNotRegex(line, "edited by hand|other inputs|not applied|rejects|unavailable")
 
@@ -148,12 +148,12 @@ class ParsarTests(unittest.TestCase):
 
     def test_a_stopped_installation_stays_stopped(self):
         self.install()
-        parsar_cli.stop(self.root, out=self.output.append)
+        oac_cli.stop(self.root, out=self.output.append)
         self.edit(lambda config: config["ports"].update(web=18080))
         self.apply()
         self.assertEqual((self.host.recreated, self.host.running()), ([], set()))
         self.assertIn("The installation is stopped; it stays stopped and starts with these files.", self.output)
-        parsar_cli.start(self.root, out=self.output.append)
+        oac_cli.start(self.root, out=self.output.append)
         self.assertEqual(self.host.recreated, ["web"])
         self.assertEqual(self.host.web_port, 18080)
         # While any service runs, apply starts the others too.
@@ -166,10 +166,10 @@ class ParsarTests(unittest.TestCase):
         path = self.root / "generated/core.env"
         edited = path.read_text() + 'OAC_EXECUTION_CONCURRENCY="9"\n'
         path.write_text(edited)
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "generated/core.env was edited by hand"):
+        with self.assertRaisesRegex(oac_cli.OacError, "generated/core.env was edited by hand"):
             self.apply()
         self.assertEqual(path.read_text(), edited)
-        self.assertIn("generated/core.env was edited by hand; put the change in config.json and run parsar apply "
+        self.assertIn("generated/core.env was edited by hand; put the change in config.json and run oac apply "
                       "--discard-edits", self.status())
         self.apply(discard_edits=True)
         self.assertNotIn('"9"', path.read_text())
@@ -183,28 +183,28 @@ class ParsarTests(unittest.TestCase):
     def test_secrets_fixed_fields_and_directories_are_checked(self):
         self.install()
         self.edit(lambda config: config.update(native_core=True, ports=dict(config["ports"], database=15432)))
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "native_core is fixed"):
+        with self.assertRaisesRegex(oac_cli.OacError, "native_core is fixed"):
             self.apply()
         self.edit(lambda config: (config.pop("native_core"), config["ports"].pop("database")))
         (self.root / "generated").chmod(0o755)
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "generated/ must be a directory with mode 0700"):
+        with self.assertRaisesRegex(oac_cli.OacError, "generated/ must be a directory with mode 0700"):
             self.apply()
         (self.root / "generated").chmod(0o700)
         (self.root / "secrets").rename(self.work / "secrets")
         (self.root / "secrets").symlink_to(self.work / "secrets")
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "secrets/ must be a directory"):
+        with self.assertRaisesRegex(oac_cli.OacError, "secrets/ must be a directory"):
             self.apply()
         (self.root / "secrets").unlink()
         (self.work / "secrets").rename(self.root / "secrets")
         (self.root / "secrets/credential.key").write_text("replaced")
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "credential.key changed"):
+        with self.assertRaisesRegex(oac_cli.OacError, "credential.key changed"):
             self.apply()
 
     def test_rotate_core_key(self):
         self.install()
         old = (self.root / "secrets/core.key").read_text()
         (self.root / "secrets/core.key.new").write_text("left by an interrupted rotation")
-        parsar_cli.rotate_core_key(self.root, yes=True, out=self.output.append)
+        oac_cli.rotate_core_key(self.root, yes=True, out=self.output.append)
         new = (self.root / "secrets/core.key").read_text()
         self.assertNotEqual(new, old)
         self.assertFalse((self.root / "secrets/core.key.new").exists())
@@ -212,17 +212,17 @@ class ParsarTests(unittest.TestCase):
         self.assertEqual(json.loads(self.generated("core-key-digests.json")), [hashlib.sha256(new.encode()).hexdigest()])
         self.assertLess(self.host.recreated.index("core"), self.host.recreated.index("web"))
         url = "http://127.0.0.1:8091/core/v1/installation"
-        self.assertEqual(self.host.http(url, parsar_cli.bearer(old))[0], 401)
+        self.assertEqual(self.host.http(url, oac_cli.bearer(old))[0], 401)
         self.assertConverged()
 
     def test_web_only_neither_rotates_nor_sends_its_key_to_an_unapplied_core(self):
         self.host.remote_core["https://core.example"] = (200, self.host.core_installation_id)
         self.install("web-only", **{"web.core_url": "https://core.example"})
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "Core owns the Core key"):
-            parsar_cli.rotate_core_key(self.root, yes=True, out=self.output.append)
+        with self.assertRaisesRegex(oac_cli.OacError, "Core owns the Core key"):
+            oac_cli.rotate_core_key(self.root, yes=True, out=self.output.append)
         self.edit(lambda config: config["web"].update(core_url="https://other.example"))
         calls = []
-        with mock.patch.object(parsar_cli, "http", side_effect=lambda url, *a, **k: calls.append(url) or (0, b"")):
+        with mock.patch.object(oac_cli, "http", side_effect=lambda url, *a, **k: calls.append(url) or (0, b"")):
             self.apply(dry_run=True)
         self.assertEqual(calls, [])
         self.assertIn("web.core_url changes; apply checks which Core it reaches.", self.output)
@@ -234,11 +234,11 @@ class ParsarTests(unittest.TestCase):
                            {"name": "node-b", "online": True, "core_url": "https://older.example"}]
         self.edit(lambda config: config.update(public_url="https://new.example"))
         before = self.generated("core.env")
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "--confirm-public-url-change https://new.example"):
+        with self.assertRaisesRegex(oac_cli.OacError, "--confirm-public-url-change https://new.example"):
             self.apply()
         self.assertIn("  node node-a: online", self.output)
         self.assertNotIn("  node node-b: online", self.output)
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "must equal the new public URL"):
+        with self.assertRaisesRegex(oac_cli.OacError, "must equal the new public URL"):
             self.apply(confirm_public_url_change="https://other.example")
         self.assertEqual(self.generated("core.env"), before)
         self.apply(confirm_public_url_change="https://new.example")
@@ -247,18 +247,18 @@ class ParsarTests(unittest.TestCase):
         self.host.bindings.update(nodes=1, nodes_on_other_address=0, hosted_sandboxes=0)
         self.edit(lambda config: config.update(public_url="https://fourth.example"))
         http = self.host.http
-        with mock.patch.object(parsar_cli, "http", side_effect=lambda url, *a, **k: (
+        with mock.patch.object(oac_cli, "http", side_effect=lambda url, *a, **k: (
                 (500, b"") if url.endswith("/core/v1/sandbox/nodes") else http(url, *a, **k))), \
-                self.assertRaisesRegex(parsar_cli.ParsarError, "--confirm-public-url-change https://fourth.example"):
+                self.assertRaisesRegex(oac_cli.OacError, "--confirm-public-url-change https://fourth.example"):
             self.apply()
         self.assertIn("Bound to the current address: 1 node(s), 0 hosted sandbox(es), 0 self-hosted executor credential(s).",
                       self.output)
         self.edit(lambda config: config.update(public_url="https://new.example"))
         # With Core stopped and core.env gone, the address in use is unknown: confirmation is needed.
-        parsar_cli.stop(self.root, out=self.output.append)
+        oac_cli.stop(self.root, out=self.output.append)
         (self.root / "generated/core.env").unlink()
         self.edit(lambda config: config.update(public_url="https://third.example"))
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "--confirm-public-url-change https://third.example"):
+        with self.assertRaisesRegex(oac_cli.OacError, "--confirm-public-url-change https://third.example"):
             self.apply()
         self.apply(confirm_public_url_change="https://third.example")
 
@@ -268,12 +268,12 @@ class ParsarTests(unittest.TestCase):
         self.edit(lambda config: config["core"].update(execution_concurrency=8))
         self.host.core["fails"] = True
         self.host.core["log"] = 'noise\nlevel=ERROR msg="oac-core startup failed" error="synthetic rejection"\n'
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "previous generated files were restored"):
+        with self.assertRaisesRegex(oac_cli.OacError, "previous generated files were restored"):
             self.apply()
         self.assertEqual({name: self.generated(name) for name in before}, before)
         self.assertIn('level=ERROR msg="oac-core startup failed" error="synthetic rejection"', self.output)
         # Core is down now, so the next failure has nothing converged to roll back to.
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "nothing was rolled back"):
+        with self.assertRaisesRegex(oac_cli.OacError, "nothing was rolled back"):
             self.apply()
         self.host.core["fails"] = False
         self.apply()
@@ -289,7 +289,7 @@ class ParsarTests(unittest.TestCase):
                 self.host.core["rejects"] = lambda environment: 'OAC_EXECUTION_CONCURRENCY="4"' not in environment
                 for value in (5, 6, 7, 8):
                     self.edit(lambda config: config["core"].update(execution_concurrency=value))
-                    with self.assertRaisesRegex(parsar_cli.ParsarError, "services converged on them"):
+                    with self.assertRaisesRegex(oac_cli.OacError, "services converged on them"):
                         self.apply()
                 self.host.core["rejects"] = lambda environment: False
                 self.edit(lambda config: config["core"].update(execution_concurrency=4))
@@ -302,24 +302,24 @@ class ParsarTests(unittest.TestCase):
         path.write_text(path.read_text() + "# hand edit\n")
         self.host.core["rejects"] = lambda environment: 'OAC_EXECUTION_CONCURRENCY="5"' in environment
         self.edit(lambda config: config["core"].update(execution_concurrency=5))
-        with self.assertRaisesRegex(parsar_cli.ParsarError, "services converged on them"):
+        with self.assertRaisesRegex(oac_cli.OacError, "services converged on them"):
             self.apply(discard_edits=True)
         self.assertIn("# hand edit", path.read_text())
-        self.assertIn("generated/core.env was edited by hand; put the change in config.json and run parsar apply "
+        self.assertIn("generated/core.env was edited by hand; put the change in config.json and run oac apply "
                       "--discard-edits", self.status())
 
     def test_the_next_apply_finishes_any_interrupted_apply_rotation_or_rollback(self):
         compose_stages = {
-            "before any file": (parsar_cli, "save_state", lambda *a: True),
-            "between files": (parsar_cli, "write_private",
+            "before any file": (oac_cli, "save_state", lambda *a: True),
+            "between files": (oac_cli, "write_private",
                               lambda path, data: path.name in ("core.env", "core-key-digests.json")),
-            "before converging": (parsar_cli, "converge", lambda *a, **k: True),
-            "after Core": (parsar_cli, "compose", compose_up()),
-            "before health": (parsar_cli, "health", lambda *a: True),
+            "before converging": (oac_cli, "converge", lambda *a, **k: True),
+            "after Core": (oac_cli, "compose", compose_up()),
+            "before health": (oac_cli, "health", lambda *a: True),
         }
         native_stages = dict(compose_stages, **{
             "after reload": (native_service, "restart", lambda *a: True),
-            "after Core": (parsar_cli, "compose", compose_up()),
+            "after Core": (oac_cli, "compose", compose_up()),
         })
         for native in (False, True):
             for stage, (target, name, when) in (native_stages if native else compose_stages).items():
@@ -330,7 +330,7 @@ class ParsarTests(unittest.TestCase):
                         self.host.native.update(active=False, inputs=None, loaded=None)
                         self.install(native=native)
                         if operation == "rotate":
-                            action = lambda: parsar_cli.rotate_core_key(self.root, yes=True, out=self.output.append)
+                            action = lambda: oac_cli.rotate_core_key(self.root, yes=True, out=self.output.append)
                         else:
                             self.edit(lambda config: (config["log"].update(level="debug"),
                                                       config["ports"].update(web=18080)))
@@ -340,7 +340,7 @@ class ParsarTests(unittest.TestCase):
                         trigger = (lambda *a, when=when, **k: self.host.core["failed"] and when(*a, **k)) \
                             if operation == "rollback" else when
                         with interrupt(target, name, trigger), \
-                                self.assertRaises((KeyboardInterrupt, parsar_cli.ParsarError)) as raised:
+                                self.assertRaises((KeyboardInterrupt, oac_cli.OacError)) as raised:
                             action()
                         self.assertNotIn(": .", str(raised.exception))
                         self.host.core.update(fails=False, failed=False)

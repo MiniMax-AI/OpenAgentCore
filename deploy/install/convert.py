@@ -15,15 +15,15 @@ import hashlib
 import ipaddress
 import json
 import os
+import re
 from pathlib import Path
 import stat
-import sys
 from urllib.parse import parse_qsl, urlsplit
 
 import config_model
 import configuration
 import native_service
-import parsar_cli
+import oac_cli
 
 # Historical environment names below are conversion inputs only. The resulting
 # config.json is rendered by configuration.py using OAC_* and OAC_WEB_* settings.
@@ -146,7 +146,7 @@ def legacy_read_environment(root):
     if (not stat.S_ISDIR(directory.st_mode) or stat.S_IMODE(directory.st_mode) & 0o077
             or directory.st_uid != os.geteuid()):
         raise RuntimeError("config/ must be a private directory")
-    parsar_cli.check_private(path, "config/core.env")
+    oac_cli.check_private(path, "config/core.env")
     return configuration.read_environment(path.read_text())
 
 
@@ -232,27 +232,30 @@ def loopback(value):
         return host == "localhost"
 
 
+def legacy_unit_name(old):
+    project = old.get("project", "")
+    if not isinstance(project, str) or not re.fullmatch(r"parsar-[0-9a-f]{10}", project):
+        raise ConvertError("The old installation has an invalid project name")
+    return project + "-core.service"
+
+
+def legacy_disable(old, run):
+    run(["systemctl", "--user", "disable", "--now", legacy_unit_name(old)])
+
+
 def old_core_deployment(root, old, plan, run):
-    """Read the sandbox deployment's core_url from the old Core, starting it with its old files."""
+    """Read only; the rename coordinator owns any temporary old-service start."""
     base = f'http://127.0.0.1:{old["core_port"]}'
-    started = False
-    if parsar_cli.http(base + "/healthz")[0] != 200:
-        run(["docker", "compose", "-f", str(root / "compose.json"), "up", "--detach", "--wait"])
-        if native_service.is_native(old):
-            # By path: an interrupted conversion may already have disabled the unit.
-            run(["systemctl", "--user", "enable", "--now", str(root / "config" / native_service.unit_name(old))])
-        started = True
-        parsar_cli.wait_status(base + "/healthz")
     key = (root / "admin/core.key").read_text().strip()
-    status, body = parsar_cli.http(base + "/core/v1/sandbox/deployment", parsar_cli.bearer(key))
+    status, body = oac_cli.http(base + "/core/v1/sandbox/deployment", oac_cli.bearer(key))
     if status != 200:
         plan.problem("sandbox deployment", "core_url", "the old Core did not return it; make sure it starts with its "
                      "own files and that admin/core.key is current")
-        return None, started
-    return json.loads(body).get("core_url") or "", started
+        return None, False
+    return json.loads(body).get("core_url") or "", False
 
 
-def preflight(root, bundle_manifest, images, public_url_override, run):
+def preflight(root, bundle_manifest, images, public_url_override, run, inspect_deployment=True):
     """Build config.json and state.json in memory; change nothing."""
     old = detect(root)
     plan = Plan()
@@ -267,8 +270,8 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
     private = ["admin/core.key"] + ([] if mode == "web-only" else ["config/credential.key", "config/database.password"])
     for name in private:
         try:
-            parsar_cli.check_private(root / name, name)
-        except parsar_cli.ParsarError:
+            oac_cli.check_private(root / name, name)
+        except oac_cli.OacError:
             plan.problem(name, "", "must be a private regular file (mode 0600, owned by you, not a link); fix it and rerun")
     if plan.problems:
         return old, plan, False
@@ -302,10 +305,10 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
         known["config"] = {"core.env", "credential.key", "database.password"}
         known["admin"].add("core-key-digests.json")
         if native:
-            known["config"].add(native_service.unit_name(old))
+            known["config"].add(legacy_unit_name(old))
         try:
             env = legacy_read_environment(root)
-        except (RuntimeError, parsar_cli.ParsarError, OSError, UnicodeError):
+        except (RuntimeError, oac_cli.OacError, OSError, UnicodeError):
             plan.problem("config/core.env", "", "must be a private file of double-quoted literal values")
             env = None
         if env is not None:
@@ -339,7 +342,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
     started = False
     # Before #138, nodes enrolled with the sandbox deployment's own core_url. Since then
     # Core derives that from AGENTS_API_PUBLIC_URL, so core.env already names the address.
-    if mode != "web-only" and not from_env and not plan.problems:
+    if mode != "web-only" and not from_env and not plan.problems and inspect_deployment:
         deployment, started = old_core_deployment(root, old, plan, run)
         if deployment == f'http://127.0.0.1:{old["core_port"]}':
             deployment = None  # Core's loopback address, saved by a local-only setup: no public URL.
@@ -358,7 +361,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
                     plan.problem("public_url", "", f"the installation's {public} differs from the sandbox deployment's "
                                  f"{deployment}. Rerun with --public-url {public} or --public-url {deployment}; "
                                  f"choosing {public} means the deployment's nodes must be removed and added again")
-    if public_url_override is not None and not plan.problems:
+    if public_url_override is not None and not plan.problems and inspect_deployment:
         plan.problem("--public-url", "", "only settles a conflict between the installation and the sandbox deployment; "
                      "change public_url in config.json after conversion")
     config["public_url"] = public
@@ -381,7 +384,7 @@ def preflight(root, bundle_manifest, images, public_url_override, run):
                        ("config/database.password", "secrets/database.password")]
         plan.deletions += ["config/core.env", "admin/core-key-digests.json"]
         if native:
-            plan.deletions.append("config/" + native_service.unit_name(old))
+            plan.deletions.append("config/" + legacy_unit_name(old))
     plan.state = {
         "format": 1, "installation_id": old["installation_id"], "project": old["project"],
         "uid": old["uid"], "gid": old["gid"], "mode": mode, "native_core": native,
@@ -494,29 +497,6 @@ def map_environment(root, old, env, password, config, plan, known):
 
 # Steps -----------------------------------------------------------------------
 
-def confirm(root, old, plan, yes, interactive, out):
-    out("Conversion writes config.json and state.json, moves the secrets into secrets/, removes the old generated")
-    out("files and upgrades Core to this release. Database migrations can't be undone; back up first:")
-    if old["mode"] != "web-only":
-        out(f'  docker compose -f {root / "compose.json"} exec -T database pg_dump -U agents_api agents_api > parsar-backup.sql')
-    for note in plan.notes:
-        out("Note: " + note)
-    for name in plan.leftovers:
-        out(f"Left in place: {name} (not part of the installer's layout)")
-    defaults = {key: node.get("default") for key, node, _ in config_model.leaves()}
-    shown = {key: value for key, value in config_model.values(plan.config).items()
-             if key not in config_model.sensitive_keys() and (key in ("mode", "public_url") or value != defaults[key])}
-    out("config.json, apart from defaults: " + json.dumps(shown))
-    if not (yes or (interactive and input("Type yes to convert this installation: ").strip() == "yes")):
-        raise ConvertError("Conversion was not confirmed; nothing was changed. Rerun with --yes to skip the prompt")
-
-
-def stop_old(root, old, run):
-    if native_service.is_native(old):
-        native_service.disable(old)
-    run(["docker", "compose", "-f", str(root / "compose.json"), "stop"])
-
-
 def move(root, source, target):
     source, target = root / source, root / target
     if source.exists() and target.exists():
@@ -534,8 +514,8 @@ def write_layout(root, old, plan):
     for name in ("secrets", "generated"):
         (root / name).mkdir(mode=0o700, exist_ok=True)
         os.chmod(root / name, 0o700)
-    parsar_cli.write_private(root / "state.json", json.dumps(plan.state, indent=2) + "\n")
-    parsar_cli.create_private(root / "config.json", json.dumps(plan.config, indent=2) + "\n")
+    oac_cli.write_private(root / "state.json", json.dumps(plan.state, indent=2) + "\n")
+    oac_cli.write_private(root / "config.json", json.dumps(plan.config, indent=2) + "\n")
     finish_layout(root, old, plan.moves, plan.deletions)
 
 
@@ -569,39 +549,7 @@ def resume(root, state, out):
                   ("config/database.password", "secrets/database.password")]
         deletions += ["config/core.env", "admin/core-key-digests.json"]
         if native_service.is_native(old):
-            deletions.append("config/" + native_service.unit_name(old))
+            deletions.append("config/" + legacy_unit_name(old))
     deletions += [name for name in state["converted_from"].get("remove", []) if name not in deletions]
     out("Resuming an interrupted conversion.")
     finish_layout(root, old, moves, deletions)
-
-
-def convert(root, manifest, load_images, public_url_override, yes, run, interactive=None, out=print):
-    """Steps 1-5. The caller then loads the bundle's files and applies (step 6)."""
-    interactive = sys.stdin.isatty() if interactive is None else interactive
-    if (root / "config.json").exists():
-        state = json.loads((root / "state.json").read_text())
-        if state["source_commit"] != manifest["source_commit"]:
-            raise ConvertError("Finish the conversion with the bundle it started with, release " + state["source_commit"])
-        check_resumed_public_url(root, public_url_override)
-        load_images(state["images"])
-        resume(root, state, out)
-        return
-    old = detect(root)
-    wanted = ["web"] if old["mode"] == "web-only" else (["database"] if old["native_core"] else ["core", "database"])
-    if old["mode"] == "all":
-        wanted.append("web")
-    old, plan, started = preflight(root, manifest, {name: None for name in wanted}, public_url_override, run)
-    try:
-        if plan.problems:
-            raise ConvertError("This installation can't be converted yet:\n"
-                               + "\n".join("  - " + item for item in plan.problems) + "\nNothing was changed.")
-        confirm(root, old, plan, yes, interactive, out)
-    except ConvertError:
-        if started:
-            # Leave the services as they were found.
-            run(["docker", "compose", "-f", str(root / "compose.json"), "stop"])
-            native_service.stop(root, old)
-        raise
-    plan.state["images"] = load_images(wanted)
-    stop_old(root, old, run)
-    write_layout(root, old, plan)

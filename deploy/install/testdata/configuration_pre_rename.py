@@ -15,7 +15,7 @@ import config_model
 import native_service
 
 # Where Core and Web containers see secrets and generated inputs.
-RUN = "/run/oac"
+RUN = "/run/parsar"
 POOL = (("max_conns", "pool_max_conns"), ("min_conns", "pool_min_conns"),
         ("max_conn_lifetime", "pool_max_conn_lifetime"), ("max_conn_idle_time", "pool_max_conn_idle_time"),
         ("health_check_period", "pool_health_check_period"))
@@ -27,7 +27,7 @@ _HOST_LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 def valid_core_origin(value):
     """Accept exactly the origins Core's ValidateSandboxCoreURL accepts
     (services/agents-api/internal/store/sandbox_deployment_setup.go), so an
-    installer value never fails Core's OAC_PUBLIC_URL check at startup."""
+    installer value never fails Core's AGENTS_API_PUBLIC_URL check at startup."""
     if not isinstance(value, str) or any(char in value for char in "?#@\\% \t\r\n"):
         return False
     try:
@@ -94,7 +94,7 @@ def sha256(data):
 
 
 def edit_hint(root):
-    return f"Generated from {Path(root) / 'config.json'}. Do not edit; change config.json and run {Path(root) / 'oac'} apply."
+    return f"Generated from {Path(root) / 'config.json'}. Do not edit; change config.json and run {Path(root) / 'parsar'} apply."
 
 
 def read_core_key(root):
@@ -111,16 +111,16 @@ def secret_digests(root, mode):
 
 
 def local_public_url(config):
-    """OAC_PUBLIC_URL: the public origin, or Core's loopback origin for local use."""
+    """AGENTS_API_PUBLIC_URL: the public origin, or Core's loopback origin for local use."""
     return config["public_url"] or f'http://127.0.0.1:{config["ports"]["core"]}'
 
 
 def log_environment(log):
-    result = {"OAC_LOG_LEVEL": log["level"]}
+    result = {"PARSAR_LOG_LEVEL": log["level"]}
     if log["format"] != "auto":
-        result["OAC_LOG_FORMAT"] = log["format"]
+        result["PARSAR_LOG_FORMAT"] = log["format"]
     if log["add_source"]:
-        result["OAC_LOG_ADD_SOURCE"] = "1"
+        result["PARSAR_LOG_ADD_SOURCE"] = "1"
     return result
 
 
@@ -134,39 +134,34 @@ def core_environment(root, config, state):
     query = [("sslmode", "disable")] + [(name, str(core["database_pool"][key])) for key, name in POOL
                                         if core["database_pool"][key] is not None]
     result = {
-        "OAC_ADDR": f'127.0.0.1:{ports["core"]}' if native else ":8091",
-        "OAC_PUBLIC_URL": local_public_url(config),
-        "OAC_DATABASE_URL": f"postgres://agents_api@{database}/agents_api?" + urlencode(query),
-        "OAC_DATABASE_PASSWORD_FILE": secrets + "/database.password",
-        "OAC_CREDENTIAL_KEY_FILE": secrets + "/credential.key",
-        "OAC_CORE_KEY_DIGESTS_FILE": generated + "/core-key-digests.json",
-        "OAC_INSTALLATION_ID": state["installation_id"],
-        "OAC_SETTINGS_FILE": generated + "/settings.json",
-        "OAC_E2B_STATE_DIR": str(root / "state/e2b") if native else "/state/e2b",
-        "OAC_DEFAULT_HARNESS": core["default_harness"],
-        "OAC_HARNESSES": ",".join(core["harnesses"]),
-        "OAC_EXECUTION_CONCURRENCY": str(core["execution_concurrency"]),
-        "OAC_WRITE_AUDIT_RETENTION": core["write_audit_retention"],
+        "AGENTS_API_ADDR": f'127.0.0.1:{ports["core"]}' if native else ":8091",
+        "AGENTS_API_PUBLIC_URL": local_public_url(config),
+        "AGENTS_API_DATABASE_URL": f"postgres://agents_api@{database}/agents_api?" + urlencode(query),
+        "AGENTS_API_DATABASE_PASSWORD_FILE": secrets + "/database.password",
+        "AGENTS_API_CREDENTIAL_KEY_FILE": secrets + "/credential.key",
+        "AGENTS_API_CORE_KEY_DIGESTS_FILE": generated + "/core-key-digests.json",
+        "AGENTS_API_SANDBOX_INSTALLATION_ID": state["installation_id"],
+        "AGENTS_API_SETTINGS_FILE": generated + "/settings.json",
+        "AGENTS_API_E2B_STATE_DIR": str(root / "state/e2b") if native else "/state/e2b",
+        "AGENTS_API_ENGINE": core["default_harness"],
+        "AGENTS_API_HARNESSES": ",".join(core["harnesses"]),
+        "AGENTS_API_EXECUTION_CONCURRENCY": str(core["execution_concurrency"]),
+        "AGENTS_API_WRITE_AUDIT_RETENTION": core["write_audit_retention"],
     }
     if native:
-        result["OAC_E2B_PROVIDER_BIN"] = str(root / "native/e2b/oac-e2b-provider")
+        result["AGENTS_API_E2B_PROVIDER_BIN"] = str(root / "native/e2b/agents-api-e2b-provider")
     if core["oauth_trusted_origins"]:
-        result["OAC_OAUTH_TRUSTED_ORIGINS"] = ",".join(core["oauth_trusted_origins"])
+        result["AGENTS_API_OAUTH_TRUSTED_ORIGINS"] = ",".join(core["oauth_trusted_origins"])
     if core["runtime_history"] is not None:
-        result["OAC_HISTORY_SETTINGS_FILE"] = generated + "/runtime-history.json"
+        result["AGENTS_API_RUNTIME_HISTORY_FILE"] = generated + "/runtime-history.json"
     result.update(log_environment(config["log"]))
     return result
 
 
 def settings_document(root, config, applied_at):
     root = Path(root)
-    return {"path": str(root / "config.json"), "apply_command": f"{root / 'oac'} apply",
+    return {"path": str(root / "config.json"), "apply_command": f"{root / 'parsar'} apply",
             "applied_at": applied_at, "settings": config_model.settings(config)}
-
-
-
-def conversion_labels(state):
-    return {"io.oac.installation": state["installation_id"], "io.oac.conversion": state["renamed_from"]["at"]}
 
 
 def compose_config(root, config, state):
@@ -176,8 +171,8 @@ def compose_config(root, config, state):
     images = state["images"]
     doc = {"name": state["project"],
            # Compose interpolates every string, extension fields included.
-           "x-oac": {"generated_from": str(root / "config.json").replace("$", "$$"),
-                        "edit": "config.json, then oac apply"},
+           "x-parsar": {"generated_from": str(root / "config.json").replace("$", "$$"),
+                        "edit": "config.json, then parsar apply"},
            "services": {}}
     services = doc["services"]
     if mode != "web-only":
@@ -191,10 +186,6 @@ def compose_config(root, config, state):
                             "interval": "2s", "timeout": "5s", "retries": 30},
         }
         doc["volumes"] = {"database": {}}
-        if state.get("renamed_from"):
-            # Keep the exact copied-volume definition: Compose must never offer
-            # to replace a populated conversion volume because its labels differ.
-            doc["volumes"]["database"]["labels"] = conversion_labels(state)
         if native:
             services["database"]["ports"] = [f'127.0.0.1:{config["ports"]["database"]}:5432']
         else:
@@ -206,7 +197,7 @@ def compose_config(root, config, state):
                       "env_file": [str(root / "generated/core.env").replace("$", "$$")], "volumes": mounts,
                       "read_only": True, "tmpfs": ["/tmp:mode=1777"], "init": True,
                       "security_opt": ["no-new-privileges:true"]}
-            services["migrate"] = dict(shared, command=["/usr/local/bin/oac-core-migrate"],
+            services["migrate"] = dict(shared, command=["/usr/local/bin/agents-api-migrate"],
                                        depends_on={"database": {"condition": "service_healthy"}})
             services["core"] = dict(shared, restart="unless-stopped", ports=[f'127.0.0.1:{config["ports"]["core"]}:8091'],
                                     depends_on={"migrate": {"condition": "service_completed_successfully"}},
@@ -217,10 +208,10 @@ def compose_config(root, config, state):
         else:
             upstream = f'http://127.0.0.1:{config["ports"]["core"]}' if native else "http://core:8091"
         environment = {
-            "OAC_WEB_ORIGIN": config["public_url"] or f'http://127.0.0.1:{config["ports"]["web"]}',
-            "OAC_WEB_UPSTREAM": upstream,
-            "OAC_WEB_CORE_KEY_FILE": f"{RUN}/core.key",
-            "OAC_WEB_NODE_PAYLOAD_DIR": "/node-payload",
+            "CORE_CONSOLE_ORIGIN": config["public_url"] or f'http://127.0.0.1:{config["ports"]["web"]}',
+            "CORE_CONSOLE_UPSTREAM": upstream,
+            "CORE_CONSOLE_CORE_KEY_FILE": f"{RUN}/core.key",
+            "CORE_CONSOLE_NODE_PAYLOAD_DIR": "/node-payload",
         }
         environment.update(log_environment(config["log"]))
         web = {"image": images["web"], "user": identity, "restart": "unless-stopped",
@@ -231,12 +222,12 @@ def compose_config(root, config, state):
         if mode == "web-only" or native:
             web.pop("ports")
             web["network_mode"] = "host"
-            environment["OAC_WEB_ADDR"] = f'127.0.0.1:{config["ports"]["web"]}'
+            environment["CORE_CONSOLE_ADDR"] = f'127.0.0.1:{config["ports"]["web"]}'
         services["web"] = web
     return doc
 
 
-LABEL = "io.oac.inputs"
+LABEL = "io.parsar.inputs"
 
 
 class Rendered:
@@ -244,7 +235,7 @@ class Rendered:
 
     The digest covers everything a service reads: its Compose definition, the
     env_file content and the files and secrets it mounts. It is the service's
-    `io.oac.inputs` label, or OAC_INPUTS in the native unit, so the running
+    `io.parsar.inputs` label, or PARSAR_INPUTS in the native unit, so the running
     services can be compared with a render at any time.
     """
 
@@ -304,6 +295,6 @@ def rendered_inputs(files, unit):
             return {}
     if unit and files.get(unit):
         text = files[unit].decode() if isinstance(files[unit], bytes) else files[unit]
-        match = re.search(r"^Environment=OAC_INPUTS=([0-9a-f]{64})$", text, re.M)
+        match = re.search(r"^Environment=PARSAR_INPUTS=([0-9a-f]{64})$", text, re.M)
         result["core"] = match[1] if match else None
     return result

@@ -51,11 +51,11 @@ Pick a release, download its offline bundle and check it:
 
 ```sh
 gh release list --repo MiniMax-AI/parsar-core
-mkdir -p "$HOME/.parsar/releases" && cd "$HOME/.parsar/releases"
+mkdir -p "$HOME/.oac/releases" && cd "$HOME/.oac/releases"
 gh release download <tag> --repo MiniMax-AI/parsar-core --pattern '*-linux-amd64-offline.tar.gz*'
-sha256sum -c parsar-core-<commit>-linux-amd64-offline.tar.gz.sha256
-tar -xzf parsar-core-<commit>-linux-amd64-offline.tar.gz
-cd parsar-core-<commit>-linux-amd64
+sha256sum -c oac-<commit>-linux-amd64-offline.tar.gz.sha256
+tar -xzf oac-<commit>-linux-amd64-offline.tar.gz
+cd oac-<commit>-linux-amd64
 ```
 
 `<tag>` is the release tag from the list, and `<commit>` is the source commit in the
@@ -66,11 +66,11 @@ Each release has two bundles:
 
 | Bundle | Contains | Use it for |
 | --- | --- | --- |
-| `parsar-core-<commit>-linux-amd64-offline.tar.gz` | Core, Web and PostgreSQL images, the installers and every node and Runtime file | Any installation. Web serves the node files to your nodes and self-hosted executors |
-| `parsar-core-<commit>-linux-amd64.tar.gz` | The same without the node and Runtime files | Core-only hosts, and installations that use only E2B. Web can't add nodes or connect self-hosted executors until the files are present |
+| `oac-<commit>-linux-amd64-offline.tar.gz` | Core, Web and PostgreSQL images, the installers and every node and Runtime file | Any installation. Web serves the node files to your nodes and self-hosted executors |
+| `oac-<commit>-linux-amd64.tar.gz` | The same without the node and Runtime files | Core-only hosts, and installations that use only E2B. Web can't add nodes or connect self-hosted executors until the files are present |
 
 To add the node files to the smaller bundle, create an `artifacts/` directory in the
-extracted bundle, download the release's other `parsar-core-<commit>-linux-amd64-*`
+extracted bundle, download the release's other `oac-<commit>-linux-amd64-*`
 assets (not the two bundles) into it, then run `./install.sh`, or rerun it if the
 installation already exists. Nodes download these files only from your Web console,
 never from GitHub, so node hosts need no GitHub access.
@@ -86,8 +86,8 @@ From the extracted bundle:
 The installer:
 
 1. checks the host and the bundle, and loads the Core, Web and PostgreSQL images;
-2. creates the installation directory `~/.parsar/core` with the Core key, `config.json`
-   and the `parsar` command ([what it creates](#what-the-installer-creates));
+2. creates private `~/.oac` (mode `0700`) and the installation directory `~/.oac/core` with the Core key, `config.json`
+   and the `oac` command ([what it creates](#what-the-installer-creates));
 3. starts PostgreSQL, Core and Web with Docker Compose, on loopback ports only;
 4. selects microsandbox at Web's Standard size (2 CPUs, 4 GiB memory and two 8 GiB
    disks each). It adds no node, so this host needs no KVM; you add nodes in Web.
@@ -97,13 +97,13 @@ It ends by printing the console address, the API base URL and the next steps.
 
 Without `--public-url`, the installation serves only this host
 (`http://127.0.0.1:8080` for Web, `http://127.0.0.1:8091/v1` for the API). Set
-`public_url` in `config.json` later and run `parsar apply`; you don't reinstall. Nodes,
+`public_url` in `config.json` later and run `oac apply`; you don't reinstall. Nodes,
 E2B and self-hosted executors need the public URL.
 
 ### Installer options
 
 Flags only seed `config.json` for a new installation. Afterwards you change settings in
-`config.json` with [`parsar apply`](../configuration.md#process-settings-configjson),
+`config.json` with [`oac apply`](../configuration.md#process-settings-configjson),
 and rerunning `install.sh` accepts no flag except `--install-dir`.
 
 | Option | Default | Meaning |
@@ -120,9 +120,9 @@ and rerunning `install.sh` accepts no flag except `--install-dir`.
 | `--native-core` | off | Run [Core as a systemd user service](#native-core) instead of a container |
 | `--core-port PORT` | `8091` | Loopback port of Core. Seeds `ports.core` |
 | `--web-port PORT` | `8080` | Loopback port of Web. Seeds `ports.web` |
-| `--install-dir DIR` | `~/.parsar/core` | Absolute installation directory. It must be empty or missing |
+| `--install-dir DIR` | `~/.oac/core` | Absolute installation directory. It must be empty or missing |
 | `--config FILE` | | Seed `config.json` from a prepared file instead of the setting flags above (`--public-url`, the mode flags, `--native-core`, ports, `--core-url`) |
-| `--convert`, `--yes` | | [Convert an installation](operations.md#convert-an-earlier-installation) made before `config.json`; `--yes` skips the confirmation |
+| `--convert`, `--yes` | | [Convert an installation](operations.md#convert-an-earlier-installation) made before the OpenAgentCore rename; `--yes` skips the confirmation |
 
 #### Sandbox backend
 
@@ -156,7 +156,7 @@ it installs anything:
 
 ```sh
 ./install.sh --public-url https://core.example --sandbox e2b \
-  --e2b-api-key-file "$HOME/.parsar/e2b-api-key" --e2b-template '<template-id>:<build-uuid>'
+  --e2b-api-key-file "$HOME/.oac/e2b-api-key" --e2b-template '<template-id>:<build-uuid>'
 ```
 
 Prepare the template build with the
@@ -191,7 +191,7 @@ proxy sends `/core/v1` to Web, so the Core's public URL doesn't work here:
 | Web | `./install.sh --web-only …`, below | `console.example`: every path to Web |
 
 ```sh
-./install.sh --web-only --install-dir "$HOME/.parsar/core-console" \
+./install.sh --web-only --install-dir "$HOME/.oac/core-console" \
   --public-url https://console.example \
   --core-url https://core-api.example \
   --core-key-file "$HOME/core.key"
@@ -312,7 +312,7 @@ needs no KVM and is unrelated to the sandbox backend.
 Core and Web listen on `127.0.0.1` only; the reverse proxy reaches them there. The
 installer refuses a port that is in use. Several installations can share a host with
 their own `--install-dir` and ports, for example
-`--install-dir "$HOME/.parsar/core-2" --core-port 8092 --web-port 8081`. Each has its
+`--install-dir "$HOME/.oac/core-2" --core-port 8092 --web-port 8081`. Each has its
 own database, Core key and nodes.
 
 ## HTTPS and the reverse proxy
@@ -338,7 +338,7 @@ The proxy must:
 
 Web answers 404 on `/v1` and `/api/v1` and never forwards them. If those paths reach
 Web, application calls, node enrollment and every sandbox connection fail. Run the
-proxy on the Core host, since Core and Web listen on loopback. `parsar status` prints
+proxy on the Core host, since Core and Web listen on loopback. `oac status` prints
 the routes with this installation's ports.
 
 **Caddy** (obtains and renews the certificate itself; passes Host and WebSockets by
@@ -356,7 +356,7 @@ core.example {
 }
 ```
 
-**nginx** (for example `/etc/nginx/conf.d/parsar-core.conf`, inside the `http` block;
+**nginx** (for example `/etc/nginx/conf.d/oac.conf`, inside the `http` block;
 use your certificate paths):
 
 ```nginx
@@ -403,9 +403,9 @@ curl -s -o /dev/null -w '%{http_code}\n' -H 'OpenAI-Beta: agents=v1' https://cor
 `401` means `/v1` reached Core, which asks for a key; `404` means it reached Web.
 
 Install with `--public-url https://core.example`, or, for an existing installation,
-set `public_url` in `~/.parsar/core/config.json` and run `~/.parsar/core/parsar apply`.
+set `public_url` in `~/.oac/core/config.json` and run `~/.oac/core/oac apply`.
 Core derives every address it hands out from this one setting. If you change it while
-nodes, sandboxes or self-hosted executors use the old address, `parsar apply` lists
+nodes, sandboxes or self-hosted executors use the old address, `oac apply` lists
 them and asks you to confirm; those nodes must then be added again. See
 [Changing the public URL](../configuration.md#changing-the-public-url).
 
@@ -438,7 +438,7 @@ http://:8443 {
 3. Start the tunnel: `cloudflared tunnel --url http://127.0.0.1:8443`. It prints an
    address such as `https://random-words.trycloudflare.com`.
 4. Set `"public_url": "https://random-words.trycloudflare.com"` in
-   `~/.parsar/core/config.json` and run `~/.parsar/core/parsar apply`.
+   `~/.oac/core/config.json` and run `~/.oac/core/oac apply`.
 5. Open that address and [sign in](#sign-in-to-web).
 
 A quick tunnel is for trials only. Its address changes whenever `cloudflared`
@@ -457,7 +457,7 @@ at Add node.
 2. Sign in with the Core key:
 
    ```sh
-   cat ~/.parsar/core/secrets/core.key
+   cat ~/.oac/core/secrets/core.key
    ```
 
    The Core key is the installation's administrator credential. Keep it private; see
@@ -484,19 +484,23 @@ at Add node.
 **Create a project and issue a key**, and **Run the first Session**. After you hide it,
 **Show Getting started** in the sidebar brings it back.
 
+An existing pre-rename installation at `~/.parsar/core` blocks a new default install.
+Use `./install.sh --convert` after draining it with the old release, or explicitly
+choose another `--install-dir`. See [conversion and retained backups](operations.md#convert-an-earlier-installation).
+
 ## What the installer creates
 
-The installation directory, `~/.parsar/core` by default, mode `0700`:
+The installation directory, `~/.oac/core` by default, mode `0700`:
 
 | Path | Content |
 | --- | --- |
 | `config.json` | Process settings. The only file you edit; see the [configuration reference](../configuration.md) |
-| `parsar` | The [management command](operations.md#the-parsar-command) |
+| `oac` | The [management command](operations.md#the-oac-command) |
 | `secrets/core.key` | The Core key |
 | `secrets/credential.key` | Encryption key for credentials stored in the database. Back it up with the database; never replace it |
 | `secrets/database.password` | PostgreSQL password |
-| `state.json` | Installation ID, Compose project name, image IDs and source commit. Written by the tools only |
-| `generated/` | Files derived from `config.json`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json`, `config.schema.json`, and `runtime-history.json` or the native Core unit when used. `parsar apply` rewrites them; don't edit them |
+| `state.json` | Format 2, installation ID, Compose project name, image IDs and source commit. Written by the tools only |
+| `generated/` | Files derived from `config.json`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json`, `config.schema.json`, and `runtime-history.json` or the native Core unit when used. `oac apply` rewrites them; don't edit them |
 | `node-payload/` | The node and self-hosted installers, the manifest and the node files that Web serves at `/node-install/` |
 | `state/e2b/` | Private E2B receipts |
 | `native/` | Core binaries, with `--native-core` only |
@@ -504,7 +508,7 @@ The installation directory, `~/.parsar/core` by default, mode `0700`:
 Web-only installations have only `secrets/core.key` among the secrets, and no
 `state/e2b/`; Core-only installations have no `node-payload/`.
 
-In Docker, the installer creates a Compose project named `parsar-<10 hex digits>`
+In Docker, the installer creates a Compose project named `oac-<10 hex digits>`
 (`project` in `state.json`) with the containers `database`, `migrate` (runs the
 migrations, then exits), `core` and `web`, and the volume `<project>_database` that
 holds all data. Core and Web publish only `127.0.0.1:8091` and `127.0.0.1:8080`. The
@@ -518,7 +522,7 @@ nothing is written outside your home directory: no system service and no file un
 ## Rerun the installer
 
 Rerunning `./install.sh` from the same bundle repairs an installation: it reloads
-missing images, restores a missing `parsar` command, copies node files newly placed in
+missing images, restores a missing `oac` command, copies node files newly placed in
 `artifacts/`, applies `config.json` and starts the services. It accepts only
 `--install-dir`. It refuses a bundle from another release; see
 [Upgrades](operations.md#upgrade-an-installation).

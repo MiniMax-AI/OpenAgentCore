@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Parsar Core installation configuration",
-  "description": "Process settings of one installation. Edit config.json, then run parsar apply.",
+  "description": "Process settings of one installation. Edit config.json, then run oac apply.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "mode"],
@@ -9,30 +9,30 @@
     "$schema": {
       "type": "string",
       "description": "Editor hint that points at the installed copy of this schema. Ignored.",
-      "x-parsar": {"setting": false}
+      "x-oac": {"setting": false}
     },
     "format": {
       "const": 1,
       "description": "Configuration format. Only an upgrade changes it.",
-      "x-parsar": {"setting": false, "changeable": false}
+      "x-oac": {"setting": false, "changeable": false}
     },
     "mode": {
       "enum": ["all", "core-only", "web-only"],
       "default": "all",
       "description": "Which services this installation runs.",
-      "x-parsar": {"changeable": false, "install_flag": "--core-only or --web-only"}
+      "x-oac": {"changeable": false, "install_flag": "--core-only or --web-only"}
     },
     "native_core": {
       "type": "boolean",
       "default": false,
       "description": "Run Core as a systemd user service instead of a container.",
-      "x-parsar": {"changeable": false, "modes": ["all", "core-only"], "install_flag": "--native-core"}
+      "x-oac": {"changeable": false, "modes": ["all", "core-only"], "install_flag": "--native-core"}
     },
     "public_url": {
       "type": ["string", "null"],
       "default": null,
       "description": "Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1.",
-      "x-parsar": {
+      "x-oac": {
         "check": "origin",
         "restarts": ["core", "web"],
         "derives": ["OAC_PUBLIC_URL", "OAC_WEB_ORIGIN"],
@@ -49,7 +49,7 @@
           "maximum": 65535,
           "default": 8091,
           "description": "Loopback port of the Core API. With native Core, Web follows it.",
-          "x-parsar": {
+          "x-oac": {
             "modes": ["all", "core-only"],
             "restarts": ["core"],
             "native_restarts": ["core", "web"],
@@ -63,7 +63,7 @@
           "maximum": 65535,
           "default": 8080,
           "description": "Loopback port of Web.",
-          "x-parsar": {
+          "x-oac": {
             "modes": ["all", "web-only"],
             "restarts": ["web"],
             "derives": ["Web port mapping or OAC_WEB_ADDR"],
@@ -75,7 +75,7 @@
           "minimum": 1024,
           "maximum": 65535,
           "description": "Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port.",
-          "x-parsar": {
+          "x-oac": {
             "modes": ["all", "core-only"],
             "restarts": ["database", "core"],
             "derives": ["database port mapping", "OAC_DATABASE_URL"]
@@ -86,12 +86,12 @@
     "web": {
       "type": "object",
       "additionalProperties": false,
-      "x-parsar": {"modes": ["web-only"]},
+      "x-oac": {"modes": ["web-only"]},
       "properties": {
         "core_url": {
           "type": "string",
           "description": "Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host.",
-          "x-parsar": {
+          "x-oac": {
             "check": "origin",
             "restarts": ["web"],
             "derives": ["OAC_WEB_UPSTREAM"],
@@ -108,26 +108,26 @@
           "enum": ["debug", "info", "warn", "error"],
           "default": "info",
           "description": "Minimum log level of Core and Web.",
-          "x-parsar": {"restarts": ["core", "web"], "derives": ["OAC_LOG_LEVEL"]}
+          "x-oac": {"restarts": ["core", "web"], "derives": ["OAC_LOG_LEVEL"]}
         },
         "format": {
           "enum": ["auto", "text", "json"],
           "default": "auto",
           "description": "Log format. auto writes text to a terminal and JSON otherwise.",
-          "x-parsar": {"restarts": ["core", "web"], "derives": ["OAC_LOG_FORMAT"]}
+          "x-oac": {"restarts": ["core", "web"], "derives": ["OAC_LOG_FORMAT"]}
         },
         "add_source": {
           "type": "boolean",
           "default": false,
           "description": "Add the source file and line to each log record.",
-          "x-parsar": {"restarts": ["core", "web"], "derives": ["OAC_LOG_ADD_SOURCE"]}
+          "x-oac": {"restarts": ["core", "web"], "derives": ["OAC_LOG_ADD_SOURCE"]}
         }
       }
     },
     "core": {
       "type": "object",
       "additionalProperties": false,
-      "x-parsar": {"modes": ["all", "core-only"]},
+      "x-oac": {"modes": ["all", "core-only"]},
       "properties": {
         "execution_concurrency": {
           "type": "integer",
@@ -135,7 +135,7 @@
           "maximum": 1024,
           "default": 4,
           "description": "Concurrent execution work units in Core. Unrelated to node sandbox capacity.",
-          "x-parsar": {"restarts": ["core"], "derives": ["OAC_EXECUTION_CONCURRENCY"]}
+          "x-oac": {"restarts": ["core"], "derives": ["OAC_EXECUTION_CONCURRENCY"]}
         },
         "harnesses": {
           "type": "array",
@@ -144,27 +144,27 @@
           "items": {"enum": ["claude_sdk", "codex", "mcode"]},
           "default": ["claude_sdk", "codex", "mcode"],
           "description": "Harnesses that Sessions may select.",
-          "x-parsar": {"restarts": ["core"], "derives": ["OAC_HARNESSES"]}
+          "x-oac": {"restarts": ["core"], "derives": ["OAC_HARNESSES"]}
         },
         "default_harness": {
           "enum": ["claude_sdk", "codex", "mcode"],
           "default": "codex",
           "description": "Harness used when a Session names none. It must be listed in core.harnesses.",
-          "x-parsar": {"restarts": ["core"], "derives": ["OAC_DEFAULT_HARNESS"]}
+          "x-oac": {"restarts": ["core"], "derives": ["OAC_DEFAULT_HARNESS"]}
         },
         "write_audit_retention": {
           "type": "string",
           "default": "2160h",
           "description": "How long non-creation write history is kept, as a Go duration of at least 1h.",
-          "x-parsar": {"check": "go_duration_min_1h", "restarts": ["core"], "derives": ["OAC_WRITE_AUDIT_RETENTION"]}
+          "x-oac": {"check": "go_duration_min_1h", "restarts": ["core"], "derives": ["OAC_WRITE_AUDIT_RETENTION"]}
         },
         "oauth_trusted_origins": {
           "type": "array",
           "uniqueItems": true,
-          "items": {"type": "string", "x-parsar": {"check": "https_origin"}},
+          "items": {"type": "string", "x-oac": {"check": "https_origin"}},
           "default": [],
           "description": "Extra HTTPS origins trusted as private OAuth issuers.",
-          "x-parsar": {"restarts": ["core"], "derives": ["OAC_OAUTH_TRUSTED_ORIGINS"]}
+          "x-oac": {"restarts": ["core"], "derives": ["OAC_OAUTH_TRUSTED_ORIGINS"]}
         },
         "database_pool": {
           "type": "object",
@@ -175,32 +175,32 @@
               "minimum": 1,
               "default": null,
               "description": "Maximum database connections. null keeps the driver default, max(4, CPU count).",
-              "x-parsar": {"restarts": ["core"], "derives": ["pool_max_conns in OAC_DATABASE_URL"]}
+              "x-oac": {"restarts": ["core"], "derives": ["pool_max_conns in OAC_DATABASE_URL"]}
             },
             "min_conns": {
               "type": ["integer", "null"],
               "minimum": 0,
               "default": null,
               "description": "Minimum idle database connections. null keeps the driver default, 0.",
-              "x-parsar": {"restarts": ["core"], "derives": ["pool_min_conns in OAC_DATABASE_URL"]}
+              "x-oac": {"restarts": ["core"], "derives": ["pool_min_conns in OAC_DATABASE_URL"]}
             },
             "max_conn_lifetime": {
               "type": ["string", "null"],
               "default": null,
               "description": "Go duration. null keeps the driver default, 1h.",
-              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_lifetime in OAC_DATABASE_URL"]}
+              "x-oac": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_lifetime in OAC_DATABASE_URL"]}
             },
             "max_conn_idle_time": {
               "type": ["string", "null"],
               "default": null,
               "description": "Go duration. null keeps the driver default, 30m.",
-              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_idle_time in OAC_DATABASE_URL"]}
+              "x-oac": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_idle_time in OAC_DATABASE_URL"]}
             },
             "health_check_period": {
               "type": ["string", "null"],
               "default": null,
               "description": "Go duration. null keeps the driver default, 1m.",
-              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_health_check_period in OAC_DATABASE_URL"]}
+              "x-oac": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_health_check_period in OAC_DATABASE_URL"]}
             }
           }
         },
@@ -209,43 +209,43 @@
           "default": null,
           "additionalProperties": false,
           "description": "Runtime history collection and OTLP export. null keeps local collection with Core's defaults. Core checks the values at startup.",
-          "x-parsar": {"restarts": ["core"], "derives": ["generated/runtime-history.json", "OAC_HISTORY_SETTINGS_FILE"]},
+          "x-oac": {"restarts": ["core"], "derives": ["generated/runtime-history.json", "OAC_HISTORY_SETTINGS_FILE"]},
           "properties": {
             "transport": {
               "type": "string",
               "description": "OTLP export transport.",
-              "x-parsar": {"restarts": ["core"]}
+              "x-oac": {"restarts": ["core"]}
             },
             "endpoint": {
               "type": "string",
               "description": "OTLP collector endpoint. Omit it to keep history local.",
-              "x-parsar": {"restarts": ["core"]}
+              "x-oac": {"restarts": ["core"]}
             },
             "insecure": {
               "type": "boolean",
               "description": "Export without TLS.",
-              "x-parsar": {"restarts": ["core"]}
+              "x-oac": {"restarts": ["core"]}
             },
             "headers": {
               "type": "object",
               "additionalProperties": {"type": "string"},
-              "description": "Headers sent with each export, such as credentials. Never shown by parsar or Core.",
-              "x-parsar": {"sensitive": true, "restarts": ["core"]}
+              "description": "Headers sent with each export, such as credentials. Never shown by oac or Core.",
+              "x-oac": {"sensitive": true, "restarts": ["core"]}
             },
             "queue_capacity": {
               "type": "integer",
               "description": "Export queue capacity.",
-              "x-parsar": {"restarts": ["core"]}
+              "x-oac": {"restarts": ["core"]}
             },
             "timeout_seconds": {
               "type": "integer",
               "description": "Export and query timeout in seconds.",
-              "x-parsar": {"restarts": ["core"]}
+              "x-oac": {"restarts": ["core"]}
             },
             "sample_interval_seconds": {
               "type": "integer",
               "description": "Periodic sampling interval in seconds.",
-              "x-parsar": {"restarts": ["core"]}
+              "x-oac": {"restarts": ["core"]}
             }
           }
         }
