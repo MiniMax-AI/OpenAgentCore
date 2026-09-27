@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { enqueueToast, type ToastItem } from "./Toast";
 
-describe("Parsar toast queue", () => {
+describe("console toast queue", () => {
   it("refreshes an identical keyed toast and advances its timer revision", () => {
     const first = enqueueToast([], 1, "Agent created.", {
       tone: "success",

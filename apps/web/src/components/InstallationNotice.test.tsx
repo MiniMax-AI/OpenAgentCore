@@ -18,7 +18,7 @@ describe("local-only installation notice", () => {
   });
   it.each([
     { path: "/opt/oac/config.json", apply_command: "sudo oac apply" },
-    { path: "/srv/custom/config.json", apply_command: "/srv/custom/bin/parsar apply --config /srv/custom/config.json" },
+    { path: "/srv/custom/config.json", apply_command: "/srv/custom/bin/core-wrapper apply --config /srv/custom/config.json" },
   ])("uses the supplied path and command verbatim: $apply_command", ({ path, apply_command }) => {
     const html = renderToStaticMarkup(<InstallationNotice installation={{ ...installation, configuration: {
       path, apply_command, applied_at: "", settings: [],

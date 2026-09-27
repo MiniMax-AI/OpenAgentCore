@@ -12,7 +12,7 @@ interface ErrorStateProps {
   className?: string;
 }
 
-/** Parsar's flat, durable error state for failures that must not fade away. */
+/** A flat, durable error state for failures that must not fade away. */
 export function ErrorState({
   title,
   description,

@@ -751,7 +751,7 @@ html[data-theme="dark"] .brand-mark-dark {
   gap: 8px;
 }
 
-/* Sessions — Parsar's conversation list and 48rem thread. */
+/* Sessions — conversation list and 48rem thread. */
 
 .status-label {
   color: var(--fg-muted);
