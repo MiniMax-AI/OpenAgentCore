@@ -43,10 +43,10 @@ workbench.
 - Paired console (`services/core-console`): the administrator signs in with the
   deployment's Core key, the administration credential the installer writes to
   `secrets/core.key` under the installation directory (by default
-  `~/.parsar/core/secrets/core.key`; keeping and rotating it is described in
+  `~/.oac/core/secrets/core.key`; keeping and rotating it is described in
   [Core key](../../docs/getting-started/operations.md#core-key)). There are no
   console accounts or usernames. Sign-in shows the default file location and a
-  copyable `cat ~/.parsar/core/secrets/core.key` command for the Core host, with a
+  copyable `cat ~/.oac/core/secrets/core.key` command for the Core host, with a
   reminder to substitute a custom installation directory. The browser sends the key only to sign in and
   keeps only the session cookie; the console server holds the Core key and forwards
   the Web API (`/core/v1/**`, including sandbox administration under

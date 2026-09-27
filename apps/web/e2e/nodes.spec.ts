@@ -21,7 +21,7 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   await expect(add.getByText("In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused.")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
   await expect(add.getByText("Reaches https://core.example.com, as do its sandboxes")).toBeVisible();
-  await expect(add.getByText("parsar-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
+  await expect(add.getByText("oac-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
   await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
   // Preparing a user instead of using sudo waits behind its disclosure.
   await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeHidden();
@@ -90,7 +90,7 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   await page.clock.fastForward("01:01");
   const problem = add.getByRole("alert").filter({ hasText: "Check the log on the host:" });
   await expect(problem).toContainText("Not connected yet");
-  await expect(problem).toContainText("sudo journalctl -u parsar-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
+  await expect(problem).toContainText("sudo journalctl -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
   // Without sudo: what that user needs and the same command without sudo. Once that one is copied, the log
   // hint names its user service, and the system service in case root ran it.
   await add.getByText("No sudo on this host?").click();
@@ -100,8 +100,8 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   await expect(userCommand).toHaveValue(/\| python3 "\$d\/node-install\.pyz" --enrollment-token-stdin /);
   await expect(problem).not.toContainText("journalctl --user");
   await add.getByRole("button", { name: "Copy command without sudo" }).click();
-  await expect(problem).toContainText("journalctl --user -u parsar-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
-  await expect(problem).toContainText("If root ran it, it is a system service:sudo journalctl -u parsar-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
+  await expect(problem).toContainText("journalctl --user -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
+  await expect(problem).toContainText("If root ran it, it is a system service:sudo journalctl -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
   // Connected, it reports why Docker isn't ready; once ready, the node is connected.
   await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
   await expect(problem).toContainText("Docker limits unsupported");
@@ -134,7 +134,7 @@ test("issues no command before the installation is read, for a loopback public U
   await page.unroute("**/core/v1/installation");
   await add.getByRole("button", { name: "Try again" }).click();
   // Nodes on other machines can't reach a loopback public_url.
-  await expect(add.getByRole("status")).toHaveText("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply");
+  await expect(add.getByRole("status")).toHaveText("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run oac apply");
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   await add.getByRole("button", { name: "Close dialog" }).click();
   await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeDisabled();
@@ -209,6 +209,9 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   await expect(page.getByText("c0ffee000000")).toBeVisible();
   // Own machines continue straight to adding the first node, at its limits: no command is issued yet.
   await expect(page.getByRole("dialog", { name: "Add node" }).getByLabel("Sandboxes at once")).toBeVisible();
+  const add = page.getByRole("dialog", { name: "Add node" });
+  await add.getByText("No sudo on this host?").click();
+  await expect(add.getByText("A home directory path of 28 bytes or less after filesystem encoding, such as /home/oac")).toBeVisible();
   // None is requested within a second of opening, and Core saw only the deployment write.
   const tokenRequested = await page.waitForRequest((sent) => sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"), { timeout: 1000 }).then(() => true, () => false);
   expect(tokenRequested).toBe(false);
@@ -256,7 +259,7 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
 
 test("keeps the saved size and Runtime for the same backend, and starts another from its defaults", async ({ page, request }) => {
   const runtime = { source_commit: "0".repeat(40), image_id: `sha256:${"a".repeat(64)}`, image_manifest_digest: `sha256:${"b".repeat(64)}`,
-    microsandbox_ref: `parsar-core-runtime@sha256:${"b".repeat(64)}`, runtime_sha256: "c".repeat(64), firmware_sha256: "d".repeat(64) };
+    microsandbox_ref: `oac-runtime@sha256:${"b".repeat(64)}`, runtime_sha256: "c".repeat(64), firmware_sha256: "d".repeat(64) };
   const current = { resources: { cpus: 7, memory_mib: 8192 }, runtime };
   const deployment = { installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", maintenance: true,
     owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),

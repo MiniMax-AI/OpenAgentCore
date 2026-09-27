@@ -78,8 +78,8 @@ test("successful empty reads preserve true zero counts and empty states", async 
 test("local-only address has actionable Core instructions on all three pages and blocks Add node", async ({ page, request }) => {
   await openConsole(page, request, "overview", { installation: "local" });
   const notice = page.getByRole("status", { name: "Public address needs attention" });
-  await expect(notice).toContainText("/opt/parsar/config.json");
-  await expect(notice).toContainText("sudo parsar apply");
+  await expect(notice).toContainText("/opt/oac/config.json");
+  await expect(notice).toContainText("sudo oac apply");
   await expect(page.locator(".getting-started-step").first()).toContainText("To do");
   await expect(page.locator(".getting-started-step").first()).toContainText("Fix the public address");
   await page.getByRole("button", { name: "Nodes", exact: true }).click();

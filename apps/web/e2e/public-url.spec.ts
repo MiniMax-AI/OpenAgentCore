@@ -32,8 +32,8 @@ test("explains an E2B rejection in the wizard, with the file to edit and the com
   await page.getByRole("button", { name: "Save configuration" }).click();
   const rejection = page.locator(".wizard-rejection");
   await expect(rejection).toContainText("E2B sandboxes reach Core over the internet.");
-  await expect(rejection).toContainText("/opt/parsar/config.json");
-  await expect(rejection).toContainText("sudo parsar apply");
+  await expect(rejection).toContainText("/opt/oac/config.json");
+  await expect(rejection).toContainText("sudo oac apply");
   // Nothing was saved and nothing is uncertain: no dialog, and the wizard stays on its review.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Review and save" })).toBeVisible();
@@ -48,7 +48,7 @@ test("lists the startup settings on System with where to change them", async ({ 
   const installation = page.getByRole("region", { name: "Installation" });
   await expect(installation).toContainText("https://core.example.com/v1");
   const startup = page.getByRole("region", { name: "Startup settings" });
-  await expect(startup).toContainText("Change these in /opt/parsar/config.json, then run sudo parsar apply");
+  await expect(startup).toContainText("Change these in /opt/oac/config.json, then run sudo oac apply");
   const settings = startup.getByRole("table", { name: "Startup settings" });
   await expect(settings.getByRole("row", { name: /^log_level/ })).toContainText("debug");
   await expect(settings.getByRole("row", { name: /^listen_address/ })).toContainText("Default");

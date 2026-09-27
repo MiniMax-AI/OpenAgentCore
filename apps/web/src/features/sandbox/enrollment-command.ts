@@ -3,7 +3,7 @@ const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 /**
  * How the node installer runs on the host. "sudo" (the default) runs it as root,
  * through `sudo` unless the shell already is root, which installs the node as the
- * `parsar-node` system service; "user" runs it as the signed-in user, which
+ * `oac-node` system service; "user" runs it as the signed-in user, which
  * installs a user service of that user. The installer picks the mode from its
  * effective uid (deploy/install/node_install.py `main`).
  */
@@ -67,6 +67,6 @@ python3 "$d/install.pyz" --source-url ${quote(publicUrl)} --environment-id ${quo
  * unit of the node's user otherwise.
  */
 export function nodeLogCommand(installationId: string, mode: NodeInstallMode): string {
-  const unit = `parsar-node-${installationId}.service`;
+  const unit = `oac-node-${installationId}.service`;
   return `${mode === "sudo" ? "sudo journalctl" : "journalctl --user"} -u ${/^[A-Za-z0-9._-]+$/.test(unit) ? unit : quote(unit)}`;
 }

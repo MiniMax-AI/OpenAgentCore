@@ -195,7 +195,7 @@ export function SandboxSetupWizard({ coreUrl, current, disabled, switching = fal
             <input id={`${id}-key`} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
           </Field>
           <Field id={`${id}-template`} label={t("Template build")} help={t("The exact ready build, as template-id:build-uuid. A template alias alone is not enough. Each sandbox gets the build's CPU and memory.")} error={template && !validTemplate(template.trim()) ? t("Enter a template ID and build UUID separated by a colon.") : null}>
-            <input id={`${id}-template`} value={template} onChange={(event) => setTemplate(event.target.value)} placeholder="parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b" autoComplete="off" spellCheck={false} aria-invalid={Boolean(template && !validTemplate(template.trim()))} />
+            <input id={`${id}-template`} value={template} onChange={(event) => setTemplate(event.target.value)} placeholder="oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b" autoComplete="off" spellCheck={false} aria-invalid={Boolean(template && !validTemplate(template.trim()))} />
           </Field>
         </div>
         <Nav onBack={back} onNext={() => setStep("review")} nextDisabled={!e2bReady} t={t} />

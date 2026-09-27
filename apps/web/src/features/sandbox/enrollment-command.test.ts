@@ -32,9 +32,9 @@ $s python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c
       .toBe(`$s python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f' --force)`);
   });
   it("points at the node's journal in each mode", () => {
-    expect(nodeLogCommand("7f3c2a90-fixture", "sudo")).toBe("sudo journalctl -u parsar-node-7f3c2a90-fixture.service");
-    expect(nodeLogCommand("7f3c2a90-fixture", "user")).toBe("journalctl --user -u parsar-node-7f3c2a90-fixture.service");
-    expect(nodeLogCommand("a b", "user")).toBe("journalctl --user -u 'parsar-node-a b.service'");
+    expect(nodeLogCommand("7f3c2a90-fixture", "sudo")).toBe("sudo journalctl -u oac-node-7f3c2a90-fixture.service");
+    expect(nodeLogCommand("7f3c2a90-fixture", "user")).toBe("journalctl --user -u oac-node-7f3c2a90-fixture.service");
+    expect(nodeLogCommand("a b", "user")).toBe("journalctl --user -u 'oac-node-a b.service'");
   });
   it("creates the exact self-hosted executor install command, every value quoted", () => {
     const command = selfHostedInstallCommand({ publicUrl: "https://core.example", digest: "b".repeat(64), environmentId: "env'1", remoteUrl: "wss://core.example/api/v1/agent-daemon/ws" });

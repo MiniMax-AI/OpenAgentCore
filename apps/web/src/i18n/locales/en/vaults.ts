@@ -30,7 +30,7 @@ export const vaults = {
     newToken: "New bearer token", token: "Bearer token", tokenHelp: "Write only. It is sent once, immediately cleared, and never stored in browser state, metadata, previews, or logs.",
   },
   errors: {
-    storageUnavailable: "Credential encryption is not configured on this Core. Configure AGENTS_API_CREDENTIAL_KEY_FILE and restart Core before creating or replacing a token.",
+    storageUnavailable: "Credential encryption is not configured on this Core. Configure OAC_CREDENTIAL_KEY_FILE and restart Core before creating or replacing a token.",
     auth: "Core authentication failed. The Credential was not confirmed.", missing: "The Vault or Credential is no longer available. Refresh before trying again.",
     tooLarge: "The Credential request exceeded Core's accepted size.", invalidFields: "Core rejected the Credential fields. Check the name, exact HTTPS URL, and token format.",
     credentialUncertain: "The Credential write outcome was not confirmed. The catalog was refreshed; review it before explicitly trying again.",

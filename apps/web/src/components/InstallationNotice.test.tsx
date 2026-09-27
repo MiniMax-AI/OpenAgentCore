@@ -14,14 +14,17 @@ describe("local-only installation notice", () => {
     const html = renderToStaticMarkup(<InstallationNotice installation={installation} />);
     expect(html).toContain("Core has not reported the configuration path or apply command");
     expect(html).not.toContain("sudo");
-    expect(html).not.toContain("/opt/parsar");
+    expect(html).not.toContain("/opt/oac");
   });
-  it("uses the supplied path and command, even when they differ from installer defaults", () => {
+  it.each([
+    { path: "/opt/oac/config.json", apply_command: "sudo oac apply" },
+    { path: "/srv/custom/config.json", apply_command: "/srv/custom/bin/parsar apply --config /srv/custom/config.json" },
+  ])("uses the supplied path and command verbatim: $apply_command", ({ path, apply_command }) => {
     const html = renderToStaticMarkup(<InstallationNotice installation={{ ...installation, configuration: {
-      path: "/srv/custom/config.json", apply_command: "/srv/custom/bin/parsar apply --config /srv/custom/config.json", applied_at: "", settings: [],
+      path, apply_command, applied_at: "", settings: [],
     } }} />);
-    expect(html).toContain("/srv/custom/config.json");
-    expect(html).toContain("/srv/custom/bin/parsar apply --config /srv/custom/config.json");
+    expect(html).toContain(path);
+    expect(html).toContain(apply_command);
     expect(html).toContain("Copy apply command");
   });
   it("does not warn without a Core local_only report", () => {

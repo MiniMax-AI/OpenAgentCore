@@ -22,7 +22,7 @@ const LOCKOUT_SECONDS = 30;
 let state;
 const hex = (c) => c.repeat(64);
 /** The Runtime release this fixture's distribution manifest describes. */
-const release = { source_commit: "c0ffee".padEnd(40, "0"), image_id: `sha256:${hex("1")}`, image_manifest_digest: `sha256:${hex("2")}`, microsandbox_ref: `parsar-core-runtime@sha256:${hex("3")}`, runtime_sha256: hex("4"), firmware_sha256: hex("5") };
+const release = { source_commit: "c0ffee".padEnd(40, "0"), image_id: `sha256:${hex("1")}`, image_manifest_digest: `sha256:${hex("2")}`, microsandbox_ref: `oac-runtime@sha256:${hex("3")}`, runtime_sha256: hex("4"), firmware_sha256: hex("5") };
 const manifest = { platform: "linux/amd64", source_commit: release.source_commit, images: { runtime: release.image_id }, image_manifest_digests: { runtime: release.image_manifest_digest }, runtime_ref: release.microsandbox_ref, microsandbox: { runtime_sha256: release.runtime_sha256, firmware_sha256: release.firmware_sha256 }, artifacts: {} };
 
 /**
@@ -51,12 +51,12 @@ function installation() {
     object: "core.installation", installation_id: INSTALLATION_ID, public_url: publicUrl(), api_base_url: `${publicUrl()}/v1`,
     local_only: local, source_commit: release.source_commit,
     configuration: {
-      path: "/opt/parsar/config.json", apply_command: "sudo parsar apply", applied_at: "2026-09-24T09:30:00Z",
+      path: "/opt/oac/config.json", apply_command: "sudo oac apply", applied_at: "2026-09-24T09:30:00Z",
       settings: [
         setting("public_url", publicUrl(), LOCAL_URL, ["core", "web"]),
         setting("listen_address", "127.0.0.1:8091", "127.0.0.1:8091", ["core"]),
         setting("web_listen_address", "127.0.0.1:4173", "127.0.0.1:4173", ["web"]),
-        setting("data_dir", "/var/lib/parsar", "/var/lib/parsar", [], { changeable: false }),
+        setting("data_dir", "/var/lib/oac", "/var/lib/oac", [], { changeable: false }),
         setting("log_level", "debug", "info", ["core", "web"]),
         secret("core_key", ["core", "web"]),
         secret("database_url", ["core"]),
@@ -79,7 +79,7 @@ const templateBuild = { status: "ready", resources: { cpus: 2, memory_mib: 2048,
 
 // E2B runs sandboxes in its cloud: no nodes, only what Core holds there.
 function e2bDeployment() {
-  return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "parsar-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
+  return { ...configuredDeployment(), provider: "e2b", mode: "direct", resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", credential_configured: true, template_build: templateBuild } };
 }
 
 function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured", installers = true, artifacts = "docker,microsandbox") {

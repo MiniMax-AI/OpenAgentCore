@@ -18,13 +18,13 @@ export interface HostPrerequisite {
 
 /**
  * What a host needs for the default command, which runs the installer as root
- * and the node as the `parsar-node` system service (sudo mode), as the command
+ * and the node as the `oac-node` system service (sudo mode), as the command
  * and deploy/install/node_install.py check it:
  * - the command runs curl, sha256sum and python3 (enrollment-command.ts), and
  *   `sudo` unless the shell is root; `host_checks` needs Python 3.9+, Linux amd64,
  *   systemd as the init system, and SELinux not enforcing; `other_node` refuses a
  *   host that already runs a sudo-mode node for another installation, since
- *   sudo-mode nodes share the parsar-node account;
+ *   sudo-mode nodes share the oac-node account;
  * - Docker: `provider_group` needs rootful Docker Engine running, its socket
  *   group-accessible (0660) and, through `device_group`, owned by the docker
  *   group, which the service user joins; and CPU and memory limits enforced (the
@@ -67,8 +67,8 @@ export function hostRequirements(provider: "docker" | "microsandbox", sized: boo
  * - the user's systemd manager (`systemctl --user`): from an SSH session, or from
  *   su or sudo -iu, which leave no session bus, through the bus lingering keeps
  *   running (`user_bus`);
- * - microsandbox: a home short enough for ~/.parsar/m/<12 hex> to fit in 48 bytes
- *   (`micro_home`): at most 48 - len("/.parsar/m/") - 12 = 25 bytes.
+ * - microsandbox: a home short enough for ~/.oac/m/<12 hex> to fit in 48 bytes
+ *   (`micro_home`): at most 48 - len("/.oac/m/") - 12 = 28 filesystem-encoded bytes.
  */
 export function userModePrerequisites(provider: "docker" | "microsandbox"): HostPrerequisite[] {
   return [
@@ -77,7 +77,7 @@ export function userModePrerequisites(provider: "docker" | "microsandbox"): Host
       ? { label: "Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits", command: "sudo usermod -aG docker NODE_USER" }
       : { label: "Read and write access to /dev/kvm for that user", command: "sudo usermod -aG kvm NODE_USER" },
     { label: "systemd lingering for that user, enabled after the group change", command: "sudo loginctl enable-linger NODE_USER" },
-    ...(provider === "microsandbox" ? [{ label: "A home directory of 25 bytes or less, such as /home/parsar" } satisfies HostPrerequisite] : []),
+    ...(provider === "microsandbox" ? [{ label: "A home directory path of 28 bytes or less after filesystem encoding, such as /home/oac" } satisfies HostPrerequisite] : []),
     { label: "Run the command as that user: over SSH, or from a root shell with", command: "su - NODE_USER" },
   ];
 }
