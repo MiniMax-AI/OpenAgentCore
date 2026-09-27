@@ -61,10 +61,10 @@ before relying on optional settings or hosted error/default equivalence.
 ```bash
 make build-agents-api
 # Optional absolute output directory:
-OAC_DEV_CORE_BUILD_DIR="$HOME/.oac/build/agents-api-test" make build-agents-api
+OAC_DEV_CORE_BUILD_DIR="$HOME/.oac/build/oac-core-test" make build-agents-api
 ```
 
-The default output is `${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api`:
+The default output is `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core`:
 
 - `oac-core`: HTTP service and execution worker.
 - `oac-core-migrate`: this service's embedded database migrations.
@@ -83,7 +83,7 @@ container, see [Container deployment](CONTAINER.md).
 `make build-agents-api-release` packages these commands and `oac-node` in a versioned
 Linux amd64 archive, with source/protocol identity, checksums, a license and
 [operator instructions](RELEASE.md). Build from a clean Git worktree with Go and
-Python 3.9+; output defaults to `~/.oac/build/agents-api-release` (or
+Python 3.9+; output defaults to `~/.oac/build/oac-core-release` (or
 `OAC_DEV_RELEASE_DIR`). The extracted API needs no source checkout or compiler.
 The archive and the container are advanced paths for running Core alone; see
 [Maintainers and advanced deployments](../../docs/maintainers.md). The Docker-hosted
@@ -295,12 +295,12 @@ After migrations, an operator can provision a device for an execution tenant:
 
 ```bash
 umask 077
-mkdir -p ~/.oac/daemon/agents-api
+mkdir -p ~/.oac/daemon/default
 go run ./services/agents-api/cmd/device \
   --tenant '<execution-tenant-uuid>' --name 'local executor' \
   --url 'http://127.0.0.1:8091' \
-  > ~/.oac/daemon/agents-api/auth.json
-oac-daemon connect --profile agents-api
+  > ~/.oac/daemon/default/auth.json
+oac-daemon connect --profile default
 ```
 
 The command requires `OAC_DATABASE_URL` and emits a secret profile once.
@@ -336,9 +336,9 @@ for build outputs, version checks and platform restrictions.
 ```bash
 make build-claude-sdk-runtime
 # After extracting the matching archive into this operator-chosen directory:
-export OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT="$HOME/.parsar/runtimes/claude-sdk/dist/main.js"
+export OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT="$HOME/.oac/runtimes/claude-sdk/dist/main.js"
 export OAC_RUNTIME_CLAUDE_SDK_NODE="/absolute/path/to/node"
-oac-daemon connect --profile agents-api
+oac-daemon connect --profile default
 ```
 
 Set `OAC_DEFAULT_HARNESS=claude_sdk` on the API service. Configure provider access in
@@ -357,7 +357,7 @@ the official client installed from the commit in `contracts/agents-api/upstream.
 ```bash
 python -m pip install -r services/agents-api/tests/requirements.txt
 make build-agents-api
-OAC_TEST_SERVER_BIN="${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api/oac-core" \
+OAC_TEST_SERVER_BIN="${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core/oac-core" \
   python services/agents-api/tests/official_client.py
 ```
 
@@ -388,7 +388,7 @@ retry identity, disconnect survival and explicitly controlled deadline failure.
 The test database must be named `oac_*_tests` and contain no product
 workspace tables. Tests apply only this service's migrations and use new tenant
 IDs without truncating tables. Missing test configuration skips DB tests locally;
-the `agents-api` CI workflow always supplies its own PostgreSQL service. Run the
+the `OpenAgentCore checks` CI workflow always supplies its own PostgreSQL service. Run the
 full `make check` before review as well. Product OpenAPI generation excludes this
 service; its supported HTTP contract is generated separately.
 
@@ -493,7 +493,7 @@ umask 077
 oac-core-environment-key --tenant "$TENANT_ID" \
   --organization "$ORGANIZATION_ID" --project "$PROJECT_ID" \
   --subject-kind service_account --subject-id "$SUBJECT_ID" --key-id "$KEY_ID" \
-  > "$HOME/.parsar/executor-key.json"
+  > "$HOME/.oac/executor-key.json"
 ```
 
 The immutable principal must match a verified project mapping and the Session's

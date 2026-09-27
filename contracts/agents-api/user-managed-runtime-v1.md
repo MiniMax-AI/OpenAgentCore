@@ -1,6 +1,6 @@
 # User-managed V1 Runtime qualification
 
-The V1 executor is Parsar's daemon, colocated with the selected native harness,
+The V1 executor is the OpenAgentCore daemon, colocated with the selected native harness,
 local tools and workspace. Core runs separately with its own PostgreSQL database.
 A caller creates a public `self_hosted` Session and starts Runtime with its exact
 Environment ID, returned `remote_url` and scoped executor credential. This private

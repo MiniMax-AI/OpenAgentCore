@@ -49,7 +49,7 @@ def main():
         licenses.mkdir()
         shutil.copy2(source / 'requirements.lock', exported / 'requirements.lock')
         checked([python, str(source / 'licenses.py'), str(licenses)])
-        shutil.copy2('/source/LICENSE', licenses / 'Parsar-Core-LICENSE')
+        shutil.copy2('/source/LICENSE', licenses / 'OpenAgentCore-LICENSE')
         report = json.loads(subprocess.check_output([str(exported / NAME), '--check'], text=True))
         if report != {'Version': 1, 'SDKVersion': '2.51.0'}:
             raise RuntimeError('Unexpected helper readiness report')

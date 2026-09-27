@@ -35,14 +35,14 @@ class NameGuardTests(unittest.TestCase):
         self.assertTrue(names.violations("provenance/source.json", "PARSAR", [rule]))
 
     def test_detections_include_commands_settings_labels_and_display(self):
-        for value in ("PaRsAr", "io.parsar.installation", "AGENTS_API_PORT", "CORE_CONSOLE_BIND",
+        for value in ("PaRsAr", "io.parsar.installation", "AGENTS_API_PORT", "CORE_CONSOLE_BIND", "AGENTS_CORE_WEB_ADDR",
                       "agents-api", "agents-api-codex-write", "core-console", "agents-runtime-dev",
                       "Agent Core", "Agents Core Web"):
             with self.subTest(value=value):
                 self.assertTrue(names.violations("x", value, []))
 
     def test_new_names_and_pinned_public_contract_are_not_retired(self):
-        content = "OpenAgentCore oac-core OAC_CORE_PORT agents_api AgentCoreError x_agents_core"
+        content = "OpenAgentCore oac-core OAC_CORE_PORT agents_api AgentCoreError x_agents_core core_console_session"
         self.assertFalse(names.violations("x", content, []))
 
     def test_coordinates_and_multiple_matches_do_not_disclose_line_content(self):
@@ -85,6 +85,19 @@ class NameGuardTests(unittest.TestCase):
             self.assertNotIn("binary:", result.stdout)
             (root / "tracked.txt").write_text("OAC_RUNTIME_HOME\n")
             self.assertEqual(subprocess.run(command, capture_output=True).returncode, 0)
+
+    def test_persisted_domain_exception_does_not_allow_other_settings_or_paths(self):
+        rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))
+        content = '"parsar.agents-api.credential"; "PARSAR_HOME"'
+        found = names.violations("services/agents-api/internal/credentialcrypto/cipher.go", content, rules)
+        self.assertEqual([item[2] for item in found], ["PARSAR"])
+        self.assertTrue(names.violations("README.md", content, rules))
+
+    def test_retirement_table_exception_does_not_hide_runtime_setting(self):
+        rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))
+        content = '{"AGENTS_API_ADDR", "OAC_ADDR"}; os.Getenv("PARSAR_HOME")'
+        found = names.violations("services/agents-api/cmd/server/process_configuration.go", content, rules)
+        self.assertEqual([item[2] for item in found], ["PARSAR"])
 
     def test_checked_in_exceptions_do_not_hide_unrelated_retired_setting(self):
         rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))

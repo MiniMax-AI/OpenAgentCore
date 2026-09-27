@@ -15,7 +15,7 @@ const statuses = [{ name: "installed", status: "connected", tools: [{ name: "ech
 const baseline = ["Bash", "Read", "Edit"];
 
 function fixture(t, declarations = [stdio]) {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "parsar-mcp-workspace-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "oac-mcp-workspace-")));
   const dirs = Object.fromEntries(["work", "home", "state", "scratch", "secrets", "deps"].map(name => {
     const path = join(root, name); mkdirSync(path); return [name, path];
   }));

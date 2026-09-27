@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
-output_dir="${OAC_DEV_WEB_BUILD_DIR:-$runtime_root/build/core-console}"
+output_dir="${OAC_DEV_WEB_BUILD_DIR:-$runtime_root/build/oac-web}"
 export GOCACHE="${GOCACHE:-$runtime_root/cache/go-build}"
 export GOMODCACHE="${GOMODCACHE:-$runtime_root/cache/go-mod}"
 for directory in "$runtime_root" "$output_dir" "$GOCACHE" "$GOMODCACHE"; do
@@ -16,8 +16,8 @@ for directory in "$runtime_root" "$output_dir" "$GOCACHE" "$GOMODCACHE"; do
   esac
 done
 
-mkdir -p "$runtime_root/cache/core-console-builds"
-build_context="$(mktemp -d "$runtime_root/cache/core-console-builds/source.XXXXXX")"
+mkdir -p "$runtime_root/cache/oac-web-builds"
+build_context="$(mktemp -d "$runtime_root/cache/oac-web-builds/source.XXXXXX")"
 trap 'rm -rf "$build_context"' EXIT
 mkdir -p "$build_context/tmp"
 export GOTMPDIR="$build_context/tmp"

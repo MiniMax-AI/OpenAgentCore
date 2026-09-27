@@ -108,7 +108,7 @@ def main():
 
     process = None
     credential_canary = secrets.token_hex(32)
-    with tempfile.TemporaryDirectory(prefix="agents-api-test-") as directory:
+    with tempfile.TemporaryDirectory(prefix="oac-core-test-") as directory:
         core_key_digests = Path(directory) / "core-key-digests.json"
         core_key_digests.touch(mode=0o600)
         core_key_digests.write_text(json.dumps([hashlib.sha256(admin_token.encode()).hexdigest()]))

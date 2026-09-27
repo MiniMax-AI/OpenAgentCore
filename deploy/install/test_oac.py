@@ -36,7 +36,7 @@ def compose_up(*services):
     return when
 
 
-class ParsarTests(unittest.TestCase):
+class OacTests(unittest.TestCase):
     def setUp(self):
         base = Path.home() / ".oac/tests/oac"
         base.mkdir(parents=True, exist_ok=True)

@@ -3,13 +3,13 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
-image="${OAC_DEV_CORE_IMAGE:-agents-api:dev}"
+image="${OAC_DEV_CORE_IMAGE:-oac-core:dev}"
 if [[ "$runtime_root" != /* ]]; then
   printf 'OAC_DEV_HOME must be absolute: %s\n' "$runtime_root" >&2
   exit 1
 fi
-mkdir -p "$runtime_root/cache/agents-api-builds"
-image_context="$(mktemp -d "$runtime_root/cache/agents-api-builds/image.XXXXXX")"
+mkdir -p "$runtime_root/cache/oac-core-builds"
+image_context="$(mktemp -d "$runtime_root/cache/oac-core-builds/image.XXXXXX")"
 trap 'rm -rf "$image_context"' EXIT
 
 # Reuse the source boundary; never send the repository or runtime keys to Docker.

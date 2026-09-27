@@ -1,6 +1,6 @@
 # Core design principles
 
-Parsar Core is an open-source implementation of the OpenAI Agents API. Its public
+OpenAgentCore is an open-source implementation of the OpenAI Agents API. Its public
 contract follows the repository's pinned upstream baseline; documented native
 harness differences remain explicit. Core extensions must not silently change
 upstream resource shapes or execution semantics.

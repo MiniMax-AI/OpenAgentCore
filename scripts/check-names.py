@@ -13,11 +13,10 @@ import sys
 
 # These spellings are detection inputs, not supported compatibility aliases.
 FORBIDDEN = re.compile(
-    r"parsar|\bAGENTS_API_[A-Z][A-Z0-9_]*|\bCORE_CONSOLE_[A-Z][A-Z0-9_]*"
+    r"(?i:parsar)|\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\bAGENTS_API_[A-Z][A-Z0-9_]*|\bCORE_CONSOLE_[A-Z][A-Z0-9_]*"
     r"|\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider"
     r"|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\b"
-    r"|\bcore-console\b|\bagents-runtime-|\bAgents? Core(?: Web)?\b",
-    re.IGNORECASE,
+    r"|\bcore-console\b|\bagents-runtime-|(?i:\bAgents? Core(?: Web)?\b)",
 )
 
 

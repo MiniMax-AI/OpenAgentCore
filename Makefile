@@ -8,8 +8,13 @@ SWAG_VERSION ?= v1.16.4
 help:
 	@printf '%s\n' 'make build-agents-api  Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
-check: check-distribution check-database check-sqlc check-go check-microsandbox-provider check-agents-api check-claude-sdk check-web check-mcode-harness check-agents-executor
-	@printf 'Parsar Core checks passed.\n'
+check: check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-agents-api check-claude-sdk check-web check-mcode-harness check-agents-executor
+	@printf 'OpenAgentCore checks passed.\n'
+
+.PHONY: check-names
+check-names:
+	python3 scripts/check-names.test.py
+	python3 scripts/check-names.py
 
 check-database:
 	@if [[ -n "$${PARSAR_AGENTS_API_TEST_DATABASE_URL+x}" && -z "$${OAC_TEST_DATABASE_URL+x}" ]]; then \
@@ -60,7 +65,7 @@ docker-build-agents-api:
 	./scripts/build-agents-api-image.sh
 
 check-agents-api-container: docker-build-agents-api
-	OAC_DEV_CORE_IMAGE="$${OAC_DEV_CORE_IMAGE:-agents-api:dev}" OAC_TEST_SERVER_BIN="$(CURDIR)/services/agents-api/tests/container_server.py" $${OAC_TEST_OFFICIAL_SDK_PYTHON:-python3} services/agents-api/tests/official_client.py
+	OAC_DEV_CORE_IMAGE="$${OAC_DEV_CORE_IMAGE:-oac-core:dev}" OAC_TEST_SERVER_BIN="$(CURDIR)/services/agents-api/tests/container_server.py" $${OAC_TEST_OFFICIAL_SDK_PYTHON:-python3} services/agents-api/tests/official_client.py
 
 node-deps:
 	pnpm install --frozen-lockfile

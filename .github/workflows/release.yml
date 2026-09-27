@@ -127,4 +127,4 @@ jobs:
         run: |
           printf 'Matched Linux amd64 artifacts from commit %s. Build output is not live execution qualification.\n' "$RELEASE_REVISION" > release-notes.md
           gh release create "$RELEASE_TAG" --draft --target "$RELEASE_REVISION" \
-            --title "Parsar Core $RELEASE_REVISION" --notes-file release-notes.md release-upload/*
+            --title "OpenAgentCore $RELEASE_REVISION" --notes-file release-notes.md release-upload/*

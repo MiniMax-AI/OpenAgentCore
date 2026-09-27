@@ -83,7 +83,7 @@ process.disconnect();
 `;
 
 function placement() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "parsar-prepare-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "oac-prepare-")));
   const dirs = Object.fromEntries(["workspace", "home", "state", "scratch", "deps"].map(name => {
     const path = join(root, name); mkdirSync(path); return [name, path];
   }));

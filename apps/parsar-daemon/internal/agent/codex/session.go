@@ -119,12 +119,12 @@ type Session struct {
 var _ agent.Session = (*Session)(nil)
 
 // SubmitPermission completes the deferred Codex app-server request that
-// produced the Parsar permission envelope.
+// produced the Core permission envelope.
 func (s *Session) SubmitPermission(_ context.Context, permID string, decision proto.PermissionDecisionPayload) error {
 	return s.submitCodexPermission(permID, decision)
 }
 
-// SubmitPromptForUserChoice maps Parsar's header/answer pairs back to
+// SubmitPromptForUserChoice maps Core's header/answer pairs back to
 // Codex's question-id keyed requestUserInput response.
 func (s *Session) SubmitPromptForUserChoice(_ context.Context, askID string, decision proto.PromptForUserChoiceDecisionPayload) error {
 	return s.submitCodexUserInput(askID, decision)

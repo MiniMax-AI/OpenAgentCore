@@ -52,7 +52,7 @@ paths must remain immutable for the lifetime of the provider key.
 
 Use a dedicated, private (0700), short MSB_HOME on local persistent storage.
 The upstream runtime uses Unix sockets, so a short path such as
-`/var/lib/parsar-msb` avoids pathname limits. Never share that home with another
+`/var/lib/oac-msb` avoids pathname limits. Never share that home with another
 installation, cloud profile, or manual lifecycle controller. Its VM disks,
 snapshots, SDK state and credentials are confidential execution-service data.
 All managed sandbox lifecycle mutations must go through the provider.

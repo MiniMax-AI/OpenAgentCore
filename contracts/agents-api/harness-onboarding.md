@@ -1,4 +1,4 @@
-# Add a native harness to Agent Core
+# Add a native harness to OpenAgentCore
 
 This reference is for adapter developers using the shared contract on main after
 PR #701 (2026-09-19). Start with a working native SDK or machine-readable protocol.

@@ -1,6 +1,6 @@
-# Parsar Core development
+# OpenAgentCore development
 
-Parsar Core is the independent execution service behind Parsar. Product business
+OpenAgentCore is the independent execution service behind Parsar. Product business
 code, its database and migrations stay in the Parsar repository. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) before changing code.
 

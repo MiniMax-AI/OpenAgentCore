@@ -287,7 +287,7 @@ def stdio(package, server):
     """Preserve the native MCP descriptors while entering the existing sandbox."""
     roots()
     args = sandbox('enabled', '/workspace')
-    helper = '/tmp/agents-api-mcp-exec'
+    helper = '/tmp/oac-mcp-exec'
     # System-package roots predate daemon installation. Mount only the fixed
     # static helper, never native configuration, credentials or Runtime state.
     args[-1:-1] = ['--ro-bind', '/usr/local/bin/oac-daemon', helper]

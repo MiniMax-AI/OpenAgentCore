@@ -1,5 +1,5 @@
 // Command oac-daemon is the reverse-WebSocket worker that pairs a user
-// machine with a Parsar server and exposes a local agent CLI
+// machine with a OpenAgentCore server and exposes a local agent CLI
 // subprocess as a connector_type=agent_daemon target. See
 // apps/parsar-daemon/README.md for the subcommand spec.
 package main

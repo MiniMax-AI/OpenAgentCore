@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
-output_dir="${OAC_DEV_CORE_BUILD_DIR:-$runtime_root/build/agents-api}"
+output_dir="${OAC_DEV_CORE_BUILD_DIR:-$runtime_root/build/oac-core}"
 for directory in "$runtime_root" "$output_dir"; do
   if [[ "$directory" != /* ]]; then
     printf 'Agents API build directories must be absolute: %s\n' "$directory" >&2
@@ -17,8 +17,8 @@ if [[ -n "$revision" && ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
-mkdir -p "$runtime_root/cache/agents-api-builds"
-build_context="$(mktemp -d "$runtime_root/cache/agents-api-builds/source.XXXXXX")"
+mkdir -p "$runtime_root/cache/oac-core-builds"
+build_context="$(mktemp -d "$runtime_root/cache/oac-core-builds/source.XXXXXX")"
 trap 'rm -rf "$build_context"' EXIT
 
 # This is the release source boundary. Product and other application sources

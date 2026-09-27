@@ -129,10 +129,10 @@ func TestDeriveWSURLPrefersAbsolute(t *testing.T) {
 
 func TestDeriveWSURLFallsBackToServerBase(t *testing.T) {
 	cases := []struct{ base, want string }{
-		{"https://parsar.example.com", "wss://parsar.example.com/agent-daemon/ws"},
+		{"https://core.example.com", "wss://core.example.com/agent-daemon/ws"},
 		{"http://localhost:3000", "ws://localhost:3000/agent-daemon/ws"},
 		{"http://localhost:3000/", "ws://localhost:3000/agent-daemon/ws"},
-		{"https://parsar.example.com/api", "wss://parsar.example.com/api/agent-daemon/ws"},
+		{"https://core.example.com/api", "wss://core.example.com/api/agent-daemon/ws"},
 	}
 	for _, tc := range cases {
 		got, err := transport.DeriveWSURL(transport.BootstrapResponse{WSURL: ""}, tc.base)

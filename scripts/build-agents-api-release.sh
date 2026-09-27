@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
-output_dir="${OAC_DEV_RELEASE_DIR:-$runtime_root/build/agents-api-release}"
+output_dir="${OAC_DEV_RELEASE_DIR:-$runtime_root/build/oac-core-release}"
 export GOCACHE="${GOCACHE:-$runtime_root/cache/go-build}"
 export GOMODCACHE="${GOMODCACHE:-$runtime_root/cache/go-mod}"
 python3 - "$HOME/.oac" "$runtime_root" "$output_dir" "$GOCACHE" "$GOMODCACHE" <<'PY'
@@ -36,7 +36,7 @@ require_clean_source
 source_revision="$(git -C "$repo_root" rev-parse HEAD)"
 source_tree="$(git -C "$repo_root" rev-parse "$source_revision^{tree}")"
 source_epoch="$(git -C "$repo_root" show -s --format=%ct "$source_revision")"
-archive_name="agents-api-$source_revision-linux-amd64.tar.gz"
+archive_name="oac-core-$source_revision-linux-amd64.tar.gz"
 
 mkdir -p "$output_dir"
 release_context="$(mktemp -d "$output_dir/.staging.XXXXXX")"
@@ -90,7 +90,7 @@ readme = readme.replace("@SOURCE_REVISION@", revision).replace("@ARCHIVE_NAME@",
 (package / "LICENSE").write_bytes((source / "LICENSE").read_bytes())
 (package / "HOSTED-SANDBOX-MANAGER.md").write_bytes((source / "services/agents-api/HOSTED-SANDBOX-MANAGER.md").read_bytes())
 manifest = {
-    "artifact": "agents-api",
+    "artifact": "oac-core",
     "source": {"commit": revision, "tree": tree, "commit_timestamp": int(epoch)},
     "platform": {"os": "linux", "architecture": "amd64", "goamd64": "v1"},
     "go_version": go_version,

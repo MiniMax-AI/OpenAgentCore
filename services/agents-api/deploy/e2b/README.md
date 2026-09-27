@@ -8,7 +8,7 @@ request. The sandbox runs the existing V1 daemon, selected native harness, tools
 and workspace together. Codex, Claude Code and MiniMax Code use the same startup
 contract and their respective qualified Runtime images.
 
-This deployment uses Parsar daemon enrollment, not Codex `exec-server` or Noise.
+This deployment uses OpenAgentCore daemon enrollment, not Codex `exec-server` or Noise.
 Public execution and Files/Artifacts continue through Core and the daemon;
 E2B commands/files are used only for deployment, initialization and inspection.
 A public Session deletion does not destroy an application-owned VM; managed
@@ -56,7 +56,7 @@ python -m venv "$HOME/.oac/build/e2b-sdk"
 "$HOME/.oac/build/e2b-sdk/bin/python" services/agents-api/deploy/e2b/build-template.py \
   --image sha256:QUALIFIED_RUNTIME_IMAGE_DIGEST \
   --name your-runtime-build \
-  --api-key-file "$HOME/.parsar/secrets/e2b.key" \
+  --api-key-file "$HOME/.oac/secrets/e2b.key" \
   --output "$HOME/.oac/build/e2b-template.json"
 ```
 
@@ -90,9 +90,9 @@ example, not a service or a replacement lifecycle owner:
   --remote-url 'RETURNED_REMOTE_URL' \
   --environment-id 'RETURNED_ENVIRONMENT_UUID' \
   --launch-id 'YOUR_APPLICATION_LAUNCH_UUID' \
-  --executor-key-file "$HOME/.parsar/secrets/executor-key.json" \
-  --api-key-file "$HOME/.parsar/secrets/e2b.key" \
-  --record "$HOME/.parsar/runtimes/YOUR_APPLICATION_LAUNCH_UUID.json" \
+  --executor-key-file "$HOME/.oac/secrets/executor-key.json" \
+  --api-key-file "$HOME/.oac/secrets/e2b.key" \
+  --record "$HOME/.oac/runtimes/YOUR_APPLICATION_LAUNCH_UUID.json" \
   --timeout 7200
 ```
 

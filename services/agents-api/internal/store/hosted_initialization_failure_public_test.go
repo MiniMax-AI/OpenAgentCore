@@ -156,7 +156,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 		{"later setup command", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands}},
 			failure{fail: "setup", skip: 1, result: sandbox.CommandResult{ExitCode: 1, Stdout: `{"version":1,"outcome":"failed","exit_code":3}` + "\n"}},
 			`Failed to provision environment: script "setup_commands[1]" failed with exit code 3`, []string{"configure", "setup", "setup"}},
-		{"python package", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Packages: v1.EnvironmentPackages{Python: []string{"parsar-nonexistent-zz"}}, Commands: commands[2:]}},
+		{"python package", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Packages: v1.EnvironmentPackages{Python: []string{"oac-nonexistent-zz"}}, Commands: commands[2:]}},
 			failure{fail: "python", result: leakyReceipt(`"exit_code":1,`)},
 			`Failed to provision environment: script "Python package installation" failed with exit code 1`, []string{"configure", "python"}},
 		{"old image without exit status", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands[1:]}},

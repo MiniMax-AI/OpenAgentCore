@@ -70,7 +70,7 @@ Linux-only module. A full Linux check is required before publishing this profile
 
 Install the Linux x86_64 archive from the official
 [v0.7.2 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.2)
-into a fresh private directory under `~/.parsar/runtime/`. Verify the release
+into a fresh private directory under `~/.oac/runtime/`. Verify the release
 checksum before extraction. The qualified archive is
 `microsandbox-linux-x86_64.tar.gz`, SHA256
 `47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b`.
@@ -98,7 +98,7 @@ remains the image source; produce and select a matching distribution rather than
 substituting a local image for an already saved release.
 
 The provider performs the existing Runtime bootstrap, starts the daemon as
-uid/gid 1000 and creates `/run/parsar` as a private control directory. No model,
+uid/gid 1000 and creates `/run/oac` as a private control directory. No model,
 Core or tenant credential belongs in the image. The ordinary Runtime initializer
 and native isolation profile still apply; snapshot restore does not rerun setup
 commands or initial file writes.

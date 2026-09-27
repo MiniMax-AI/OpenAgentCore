@@ -9,7 +9,7 @@ case "$output_dir" in
 esac
 mkdir -p "$output_dir"
 source_revision="${E2B_SOURCE_REVISION:-$(git -C "$repo_root" rev-parse HEAD)}"
-image="parsar-e2b-provider-build:${source_revision:0:12}"
+image="oac-e2b-provider-build:${source_revision:0:12}"
 # Proxy values are build-only operator settings; no account key is needed.
 docker build --platform linux/amd64 --build-arg HTTP_PROXY --build-arg HTTPS_PROXY \
   --build-arg ALL_PROXY --build-arg NO_PROXY \

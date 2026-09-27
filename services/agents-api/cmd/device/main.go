@@ -68,7 +68,7 @@ func run() error {
 		return err
 	}
 	// Emit the existing daemon profile shape. Operators redirect this secret to a
-	// mode-0600 auth.json under ~/.parsar; it is never included in diagnostic logs.
+	// mode-0600 auth.json under ~/.oac; it is never included in diagnostic logs.
 	return json.NewEncoder(os.Stdout).Encode(map[string]string{
 		"server_url": strings.TrimRight(*serverURL, "/") + "/api/v1", "runtime_id": registered.ID,
 		"runner_credential": credential, "device_name": registered.Name,

@@ -120,7 +120,7 @@ func run() error {
 	if err != nil {
 		return credentialOperationError(err)
 	}
-	// Operators redirect stdout to a mode-0600 file under ~/.parsar; no read-back operation exists.
+	// Operators redirect stdout to a mode-0600 file under ~/.oac; no read-back operation exists.
 	if err := json.NewEncoder(os.Stdout).Encode(credential); err != nil {
 		return errors.New("could not write issued executor credential; rotate explicitly to replace it")
 	}

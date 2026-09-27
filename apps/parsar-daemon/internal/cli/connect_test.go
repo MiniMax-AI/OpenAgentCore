@@ -19,7 +19,7 @@ import (
 func TestScrubInlineConnectArgsRemovesTokenURLAndDeviceName(t *testing.T) {
 	got := scrubInlineConnectArgs([]string{
 		"oac-daemon", "connect",
-		"--url", "https://parsar.example.com",
+		"--url", "https://core.example.com",
 		"--token=rtk_secret",
 		"--device-name", "dev-1",
 		"-b",
@@ -32,14 +32,14 @@ func TestScrubInlineConnectArgsRemovesTokenURLAndDeviceName(t *testing.T) {
 }
 
 func TestLoadInlineConnectEnvFillsMissingValuesAndUnsets(t *testing.T) {
-	t.Setenv(connectInlineURLEnv, "https://parsar.example.com")
+	t.Setenv(connectInlineURLEnv, "https://core.example.com")
 	t.Setenv(connectInlineTokenEnv, "rtk_secret")
 	t.Setenv(connectInlineDeviceNameEnv, "dev-1")
 
 	serverURL, token, deviceName := "", "", ""
 	loadInlineConnectEnv(&serverURL, &token, &deviceName)
 
-	if serverURL != "https://parsar.example.com" || token != "rtk_secret" || deviceName != "dev-1" {
+	if serverURL != "https://core.example.com" || token != "rtk_secret" || deviceName != "dev-1" {
 		t.Fatalf("loaded values = (%q, %q, %q)", serverURL, token, deviceName)
 	}
 	if got := inlineConnectEnvValue(connectInlineTokenEnv); got != "" {
@@ -53,7 +53,7 @@ func inlineConnectEnvValue(key string) string { return os.Getenv(key) }
 // hydration, so sandboxes passing the token via env bailed with
 // "not paired". loadInlineConnectEnv now runs first.
 func TestLoadInlineConnectEnvHydratesParentProcessFlags(t *testing.T) {
-	t.Setenv(connectInlineURLEnv, "https://parsar.example.com")
+	t.Setenv(connectInlineURLEnv, "https://core.example.com")
 	t.Setenv(connectInlineTokenEnv, "rtk_secret")
 
 	serverURL, token, deviceName := "", "", ""
@@ -239,7 +239,7 @@ func TestRegisterAgentKindsPreservesDescriptors(t *testing.T) {
 				Resume:    true,
 			},
 		},
-	}, "https://parsar.example.test")
+	}, "https://core.example.test")
 
 	kinds := reg.SupportedAgentKinds()
 	if len(kinds) != 5 {

@@ -65,7 +65,7 @@ class ArtifactTests(unittest.TestCase):
         self.thread.join()
 
     def entry(self, name, data):
-        value = {'filename': 'parsar-core-' + 'a' * 40 + '-linux-amd64-' + name.replace('/', '-'),
+        value = {'filename': 'oac-' + 'a' * 40 + '-linux-amd64-' + name.replace('/', '-'),
                  'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
         self.manifest['artifacts'][name] = value
         return value

@@ -43,7 +43,7 @@ func TestCodexPermissionRequestWaitsForHumanDecision(t *testing.T) {
 	select {
 	case env = <-out:
 	case <-time.After(2 * time.Second):
-		t.Fatal("permission request was not surfaced to Parsar")
+		t.Fatal("permission request was not surfaced to OpenAgentCore")
 	}
 	if env.Type != proto.TypePermissionRequest {
 		t.Fatalf("envelope type = %q, want %q", env.Type, proto.TypePermissionRequest)
@@ -147,7 +147,7 @@ func TestCodexUserInputMapsAnswersByQuestionID(t *testing.T) {
 	select {
 	case env = <-out:
 	case <-time.After(2 * time.Second):
-		t.Fatal("requestUserInput was not surfaced to Parsar")
+		t.Fatal("requestUserInput was not surfaced to OpenAgentCore")
 	}
 	if env.Type != proto.TypePromptForUserChoice {
 		t.Fatalf("envelope type = %q, want %q", env.Type, proto.TypePromptForUserChoice)
@@ -212,7 +212,7 @@ func TestCodexUserInputCancellationReturnsErrorInsteadOfEmptyAnswers(t *testing.
 	select {
 	case env = <-out:
 	case <-time.After(2 * time.Second):
-		t.Fatal("requestUserInput was not surfaced to Parsar")
+		t.Fatal("requestUserInput was not surfaced to OpenAgentCore")
 	}
 	var request proto.PromptForUserChoicePayload
 	if err := env.DecodePayload(&request); err != nil {

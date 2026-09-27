@@ -1,6 +1,6 @@
 # Maintainers and advanced deployments
 
-This page is for people who build and publish Parsar Core, or run Core without the
+This page is for people who build and publish OpenAgentCore, or run Core without the
 installer. To install Core and Web, use the
 [installation guide](getting-started/install.md) instead.
 

@@ -38,7 +38,7 @@ func TestBridgeUsesRunAttributionAndClosesAccess(t *testing.T) {
 	}
 	defer release()
 	if filepath.Dir(path) != filepath.Join(home, ".oac", "authoring") {
-		t.Fatal("socket outside Parsar state")
+		t.Fatal("socket outside OpenAgentCore state")
 	}
 	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("socket permissions: %v %v", info, err)
