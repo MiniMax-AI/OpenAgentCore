@@ -621,6 +621,43 @@ for (const file of [".env", ".env.local", ".env.development", ".env.development.
   });
 }
 
+for (const source of ["environment", ".env"]) {
+  for (const value of ["", "retired-private-value-marker"]) {
+    test(`preserves ${source} retirement guidance (${value ? "set" : "empty"}) when a later dotenv path is a directory`, async (t) => {
+      const state = await createLocalState(t);
+      await mkdir(join(state.root, ".env.local"));
+      const env = source === "environment" ? { AGENTS_API_PROXY_TOKEN: value } : {};
+      if (source === ".env") await writeFile(join(state.root, ".env"), `AGENTS_API_PROXY_TOKEN=${value}\n`);
+      const result = await runScenario({
+        env, cwd: state.root, homeDir: state.homeDir,
+        fetchImpl: async () => assert.fail("invalid configuration must not make requests"),
+        runCommand: async () => assert.fail("invalid configuration must not inspect a daemon"),
+      });
+      assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
+      assert.deepEqual(result.result.checks, [{
+        level: "FAIL", layer: "Configuration",
+        message: "Retired Web settings: AGENTS_API_PROXY_TOKEN is no longer supported; use OAC_WEB_DEV_PROXY_TOKEN.",
+      }]);
+      assert.doesNotMatch(result.stdout + result.stderr, /Caller token|retired-private-value-marker|fixture-bearer/);
+    });
+  }
+}
+
+test("stops on an unreadable configuration without inspecting conventional credentials or a daemon", async (t) => {
+  const state = await createLocalState(t);
+  await mkdir(join(state.root, ".env.local"));
+  const result = await runScenario({
+    cwd: state.root, homeDir: state.homeDir,
+    fetchImpl: async () => assert.fail("invalid configuration must not make requests"),
+    runCommand: async () => assert.fail("invalid configuration must not inspect a daemon"),
+  });
+  assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
+  assert.deepEqual(result.result.checks, [{
+    level: "FAIL", layer: "Configuration", message: "local environment configuration is unreadable or unsafe.",
+  }]);
+  assert.doesNotMatch(result.stdout + result.stderr, /Caller token|fixture-bearer/);
+});
+
 test("never falls back to the retired conventional token file", async (t) => {
   const state = await createLocalState(t);
   await rm(join(state.stateDir, "web-token"));

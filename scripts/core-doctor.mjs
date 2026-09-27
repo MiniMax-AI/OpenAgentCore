@@ -199,7 +199,16 @@ function expandConfiguredValue(key, value, env) {
   return expandDotEnvValue(value, safeEnvironment, {}).replace(/\\\$/g, "$");
 }
 
+function rejectRetiredProxySettings(env, parsed = {}) {
+  // Diagnostics contain only allowlisted names, never configuration values.
+  const retired = Object.entries(RETIRED_PROXY_SETTINGS).filter(([name]) => Object.hasOwn(env, name) || Object.hasOwn(parsed, name));
+  if (retired.length) {
+    throw new CoreDoctorRetiredSettingsError(`Retired Web settings: ${retired.map(([name, replacement]) => `${name} is no longer supported; use ${replacement}`).join(". ")}.`);
+  }
+}
+
 export async function loadCoreDoctorConfig({ env, cwd }) {
+  rejectRetiredProxySettings(env);
   const parsed = {};
   const dotenvFiles = [".env", ".env.local", ".env.development", ".env.development.local"];
 
@@ -207,15 +216,14 @@ export async function loadCoreDoctorConfig({ env, cwd }) {
     try {
       Object.assign(parsed, parseEnv(await readSmallText(join(cwd, name))));
     } catch (error) {
-      if (error?.code !== "ENOENT") throw new CoreDoctorUsageError("local environment file is unreadable or unsafe");
+      if (error?.code !== "ENOENT") {
+        rejectRetiredProxySettings(env, parsed);
+        throw new CoreDoctorUsageError("local environment file is unreadable or unsafe");
+      }
     }
   }
 
-  // Reject names before expanding values or reading credentials. Never include values in diagnostics.
-  const retired = Object.entries(RETIRED_PROXY_SETTINGS).filter(([name]) => Object.hasOwn(env, name) || Object.hasOwn(parsed, name));
-  if (retired.length) {
-    throw new CoreDoctorRetiredSettingsError(`Retired Web settings: ${retired.map(([name, replacement]) => `${name} is no longer supported; use ${replacement}`).join(". ")}.`);
-  }
+  rejectRetiredProxySettings(env, parsed);
 
   const loaded = {};
   for (const key of CONFIG_KEYS) {
@@ -836,31 +844,23 @@ export async function runCoreDoctor({
   const report = createReport();
   let exitCode = CORE_DOCTOR_EXIT_CODES.ok;
   let config;
-  let configLoaded = true;
   try {
     config = await loadCoreDoctorConfig({ env, cwd });
   } catch (error) {
-    if (error instanceof CoreDoctorRetiredSettingsError) {
-      report.add("FAIL", "Configuration", error.message);
-      const exitCode = CORE_DOCTOR_EXIT_CODES.diagnosticFailure;
-      stdout.write(report.render(exitCode));
-      return { exitCode, checks: report.checks };
-    }
-    report.add("FAIL", "Configuration", "local environment configuration is unreadable or unsafe.");
-    exitCode = CORE_DOCTOR_EXIT_CODES.diagnosticFailure;
-    config = {};
-    configLoaded = false;
+    report.add("FAIL", "Configuration", error instanceof CoreDoctorRetiredSettingsError
+      ? error.message : "local environment configuration is unreadable or unsafe.");
+    const exitCode = CORE_DOCTOR_EXIT_CODES.diagnosticFailure;
+    stdout.write(report.render(exitCode));
+    return { exitCode, checks: report.checks };
   }
 
   let target;
-  if (configLoaded) {
-    try {
-      target = parseCoreTarget(config.OAC_WEB_DEV_PROXY_TARGET || DEFAULT_TARGET);
-      report.add("PASS", "Configuration", `proxy target is configured (${target.displayOrigin}).`);
-    } catch {
-      report.add("FAIL", "Configuration", "proxy target must be credential-free HTTPS or a loopback HTTP origin.");
-      exitCode = CORE_DOCTOR_EXIT_CODES.diagnosticFailure;
-    }
+  try {
+    target = parseCoreTarget(config.OAC_WEB_DEV_PROXY_TARGET || DEFAULT_TARGET);
+    report.add("PASS", "Configuration", `proxy target is configured (${target.displayOrigin}).`);
+  } catch {
+    report.add("FAIL", "Configuration", "proxy target must be credential-free HTTPS or a loopback HTTP origin.");
+    exitCode = CORE_DOCTOR_EXIT_CODES.diagnosticFailure;
   }
 
   const credentials = await inspectCoreCredentials({ config, cwd, homeDir, platform, report });
