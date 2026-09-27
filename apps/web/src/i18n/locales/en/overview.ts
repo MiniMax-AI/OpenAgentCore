@@ -25,8 +25,8 @@ export const overview = {
       backend: "Open sandbox backend",
     },
     model: {
-      title: "Set a default model",
-      body: "Core-hosted Sessions and Sessions without an environment need a model provider. Apps can also pass one in each request or save one on the Agent; this only sets the default.",
+      title: "Set a default model provider",
+      body: "Set the model service address and API key for the default harness so Agents can call a model. Applications can override this provider in a request or on an Agent.",
       open: "Open System",
     },
     key: {
@@ -43,7 +43,7 @@ export const overview = {
     },
     complete: {
       title: "You're set",
-      body: "Sandboxes are ready, a default model is set, a project has a key and the first Session ran.",
+      body: "Sandboxes are ready, a default model provider is set, a project has a key and the first Session ran.",
       dismiss: "Dismiss",
     },
   },
@@ -71,7 +71,7 @@ export const overview = {
     nodesOnline: "{{online}} / {{total}} nodes online",
     nodesOnlineSuspended: "{{online}} / {{total}} nodes online · {{suspended}} suspended",
     cloudPending: "{{count}} starting or changing",
-    attentionSplit: "{{failed}} failed, {{waiting}} waiting",
+    attentionSplit: "{{failed}} failed, {{waiting}} waiting for caller",
   },
   errors: {
     load: "The overview could not be loaded: {{reason}}",
@@ -103,11 +103,12 @@ export const overview = {
   },
   nodeHealth: {
     available: "Available",
-    degraded: "Provider issue",
+    degraded: "Provider not ready",
     offline: "Offline",
   },
   fleet: {
     title: "Fleet",
+    cloudHelp: "Core and the sandboxes it holds in E2B’s cloud. Select Core or E2B for a summary.",
     help: "Core and its connection to each sandbox node: solid lines are online, dashed lines offline. The figure on a node is active sandboxes / limit. Select Core or a node for a summary.",
     core: "Core",
     open: "{{name}}, {{state}}, sandboxes {{slots}}",
@@ -169,7 +170,7 @@ export const overview = {
     vaults: "Vaults",
     total: "Total",
     running: "Running",
-    waiting: "Waiting",
+    waiting: "Waiting for caller",
     failed: "Failed",
     tokens: "Tokens",
     coverage: "Coverage",
@@ -182,7 +183,7 @@ export const overview = {
     unreadDescription: "The Session lists of {{names}} could not be read. Refresh, or open the Session log.",
     unlistedDescription: "Core counts {{count}} Sessions that need attention, but they were not among the Sessions read. Open the Session log to see them.",
     title: "Needs attention",
-    subtitle: "Failed Sessions and Sessions waiting for a required action, across every project.",
+    subtitle: "Failed Sessions and Sessions waiting for their caller, across every project. Applications submit function results; the console cannot submit them.",
     viewLog: "Session log",
     shown: "{{shown}} of {{total}}",
     limitHelp: "The {{count}} most recently active are shown. The Session log lists the rest.",
@@ -200,6 +201,6 @@ export const overview = {
   },
   sessions: {
     failed: "Failed",
-    requires_action: "Requires action",
+    requires_action: "Waiting for caller",
   },
 } as const;

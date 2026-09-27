@@ -151,7 +151,7 @@ export function SessionPage() {
               {session.vault_ids.length ? session.vault_ids.map((id) => <CopyableId key={id} id={id} compact />) : MISSING}
             </dd>
           </div>
-          {waiting.length ? <div><dt>{t("detail.waitingFor")}</dt><dd className="session-fact-stack">{waiting.map((entry, index) => <span key={index}>{entry}</span>)}</dd></div> : null}
+          {waiting.length ? <div><dt>{t("detail.waitingFor")}</dt><dd className="session-fact-stack">{waiting.map((entry, index) => <span key={index}>{entry}</span>)}{session.required_actions.some((action) => action.type === "function_call") ? <span className="detail-note">{t("detail.applicationAction")}</span> : null}</dd></div> : null}
           {metadata.length ? (
             <div>
               <dt>{t("detail.metadata")}</dt>

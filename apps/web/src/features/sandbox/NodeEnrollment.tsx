@@ -302,7 +302,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
             </ol>}
         </div>
         {next ? <p className="sandbox-next-step">
-          <span>{t(next === "default-model" ? "Next: set a default model." : "Next: finish Getting started.")}</span>
+          <span>{t(next === "default-model" ? "Next: set a default model provider." : "Next: finish Getting started.")}</span>
           <button className="text-action" type="button" onClick={() => { close(); if (next === "default-model") navigate("system", {}, "default-model"); else navigate("overview"); }}>
             {t(next === "default-model" ? "Open System" : "Open Overview")}
           </button>

@@ -118,16 +118,19 @@ python3 "$d/install.pyz" --source-url 'https://core.example.com' --environment-i
   await expect(credentials).toContainText("Revoked");
   await expect(credentials.getByRole("button", { name: /^Revoke credential / })).toHaveCount(0);
   // Rotating the revoked credential restores it with a new secret: its host reconnects only with the same key ID.
-  await credentials.getByRole("button", { name: /^Rotate credential / }).click();
-  const rotation = page.getByRole("dialog", { name: "Rotate credential?" });
-  await expect(rotation).toContainText("Rotating restores it with a new secret");
+  await expect(credentials.getByRole("button", { name: /^Rotate credential / })).toHaveCount(0);
+  await credentials.getByRole("button", { name: /^Restore credential / }).click();
+  const rotation = page.getByRole("dialog", { name: "Restore credential?" });
+  await expect(rotation).toContainText("generating a new secret for the same credential");
   await expect(rotation).toContainText("rerun the Connect a host command there and paste the new credential at its prompt");
-  await rotation.getByRole("button", { name: "Rotate" }).click();
+  await rotation.getByRole("button", { name: "Restore" }).click();
   const restored = page.getByRole("dialog", { name: "Executor credential" });
   await expect(restored.getByLabel("Executor credential file")).toContainText("exec_fixture_2");
   await restored.getByRole("button", { name: "Done" }).click();
   await expect(credentials).toContainText("Active");
   await expect(credentials).not.toContainText("Revoked");
+  await expect(credentials.getByRole("button", { name: /^Rotate credential / })).toBeVisible();
+  await expect(credentials.getByRole("button", { name: /^Restore credential / })).toHaveCount(0);
 
   // Archived meanwhile: Core refuses the issuance and the console stops offering it.
   await archiveProject(request, new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("project")!);

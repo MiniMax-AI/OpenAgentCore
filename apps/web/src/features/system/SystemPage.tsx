@@ -79,7 +79,7 @@ export function SystemPage() {
     );
   } else {
     body = (
-      <Section headingId="system-sandbox-heading" title={t("sandbox.title")} actions={<button className="text-action" type="button" onClick={() => navigate("nodes")}>{t("sandbox.change")}</button>}>
+      <Section headingId="system-sandbox-heading" title={t("sandbox.title")} actions={<button className="text-action" type="button" onClick={() => navigate("nodes")}>{t(data.provider === "e2b" ? "sandbox.changeCloud" : "sandbox.change")}</button>}>
         <dl className="system-facts">
           <Fact label={t("sandbox.runsOn")}>{data.provider === "e2b" ? t("sandbox.e2b") : t("sandbox.ownMachines", { provider: providerNames[data.provider] ?? data.provider })}</Fact>
           {each ? (

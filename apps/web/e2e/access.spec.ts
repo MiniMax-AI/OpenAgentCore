@@ -17,6 +17,11 @@ test("signs in with the Core key, keeps it out of the browser, and signs out and
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Sign in to Parsar Core" })).toBeVisible();
+  await expect(page.getByText("cat ~/.parsar/core/secrets/core.key", { exact: true })).toBeVisible();
+  await expect(page.getByText("For a custom installation directory, replace the path in this command.")).toBeVisible();
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy key read command" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("cat ~/.parsar/core/secrets/core.key");
   await signIn(page, "not-the-core-key");
   await expect(page.getByRole("alert")).toHaveText("This Core key is not correct. Check it and try again.");
   await signIn(page, FIXTURE_CORE_KEY);
@@ -48,7 +53,7 @@ test("opens a fresh install on the Overview's Getting started: a project and its
   const step = (name: string) => page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: name });
   // The fixture deployment already has a ready node.
   await expect(step("Get sandboxes ready")).toContainText("Done");
-  await expect(step("Set a default model")).toContainText("To do");
+  await expect(step("Set a default model provider")).toContainText("To do");
   await expect(step("Create a project and issue a key")).toContainText("To do");
   await expect(step("Run the first Session")).toContainText("To do");
 
@@ -98,19 +103,19 @@ test("opens a fresh install on the Overview's Getting started: a project and its
   expect(stored).not.toContain(FIXTURE_CORE_KEY);
 });
 
-test("leads from Getting started to the default model, and counts it done once the default harness has one", async ({ page, request }) => {
+test("leads from Getting started to the default model provider, and counts it done once the default harness has one", async ({ page, request }) => {
   await openConsole(page, request, "overview", { fresh: true });
-  const step = page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: "Set a default model" });
+  const step = page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: "Set a default model provider" });
   await expect(step).toContainText("To do");
   await step.getByRole("button", { name: "Open System" }).click();
   await expect(page.getByRole("heading", { name: "System", level: 1 })).toBeVisible();
   // It arrives on the default harness's action.
-  const set = page.getByRole("button", { name: "Set the default model for Codex" });
+  const set = page.getByRole("button", { name: "Set the default model provider for Codex" });
   await expect(set).toBeFocused();
   // Only the page body scrolls to it: the page header stays in view.
   await expect(page.getByRole("heading", { name: "System", level: 1 })).toBeInViewport();
   await set.click();
-  const form = page.getByRole("dialog", { name: "Set default model for Codex" });
+  const form = page.getByRole("dialog", { name: "Set default model provider for Codex" });
   await form.getByLabel("Base URL").fill("https://model.example/v1");
   await form.getByLabel("API key").fill("sk-fixture-getting-started");
   await form.getByRole("button", { name: "Save" }).click();

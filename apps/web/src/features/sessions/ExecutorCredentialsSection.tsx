@@ -266,8 +266,8 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
                     {revoked && archived ? null : (
                       <RowActions>
                         {archived ? null : (
-                          <button className="text-action" type="button" aria-label={t("executor.rotateLabel", { id })} disabled={busy} onClick={() => openRotation(credential.key_id, revoked ? "revoked" : "active")}>
-                            {t("executor.rotate")}
+                          <button className="text-action" type="button" aria-label={t(revoked ? "executor.restoreLabel" : "executor.rotateLabel", { id })} disabled={busy} onClick={() => openRotation(credential.key_id, revoked ? "revoked" : "active")}>
+                            {t(revoked ? "executor.restore" : "executor.rotate")}
                           </button>
                         )}
                         {revoked ? null : (
@@ -321,9 +321,9 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       </ErrorDialog>
       <ConfirmDialog
         open={rotation !== null}
-        title={t("executor.rotateDialog.title")}
-        confirmLabel={t("executor.rotateDialog.confirm")}
-        busyLabel={t("executor.rotateDialog.busy")}
+        title={t(rotation?.reason === "revoked" ? "executor.rotateDialog.restoreTitle" : "executor.rotateDialog.title")}
+        confirmLabel={t(rotation?.reason === "revoked" ? "executor.rotateDialog.restoreConfirm" : "executor.rotateDialog.confirm")}
+        busyLabel={t(rotation?.reason === "revoked" ? "executor.rotateDialog.restoreBusy" : "executor.rotateDialog.busy")}
         busy={rotating}
         error={rotationError}
         onConfirm={() => void rotate()}

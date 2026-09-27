@@ -551,7 +551,7 @@ request runs.
   console without the provider's node files replaces the limits with one line
   saying why (the failed read with Try again), and the footer offers nothing to
   generate. Once the node is ready, while Getting started is open, one line under
-  the green status names the next step (set a default model, or finish Getting
+  the green status names the next step (set a default model provider, or finish Getting
   started) with a text action to System or the Overview.
 - **Clean up the host**: after a node is removed, a dialog gives the host's
   uninstall command in the same Terminal block, a Graphite line that it deletes no
@@ -623,8 +623,10 @@ hidden element for assistive technology.
 ### Status dot
 A 7px circle plus a plain label at 12.5px: ok green, warning amber, danger red,
 pending Series 1 with a soft expanding ring while work is in progress, neutral
-Idle Gray. A waiting Session's required actions sit in a help tip beside the
-label. A failed Session's reason, as Core sent it, stays visible under the label
+Idle Gray. A waiting Session names the result its application must submit under
+the label in lists, with the caller's responsibility in a help tip. Its detail
+page shows both in the Waiting for facts.
+A failed Session's reason, as Core sent it, stays visible under the label
 in 12px Graphite: in full on the Session page, its line breaks kept; in the
 Session log on one truncated line, with the full text in its tooltip, that never
 widens the status column. Never a coloured pill, never colour alone.
@@ -698,8 +700,9 @@ Agents, Sessions, Skills, Vaults, files, templates and machines around it; the
 Parsar mark is itself nodes on a ring. Brand copy sits bottom-left in solid
 ink; it is a paragraph, not a heading, because the panel's title names the task.
 Signing in asks for one thing, the deployment's Core key, in a single password
-field; where the key is kept and what it can do sit behind a help tip beside the
-label, and a refused key, too many attempts or an unavailable console is an error
+field; the default key location and a copyable read command stay visible beneath
+it, with a reminder to substitute a custom installation directory. The key’s
+authority stays in a help tip. A refused key, too many attempts or an unavailable console is an error
 beside the field. Signing in opens the console on the Overview. The optional tour
 has three chapters — Monitor, Resources, Platform — whose stage shows a real dark
 screenshot of those pages, tilted towards the panel; it takes the place of the
@@ -721,7 +724,7 @@ Create project (which continues to the new project's first key) or Issue key;
 See how to call (the newest active project, preferring one with an active key), or
 Projects and keys without an active project. Add node, Create project and Issue key
 open their page with the dialog already open; Open System brings the Default
-model section to the top of the page body and focuses the default harness's Set or
+model provider section to the top of the page body and focuses the default harness's Set or
 Replace; See how to call opens the project and, once its keys, usage and address
 are read, brings its How to call heading to the top of the page body, focused. Only the page body scrolls; the page header stays. Every step done turns it into one line, "You're set", with Take the tour and
 Dismiss; it stays, through the tour, until dismissed, and the checklist does not
@@ -755,7 +758,7 @@ console's Runtime, and E2B always needs its key again. Rules sit behind help tip
 
 ### System page
 Four sections, each saying where it changes. Installation: the public address, API
-base URL, installation ID and source commit as a fact card. Default model, the one
+base URL, installation ID and source commit as a fact card. Default model provider, the one
 section changed here: one card per harness in an auto-fill grid, its header holding
 the harness name and outline actions (Set, or Replace and Clear); fact rows give the
 harness's read-only startup state (a status dot and a Default pill, its source behind

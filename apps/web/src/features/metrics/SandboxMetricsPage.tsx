@@ -116,7 +116,7 @@ export function SandboxMetricsPage() {
       <PageHeader
         headingId="sandbox-metrics-heading"
         title={t("sandbox.title")}
-        help={t("sandbox.description")}
+        help={t(cloud ? "sandbox.cloudDescription" : "sandbox.description")}
         actions={<>
           <SegmentedControl
             label={t("range.label")}
@@ -239,6 +239,7 @@ function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
       help={t("sandbox.cloud.help")}
       actions={<button className="button outline" type="button" onClick={() => navigate("nodes")}>{t("sandbox.cloud.manage")}</button>}
     >
+      <p className="detail-note">{t("sandbox.cloud.counts")}</p>
       <KpiStrip label={t("sandbox.cloud.title")}>
         <Kpi label={t("sandbox.cloud.running")} help={t("sandbox.cloud.runningHelp")} value={formatInteger(deployment.resources.allocations, locale)} />
         <Kpi label={t("sandbox.cloud.pending")} value={formatInteger(deployment.resources.pending, locale)} />

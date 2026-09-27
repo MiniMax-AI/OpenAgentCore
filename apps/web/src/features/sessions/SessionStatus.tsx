@@ -15,19 +15,18 @@ export function useWaitingFor() {
 }
 
 /**
- * A Session's status. A failed Session's reason, as Core sent it, stays in
- * sight under the status: in full on the Session page, on one truncated line
- * with the full text in its tooltip in a list (`truncate`).
+ * Failures stay visible under the status, truncated only in lists. Required
+ * actions appear here in lists and in their own facts on the Session page.
  */
 export function SessionStatus({ session, truncate = false }: { session: AgentSession; truncate?: boolean }) {
   const { t } = useTranslation("sessions");
   const waitingFor = useWaitingFor()(session);
   const key = statusKey(session.status);
-  const reason = session.status === "failed" && session.error ? session.error : null;
+  const reason = session.status === "failed" ? session.error : session.status === "requires_action" && truncate ? waitingFor.join(" · ") : null;
   const status = (
     <span className="status-with-help">
       <StatusDot tone={sessionStatusTone[session.status] ?? "neutral"} label={t(`sessionStatus.${key}`)} />
-      {session.status === "requires_action" && waitingFor.length ? <HelpTip label={t("log.waitingLabel")}>{waitingFor.join(" · ")}</HelpTip> : null}
+      {truncate && session.required_actions.some((action) => action.type === "function_call") ? <HelpTip label={t("log.waitingLabel")}>{t("detail.applicationAction")}</HelpTip> : null}
     </span>
   );
   if (!reason) return status;

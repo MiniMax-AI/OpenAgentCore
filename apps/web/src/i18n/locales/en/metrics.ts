@@ -179,6 +179,7 @@ export const metrics = {
   sandbox: {
     title: "Sandbox metrics",
     description: "Host capacity of the whole deployment, and the hosted Runtimes of every project.",
+    cloudDescription: "Sandboxes Core holds in E2B’s cloud, and hosted Runtime observations across projects.",
     nodeDialog: {
       facts: "Node figures",
       openLabel: "Show {{name}}",
@@ -224,6 +225,7 @@ export const metrics = {
     manageNodes: "Manage nodes",
     cloud: {
       title: "E2B cloud",
+      counts: "The running count comes from Core’s E2B allocations. The hosted Runtime total below counts Core’s hosted observation records across projects, including every reported lifecycle state. These sources have different coverage and refresh separately.",
       help: "This deployment runs its sandboxes in E2B's cloud: there are no machines to manage. Counts are Core's own records of what it placed in E2B.",
       manage: "Sandbox backend",
       running: "Running sandboxes",
@@ -243,7 +245,7 @@ export const metrics = {
     lastSeen: "Last heartbeat",
     health: {
       available: "Available",
-      degraded: "Provider issue",
+      degraded: "Provider not ready",
       offline: "Offline",
     },
     slotsOf: "Active sandboxes on {{name}}",

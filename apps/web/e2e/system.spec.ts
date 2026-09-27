@@ -6,10 +6,10 @@ test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
 const KEY = "sk-fixture-default-model-canary";
 
-test("sets, replaces and clears a harness's default model, and keeps its key out of the browser", async ({ page, request }) => {
-  // A fresh install: no harness has a default model yet.
+test("sets, replaces and clears a harness's default model provider, and keeps its key out of the browser", async ({ page, request }) => {
+  // A fresh install: no harness has a default model provider yet.
   await openConsole(page, request, "system", { fresh: true });
-  const section = page.getByRole("region", { name: "Default model" });
+  const section = page.getByRole("region", { name: "Default model provider" });
   const codex = section.getByRole("article", { name: "Codex" });
   const mcode = section.getByRole("article", { name: "MiniMax Code" });
   await expect(codex).toContainText("Enabled");
@@ -18,13 +18,28 @@ test("sets, replaces and clears a harness's default model, and keeps its key out
   await expect(section.getByRole("article", { name: "Claude Code" })).toContainText("Not set");
   await expect(mcode).toContainText("Disabled");
 
-  await codex.getByRole("button", { name: "Set the default model for Codex" }).click();
-  const set = page.getByRole("dialog", { name: "Set default model for Codex" });
+  await codex.getByRole("button", { name: "Set the default model provider for Codex" }).click();
+  const set = page.getByRole("dialog", { name: "Set default model provider for Codex" });
   await set.getByLabel("Base URL").fill("https://model.example/v1");
   await set.getByLabel("API key").fill(KEY);
+  await expect(set).toContainText("Your application specifies the model in the Agent’s model field.");
+  // Every rejected URL stays local; Enter cannot bypass validation or write a secret.
+  for (const url of ["http://model.example/v1", "ftp://model.example", "https://user:password@model.example/v1", "https://@model.example/v1", "https:model.example/v1", "https://model.example/v1?token=x", "https://model.example/v1#fragment", "https://model.example/v1?", "https://model.example/v1#", "not a URL"]) {
+    await set.getByLabel("Base URL").fill(url);
+    await expect(set.getByLabel("Base URL")).toHaveAttribute("aria-invalid", "true");
+    await expect(set.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    await set.getByLabel("API key", { exact: true }).press("Enter");
+  }
+  expect(await writes(request)).toEqual([]);
+  await set.getByLabel("Base URL").fill("https://model.example/v1");
   // Limits are Core's 32-bit whole numbers, and max output needs a context window at least as large.
   await set.getByLabel("Max output tokens").fill("32000");
   await expect(set.getByText("Set a context window at least this large.")).toBeVisible();
+  await expect(set.getByLabel("Context window", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  await expect(set.getByLabel("Context window", { exact: true })).toHaveAccessibleDescription(/Set a context window at least this large/);
+  await expect(set.getByLabel("Max output tokens", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
+  await set.getByLabel("Context window", { exact: true }).fill("1000");
+  await expect(set.getByLabel("Context window", { exact: true })).toHaveAttribute("aria-invalid", "true");
   await set.getByLabel("Context window").fill("2147483648");
   await expect(set.getByText("Enter a whole number up to 2147483647.")).toBeVisible();
   await expect(set.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -35,16 +50,16 @@ test("sets, replaces and clears a harness's default model, and keeps its key out
   expect(await page.content()).not.toContain(KEY);
 
   // Replacing starts from the saved fields but never from the key; closing the form forgets a typed key.
-  await codex.getByRole("button", { name: "Replace the default model for Codex" }).click();
-  let replace = page.getByRole("dialog", { name: "Replace default model for Codex" });
+  await codex.getByRole("button", { name: "Replace the default model provider for Codex" }).click();
+  let replace = page.getByRole("dialog", { name: "Replace default model provider for Codex" });
   await expect(replace.getByLabel("Base URL")).toHaveValue("https://model.example/v1");
   await expect(replace.getByLabel("API key")).toHaveValue("");
   await expect(replace.getByRole("button", { name: "Save" })).toBeDisabled();
   await replace.getByLabel("API key").fill(KEY);
   await replace.getByRole("button", { name: "Cancel" }).click();
   expect(await page.content()).not.toContain(KEY);
-  await codex.getByRole("button", { name: "Replace the default model for Codex" }).click();
-  replace = page.getByRole("dialog", { name: "Replace default model for Codex" });
+  await codex.getByRole("button", { name: "Replace the default model provider for Codex" }).click();
+  replace = page.getByRole("dialog", { name: "Replace default model provider for Codex" });
   await expect(replace.getByLabel("API key")).toHaveValue("");
   await replace.getByLabel("Base URL").fill("https://model.example/v2");
   await replace.getByLabel("API key").fill(KEY);
@@ -53,15 +68,15 @@ test("sets, replaces and clears a harness's default model, and keeps its key out
   await expect(replace).toBeHidden();
   await expect(codex).toContainText("https://model.example/v2");
 
-  await codex.getByRole("button", { name: "Clear the default model for Codex" }).click();
-  const confirm = page.getByRole("dialog", { name: "Clear default model" });
-  await confirm.getByRole("button", { name: "Clear default model" }).click();
+  await codex.getByRole("button", { name: "Clear the default model provider for Codex" }).click();
+  const confirm = page.getByRole("dialog", { name: "Clear default model provider" });
+  await confirm.getByRole("button", { name: "Clear default model provider" }).click();
   await expect(confirm).toBeHidden();
   await expect(codex).toContainText("Not set");
 
   // MiniMax Code needs both limits; the form shows Core's reason. A disabled harness may still be configured.
-  await mcode.getByRole("button", { name: "Set the default model for MiniMax Code" }).click();
-  const limits = page.getByRole("dialog", { name: "Set default model for MiniMax Code" });
+  await mcode.getByRole("button", { name: "Set the default model provider for MiniMax Code" }).click();
+  const limits = page.getByRole("dialog", { name: "Set default model provider for MiniMax Code" });
   await limits.getByLabel("Base URL").fill("https://model.example/anthropic");
   await limits.getByLabel("API key").fill(KEY);
   await limits.getByRole("button", { name: "Save" }).click();
@@ -81,9 +96,9 @@ test("sets, replaces and clears a harness's default model, and keeps its key out
 
 test("reports a Core without a credential key as a configuration error, without rereading", async ({ page, request }) => {
   await openConsole(page, request, "system", { fresh: true, credentials: "none" });
-  const codex = page.getByRole("region", { name: "Default model" }).getByRole("article", { name: "Codex" });
-  await codex.getByRole("button", { name: "Set the default model for Codex" }).click();
-  const set = page.getByRole("dialog", { name: "Set default model for Codex" });
+  const codex = page.getByRole("region", { name: "Default model provider" }).getByRole("article", { name: "Codex" });
+  await codex.getByRole("button", { name: "Set the default model provider for Codex" }).click();
+  const set = page.getByRole("dialog", { name: "Set default model provider for Codex" });
   await set.getByLabel("Base URL").fill("https://model.example/v1");
   await set.getByLabel("API key").fill(KEY);
   const reads: string[] = [];
@@ -97,18 +112,18 @@ test("reports a Core without a credential key as a configuration error, without 
   await expect(codex).toContainText("Not set");
 });
 
-test("reports an unconfirmed save, reads the default models again once and never repeats the write", async ({ page, request }) => {
+test("reports an unconfirmed save, reads the default model providers again once and never repeats the write", async ({ page, request }) => {
   await openConsole(page, request, "system", { fresh: true });
-  const codex = page.getByRole("region", { name: "Default model" }).getByRole("article", { name: "Codex" });
-  await codex.getByRole("button", { name: "Set the default model for Codex" }).click();
-  const set = page.getByRole("dialog", { name: "Set default model for Codex" });
+  const codex = page.getByRole("region", { name: "Default model provider" }).getByRole("article", { name: "Codex" });
+  await codex.getByRole("button", { name: "Set the default model provider for Codex" }).click();
+  const set = page.getByRole("dialog", { name: "Set default model provider for Codex" });
   await set.getByLabel("Base URL").fill("https://model.example/v1");
   await set.getByLabel("API key").fill(KEY);
   await failNext(request, { method: "PUT", path: "/harnesses/codex/model-provider", status: 500 });
   const reads: string[] = [];
   page.on("request", (sent) => { if (sent.method() === "GET" && new URL(sent.url()).pathname === "/core/v1/harnesses") reads.push(sent.url()); });
   await set.getByRole("button", { name: "Save" }).click();
-  await expect(set.getByRole("alert")).toHaveText("Core did not confirm the change. The default models were read again; check them before trying again.");
+  await expect(set.getByRole("alert")).toHaveText("Core did not confirm the change. The default model providers were read again; check them before trying again.");
   await expect.poll(() => reads.length).toBe(1);
   await page.waitForTimeout(500);
   expect(reads).toHaveLength(1);

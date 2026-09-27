@@ -25,8 +25,8 @@ export const overview = {
       backend: "打开沙箱后端",
     },
     model: {
-      title: "设置默认模型",
-      body: "Core 托管的 Session 和没有环境的 Session 需要模型服务。应用也可以在每个请求里传入，或保存在 Agent 上；这里只设置默认值。",
+      title: "设置默认模型服务",
+      body: "为默认执行框架设置模型服务地址和 API key，让 Agent 可以调用模型。应用也可以在请求或 Agent 上指定其他模型服务。",
       open: "打开系统",
     },
     key: {
@@ -43,7 +43,7 @@ export const overview = {
     },
     complete: {
       title: "一切就绪",
-      body: "沙箱已就绪，已设置默认模型，项目已有 key，第一个 Session 也已运行。",
+      body: "沙箱已就绪，已设置默认模型服务，项目已有 key，第一个 Session 也已运行。",
       dismiss: "关闭",
     },
   },
@@ -71,7 +71,7 @@ export const overview = {
     nodesOnline: "{{online}} / {{total}} 个节点在线",
     nodesOnlineSuspended: "{{online}} / {{total}} 个节点在线 · {{suspended}} 个挂起",
     cloudPending: "{{count}} 个启动或切换中",
-    attentionSplit: "失败 {{failed}}，等待操作 {{waiting}}",
+    attentionSplit: "失败 {{failed}}，等待调用方 {{waiting}}",
   },
   errors: {
     load: "无法加载概览：{{reason}}",
@@ -103,11 +103,12 @@ export const overview = {
   },
   nodeHealth: {
     available: "可用",
-    degraded: "提供方异常",
+    degraded: "提供方未就绪",
     offline: "离线",
   },
   fleet: {
     title: "机群",
+    cloudHelp: "Core 与它在 E2B 云端持有的沙箱。选择 Core 或 E2B 可查看摘要。",
     help: "Core 与各沙箱节点的连接：实线为在线，虚线为离线。节点上的数字是活跃沙箱 / 上限。点击 Core 或节点查看概况。",
     core: "Core",
     open: "{{name}}，{{state}}，沙箱 {{slots}}",
@@ -169,7 +170,7 @@ export const overview = {
     vaults: "Vault",
     total: "总数",
     running: "运行中",
-    waiting: "等待操作",
+    waiting: "等待调用方",
     failed: "失败",
     tokens: "Token",
     coverage: "用量覆盖",
@@ -182,7 +183,7 @@ export const overview = {
     unreadDescription: "{{names}} 的 Session 列表读取失败。请刷新，或打开 Session 日志查看。",
     unlistedDescription: "Core 统计有 {{count}} 个 Session 需要处理，但不在已读取的 Session 中。请打开 Session 日志查看。",
     title: "需要处理",
-    subtitle: "所有项目中失败的 Session，以及等待必要操作的 Session。",
+    subtitle: "所有项目中失败或等待调用方的 Session。函数结果须由应用提交，控制台无法代为提交。",
     viewLog: "Session 日志",
     shown: "{{shown}} / {{total}}",
     limitHelp: "只显示最近活跃的 {{count}} 个，其余请在 Session 日志中查看。",
@@ -200,6 +201,6 @@ export const overview = {
   },
   sessions: {
     failed: "失败",
-    requires_action: "等待操作",
+    requires_action: "等待调用方",
   },
 } as const;

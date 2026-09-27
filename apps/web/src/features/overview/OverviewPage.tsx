@@ -29,6 +29,7 @@ import { capacitySummary, coreStatus, type CoreStatus } from "../fleet/fleet-mod
 import { fleetSnapshot, useSandboxFleet, type FleetSnapshot, type FleetState } from "../fleet/use-sandbox-fleet";
 import { type InProject } from "../metrics/project-sessions";
 import { FleetTopology, TOPOLOGY_LIMIT, type CloudHost } from "./FleetTopology";
+import { useWaitingFor } from "../sessions/SessionStatus";
 import { GettingStarted } from "./GettingStarted";
 import { type OverviewData } from "./overview-loader";
 import { overviewQuery } from "./overview-queries";
@@ -329,7 +330,7 @@ function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; co
       <header className="overview-card-header">
         <div className="console-section-title">
           <h2 id="fleet-heading">{t("fleet.title")}</h2>
-          <HelpTip>{t("fleet.help")}</HelpTip>
+          <HelpTip>{t(cloud ? "fleet.cloudHelp" : "fleet.help")}</HelpTip>
         </div>
         {fleetState.status === "ready" ? (
           !fleet?.deployment.provider
@@ -458,6 +459,7 @@ function AttentionTable({ sessions, expected, unread, truncated, now, onOpen }: 
   const { t, i18n } = useTranslation("overview");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
+  const waitingFor = useWaitingFor();
   if (sessions === null) return <TableSkeleton label={t("attention.loading")} rows={4} columns={5} />;
   if (!sessions.length) {
     const description = unread.length
@@ -494,7 +496,7 @@ function AttentionTable({ sessions, expected, unread, truncated, now, onOpen }: 
                 </th>
                 <td><ProjectName project={entry.project} /></td>
                 <td><StatusDot tone={failed ? "danger" : "neutral"} label={t(`sessions.${failed ? "failed" : "requires_action"}`)} /></td>
-                <td className="table-truncate" title={session.error ?? undefined}>{failed ? session.error || t("attention.noError") : t("attention.requiredActions", { count: session.required_actions.length })}</td>
+                <td className="table-truncate" title={failed ? session.error ?? undefined : waitingFor(session).join(" · ")}>{failed ? session.error || t("attention.noError") : waitingFor(session).join(" · ")}</td>
                 <td className="numeric">{formatRelative(session.last_active_at, now, locale)}</td>
               </tr>
             );

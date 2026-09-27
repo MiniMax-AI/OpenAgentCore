@@ -9,3 +9,7 @@
 .console-auth-form .console-auth-error { color: var(--danger); }
 .console-account-menu > button { background: transparent; border: 0; display: flex; white-space: nowrap; gap: 9px; align-items: center; padding: 8px; color: var(--fg-muted); font: inherit; font-size: 12px; cursor: pointer; }
 .console-account-menu > button:hover { color: var(--fg); }
+
+.console-key-location { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
+.console-key-location .copyable-id { max-width: 100%; }
+.console-key-location code { overflow-wrap: anywhere; white-space: normal; }

@@ -39,17 +39,19 @@ function tokenLimit(text: string): { value: number | undefined; problem: "whole"
   return number > INT32_MAX ? { value: undefined, problem: "large" } : { value: number, problem: null };
 }
 
-function isUrl(value: string): boolean {
+function isProviderUrl(value: string): boolean {
   try {
-    new URL(value);
-    return true;
+    const url = new URL(value);
+    const authority = /^https:\/\/([^/]+)/iu.exec(value)?.[1];
+    return authority !== undefined && url.protocol === "https:" && url.hostname !== "" && !authority.includes("@")
+      && !/[\\\s?#]/u.test(value);
   } catch {
     return false;
   }
 }
 
 /**
- * System › Default model: each harness's deployment default model provider.
+ * System › Default model provider: each harness's deployment default model provider.
  * It applies to Core-hosted Sessions, after a provider in the request or on
  * the Agent, and is the only source for Sessions without an environment;
  * self-hosted Sessions bring their own. Whether a harness is enabled, and
@@ -188,9 +190,9 @@ function HarnessCard({ harness, busy, onEdit, onClear }: { harness: CoreHarness;
 /**
  * Sets or replaces one harness's provider. Non-secret fields start from the
  * current provider; the API key never does. The protocol is the one Core
- * accepts for the harness. The form checks that the base URL is a URL and the
- * limits are whole numbers within Core's range, with max output no larger than
- * the context window; Core's other rules come back as its 400 message, shown
+ * accepts for the harness. The form checks the HTTPS provider URL and whole-number
+ * limits within Core's range, with max output no larger than the context window.
+ * Core's other rules come back as its 400 message, shown
  * beside the form. Enter saves; a save in flight blocks another.
  */
 function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
@@ -216,13 +218,13 @@ function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   const protocol = harness ? harnessProtocol[harness.id] : "responses";
   const limitsRequired = harness?.id === "mcode";
   const url = baseUrl.trim();
-  const urlProblem = url && !isUrl(url) ? t("models.form.baseUrlInvalid") : null;
+  const urlProblem = url && !isProviderUrl(url) ? t("models.form.baseUrlInvalid") : null;
   const context = tokenLimit(contextWindow);
   const output = tokenLimit(maxOutputTokens);
   const limitProblem = (limit: ReturnType<typeof tokenLimit>) => (limit.problem === "whole" ? t("models.form.wholeNumber") : limit.problem === "large" ? t("models.form.tooLarge") : null);
-  const contextProblem = limitProblem(context);
-  // Core rejects max output above the context window, an omitted window counting as 0.
-  const outputProblem = limitProblem(output) ?? (!contextProblem && output.value !== undefined && output.value > (context.value ?? 0) ? t("models.form.needsContext") : null);
+  const outputProblem = limitProblem(output);
+  // The missing or undersized window is the field the administrator must fix.
+  const contextProblem = limitProblem(context) ?? (!outputProblem && output.value !== undefined && output.value > (context.value ?? 0) ? t("models.form.needsContext") : null);
   const ready = harness !== null && !busy && url !== "" && !urlProblem && apiKey.trim() !== "" && !contextProblem && !outputProblem;
 
   async function save() {
@@ -290,6 +292,7 @@ function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
       )}
     >
       <form id={formId} className="form-stack" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <p className="detail-note">{t("models.form.modelName")}</p>
         <div className="field">
           <span className="field-label-row">
             <span>{t("models.protocol")}</span>

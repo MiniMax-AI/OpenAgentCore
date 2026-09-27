@@ -88,12 +88,12 @@ export const metrics = {
     failedHelp: "所选时间范围内失败的 Turn；链接列出这个 Agent 的 Session。",
   },
   keys: {
-    title: "按 API 密钥",
-    help: "最近 {{range}} 内新建的 Session，按创建它的 API 密钥分组，来自 Core 的用量汇总。Token 是各 Session 的累计用量，只累加上报了用量的 Session。“未知”汇总没有创建记录的 Session。",
+    title: "按 API key",
+    help: "最近 {{range}} 内新建的 Session，按创建它的 API key分组，来自 Core 的用量汇总。Token 是各 Session 的累计用量，只累加上报了用量的 Session。“未知”汇总没有创建记录的 Session。",
     loading: "正在加载按密钥的用量…",
-    loadFailed: "无法加载按 API 密钥的用量：{{reason}}",
+    loadFailed: "无法加载按 API key的用量：{{reason}}",
     empty: "最近 {{range}} 内没有新建 Session。",
-    key: "API 密钥",
+    key: "API key",
     sessions: "Session",
     running: "运行中",
     failed: "失败",
@@ -102,7 +102,7 @@ export const metrics = {
     lastActive: "最近活跃",
     unknown: "未知",
     unknownHelp: "没有创建记录的 Session：在开始记录之前创建，或由管理员复制。",
-    revoked: "已吊销",
+    revoked: "已撤销",
     coverageDetail: "{{total}} 个 Session 中有 {{reported}} 个上报了用量",
   },
   core: {
@@ -179,6 +179,7 @@ export const metrics = {
   sandbox: {
     title: "沙箱监控",
     description: "整个部署的宿主机容量，以及所有项目的托管运行时。",
+    cloudDescription: "Core 在 E2B 云端持有的沙箱，以及各项目的托管 Runtime 观测。",
     nodeDialog: {
       facts: "节点指标",
       openLabel: "查看 {{name}}",
@@ -224,6 +225,7 @@ export const metrics = {
     manageNodes: "管理节点",
     cloud: {
       title: "E2B 云端",
+      counts: "运行数量来自 Core 的 E2B 分配记录；下方托管 Runtime 总数统计各项目的托管观测记录，包含所有已报告的生命周期状态。两者覆盖范围不同，并分别刷新。",
       help: "这个部署的沙箱在 E2B 的云端运行，没有需要管理的机器。数量是 Core 自己记录的、放在 E2B 上的沙箱。",
       manage: "沙箱后端",
       running: "运行中的沙箱",
@@ -243,7 +245,7 @@ export const metrics = {
     lastSeen: "最近心跳",
     health: {
       available: "可用",
-      degraded: "提供方异常",
+      degraded: "提供方未就绪",
       offline: "离线",
     },
     slotsOf: "{{name}} 上的活跃沙箱",

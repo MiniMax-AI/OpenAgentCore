@@ -2,8 +2,12 @@ export const consoleAuthChinese = {
   "Try again": "重试",
   "Sign in to Parsar Core": "登录 Parsar Core",
   "Core key": "Core Key",
-  "This deployment's Core key. The installer saved it in a private file: {{file}} in the installation directory, by default {{defaultPath}}. It is an administration credential: it cannot call the /v1 Agents API, and the console never keeps it in your browser.":
-    "这个部署的 Core Key，由安装器保存在安装目录下的私有文件 {{file}} 中，默认是 {{defaultPath}}。它是管理凭据：不能调用 /v1 Agents API，控制台也不会把它保存在你的浏览器里。",
+  "The Core key is an administration credential: it cannot call the /v1 Agents API, and the console never keeps it in your browser.":
+    "Core Key 是管理凭据：不能调用 /v1 Agents API，控制台也不会把它保存在你的浏览器里。",
+  "The installer saved the key in {{file}} inside the installation directory. On the Core host, read the default location with:":
+    "安装器将 key 保存在安装目录下的 {{file}} 中。在 Core 主机上运行以下命令可读取默认位置：",
+  "Copy key read command": "复制 key 读取命令",
+  "For a custom installation directory, replace the path in this command.": "如果使用了自定义安装目录，请替换命令中的路径。",
   "Sign in": "登录",
   "Signing in…": "正在登录…",
   "This Core key is not correct. Check it and try again.": "Core Key 不正确，请检查后重试。",

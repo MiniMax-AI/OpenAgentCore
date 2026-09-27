@@ -96,5 +96,9 @@ follows the administrator contract.
 The sandbox deployment read (`GET /core/v1/sandbox/deployment`) describes the saved
 selection. It does not prove a reachable model, valid provider credentials or
 execution readiness. Runtime observations, usage coverage and audit history must
-retain the distinctions defined by Core.
+retain the distinctions defined by Core. In E2B views, the running sandbox count
+comes from the deployment's allocations; the hosted Runtime total counts hosted
+observation records across projects and reported lifecycle states. These sources
+have different coverage and refresh independently, so the console does not infer
+resource retention or cleanup from their difference.
 Native execution ownership remains governed by [CONTRIBUTING.md](../../CONTRIBUTING.md).

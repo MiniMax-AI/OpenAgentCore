@@ -46,7 +46,7 @@ export function hostRequirements(provider: "docker" | "microsandbox", sized: boo
   return [
     { label: "Linux amd64 with systemd; Python 3.9+, curl and sha256sum; root or sudo" },
     { label: "SELinux is not enforcing (otherwise use the no-sudo command)" },
-    { label: "One Core per host: a host already running a node for another Core is refused." },
+    { label: "In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused." },
     provider === "docker"
       ? { label: "Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)" }
       : { label: "/dev/kvm in the kvm group (hardware or nested virtualization) and the libraries microsandbox links (glibc)" },

@@ -1,14 +1,14 @@
 import type { templates as english } from "../en/templates";
 type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : TranslationShape<T[K]> };
 export const templates: TranslationShape<typeof english> = {
-  boundary: "控制台只编辑模板的名称和网络；文件、依赖包、Skill、Plugin、环境变量和启动命令都保持不变。启动 Session 时可选择已保存的模板。保存配置不会启动运行时。",
+  boundary: "模板由应用使用项目 API key 通过 Agents API 创建和修改；控制台只查看和删除。",
   refreshFailed: "无法刷新目录。请检查连接后重试。",
   savedRefreshFailed: "更改已保存，但目录刷新失败。请先刷新再进行其他更改。",
   created: "模板已创建，未分配运行时。", updated: "模板已更新。现有 Session 会保留原配置。", deleted: "模板已删除。",
   loading: "正在加载环境模板…", unavailableTitle: "环境模板不可用", unavailableDescription: "此 Core 未提供模板资源，Web 不会推断目录。",
   loadFailedTitle: "无法加载环境模板", loadFailedDescription: "请检查 Core 连接和访问权限；目录当前不可用。", configureConnection: "配置连接",
   filterLabel: "筛选模板", filterPlaceholder: "按名称或 ID 筛选", count: "显示 {{visible}} / {{total}} 个模板",
-  emptyTitle: "暂无环境模板", emptyDescription: "创建可复用配置后，即可在启动 Session 时选择。", noMatch: "没有匹配的模板", clearFilter: "清除筛选", listLabel: "环境模板",
+  emptyTitle: "暂无环境模板", emptyDescription: "通过 Agents API 创建模板后，即可在启动 Session 时选择。", noMatch: "没有匹配的模板", clearFilter: "清除筛选", listLabel: "环境模板",
   columns: { name: "名称", network: "网络", packages: "依赖包", files: "文件", skills: "Skill", plugins: "Plugin", updated: "更新时间", actions: "操作" },
   access: { enabled: "已启用", disabled: "已禁用", restricted: "受限" },
   accessHelp: {

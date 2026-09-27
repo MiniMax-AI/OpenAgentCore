@@ -39,7 +39,7 @@ const stateLabel: Record<NodeState, MessageKey> = {
   unconfirmed: "Status unconfirmed",
   old_address: "Old address",
   offline: "Offline",
-  degraded: "Provider unavailable",
+  degraded: "Provider not ready",
   attention: "Needs attention",
   available: "Available",
 };

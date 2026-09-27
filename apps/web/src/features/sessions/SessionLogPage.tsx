@@ -288,8 +288,8 @@ function SessionLogRow({
       <td className="numeric" title={session.usage ? t("log.exactTokens", { tokens: session.usage.total_tokens.toLocaleString(locale) }) : undefined}>
         {session.usage ? formatCompact(session.usage.total_tokens, locale) : MISSING}
       </td>
-      <td className="numeric" title={formatDateTime(session.created_at, locale)}>{formatRelative(session.created_at, now, locale)}</td>
-      <td className="numeric" title={formatDateTime(session.last_active_at, locale)}>{formatRelative(session.last_active_at, now, locale)}</td>
+      <td className="numeric session-log-time" title={formatDateTime(session.created_at, locale)}>{formatRelative(session.created_at, now, locale)}</td>
+      <td className="numeric session-log-time" title={formatDateTime(session.last_active_at, locale)}>{formatRelative(session.last_active_at, now, locale)}</td>
       <td><CreatorCell creator={creators.creatorOf(row.project.id, session.id)} /></td>
       <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
         {isDeletable(session) ? (

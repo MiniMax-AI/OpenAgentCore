@@ -45,7 +45,9 @@ workbench.
   `secrets/core.key` under the installation directory (by default
   `~/.parsar/core/secrets/core.key`; keeping and rotating it is described in
   [Core key](../../docs/getting-started/operations.md#core-key)). There are no
-  console accounts or usernames. The browser sends the key only to sign in and
+  console accounts or usernames. Sign-in shows the default file location and a
+  copyable `cat ~/.parsar/core/secrets/core.key` command for the Core host, with a
+  reminder to substitute a custom installation directory. The browser sends the key only to sign in and
   keeps only the session cookie; the console server holds the Core key and forwards
   the Web API (`/core/v1/**`, including sandbox administration under
   `/core/v1/sandbox/**`). The console never calls `/v1`.
@@ -95,7 +97,7 @@ workbench.
   loopback, or when the console lacks the provider's node files; after Remove, a dialog gives
   the host's uninstall command, or says none can be given without a usable public URL), System (the
   installation's public address, API base URL, installation ID and source commit, read-only;
-  each harness's default model, set, replaced or cleared there beside its read-only startup
+  each harness's default model provider, set, replaced or cleared there beside its read-only startup
   state; the sandbox configuration every project shares, with a link to Nodes where it
   changes; and Core's startup settings from config.json, with the file and the apply command
   that change them).
@@ -117,21 +119,26 @@ workbench.
   forced first. While a step is to do, a Getting started checklist on the Overview
   shows four steps, in any order, each with its state and one action: sandboxes
   ready (a saved deployment and a node online and ready, or a saved E2B deployment
-  whose template build is not reported as not ready), a default model on the default
+  whose template build is not reported as not ready), a default model provider on the default
   harness (on any enabled harness when none is default),
   a project with an active key, and a first Session, whose action opens the call
   samples of the newest active project, preferring one with an active key.
   Completion comes from reads the
   console already makes. It can be hidden; Show Getting started in the sidebar
   opens it again, and it ends with a brief "You're set". While it is open, Add node
-  ends with the next step once its node is ready: the default model while that is to
+  ends with the next step once its node is ready: the default model provider while that is to
   do, otherwise back to the checklist. The optional
   three-chapter tour of the console (Monitor, Resources, Platform) opens from it,
   on the sign-in stage.
 - Terminology: API terms stay in English in the Chinese UI (Agent, Session, Turn,
   Skill, Vault, Credential, API key). The sign-in credential is the Core key
   ("Core Key"); keys issued in a project for applications are project API keys
-  ("项目 API Key").
+  ("项目 API Key"). Provider readiness is "Provider not ready / 提供方未就绪";
+  revoked credentials and keys use "Revoked / 已撤销". A default model provider is
+  a service address and write-only key; the application's Agent `model` chooses
+  the provider-supported model name. A sandbox is Core-managed compute; Runtime
+  names Core's execution observations, and Environment is the Session's API
+  execution environment. These are distinct counts and resources, not synonyms.
 
 ## Capabilities and Constraints
 
@@ -160,6 +167,9 @@ workbench.
   creating key of each asset and a project's write history; an asset an
   administrator copied in an earlier release shows as Admin copy and an asset
   without a record as Unknown.
+- **Waiting for results.** Overview, Session log and Session details name the
+  function whose result the calling application must submit. The console cannot
+  submit that result; environment connection waits stay distinct from function waits.
 - **Session history is read-only.** A Session page reads the Session, its Items and
   Turns and polls while work is in flight; there is no live event stream.
 - **Executor credentials.** Only Core issues the credential file a self-hosted
@@ -175,7 +185,7 @@ workbench.
   it; the installer asks for the credential at a hidden prompt, or reads
   `--credential-file`). The same command is safe to rerun. Revoking or rotating
   disconnects the host's executor; reconnecting takes that same credential,
-  rotated (Rotate on a revoked row restores it), and the same command, because a
+  rotated (Restore on a revoked row rotates and restores it), and the same command, because a
   newly issued credential does not reconnect an environment that already
   connected. Without a `public_url`, with a loopback one, or when the Session's
   `remote_url` is not `wss://`, the section says why instead of showing a

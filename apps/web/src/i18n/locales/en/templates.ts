@@ -1,5 +1,5 @@
 export const templates = {
-  boundary: "The console edits only a Template's name and network; files, packages, Skills, Plugins, environment variables and setup commands stay as they are. Select a saved Template when starting a Session. Saving configuration does not start a Runtime.",
+  boundary: "Applications create and change Templates through the Agents API with a project API key. The console only inspects and deletes them.",
   refreshFailed: "The catalog could not be refreshed. Check the connection and try again.",
   savedRefreshFailed: "The change was saved, but the catalog refresh failed. Refresh before making another change.",
   created: "Template created. No Runtime was allocated.",
@@ -15,7 +15,7 @@ export const templates = {
   filterPlaceholder: "Filter by name or ID",
   count: "{{visible}} of {{total}} Templates",
   emptyTitle: "No Environment Templates yet",
-  emptyDescription: "Create a reusable configuration, then select it when starting a Session.",
+  emptyDescription: "Create a Template through the Agents API, then select it when starting a Session.",
   noMatch: "No matching Templates",
   clearFilter: "Clear filter",
   listLabel: "Environment Templates",
