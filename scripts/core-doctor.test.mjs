@@ -788,6 +788,21 @@ test("never includes credential, response, URL suffix, provider, or private-path
   }
 });
 
+test("rejects a malformed target before conventional credential, network or daemon checks", async (t) => {
+  const state = await createLocalState(t);
+  const result = await runScenario({
+    env: { OAC_WEB_DEV_PROXY_TARGET: "not-a-url" },
+    cwd: state.root, homeDir: state.homeDir,
+    fetchImpl: async () => assert.fail("invalid targets must not make requests"),
+    runCommand: async () => assert.fail("invalid targets must not inspect a daemon"),
+  });
+  assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
+  assert.deepEqual(result.result.checks, [{
+    level: "FAIL", layer: "Configuration", message: "proxy target must be credential-free HTTPS or a loopback HTTP origin.",
+  }]);
+  assert.doesNotMatch(result.stdout + result.stderr, /Caller token|fixture-bearer|not-a-url/);
+});
+
 test("rejects credential-bearing target suffixes without reflecting them", async (t) => {
   const state = await createLocalState(t);
   const result = await runScenario({
@@ -798,11 +813,13 @@ test("rejects credential-bearing target suffixes without reflecting them", async
     cwd: state.root,
     homeDir: state.homeDir,
     fetchImpl: async () => assert.fail("invalid targets must not be requested"),
+    runCommand: async () => assert.fail("invalid targets must not inspect a daemon"),
   });
 
   assert.equal(result.result.exitCode, CORE_DOCTOR_EXIT_CODES.diagnosticFailure);
   assert.match(result.stdout, /credential-free HTTPS or a loopback HTTP origin/);
-  assert.doesNotMatch(result.stdout, /query-secret-marker|fragment-secret-marker/);
+  assert.equal(result.result.checks.length, 1);
+  assert.doesNotMatch(result.stdout, /Caller token|query-secret-marker|fragment-secret-marker/);
 });
 
 test("invalid options use exit 2 without reflecting untrusted argv", async () => {
