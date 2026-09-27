@@ -10,8 +10,8 @@ const valid = {
   OAC_WEB_DOCKER_IMAGE: "agents-core-web-executor:2b34ea46-codex-0.153.4",
   OAC_WEB_DOCKER_API_CONTAINER: "agents-core-web-api",
   OAC_WEB_DOCKER_USER: "501:20",
-  OAC_WEB_DOCKER_CREDENTIALS_HOME_PATH: ".oac/agents-api-web-smoke/executor-key.json",
-  OAC_WEB_DOCKER_RUNTIME_HOME_PATH: ".oac/agents-api-web-smoke/executors",
+  OAC_WEB_DOCKER_CREDENTIALS_HOME_PATH: ".oac/web-smoke/executor-key.json",
+  OAC_WEB_DOCKER_RUNTIME_HOME_PATH: ".oac/web-smoke/executors",
 };
 
 describe("local Docker guide configuration", () => {
@@ -52,7 +52,7 @@ describe("local Docker guide configuration", () => {
 
 const validBackend = {
   OAC_WEB_DOCKER_BACKEND_GUIDE: "1",
-  OAC_WEB_DOCKER_DATABASE_CONTAINER: "parsar-agents-api-web-smoke-db",
+  OAC_WEB_DOCKER_DATABASE_CONTAINER: "oac-web-smoke-db",
   OAC_WEB_DOCKER_API_CONTAINER: "agents-core-web-api",
   OAC_WEB_DOCKER_DAEMON_CONTAINER: "agents-core-web-daemon",
   OAC_WEB_DOCKER_CORE_PORT: "8091",
@@ -69,7 +69,7 @@ describe("local Docker backend guide configuration", () => {
 
   it("accepts only non-secret container names and a loopback Core port", () => {
     expect(loadLocalDockerBackendGuideProfile(validBackend)).toEqual({
-      databaseContainer: "parsar-agents-api-web-smoke-db",
+      databaseContainer: "oac-web-smoke-db",
       apiContainer: "agents-core-web-api",
       daemonContainer: "agents-core-web-daemon",
       corePort: 8091,

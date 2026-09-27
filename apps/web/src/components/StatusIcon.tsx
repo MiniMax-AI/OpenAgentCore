@@ -5,7 +5,7 @@ interface StatusIconProps {
   title?: string;
 }
 
-/** Parsar's 14px status signature. Status colour never leaves this glyph. */
+/** The console's 14px status signature. Status colour never leaves this glyph. */
 export function StatusIcon({ status, title }: StatusIconProps) {
   const common = {
     className: `status-icon status-${status}`,

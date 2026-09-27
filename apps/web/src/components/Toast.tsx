@@ -109,7 +109,7 @@ export function enqueueToast(
     ));
   }
 
-  // Parsar lets the oldest transient toast finish its exit rather than
+  // Let the oldest transient toast finish its exit rather than
   // removing it abruptly. Persistent prompts are never selected for eviction.
   const live = list.filter((toast) => !toast.leaving && !toast.persist);
   const excess = live.slice(0, Math.max(0, live.length - (MAX_VISIBLE - 1)));
