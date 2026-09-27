@@ -5,7 +5,7 @@ the `parsar` command, use the
 [Core distribution and its installer](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/docs/getting-started/install.md).
 
 This Linux amd64 package contains the independent API, embedded migrator, operator
-commands and `parsar-sandbox-node`. It needs your own PostgreSQL and separately
+commands and `oac-node`. It needs your own PostgreSQL and separately
 installed execution software, and it has no Web console.
 It does not need a source checkout, Go, Node, the Parsar product or its database.
 The [coverage ledger](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/README.md)
@@ -168,7 +168,7 @@ and it does not switch Parsar's product execution path.
 
 ## Sandbox nodes
 
-The release includes `parsar-sandbox-node` for local and remote hosts. See the
+The release includes `oac-node` for local and remote hosts. See the
 [nodes and sandbox backends reference](HOSTED-SANDBOX-MANAGER.md) for provider
 selection, manual registration, administrator credentials, fixed Session placement
 and maintenance.

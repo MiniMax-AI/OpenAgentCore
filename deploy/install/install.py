@@ -85,8 +85,8 @@ def verify_bundle(bundle):
     manifest = json.loads((bundle / "manifest.json").read_text())
     for name in ("core", "web", "database", "runtime"):
         image_identities(manifest, name)
-    for name in ("images/runtime.tar.gz", "native/bin/parsar-sandbox-node",
-                 "native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
+    for name in ("images/runtime.tar.gz", "native/bin/oac-node",
+                 "native/bin/oac-microsandbox-provider", "native/microsandbox/msb",
                  "native/microsandbox/libkrunfw.so.5.6.1"):
         artifact(manifest, name)
     return manifest

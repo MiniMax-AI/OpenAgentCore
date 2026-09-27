@@ -114,8 +114,8 @@ contains limits; its top-level `resources` contains cleanup counts.
 The Core installer never enrolls its own host. The Core host joins like any other
 host, through **Add node**, with the same database selection and registration
 checks. Node identity and configuration live under
-`~/.parsar/nodes/<installation-id>/` in the home of the account that runs the node
-(`/var/lib/parsar-node` for a node added with sudo); preserve that private directory
+`~/.oac/nodes/<installation-id>/` in the home of the account that runs the node
+(`/var/lib/oac-node` for a node added with sudo); preserve that private directory
 and its backend storage together. Core has no embedded local provider configuration or node
 identity mount.
 
@@ -154,7 +154,7 @@ reverse proxy routes `/api/v1`, with WebSocket upgrades, directly to Core; see
 
 | Route | Credential |
 | --- | --- |
-| `GET /api/v1/sandbox-node/configuration` | Enrollment token, or node credential with `X-Parsar-Node-ID` |
+| `GET /api/v1/sandbox-node/configuration` | Enrollment token, or node credential with `X-OAC-Node-ID` |
 | `POST /api/v1/sandbox-node/enroll` | One-use enrollment token |
 | `GET /api/v1/sandbox-node/identity?node_id=` | Node credential |
 | WebSocket `GET /api/v1/sandbox-node/connect?node_id=` | Node credential |
@@ -171,14 +171,14 @@ that used the removed `/core/v1/sandbox` node paths cannot connect to this Core:
 drain with the previous release, then upgrade and enroll new nodes, as described
 in [Upgrade notes](../../docs/getting-started/operations.md#node-connections-at-apiv1).
 Rerunning the same command preserves the node's private identity. A registered retry
-reads configuration with its retained node credential and `X-Parsar-Node-ID`; it does
+reads configuration with its retained node credential and `X-OAC-Node-ID`; it does
 not enroll again. Changes to the Core origin, installation, generation, specification
 or release are refused without rewriting state.
 
 ### Manual registration
 
 Manual registration remains available for operator-managed payloads. Build or install
-`parsar-sandbox-node` from the same Core release. On the host, first read
+`oac-node` from the same Core release. On the host, first read
 `GET /api/v1/sandbox-node/configuration` with the enrollment Bearer token. Build the
 private provider JSON from its `provider`, `installation_id`, `core_url` (the
 installation public URL), `generation` and `specification`, plus one adapter object
@@ -190,7 +190,7 @@ for the host:
 - Microsandbox: absolute `helper_path`, `runtime_home`, `runtime_path` and
   `firmware_path`, the host network policy and validated resource and Runtime copies.
   The runtime home is an existing private backend namespace. The native Unix socket
-  limit requires `$HOME/.parsar/m/<12-character installation hash>` to fit within 48
+  limit requires `$HOME/.oac/m/<12-character installation hash>` to fit within 48
   encoded bytes; the installer rejects a longer path before creating node state, so
   use a service account with a shorter persistent home.
 
@@ -207,13 +207,13 @@ Save the single-use registration token in a `0600` file on the host; it expires 
 the duration shown by Core. Run, with real absolute paths:
 
 ```sh
-parsar-sandbox-node register \
+oac-node register \
   --config /var/lib/parsar/provider.json \
   --state-dir /var/lib/parsar/node \
   --core-url https://core.example \
   --name worker-1 \
   --enrollment-token-file /var/lib/parsar/enrollment-token
-parsar-sandbox-node run \
+oac-node run \
   --config /var/lib/parsar/provider.json \
   --state-dir /var/lib/parsar/node
 ```
@@ -373,7 +373,7 @@ fix, the next heartbeat (about ten seconds) checks again and clears or replaces
 the code. Repaired Runtime artifacts, a pulled image or a started Docker daemon
 recover this way. A new Docker or KVM group membership applies only to a new
 process: restart the node service (`sudo systemctl restart
-parsar-node-<installation_id>.service` in sudo mode, `systemctl --user restart …`
+oac-node-<installation_id>.service` in sudo mode, `systemctl --user restart …`
 without sudo). The service journal's warning includes the local error behind the code;
 that text never leaves the host.
 

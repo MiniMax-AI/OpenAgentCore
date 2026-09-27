@@ -243,6 +243,10 @@ resources that block replacement.
 
 ## Node configuration and enrollment
 
+The retired `X-Parsar-Node-ID` header is rejected even when empty or accompanied
+by its replacement: `400 invalid_request`, with the message
+`X-Parsar-Node-ID was renamed to X-OAC-Node-ID; use the node command from this Core's Web`. Header values are never included in this diagnostic.
+
 For a new node, send `Authorization: Bearer <enrollment-token>` to the configuration
 GET without `X-OAC-Node-ID`. The token must be valid, unexpired, unconsumed and
 belong to this installation. This read does not consume it. Maintenance prevents

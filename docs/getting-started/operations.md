@@ -149,8 +149,8 @@ Back up these together; a restore needs all of them:
   be decrypted; never regenerate it to get past an error.
 - `state/e2b/`, when E2B is used: receipts Core needs to clean up E2B sandboxes.
 - each node's state directory on its host,
-  `/var/lib/parsar-node/.parsar/nodes/<installation-id>/` (sudo mode) or
-  `~/.parsar/nodes/<installation-id>/` (no sudo), with its provider storage: Docker
+  `/var/lib/oac-node/.oac/nodes/<installation-id>/` (sudo mode) or
+  `~/.oac/nodes/<installation-id>/` (no sudo), with its provider storage: Docker
   volumes or microsandbox's store.
 - the bundle you installed from, to repair or recover the same release.
 

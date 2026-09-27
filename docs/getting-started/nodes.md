@@ -160,7 +160,7 @@ where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy wit
 - Downloads resume where they stopped. A download that brings less than 64 KiB in a
   minute stops, keeping what it has; run the command again.
 - The Docker Runtime image is about 500 MB. On a slow link, load it first: copy the
-  release's `parsar-core-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run
+  release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run
   `sudo docker load -i` on it. The installer then finds the exact image and skips the
   download.
 - Interrupting the installer, or closing its terminal, stops it; run the command again
