@@ -148,8 +148,10 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	second := connect(rotated.Token)
 	await("connected")
 	assertConnection(environment.ID, rotated.Token, "connected", 200)
+	awaitRelease := observeExecutionLeaseRelease(t, pool)
 	stop()
 	stop = nil
+	awaitRelease()
 	// A new Core owner clears prior transport evidence, then observes the same
 	// live, authorized daemon. No compute allocation or native execution is made.
 	stop = start()
