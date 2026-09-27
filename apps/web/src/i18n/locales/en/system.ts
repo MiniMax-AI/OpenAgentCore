@@ -44,7 +44,7 @@ export const system = {
     enabled: "Enabled",
     disabled: "Disabled",
     default: "Default",
-    startupHelp: "Which harnesses are enabled, and the default one, are set in config.json and applied with parsar apply.",
+    startupHelp: "Which harnesses are enabled, and the default one, are set in config.json and applied with oac apply.",
     harness: "Harness",
     provider: "Model provider",
     notSet: "Not set",
@@ -81,7 +81,7 @@ export const system = {
       save: "Save",
       saving: "Saving…",
       uncertain: "Core did not confirm the change. The default model providers were read again; check them before trying again.",
-      noCredentialKey: "Core has no credential encryption key configured, so it can't store keys. Installer-based installs configure this automatically; for manual deployments, set AGENTS_API_CREDENTIAL_KEY_FILE for Core.",
+      noCredentialKey: "Core has no credential encryption key configured, so it can't store keys. Installer-based installs configure this automatically; for manual deployments, set OAC_CREDENTIAL_KEY_FILE for Core.",
     },
     clearDialog: {
       title: "Clear default model provider",

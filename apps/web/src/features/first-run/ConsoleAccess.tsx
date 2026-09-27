@@ -16,7 +16,7 @@ import "./console-access.css";
  * directory, and that file under the default installation directory. The
  * visible sign-in instructions name both; the actual custom path is not public.
  */
-const CORE_KEY_LOCATION = { file: "secrets/core.key", defaultPath: "~/.parsar/core/secrets/core.key" } as const;
+const CORE_KEY_LOCATION = { file: "secrets/core.key", defaultPath: "~/.oac/core/secrets/core.key" } as const;
 
 const ConsoleAccountContext = createContext<{ logout: () => Promise<void> } | null>(null);
 export const useConsoleAccount = () => useContext(ConsoleAccountContext);

@@ -100,7 +100,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const blocker: { text: string; failed?: boolean } | null = installation.data === undefined
     ? installation.isError ? { text: t("The installation couldn't be read, so no command can be issued."), failed: true } : { text: t("Checking this installation's public URL…") }
     : !publicUrl
-      ? { text: t("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply") }
+      ? { text: t("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run oac apply") }
       : !nodeFilesAvailable(consoleConfig, deployment.provider)
         ? { text: t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend }) }
         : null;
@@ -144,7 +144,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   }, [onRefresh]);
   useEffect(() => () => { generation.current++; request.current?.abort(); }, []);
   useEffect(() => { if (open) rememberRequirementsSeen(); }, [open]);
-  // Rerunning ./install.sh or parsar apply on the Core host changes what the console and the installation report.
+  // Rerunning ./install.sh or oac apply on the Core host changes what the console and the installation report.
   useEffect(() => {
     if (!open) return;
     const reread = () => {

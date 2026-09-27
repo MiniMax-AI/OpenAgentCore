@@ -104,7 +104,7 @@ test("reports a Core without a credential key as a configuration error, without 
   const reads: string[] = [];
   page.on("request", (sent) => { if (sent.method() === "GET" && new URL(sent.url()).pathname === "/core/v1/harnesses") reads.push(sent.url()); });
   await set.getByRole("button", { name: "Save" }).click();
-  await expect(set.getByRole("alert")).toHaveText("Core has no credential encryption key configured, so it can't store keys. Installer-based installs configure this automatically; for manual deployments, set AGENTS_API_CREDENTIAL_KEY_FILE for Core.");
+  await expect(set.getByRole("alert")).toHaveText("Core has no credential encryption key configured, so it can't store keys. Installer-based installs configure this automatically; for manual deployments, set OAC_CREDENTIAL_KEY_FILE for Core.");
   await expect(set.getByRole("button", { name: "Save" })).toBeEnabled();
   expect(reads).toEqual([]);
   expect(await writes(request)).toEqual(["PUT /core/v1/harnesses/codex/model-provider"]);

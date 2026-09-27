@@ -80,8 +80,8 @@ export function HostRequirements({ provider, sized, values, open, onToggle }: {
     <summary>{t("Host requirements")}</summary>
     <PrerequisiteList items={hostRequirements(provider, sized)} values={values} />
     <div className="sandbox-host-requirements-note">
-      <p>{t("The command creates the parsar-node service user and a system service. It installs no software; if something is missing it stops and says what to install.")}</p>
-      {provider === "docker" ? <p>{t("parsar-node joins the docker group, which is equivalent to root on this host.")}</p> : null}
+      <p>{t("The command creates the oac-node service user and a system service. It installs no software; if something is missing it stops and says what to install.")}</p>
+      {provider === "docker" ? <p>{t("oac-node joins the docker group, which is equivalent to root on this host.")}</p> : null}
     </div>
   </details>;
 }

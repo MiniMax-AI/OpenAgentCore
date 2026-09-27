@@ -46,7 +46,7 @@ export const system: TranslationShape<typeof english> = {
     enabled: "已启用",
     disabled: "未启用",
     default: "默认",
-    startupHelp: "启用哪些执行框架、默认用哪个，都在 config.json 中设置，并用 parsar apply 生效。",
+    startupHelp: "启用哪些执行框架、默认用哪个，都在 config.json 中设置，并用 oac apply 生效。",
     harness: "执行框架",
     provider: "模型服务",
     notSet: "未设置",
@@ -83,7 +83,7 @@ export const system: TranslationShape<typeof english> = {
       save: "保存",
       saving: "正在保存…",
       uncertain: "Core 没有确认这次修改。已重新读取默认模型服务，请先核对再重试。",
-      noCredentialKey: "Core 没有配置凭据加密密钥，因此无法保存 key。用安装器安装的会自动配置；手动部署时，请为 Core 设置 AGENTS_API_CREDENTIAL_KEY_FILE。",
+      noCredentialKey: "Core 没有配置凭据加密密钥，因此无法保存 key。用安装器安装的会自动配置；手动部署时，请为 Core 设置 OAC_CREDENTIAL_KEY_FILE。",
     },
     clearDialog: {
       title: "清除默认模型服务",

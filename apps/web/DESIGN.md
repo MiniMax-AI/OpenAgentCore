@@ -540,10 +540,13 @@ request runs.
   steps, and, once the installer's minute passes, an amber card with the reason
   and a copyable log command. Below, two folded Hairline disclosures: Host
   requirements for the default command, which uses sudo (open until this browser
-  has shown it once, with notes that it creates the `parsar-node` system service
+  has shown it once, with notes that it creates the `oac-node` system service
   and, for Docker, that the docker group is root-equivalent), and "No sudo on this
-  host?", with what the node's own user needs and the command without sudo. The
-  log command follows the command last copied; after the no-sudo one it adds the
+  host?", with what the node's own user needs and the command without sudo.
+  Sudo mode allows one Core per host because nodes share the service account.
+  For microsandbox without sudo, the home path must be at most 28 bytes after
+  filesystem encoding, so `~/.oac/m/<12 hex>` fits the 48-byte Runtime home limit.
+  The log command follows the command last copied; after the no-sudo one it adds the
   system service's, for a root shell. The command downloads from the
   installation's public URL, never the browser's address, so it works as shown on
   any host. Until the installation is read, a line says it is being checked; a

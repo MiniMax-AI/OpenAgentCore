@@ -5,7 +5,7 @@ import standardSizes from "./standard-sizes.json";
 import type { SandboxSpecification } from "@agents-core-web/agents-client";
 
 const manifest = { platform: "linux/amd64", source_commit: "0".repeat(40), images: { runtime: `sha256:${"a".repeat(64)}` },
-  image_manifest_digests: { runtime: `sha256:${"b".repeat(64)}` }, runtime_ref: `parsar-core-runtime@sha256:${"b".repeat(64)}`,
+  image_manifest_digests: { runtime: `sha256:${"b".repeat(64)}` }, runtime_ref: `oac-runtime@sha256:${"b".repeat(64)}`,
   microsandbox: { runtime_sha256: "c".repeat(64), firmware_sha256: "d".repeat(64) } };
 afterEach(() => vi.unstubAllGlobals());
 
@@ -51,7 +51,7 @@ describe("deployment resources and Runtime", () => {
   });
   it("accepts any well-formed Runtime image name in the Runtime reference", async () => {
     const digest = "b".repeat(64);
-    for (const runtime_ref of [`parsar-core-runtime@sha256:${digest}`, `oac-runtime@sha256:${digest}`]) {
+    for (const runtime_ref of [`parsar-core-runtime@sha256:${digest}`, `oac-runtime@sha256:${digest}`, `custom-runtime@sha256:${digest}`]) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...manifest, runtime_ref }))));
       expect((await distributionRuntime(new AbortController().signal)).microsandbox_ref).toBe(runtime_ref);
       expect(isRuntimeReleaseField("microsandbox_ref", runtime_ref)).toBe(true);
@@ -65,7 +65,7 @@ describe("deployment resources and Runtime", () => {
   it("rejects unavailable, mutable or incomplete release identities", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 404 })));
     await expect(distributionRuntime(new AbortController().signal)).rejects.toThrow();
-    for (const invalid of [{ ...manifest, platform: "linux/arm64" }, { ...manifest, source_commit: "main" }, { ...manifest, runtime_ref: "parsar-core-runtime:latest" }, { ...manifest, microsandbox: {} }]) {
+    for (const invalid of [{ ...manifest, platform: "linux/arm64" }, { ...manifest, source_commit: "main" }, { ...manifest, runtime_ref: "oac-runtime:latest" }, { ...manifest, microsandbox: {} }]) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(invalid))));
       await expect(distributionRuntime(new AbortController().signal)).rejects.toThrow();
     }
