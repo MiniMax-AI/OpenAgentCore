@@ -139,7 +139,7 @@ info:
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
-  title: Core Machine Connections
+  title: OpenAgentCore Machine Connections
   version: "1"
 paths:
   /api/v1/sandbox-node/configuration:
