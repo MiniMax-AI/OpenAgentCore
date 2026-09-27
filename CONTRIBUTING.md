@@ -165,7 +165,9 @@ streaming, content-download, live directory, Runtime observation and Runtime
 history routes register an explicit HEAD 405 instead. Every 405 of the API router, unknown methods included, has the JSON
 body and lists the route's methods in `Allow`.
 
-Keep runtime state, test artifacts and build output under `~/.oac/`. Require
+Keep test artifacts under `~/.oac/` and build output under
+`${OAC_DEV_HOME:-$HOME/.oac}`. Runtime state still uses its existing runtime
+configuration. Require
 absolute user-supplied working directories. Keep credentials out of source and
 logs. Update this guide when architecture, ownership or generated contracts change.
 Comments and documentation are English. Reuse existing helpers and error mapping;
@@ -181,6 +183,9 @@ tests and packaging, MiniMax companion checks, and Rust filesystem-helper
 tests/format/Clippy. It intentionally has no product Web/server/installer gates. The full gate fails when the database variable is missing. The test database role
 needs CREATE DATABASE permission: managed-provider tests create and drop isolated
 `oac_*_tests` databases because provider identity is deployment-wide.
+Set `OAC_TEST_DATABASE_URL` to that dedicated database and `OAC_TEST_OFFICIAL_SDK_PYTHON`
+to the pinned SDK interpreter. `PARSAR_AGENTS_API_TEST_DATABASE_URL` is retired;
+`make check-database` reports its replacement when only the old name is set.
 Tests must not bypass the production provider-switch guard.
 
 Use Go from `go.mod`, Node 22, pnpm 10.30.3, Python 3.9+, Rust 1.95.0 with rustfmt

@@ -12,6 +12,9 @@ check: check-distribution check-database check-sqlc check-go check-microsandbox-
 	@printf 'Parsar Core checks passed.\n'
 
 check-database:
+	@if [[ -n "$${PARSAR_AGENTS_API_TEST_DATABASE_URL+x}" && -z "$${OAC_TEST_DATABASE_URL+x}" ]]; then \
+	    echo 'PARSAR_AGENTS_API_TEST_DATABASE_URL was renamed; set OAC_TEST_DATABASE_URL instead' >&2; exit 1; \
+	fi
 	@test -n "$${OAC_TEST_DATABASE_URL:-}" || { echo 'Set OAC_TEST_DATABASE_URL to a dedicated test PostgreSQL database' >&2; exit 1; }
 
 sqlc-generate:

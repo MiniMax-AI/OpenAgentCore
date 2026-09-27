@@ -62,7 +62,7 @@ Unconfirmed initialization commands require reclaiming the whole allocation.
 From the repository root:
 
 ```sh
-E2B_PROVIDER_BUILD_DIR="$HOME/.parsar/build/e2b-provider" scripts/build-e2b-provider.sh
+E2B_PROVIDER_BUILD_DIR="$HOME/.oac/build/e2b-provider" scripts/build-e2b-provider.sh
 ```
 
 Docker builds Linux amd64 output with the pinned CPython 3.12.12/Debian 12 image.

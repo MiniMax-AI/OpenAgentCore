@@ -51,13 +51,13 @@ environment-aware daemon `connect` command. Keep keys and build outputs outside
 the checkout, in private directories. Install the pinned SDK from this directory:
 
 ```sh
-python -m venv "$HOME/.parsar/build/e2b-sdk"
-"$HOME/.parsar/build/e2b-sdk/bin/pip" install -r services/agents-api/deploy/e2b/requirements.txt
-"$HOME/.parsar/build/e2b-sdk/bin/python" services/agents-api/deploy/e2b/build-template.py \
+python -m venv "$HOME/.oac/build/e2b-sdk"
+"$HOME/.oac/build/e2b-sdk/bin/pip" install -r services/agents-api/deploy/e2b/requirements.txt
+"$HOME/.oac/build/e2b-sdk/bin/python" services/agents-api/deploy/e2b/build-template.py \
   --image sha256:QUALIFIED_RUNTIME_IMAGE_DIGEST \
   --name your-runtime-build \
   --api-key-file "$HOME/.parsar/secrets/e2b.key" \
-  --output "$HOME/.parsar/build/e2b-template.json"
+  --output "$HOME/.oac/build/e2b-template.json"
 ```
 
 The builder preserves the existing image's binaries, native configuration and
@@ -85,7 +85,7 @@ Generate and retain an application launch UUID once. `launch.py` is a thin SDK
 example, not a service or a replacement lifecycle owner:
 
 ```sh
-"$HOME/.parsar/build/e2b-sdk/bin/python" services/agents-api/deploy/e2b/launch.py \
+"$HOME/.oac/build/e2b-sdk/bin/python" services/agents-api/deploy/e2b/launch.py \
   --template 'TEMPLATE_ID:BUILD_UUID' \
   --remote-url 'RETURNED_REMOTE_URL' \
   --environment-id 'RETURNED_ENVIRONMENT_UUID' \

@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
@@ -26,7 +27,10 @@ environment = dict(value.split('=', 1) for value in image['Config']['Env']
                    if value.startswith(('HOME=', 'PARSAR_')))
 if environment.get('PARSAR_RUNTIME_WORKSPACE') != '/environment/workspace':
     parser.error('Image does not use the colocated Runtime layout')
-state = Path.home() / '.parsar/build/e2b'
+dev_home = Path(os.environ.get('OAC_DEV_HOME') or Path.home() / '.oac')
+if not dev_home.is_absolute():
+    parser.error('OAC_DEV_HOME must be absolute')
+state = dev_home / 'build/e2b'
 state.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(dir=state) as temporary:
     context = Path(temporary)
