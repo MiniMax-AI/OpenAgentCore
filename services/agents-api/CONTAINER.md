@@ -29,8 +29,8 @@ user is UID/GID 65532. No model credentials or tenant keys belong in the image.
 ## Configure and run
 
 Use a new private directory for deployment configuration. Create `api.env` with
-`AGENTS_API_DATABASE_URL` pointing to the dedicated execution database and
-`AGENTS_API_CORE_KEY_DIGESTS_FILE=/run/core-key-digests.json`. Create
+`OAC_DATABASE_URL` pointing to the dedicated execution database and
+`OAC_CORE_KEY_DIGESTS_FILE=/run/core-key-digests.json`. Create
 `core-key-digests.json` as a JSON array of Core key SHA-256 digests.
 Keep the Core key separately and use the [administrator API](../../contracts/agents-api/admin-api.md)
 to create Projects and issue application keys after startup. Keep both
@@ -44,7 +44,7 @@ alone and must never target the product database:
 config_dir="$HOME/.parsar/agents-api-deployment"
 docker run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges \
   --env-file "$config_dir/api.env" \
-  agents-api:dev /usr/local/bin/agents-api-migrate
+  agents-api:dev /usr/local/bin/oac-core-migrate
 ```
 
 The following Linux example uses the non-root host UID to read its private key
@@ -73,10 +73,10 @@ active service per execution database; container replicas do not add HA/recovery
 
 ## Connect execution
 
-Set `AGENTS_API_PUBLIC_URL` in `api.env` to the API's externally reachable origin,
+Set `OAC_PUBLIC_URL` in `api.env` to the API's externally reachable origin,
 such as `https://core.example`, then start the container. Core derives the daemon
 WebSocket URL from it. Provision a device using this image with
-`/usr/local/bin/agents-api-device` as the command and the arguments documented in
+`/usr/local/bin/oac-core-device` as the command and the arguments documented in
 [Internal execution device connection](README.md#internal-execution-device-connection).
 Pass the same private environment file. The operator command emits a secret profile;
 redirect it into a new private file and transfer it securely to the executor.
@@ -103,7 +103,7 @@ including authentication, tenant isolation and restart persistence. Its host
 network is a test convenience. Real daemon/model acceptance is additional evidence;
 synthetic or HTTP-only checks do not prove native execution or full compatibility.
 
-The image also includes `/usr/local/bin/agents-api-environment-key` for operator
+The image also includes `/usr/local/bin/oac-core-environment-key` for operator
 issuance, rotation and revocation of exact-Environment executor credentials. Run it
 with only the execution database configuration and the arguments in the
 [native transport guide](README.md#user-managed-runtime-enrollment). Redirect

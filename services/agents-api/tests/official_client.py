@@ -115,11 +115,11 @@ def main():
         credential_key = Path(directory) / "credential-key.txt"
         credential_key.touch(mode=0o600)
         credential_key.write_text(base64.b64encode(secrets.token_bytes(32)).decode() + "\n")
-        env = dict(os.environ, AGENTS_API_DATABASE_URL=dsn, AGENTS_API_CORE_KEY_DIGESTS_FILE=str(core_key_digests), AGENTS_API_ADDR=f"127.0.0.1:{port}", AGENTS_API_ENGINE="codex")
-        env["AGENTS_API_CREDENTIAL_KEY_FILE"] = str(credential_key)
+        env = dict(os.environ, OAC_DATABASE_URL=dsn, OAC_CORE_KEY_DIGESTS_FILE=str(core_key_digests), OAC_ADDR=f"127.0.0.1:{port}", OAC_DEFAULT_HARNESS="codex")
+        env["OAC_CREDENTIAL_KEY_FILE"] = str(credential_key)
         # Enable the real Worker/gateway admission path without connecting a daemon.
         # Synthetic fixture inputs remain queued; this is not live model acceptance.
-        env["AGENTS_API_PUBLIC_URL"] = f"http://127.0.0.1:{port}"
+        env["OAC_PUBLIC_URL"] = f"http://127.0.0.1:{port}"
         with (Path(directory) / "server.log").open("w+") as log:
             def start():
                 child = subprocess.Popen([binary], env=env, stdout=log, stderr=log)
@@ -352,7 +352,7 @@ def main():
                 process.terminate()
                 process.wait(timeout=15)
                 # Reuse the same credential contract with the second public engine.
-                env["AGENTS_API_ENGINE"] = "claude_sdk"
+                env["OAC_DEFAULT_HARNESS"] = "claude_sdk"
                 process = start()
                 with client(tokens[0]) as a, client(tokens[1]) as b, client(peer_key) as peer:
                     claude_credentials = verify_mcp_credentials(a, b, peer, credential_canary, expect_error)
@@ -363,8 +363,8 @@ def main():
                     verify_mcp_credential_recovery(a, claude_credentials)
                 process.terminate()
                 process.wait(timeout=15)
-                env["AGENTS_API_ENGINE"] = "codex"
-                env.pop("AGENTS_API_CREDENTIAL_KEY_FILE")
+                env["OAC_DEFAULT_HARNESS"] = "codex"
+                env.pop("OAC_CREDENTIAL_KEY_FILE")
                 process = start()
                 with client(tokens[0]) as without_key, client(tokens[1]) as other, client(peer_key) as peer:
                     verify_credential_storage_disabled(without_key, saved_credentials[0][0], credential_canary, expect_error)

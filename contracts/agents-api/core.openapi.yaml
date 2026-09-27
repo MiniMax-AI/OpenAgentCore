@@ -282,10 +282,10 @@ definitions:
       configuration:
         allOf:
           - $ref: '#/definitions/api.InstallationConfiguration'
-        description: The installer's settings snapshot (AGENTS_API_SETTINGS_FILE); null when the installer did not start Core.
+        description: The installer's settings snapshot (OAC_SETTINGS_FILE); null when the installer did not start Core.
         x-nullable: true
       installation_id:
-        description: AGENTS_API_SANDBOX_INSTALLATION_ID; null when Core runs without the sandbox manager.
+        description: OAC_INSTALLATION_ID; null when Core runs without the sandbox manager.
         type: string
         x-nullable: true
       local_only:
@@ -296,7 +296,7 @@ definitions:
           - core.installation
         type: string
       public_url:
-        description: 'AGENTS_API_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.'
+        description: 'OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.'
         type: string
         x-nullable: true
       source_commit:
@@ -884,7 +884,7 @@ definitions:
   store.RuntimeDeploymentView:
     properties:
       core_url:
-        description: 'Read-only: the installation public URL (AGENTS_API_PUBLIC_URL), which nodes and sandboxes use to reach Core. The deployment API does not accept it.'
+        description: 'Read-only: the installation public URL (OAC_PUBLIC_URL), which nodes and sandboxes use to reach Core. The deployment API does not accept it.'
         type: string
       e2b:
         $ref: '#/definitions/store.SandboxE2BView'
@@ -3079,7 +3079,7 @@ paths:
         - Core Administration
   /core/v1/harnesses:
     get:
-      description: Core key only. Returns every harness this build supports, in name order. enabled and default are read-only views of the process configuration (AGENTS_API_ENGINE and AGENTS_API_HARNESSES). model_provider is the harness's deployment default, stored in Core, or null. Keys are never returned; api_key_configured reports that one is set.
+      description: Core key only. Returns every harness this build supports, in name order. enabled and default are read-only views of the process configuration (OAC_DEFAULT_HARNESS and OAC_HARNESSES). model_provider is the harness's deployment default, stored in Core, or null. Keys are never returned; api_key_configured reports that one is set.
       produces:
         - application/json
       responses:

@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 
-REQUIRED = ("bin/agents-api", "bin/agents-api-migrate", "e2b/agents-api-e2b-provider")
+REQUIRED = ("bin/oac-core", "bin/oac-core-migrate", "e2b/oac-e2b-provider")
 
 
 def is_native(state):
@@ -51,7 +51,7 @@ def _checked(arguments, failure):
     return result.stdout.strip()
 
 
-def _files(native):
+def _files(native, required=REQUIRED):
     if native.is_symlink() or not native.is_dir():
         raise RuntimeError("The distribution is missing its native Core payload")
     files = {}
@@ -59,9 +59,9 @@ def _files(native):
         if path.is_symlink() or not (path.is_dir() or path.is_file()):
             raise RuntimeError("The distribution requires regular native Core executables")
         name = str(path.relative_to(native))
-        if name in REQUIRED and path.is_file():
+        if name in required and path.is_file():
             files[name] = path
-    if not set(REQUIRED).issubset(files):
+    if not set(required).issubset(files):
         raise RuntimeError("The distribution is missing a required native Core executable")
     return files
 
@@ -111,7 +111,12 @@ def prepare(root, state, bundle, replace=False):
         source, target = bundle / "native", root / "native"
         incoming = _files(source)
         if target.exists() or target.is_symlink():
-            installed = _files(target)
+            # Only conversion reads the historical executable layout. The new
+            # bundle and every normal launch require the renamed commands.
+            required = REQUIRED
+            if replace and not (target / "bin/oac-core").exists():
+                required = ("bin/agents-api", "bin/agents-api-migrate", "e2b/agents-api-e2b-provider")
+            installed = _files(target, required)
             if incoming.keys() == installed.keys() and all(_digest(path) == _digest(installed[name]) for name, path in incoming.items()):
                 replace = False
             elif not replace:
@@ -138,7 +143,7 @@ def unit_text(root, header, inputs=None):
     root = _path(root)
     # ':' disables command-line environment substitution. The executable is
     # still Core itself; no shell, wrapper or provider shutdown hook is used.
-    executable = str(root / "native/bin/agents-api").replace("%", "%%").replace('"', '\\"')
+    executable = str(root / "native/bin/oac-core").replace("%", "%%").replace('"', '\\"')
     return ("# " + header + "\n"
             + "[Unit]\nDescription=Parsar Core\n\n[Service]\nType=exec\n"
             + 'ExecStart=:"' + executable + '"\n'

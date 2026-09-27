@@ -60,7 +60,7 @@ referenced file. Session/Template JSON requests allow 16 MiB for the base64 enve
 Paths must be canonical, distinct and stay within the workspace; symlinks are not
 followed. A failed install never starts native execution.
 
-Configure `AGENTS_API_CREDENTIAL_KEY_FILE` with the existing execution-service
+Configure `OAC_CREDENTIAL_KEY_FILE` with the existing execution-service
 base64 32-byte encryption key. Template writes and Session resolution need it;
 ordinary metadata reads do not. Template inline metadata contains type/path/size,
 while references contain type/path/file_id. Sessions receive fresh file IDs and

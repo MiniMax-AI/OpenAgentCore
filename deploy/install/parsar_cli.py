@@ -160,7 +160,7 @@ def stale(actual, desired, will_run):
 
 def migrate_native(root):
     environment = configuration.read_environment((root / "generated/core.env").read_text())
-    run([str(root / "native/bin/agents-api-migrate")], env=dict(os.environ, **environment),
+    run([str(root / "native/bin/oac-core-migrate")], env=dict(os.environ, **environment),
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -393,7 +393,7 @@ def old_public_url(root, config, previous, disk, actual):
         written = configuration.read_environment((disk.get("core.env") or b"").decode())
     except RuntimeError:
         written = {}
-    return written.get("AGENTS_API_PUBLIC_URL"), port, False
+    return written.get("OAC_PUBLIC_URL"), port, False
 
 
 def confirm_public_url(root, config, old, port, core_answered, args, interactive, out):

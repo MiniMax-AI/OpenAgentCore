@@ -8,12 +8,12 @@ provider or model call. See the [Core OpenAPI](core.openapi.yaml) for the schema
 | Field | Source |
 | --- | --- |
 | `object` | Always `core.installation` |
-| `installation_id` | `AGENTS_API_SANDBOX_INSTALLATION_ID`; null when Core runs without the sandbox manager |
-| `public_url` | `AGENTS_API_PUBLIC_URL`: the origin applications, nodes, sandbox guests and self-hosted executors use. Null when unset |
+| `installation_id` | `OAC_INSTALLATION_ID`; null when Core runs without the sandbox manager |
+| `public_url` | `OAC_PUBLIC_URL`: the origin applications, nodes, sandbox guests and self-hosted executors use. Null when unset |
 | `api_base_url` | `public_url` followed by `/v1`: the base URL for Project API keys (`OPENAI_BASE_URL`). Null when `public_url` is null |
 | `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
 | `source_commit` | The full source commit Core was built from; null for development builds |
-| `configuration` | The installer's settings snapshot (`AGENTS_API_SETTINGS_FILE`); null when the installer did not start Core |
+| `configuration` | The installer's settings snapshot (`OAC_SETTINGS_FILE`); null when the installer did not start Core |
 | `address_bindings` | What a change of `public_url` affects, counted on each read |
 
 `configuration` has:

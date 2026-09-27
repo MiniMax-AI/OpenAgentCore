@@ -77,8 +77,8 @@ def verify_bundle(bundle):
                 "sandbox_setup.py", "standard-sizes.json", "node_spec.py", "node-install.pyz",
                 "self-hosted-install.pyz", "distribution.py", "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "database"))
-    required.update("native/bin/" + name for name in ("agents-api", "agents-api-migrate"))
-    required.add("native/e2b/agents-api-e2b-provider")
+    required.update("native/bin/" + name for name in ("oac-core", "oac-core-migrate"))
+    required.add("native/e2b/oac-e2b-provider")
     if not required.issubset(covered):
         raise InstallError("Distribution checksum list is incomplete")
     manifest = json.loads((bundle / "manifest.json").read_text())

@@ -24,17 +24,17 @@ type Config struct {
 
 // ConfigFromEnv reads:
 //
-//	PARSAR_LOG_FORMAT     = json | text  (default: auto)
-//	PARSAR_LOG_LEVEL      = debug | info | warn | error  (default: info)
-//	PARSAR_LOG_ADD_SOURCE = 0 | 1  (default: 0)
+//	OAC_LOG_FORMAT     = json | text  (default: auto)
+//	OAC_LOG_LEVEL      = debug | info | warn | error  (default: info)
+//	OAC_LOG_ADD_SOURCE = 0 | 1  (default: 0)
 //
 // Unknown values fall back to defaults — Init runs before most
 // error-handling exists, so "boot anyway" beats "panic on typo".
 func ConfigFromEnv() Config {
 	cfg := Config{
-		Format:    strings.ToLower(strings.TrimSpace(os.Getenv("PARSAR_LOG_FORMAT"))),
-		Level:     parseLevel(os.Getenv("PARSAR_LOG_LEVEL")),
-		AddSource: os.Getenv("PARSAR_LOG_ADD_SOURCE") == "1",
+		Format:    strings.ToLower(strings.TrimSpace(os.Getenv("OAC_LOG_FORMAT"))),
+		Level:     parseLevel(os.Getenv("OAC_LOG_LEVEL")),
+		AddSource: os.Getenv("OAC_LOG_ADD_SOURCE") == "1",
 		Out:       os.Stderr,
 	}
 	return cfg

@@ -64,7 +64,7 @@ fails before new model input. A disconnected observer does not authorize replay.
    through service composition. Custom composition supplies the same
    `execution.Policy` to `api.WithExecutionPolicy` and `Dispatcher.Policy`.
 5. Package the native prerequisites and select the engine through operator
-   configuration (`AGENTS_API_ENGINE`). Do not invent a public harness field.
+   configuration (`OAC_DEFAULT_HARNESS`). Do not invent a public harness field.
 
 The static registration surface requires a build. Dynamic plugins are outside
 this contract. A small adapter does not remove the need for native qualification.

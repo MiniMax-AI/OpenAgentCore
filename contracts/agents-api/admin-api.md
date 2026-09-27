@@ -16,7 +16,7 @@ proof of origin.
 A Project owns one tenant and shared principal. Its keys have equal access to all
 its assets. Projects and keys are database-owned; deployment configuration defines
 neither. There are no API users, roles or configuration-managed business keys.
-Core requires the Core key digest file (`AGENTS_API_CORE_KEY_DIGESTS_FILE`) at
+Core requires the Core key digest file (`OAC_CORE_KEY_DIGESTS_FILE`) at
 startup for bootstrap and management.
 
 | Operation | Path | Result |

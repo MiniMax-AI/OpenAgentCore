@@ -216,30 +216,30 @@ loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose mu
 
 | Variable | Set from |
 | --- | --- |
-| `AGENTS_API_PUBLIC_URL` | `public_url`, or Core's loopback origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it. Required with `AGENTS_API_SANDBOX_INSTALLATION_ID` |
-| `AGENTS_API_ADDR` | `ports.core` (native Core) or the container port |
-| `AGENTS_API_DATABASE_URL` | The installation's PostgreSQL without a password, plus `core.database_pool` as `pool_*` query parameters |
-| `AGENTS_API_DATABASE_PASSWORD_FILE` | `secrets/database.password`. The URL must then carry no password; migrations and the maintenance commands read the file too |
-| `AGENTS_API_CREDENTIAL_KEY_FILE` | `secrets/credential.key` |
-| `AGENTS_API_CORE_KEY_DIGESTS_FILE` | `generated/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
-| `AGENTS_API_SANDBOX_INSTALLATION_ID` | `state.json`; pinned to the database |
-| `AGENTS_API_SETTINGS_FILE` | `generated/settings.json`, the snapshot Core serves at `GET /core/v1/installation`; Core does not act on it |
-| `AGENTS_API_EXECUTION_CONCURRENCY`, `AGENTS_API_ENGINE`, `AGENTS_API_HARNESSES`, `AGENTS_API_WRITE_AUDIT_RETENTION`, `AGENTS_API_OAUTH_TRUSTED_ORIGINS` | The matching `core.*` settings |
-| `AGENTS_API_RUNTIME_HISTORY_FILE` | `generated/runtime-history.json` when `core.runtime_history` is set; see the [history contract](../contracts/agents-api/runtime-history-api.md) |
-| `PARSAR_LOG_LEVEL`, `PARSAR_LOG_FORMAT`, `PARSAR_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
-| `AGENTS_API_E2B_STATE_DIR`, `AGENTS_API_E2B_PROVIDER_BIN` | The E2B receipt directory and, for native Core, the bundled helper. The E2B key and template live in the database |
+| `OAC_PUBLIC_URL` | `public_url`, or Core's loopback origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it. Required with `OAC_INSTALLATION_ID` |
+| `OAC_ADDR` | `ports.core` (native Core) or the container port |
+| `OAC_DATABASE_URL` | The installation's PostgreSQL without a password, plus `core.database_pool` as `pool_*` query parameters |
+| `OAC_DATABASE_PASSWORD_FILE` | `secrets/database.password`. The URL must then carry no password; migrations and the maintenance commands read the file too |
+| `OAC_CREDENTIAL_KEY_FILE` | `secrets/credential.key` |
+| `OAC_CORE_KEY_DIGESTS_FILE` | `generated/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
+| `OAC_INSTALLATION_ID` | `state.json`; pinned to the database |
+| `OAC_SETTINGS_FILE` | `generated/settings.json`, the snapshot Core serves at `GET /core/v1/installation`; Core does not act on it |
+| `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching `core.*` settings |
+| `OAC_HISTORY_SETTINGS_FILE` | `generated/runtime-history.json` when `core.runtime_history` is set; see the [history contract](../contracts/agents-api/runtime-history-api.md) |
+| `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
+| `OAC_E2B_STATE_DIR`, `OAC_E2B_PROVIDER_BIN` | The E2B receipt directory and, for native Core, the bundled helper. The E2B key and template live in the database |
 
 A Web you run without the installer reads the variables in
 [Connecting the administrator console to Core](web/core-connection.md#server-configuration-and-login),
-plus `CORE_CONSOLE_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's
+plus `OAC_WEB_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's
 node payload (the installer's `node-payload/`). Without it, Add node and the
 self-hosted install command are unavailable.
 
 Core fails at startup, naming the replacement, while a retired variable is set:
-`AGENTS_API_DAEMON_WS_URL` (use `AGENTS_API_PUBLIC_URL`), `AGENTS_API_CONFIG_FILE` (no
+`AGENTS_API_DAEMON_WS_URL` (use `OAC_PUBLIC_URL`), `AGENTS_API_CONFIG_FILE` (no
 replacement), `AGENTS_API_EXECUTION_OPTIONS_FILE` (use
 [default models](#default-models)), `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` (use
-`AGENTS_API_CORE_KEY_DIGESTS_FILE`), and `AGENTS_API_MANAGED_RUNTIMES_FILE`,
+`OAC_CORE_KEY_DIGESTS_FILE`), and `AGENTS_API_MANAGED_RUNTIMES_FILE`,
 `AGENTS_API_SANDBOX_NODE_STATE_DIR` and `AGENTS_API_SANDBOX_NODE_CORE_URL` (the
 sandbox deployment lives in the database and nodes enroll separately). Core logs the
 file paths it loads, never environment values or file contents. Native installation

@@ -9,7 +9,7 @@ import (
 )
 
 // webSocketURL answers daemon bootstrap. Every daemon uses the one URL derived
-// from AGENTS_API_PUBLIC_URL, except a legacy embedded node's own Runtime.
+// from OAC_PUBLIC_URL, except a legacy embedded node's own Runtime.
 func (m *managedNodes) webSocketURL(publicURL string) func(context.Context, gateway.AuthenticatedRuntime) (string, error) {
 	return func(ctx context.Context, auth gateway.AuthenticatedRuntime) (string, error) {
 		if m != nil && m.runtime != nil && auth.RuntimeNodeID != "" && auth.RuntimeNodeID == m.runtime.LocalNodeID {

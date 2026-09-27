@@ -114,7 +114,7 @@ queryable after resource deletion; expired non-creation records do not.
 
 ## Retention
 
-`AGENTS_API_WRITE_AUDIT_RETENTION` accepts a Go duration of at least one hour;
+`OAC_WRITE_AUDIT_RETENTION` accepts a Go duration of at least one hour;
 default `2160h` (90 days). Every minute Core removes at most 1,000 expired
 non-creation records in a bounded transaction. Creation records and anchors are
 retained permanently, which includes the entire lifetime of a resource and its

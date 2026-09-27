@@ -24,8 +24,8 @@ func TestE2BRejectedSpecificationHasSafeActionableDiagnostic(t *testing.T) {
 	if err := os.Chmod(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", helper)
-	t.Setenv("AGENTS_API_E2B_STATE_DIR", state)
+	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
+	t.Setenv("OAC_E2B_STATE_DIR", state)
 	id := uuid.NewString()
 	s := &managedSetup{installationID: id}
 	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 3, MemoryMiB: 3072}}, E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
@@ -63,8 +63,8 @@ else:
 	if err := os.Chmod(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", helper)
-	t.Setenv("AGENTS_API_E2B_STATE_DIR", state)
+	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
+	t.Setenv("OAC_E2B_STATE_DIR", state)
 	id := uuid.NewString()
 	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Generation: 1,
 		Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
@@ -104,8 +104,8 @@ func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", helper)
-	t.Setenv("AGENTS_API_E2B_STATE_DIR", state)
+	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
+	t.Setenv("OAC_E2B_STATE_DIR", state)
 	id := uuid.NewString()
 	s := &managedSetup{installationID: id}
 	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}

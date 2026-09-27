@@ -171,10 +171,11 @@ class ConvertTests(unittest.TestCase):
                 self.convert()
                 self.assertIsNone(self.document("config.json")["public_url"])
                 environment = configuration.read_environment((self.root / "generated/core.env").read_text())
-                self.assertEqual(environment["AGENTS_API_PUBLIC_URL"], "http://127.0.0.1:8091")
+                self.assertEqual(environment["OAC_PUBLIC_URL"], "http://127.0.0.1:8091")
+                self.assertTrue(all(name.startswith("OAC_") for name in environment))
                 services = self.document("generated/compose.json")["services"]
                 if mode == "all":
-                    self.assertEqual(services["web"]["environment"]["CORE_CONSOLE_ORIGIN"], "http://127.0.0.1:8080")
+                    self.assertEqual(services["web"]["environment"]["OAC_WEB_ORIGIN"], "http://127.0.0.1:8080")
                 self.assertFalse([url for url in self.host.requests if url.endswith("/core/v1/sandbox/deployment")])
                 self.assertConverted()
 

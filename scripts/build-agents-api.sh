@@ -34,8 +34,8 @@ tar -C "$repo_root" -cf - \
   cd "$build_context"
   export GOWORK=off CGO_ENABLED=0
   for command in server migrate device environment-key sandbox-node; do
-    artifact="agents-api-$command"
-    if [[ "$command" == server ]]; then artifact=agents-api; fi
+    artifact="oac-core-$command"
+    if [[ "$command" == server ]]; then artifact=oac-core; fi
     if [[ "$command" == sandbox-node ]]; then artifact=parsar-sandbox-node; fi
     go build -mod=readonly -trimpath -buildvcs=false -ldflags "-X main.buildRevision=$revision" \
       -o "$build_context/bin/$artifact" "./services/agents-api/cmd/$command"
@@ -44,7 +44,7 @@ tar -C "$repo_root" -cf - \
 
 # Publish only after every command builds successfully.
 mkdir -p "$output_dir"
-for artifact in agents-api agents-api-migrate agents-api-device agents-api-environment-key parsar-sandbox-node; do
+for artifact in oac-core oac-core-migrate oac-core-device oac-core-environment-key parsar-sandbox-node; do
   mv -f "$build_context/bin/$artifact" "$output_dir/$artifact"
 done
 printf 'Standalone Agents API binaries: %s\n' "$output_dir"

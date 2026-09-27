@@ -58,3 +58,12 @@ func refreshIdentity(t *testing.T, coreURL string) error {
 	_, err := node.RefreshIdentity(t.Context(), dir)
 	return err
 }
+
+func TestNodeRejectsRetiredLoggingSettingsBeforeStartup(t *testing.T) {
+	t.Setenv("PARSAR_LOG_LEVEL", "private-log")
+	t.Setenv("PARSAR_LOG_FORMAT", "")
+	err := run(t.Context(), []string{"run"})
+	if err == nil || !strings.Contains(err.Error(), "PARSAR_LOG_LEVEL → OAC_LOG_LEVEL") || !strings.Contains(err.Error(), "PARSAR_LOG_FORMAT → OAC_LOG_FORMAT") || strings.Contains(err.Error(), "private-log") {
+		t.Fatalf("retired logging settings were ignored or exposed: %v", err)
+	}
+}

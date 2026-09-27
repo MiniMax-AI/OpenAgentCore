@@ -79,8 +79,8 @@ func newWithClient(client metricClient) *Exporter {
 	return &Exporter{
 		client: client,
 		resource: resource.NewSchemaless(
-			attribute.String("service.name", "parsar-agents-api"),
-			attribute.String("service.namespace", "parsar-core"),
+			attribute.String("service.name", "oac-core"),
+			attribute.String("service.namespace", "oac"),
 		),
 	}
 }

@@ -41,8 +41,8 @@ checks. Additional capability combinations require evidence, not an engine-name
 exception. The static registry requires a build to add an implementation; dynamic
 plugin loading and untrusted code execution are outside this design.
 
-New Session selection uses the default `AGENTS_API_ENGINE` or the documented
-[harness extension](harness-selection.md). `AGENTS_API_HARNESSES` explicitly adds
+New Session selection uses the default `OAC_DEFAULT_HARNESS` or the documented
+[harness extension](harness-selection.md). `OAC_HARNESSES` explicitly adds
 deployment-supported profiles without requiring a managed Provider; existing
 Sessions retain their engine. The default is a deployment convenience,
 not a different contract or authority level. The documented extension remains separate from the pinned public protocol.

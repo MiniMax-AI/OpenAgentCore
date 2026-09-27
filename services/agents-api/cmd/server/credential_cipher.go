@@ -10,17 +10,17 @@ import (
 )
 
 func credentialCipher() (*credentialcrypto.Cipher, error) {
-	path := os.Getenv("AGENTS_API_CREDENTIAL_KEY_FILE")
+	path := os.Getenv("OAC_CREDENTIAL_KEY_FILE")
 	if path == "" {
 		return nil, nil
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.New("cannot read AGENTS_API_CREDENTIAL_KEY_FILE")
+		return nil, errors.New("cannot read OAC_CREDENTIAL_KEY_FILE")
 	}
 	key, err := base64.StdEncoding.Strict().DecodeString(strings.TrimSpace(string(content)))
 	if err != nil || len(key) != 32 {
-		return nil, errors.New("AGENTS_API_CREDENTIAL_KEY_FILE must contain a base64-encoded random 32-byte key")
+		return nil, errors.New("OAC_CREDENTIAL_KEY_FILE must contain a base64-encoded random 32-byte key")
 	}
 	return credentialcrypto.New(key)
 }

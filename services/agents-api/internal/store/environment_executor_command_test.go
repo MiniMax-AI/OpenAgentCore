@@ -25,7 +25,7 @@ func TestEnvironmentExecutorOperatorCommand(t *testing.T) {
 		t.Helper()
 		args := append([]string{"--tenant", owner, "--organization", principal.OrganizationID, "--project", principal.ProjectID, "--subject-kind", principal.SubjectKind, "--subject-id", principal.SubjectID, "--key-id", keyID}, flags...)
 		cmd := exec.CommandContext(t.Context(), binary, args...)
-		cmd.Env = append(os.Environ(), "AGENTS_API_DATABASE_URL="+pool.Config().ConnConfig.ConnString())
+		cmd.Env = append(os.Environ(), "OAC_DATABASE_URL="+pool.Config().ConnConfig.ConnString())
 		data, err := cmd.Output()
 		if (err == nil) != success {
 			t.Fatal("unexpected operator outcome", flags)

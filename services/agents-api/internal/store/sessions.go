@@ -82,7 +82,7 @@ type Store struct {
 	executionLease   *ExecutionLease
 	credentialCipher *credentialcrypto.Cipher
 	oauthRefresher   oauthrefresh.Refresher
-	// publicURL is AGENTS_API_PUBLIC_URL. Core derives every address it gives
+	// publicURL is OAC_PUBLIC_URL. Core derives every address it gives
 	// nodes, sandboxes and administrators from it.
 	publicURL string
 }

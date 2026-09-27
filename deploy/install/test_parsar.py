@@ -121,7 +121,7 @@ class ParsarTests(unittest.TestCase):
         self.edit(lambda config: config["log"].update(level="debug"))
         self.apply()
         self.assertEqual(sorted(self.host.recreated), ["core", "migrate", "web"])
-        self.assertEqual(self.environment()["PARSAR_LOG_LEVEL"], '"debug"')
+        self.assertEqual(self.environment()["OAC_LOG_LEVEL"], '"debug"')
         self.output.clear()
         self.apply()
         self.assertIn("Nothing to apply.", self.output)
@@ -138,12 +138,12 @@ class ParsarTests(unittest.TestCase):
         self.assertEqual((self.host.native["restarts"], self.host.native["addr"]), (1, 18091))
         self.assertEqual(self.host.recreated, ["web"])
         web = json.loads(self.generated("compose.json"))["services"]["web"]
-        self.assertEqual(web["environment"]["CORE_CONSOLE_UPSTREAM"], "http://127.0.0.1:18091")
+        self.assertEqual(web["environment"]["OAC_WEB_UPSTREAM"], "http://127.0.0.1:18091")
         # A repair (install.sh rerun) applies with start; the active unit still restarts for new inputs.
         self.edit(lambda config: config["log"].update(level="debug"))
         self.apply(start=True)
         self.assertEqual(self.host.native["restarts"], 2)
-        self.assertIn('PARSAR_LOG_LEVEL="debug"', self.host.native["environment"])
+        self.assertIn('OAC_LOG_LEVEL="debug"', self.host.native["environment"])
         self.assertConverged()
 
     def test_a_stopped_installation_stays_stopped(self):
@@ -164,7 +164,7 @@ class ParsarTests(unittest.TestCase):
     def test_hand_edits_are_refused_until_discarded_and_missing_files_are_rewritten(self):
         self.install()
         path = self.root / "generated/core.env"
-        edited = path.read_text() + 'AGENTS_API_EXECUTION_CONCURRENCY="9"\n'
+        edited = path.read_text() + 'OAC_EXECUTION_CONCURRENCY="9"\n'
         path.write_text(edited)
         with self.assertRaisesRegex(parsar_cli.ParsarError, "generated/core.env was edited by hand"):
             self.apply()
@@ -242,7 +242,7 @@ class ParsarTests(unittest.TestCase):
             self.apply(confirm_public_url_change="https://other.example")
         self.assertEqual(self.generated("core.env"), before)
         self.apply(confirm_public_url_change="https://new.example")
-        self.assertEqual(self.environment()["AGENTS_API_PUBLIC_URL"], '"https://new.example"')
+        self.assertEqual(self.environment()["OAC_PUBLIC_URL"], '"https://new.example"')
         # The count comes from Core's bindings, so a failed node list read still needs confirmation.
         self.host.bindings.update(nodes=1, nodes_on_other_address=0, hosted_sandboxes=0)
         self.edit(lambda config: config.update(public_url="https://fourth.example"))
@@ -286,7 +286,7 @@ class ParsarTests(unittest.TestCase):
                 self.host.native_root, self.host.containers = self.root, {}
                 self.host.native.update(active=False, inputs=None, loaded=None)
                 self.install(native=native)
-                self.host.core["rejects"] = lambda environment: 'AGENTS_API_EXECUTION_CONCURRENCY="4"' not in environment
+                self.host.core["rejects"] = lambda environment: 'OAC_EXECUTION_CONCURRENCY="4"' not in environment
                 for value in (5, 6, 7, 8):
                     self.edit(lambda config: config["core"].update(execution_concurrency=value))
                     with self.assertRaisesRegex(parsar_cli.ParsarError, "services converged on them"):
@@ -300,7 +300,7 @@ class ParsarTests(unittest.TestCase):
         self.install()
         path = self.root / "generated/core.env"
         path.write_text(path.read_text() + "# hand edit\n")
-        self.host.core["rejects"] = lambda environment: 'AGENTS_API_EXECUTION_CONCURRENCY="5"' in environment
+        self.host.core["rejects"] = lambda environment: 'OAC_EXECUTION_CONCURRENCY="5"' in environment
         self.edit(lambda config: config["core"].update(execution_concurrency=5))
         with self.assertRaisesRegex(parsar_cli.ParsarError, "services converged on them"):
             self.apply(discard_edits=True)

@@ -43,6 +43,10 @@ func exitCode(err error) int {
 }
 
 func run(ctx context.Context, args []string) error {
+	if renamed := log.RenamedEnvironment(); len(renamed) > 0 {
+		return errors.New("OpenAgentCore renamed these settings; set the new names and remove the old ones: " + strings.Join(renamed, ", "))
+	}
+
 	if len(args) == 0 || (args[0] != "register" && args[0] != "run") {
 		return errors.New("usage: parsar-sandbox-node register|run --config PATH --state-dir PATH")
 	}

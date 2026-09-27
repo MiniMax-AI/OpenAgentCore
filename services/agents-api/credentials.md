@@ -8,7 +8,7 @@ configured MCP destination; an attached Session can use it during execution.
 
 ## Configure the storage key
 
-`AGENTS_API_CREDENTIAL_KEY_FILE` points to a file containing one base64-encoded,
+`OAC_CREDENTIAL_KEY_FILE` points to a file containing one base64-encoded,
 random 32-byte key. Generate it once in private service configuration; the following
 command refuses to replace an existing file:
 
@@ -19,7 +19,7 @@ command refuses to replace an existing file:
   mkdir -p "$HOME/.parsar/agents-api"
   openssl rand -base64 32 > "$HOME/.parsar/agents-api/credential.key"
 )
-export AGENTS_API_CREDENTIAL_KEY_FILE="$HOME/.parsar/agents-api/credential.key"
+export OAC_CREDENTIAL_KEY_FILE="$HOME/.parsar/agents-api/credential.key"
 ```
 
 Keep the same key across service restarts and retain a protected backup separately

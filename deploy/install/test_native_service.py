@@ -67,14 +67,14 @@ class NativeServiceTests(unittest.TestCase):
 
     def test_cloud_helper_remains_executable_but_private(self):
         self.prepare()
-        helper = self.root / "native/e2b/agents-api-e2b-provider"
+        helper = self.root / "native/e2b/oac-e2b-provider"
         self.assertEqual(stat.S_IMODE(helper.stat().st_mode), 0o700)
 
     def test_unit_preserves_direct_core_and_runtime_process_lifetime(self):
         unit = configparser.ConfigParser(interpolation=None)
         unit.read(self.unit_path())
         directives = unit["Service"]
-        executable = str(self.root / "native/bin/agents-api").replace("%", "%%").replace('"', '\\"')
+        executable = str(self.root / "native/bin/oac-core").replace("%", "%%").replace('"', '\\"')
         self.assertEqual(directives["ExecStart"], ':"' + executable + '"')
         self.assertEqual(directives["WorkingDirectory"], str(self.root).replace("%", "%%"))
         self.assertEqual(directives["EnvironmentFile"], str(self.root / "generated/core.env").replace("%", "%%"))
@@ -94,16 +94,16 @@ class NativeServiceTests(unittest.TestCase):
         original = [(path.stat().st_ino, path.stat().st_mtime_ns, path.read_bytes()) for path in paths]
         self.prepare()
         self.assertEqual(original, [(path.stat().st_ino, path.stat().st_mtime_ns, path.read_bytes()) for path in paths])
-        (self.bundle / "native/bin/agents-api").write_bytes(b"\x7fELFnewer release")
+        (self.bundle / "native/bin/oac-core").write_bytes(b"\x7fELFnewer release")
         service.prepare(self.root, self.state, self.bundle, replace=True)
-        self.assertEqual((self.root / "native/bin/agents-api").read_bytes(), b"\x7fELFnewer release")
+        self.assertEqual((self.root / "native/bin/oac-core").read_bytes(), b"\x7fELFnewer release")
         self.assertEqual(sorted(path.name for path in self.root.iterdir()), ["generated", "native"])
 
     def test_changed_payload_refuses_without_overwriting_installed_binary(self):
         self.prepare()
-        installed = self.root / "native/bin/agents-api"
+        installed = self.root / "native/bin/oac-core"
         before = installed.read_bytes()
-        (self.bundle / "native/bin/agents-api").write_bytes(b"changed")
+        (self.bundle / "native/bin/oac-core").write_bytes(b"changed")
         with self.assertRaisesRegex(RuntimeError, "differ"):
             self.prepare()
         self.assertEqual(installed.read_bytes(), before)
@@ -124,7 +124,7 @@ class NativeServiceTests(unittest.TestCase):
         self.run.assert_not_called()
 
     def test_symlink_payload_is_not_followed(self):
-        path = self.bundle / "native/bin/agents-api"
+        path = self.bundle / "native/bin/oac-core"
         path.unlink()
         outside = self.directory / "outside"
         outside.write_bytes(b"unchanged")

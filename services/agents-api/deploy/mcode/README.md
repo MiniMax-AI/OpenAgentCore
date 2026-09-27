@@ -22,7 +22,7 @@ Set `PARSAR_MCODE_BIN` to that absolute executable and `PARSAR_MCODE_AGENTS_API=
 for the daemon. The opt-in only advertises the profile for the qualified version.
 Use the existing authenticated daemon connection and operator device enrollment;
 this is not a new public enrollment API or official `self_hosted` implementation.
-Set `AGENTS_API_ENGINE=mcode` in the independent Core deployment. Existing Sessions
+Set `OAC_DEFAULT_HARNESS=mcode` in the independent Core deployment. Existing Sessions
 retain their engine. Do not expose a new public harness selector.
 
 ## Docker workspace

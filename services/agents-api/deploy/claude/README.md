@@ -23,7 +23,7 @@ private Docker network, the existing `deploy/codex/seccomp.json`, and
 layout required by native bubblewrap; all native sandbox restrictions remain on.
 It is disabled for existing deployments unless explicitly selected.
 
-Set `AGENTS_API_ENGINE=claude_sdk`. Configure the deployment default model provider
+Set `OAC_DEFAULT_HARNESS=claude_sdk`. Configure the deployment default model provider
 with the Core key, in Web or through Core's API:
 
 ```sh

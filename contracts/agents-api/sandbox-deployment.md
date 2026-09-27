@@ -73,7 +73,7 @@ POST and PUT take the same complete selection. PUT also requires a nonzero
 | `e2b` | Required only for E2B: write-only `api_key` and immutable `template` build selector |
 
 The request has no Core address. Core derives the deployment's `core_url` from the
-installation public URL (`public_url` in `config.json`, `AGENTS_API_PUBLIC_URL` for
+installation public URL (`public_url` in `config.json`, `OAC_PUBLIC_URL` for
 Core): the HTTPS origin nodes and sandbox guests use to reach Core. A request that
 contains `core_url` is rejected with 400 `invalid_request_error` and
 `param: "core_url"`. E2B guests reach Core from E2B's cloud, so an E2B selection is

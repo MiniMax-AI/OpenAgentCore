@@ -114,7 +114,7 @@ are not used for grant exchange.
 For an operator-controlled private issuer, configure exact HTTPS origins:
 
 ```sh
-export AGENTS_API_OAUTH_TRUSTED_ORIGINS='https://issuer.internal:8443'
+export OAC_OAUTH_TRUSTED_ORIGINS='https://issuer.internal:8443'
 ```
 
 The comma-separated list is server configuration, not a tenant parameter. It

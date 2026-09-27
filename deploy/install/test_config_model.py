@@ -100,7 +100,7 @@ class ConfigModelTests(unittest.TestCase):
                     config["core"]["runtime_history"] = {"endpoint": "collector.example:4317", "headers": headers}
                     rendered = configuration.render(root, config, dict(state, native_core=native), "2026-09-25T00:00:00Z")
                     environment = configuration.read_environment(rendered.files["core.env"])
-                    self.assertRegex(environment["AGENTS_API_DATABASE_URL"], r"^postgres://agents_api@[^:/]+:\d+/agents_api\?sslmode=disable$")
+                    self.assertRegex(environment["OAC_DATABASE_URL"], r"^postgres://agents_api@[^:/]+:\d+/agents_api\?sslmode=disable$")
                     for name, text in rendered.files.items():
                         for secret in [*secrets.values(), "export-secret"]:
                             if name != "runtime-history.json":

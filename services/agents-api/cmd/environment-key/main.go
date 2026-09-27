@@ -35,7 +35,7 @@ type commandOptions struct {
 
 func parseOptions(args []string, helpOutput io.Writer) (commandOptions, error) {
 	var options commandOptions
-	flags := flag.NewFlagSet("agents-api-environment-key", flag.ContinueOnError)
+	flags := flag.NewFlagSet("oac-core-environment-key", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.StringVar(&options.principal.TenantID, "tenant", "", "execution tenant UUID with an existing project mapping")
 	flags.StringVar(&options.principal.OrganizationID, "organization", "", "execution organization ID")
@@ -98,7 +98,7 @@ func run() error {
 		return err
 	}
 	if dsn == "" {
-		return errors.New("AGENTS_API_DATABASE_URL must point to a dedicated execution database")
+		return errors.New("OAC_DATABASE_URL must point to a dedicated execution database")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

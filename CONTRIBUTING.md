@@ -1661,8 +1661,8 @@ execution concurrency bounds simultaneous work, not attempt frequency. Managed-p
 polling retains its separate five-second interval. Unknown promotion results or
 errors after admission retain the existing no-replay settlement rules.
 
-`AGENTS_API_PUBLIC_URL` enables the private gateway; Core derives the public
-`remote_url` from it. `AGENTS_API_HARNESSES` explicitly adds deployment-supported
+`OAC_PUBLIC_URL` enables the private gateway; Core derives the public
+`remote_url` from it. `OAC_HARNESSES` explicitly adds deployment-supported
 engines to the default engine and configured managed profiles; advertising a
 heartbeat alone does not enable an engine. The three native profiles share enrollment
 at `/workspace`. Their new user-managed public chain requires fixed-client/raw HTTP,
@@ -1671,8 +1671,8 @@ from prior Docker or retired remote-executor evidence.
 
 #### Independent build artifacts
 
-`make build-agents-api` produces `agents-api`, `agents-api-migrate`,
-`agents-api-device` and `agents-api-environment-key` under `${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api`.
+`make build-agents-api` produces `oac-core`, `oac-core-migrate`,
+`oac-core-device` and `oac-core-environment-key` under `${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api`.
 `OAC_DEV_CORE_BUILD_DIR` may select another absolute output directory. The build
 uses only the explicit source set in `scripts/build-agents-api.sh`: the execution
 service, its Go contracts and required shared daemon/logging packages, plus the
@@ -1730,7 +1730,14 @@ inputs differ are recreated or restarted. Decide restarts from what runs, never
 from recorded bookkeeping, so the next apply finishes any interrupted one. Installation flags only seed it, and
 rerunning the installer rejects them. Runtime settings stay in PostgreSQL and
 change through Web or `/core/v1`. Secrets live once each in `secrets/`; identity and
-install facts live in tool-written `state.json`. Core still reads only its
+install facts live in tool-written `state.json`. Core process settings use `OAC_*`, Web settings use `OAC_WEB_*`, and shared Go
+logging uses `OAC_LOG_*`. Retired settings fail startup even when empty or when
+the new name is also set; report every matching name without values. Only the
+explicit installer conversion reads pre-rename files. Core and operator executables
+are `oac-core`, `oac-core-migrate`, `oac-core-device` and
+`oac-core-environment-key`; Web is `oac-web`, and the Core-host E2B helper is
+`oac-e2b-provider` under `/opt/oac/e2b` in the image.
+Core still reads only its
 environment and has no config loader; it serves the non-secret snapshot at
 `GET /core/v1/installation`. Keep the schema, the subset validator
 (`config_model.py`), the generator and the generated reference table in
@@ -1836,7 +1843,7 @@ machine route that reaches Core directly, never through the console. Bounded
 polling and reruns retain the original container and history; timeout is a
 diagnostic failure, not permission to relaunch. The installation public URL
 (`public_url` in the installation's `config.json`, seeded by `--public-url`, and
-`AGENTS_API_PUBLIC_URL` for Core) is the one origin for
+`OAC_PUBLIC_URL` for Core) is the one origin for
 applications, nodes, sandbox guests and self-hosted executors, and also the console
 origin. Core derives the daemon `wss` URL, the self-hosted `remote_url`, hosted
 Runtime bootstrap and the deployment's read-only `core_url` from it; the deployment
@@ -1929,10 +1936,10 @@ must not change on a repeated install.
 `services/core-console` serves the production Web build and, after console login
 and same-origin checks, forwards every `/core/v1` request with the Core key; Core
 decides whether the route exists. It requires the private Core key file named by
-`CORE_CONSOLE_CORE_KEY_FILE` and holds no project caller credential. Every `/v1`
+`OAC_WEB_CORE_KEY_FILE` and holds no project caller credential. Every `/v1`
 and `/api/v1` request returns 404, including explicit Bearer and WebSocket
 requests; Web forwards no node or daemon transport. The installer mounts only the
-Core key into Web and only its digest (`AGENTS_API_CORE_KEY_DIGESTS_FILE`) into
+Core key into Web and only its digest (`OAC_CORE_KEY_DIGESTS_FILE`) into
 Core. The browser receives safe configuration, never that key. The deployment's
 TLS reverse proxy routes `/v1` (applications) and `/api/v1` (nodes and Runtime
 daemons, with their own credentials) directly to Core and everything else,
@@ -2080,7 +2087,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   against a database with deletion markers; migration rollback refuses to remove
   the column while deleted records exist, preventing public resurrection.
 - `services/agents-api` owns its SQL schema, sqlc queries and embedded goose
-  migrations. `AGENTS_API_DATABASE_URL` is required; never fall back to the product
+  migrations. `OAC_DATABASE_URL` is required; never fall back to the product
   database URL. Its first persistence slice stores tenant-scoped Sessions with a
   stable engine and idempotent creation. It does not switch production execution.
 - Reusable Agents have their own tenant-scoped `agents` records, independent of
@@ -2175,7 +2182,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   hot replacement, output repair or harness-specific OAuth path is introduced.
   Refresh uses verified HTTPS, rejects redirects, and checks resolved addresses
   before dialing them. Private issuer origins need explicit operator configuration
-  in `AGENTS_API_OAUTH_TRUSTED_ORIGINS`; tenants cannot relax that boundary and TLS
+  in `OAC_OAUTH_TRUSTED_ORIGINS`; tenants cannot relax that boundary and TLS
   verification remains mandatory. Keycloak is acceptance infrastructure only.
   Preserve the pinned update omission/null and immutable-field rules described in
   [OAuth credentials](services/agents-api/oauth-credentials.md); record unspecified
@@ -2451,7 +2458,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   `runtime.openapi.yaml` (`/api/v1`); never mix their routes or authentication
   schemes. Review the generated diffs; contract tests hold `openapi.yaml` to the
   pinned routes and fields.
-- The standalone service uses `AGENTS_API_DATABASE_URL`. PostgreSQL stores Projects,
+- The standalone service uses `OAC_DATABASE_URL`. PostgreSQL stores Projects,
   their immutable execution scopes and API-key digests. Keys in the same Project
   resolve to one shared service-account principal and tenant. Project/key writes
   go through Core-key `/core/v1` routes, not configuration files.
@@ -2476,7 +2483,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   mixed-version writers are not supported. Tests must supply explicit synthetic
   creators; only controlled historical fixtures may seed unknown ownership.
   The operator-selected
-  `AGENTS_API_ENGINE` is separate from the requested model.
+  `OAC_DEFAULT_HARNESS` is separate from the requested model.
   Public execution supports the enabled `none` profiles, the three colocated
   self-hosted profiles and qualified three-harness Docker hosted profiles; reject unsupported
   input/environment/agent options explicitly.
@@ -2494,7 +2501,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   tenant ownership and a credential digest. Their internal daemon gateway uses
   `/api/v1/agent-daemon/*`, separately from the official `/v1/agents/*` surface;
   device credentials grant no Session API or product permissions. The optional
-  `AGENTS_API_PUBLIC_URL` enables that gateway. It is a single-process registry,
+  `OAC_PUBLIC_URL` enables that gateway. It is a single-process registry,
   not a claim of multi-pod execution or stock `exec-server` interoperability.
   Self-hosted enrollment uses this gateway with an exact Environment binding.
   Session/device bindings are tenant-scoped and immutable. Revocation denies new
@@ -2865,7 +2872,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   including after terminal or later Turns. Omitted/null input is permitted only
   for non-streaming hosted creation and self-hosted creation.
   Creation streaming uses the shared live path above; non-text messages remain a gap.
-- Enabling daemon transport with `AGENTS_API_PUBLIC_URL` also starts a bounded execution worker. Select
+- Enabling daemon transport with `OAC_PUBLIC_URL` also starts a bounded execution worker. Select
   only connected, capable devices owned by the authenticated tenant; bind once and
   preserve native continuity. Metadata cannot select a device. Offline work stays
   queued and can be cancelled. An engine host is not a self-hosted environment.
@@ -3351,7 +3358,7 @@ Turns/input receipts, text observations, function tools, raw usage and restricti
 execution controls. It does not advertise permissions, product authoring, legacy
 raw tool Items, general web-search control or text-verbosity levels. Router admission
 for `environment:none` uses the available engine capability, not an engine name.
-The independent API selects new Session engines through `AGENTS_API_ENGINE`
+The independent API selects new Session engines through `OAC_DEFAULT_HARNESS`
 (`codex` by default, `claude_sdk` or `mcode`); existing Sessions keep their stored engine.
 This remains the deployment default; the optional Core harness extension selects
 an enabled engine for one saved or inline Agent configuration. API admission,

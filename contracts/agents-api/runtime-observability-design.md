@@ -267,7 +267,7 @@ is execution or lifecycle authority. No additional metrics service is deployed.
 
 ### 10.2 OTLP transport configuration and instruments
 
-Core enables external export only when `AGENTS_API_RUNTIME_HISTORY_FILE` contains
+Core enables external export only when `OAC_HISTORY_SETTINGS_FILE` contains
 an OTLP endpoint. With the variable unset, local history and 30-second sampling
 remain enabled. An optional server-only configuration is:
 

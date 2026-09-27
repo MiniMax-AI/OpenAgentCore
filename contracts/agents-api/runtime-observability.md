@@ -130,7 +130,7 @@ handoff. Only periodic samples populate durable history; current API reads canno
 inflate cadence coverage. Retention is seven days; history reads span at most
 24 hours and have explicit input and output limits.
 
-`AGENTS_API_RUNTIME_HISTORY_FILE` optionally changes sampling and adds OTLP/HTTP
+`OAC_HISTORY_SETTINGS_FILE` optionally changes sampling and adds OTLP/HTTP
 export. The local database and external exporter have independent bounded queues.
 No Collector is required for the Dashboard. Failures and queue saturation remain
 missing observations rather than fabricated zeroes or failed executions. Transport
@@ -150,3 +150,6 @@ See the [design](runtime-observability-design.md),
 [current API](runtime-observability-api.md), [history API](runtime-history-api.md)
 and [configuration](../../services/agents-api/runtime-history/README.md).
 Additional provider telemetry and idle-policy authority remain separate work.
+
+The OTLP resource identifies Core with `service.name=oac-core` and
+`service.namespace=oac`. Metric names retain the `agents.*` namespace.

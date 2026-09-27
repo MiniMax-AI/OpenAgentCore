@@ -1,4 +1,4 @@
-// Command core-console serves the Core Web build and its authenticated API proxy.
+// Command oac-web serves the Core Web build and its authenticated API proxy.
 package main
 
 import (

@@ -27,7 +27,7 @@ type managedSetup struct {
 	}
 	hub            *node.Hub
 	installationID string
-	// publicURL is AGENTS_API_PUBLIC_URL; every sandbox reaches Core through it.
+	// publicURL is OAC_PUBLIC_URL; every sandbox reaches Core through it.
 	publicURL string
 	selected  atomic.Pointer[execution.RuntimeProvider]
 }
@@ -168,9 +168,9 @@ func (s *managedSetup) provider(setup store.SandboxSetup) (sandbox.Provider, err
 		if setup.E2B == nil {
 			return nil, errors.New("E2B deployment configuration is unavailable")
 		}
-		binary := os.Getenv("AGENTS_API_E2B_PROVIDER_BIN")
+		binary := os.Getenv("OAC_E2B_PROVIDER_BIN")
 		if binary == "" {
-			binary = "/opt/parsar/e2b/agents-api-e2b-provider"
+			binary = "/opt/oac/e2b/oac-e2b-provider"
 		}
 		// Only a candidate that omitted its resources has none; its validation
 		// reads them from the template build before the candidate is rebuilt.
@@ -178,7 +178,7 @@ func (s *managedSetup) provider(setup store.SandboxSetup) (sandbox.Provider, err
 		if setup.Specification.Resources != (sandbox.Resources{}) {
 			resources = &setup.Specification.Resources
 		}
-		provider, err := e2b.New(e2b.Config{Binary: binary, StateDir: os.Getenv("AGENTS_API_E2B_STATE_DIR"),
+		provider, err := e2b.New(e2b.Config{Binary: binary, StateDir: os.Getenv("OAC_E2B_STATE_DIR"),
 			Resources: resources, InstallationID: setup.InstallationID, APIKey: setup.E2B.APIKey, Template: setup.E2B.Template, TimeoutSeconds: 3600})
 		if err != nil {
 			return nil, errors.New("E2B provider cannot load; check the installed helper and private state directory")

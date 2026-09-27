@@ -17,9 +17,9 @@ The Nodes page uses the Core key, separate from Project API keys. After console
 sign-in, the console server forwards the page's `/core/v1/sandbox` requests, like
 every other `/core/v1` request, with the Core key it reads from its private file; the
 key never reaches the browser. For a Web you run without the installer, configure the
-private `0600` key file through `CORE_CONSOLE_CORE_KEY_FILE`; Web refuses to start
+private `0600` key file through `OAC_WEB_CORE_KEY_FILE`; Web refuses to start
 without it. Core serves the deployment and node routes only when
-`AGENTS_API_SANDBOX_INSTALLATION_ID` is set. Project keys cannot register, edit or
+`OAC_INSTALLATION_ID` is set. Project keys cannot register, edit or
 remove nodes. The node installation payload that Web serves contains no secret.
 
 ## Sandbox backend selection
@@ -58,8 +58,8 @@ See [what each field means per sandbox provider](../../contracts/agents-api/sand
 for fields that differ between E2B, Docker and microsandbox.
 
 For deployments without the installer that use E2B, install the packaged helper and set
-`AGENTS_API_E2B_PROVIDER_BIN` to its absolute executable path. Set
-`AGENTS_API_E2B_STATE_DIR` to a persistent directory owned by the Core service user,
+`OAC_E2B_PROVIDER_BIN` to its absolute executable path. Set
+`OAC_E2B_STATE_DIR` to a persistent directory owned by the Core service user,
 mode `0700`. The standard distribution prepares both. Back up this private state
 with the database and credential-encryption key; losing it can leave an uncertain
 allocation that cannot safely be reclaimed. Do not mount it into Web or Runtime.
@@ -84,9 +84,9 @@ model request. Hosted Session admission fails until setup is complete and a read
 has capacity. E2B allocates directly without this node requirement.
 
 For deployments without the installer and with zero nodes, set
-`AGENTS_API_SANDBOX_INSTALLATION_ID` to a stable UUID, configure
-`AGENTS_API_CORE_KEY_DIGESTS_FILE`, and enable the daemon gateway with
-`AGENTS_API_PUBLIC_URL`. Core derives the hosted Runtime bootstrap and the public
+`OAC_INSTALLATION_ID` to a stable UUID, configure
+`OAC_CORE_KEY_DIGESTS_FILE`, and enable the daemon gateway with
+`OAC_PUBLIC_URL`. Core derives the hosted Runtime bootstrap and the public
 daemon WebSocket address from that URL; it never uses the request Host or forwarded
 headers. Preserve the installation UUID and database together.
 

@@ -13,7 +13,7 @@ import tempfile
 
 SOURCE = Path('/source/services/agents-api/tools/e2b-provider')
 OUTPUT = Path('/output')
-NAME = 'agents-api-e2b-provider'
+NAME = 'oac-e2b-provider'
 BASE = 'python:3.12.12-slim-bookworm@sha256:2986c55feb36e6cae00fa1fefb454283e4b33f35e75ff8bdd123b134130be301'
 
 

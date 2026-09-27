@@ -28,8 +28,8 @@ tar -C "$repo_root" -cf - go.mod go.sum internal/obs/log services/core-console \
   cd "$build_context"
   export GOWORK=off CGO_ENABLED=0
   go build -mod=readonly -trimpath -buildvcs=false \
-    -o "$build_context/core-console" ./services/core-console
+    -o "$build_context/oac-web" ./services/core-console
 )
 mkdir -p "$output_dir"
-mv -f "$build_context/core-console" "$output_dir/core-console"
-printf 'Core console binary: %s/core-console\n' "$output_dir"
+mv -f "$build_context/oac-web" "$output_dir/oac-web"
+printf 'Core console binary: %s/oac-web\n' "$output_dir"

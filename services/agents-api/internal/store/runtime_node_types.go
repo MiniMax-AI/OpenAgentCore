@@ -138,7 +138,7 @@ type RuntimeDeploymentView struct {
 	Provider       string                 `json:"provider"`
 	Maintenance    bool                   `json:"maintenance"`
 	OwnerEpoch     uint64                 `json:"owner_epoch"`
-	// Read-only: the installation public URL (AGENTS_API_PUBLIC_URL), which nodes and sandboxes use to reach Core. The deployment API does not accept it.
+	// Read-only: the installation public URL (OAC_PUBLIC_URL), which nodes and sandboxes use to reach Core. The deployment API does not accept it.
 	CoreURL string `json:"core_url"`
 }
 type RuntimeNodeAllocation struct {

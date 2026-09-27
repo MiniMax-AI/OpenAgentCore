@@ -22,7 +22,7 @@ exclude expired records before physical cleanup completes.
 
 ## Optional configuration
 
-Set `AGENTS_API_RUNTIME_HISTORY_FILE` to an absolute server-only JSON file to change
+Set `OAC_HISTORY_SETTINGS_FILE` to an absolute server-only JSON file to change
 sampling or export to an existing OTLP receiver. Sampling-only example:
 
 ```json

@@ -25,6 +25,8 @@ import configuration
 import native_service
 import parsar_cli
 
+# Historical environment names below are conversion inputs only. The resulting
+# config.json is rendered by configuration.py using OAC_* and OAC_WEB_* settings.
 POOL = {name: key for key, name in configuration.POOL}
 MAPPED = {"AGENTS_API_EXECUTION_CONCURRENCY", "PARSAR_LOG_LEVEL", "PARSAR_LOG_FORMAT", "PARSAR_LOG_ADD_SOURCE",
           "AGENTS_API_WRITE_AUDIT_RETENTION", "AGENTS_API_ENGINE", "AGENTS_API_HARNESSES",

@@ -25,7 +25,7 @@ func configureManagedNodes(s *store.Store, publicURL string, owner func(context.
 	if os.Getenv("AGENTS_API_MANAGED_RUNTIMES_FILE") != "" {
 		return nil, errors.New("file-managed sandbox configuration is no longer supported; retain existing resources, drain them with the previous release, this release does not automatically adopt file-managed deployment records")
 	}
-	setupID := os.Getenv("AGENTS_API_SANDBOX_INSTALLATION_ID")
+	setupID := os.Getenv("OAC_INSTALLATION_ID")
 	if setupID == "" {
 		return nil, nil
 	}
@@ -34,7 +34,7 @@ func configureManagedNodes(s *store.Store, publicURL string, owner func(context.
 		return nil, errors.New("sandbox installation ID must be a canonical UUID")
 	}
 	if publicURL == "" {
-		return nil, errors.New("AGENTS_API_SANDBOX_INSTALLATION_ID requires AGENTS_API_PUBLIC_URL, the origin nodes and sandboxes use to reach Core")
+		return nil, errors.New("OAC_INSTALLATION_ID requires OAC_PUBLIC_URL, the origin nodes and sandboxes use to reach Core")
 	}
 	closeProvider := func() {}
 	result := &managedNodes{closeProvider: closeProvider}
@@ -49,7 +49,7 @@ func configureManagedNodes(s *store.Store, publicURL string, owner func(context.
 		return nil, err
 	}
 	if setupID != "" && result.admin == nil {
-		return nil, errors.New("Web sandbox setup requires AGENTS_API_CORE_KEY_DIGESTS_FILE with the Core key digest")
+		return nil, errors.New("Web sandbox setup requires OAC_CORE_KEY_DIGESTS_FILE with the Core key digest")
 	}
 	result.hub = node.NewHub(node.HubOptions{
 		Authenticate: func(ctx context.Context, id, credential string) (node.Identity, error) {
@@ -95,23 +95,23 @@ func (m *managedNodes) close() {
 }
 
 func deploymentAdminAuthenticator() (*api.DeploymentAuthenticator, error) {
-	path := os.Getenv("AGENTS_API_CORE_KEY_DIGESTS_FILE")
+	path := os.Getenv("OAC_CORE_KEY_DIGESTS_FILE")
 	if path == "" {
 		return nil, nil
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.New("cannot read AGENTS_API_CORE_KEY_DIGESTS_FILE")
+		return nil, errors.New("cannot read OAC_CORE_KEY_DIGESTS_FILE")
 	}
 	var digests []string
 	if json.Unmarshal(raw, &digests) != nil || len(digests) == 0 {
-		return nil, errors.New("AGENTS_API_CORE_KEY_DIGESTS_FILE must contain a JSON array of Core key SHA-256 digests")
+		return nil, errors.New("OAC_CORE_KEY_DIGESTS_FILE must contain a JSON array of Core key SHA-256 digests")
 	}
 	return api.NewDeploymentAuthenticator(digests)
 }
 
 func serverAddress() string {
-	if value := os.Getenv("AGENTS_API_ADDR"); value != "" {
+	if value := os.Getenv("OAC_ADDR"); value != "" {
 		return value
 	}
 	return "127.0.0.1:8091"

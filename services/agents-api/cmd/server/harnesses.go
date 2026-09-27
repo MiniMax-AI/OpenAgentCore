@@ -13,7 +13,7 @@ import (
 // user-managed Runtime profiles without configuring a managed Provider.
 func enabledHarnesses(defaultEngine string) ([]string, error) {
 	kinds := []string{defaultEngine}
-	if value := os.Getenv("AGENTS_API_HARNESSES"); value != "" {
+	if value := os.Getenv("OAC_HARNESSES"); value != "" {
 		kinds = append(kinds, strings.Split(value, ",")...)
 	}
 	for i, kind := range kinds {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"io"
 	"net/url"
 	"os"
@@ -18,41 +19,60 @@ type config struct {
 }
 
 func loadConfig() (config, error) {
-	// Renamed and retired settings fail startup instead of being silently ignored.
+	var problems, renamed []string
+	for _, setting := range [][2]string{
+		{"CORE_CONSOLE_ADDR", "OAC_WEB_ADDR"},
+		{"CORE_CONSOLE_ORIGIN", "OAC_WEB_ORIGIN"},
+		{"CORE_CONSOLE_DIST", "OAC_WEB_DIST"},
+		{"CORE_CONSOLE_UPSTREAM", "OAC_WEB_UPSTREAM"},
+		{"CORE_CONSOLE_CORE_KEY_FILE", "OAC_WEB_CORE_KEY_FILE"},
+		{"CORE_CONSOLE_NODE_PAYLOAD_DIR", "OAC_WEB_NODE_PAYLOAD_DIR"},
+	} {
+		if _, present := os.LookupEnv(setting[0]); present {
+			renamed = append(renamed, setting[0]+" → "+setting[1])
+		}
+	}
+	renamed = append(renamed, log.RenamedEnvironment()...)
+	if len(renamed) > 0 {
+		problems = append(problems, "OpenAgentCore renamed these Web settings; set the new names and remove the old ones: "+strings.Join(renamed, ", "))
+	}
 	if _, present := os.LookupEnv("CORE_CONSOLE_ADMIN_TOKEN_FILE"); present {
-		return config{}, errors.New("CORE_CONSOLE_ADMIN_TOKEN_FILE was renamed; set CORE_CONSOLE_CORE_KEY_FILE to the Core key file instead")
+		problems = append(problems, "CORE_CONSOLE_ADMIN_TOKEN_FILE was renamed; set OAC_WEB_CORE_KEY_FILE to the Core key file instead")
 	}
 	for _, retired := range []string{"CORE_CONSOLE_AUTH_MODE", "CORE_CONSOLE_STATE_DIR", "CORE_CONSOLE_PASSWORD_FILE"} {
 		if _, present := os.LookupEnv(retired); present {
-			return config{}, errors.New(retired + " is retired; Web signs in with the Core key only, so remove this setting")
+			problems = append(problems, retired+" is retired; Web signs in with the Core key only, so remove this setting")
 		}
 	}
+	if len(problems) > 0 {
+		return config{}, errors.New(strings.Join(problems, "; "))
+	}
 	c := config{
-		addr:   envDefault("CORE_CONSOLE_ADDR", ":8080"),
-		origin: envDefault("CORE_CONSOLE_ORIGIN", "http://127.0.0.1:8080"),
-		dist:   envDefault("CORE_CONSOLE_DIST", "/www"),
+		addr:   envDefault("OAC_WEB_ADDR", ":8080"),
+		origin: envDefault("OAC_WEB_ORIGIN", "http://127.0.0.1:8080"),
+		dist:   envDefault("OAC_WEB_DIST", "/www"),
 	}
 	origin, err := serverURL(c.origin)
 	if err != nil || origin.Path != "" {
-		return config{}, errors.New("CORE_CONSOLE_ORIGIN must be an HTTP(S) origin without a path")
+		return config{}, errors.New("OAC_WEB_ORIGIN must be an HTTP(S) origin without a path")
 	}
-	c.upstream, err = serverURL(envDefault("CORE_CONSOLE_UPSTREAM", "http://core:8091"))
+	c.upstream, err = serverURL(envDefault("OAC_WEB_UPSTREAM", "http://core:8091"))
 	if err != nil {
-		return config{}, errors.New("CORE_CONSOLE_UPSTREAM must be an HTTP(S) server URL without credentials, query or path")
+		return config{}, errors.New("OAC_WEB_UPSTREAM must be an HTTP(S) server URL without credentials, query or path")
 	}
 	if !filepath.IsAbs(c.dist) {
-		return config{}, errors.New("CORE_CONSOLE_DIST must be absolute")
+		return config{}, errors.New("OAC_WEB_DIST must be absolute")
 	}
-	c.coreKey, err = readSecret(envDefault("CORE_CONSOLE_CORE_KEY_FILE", "/admin/core.key"))
+	c.coreKey, err = readSecret(envDefault("OAC_WEB_CORE_KEY_FILE", "/admin/core.key"))
 	if err != nil {
-		return config{}, errors.New("CORE_CONSOLE_CORE_KEY_FILE must name a private regular file containing the Core key")
+		return config{}, errors.New("OAC_WEB_CORE_KEY_FILE must name a private regular file containing the Core key")
 	}
 	if utf8.RuneCountInString(c.coreKey) < minimumCoreKeyLength {
-		return config{}, errors.New("the Core key in CORE_CONSOLE_CORE_KEY_FILE must have at least 32 characters")
+		return config{}, errors.New("the Core key in OAC_WEB_CORE_KEY_FILE must have at least 32 characters")
 	}
-	c.nodePayloadDir = os.Getenv("CORE_CONSOLE_NODE_PAYLOAD_DIR")
+	c.nodePayloadDir = os.Getenv("OAC_WEB_NODE_PAYLOAD_DIR")
 	if c.nodePayloadDir != "" && !filepath.IsAbs(c.nodePayloadDir) {
-		return config{}, errors.New("CORE_CONSOLE_NODE_PAYLOAD_DIR must be absolute")
+		return config{}, errors.New("OAC_WEB_NODE_PAYLOAD_DIR must be absolute")
 	}
 	return c, nil
 }

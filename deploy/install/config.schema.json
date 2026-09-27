@@ -35,7 +35,7 @@
       "x-parsar": {
         "check": "origin",
         "restarts": ["core", "web"],
-        "derives": ["AGENTS_API_PUBLIC_URL", "CORE_CONSOLE_ORIGIN"],
+        "derives": ["OAC_PUBLIC_URL", "OAC_WEB_ORIGIN"],
         "install_flag": "--public-url"
       }
     },
@@ -53,7 +53,7 @@
             "modes": ["all", "core-only"],
             "restarts": ["core"],
             "native_restarts": ["core", "web"],
-            "derives": ["Core port mapping or AGENTS_API_ADDR"],
+            "derives": ["Core port mapping or OAC_ADDR"],
             "install_flag": "--core-port"
           }
         },
@@ -66,7 +66,7 @@
           "x-parsar": {
             "modes": ["all", "web-only"],
             "restarts": ["web"],
-            "derives": ["Web port mapping or CORE_CONSOLE_ADDR"],
+            "derives": ["Web port mapping or OAC_WEB_ADDR"],
             "install_flag": "--web-port"
           }
         },
@@ -78,7 +78,7 @@
           "x-parsar": {
             "modes": ["all", "core-only"],
             "restarts": ["database", "core"],
-            "derives": ["database port mapping", "AGENTS_API_DATABASE_URL"]
+            "derives": ["database port mapping", "OAC_DATABASE_URL"]
           }
         }
       }
@@ -94,7 +94,7 @@
           "x-parsar": {
             "check": "origin",
             "restarts": ["web"],
-            "derives": ["CORE_CONSOLE_UPSTREAM"],
+            "derives": ["OAC_WEB_UPSTREAM"],
             "install_flag": "--core-url"
           }
         }
@@ -108,19 +108,19 @@
           "enum": ["debug", "info", "warn", "error"],
           "default": "info",
           "description": "Minimum log level of Core and Web.",
-          "x-parsar": {"restarts": ["core", "web"], "derives": ["PARSAR_LOG_LEVEL"]}
+          "x-parsar": {"restarts": ["core", "web"], "derives": ["OAC_LOG_LEVEL"]}
         },
         "format": {
           "enum": ["auto", "text", "json"],
           "default": "auto",
           "description": "Log format. auto writes text to a terminal and JSON otherwise.",
-          "x-parsar": {"restarts": ["core", "web"], "derives": ["PARSAR_LOG_FORMAT"]}
+          "x-parsar": {"restarts": ["core", "web"], "derives": ["OAC_LOG_FORMAT"]}
         },
         "add_source": {
           "type": "boolean",
           "default": false,
           "description": "Add the source file and line to each log record.",
-          "x-parsar": {"restarts": ["core", "web"], "derives": ["PARSAR_LOG_ADD_SOURCE"]}
+          "x-parsar": {"restarts": ["core", "web"], "derives": ["OAC_LOG_ADD_SOURCE"]}
         }
       }
     },
@@ -135,7 +135,7 @@
           "maximum": 1024,
           "default": 4,
           "description": "Concurrent execution work units in Core. Unrelated to node sandbox capacity.",
-          "x-parsar": {"restarts": ["core"], "derives": ["AGENTS_API_EXECUTION_CONCURRENCY"]}
+          "x-parsar": {"restarts": ["core"], "derives": ["OAC_EXECUTION_CONCURRENCY"]}
         },
         "harnesses": {
           "type": "array",
@@ -144,19 +144,19 @@
           "items": {"enum": ["claude_sdk", "codex", "mcode"]},
           "default": ["claude_sdk", "codex", "mcode"],
           "description": "Harnesses that Sessions may select.",
-          "x-parsar": {"restarts": ["core"], "derives": ["AGENTS_API_HARNESSES"]}
+          "x-parsar": {"restarts": ["core"], "derives": ["OAC_HARNESSES"]}
         },
         "default_harness": {
           "enum": ["claude_sdk", "codex", "mcode"],
           "default": "codex",
           "description": "Harness used when a Session names none. It must be listed in core.harnesses.",
-          "x-parsar": {"restarts": ["core"], "derives": ["AGENTS_API_ENGINE"]}
+          "x-parsar": {"restarts": ["core"], "derives": ["OAC_DEFAULT_HARNESS"]}
         },
         "write_audit_retention": {
           "type": "string",
           "default": "2160h",
           "description": "How long non-creation write history is kept, as a Go duration of at least 1h.",
-          "x-parsar": {"check": "go_duration_min_1h", "restarts": ["core"], "derives": ["AGENTS_API_WRITE_AUDIT_RETENTION"]}
+          "x-parsar": {"check": "go_duration_min_1h", "restarts": ["core"], "derives": ["OAC_WRITE_AUDIT_RETENTION"]}
         },
         "oauth_trusted_origins": {
           "type": "array",
@@ -164,7 +164,7 @@
           "items": {"type": "string", "x-parsar": {"check": "https_origin"}},
           "default": [],
           "description": "Extra HTTPS origins trusted as private OAuth issuers.",
-          "x-parsar": {"restarts": ["core"], "derives": ["AGENTS_API_OAUTH_TRUSTED_ORIGINS"]}
+          "x-parsar": {"restarts": ["core"], "derives": ["OAC_OAUTH_TRUSTED_ORIGINS"]}
         },
         "database_pool": {
           "type": "object",
@@ -175,32 +175,32 @@
               "minimum": 1,
               "default": null,
               "description": "Maximum database connections. null keeps the driver default, max(4, CPU count).",
-              "x-parsar": {"restarts": ["core"], "derives": ["pool_max_conns in AGENTS_API_DATABASE_URL"]}
+              "x-parsar": {"restarts": ["core"], "derives": ["pool_max_conns in OAC_DATABASE_URL"]}
             },
             "min_conns": {
               "type": ["integer", "null"],
               "minimum": 0,
               "default": null,
               "description": "Minimum idle database connections. null keeps the driver default, 0.",
-              "x-parsar": {"restarts": ["core"], "derives": ["pool_min_conns in AGENTS_API_DATABASE_URL"]}
+              "x-parsar": {"restarts": ["core"], "derives": ["pool_min_conns in OAC_DATABASE_URL"]}
             },
             "max_conn_lifetime": {
               "type": ["string", "null"],
               "default": null,
               "description": "Go duration. null keeps the driver default, 1h.",
-              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_lifetime in AGENTS_API_DATABASE_URL"]}
+              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_lifetime in OAC_DATABASE_URL"]}
             },
             "max_conn_idle_time": {
               "type": ["string", "null"],
               "default": null,
               "description": "Go duration. null keeps the driver default, 30m.",
-              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_idle_time in AGENTS_API_DATABASE_URL"]}
+              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_max_conn_idle_time in OAC_DATABASE_URL"]}
             },
             "health_check_period": {
               "type": ["string", "null"],
               "default": null,
               "description": "Go duration. null keeps the driver default, 1m.",
-              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_health_check_period in AGENTS_API_DATABASE_URL"]}
+              "x-parsar": {"check": "go_duration", "restarts": ["core"], "derives": ["pool_health_check_period in OAC_DATABASE_URL"]}
             }
           }
         },
@@ -209,7 +209,7 @@
           "default": null,
           "additionalProperties": false,
           "description": "Runtime history collection and OTLP export. null keeps local collection with Core's defaults. Core checks the values at startup.",
-          "x-parsar": {"restarts": ["core"], "derives": ["generated/runtime-history.json", "AGENTS_API_RUNTIME_HISTORY_FILE"]},
+          "x-parsar": {"restarts": ["core"], "derives": ["generated/runtime-history.json", "OAC_HISTORY_SETTINGS_FILE"]},
           "properties": {
             "transport": {
               "type": "string",

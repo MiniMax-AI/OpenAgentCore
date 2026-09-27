@@ -18,14 +18,14 @@ import (
 
 func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 	t.Setenv("AGENTS_API_MANAGED_RUNTIMES_FILE", "")
-	t.Setenv("AGENTS_API_SANDBOX_INSTALLATION_ID", uuid.NewString())
+	t.Setenv("OAC_INSTALLATION_ID", uuid.NewString())
 	digest := sha256.Sum256([]byte("synthetic-admin"))
 	path := filepath.Join(t.TempDir(), "core-key-digests.json")
 	if err := os.WriteFile(path, []byte(`["`+hex.EncodeToString(digest[:])+`"]`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTS_API_CORE_KEY_DIGESTS_FILE", path)
-	if _, err := configureManagedNodes(nil, "", nil); err == nil || !strings.Contains(err.Error(), "AGENTS_API_PUBLIC_URL") {
+	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", path)
+	if _, err := configureManagedNodes(nil, "", nil); err == nil || !strings.Contains(err.Error(), "OAC_PUBLIC_URL") {
 		t.Fatal("sandbox manager started without a public URL", err)
 	}
 	m, err := configureManagedNodes(nil, "https://core.example", func(context.Context) error { return nil })
@@ -36,7 +36,7 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 	if m.setup == nil || m.admin == nil || m.hub == nil || m.runtime == nil || m.runtime.Provider != nil {
 		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
 	}
-	t.Setenv("AGENTS_API_CORE_KEY_DIGESTS_FILE", "")
+	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", "")
 	if _, err := configureManagedNodes(nil, "https://core.example", nil); err == nil {
 		t.Fatal("setup accepted without admin authentication")
 	}
@@ -81,8 +81,8 @@ func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T)
 
 func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
 	id := uuid.NewString()
-	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
-	t.Setenv("AGENTS_API_E2B_STATE_DIR", t.TempDir())
+	t.Setenv("OAC_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
+	t.Setenv("OAC_E2B_STATE_DIR", t.TempDir())
 	s := &managedSetup{installationID: id, store: &setupStore{value: store.SandboxSetup{
 		InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
 		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()},
@@ -119,8 +119,8 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 
 func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 	id := uuid.NewString()
-	t.Setenv("AGENTS_API_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
-	t.Setenv("AGENTS_API_E2B_STATE_DIR", t.TempDir())
+	t.Setenv("OAC_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
+	t.Setenv("OAC_E2B_STATE_DIR", t.TempDir())
 	s := &managedSetup{installationID: id}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.selected.Store(previous)

@@ -14,7 +14,7 @@ func TestWriteAuditRetention(t *testing.T) {
 		bad   bool
 	}{{"", 90 * 24 * time.Hour, false}, {"24h", 24 * time.Hour, false}, {"0", 0, true}, {"30m", 0, true}, {"-1h", 0, true}, {"90d", 0, true}} {
 		t.Run(test.value, func(t *testing.T) {
-			t.Setenv("AGENTS_API_WRITE_AUDIT_RETENTION", test.value)
+			t.Setenv("OAC_WRITE_AUDIT_RETENTION", test.value)
 			got, err := writeAuditRetention()
 			if (err != nil) != test.bad || (!test.bad && got != test.want) {
 				t.Fatalf("%v %v", got, err)

@@ -20,11 +20,11 @@ package so replacing binaries does not replace credentials or state.
 
 ```sh
 sha256sum -c @ARCHIVE_NAME@.tar.gz.sha256
-mkdir -p "$HOME/.parsar/releases"
-tar -xzf @ARCHIVE_NAME@.tar.gz -C "$HOME/.parsar/releases"
-cd "$HOME/.parsar/releases/@ARCHIVE_NAME@"
+mkdir -p "$HOME/.oac/releases"
+tar -xzf @ARCHIVE_NAME@.tar.gz -C "$HOME/.oac/releases"
+cd "$HOME/.oac/releases/@ARCHIVE_NAME@"
 sha256sum -c SHA256SUMS
-export AGENTS_API_BIN_DIR="$PWD/bin"
+core_bin_dir="$PWD/bin"
 ```
 
 `manifest.json` records the source revision/tree, target platform, fixed upstream
@@ -40,12 +40,12 @@ the reachable WSS service address.
 
 ```sh
 umask 077
-export PARSAR_HOME="$HOME/.parsar/agents-api-deployment"
-mkdir -p "$PARSAR_HOME"
-export AGENTS_API_DATABASE_URL='postgres://<account>:<password>@<host>/<execution-db>'
-export AGENTS_API_CORE_KEY_DIGESTS_FILE="$PARSAR_HOME/core-key-digests.json"
-export AGENTS_API_ADDR=127.0.0.1:8091
-export AGENTS_API_ENGINE=codex
+core_config_dir="$HOME/.oac/agents-api-deployment"
+mkdir -p "$core_config_dir"
+export OAC_DATABASE_URL='postgres://<account>:<password>@<host>/<execution-db>'
+export OAC_CORE_KEY_DIGESTS_FILE="$core_config_dir/core-key-digests.json"
+export OAC_ADDR=127.0.0.1:8091
+export OAC_DEFAULT_HARNESS=codex
 ```
 
 Create `core-key-digests.json` as a JSON array containing the SHA-256 digest of a
@@ -57,15 +57,15 @@ its scope and principal; rotation uses issuance and revocation without a restart
 Set the reachable public origin; Core derives the daemon endpoint from it:
 
 ```sh
-export AGENTS_API_PUBLIC_URL=http://127.0.0.1:8091
+export OAC_PUBLIC_URL=http://127.0.0.1:8091
 ```
 
 Keep the configuration and key files mode 0600. Run migrations explicitly, then
 start the API in the foreground or through your existing service supervisor:
 
 ```sh
-"$AGENTS_API_BIN_DIR/agents-api-migrate"
-"$AGENTS_API_BIN_DIR/agents-api"
+"$core_bin_dir/oac-core-migrate"
+"$core_bin_dir/oac-core"
 ```
 
 `GET /healthz` provides liveness. Project creation establishes its immutable execution scope. One API execution worker owns
@@ -104,7 +104,7 @@ curl -fsS -X POST \
   -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$CORE_KEY_FILE")") \
   -H 'Content-Type: application/json' -d "{\"key_id\":\"$KEY_ID\"}" \
   "http://127.0.0.1:8091/core/v1/projects/$PROJECT_ID/environments/$ENVIRONMENT_ID/executor-credentials" \
-  > "$PARSAR_HOME/executor-key.json"
+  > "$core_config_dir/executor-key.json"
 ```
 
 If the response is uncertain, do not retry automatically: list the credentials
@@ -113,7 +113,7 @@ issue it again. Revoke with `DELETE …/executor-credentials/$KEY_ID`. See
 [executor credentials](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/contracts/agents-api/environment-executor-credentials.md)
 for the rules, including the 404 and 409 cases.
 
-Break-glass only: `agents-api-environment-key` issues, rotates or revokes the
+Break-glass only: `oac-core-environment-key` issues, rotates or revokes the
 same credential directly in the database when the Core API is unavailable. It
 needs the private database configuration and the Project's execution principal
 (tenant UUID from the `projects` table, organization `core`, project
@@ -122,7 +122,9 @@ bypasses the Core API: it skips the archived-Project check and writes no
 administrator audit entry, so use the Core-key route whenever Core is running.
 
 Deploy the qualified V1 Runtime containing our daemon, selected native harness,
-local tools and workspace. Transfer only its scoped key into the protected daemon
+local tools and workspace. Transfer the host file `$core_config_dir/executor-key.json`
+into the Runtime as `$PARSAR_HOME/executor-key.json`; the host path is not available
+inside the Runtime. Keep only this scoped key in the protected daemon
 state directory as an owned mode-0600 file. Keep API caller and database credentials
 outside Runtime. Configure the model through the existing private adapter options;
 native tools must not inherit model credentials or read native history.

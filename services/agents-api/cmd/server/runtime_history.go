@@ -90,10 +90,10 @@ func runtimeHistory(ctx context.Context, coreStore *store.Store, executionEnable
 
 func loadRuntimeHistoryConfig() (runtimeHistoryConfig, error) {
 	var config runtimeHistoryConfig
-	if file := os.Getenv("AGENTS_API_RUNTIME_HISTORY_FILE"); file != "" {
+	if file := os.Getenv("OAC_HISTORY_SETTINGS_FILE"); file != "" {
 		raw, err := os.ReadFile(file)
 		if err != nil {
-			return config, errors.New("cannot read AGENTS_API_RUNTIME_HISTORY_FILE")
+			return config, errors.New("cannot read OAC_HISTORY_SETTINGS_FILE")
 		}
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()

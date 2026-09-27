@@ -10,22 +10,33 @@ import (
 	"strings"
 )
 
-// FromEnvironment returns AGENTS_API_DATABASE_URL. When
-// AGENTS_API_DATABASE_PASSWORD_FILE is set, the password comes only from that
+// FromEnvironment returns OAC_DATABASE_URL. When
+// OAC_DATABASE_PASSWORD_FILE is set, the password comes only from that
 // file and the URL must not contain one. An empty result means the URL is
 // unset; each command reports that in its own terms.
 func FromEnvironment() (string, error) {
-	raw := os.Getenv("AGENTS_API_DATABASE_URL")
-	file := os.Getenv("AGENTS_API_DATABASE_PASSWORD_FILE")
+	var renamed []string
+	for _, suffix := range []string{"DATABASE_URL", "DATABASE_PASSWORD_FILE"} {
+		old := "AGENTS_API_" + suffix
+		if _, present := os.LookupEnv(old); present {
+			renamed = append(renamed, old+" → OAC_"+suffix)
+		}
+	}
+	if len(renamed) > 0 {
+		return "", errors.New("OpenAgentCore renamed these settings; set the new names and remove the old ones: " + strings.Join(renamed, ", "))
+	}
+
+	raw := os.Getenv("OAC_DATABASE_URL")
+	file := os.Getenv("OAC_DATABASE_PASSWORD_FILE")
 	if raw == "" || file == "" {
 		return raw, nil
 	}
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.User == nil || u.User.Username() == "" {
-		return "", errors.New("AGENTS_API_DATABASE_PASSWORD_FILE requires AGENTS_API_DATABASE_URL in postgres:// form with a user name")
+		return "", errors.New("OAC_DATABASE_PASSWORD_FILE requires OAC_DATABASE_URL in postgres:// form with a user name")
 	}
 	if _, set := u.User.Password(); set {
-		return "", errors.New("set the database password only in AGENTS_API_DATABASE_PASSWORD_FILE, not also in AGENTS_API_DATABASE_URL")
+		return "", errors.New("set the database password only in OAC_DATABASE_PASSWORD_FILE, not also in OAC_DATABASE_URL")
 	}
 	password, err := readPassword(file)
 	if err != nil {
@@ -36,7 +47,7 @@ func FromEnvironment() (string, error) {
 }
 
 func readPassword(path string) (string, error) {
-	failure := errors.New("AGENTS_API_DATABASE_PASSWORD_FILE must name a readable regular file containing one password line")
+	failure := errors.New("OAC_DATABASE_PASSWORD_FILE must name a readable regular file containing one password line")
 	f, err := os.Open(path)
 	if err != nil {
 		return "", failure

@@ -176,7 +176,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.document("state.json")["core_installation_id"], self.host.core_installation_id)
         web = self.document("generated/compose.json")["services"]["web"]
         self.assertEqual(set(self.document("generated/compose.json")["services"]), {"web"})
-        self.assertEqual((web["network_mode"], web["environment"]["CORE_CONSOLE_UPSTREAM"]), ("host", "http://127.0.0.1:9091"))
+        self.assertEqual((web["network_mode"], web["environment"]["OAC_WEB_UPSTREAM"]), ("host", "http://127.0.0.1:9091"))
         self.assertNotIn(source.read_text(), self.output.getvalue())
         self.assertIn("Console: http://127.0.0.1:8080 (local only)\nNext: sign in to Web with the Core key in "
                       + str(self.root / "secrets/core.key") + ", then create a Project", self.output.getvalue())
@@ -201,7 +201,7 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(config["native_core"])
         self.assertIn("database", config["ports"])
         commands = self.host.commands
-        migrate = commands.index([str(self.root / "native/bin/agents-api-migrate")])
+        migrate = commands.index([str(self.root / "native/bin/oac-core-migrate")])
         unit = self.root / "generated/parsar-{}-core.service".format(self.document("state.json")["project"][7:])
         self.assertLess(migrate, commands.index(["systemctl", "--user", "enable", "--now", str(unit)]))
         self.assertEqual(set(self.document("generated/compose.json")["services"]), {"database", "web"})

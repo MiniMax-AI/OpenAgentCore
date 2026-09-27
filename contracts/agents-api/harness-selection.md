@@ -10,7 +10,7 @@ Agent configuration. This is a Core extension, not an upstream field.
 
 Supported identifiers are `codex`, `claude_sdk` (Claude Code), and `mcode`
 (MiniMax Code). Unknown identifiers, empty objects and unknown nested fields are
-rejected. Omission inherits a saved Agent value, or uses `AGENTS_API_ENGINE` for
+rejected. Omission inherits a saved Agent value, or uses `OAC_DEFAULT_HARNESS` for
 an inline Agent. An explicit null clears the saved selection or replaces it for
 one Session, restoring deployment-default selection. Agent updates preserve omitted
 fields and replace the entire supplied extension. Saved resources do not start
@@ -34,7 +34,7 @@ resources and native histories. Agent edits do not change accepted Sessions.
 
 ## Operator configuration
 
-`AGENTS_API_ENGINE` selects the default engine. `AGENTS_API_HARNESSES` explicitly
+`OAC_DEFAULT_HARNESS` selects the default engine. `OAC_HARNESSES` explicitly
 adds comma-separated deployment-supported engines, for example
 `codex,claude_sdk,mcode`, without requiring a managed Provider. The default engine
 remains enabled; unknown names fail startup.
@@ -45,7 +45,7 @@ Hosted placement uses one provider per deployment, saved in PostgreSQL. Web or
 `microsandbox` or `e2b`, the per-sandbox resources and one immutable Runtime
 release (an E2B template build for E2B); see the
 [deployment configuration](sandbox-deployment.md). Core needs a stable
-`AGENTS_API_SANDBOX_INSTALLATION_ID` for this; the installer generates it. Docker
+`OAC_INSTALLATION_ID` for this; the installer generates it. Docker
 and microsandbox sandboxes run on enrolled nodes, whose files hold only host paths
 and an installed copy of that selection. The former
 `AGENTS_API_MANAGED_RUNTIMES_FILE` is rejected at startup.

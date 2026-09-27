@@ -62,8 +62,13 @@ func TestExporterBuildsFencedProviderNeutralMetrics(t *testing.T) {
 		t.Fatalf("unexpected export call: calls=%d metrics=%+v", client.calls, client.metrics)
 	}
 	serviceName, ok := client.metrics.Resource.Set().Value("service.name")
-	if !ok || serviceName.AsString() != "parsar-agents-api" {
+	if !ok || serviceName.AsString() != "oac-core" {
 		t.Fatalf("unexpected service resource: %v %v", serviceName, ok)
+	}
+
+	namespace, ok := client.metrics.Resource.Set().Value("service.namespace")
+	if !ok || namespace.AsString() != "oac" {
+		t.Fatalf("unexpected service namespace: %v %v", namespace, ok)
 	}
 
 	byName := map[string]metricdata.Metrics{}

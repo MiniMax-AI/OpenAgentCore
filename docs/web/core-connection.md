@@ -10,7 +10,7 @@ no execution controls.
 The browser calls same-origin `/core/v1` through `AdminClient` and
 `CoreMetricsClient`, and the `/core/v1/sandbox` management routes through the
 sandbox client. The console server forwards each signed-in `/core/v1/*` request by
-prefix to its configured Core upstream, with the Core key (`CORE_CONSOLE_CORE_KEY_FILE`)
+prefix to its configured Core upstream, with the Core key (`OAC_WEB_CORE_KEY_FILE`)
 as the upstream credential; Core alone decides whether the route exists. Browser
 code must never receive that credential.
 
@@ -35,11 +35,11 @@ yourself only for a Web you run without the installer.
 
 | Setting | Purpose |
 | --- | --- |
-| `CORE_CONSOLE_ADDR` | Console listener address |
-| `CORE_CONSOLE_ORIGIN` | Exact browser-facing origin used for host and origin checks |
-| `CORE_CONSOLE_UPSTREAM` | Core HTTP(S) origin, without credentials, query or resource path |
-| `CORE_CONSOLE_CORE_KEY_FILE` | Absolute path to the private regular file containing the Core key |
-| `CORE_CONSOLE_DIST` | Absolute directory containing the built Web assets |
+| `OAC_WEB_ADDR` | Console listener address |
+| `OAC_WEB_ORIGIN` | Exact browser-facing origin used for host and origin checks |
+| `OAC_WEB_UPSTREAM` | Core HTTP(S) origin, without credentials, query or resource path |
+| `OAC_WEB_CORE_KEY_FILE` | Absolute path to the private regular file containing the Core key |
+| `OAC_WEB_DIST` | Absolute directory containing the built Web assets |
 
 The console exposes `GET /console/auth` and `POST /console/auth/login` and
 `/logout`. The administrator signs in with the deployment's Core key, which the

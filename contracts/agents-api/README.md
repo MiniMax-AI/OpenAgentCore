@@ -466,9 +466,9 @@ and cancellation. This does not close the remaining protocol/transport gaps.
 
 ### Public engine profiles
 
-`AGENTS_API_ENGINE` supplies the default for new Sessions. The optional
+`OAC_DEFAULT_HARNESS` supplies the default for new Sessions. The optional
 [Core harness extension](harness-selection.md) explicitly selects an enabled engine;
-existing Sessions retain their immutable choice. `AGENTS_API_HARNESSES` explicitly
+existing Sessions retain their immutable choice. `OAC_HARNESSES` explicitly
 adds installed deployment profiles without requiring a managed Provider. Model
 identity is independent.
 All three profiles require implicit reasoning and service tier `auto`. Ordinary

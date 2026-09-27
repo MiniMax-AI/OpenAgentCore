@@ -66,10 +66,10 @@ OAC_DEV_CORE_BUILD_DIR="$HOME/.oac/build/agents-api-test" make build-agents-api
 
 The default output is `${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api`:
 
-- `agents-api`: HTTP service and execution worker.
-- `agents-api-migrate`: this service's embedded database migrations.
-- `agents-api-device`: operator device provisioning and revocation.
-- `agents-api-environment-key`: principal executor key issuance, rotation and revocation.
+- `oac-core`: HTTP service and execution worker.
+- `oac-core-migrate`: this service's embedded database migrations.
+- `oac-core-device`: operator device provisioning and revocation.
+- `oac-core-environment-key`: principal executor key issuance, rotation and revocation.
 
 Use these executables in place of the corresponding `go run` commands below.
 The build needs Go and access to its pinned module dependencies; it does not need
@@ -100,7 +100,7 @@ This service does not import `server/internal` or apply product migrations.
 Migrations are embedded and tracked in `agents_api_schema_version`.
 
 ```bash
-AGENTS_API_DATABASE_URL='postgres://.../agents_api' \
+OAC_DATABASE_URL='postgres://.../agents_api' \
   go run ./services/agents-api/cmd/migrate
 ```
 
@@ -151,9 +151,9 @@ incomplete. Durable acceptance is not an exactly-once side-effect guarantee.
 ## Standalone HTTP service
 
 Run migrations first, then `go run ./services/agents-api/cmd/server`. The service
-uses `AGENTS_API_DATABASE_URL` for its dedicated database; it does not read the
+uses `OAC_DATABASE_URL` for its dedicated database; it does not read the
 product database or accept product login cookies. It requires the Core key digest
-file named by `AGENTS_API_CORE_KEY_DIGESTS_FILE` at startup; the Core key
+file named by `OAC_CORE_KEY_DIGESTS_FILE` at startup; the Core key
 authenticates `/core/v1`, where Projects and keys are managed. The Core key cannot
 authenticate `/v1`, and application API keys cannot authenticate `/core/v1`.
 
@@ -187,13 +187,13 @@ credentials separately match this recorded creator before authorizing an Environ
 connection; they do not inherit general caller API permissions. Native Runtime and
 node transport contracts are unchanged.
 
-`AGENTS_API_ADDR` defaults to `127.0.0.1:8091`; use a TLS reverse proxy for remote
-access. `AGENTS_API_ENGINE` defaults to `codex`; use `claude_sdk` for Claude Code
+`OAC_ADDR` defaults to `127.0.0.1:8091`; use a TLS reverse proxy for remote
+access. `OAC_DEFAULT_HARNESS` defaults to `codex`; use `claude_sdk` for Claude Code
 or `mcode` for MiniMax Code. Configure the corresponding qualified Runtime through
 its [deployment guide](../../contracts/agents-api/README.md#public-engine-profiles).
 It selects new Sessions independently of the requested
 model. Existing Sessions retain their stored engine. Set
-`AGENTS_API_HARNESSES=codex,claude_sdk,mcode` to explicitly enable installed profiles
+`OAC_HARNESSES=codex,claude_sdk,mcode` to explicitly enable installed profiles
 for user-managed enrollment without a managed Provider. This list supplements the
 default engine and any managed engine profiles; unknown names fail startup.
 Enabling a profile does not install its harness or qualify its deployment.
@@ -286,7 +286,7 @@ other exact hosted failure and expiry semantics remain unverified.
 
 The standalone service can accept existing daemon connections without a Parsar
 workspace or product database. Enable its internal gateway by setting
-`AGENTS_API_PUBLIC_URL=https://your-service` (HTTP only for a loopback host during
+`OAC_PUBLIC_URL=https://your-service` (HTTP only for a loopback host during
 local development). Core returns the derived
 `wss://your-service/api/v1/agent-daemon/ws` as `self_hosted.remote_url`. It names
 our private daemon transport, not stock OpenAI `exec-server` interoperability.
@@ -303,7 +303,7 @@ go run ./services/agents-api/cmd/device \
 parsar-daemon connect --profile agents-api
 ```
 
-The command requires `AGENTS_API_DATABASE_URL` and emits a secret profile once.
+The command requires `OAC_DATABASE_URL` and emits a secret profile once.
 Use a new profile rather than overwriting an existing device's credentials. When
 provisioning remote compute, securely transfer this file to the same profile path
 on the executor. The database stores only the credential digest. API keys and
@@ -341,7 +341,7 @@ export PARSAR_CLAUDE_SDK_NODE="/absolute/path/to/node"
 parsar-daemon connect --profile agents-api
 ```
 
-Set `AGENTS_API_ENGINE=claude_sdk` on the API service. Configure provider access in
+Set `OAC_DEFAULT_HARNESS=claude_sdk` on the API service. Configure provider access in
 the daemon's private native SDK environment. Runtime readiness checks versions and
 startup before daemon registration; it does not validate provider credentials.
 SDK state stays under the daemon profile, independently of the replaceable bundle.
@@ -490,7 +490,7 @@ access, the operator CLI can instead issue a principal executor key:
 
 ```bash
 umask 077
-agents-api-environment-key --tenant "$TENANT_ID" \
+oac-core-environment-key --tenant "$TENANT_ID" \
   --organization "$ORGANIZATION_ID" --project "$PROJECT_ID" \
   --subject-kind service_account --subject-id "$SUBJECT_ID" --key-id "$KEY_ID" \
   > "$HOME/.parsar/executor-key.json"

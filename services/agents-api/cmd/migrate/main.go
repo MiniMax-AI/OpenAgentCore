@@ -13,7 +13,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		log.Bg().Error("agents-api migration failed", "error", err)
+		log.Bg().Error("oac-core migration failed", "error", err)
 		os.Exit(1)
 	}
 }
@@ -24,7 +24,7 @@ func run() error {
 		return err
 	}
 	if databaseURL == "" {
-		return errors.New("AGENTS_API_DATABASE_URL must point to a dedicated execution database")
+		return errors.New("OAC_DATABASE_URL must point to a dedicated execution database")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

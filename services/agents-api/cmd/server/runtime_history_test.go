@@ -17,7 +17,7 @@ func (panicHistoryExporter) Export(context.Context, runtimeobs.ExportRecord) err
 func (panicHistoryExporter) Close(context.Context) error                           { panic("close") }
 
 func TestRuntimeHistoryUsesCoreDatabaseByDefault(t *testing.T) {
-	t.Setenv("AGENTS_API_RUNTIME_HISTORY_FILE", "")
+	t.Setenv("OAC_HISTORY_SETTINGS_FILE", "")
 	for _, enabled := range []bool{true, false} {
 		setup, err := runtimeHistory(t.Context(), store.New(nil), enabled)
 		if err != nil {
@@ -44,7 +44,7 @@ func TestRuntimeHistoryOptionalExportAndSamplingConfiguration(t *testing.T) {
 	if err := os.WriteFile(file, []byte(`{"transport":"otlp_http","endpoint":"https://collector.example.test/v1/metrics","headers":{"Authorization":"Bearer private"},"sample_interval_seconds":60}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AGENTS_API_RUNTIME_HISTORY_FILE", file)
+	t.Setenv("OAC_HISTORY_SETTINGS_FILE", file)
 	setup, err := runtimeHistory(t.Context(), store.New(nil), true)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestRuntimeHistoryConfigFailsClosedWithoutLeakingSecrets(t *testing.T) {
 			if err := os.WriteFile(file, []byte(test.config), 0600); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("AGENTS_API_RUNTIME_HISTORY_FILE", file)
+			t.Setenv("OAC_HISTORY_SETTINGS_FILE", file)
 			_, err := loadRuntimeHistoryConfig()
 			if err == nil {
 				t.Fatal("unsafe history configuration accepted")

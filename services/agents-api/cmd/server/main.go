@@ -48,7 +48,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		log.Bg().Error("agents-api startup failed", "error", err)
+		log.Bg().Error("oac-core startup failed", "error", err)
 		os.Exit(1)
 	}
 }
@@ -72,7 +72,7 @@ func run() error {
 		return err
 	}
 	if databaseURL == "" {
-		return errors.New("AGENTS_API_DATABASE_URL is required")
+		return errors.New("OAC_DATABASE_URL is required")
 	}
 	credentialKey, err := credentialCipher()
 	if err != nil {
@@ -90,7 +90,7 @@ func run() error {
 	if err := pool.Ping(ready); err != nil {
 		return errors.New("Agents API database connection failed")
 	}
-	engine := os.Getenv("AGENTS_API_ENGINE")
+	engine := os.Getenv("OAC_DEFAULT_HARNESS")
 	if engine == "" {
 		engine = "codex"
 	}

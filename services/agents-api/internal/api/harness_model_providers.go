@@ -80,7 +80,7 @@ func knownHarness(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 // @Summary List harnesses and their deployment default model providers
-// @Description Core key only. Returns every harness this build supports, in name order. enabled and default are read-only views of the process configuration (AGENTS_API_ENGINE and AGENTS_API_HARNESSES). model_provider is the harness's deployment default, stored in Core, or null. Keys are never returned; api_key_configured reports that one is set.
+// @Description Core key only. Returns every harness this build supports, in name order. enabled and default are read-only views of the process configuration (OAC_DEFAULT_HARNESS and OAC_HARNESSES). model_provider is the harness's deployment default, stored in Core, or null. Keys are never returned; api_key_configured reports that one is set.
 // @Tags Deployment Model Providers
 // @Produce json
 // @Security DeploymentAdminAuth

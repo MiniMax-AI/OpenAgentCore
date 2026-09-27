@@ -12,13 +12,13 @@ import (
 )
 
 func TestCredentialCipherConfiguration(t *testing.T) {
-	t.Setenv("AGENTS_API_CREDENTIAL_KEY_FILE", "")
+	t.Setenv("OAC_CREDENTIAL_KEY_FILE", "")
 	t.Setenv("PARSAR_MASTER_KEY", "must-not-be-used")
 	if c, err := credentialCipher(); c != nil || err != nil {
 		t.Fatal("absent dedicated key must remain disabled", err)
 	}
 	path := filepath.Join(t.TempDir(), "credential.key")
-	t.Setenv("AGENTS_API_CREDENTIAL_KEY_FILE", path)
+	t.Setenv("OAC_CREDENTIAL_KEY_FILE", path)
 	if _, err := credentialCipher(); err == nil {
 		t.Fatal("missing configured file accepted")
 	}

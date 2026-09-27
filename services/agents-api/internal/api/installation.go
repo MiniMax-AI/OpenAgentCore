@@ -19,9 +19,9 @@ import (
 // environment and build; configuration is the installer's settings snapshot.
 type Installation struct {
 	Object string `json:"object" enums:"core.installation"`
-	// AGENTS_API_SANDBOX_INSTALLATION_ID; null when Core runs without the sandbox manager.
+	// OAC_INSTALLATION_ID; null when Core runs without the sandbox manager.
 	InstallationID *string `json:"installation_id" extensions:"x-nullable"`
-	// AGENTS_API_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.
+	// OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.
 	PublicURL *string `json:"public_url" extensions:"x-nullable"`
 	// public_url followed by /v1; null when public_url is null.
 	APIBaseURL *string `json:"api_base_url" extensions:"x-nullable"`
@@ -29,7 +29,7 @@ type Installation struct {
 	LocalOnly bool `json:"local_only"`
 	// Full source commit Core was built from; null for development builds.
 	SourceCommit *string `json:"source_commit" extensions:"x-nullable"`
-	// The installer's settings snapshot (AGENTS_API_SETTINGS_FILE); null when the installer did not start Core.
+	// The installer's settings snapshot (OAC_SETTINGS_FILE); null when the installer did not start Core.
 	Configuration   *InstallationConfiguration `json:"configuration" extensions:"x-nullable"`
 	AddressBindings store.AddressBindings      `json:"address_bindings"`
 }
@@ -68,7 +68,7 @@ const maxInstallationSettings = 64 << 10
 // A sensitive setting that carries a value is rejected, so the snapshot cannot
 // leak a secret through this read.
 func ParseInstallationConfiguration(raw []byte) (*InstallationConfiguration, error) {
-	invalid := errors.New("AGENTS_API_SETTINGS_FILE must contain the installer's settings snapshot")
+	invalid := errors.New("OAC_SETTINGS_FILE must contain the installer's settings snapshot")
 	if len(raw) > maxInstallationSettings {
 		return nil, invalid
 	}

@@ -219,12 +219,12 @@ replacement:
 | Retired | Replacement | Where |
 | --- | --- | --- |
 | `AGENTS_API_EXECUTION_OPTIONS_FILE` | Default models, set per harness in Web (**System**, **Default model**) or with `PUT /core/v1/harnesses/{harness}/model-provider` | `config/core.env`. `--convert` does not carry it over; it leaves the file, which may hold model keys, and reports it. Delete the file once the defaults are set |
-| `AGENTS_API_DAEMON_WS_URL` (a `wss://…/api/v1/agent-daemon/ws` URL) | `AGENTS_API_PUBLIC_URL` (the origin, such as `https://core.example`), or `public_url` in `config.json` | `config/core.env` |
+| `AGENTS_API_DAEMON_WS_URL` (a `wss://…/api/v1/agent-daemon/ws` URL) | `OAC_PUBLIC_URL` (the origin, such as `https://core.example`), or `public_url` in `config.json` | `config/core.env` |
 | `AGENTS_API_CONFIG_FILE` | None; delete the line | `config/core.env` |
 | `AGENTS_API_MANAGED_RUNTIMES_FILE` | The sandbox deployment in the database, set in Web | `config/core.env`; see [older file-managed installations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#older-file-managed-installations) |
 | `admin/sandbox-admin.key`, `admin/digests.json` | `admin/core.key`, `admin/core-key-digests.json` (conversion then moves them to `secrets/` and `generated/`) | Files and their `compose.json` mounts |
-| `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` | `AGENTS_API_CORE_KEY_DIGESTS_FILE` | `config/core.env` |
-| `CORE_CONSOLE_ADMIN_TOKEN_FILE`, `install.sh --admin-token-file` | `CORE_CONSOLE_CORE_KEY_FILE`, `--core-key-file` | Web environment; installer flag |
+| `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` | `OAC_CORE_KEY_DIGESTS_FILE` | `config/core.env` |
+| `CORE_CONSOLE_ADMIN_TOKEN_FILE`, `install.sh --admin-token-file` | `OAC_WEB_CORE_KEY_FILE`, `--core-key-file` | Web environment; installer flag |
 | `CORE_CONSOLE_AUTH_MODE`, `CORE_CONSOLE_STATE_DIR`, `CORE_CONSOLE_PASSWORD_FILE` | None: Web has no accounts or passwords; sign in with the Core key | Web environment, with their `state/console` and `config/console.password` mounts |
 | `install.sh --sandbox-provider`, `--provider` | `install.sh --sandbox`; add the Core host as a node with Add node | Installer flags |
 | `install.sh --status`, `--stop` | `parsar status`, `parsar stop` | Installer flags |
@@ -234,7 +234,7 @@ Before converting, rename or remove only the names from before the Core key:
 `admin/sandbox-admin.key`, `admin/digests.json`, `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE`
 and the retired `CORE_CONSOLE_*` settings. Leave `AGENTS_API_DAEMON_WS_URL`,
 `AGENTS_API_CONFIG_FILE` and `AGENTS_API_EXECUTION_OPTIONS_FILE` to `--convert`, which
-maps or reports them. Don't add `AGENTS_API_PUBLIC_URL` by hand: when it is present,
+maps or reports them. Don't add `OAC_PUBLIC_URL` by hand: when it is present,
 conversion takes it as the address Core uses and skips the check against the sandbox
 deployment's Core address that keeps existing nodes bound. Hosted and self-hosted
 Sessions that relied on the retired options file
@@ -249,7 +249,7 @@ Recreate them with `x_agents_core.model_provider` or an Agent that has one saved
 
 The deployment no longer stores a Core address; nodes keep the one they enrolled with.
 For a Core you run without the installer, read `GET /core/v1/sandbox/deployment` with
-the Core key before upgrading and set `AGENTS_API_PUBLIC_URL` to its `core_url`; with
+the Core key before upgrading and set `OAC_PUBLIC_URL` to its `core_url`; with
 any other value, every existing node counts as bound to another address and must be
 added again.
 

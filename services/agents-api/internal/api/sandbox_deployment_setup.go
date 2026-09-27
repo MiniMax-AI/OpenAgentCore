@@ -48,7 +48,7 @@ func rejectCoreURL(w http.ResponseWriter, raw json.RawMessage) bool {
 	if _, present := fields["core_url"]; !present {
 		return false
 	}
-	writeError(w, http.StatusBadRequest, "invalid_request_error", "core_url is derived from the installation public URL (public_url in config.json, AGENTS_API_PUBLIC_URL for Core) and cannot be set here. Remove it.", "core_url")
+	writeError(w, http.StatusBadRequest, "invalid_request_error", "core_url is derived from the installation public URL (public_url in config.json, OAC_PUBLIC_URL for Core) and cannot be set here. Remove it.", "core_url")
 	return true
 }
 

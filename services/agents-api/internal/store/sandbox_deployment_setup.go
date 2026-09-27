@@ -98,7 +98,7 @@ func (s *Store) ClaimWebSandboxDeployment(ctx context.Context, installationID st
 
 // ValidateSandboxCoreURL accepts a canonical public origin, never a path or
 // credential. Plain HTTP is reserved for explicit loopback development hosts.
-// AGENTS_API_PUBLIC_URL must pass it.
+// OAC_PUBLIC_URL must pass it.
 func ValidateSandboxCoreURL(value string) error {
 	u, err := url.Parse(value)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawFragment != "" || u.Opaque != "" || u.String() != value || u.Host != strings.ToLower(u.Host) {

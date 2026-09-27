@@ -71,8 +71,8 @@ The full Python dependency closure, including PyInstaller, has hashes in
 No account credential is needed for builds or `--check`. When building from an
 archived source tree, supply `E2B_SOURCE_REVISION` with its actual commit.
 
-The output is `agents-api-e2b-provider-linux-amd64.tar.gz` and its `.sha256` file.
-Extraction yields `agents-api-e2b-provider/agents-api-e2b-provider`, `_internal/`,
+The output is `oac-e2b-provider-linux-amd64.tar.gz` and its `.sha256` file.
+Extraction yields `oac-e2b-provider/oac-e2b-provider`, `_internal/`,
 `licenses/`, `requirements.lock` and `manifest.json`. The artifact contains only
 regular files/directories, with executable permissions preserved. Core's image
 and native installer use the same tree; the target needs compatible Linux/glibc

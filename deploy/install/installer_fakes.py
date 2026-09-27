@@ -136,7 +136,7 @@ class FakeHost:
             if "web" in names:
                 web = services["web"]
                 self.web_port = int(web["ports"][0].split(":")[1]) if "ports" in web else int(
-                    web["environment"]["CORE_CONSOLE_ADDR"].rsplit(":", 1)[1])
+                    web["environment"]["OAC_WEB_ADDR"].rsplit(":", 1)[1])
             environment = path.parent / "core.env"
             if "core" in names and (self.core["fails"] or
                                     self.core["rejects"](environment.read_text() if environment.exists() else "")):
@@ -181,7 +181,7 @@ class FakeHost:
                                          (root / "config/core.env", root / "admin/core-key-digests.json")):
                 if environment.exists():
                     address = next(line for line in environment.read_text().splitlines()
-                                   if line.startswith("AGENTS_API_ADDR="))
+                                   if line.startswith("OAC_ADDR="))
                     native["addr"] = int(address.rsplit(":", 1)[1].rstrip('"'))
                     native["digests"] = json.loads(digests.read_text())
                     native["environment"] = environment.read_text()
@@ -230,7 +230,7 @@ class FakeHost:
         if path == "/core/v1/installation":
             native = self.native["active"] and self.native["addr"] == port
             environment = self.native["environment"] if native else self.core.get("environment", "")
-            match = re.search(r'^AGENTS_API_PUBLIC_URL="([^"]+)"$', environment, re.M)
+            match = re.search(r'^OAC_PUBLIC_URL="([^"]+)"$', environment, re.M)
             public = match[1] if match else None
             return 200, json.dumps({"installation_id": self.core_installation_id, "public_url": public,
                                     "address_bindings": self.bindings}).encode()
@@ -260,7 +260,7 @@ class FakeHost:
                 "resources": selection.get("resources", {"cpus": 2, "memory_mib": 2048})}}
         native = self.native["active"] and self.native["addr"] == port
         environment = self.native["environment"] if native else self.core.get("environment", "")
-        installation = re.search(r'^AGENTS_API_SANDBOX_INSTALLATION_ID="([^"]+)"$', environment, re.M)
+        installation = re.search(r'^OAC_INSTALLATION_ID="([^"]+)"$', environment, re.M)
         return 200, json.dumps(dict(self.deployment, installation_id=installation and installation[1])).encode()
 
 
@@ -307,9 +307,9 @@ def make_bundle(directory, manifest, commit=None):
     (bundle / "manifest.json").write_text(json.dumps(manifest))
     for name in manifest["images"]:
         (bundle / "images" / (name + ".tar")).write_bytes(("synthetic " + name).encode())
-    for name in ("bin/agents-api", "bin/agents-api-migrate", "bin/agents-api-microsandbox-provider",
+    for name in ("bin/oac-core", "bin/oac-core-migrate", "bin/agents-api-microsandbox-provider",
                  "bin/parsar-sandbox-node", "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1",
-                 "e2b/agents-api-e2b-provider"):
+                 "e2b/oac-e2b-provider"):
         path = bundle / "native" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"\x7fELFsynthetic native file " + manifest["source_commit"].encode())

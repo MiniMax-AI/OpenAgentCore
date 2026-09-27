@@ -15,13 +15,13 @@ type writeAuditPruner interface {
 }
 
 func writeAuditRetention() (time.Duration, error) {
-	value := os.Getenv("AGENTS_API_WRITE_AUDIT_RETENTION")
+	value := os.Getenv("OAC_WRITE_AUDIT_RETENTION")
 	if value == "" {
 		return 90 * 24 * time.Hour, nil
 	}
 	duration, err := time.ParseDuration(value)
 	if err != nil || duration < time.Hour {
-		return 0, errors.New("AGENTS_API_WRITE_AUDIT_RETENTION must be a duration of at least 1h")
+		return 0, errors.New("OAC_WRITE_AUDIT_RETENTION must be a duration of at least 1h")
 	}
 	return duration, nil
 }

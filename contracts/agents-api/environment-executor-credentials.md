@@ -67,7 +67,7 @@ Issue, rotate and revoke each record an administrator audit entry
 (`resource_type:"executor_credential"`, the key ID as `resource_id`, action
 `issue`, `rotate` or `revoke`) in the same transaction as the write. The audit
 never contains the secret. Credentials issued by the operator CLI
-(`agents-api-environment-key`) without an Environment restriction cannot be
+(`oac-core-environment-key`) without an Environment restriction cannot be
 managed through these routes.
 
 ## Model provider

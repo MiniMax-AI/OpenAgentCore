@@ -39,7 +39,7 @@ func run() error {
 		return err
 	}
 	if dsn == "" || *tenant == "" || flag.NArg() != 0 {
-		return errors.New("AGENTS_API_DATABASE_URL and --tenant are required")
+		return errors.New("OAC_DATABASE_URL and --tenant are required")
 	}
 	if *revoke == "" {
 		u, err := url.Parse(*serverURL)

@@ -17,7 +17,7 @@ var sourceCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
 // acts on the snapshot; it only reports it.
 func installationFacts(publicURL string) (api.Installation, error) {
 	var facts api.Installation
-	if id := os.Getenv("AGENTS_API_SANDBOX_INSTALLATION_ID"); id != "" {
+	if id := os.Getenv("OAC_INSTALLATION_ID"); id != "" {
 		facts.InstallationID = &id
 	}
 	if publicURL != "" {
@@ -28,18 +28,18 @@ func installationFacts(publicURL string) (api.Installation, error) {
 		revision := buildRevision
 		facts.SourceCommit = &revision
 	}
-	path := os.Getenv("AGENTS_API_SETTINGS_FILE")
+	path := os.Getenv("OAC_SETTINGS_FILE")
 	if path == "" {
 		return facts, nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return facts, errors.New("cannot read AGENTS_API_SETTINGS_FILE")
+		return facts, errors.New("cannot read OAC_SETTINGS_FILE")
 	}
 	defer f.Close()
 	raw, err := io.ReadAll(io.LimitReader(f, 64<<10+1))
 	if err != nil {
-		return facts, errors.New("cannot read AGENTS_API_SETTINGS_FILE")
+		return facts, errors.New("cannot read OAC_SETTINGS_FILE")
 	}
 	facts.Configuration, err = api.ParseInstallationConfiguration(raw)
 	return facts, err
