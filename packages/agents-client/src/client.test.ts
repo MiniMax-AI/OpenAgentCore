@@ -313,7 +313,7 @@ describe("OpenAIAgentsClient", () => {
       status: 503,
       code: "stream_interrupted",
       errorType: "server_error",
-      message: "Agent Core interrupted the live event stream. Reconnect and retrieve durable state.",
+      message: "OpenAgentCore interrupted the live event stream. Reconnect and retrieve durable state.",
     });
     expect(onEvent).not.toHaveBeenCalled();
     expect(cancelled).toBe(true);
@@ -898,7 +898,7 @@ describe("OpenAIAgentsClient", () => {
     )).rejects.toMatchObject({
       status: 503,
       code: "stream_interrupted",
-      message: "Agent Core interrupted the live event stream. Reconnect and retrieve durable state.",
+      message: "OpenAgentCore interrupted the live event stream. Reconnect and retrieve durable state.",
     });
     expect(onSession).not.toHaveBeenCalled();
     expect(onEvent).not.toHaveBeenCalled();
@@ -1591,7 +1591,7 @@ describe("OpenAIAgentsClient", () => {
     await expect(client.listEnvironmentFiles("environment", {})).rejects.toMatchObject({
       status: 502,
       code: "invalid_environment_files",
-      message: "Agent Core returned an invalid Environment files page.",
+      message: "OpenAgentCore returned an invalid Environment files page.",
     });
     expect(calls).toHaveLength(1);
   });
@@ -1664,7 +1664,7 @@ describe("OpenAIAgentsClient", () => {
     await expect(client.retrieveEnvironment("environment")).rejects.toMatchObject({
       status: 502,
       code: "invalid_environment_resource",
-      message: "Agent Core returned an invalid Environment resource.",
+      message: "OpenAgentCore returned an invalid Environment resource.",
     });
     expect(calls).toHaveLength(1);
   });
@@ -1995,7 +1995,7 @@ describe("OpenAIAgentsClient", () => {
 
     await expect(client.retrieveEnvironment("environment")).rejects.toMatchObject({
       status,
-      message: `Agent core request failed (${status}).`,
+      message: `OpenAgentCore request failed (${status}).`,
     });
     expect(calls).toHaveLength(1);
   });
@@ -2428,7 +2428,7 @@ describe("OpenAIAgentsClient", () => {
 
       await expect(submit(client)).rejects.toMatchObject({
         status,
-        message: `Agent core request failed (${status}).`,
+        message: `OpenAgentCore request failed (${status}).`,
       });
       expect(calls).toHaveLength(1);
     }
@@ -2674,7 +2674,7 @@ describe("OpenAIAgentsClient", () => {
     expect(error).toMatchObject({
       status: 503,
       code: "credential_write_failed",
-      message: "Agent Core Credential creation failed.",
+      message: "OpenAgentCore Credential creation failed.",
       param: undefined,
       errorType: undefined,
     });
@@ -2716,7 +2716,7 @@ describe("OpenAIAgentsClient", () => {
     expect(error).toMatchObject({
       status: 503,
       code: "credential_write_failed",
-      message: "Agent Core Credential token replacement failed.",
+      message: "OpenAgentCore Credential token replacement failed.",
       param: undefined,
       errorType: undefined,
     });

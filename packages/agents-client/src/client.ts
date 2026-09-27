@@ -148,7 +148,7 @@ export class AgentCoreError extends Error {
 export class CreationStreamRetryError extends AgentCoreError {
   constructor() {
     super(
-      "Agent Core already recorded this Session creation, so its stream sends no events. Repeat the same request and Idempotency-Key with stream=false to retrieve the Session.",
+      "OpenAgentCore already recorded this Session creation, so its stream sends no events. Repeat the same request and Idempotency-Key with stream=false to retrieve the Session.",
       409,
       "creation_stream_retry",
     );
@@ -456,7 +456,7 @@ function invalidVaultResponse(code: string, message: string): never {
 
 export function projectVault(value: unknown, expectedId?: string): Vault {
   if (!isRecord(value) || !exactFields(value, vaultFields)) {
-    return invalidVaultResponse("invalid_vault_resource", "Agent Core returned an invalid Vault resource.");
+    return invalidVaultResponse("invalid_vault_resource", "OpenAgentCore returned an invalid Vault resource.");
   }
   if (
     typeof value.id !== "string" || !canonicalUuidPattern.test(value.id) ||
@@ -466,7 +466,7 @@ export function projectVault(value: unknown, expectedId?: string): Vault {
     !(value.name === null || isTrimmedName(value.name)) ||
     !validMetadata(value.metadata)
   ) {
-    return invalidVaultResponse("invalid_vault_resource", "Agent Core returned an invalid Vault resource.");
+    return invalidVaultResponse("invalid_vault_resource", "OpenAgentCore returned an invalid Vault resource.");
   }
   return {
     id: value.id,
@@ -483,7 +483,7 @@ export function projectVaultCredential(
   expectedCredentialId?: string,
 ): VaultCredential {
   if (!isRecord(value) || !exactFields(value, vaultCredentialFields) || !isRecord(value.auth)) {
-    return invalidVaultResponse("invalid_vault_credential", "Agent Core returned invalid Credential metadata.");
+    return invalidVaultResponse("invalid_vault_credential", "OpenAgentCore returned invalid Credential metadata.");
   }
   if (
     typeof value.id !== "string" || !canonicalUuidPattern.test(value.id) ||
@@ -493,10 +493,10 @@ export function projectVaultCredential(
     !Number.isSafeInteger(value.created_at) || Number(value.created_at) < 0 ||
     !Number.isSafeInteger(value.updated_at) || Number(value.updated_at) < Number(value.created_at)
   ) {
-    return invalidVaultResponse("invalid_vault_credential", "Agent Core returned invalid Credential metadata.");
+    return invalidVaultResponse("invalid_vault_credential", "OpenAgentCore returned invalid Credential metadata.");
   }
   const auth = projectVaultCredentialAuth(value.auth);
-  if (!auth) return invalidVaultResponse("invalid_vault_credential", "Agent Core returned invalid Credential metadata.");
+  if (!auth) return invalidVaultResponse("invalid_vault_credential", "OpenAgentCore returned invalid Credential metadata.");
   return {
     id: value.id,
     vault_id: value.vault_id as string,
@@ -550,7 +550,7 @@ function projectVaultPage<T extends { id: string; created_at: number }>(
 }
 
 export function projectVaultList(value: unknown, options?: VaultListOptions): VaultList {
-  return projectVaultPage(value, options, (entry) => projectVault(entry), "invalid_vault_list", "Agent Core returned an invalid Vault list.");
+  return projectVaultPage(value, options, (entry) => projectVault(entry), "invalid_vault_list", "OpenAgentCore returned an invalid Vault list.");
 }
 
 export function projectVaultCredentialList(value: unknown, vaultId: string, options?: VaultListOptions): VaultCredentialList {
@@ -559,7 +559,7 @@ export function projectVaultCredentialList(value: unknown, vaultId: string, opti
     options,
     (entry) => projectVaultCredential(entry, vaultId),
     "invalid_vault_credential_list",
-    "Agent Core returned an invalid Credential list.",
+    "OpenAgentCore returned an invalid Credential list.",
   );
 }
 
@@ -571,12 +571,12 @@ function projectDeletedResource<T extends VaultDeleted | VaultCredentialDeleted>
   code: string,
 ): T {
   if (!isRecord(value) || !exactFields(value, fields) || !sameUuid(value.id, expectedId) || value.object !== object || value.deleted !== true) {
-    return invalidVaultResponse(code, "Agent Core returned an invalid deletion receipt.");
+    return invalidVaultResponse(code, "OpenAgentCore returned an invalid deletion receipt.");
   }
   return { id: value.id as string, object, deleted: true } as T;
 }
 
-function invalidEnvironmentTemplate(message = "Agent Core returned an invalid Environment Template."): never {
+function invalidEnvironmentTemplate(message = "OpenAgentCore returned an invalid Environment Template."): never {
   throw new AgentCoreError(message, 502, "invalid_environment_template");
 }
 
@@ -593,11 +593,11 @@ export function projectEnvironmentTemplateList(
     options,
     (entry) => projectEnvironmentTemplate(entry),
     "invalid_environment_template_list",
-    "Agent Core returned an invalid Environment Template list.",
+    "OpenAgentCore returned an invalid Environment Template list.",
   );
 }
 
-function invalidSessionResource(message = "Agent Core returned an invalid Session resource."): never {
+function invalidSessionResource(message = "OpenAgentCore returned an invalid Session resource."): never {
   throw new AgentCoreError(message, 502, "invalid_session_resource");
 }
 
@@ -805,7 +805,7 @@ function bindCreatedEnvironment(
   expected: ExpectedCreationEnvironment,
 ): void {
   if (environment.type !== expected.type) {
-    return invalidSessionResource("Agent Core returned a different Environment type than the creation request.");
+    return invalidSessionResource("OpenAgentCore returned a different Environment type than the creation request.");
   }
   if (
     expected.type === "self_hosted" && environment.type === "self_hosted" &&
@@ -815,14 +815,14 @@ function bindCreatedEnvironment(
         expected.capabilityDirectories,
       ))
   ) {
-    return invalidSessionResource("Agent Core returned a different self-hosted Environment configuration.");
+    return invalidSessionResource("OpenAgentCore returned a different self-hosted Environment configuration.");
   }
   if (
     expected.type === "openai_hosted" && environment.type === "openai_hosted" &&
     expected.networkAccess !== null &&
     (environment as Extract<AgentSession["environment"], { type: "openai_hosted" }>).network.access !== expected.networkAccess
   ) {
-    return invalidSessionResource("Agent Core returned a different managed Environment network mode.");
+    return invalidSessionResource("OpenAgentCore returned a different managed Environment network mode.");
   }
 }
 
@@ -910,7 +910,7 @@ export function projectAgentSession(
   ) return invalidSessionResource();
 
   if (!Array.isArray(value.vault_ids)) {
-    return invalidVaultResponse("invalid_session_vaults", "Agent Core returned invalid Session Vault attachments.");
+    return invalidVaultResponse("invalid_session_vaults", "OpenAgentCore returned invalid Session Vault attachments.");
   }
   const vaultIds = value.vault_ids;
   if (
@@ -918,14 +918,14 @@ export function projectAgentSession(
     (expectedVaultIds !== undefined &&
       (expectedVaultIds.length !== vaultIds.length || expectedVaultIds.some((id, index) => id !== vaultIds[index])))
   ) {
-    return invalidVaultResponse("invalid_session_vaults", "Agent Core returned invalid Session Vault attachments.");
+    return invalidVaultResponse("invalid_session_vaults", "OpenAgentCore returned invalid Session Vault attachments.");
   }
 
   const environment = projectSessionEnvironment(value.environment);
   const requiredActions = projectRequiredActions(value.required_actions);
   const requiresAction = value.status === "requires_action";
   if (requiresAction !== (requiredActions.length > 0)) {
-    return invalidSessionResource("Agent Core returned Session actions inconsistent with its status.");
+    return invalidSessionResource("OpenAgentCore returned Session actions inconsistent with its status.");
   }
   const environmentConnections = requiredActions.filter((action) => action.type === "environment_connection");
   if (environmentConnections.length > 0) {
@@ -937,9 +937,9 @@ export function projectAgentSession(
       environmentId === null ||
       requiredActions.length !== 1 ||
       environmentConnections.length !== 1
-    ) return invalidSessionResource("Agent Core returned an invalid Environment connection action.");
+    ) return invalidSessionResource("OpenAgentCore returned an invalid Environment connection action.");
     if (!sameResourceId(environmentConnections[0]!.environment_id, environmentId)) {
-      return invalidSessionResource("Agent Core returned an invalid Environment connection action.");
+      return invalidSessionResource("OpenAgentCore returned an invalid Environment connection action.");
     }
   }
 
@@ -959,13 +959,13 @@ export function projectAgentSession(
   };
   if (expectedEnvironment !== undefined) bindCreatedEnvironment(session.environment, expectedEnvironment);
   if (expectedImmutable !== undefined && !matchesImmutableSession(session, expectedImmutable)) {
-    return invalidSessionResource("Agent Core changed immutable Session configuration in the event stream.");
+    return invalidSessionResource("OpenAgentCore changed immutable Session configuration in the event stream.");
   }
   return session;
 }
 
 function invalidSessionList(): never {
-  throw new AgentCoreError("Agent Core returned an invalid Session list.", 502, "invalid_session_list");
+  throw new AgentCoreError("OpenAgentCore returned an invalid Session list.", 502, "invalid_session_list");
 }
 
 /**
@@ -1018,7 +1018,7 @@ function projectTolerantSessionList(value: unknown, limit: number, order: PageOr
   };
 }
 
-function invalidRuntimeObservation(message = "Agent Core returned an invalid Runtime observation."): never {
+function invalidRuntimeObservation(message = "OpenAgentCore returned an invalid Runtime observation."): never {
   throw new AgentCoreError(message, 502, "invalid_runtime_observation");
 }
 
@@ -1189,7 +1189,7 @@ function optionalEventIndex(event: Record<string, unknown>, field: string, requi
 function eventSessionId(event: Record<string, unknown>, expectedSessionId: string, required: boolean): string | undefined {
   if (event.session_id === undefined && !required) return undefined;
   if (typeof event.session_id !== "string" || !sameResourceId(event.session_id, expectedSessionId)) {
-    return invalidStreamEvent("Agent Core returned an event for a different Session.");
+    return invalidStreamEvent("OpenAgentCore returned an event for a different Session.");
   }
   return event.session_id;
 }
@@ -1209,12 +1209,12 @@ function projectEnvironmentState(value: unknown, status: string): AgentSessionEn
   };
 }
 
-function invalidStreamEvent(message = "Agent Core returned an invalid event stream payload."): never {
+function invalidStreamEvent(message = "OpenAgentCore returned an invalid event stream payload."): never {
   throw new AgentCoreError(message, 502, "invalid_stream_event");
 }
 
 function invalidHistoryResource(): never {
-  throw new AgentCoreError("Agent Core returned an invalid history resource.", 502, "invalid_history_resource");
+  throw new AgentCoreError("OpenAgentCore returned an invalid history resource.", 502, "invalid_history_resource");
 }
 
 function parseStreamEvent(message: { event?: string; data: string }): SessionEvent {
@@ -1245,7 +1245,7 @@ function projectCreatedSessionEvent(
 ): { event: SessionEvent; session: AgentSession } {
   const value = event as unknown as Record<string, unknown>;
   if (event.type !== "agent.session.created" || !onlyFields(value, snapshotEventFields) || event.session === undefined) {
-    return invalidStreamEvent("Agent Core did not begin Session creation with a created Session snapshot.");
+    return invalidStreamEvent("OpenAgentCore did not begin Session creation with a created Session snapshot.");
   }
   const session = projectAgentSession(event.session, expectedVaultIds, undefined, expectedEnvironment);
   const sessionId = eventSessionId(value, session.id, false);
@@ -1438,7 +1438,7 @@ async function consumeEventStream(
   options: EventStreamConsumerOptions,
 ): Promise<void> {
   if (!body) {
-    throw new AgentCoreError("Agent core returned an empty event stream.", 502, "empty_stream");
+    throw new AgentCoreError("OpenAgentCore returned an empty event stream.", 502, "empty_stream");
   }
 
   const reader = body.getReader();
@@ -1454,14 +1454,14 @@ async function consumeEventStream(
       const sessionId = requiredEventString(raw, "session_id");
       const expectedSessionId = options.expectedSessionId?.();
       if (expectedSessionId !== undefined && !sameResourceId(sessionId, expectedSessionId)) {
-        return invalidStreamEvent("Agent Core returned an event for a different Session.");
+        return invalidStreamEvent("OpenAgentCore returned an event for a different Session.");
       }
       const streamError = projectStreamError(event.error);
       // Only Core's own interruption ends delivery. Other error events report a
       // Session failure, delivered in order before agent.session.failed.
       if (streamError.code === "stream_interrupted") {
         throw new AgentCoreError(
-          "Agent Core interrupted the live event stream. Reconnect and retrieve durable state.",
+          "OpenAgentCore interrupted the live event stream. Reconnect and retrieve durable state.",
           503,
           streamError.code,
           null,
@@ -1489,7 +1489,7 @@ async function consumeEventStream(
     decoder.finish();
     options.signal?.throwIfAborted();
     if (!sawEvent) {
-      throw options.emptyStreamError?.() ?? new AgentCoreError("Agent core returned an empty event stream.", 502, "empty_stream");
+      throw options.emptyStreamError?.() ?? new AgentCoreError("OpenAgentCore returned an empty event stream.", 502, "empty_stream");
     }
   } catch (error) {
     await reader.cancel(error).catch(() => undefined);
@@ -1513,7 +1513,7 @@ function isExpectedEnvironmentId(value: unknown, expectedId: string): value is s
 
 function projectEnvironmentResource(value: unknown, expectedId: string): AgentEnvironmentResource {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new AgentCoreError("Agent Core returned an invalid Environment resource.", 502, "invalid_environment_resource");
+    throw new AgentCoreError("OpenAgentCore returned an invalid Environment resource.", 502, "invalid_environment_resource");
   }
   const resource = value as Record<string, unknown>;
   const fields = Object.keys(resource);
@@ -1530,7 +1530,7 @@ function projectEnvironmentResource(value: unknown, expectedId: string): AgentEn
     (resource.type === "openai_hosted" &&
       (resource.files.length !== 0 || resource.plugins.length !== 0 || resource.skills.length !== 0))
   ) {
-    throw new AgentCoreError("Agent Core returned an invalid Environment resource.", 502, "invalid_environment_resource");
+    throw new AgentCoreError("OpenAgentCore returned an invalid Environment resource.", 502, "invalid_environment_resource");
   }
   if (resource.type === "openai_hosted") {
     return {
@@ -1555,7 +1555,7 @@ function projectEnvironmentResource(value: unknown, expectedId: string): AgentEn
 }
 
 function invalidSourceFile(): never {
-  throw new AgentCoreError("Agent Core returned invalid Source File metadata.", 502, "invalid_source_file");
+  throw new AgentCoreError("OpenAgentCore returned invalid Source File metadata.", 502, "invalid_source_file");
 }
 
 function invalidSourceFileContent(message: string): never {
@@ -1570,7 +1570,7 @@ async function readExactSourceFileBody(
 ): Promise<Uint8Array<ArrayBuffer>> {
   if (response.body === null) {
     if (expectedBytes === 0) return new Uint8Array();
-    return invalid(`Agent Core returned incomplete ${label} content.`);
+    return invalid(`OpenAgentCore returned incomplete ${label} content.`);
   }
   const reader = response.body.getReader();
   const data = new Uint8Array(expectedBytes);
@@ -1581,7 +1581,7 @@ async function readExactSourceFileBody(
       if (done) break;
       if (!(value instanceof Uint8Array) || value.byteLength > expectedBytes - offset) {
         await reader.cancel().catch(() => undefined);
-        return invalid(`Agent Core returned ${label} content with a mismatched length.`);
+        return invalid(`OpenAgentCore returned ${label} content with a mismatched length.`);
       }
       data.set(value, offset);
       offset += value.byteLength;
@@ -1590,7 +1590,7 @@ async function readExactSourceFileBody(
     reader.releaseLock();
   }
   if (offset !== expectedBytes) {
-    return invalid(`Agent Core returned incomplete ${label} content.`);
+    return invalid(`OpenAgentCore returned incomplete ${label} content.`);
   }
   return data;
 }
@@ -1662,7 +1662,7 @@ export function projectSourceFileDeleted(value: unknown, expectedId: string): So
 }
 
 function invalidSourceFileList(): never {
-  throw new AgentCoreError("Agent Core returned an invalid Files list.", 502, "invalid_source_file_list");
+  throw new AgentCoreError("OpenAgentCore returned an invalid Files list.", 502, "invalid_source_file_list");
 }
 
 /**
@@ -1715,7 +1715,7 @@ function projectEnvironmentFile(
   expectedSize?: number,
 ): EnvironmentFile {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new AgentCoreError("Agent Core returned an invalid Environment file.", 502, "invalid_environment_file");
+    throw new AgentCoreError("OpenAgentCore returned an invalid Environment file.", 502, "invalid_environment_file");
   }
   const file = value as Record<string, unknown>;
   const fields = Object.keys(file);
@@ -1731,7 +1731,7 @@ function projectEnvironmentFile(
     Number(file.size_bytes) > maxEnvironmentFileBytes ||
     (expectedSize !== undefined && file.size_bytes !== expectedSize)
   ) {
-    throw new AgentCoreError("Agent Core returned an invalid Environment file.", 502, "invalid_environment_file");
+    throw new AgentCoreError("OpenAgentCore returned an invalid Environment file.", 502, "invalid_environment_file");
   }
   return {
     environment_id: file.environment_id as string,
@@ -1791,7 +1791,7 @@ function compareUtf8(left: string, right: string): number {
 }
 
 function invalidEnvironmentFiles(): never {
-  throw new AgentCoreError("Agent Core returned an invalid Environment files page.", 502, "invalid_environment_files");
+  throw new AgentCoreError("OpenAgentCore returned an invalid Environment files page.", 502, "invalid_environment_files");
 }
 
 function projectEnvironmentFileList(
@@ -1908,7 +1908,7 @@ export class OpenAIAgentsClient implements AgentCore {
       // Keep the customer-safe HTTP fallback when an intermediary returns HTML.
     }
     return new AgentCoreError(
-      envelope?.error?.message ?? `Agent core request failed (${response.status}).`,
+      envelope?.error?.message ?? `OpenAgentCore request failed (${response.status}).`,
       response.status,
       envelope?.error?.code,
       envelope?.error?.param,
@@ -2001,7 +2001,7 @@ export class OpenAIAgentsClient implements AgentCore {
     const expectedName = input.name ?? null;
     const expectedMetadata = input.metadata ?? {};
     if (vault.name !== expectedName || !sameMetadata(vault.metadata, expectedMetadata)) {
-      return invalidVaultResponse("invalid_vault_resource", "Agent Core returned mismatched Vault metadata.");
+      return invalidVaultResponse("invalid_vault_resource", "OpenAgentCore returned mismatched Vault metadata.");
     }
     return vault;
   }
@@ -2041,12 +2041,12 @@ export class OpenAIAgentsClient implements AgentCore {
     const value = await this.requestCredentialWrite(
       `/vaults/${encodeURIComponent(vaultId)}/credentials`,
       JSON.stringify(input),
-      "Agent Core Credential creation failed.",
+      "OpenAgentCore Credential creation failed.",
       201,
     );
     const credential = projectVaultCredential(value, vaultId);
     if (credential.auth.type !== "static_bearer" || credential.name !== input.name || credential.auth.mcp_server_url !== input.auth.mcp_server_url) {
-      return invalidVaultResponse("invalid_vault_credential", "Agent Core returned mismatched Credential metadata.");
+      return invalidVaultResponse("invalid_vault_credential", "OpenAgentCore returned mismatched Credential metadata.");
     }
     return credential;
   }
@@ -2085,7 +2085,7 @@ export class OpenAIAgentsClient implements AgentCore {
     const value = await this.requestCredentialWrite(
       `/vaults/${encodeURIComponent(vaultId)}/credentials/${encodeURIComponent(credentialId)}`,
       JSON.stringify(input),
-      "Agent Core Credential token replacement failed.",
+      "OpenAgentCore Credential token replacement failed.",
       200,
     );
     const credential = projectVaultCredential(value, vaultId, credentialId);
@@ -2095,7 +2095,7 @@ export class OpenAIAgentsClient implements AgentCore {
       credential.created_at !== baseline.created_at ||
       credential.updated_at < baseline.updated_at
     ) {
-      return invalidVaultResponse("invalid_vault_credential", "Agent Core returned mismatched Credential metadata after token replacement.");
+      return invalidVaultResponse("invalid_vault_credential", "OpenAgentCore returned mismatched Credential metadata after token replacement.");
     }
     return credential;
   }
@@ -2121,7 +2121,7 @@ export class OpenAIAgentsClient implements AgentCore {
     if (options?.agentId) params.set("agent_id", options.agentId);
     const page = await this.request<ListPage<unknown>>(withQuery("/agents/sessions", params), { signal: options?.signal });
     if (!isRecord(page) || !Array.isArray(page.data)) {
-      return invalidVaultResponse("invalid_session_vaults", "Agent Core returned invalid Session Vault attachments.");
+      return invalidVaultResponse("invalid_session_vaults", "OpenAgentCore returned invalid Session Vault attachments.");
     }
     return { ...page, data: page.data.map((session) => projectAgentSession(session)) };
   }
@@ -2264,7 +2264,7 @@ export class OpenAIAgentsClient implements AgentCore {
       !isRecognizedEnvironmentTemplate(template) || template.name !== expectedName ||
       !sameEnvironmentNetwork(template.network, expectedEnvironmentTemplateNetwork(input.network))
     ) {
-      return invalidEnvironmentTemplate("Agent Core returned mismatched Environment Template configuration.");
+      return invalidEnvironmentTemplate("OpenAgentCore returned mismatched Environment Template configuration.");
     }
     return template;
   }
@@ -2296,7 +2296,7 @@ export class OpenAIAgentsClient implements AgentCore {
       (hasOwn(supplied, "name") && template.name !== (input.name ?? null)) ||
       (hasOwn(supplied, "network") && !sameEnvironmentNetwork(template.network, expectedEnvironmentTemplateNetwork(input.network)))
     ) {
-      return invalidEnvironmentTemplate("Agent Core returned mismatched Environment Template configuration.");
+      return invalidEnvironmentTemplate("OpenAgentCore returned mismatched Environment Template configuration.");
     }
     return template;
   }
@@ -2315,7 +2315,7 @@ export class OpenAIAgentsClient implements AgentCore {
       !sameUuid(value.id, templateId) ||
       value.object !== "agent.environment.template.deleted" || value.deleted !== true
     ) {
-      return invalidEnvironmentTemplate("Agent Core returned an invalid Environment Template deletion receipt.");
+      return invalidEnvironmentTemplate("OpenAgentCore returned an invalid Environment Template deletion receipt.");
     }
     return { id: value.id as string, object: "agent.environment.template.deleted", deleted: true };
   }
@@ -2468,7 +2468,7 @@ export class OpenAIAgentsClient implements AgentCore {
       cacheControl !== "no-store" ||
       nosniff?.toLowerCase() !== "nosniff"
     ) {
-      return invalidSourceFileContent("Agent Core returned invalid Source File content headers.");
+      return invalidSourceFileContent("OpenAgentCore returned invalid Source File content headers.");
     }
     const data = await readExactSourceFileBody(response, Number(contentLength));
     return {
@@ -2512,7 +2512,7 @@ export class OpenAIAgentsClient implements AgentCore {
     const skill = projectSkill(value, invalidSkillResponse);
     // A new Skill has exactly one version, which is both default and latest.
     if (skill.default_version !== skill.latest_version) {
-      return invalidSkillResponse("Agent Core returned an invalid new Skill.");
+      return invalidSkillResponse("OpenAgentCore returned an invalid new Skill.");
     }
     return skill;
   }
@@ -2528,7 +2528,7 @@ export class OpenAIAgentsClient implements AgentCore {
     );
     const skill = projectSkill(value, invalidSkillResponse, skillId);
     if (skill.default_version !== version) {
-      return invalidSkillResponse("Agent Core returned a Skill whose default version was not updated.");
+      return invalidSkillResponse("OpenAgentCore returned a Skill whose default version was not updated.");
     }
     return skill;
   }
@@ -2620,7 +2620,7 @@ export class OpenAIAgentsClient implements AgentCore {
       nosniff?.toLowerCase() !== "nosniff"
     ) {
       await response.body?.cancel().catch(() => undefined);
-      return invalidSkillContent("Agent Core returned invalid Skill content headers.");
+      return invalidSkillContent("OpenAgentCore returned invalid Skill content headers.");
     }
     const data = await readExactSourceFileBody(response, Number(contentLength), invalidSkillContent, "Skill");
     return {

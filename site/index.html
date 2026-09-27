@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Parsar Core is open-source Agents API infrastructure. Run Codex, Claude Code and MiniMax Code on your infrastructure, with a Web console included.">
+    <meta name="description" content="OpenAgentCore is open-source Agents API infrastructure. Run Codex, Claude Code and MiniMax Code on your infrastructure, with a Web console included.">
     <meta name="theme-color" content="#fafafd">
-    <title>Parsar Core · Open-source Agents API infrastructure</title>
+    <title>OpenAgentCore · Open-source Agents API infrastructure</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header wrap">
-      <a class="brand" href="#" aria-label="Parsar Core home"><span class="brand-mark" aria-hidden="true">p<span>_</span></span>Parsar <span class="brand-core">Core</span></a>
+      <a class="brand" href="#" aria-label="OpenAgentCore home"><span class="brand-mark" aria-hidden="true">o<span>_</span></span>OpenAgentCore</a>
       <nav aria-label="Main navigation">
         <a href="#architecture">Architecture</a>
         <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Documentation</a>
@@ -59,7 +59,7 @@ client = OpenAI()
         <div class="wrap">
           <div class="section-heading"><div><p class="eyebrow">01 / Under the hood</p><h2 id="architecture-title">One execution path.<br>Clear responsibilities.</h2></div><p>Core owns the API and execution state. Each harness keeps its native model and tool loop.</p></div>
           <div class="architecture" aria-label="Core connects to the shared Runtime and its native harness adapters">
-            <div class="architecture-node"><span class="node-kind">CONTROL PLANE</span><h3>Parsar Core</h3><p>Sessions, credentials, files<br>and execution history.</p><span class="node-detail">Agents API + Web console</span></div>
+            <div class="architecture-node"><span class="node-kind">CONTROL PLANE</span><h3>OpenAgentCore</h3><p>Sessions, credentials, files<br>and execution history.</p><span class="node-detail">Agents API + Web console</span></div>
             <span class="connector" aria-hidden="true">→</span>
             <div class="architecture-node runtime-node"><span class="node-kind">SHARED RUNTIME</span><h3>Daemon + workspace</h3><p>One runtime contract.<br>Tools and files stay with execution.</p><span class="node-detail">Docker / microsandbox</span></div>
             <span class="connector" aria-hidden="true">→</span>
@@ -81,7 +81,7 @@ client = OpenAI()
           <ol class="setup-steps">
             <li class="setup-step"><span class="step-number" aria-hidden="true">01</span><div class="step-content"><div class="step-title"><h3>Install Core + Web</h3><span class="badge">ZERO NODES</span></div><p>Run from your extracted bundle. Core, Web and PostgreSQL start together. No model key required.</p><pre class="install-command"><code>./install.sh \
     --public-url https://core.example</code></pre></div></li>
-            <li class="setup-step"><span class="step-number" aria-hidden="true">02</span><div class="step-content"><h3>Sign in and issue a key</h3><p>Open the address printed by the installer. Sign in with the Core key in this private file:</p><div class="file-path"><code>~/.parsar/core/secrets/core.key</code></div><p class="step-detail">Set a default model on <strong>System</strong>, then create a project and issue a key on <strong>Projects and keys</strong>.</p></div></li>
+            <li class="setup-step"><span class="step-number" aria-hidden="true">02</span><div class="step-content"><h3>Sign in and issue a key</h3><p>Open the address printed by the installer. Sign in with the Core key in this private file:</p><div class="file-path"><code>~/.oac/core/secrets/core.key</code></div><p class="step-detail">Set a default model on <strong>System</strong>, then create a project and issue a key on <strong>Projects and keys</strong>.</p></div></li>
             <li class="setup-step"><span class="step-number" aria-hidden="true">03</span><div class="step-content"><h3>Add a node</h3><p>Open <strong>Nodes</strong>, choose <strong>Add node</strong>, then <strong>Generate command</strong>. Paste the command on a Linux host with sudo; it prepares the host itself.</p><div class="provider-options"><span>Docker</span><span>microsandbox</span></div><p class="step-detail">Web shows when the node is online and ready. All nodes use the same provider.</p></div></li>
           </ol>
           <p class="setup-footnote">Installation and enrollment do not call a model. <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md#installer-options">Other installation options <span aria-hidden="true">↗</span></a></p>
@@ -98,6 +98,6 @@ client = OpenAI()
       </section>
     </main>
 
-    <footer class="site-footer wrap"><div><a class="brand" href="#" aria-label="Parsar Core home"><span class="brand-mark" aria-hidden="true">p<span>_</span></span>Parsar <span class="brand-core">Core</span></a><p>Open infrastructure for native agents.</p></div><div class="footer-links"><a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Documentation</a><a href="https://github.com/MiniMax-AI/parsar-core">View on GitHub <span aria-hidden="true">↗</span></a></div></footer>
+    <footer class="site-footer wrap"><div><a class="brand" href="#" aria-label="OpenAgentCore home"><span class="brand-mark" aria-hidden="true">o<span>_</span></span>OpenAgentCore</a><p>Open infrastructure for native agents.</p></div><div class="footer-links"><a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Documentation</a><a href="https://github.com/MiniMax-AI/parsar-core">View on GitHub <span aria-hidden="true">↗</span></a></div></footer>
   </body>
 </html>
