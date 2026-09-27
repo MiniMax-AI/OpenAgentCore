@@ -1,5 +1,4 @@
 import { createPortal } from "react-dom";
-import { TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SandboxAdminClient, SandboxDeployment, SandboxEnrollment, SandboxNode } from "@agents-core-web/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,10 +6,13 @@ import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { formatBytes } from "../../lib/format";
+import { useConsoleNavigation } from "../../lib/console-navigation";
 import { installationQuery } from "../../lib/installation";
 import { sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
-import { sandboxCoreOrigin, sandboxSetupOrigin } from "./core-origin";
+import { checklistOpenFor, modelStep, nextStepAfterNode } from "../overview/getting-started";
+import { harnessesQuery } from "../system/harness-queries";
+import { nodeSourceUrl } from "./core-origin";
 import { nodeFilesAvailable, type SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand, nodeLogCommand, type NodeInstallMode } from "./enrollment-command";
 import { CommandBlock, CopyCommand, HostRequirements, NoSudoGuide } from "./node-commands";
@@ -35,13 +37,15 @@ const DEFAULT_RETAINED = "8";
  * one-time enrollment command that approves them
  * (`POST /core/v1/sandbox/enrollment-tokens`). Only microsandbox suspends
  * sandboxes, so only it asks for a retained limit; Docker retains exactly the
- * sandboxes it runs at once. The command runs the installer with sudo, which
- * installs the node as a system service; a disclosure offers the same command
- * without sudo, which installs a user service, and the log hint follows the
- * command last copied. No command is issued until the installation is read: one
- * whose public URL is loopback (`local_only`), an unreadable one, or a console
- * that reports no node files for the deployment's provider (`node_artifacts`)
- * says so instead. Each opening, and each return to the window while open, reads
+ * sandboxes it runs at once. The command downloads the installer from the
+ * installation's public URL, never the browser's address, and runs it with
+ * sudo, which installs the node as a system service; a disclosure offers the
+ * same command without sudo, which installs a user service, and the log hint
+ * follows the command last copied. No command is issued until the installation
+ * is read: one whose public URL other machines can't use (loopback, as
+ * `local_only` says, or not HTTPS), an unreadable one, or a console that
+ * reports no node files for the deployment's provider (`node_artifacts`) says
+ * so instead. Each opening, and each return to the window while open, reads
  * the installation and the console again, so a fix on the Core host shows
  * without a reload.
  *
@@ -84,9 +88,10 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const reading = useRef(false);
   const generation = useRef(0);
   const request = useRef<AbortController | null>(null);
-  const sourceUrl = sandboxCoreOrigin(window.location.origin);
-  const coreUrl = sandboxCoreOrigin(deployment.core_url || window.location.origin);
-  const available = Boolean(consoleConfig.node_installer && sourceUrl && coreUrl);
+  // Nodes download from, and reach Core at, the public URL; the browser's address may be a tunnel or loopback.
+  // The deployment's core_url is the same address, but the installation is read again on each opening, so a fix shows at once.
+  const publicUrl = installation.data ? nodeSourceUrl(installation.data) : null;
+  const available = consoleConfig.node_installer;
   const provider = deployment.provider === "docker" || deployment.provider === "microsandbox" ? deployment.provider : null;
   const backend = provider === "microsandbox" ? "microsandbox" : "Docker";
   // Nodes and their sandboxes reach Core at its public URL, so a loopback one serves no other machine;
@@ -94,14 +99,11 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // is issued, nor before the installation is read: a failed read (an older Core, say) proves nothing.
   const blocker: { text: string; failed?: boolean } | null = installation.data === undefined
     ? installation.isError ? { text: t("The installation couldn't be read, so no command can be issued."), failed: true } : { text: t("Checking this installation's public URL…") }
-    : installation.data.local_only
+    : !publicUrl
       ? { text: t("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply") }
       : !nodeFilesAvailable(consoleConfig, deployment.provider)
         ? { text: t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend }) }
         : null;
-  // The command downloads from this console's own address. A loopback one (or any
-  // address sandboxSetupOrigin refuses for guests) resolves to the node host itself.
-  const consoleLoopback = sourceUrl !== null && sandboxSetupOrigin(sourceUrl) === null;
   // Core takes whole numbers from 1 to a million, with the retained limit at least the active one.
   const suspends = deployment.provider === "microsandbox";
   const whole = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : null);
@@ -119,12 +121,17 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // the command on that host resumes with the node's retained identity.
   const registered = progress.stage !== "waiting";
   const ready = progress.stage === "ready" && fresh;
+  // While Getting started is open, a ready node points to what comes next: the default model, or the checklist.
+  const { navigate } = useConsoleNavigation();
+  const onboarding = ready && checklistOpenFor(deployment.installation_id);
+  const harnesses = useQuery({ ...harnessesQuery, enabled: onboarding });
+  const next = nextStepAfterNode(onboarding, modelStep(harnesses.data?.data ?? (harnesses.isError ? "failed" : undefined)));
   const expiresAt = enrollment ? Date.parse(enrollment.expires_at) : 0;
   const lapsed = Boolean(enrollment && expiresAt <= now);
   // Expired only once a read begun after the expiry found no node for the command.
   const expired = lapsed && checkedAt >= expiresAt;
-  const commandFor = (mode: NodeInstallMode) => enrollment && provider && available && (registered || !expired) && !ready
-    ? nodeInstallCommand({ token: enrollment.token, coreUrl: coreUrl!, sourceUrl: sourceUrl!, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256, mode }) : "";
+  const commandFor = (mode: NodeInstallMode) => enrollment && provider && available && publicUrl && (registered || !expired) && !ready
+    ? nodeInstallCommand({ token: enrollment.token, coreUrl: publicUrl, sourceUrl: publicUrl, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256, mode }) : "";
   const command = commandFor("sudo");
   const nodeId = node?.id ?? null;
   const polling = open && enrollment !== null && !ready && (registered || !expired);
@@ -223,7 +230,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   }
   const size = deployment.specification?.resources;
   const values = {
-    console: sourceUrl ?? "", core: coreUrl ?? "",
+    core: publicUrl ?? "",
     size: size ? t("{{cpus}} CPU · {{memory}}", { cpus: size.cpus, memory: formatBytes(size.memory_mib * 2 ** 20) }) : "",
   };
   const requirements = provider ? <>
@@ -257,16 +264,13 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     : sandboxDiagnosticMessage(progress.problem, locale);
   return createPortal(<Modal open={open} title={t("Add node")} onClose={close} footer={footer}>
     <div className="sandbox-add-node form-stack">
-      {!available ? <p role="status">{consoleConfig.node_installer && coreUrl && !sourceUrl
-        ? t("Open this console over HTTPS to add a node: the installer downloads only over HTTPS.")
-        : t("Node installation is unavailable. Ask the deployment administrator to enable the node installer on this console.")}</p>
+      {!available ? <p role="status">{t("This console serves no node installer. For a console deployed by hand, point CORE_CONSOLE_NODE_PAYLOAD_DIR at the distribution's node payload and restart it.")}</p>
       : !enrollment && blocker ? blocker.failed
         ? <p role="alert">{blocker.text} <button className="text-action" type="button" disabled={installation.isFetching} onClick={() => void installation.refetch()}>{t("Try again")}</button></p>
         : <p role="status">{blocker.text}</p>
       : !enrollment ? (
         <form id={limitsForm} className="form-stack" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
           <p>{t("Set the sandbox limits for the host you want to add.")}</p>
-          {consoleLoopback ? <p className="sandbox-add-node-warning" role="note"><TriangleAlert size={14} aria-hidden="true" /><span>{t("This console is open at {{origin}}, which other machines can't reach. To add another machine, open the console at its HTTPS address, then generate the command.", { origin: sourceUrl })}</span></p> : null}
           <div className="field">
             <span className="field-label-row"><label htmlFor={`${id}-active`}>{t("Sandboxes at once")}</label><HelpTip>{t("The most sandboxes Core places on this node at the same time.")}</HelpTip></span>
             <input id={`${id}-active`} inputMode="numeric" autoComplete="off" autoFocus={open} value={active} onChange={(event) => setActive(event.target.value)} aria-invalid={Boolean(activeProblem)} />
@@ -297,6 +301,12 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
               {steps.map((step, index) => <li key={index} className={step.state}><StatusDot tone={step.tone} label={step.label} /></li>)}
             </ol>}
         </div>
+        {next ? <p className="sandbox-next-step">
+          <span>{t(next === "default-model" ? "Next: set a default model." : "Next: finish Getting started.")}</span>
+          <button className="text-action" type="button" onClick={() => { close(); if (next === "default-model") navigate("system", {}, "default-model"); else navigate("overview"); }}>
+            {t(next === "default-model" ? "Open System" : "Open Overview")}
+          </button>
+        </p> : null}
         {problem && !ready ? <div className="sandbox-enrollment-problem" role="alert">
           <p><strong>{problem.label}</strong> {problem.advice}{problem.help ? <HelpTip>{problem.help}</HelpTip> : null}</p>
           <div className="sandbox-log-hint">

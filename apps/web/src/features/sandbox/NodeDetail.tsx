@@ -9,7 +9,7 @@ import { nodeProviderDiagnostic, sandboxDiagnosticMessage } from "../../lib/sand
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { phaseTiming } from "./allocation-phase";
-import { nodeState, NodeStatus, seconds } from "./NodeList";
+import { nodeState, NodeStatus, OldAddressHint, seconds } from "./NodeList";
 
 /** Why a node is not serving: disconnected, or the reason its provider is not ready. */
 function nodeDiagnostic(node: SandboxNode): string {
@@ -36,9 +36,11 @@ function PhaseTime({ allocation, retentionSeconds, now }: { allocation: SandboxA
   return <td className="nodes-nowrap" title={formatDateTime(timing.since, locale)}>{text}</td>;
 }
 
-export function NodeDetail({ node, allocations, stale, suspension }: {
+export function NodeDetail({ node, allocations, coreUrl, stale, suspension }: {
   node: SandboxNode;
   allocations: readonly SandboxAllocation[];
+  /** The deployment's address; a node enrolled with another one is on an old address. */
+  coreUrl: string;
   stale: boolean;
   /** The deployment's idle suspension policy; only microsandbox has one. */
   suspension: SandboxDeployment["suspension"];
@@ -51,7 +53,9 @@ export function NodeDetail({ node, allocations, stale, suspension }: {
   const reporting = !stale && node.online;
   // Only microsandbox suspends sandboxes into snapshots; Docker retains nothing.
   const suspends = node.provider === "microsandbox";
-  const diagnostic = stale ? "" : nodeDiagnostic(node);
+  const state = nodeState(node, own, stale, coreUrl);
+  // As in the list, an old address is the status to act on; the node's health would only distract.
+  const diagnostic = stale || state === "old_address" ? "" : nodeDiagnostic(node);
   const count = (value: number) => formatInteger(value, locale);
   return (
     <>
@@ -60,8 +64,9 @@ export function NodeDetail({ node, allocations, stale, suspension }: {
         <div>
           <dt>{t("Status")}</dt>
           <dd className="node-status-fact">
-            <NodeStatus state={nodeState(node, own, stale)} />
+            <NodeStatus state={state} />
             {diagnostic ? <DiagnosticTip code={diagnostic} /> : null}
+            {state === "old_address" ? <OldAddressHint /> : null}
           </dd>
         </div>
         <div>
@@ -73,9 +78,10 @@ export function NodeDetail({ node, allocations, stale, suspension }: {
         <div><dt>{t("Added")}</dt><dd>{formatDateTime(seconds(node.created_at), locale)}</dd></div>
       </dl>
 
-      {/* Active slots, cleanup and host resources are on Sandbox metrics; only what it does not show is here. */}
+      {/* Cleanup and host resources are on Sandbox metrics; the node's limit is here as well, beside Edit node that sets it. */}
       <Section headingId="node-capacity-heading" title={t("Capacity")}>
         <KpiStrip label={t("Capacity")}>
+          <Kpi label={t("Active / limit")} help={t("Sandboxes Core has placed on this node, against the most it places here at once.")} value={`${count(node.active)} / ${count(node.max_active)}`} />
           <Kpi label={t("Running")} value={reporting ? count(node.running) : MISSING} />
           {suspends ? <Kpi label={t("Suspended")} help={t("Suspended sandboxes keep their state as a snapshot on the node and resume on the Session's next Turn. They count toward the retained limit, not the active one.")} value={count(suspendedSandboxes(node))} /> : null}
           {suspends ? <Kpi label={t("Retained / limit")} help={t("Sandboxes this node holds, active and suspended, against its retained limit.")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}

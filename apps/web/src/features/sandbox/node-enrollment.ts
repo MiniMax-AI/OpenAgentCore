@@ -36,9 +36,10 @@ export interface HostPrerequisite {
  * - `host_capacity`: the host's CPUs and memory hold one sandbox of the
  *   deployment's size (else the node reports capacity_insufficient); the Runtime
  *   image needs about 2 GB of disk;
- * - network: node files and artifacts only from the console (`fetch` and
- *   `metadata`, which never use a release URL), Core's /api/v1 (node_spec.py, the
- *   `register` call), and sandboxes reach Core as well (`provider_config`).
+ * - network: node files and artifacts only from the console at the public URL
+ *   (`fetch` and `metadata`, which never use a release URL), Core's /api/v1 at the
+ *   same URL (node_spec.py, the `register` call), and sandboxes reach Core as well
+ *   (`provider_config`).
  * `sized` says whether the deployment's sandbox size is known for the capacity item.
  */
 export function hostRequirements(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
@@ -50,7 +51,7 @@ export function hostRequirements(provider: "docker" | "microsandbox", sized: boo
       ? { label: "Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)" }
       : { label: "/dev/kvm in the kvm group (hardware or nested virtualization) and the libraries microsandbox links (glibc)" },
     { label: sized ? "CPUs and memory for at least one sandbox: {{size}}; about 2 GB of disk for the Runtime image" : "CPUs and memory for at least one sandbox; about 2 GB of disk for the Runtime image" },
-    { label: "Reaches {{console}} and {{core}}; sandboxes reach {{core}}" },
+    { label: "Reaches {{core}}, as do its sandboxes" },
   ];
 }
 

@@ -10,17 +10,17 @@ import { ErrorState } from "../../components/ErrorState";
 import { useFailureToast, useToast } from "../../components/Toast";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { installationQuery } from "../../lib/installation";
-import { sandboxConfigurationRejection, sandboxRequestError } from "../../lib/sandbox-labels";
+import { sandboxConfigurationRejection, sandboxRequestError, sandboxWriteUncertain } from "../../lib/sandbox-labels";
 import type { SandboxConsoleConfig } from "./console-config";
 import { sandboxAdmin, sandboxConsoleConfigQuery, sandboxDeploymentQuery, sandboxScope, sandboxSnapshotQuery, type SandboxSnapshot } from "./sandbox-queries";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
 import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 import { NodeEnrollment } from "./NodeEnrollment";
-import { NodeList } from "./NodeList";
+import { NodeList, onOldAddress } from "./NodeList";
 import { NodeDetail } from "./NodeDetail";
 import { NodeEditDialog } from "./NodeEditDialog";
 import { NodeCleanupDialog, type NodeCleanup } from "./NodeCleanupDialog";
-import { sandboxCoreOrigin } from "./core-origin";
+import { sandboxSize } from "./deployment-specification";
 import "./SandboxManagerView.css";
 
 /** Nodes: the deployment provider, the node list and one node's detail (`#nodes?id=…`). */
@@ -51,7 +51,7 @@ function SandboxAccess() {
   const { data: config, isPending: checking, isFetching, isError, refetch } = useQuery(sandboxConsoleConfigQuery);
   if (isError && config === undefined) return <><NodesPageHeader /><div className="console-page-body"><p role="alert">{t("The console configuration could not be read. Refresh to try again.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></div></>;
   if (checking) return <><NodesPageHeader /><div className="console-page-body"><p role="status">{t("Connecting to this console's Core…")}</p></div></>;
-  if (!config?.sandbox_admin) return <><NodesPageHeader /><div className="console-page-body"><p role="alert">{t("Sandbox administration is not configured on this console. Ask the deployment administrator to configure access.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></div></>;
+  if (!config?.sandbox_admin) return <><NodesPageHeader /><div className="console-page-body"><p role="alert">{t("Sandbox administration is not configured on this console.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></div></>;
   return <SandboxManager consoleConfig={config} />;
 }
 
@@ -76,14 +76,14 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const [removeError, setRemoveError] = useState<string | null>(null);
   // After a removal, the host's uninstall command; it stays for the closing animation.
   const [cleanup, setCleanup] = useState<{ node: NodeCleanup; open: boolean } | null>(null);
-  // When a deployment write last had an uncertain outcome; only a read begun after it confirms the state again.
+  // When a deployment write last had an uncertain outcome (no response, a timeout or a 5xx); only a read begun after it confirms the state again.
   const [uncertainSince, setUncertainSince] = useState<number | null>(null);
   const setupNeedsRefresh = uncertainSince !== null && !(snapshot && snapshot.readAt > uncertainSince);
   // The state on screen is Core's last successful read, with no uncertain write since.
   const confirmed = snapshot !== null && !query.isError && !setupNeedsRefresh;
   // Writes additionally wait for any read in flight.
   const fresh = confirmed && !loading;
-  // A failed write opens a dialog with Core's reason; the error stays for the closing animation.
+  // A write with an uncertain outcome opens a dialog with the reason; the error stays for the closing animation.
   const [writeFailure, setWriteFailure] = useState<{ error: unknown; open: boolean } | null>(null);
   const { refetch } = query;
   const refresh = useCallback(() => {
@@ -137,9 +137,14 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       if (!controller.signal.aborted) {
         // Core rejected the configuration and saved nothing: the wizard explains why.
         if (fromWizard && sandboxConfigurationRejection(error) !== null) throw error;
-        setUncertainSince(performance.now()); setWriteFailure({ error, open: true });
-        // Nothing re-reads on its own: the operator refreshes to confirm. A later visit reads again.
-        void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
+        if (sandboxWriteUncertain(error)) {
+          setUncertainSince(performance.now()); setWriteFailure({ error, open: true });
+          // Nothing re-reads on its own: the operator refreshes to confirm. A later visit reads again.
+          void queryClient.invalidateQueries({ queryKey: sandboxScope, refetchType: "none" });
+        } else {
+          // Core refused the change, so nothing changed: its reason, and the page stays usable as it was.
+          toast.show(t("Core rejected the sandbox change"), { tone: "error", detail: sandboxRequestError(error, locale), key: "sandbox-write" });
+        }
       }
     } finally { if (!controller.signal.aborted) setBusy(false); }
     return false;
@@ -176,13 +181,12 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         setRemoveTarget(null);
         if (params.id === target.id) navigate("nodes");
         refresh();
-        // The host still runs the node's service until it is uninstalled there.
-        const sourceUrl = sandboxCoreOrigin(window.location.origin);
-        if (consoleConfig.node_installer && sourceUrl && snapshot) {
+        // The host still runs the node's service until it is uninstalled there; the dialog reads the installation for the command.
+        if (consoleConfig.node_installer && snapshot) {
           const { deployment } = snapshot;
           setCleanup({ node: {
-            name: target.name || target.id, sourceUrl, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256,
-            provider: deployment.provider, oldAddress: target.core_url !== deployment.core_url ? target.core_url : null,
+            name: target.name || target.id, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256,
+            provider: deployment.provider, oldAddress: onOldAddress(target, deployment.core_url) ? target.core_url : null,
           }, open: true });
         }
       }
@@ -203,7 +207,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     : hostedNodes && fresh && !snapshot.deployment.maintenance ? "ready" : "unavailable";
   useConsoleIntent("add-node", addNodeReadiness, () => setAdding(true));
   // A node enrolled with another address than Core's current one (config.json's public_url) gets no new sandboxes until it is added again.
-  const staleNodes = hostedNodes && snapshot ? nodes.filter((node) => node.core_url !== snapshot.deployment.core_url).map((node) => node.name || node.id) : [];
+  const staleNodes = hostedNodes && snapshot ? nodes.filter((node) => onOldAddress(node, snapshot.deployment.core_url)).map((node) => node.name || node.id) : [];
   const selected = params.id ? nodes.find((node) => node.id === params.id) : undefined;
   const refreshButton = <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy || removing} label={t("Refresh sandbox state")} />;
   const readFailure = error !== null ? sandboxRequestError(error, locale) : null;
@@ -252,7 +256,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
       />
       <div className="console-page-body sandbox-content">
         {status}
-        {selected ? <NodeDetail node={selected} allocations={allocations} stale={!confirmed} suspension={snapshot?.deployment.suspension ?? null} /> : snapshot && !loading ? (
+        {selected ? <NodeDetail node={selected} allocations={allocations} coreUrl={snapshot?.deployment.core_url ?? ""} stale={!confirmed} suspension={snapshot?.deployment.suspension ?? null} /> : snapshot && !loading ? (
           <EmptyState icon={Server} title={t("Node not found")} hint={t("This node is not registered. It may have been removed.")} action={<button type="button" className="button outline" onClick={back}>{t("Back")}</button>} />
         ) : null}
       </div>
@@ -263,6 +267,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         key={editTarget?.id ?? "closed"}
         client={client}
         node={editTarget}
+        size={snapshot ? sandboxSize(snapshot.deployment) : null}
         onClose={() => setEditTarget(null)}
         onSaved={() => {
           const saved = editTarget;
@@ -295,7 +300,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         <SandboxDeploymentSettings key={`${snapshot.deployment.generation}:${snapshot.deployment.maintenance}:${revision}`} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} onMaintenance={maintenance} onUpdate={update} onRefresh={refresh} />
         {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
           {nodes.length
-            ? <NodeList nodes={nodes} allocations={allocations} stale={!confirmed} disabled={busy || loading || removing} suspends={snapshot.deployment.provider === "microsandbox"} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
+            ? <NodeList nodes={nodes} allocations={allocations} coreUrl={snapshot.deployment.core_url} stale={!confirmed} disabled={busy || loading || removing} suspends={snapshot.deployment.provider === "microsandbox"} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
             : <EmptyState icon={Server} title={t("Add your first node")} hint={t("No nodes registered. Add a node to provide hosted capacity.")} />}
         </section> : null}
       </> : null}

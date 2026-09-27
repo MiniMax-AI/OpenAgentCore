@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectManagementBoundary, openConsole, resetFixture, setNode, writes } from "./console";
+import { expectManagementBoundary, failNext, openConsole, resetFixture, setNode, writes } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
@@ -20,13 +20,11 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   await expect(add.getByText("SELinux is not enforcing (otherwise use the no-sudo command)")).toBeVisible();
   await expect(add.getByText("One Core per host: a host already running a node for another Core is refused.")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
-  await expect(add.getByText(/^Reaches http:\/\/127\.0\.0\.1:\d+ and https:\/\/core\.example\.com; sandboxes reach https:\/\/core\.example\.com$/)).toBeVisible();
+  await expect(add.getByText("Reaches https://core.example.com, as do its sandboxes")).toBeVisible();
   await expect(add.getByText("parsar-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
   await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
   // Preparing a user instead of using sudo waits behind its disclosure.
   await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeHidden();
-  // The fixture console runs on loopback, where another machine can't download from it.
-  await expect(add.getByRole("note")).toContainText("other machines can't reach");
   await add.getByLabel("Sandboxes at once").fill("3");
   const tokenRequest = () => page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
   const issued = tokenRequest();
@@ -38,6 +36,9 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   // The token goes on stdin to the checked installer, run with sudo unless the shell is root.
   await expect(field).toHaveValue(/^ \(umask 077;.*\|\| s=sudo\n/);
   await expect(field).toHaveValue(/\| \$s python3 "\$d\/node-install\.pyz" --enrollment-token-stdin /);
+  // It downloads from, and names as its source, the public URL, not the loopback address this browser uses.
+  await expect(field).toHaveValue(/curl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' /);
+  await expect(field).toHaveValue(/ --source-url 'https:\/\/core\.example\.com' --core-url 'https:\/\/core\.example\.com' /);
   await expect(add.getByText("If the command is interrupted or the download stalls, run the same command again: the download resumes.")).toBeVisible();
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
   const progress = add.getByRole("status", { name: "Registration progress" });
@@ -132,9 +133,8 @@ test("issues no command before the installation is read, for a loopback public U
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   await page.unroute("**/core/v1/installation");
   await add.getByRole("button", { name: "Try again" }).click();
-  // Nodes on other machines can't reach a loopback public_url; this replaces the note about the browser's address.
+  // Nodes on other machines can't reach a loopback public_url.
   await expect(add.getByRole("status")).toHaveText("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply");
-  await expect(add.getByRole("note")).toHaveCount(0);
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   await add.getByRole("button", { name: "Close dialog" }).click();
 
@@ -160,7 +160,7 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("edge-03");
   // The host still runs the node until it is uninstalled there: with sudo, or as the user that installed it.
   const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
-  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\n[^]*\n\$s python3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\ncurl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' [^]*\n\$s python3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
   await cleanup.getByText("Installed without sudo?").click();
   await expect(cleanup.getByLabel("Uninstall command without sudo", { exact: true })).toHaveValue(/\npython3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
   // Nothing to force for a node on the current address; closing leaves focus on the page, as the row is gone.
@@ -168,6 +168,28 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await cleanup.getByRole("button", { name: "Done" }).click();
   await expect(cleanup).toBeHidden();
   await expect(page.getByRole("heading", { name: "Nodes", level: 1 })).toBeFocused();
+});
+
+test("marks a node on an old Core address in its row, beside each node's limit", async ({ page, request }) => {
+  await openConsole(page, request, "nodes", { installation: "stale" });
+  const row = page.getByRole("row", { name: /core-01/ });
+  await expect(row).toContainText("Old address");
+  await expect(row).toContainText("Remove and add again");
+  await expect(row).not.toContainText("Available");
+  // Docker nodes show their limit too.
+  await expect(row).toContainText("5 / 8");
+});
+
+test("gives the host's uninstall command even when the installation must be read again", async ({ page, request }) => {
+  await openConsole(page, request, "nodes");
+  await page.route("**/core/v1/installation", (route) => route.fulfill({ status: 500, json: { error: { message: "Unavailable.", type: "server_error", code: null, param: null } } }));
+  await page.getByRole("button", { name: "Remove edge-03" }).click();
+  await page.getByRole("dialog", { name: "Remove node" }).getByRole("button", { name: "Confirm removal" }).click();
+  const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
+  await expect(cleanup.getByRole("alert")).toContainText("The installation couldn't be read, so no command can be issued.");
+  await page.unroute("**/core/v1/installation");
+  await cleanup.getByRole("button", { name: "Try again" }).click();
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/'https:\/\/core\.example\.com\/node-install\/node-install\.pyz'/);
 });
 
 test("sets up own-machine sandboxes page by page, with the Runtime from the distribution", async ({ page, request }) => {
@@ -282,10 +304,11 @@ test("keeps the saved size and Runtime for the same backend, and starts another 
 
 test("reports a failed sandbox change in a dialog, then reads the state again", async ({ page, request }) => {
   await openConsole(page, request, "nodes");
+  // Core's answer is lost, so the change may have been saved.
   await page.route("**/core/v1/sandbox/deployment/maintenance", (route) => route.fulfill({
-    status: 409,
+    status: 503,
     contentType: "application/json",
-    body: JSON.stringify({ error: { message: "The deployment changed.", type: "conflict_error", code: "sandbox_deployment_conflict", param: null } }),
+    body: JSON.stringify({ error: { message: "Unavailable.", type: "server_error", code: null, param: null } }),
   }));
   await page.getByRole("button", { name: "Enter maintenance to change provider" }).click();
   const failed = page.getByRole("dialog", { name: "Couldn't confirm the sandbox change" });
@@ -294,13 +317,39 @@ test("reports a failed sandbox change in a dialog, then reads the state again", 
   await expect(page.getByRole("button", { name: "Enter maintenance to change provider" })).toBeEnabled();
 });
 
+test("keeps the page usable when Core refuses a sandbox change, and shows Core's reason", async ({ page, request }) => {
+  await openConsole(page, request, "nodes", { sandbox: "none" });
+  await failNext(request, { method: "POST", path: "/sandbox/deployment", status: 403, message: "This console is read-only." });
+  await page.getByRole("button", { name: "Own machines" }).click();
+  await page.getByRole("button", { name: "microsandbox Recommended" }).click();
+  await page.getByRole("button", { name: /^Standard/ }).click();
+  const save = page.getByRole("button", { name: "Save configuration" });
+  await save.click();
+  // A clear refusal changed nothing: no "couldn't confirm" dialog, and the same page to try again.
+  await expect(page.getByText("This console is read-only.")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // One code covers several reasons, so a conflict shows Core's own.
+  await failNext(request, { method: "POST", path: "/sandbox/deployment", status: 409, code: "sandbox_deployment_conflict", message: "Another administrator changed the deployment; it is now at generation 2." });
+  await save.click();
+  await expect(page.getByText("Another administrator changed the deployment; it is now at generation 2.")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await save.click();
+  await expect(page.getByText("c0ffee000000")).toBeVisible();
+});
+
 test("renames a node and sets how many sandboxes run on it at once", async ({ page, request }) => {
   await openConsole(page, request, "nodes?id=node-local");
+  // A Docker node shows its limit too, and the edit shows what the host holds.
+  const capacity = page.getByRole("region", { name: "Capacity" });
+  await expect(capacity).toContainText("Active / limit");
+  await expect(capacity).toContainText("5 / 8");
   await page.getByRole("button", { name: "Edit node" }).click();
   const edit = page.getByRole("dialog", { name: "Edit node" });
+  await expect(edit.getByText("Host: 16 CPU · 64 GiB. Each sandbox: 2 CPU · 4 GiB. Suggested: at most 8 at once.")).toBeVisible();
   await edit.getByLabel("Name").fill("core-01-large");
   await edit.getByLabel("Sandboxes at once").fill("6");
   await edit.getByRole("button", { name: "Save" }).click();
   await expect(edit).toBeHidden();
   await expect(page.getByRole("heading", { name: "core-01-large", level: 1 })).toBeVisible();
+  await expect(capacity).toContainText("5 / 6");
 });

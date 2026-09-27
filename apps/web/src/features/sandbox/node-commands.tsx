@@ -52,8 +52,8 @@ export function CopyCommand({ value }: { value: string }) {
   </span>;
 }
 
-/** The addresses and sandbox size the requirement labels name. */
-export type RequirementValues = { console: string; core: string; size: string };
+/** The public URL and sandbox size the requirement labels name. */
+export type RequirementValues = { core: string; size: string };
 
 function PrerequisiteList({ items, values }: { items: HostPrerequisite[]; values: RequirementValues }) {
   const { t } = useTranslation("sandbox");

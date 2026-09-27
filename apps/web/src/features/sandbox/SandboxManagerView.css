@@ -25,6 +25,7 @@
 .sandbox-command .field textarea { width: 100%; min-height: 130px; border: 0; border-radius: 0; padding: 14px; background: transparent; font-family: var(--font-mono, monospace); font-size: 11px; line-height: 1.6; resize: vertical; overflow-wrap: anywhere; }
 .sandbox-enrollment-status { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--fg-muted); }
 .sandbox-enrollment-status.connected { color: color-mix(in srgb, var(--success) 65%, var(--fg)); }
+.sandbox-add-node .sandbox-next-step { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; font-size: 13px; }
 .sandbox-add-node .sandbox-command-expiry { font-size: 12px; }
 .sandbox-maintenance { padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 @media (max-width: 600px) {
@@ -52,11 +53,14 @@
 /* Node list and node detail. */
 .nodes-nowrap { white-space: nowrap; }
 .node-status-fact, .node-diagnostic { display: inline-flex; align-items: center; gap: 4px; }
+/* A node on an old address: what to do, under its status. */
+.node-status-hint { display: block; color: var(--fg-muted); font-size: 12px; }
+.node-status-fact { flex-wrap: wrap; }
+.node-status-fact .node-status-hint { flex-basis: 100%; }
 .sandbox-manager-page .console-section-title h2 .heading-count { margin-left: 6px; }
 
 /* Add node: the countdown sits beside Copy; requirements fold away once seen. */
 .sandbox-command-heading .sandbox-command-expiry { margin-left: auto; color: var(--fg-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sandbox-add-node-warning,
 .sandbox-enrollment-problem {
   padding: 10px 12px;
   font-size: 12.5px;
@@ -64,8 +68,6 @@
   border: 1px solid color-mix(in srgb, var(--warning) 26%, var(--line));
   border-radius: 8px;
 }
-.sandbox-add-node .sandbox-add-node-warning { display: flex; gap: 8px; align-items: flex-start; color: var(--fg); }
-.sandbox-add-node-warning svg { flex-shrink: 0; margin-top: 3px; color: var(--warning); }
 .sandbox-enrollment-problem { display: grid; gap: 6px; }
 .sandbox-add-node .sandbox-enrollment-problem p { color: var(--fg); }
 .sandbox-enrollment-problem p .help-tip { margin-left: 2px; vertical-align: -4px; }

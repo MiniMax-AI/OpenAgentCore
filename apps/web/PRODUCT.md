@@ -84,13 +84,16 @@ workbench.
   backend (microsandbox by default; Docker only after a confirmation of its weaker
   isolation) or E2B account, the size of each sandbox (own machines only; E2B takes the
   template build's), a review, and advanced settings
-  with the complete form — then the node list with each node's capacity, host
-  figures and allocations, enrollment, renaming, sandbox limits and removal; Add node
+  with the complete form — then the node list with each node's capacity (active
+  sandboxes against its limit, for every backend), host figures and allocations,
+  enrollment, renaming, sandbox limits (beside the host's CPUs and memory and at most
+  how many sandboxes of the deployment's size they hold) and removal; Add node
   asks for the node's sandbox limits before it issues the one-time command, which installs
   the node with sudo as a system service (a disclosure gives the command without sudo, as a
-  user service); it issues none before the installation is read, while the public URL is
+  user service); both commands download from the installation's public URL, never the
+  browser's address; it issues none before the installation is read, while the public URL is
   loopback, or when the console lacks the provider's node files; after Remove, a dialog gives
-  the host's uninstall command), System (the
+  the host's uninstall command, or says none can be given without a usable public URL), System (the
   installation's public address, API base URL, installation ID and source commit, read-only;
   each harness's default model, set, replaced or cleared there beside its read-only startup
   state; the sandbox configuration every project shares, with a link to Nodes where it
@@ -99,6 +102,9 @@ workbench.
 - A node whose provider is not ready names the reason (Docker unreachable, no Docker
   limits, missing Runtime image, no KVM, missing microsandbox components, a host too
   small) and its fix in the help tip beside its status, wherever that status shows.
+- A node enrolled with an earlier Core address gets no new sandboxes, so on the Nodes
+  list and its page its status is Old address, with "Remove and add again", never
+  Available.
 - **E2B deployments** have no machines: the Nodes entry becomes Sandbox backend,
   and Overview and Sandbox metrics show the sandboxes Core holds in E2B's cloud
   (running, starting, size, template build) instead of node capacity, with no node column
@@ -117,7 +123,9 @@ workbench.
   samples of the newest active project, preferring one with an active key.
   Completion comes from reads the
   console already makes. It can be hidden; Show Getting started in the sidebar
-  opens it again, and it ends with a brief "You're set". The optional
+  opens it again, and it ends with a brief "You're set". While it is open, Add node
+  ends with the next step once its node is ready: the default model while that is to
+  do, otherwise back to the checklist. The optional
   three-chapter tour of the console (Monitor, Resources, Platform) opens from it,
   on the sign-in stage.
 - Terminology: API terms stay in English in the Chinese UI (Agent, Session, Turn,

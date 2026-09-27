@@ -2,7 +2,7 @@ import type { CoreHarness, SandboxDeployment } from "@agents-core-web/agents-cli
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { FleetState } from "../fleet/use-sandbox-fleet";
-import { checklistStorageKey, checklistView, gettingStartedSteps, rememberInstallation } from "./getting-started";
+import { checklistStorageKey, checklistView, gettingStartedSteps, nextStepAfterNode, rememberInstallation } from "./getting-started";
 import { node, project } from "./test-fixtures";
 
 const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({
@@ -88,5 +88,14 @@ describe("Getting started visibility", () => {
     rememberInstallation("inst-1");
     expect(checklistStorageKey(down)).toBe("agents-core-web.getting-started.inst-1");
     expect(checklistStorageKey({ status: "loading" })).toBeNull();
+  });
+});
+
+describe("the next step after a node is ready", () => {
+  it("is the default model while it is to do, else the checklist, and only while the checklist is open", () => {
+    expect(nextStepAfterNode(true, "todo")).toBe("default-model");
+    expect(nextStepAfterNode(true, "done")).toBe("getting-started");
+    expect(nextStepAfterNode(true, null)).toBeNull();
+    expect(nextStepAfterNode(false, "todo")).toBeNull();
   });
 });

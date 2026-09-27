@@ -544,17 +544,26 @@ request runs.
   and, for Docker, that the docker group is root-equivalent), and "No sudo on this
   host?", with what the node's own user needs and the command without sudo. The
   log command follows the command last copied; after the no-sudo one it adds the
-  system service's, for a root shell. Until the installation is read, a line says
-  it is being checked; a failed read, a loopback public URL, or a console without
-  the provider's node files replaces the limits with one line saying why (the
-  failed read with Try again), and the footer offers nothing to generate.
+  system service's, for a root shell. The command downloads from the
+  installation's public URL, never the browser's address, so it works as shown on
+  any host. Until the installation is read, a line says it is being checked; a
+  failed read, a public URL other machines can't use (loopback or not HTTPS), or a
+  console without the provider's node files replaces the limits with one line
+  saying why (the failed read with Try again), and the footer offers nothing to
+  generate. Once the node is ready, while Getting started is open, one line under
+  the green status names the next step (set a default model, or finish Getting
+  started) with a text action to System or the Overview.
 - **Clean up the host**: after a node is removed, a dialog gives the host's
   uninstall command in the same Terminal block, a Graphite line that it deletes no
   sandboxes, volumes or images (and, for microsandbox, keeps its image store and
   data), and the no-sudo form behind an "Installed without sudo?" disclosure. A
   node enrolled with an earlier Core address adds an "Old Core address gone?"
-  disclosure with the `--force` form; a loopback console carries Add node's amber
-  note. Done dismisses it and focus returns to the page heading.
+  disclosure with the `--force` form. The command, too, downloads from the public
+  URL, which the dialog reads again if it is not at hand: until then one line says
+  it is being checked, a failed read says so with Try again, and a public URL other
+  machines can't use (loopback, or none) gets a line saying the service stays on the
+  host and no command can be given. Done dismisses it and focus returns to the page
+  heading.
 - **Use Docker instead of microsandbox?**: choosing Docker in sandbox setup lists
   what it gives up, each point a 600 Ink lead over a Graphite line: weaker
   isolation (containers share the host kernel; microsandbox gives each sandbox
@@ -562,6 +571,11 @@ request runs.
   group) and limited use (trusted workloads, or hosts without KVM). The footer
   holds Use Docker (outline) and Keep microsandbox (primary), which takes focus;
   closing or Escape keeps microsandbox too.
+- **Edit node**: the name, then the sandbox limit with one 12px Graphite line under
+  it once the node's heartbeat has the host's CPUs and memory: the host, each
+  sandbox's size and at most how many fit. The Nodes list and a node's Capacity
+  show "Active / limit" for Docker and microsandbox alike, so a saved limit shows
+  where it was set.
 - **How to call**: wherever a new key is shown, a card under it gives three
   copyable samples, each a Margin Gray block with a Hairline and its label and copy
   button in a header row: a Shell block exporting `OPENAI_BASE_URL` (the
@@ -645,17 +659,20 @@ at zero).
 
 ### Notices
 Errors are popups, never lines inserted into a page. A failed action whose outcome
-needs a decision (an uncertain sandbox change) opens an error dialog with Core's
-reason and the next step as its primary button. A failed refresh that keeps the last
-data on screen, projects that could not be read, and other failed actions are
-reported in an error toast with the reason. Only when a page or section has nothing to show
-does an error state take the place of its content; errors inside a dialog or a form
+needs a decision (a sandbox change with no answer, a timeout or a 5xx) opens an
+error dialog with the reason and the next step as its primary button. A failed
+refresh that keeps the last data on screen, projects that could not be read, and
+other failed actions, Core's clear refusal of a sandbox change among them, are
+reported in an error toast with the reason; a refusal leaves the page usable as it
+was. Only when a page or section has nothing to show does an error state take the
+place of its content; errors inside a dialog or a form
 stay beside what they concern. Coverage notes (Margin Gray, Hairline, 12px corners,
 12.5px Graphite) state bounded aggregation. A standing warning that needs action,
 such as the Nodes page naming nodes still bound to an old Core address, is an
-amber-tinted line at the top of the page body. Partial-data chips are amber-tinted pills
-with a help tip. Safety notices (a key shown once, a destructive consequence) stay
-visible in body text.
+amber-tinted line at the top of the page body; each of those nodes' status reads
+Old address (amber dot) with "Remove and add again" under it in 12px Graphite.
+Partial-data chips are amber-tinted pills with a help tip. Safety notices (a key
+shown once, a destructive consequence) stay visible in body text.
 
 ### Onboarding
 Signing in and the console tour share one frame: a dark stage on the left (always

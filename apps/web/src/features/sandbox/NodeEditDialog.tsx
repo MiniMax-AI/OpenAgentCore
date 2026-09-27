@@ -1,20 +1,28 @@
 import { useId, useState } from "react";
-import type { SandboxAdminClient, SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxAdminClient, SandboxNode, SandboxResources } from "@agents-core-web/agents-client";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
+import { formatBytes } from "../../lib/format";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
+import { nodeDetailQuery } from "../fleet/fleet-queries";
+import { sandboxesThatFit } from "./deployment-specification";
 
 /**
  * A node's name and sandbox limits (`PATCH /core/v1/sandbox/nodes/{id}`). Core
  * takes all three together. Only microsandbox suspends sandboxes, so only it
  * shows the retained limit; for Docker the saved one is kept, raised to at least
- * the active limit because Core requires it.
+ * the active limit because Core requires it. Under the limit, the host's CPUs
+ * and memory from the node's last heartbeat, each sandbox's size and how many
+ * of those the host holds.
  */
-export function NodeEditDialog({ client, node, onClose, onSaved }: {
+export function NodeEditDialog({ client, node, size, onClose, onSaved }: {
   client: SandboxAdminClient;
   node: SandboxNode | null;
+  /** Each sandbox's CPUs and memory, from the deployment. */
+  size: SandboxResources | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -35,6 +43,19 @@ export function NodeEditDialog({ client, node, onClose, onSaved }: {
   const activeProblem = activeLimit === null || activeLimit < 1 || activeLimit > 1_000_000 ? t("Enter a whole number from 1 to 1,000,000.") : null;
   const retainedProblem = suspends && (retainedLimit === null || activeLimit === null || retainedLimit < activeLimit || retainedLimit > 1_000_000) ? t("Enter at least the number of sandboxes at once.") : null;
   const ready = node !== null && !nameProblem && !activeProblem && !retainedProblem && !busy;
+  // The node detail read adds the host's total memory to its CPU count.
+  const detail = useQuery({ ...nodeDetailQuery(node?.id ?? "", "1h"), enabled: node !== null });
+  const host = detail.data?.id === node?.id ? detail.data?.host : undefined;
+  const hostCpus = host?.effective_cpu_cores ?? node?.cpu_count ?? null;
+  const hostMemory = host?.total_memory_bytes ?? null;
+  const fit = sandboxesThatFit({ cpus: hostCpus, memoryBytes: hostMemory }, size);
+  const measure = (cpus: number, memory: number) => t("{{cpus}} CPU · {{memory}}", { cpus, memory: formatBytes(memory) });
+  // Sentences run on with a space in English and without one in Chinese.
+  const hostFacts = hostCpus !== null && hostMemory !== null ? [
+    t("Host: {{host}}.", { host: measure(hostCpus, hostMemory) }),
+    ...(size ? [t("Each sandbox: {{size}}.", { size: measure(size.cpus, size.memory_mib * 2 ** 20) })] : []),
+    ...(fit !== null && fit > 0 ? [t("Suggested: at most {{count}} at once.", { count: fit })] : []),
+  ].join(locale === "zh" ? "" : " ") : null;
 
   async function save() {
     if (!ready || !node) return;
@@ -68,8 +89,9 @@ export function NodeEditDialog({ client, node, onClose, onSaved }: {
         </label>
         <div className="field">
           <span className="field-label-row"><label htmlFor={`${id}-active`}>{t("Sandboxes at once")}</label><HelpTip>{t("The most sandboxes Core places on this node at the same time.")}</HelpTip></span>
-          <input id={`${id}-active`} inputMode="numeric" value={active} onChange={(event) => setActive(event.target.value)} aria-invalid={Boolean(activeProblem)} />
+          <input id={`${id}-active`} inputMode="numeric" value={active} onChange={(event) => setActive(event.target.value)} aria-invalid={Boolean(activeProblem)} aria-describedby={hostFacts ? `${id}-host` : undefined} />
           {activeProblem ? <span className="field-error">{activeProblem}</span> : null}
+          {hostFacts ? <small id={`${id}-host`}>{hostFacts}</small> : null}
         </div>
         {suspends ? (
           <div className="field">

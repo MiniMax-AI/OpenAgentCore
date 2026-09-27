@@ -9,20 +9,35 @@ import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { nodeHealth, suspendedSandboxes } from "../fleet/fleet-model";
 
-export type NodeState = "unconfirmed" | "offline" | "degraded" | "attention" | "available";
+export type NodeState = "unconfirmed" | "old_address" | "offline" | "degraded" | "attention" | "available";
 
-/** One status per node: stale data and reachability first, then anything reported to look at. */
-export function nodeState(node: SandboxNode, allocations: readonly SandboxAllocation[], stale: boolean): NodeState {
+/**
+ * Whether a node enrolled with another Core address than the deployment's
+ * `coreUrl`. An empty address is unknown, not old: a node Core did not enroll,
+ * such as a file-managed local one, reports none.
+ */
+export function onOldAddress(node: SandboxNode, coreUrl: string): boolean {
+  return Boolean(node.core_url && coreUrl && node.core_url !== coreUrl);
+}
+
+/**
+ * One status per node: stale data first; then a node enrolled with another
+ * address than the deployment's `coreUrl`, which gets no new sandboxes until it
+ * is removed and added again; then reachability, then anything reported to look at.
+ */
+export function nodeState(node: SandboxNode, allocations: readonly SandboxAllocation[], stale: boolean, coreUrl: string): NodeState {
   if (stale) return "unconfirmed";
+  if (onOldAddress(node, coreUrl)) return "old_address";
   const health = nodeHealth(node);
   if (health !== "available") return health;
   const attention = node.cleanup_pending > 0 || allocations.some((allocation) => allocation.node_id === node.id && allocation.diagnostic);
   return attention ? "attention" : "available";
 }
 
-const stateTone: Record<NodeState, Tone> = { unconfirmed: "neutral", offline: "danger", degraded: "warning", attention: "warning", available: "ok" };
+const stateTone: Record<NodeState, Tone> = { unconfirmed: "neutral", old_address: "warning", offline: "danger", degraded: "warning", attention: "warning", available: "ok" };
 const stateLabel: Record<NodeState, MessageKey> = {
   unconfirmed: "Status unconfirmed",
+  old_address: "Old address",
   offline: "Offline",
   degraded: "Provider unavailable",
   attention: "Needs attention",
@@ -34,15 +49,23 @@ export function NodeStatus({ state }: { state: NodeState }) {
   return <StatusDot tone={stateTone[state]} label={t(stateLabel[state])} />;
 }
 
+/** What to do about a node on an old address, under its status. */
+export function OldAddressHint() {
+  const { t } = useTranslation("sandbox");
+  return <span className="node-status-hint">{t("Remove and add again")}</span>;
+}
+
 export function seconds(value: string | null): number | null {
   if (!value) return null;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000);
 }
 
-export function NodeList({ nodes, allocations, stale, disabled, suspends = false, onOpen, onRemove }: {
+export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspends = false, onOpen, onRemove }: {
   nodes: readonly SandboxNode[];
-  /** microsandbox: sandboxes sleep as snapshots, so the list shows active and suspended counts. */
+  /** The deployment's address; a node enrolled with another one is on an old address. */
+  coreUrl: string;
+  /** microsandbox: sandboxes sleep as snapshots, so the list also shows suspended counts. */
   suspends?: boolean;
   allocations: readonly SandboxAllocation[];
   stale: boolean;
@@ -60,7 +83,7 @@ export function NodeList({ nodes, allocations, stale, disabled, suspends = false
           <tr>
             <th scope="col">{t("Node")}</th>
             <th scope="col">{t("Status")}</th>
-            {suspends ? <th scope="col" className="numeric">{t("Active / limit")}</th> : null}
+            <th scope="col" className="numeric">{t("Active / limit")}</th>
             {suspends ? <th scope="col" className="numeric"><span className="column-help">{t("Suspended")}<HelpTip>{t("Suspended sandboxes keep their state as a snapshot on the node and resume on the Session's next Turn. They count toward the retained limit, not the active one.")}</HelpTip></span></th> : null}
             <th scope="col" className="numeric">{t("Last seen")}</th>
             <th scope="col">{t("Added")}</th>
@@ -70,7 +93,7 @@ export function NodeList({ nodes, allocations, stale, disabled, suspends = false
         <tbody>
           {nodes.map((node) => {
             const name = node.name || node.id;
-            const state = nodeState(node, allocations, stale);
+            const state = nodeState(node, allocations, stale, coreUrl);
             // A degraded node names the reason its provider is not ready.
             const diagnostic = state === "degraded" ? nodeProviderDiagnostic(node) : "";
             return (
@@ -78,8 +101,11 @@ export function NodeList({ nodes, allocations, stale, disabled, suspends = false
                 <th scope="row">
                   <NameCell name={node.name} id={node.id} onOpen={() => onOpen(node)} openLabel={t("Open {{name}}", { name })} idLabel={t("Node ID")} />
                 </th>
-                <td><span className="status-with-help"><NodeStatus state={state} />{diagnostic ? <DiagnosticTip code={diagnostic} /> : null}</span></td>
-                {suspends ? <td className="numeric">{node.active} / {node.max_active}</td> : null}
+                <td>
+                  <span className="status-with-help"><NodeStatus state={state} />{diagnostic ? <DiagnosticTip code={diagnostic} /> : null}</span>
+                  {state === "old_address" ? <OldAddressHint /> : null}
+                </td>
+                <td className="numeric">{node.active} / {node.max_active}</td>
                 {suspends ? <td className="numeric">{suspendedSandboxes(node)}</td> : null}
                 <td className="numeric" title={node.last_seen_at ? formatDateTime(seconds(node.last_seen_at), locale) : undefined}>
                   {node.last_seen_at ? formatRelative(seconds(node.last_seen_at), now, locale) : t("Never")}

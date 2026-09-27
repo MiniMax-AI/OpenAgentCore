@@ -45,6 +45,16 @@ export function sandboxSize(deployment: SandboxDeployment): SandboxResources | n
   return deployment.specification?.resources ?? templateBuildSize(deployment);
 }
 
+/**
+ * At most how many sandboxes of this size a host's CPUs and memory hold at once,
+ * each at its full limits; null while a figure or the size is unknown. A
+ * suggestion for a node's limit, which Core itself never derives.
+ */
+export function sandboxesThatFit(host: { cpus: number | null; memoryBytes: number | null }, size: Pick<SandboxResources, "cpus" | "memory_mib"> | null): number | null {
+  if (!size || host.cpus === null || host.memoryBytes === null || size.cpus <= 0 || size.memory_mib <= 0) return null;
+  return Math.min(Math.floor(host.cpus / size.cpus), Math.floor(host.memoryBytes / (size.memory_mib * 2 ** 20)));
+}
+
 /** The paired console serves one matched distribution; Core persists approval. */
 export async function distributionRuntime(signal: AbortSignal): Promise<SandboxRuntimeRelease> {
   const response = await fetch("/node-install/manifest.json", { signal, credentials: "include", redirect: "error" });

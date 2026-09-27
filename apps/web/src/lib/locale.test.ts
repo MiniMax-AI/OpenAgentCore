@@ -27,9 +27,16 @@ describe("sandbox localization", () => {
     }
     expect(sandboxDiagnosticMessage("", "zh")).toBeNull();
   });
-  it("maps conflicts and unconfigured access without leaking raw backend diagnostics", () => {
-    expect(sandboxRequestError(new AgentCoreError("raw secret", 409, "runtime_node_in_use"), "zh")).toContain("保留资源");
-    expect(sandboxRequestError(new AgentCoreError("raw secret", 503, "sandbox_admin_not_configured"), "zh")).toContain("尚未配置");
+  it("shows Core's reason for a refusal, names an unconfigured console, and keeps other failures to the console's words", () => {
+    expect(sandboxRequestError(new AgentCoreError("raw secret", 503, "sandbox_admin_not_configured"), "zh")).toBe("此控制台尚未配置沙箱管理权限。");
+    // A code with one exact meaning keeps the console's localized words.
+    expect(sandboxRequestError(new AgentCoreError("Node node-edge still has allocations.", 409, "runtime_node_in_use"), "zh")).toBe("节点仍有活跃分配或保留资源。请先清理资源分配、快照、预留资源和待清理项，再移除节点。");
+    // A refusal is Core's to explain: one code, such as a 409 conflict, covers several reasons.
+    expect(sandboxRequestError(new AgentCoreError("This console is read-only.", 403), "zh")).toBe("This console is read-only.");
+    expect(sandboxRequestError(new AgentCoreError("expected_generation is stale.", 409, "sandbox_deployment_conflict"), "zh")).toBe("expected_generation is stale.");
+    // An E2B refusal whose reason the client withheld is named without it.
+    expect(sandboxRequestError(new AgentCoreError("withheld", 400, "sandbox_configuration_unconfirmed"), "zh")).toBe("Core 拒绝了这个 E2B 配置。");
+    expect(sandboxRequestError(new AgentCoreError("raw secret", 502), "zh")).not.toContain("raw secret");
     expect(sandboxRequestError(new Error("raw secret"), "zh")).not.toContain("raw secret");
   });
 });
