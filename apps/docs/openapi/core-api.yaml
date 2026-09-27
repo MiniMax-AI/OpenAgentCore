@@ -3912,7 +3912,7 @@ paths:
 schemes:
   - http
   - https
-openapi: 3.0.4
+openapi: 3.1.0
 servers:
   - url: https://core-direct.example.com
     description: 'Operator-script placeholder: replace with the Core loopback origin, not the public Web entry.'
@@ -3928,42 +3928,48 @@ components:
     api.AdminRuntimeObservationDetail:
       properties:
         allocation_created_at:
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: integer
+            - type: 'null'
         cpu:
-          allOf:
-            - $ref: '#/components/schemas/v1.RuntimeCPUObservation'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.RuntimeCPUObservation'
+            - type: 'null'
         disk:
-          allOf:
-            - $ref: '#/components/schemas/api.RuntimeDiskObservation'
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/api.RuntimeDiskObservation'
+            - type: 'null'
           description: |-
             Current Runtime disk usage and capacity. E2B reports them; Docker and
             microsandbox observations return null.
-          x-nullable: true
         environment_id:
-          format: uuid
-          type: string
-          x-nullable: true
+          anyOf:
+            - format: uuid
+              type: string
+            - type: 'null'
         id:
           format: uuid
           type: string
         instance:
           $ref: '#/components/schemas/v1.RuntimeInstance'
         lifecycle_state:
-          enum:
-            - active
-            - sleeping
-            - transitioning
-            - pending
-            - stopped
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - active
+                - sleeping
+                - transitioning
+                - pending
+                - stopped
+              type: string
+            - type: 'null'
         memory:
-          allOf:
-            - $ref: '#/components/schemas/v1.RuntimeMemoryObservation'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.RuntimeMemoryObservation'
+            - type: 'null'
         mode:
           enum:
             - none
@@ -3975,22 +3981,25 @@ components:
             - agent.runtime_observation
           type: string
         observed_at:
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: integer
+            - type: 'null'
         provider_type:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         reason:
-          enum:
-            - runtime_mode_not_observable
-            - allocation_pending
-            - runtime_not_running
-            - source_not_configured
-            - sample_timeout
-            - sample_unavailable
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - runtime_mode_not_observable
+                - allocation_pending
+                - runtime_not_running
+                - source_not_configured
+                - sample_timeout
+                - sample_unavailable
+              type: string
+            - type: 'null'
         resolved_at:
           minimum: 0
           type: integer
@@ -3998,9 +4007,10 @@ components:
           format: uuid
           type: string
         started_at:
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: integer
+            - type: 'null'
         status:
           enum:
             - observed
@@ -4111,9 +4121,10 @@ components:
             - mcode
           type: string
         model_provider:
-          allOf:
-            - $ref: '#/components/schemas/api.HarnessModelProvider'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/api.HarnessModelProvider'
+            - type: 'null'
         object:
           enum:
             - core.harness
@@ -4194,18 +4205,21 @@ components:
         address_bindings:
           $ref: '#/components/schemas/store.AddressBindings'
         api_base_url:
+          anyOf:
+            - type: string
+            - type: 'null'
           description: public_url followed by /v1; null when public_url is null.
-          type: string
-          x-nullable: true
         configuration:
-          allOf:
-            - $ref: '#/components/schemas/api.InstallationConfiguration'
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/api.InstallationConfiguration'
+            - type: 'null'
           description: The installer's settings snapshot (OAC_SETTINGS_FILE); null when the installer did not start Core.
-          x-nullable: true
         installation_id:
+          anyOf:
+            - type: string
+            - type: 'null'
           description: OAC_INSTALLATION_ID; null when Core runs without the sandbox manager.
-          type: string
-          x-nullable: true
         local_only:
           description: True when public_url names a loopback host, reachable only from the Core host.
           type: boolean
@@ -4214,13 +4228,15 @@ components:
             - core.installation
           type: string
         public_url:
+          anyOf:
+            - type: string
+            - type: 'null'
           description: 'OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.'
-          type: string
-          x-nullable: true
         source_commit:
+          anyOf:
+            - type: string
+            - type: 'null'
           description: Full source commit Core was built from; null for development builds.
-          type: string
-          x-nullable: true
       type: object
     api.InstallationConfiguration:
       properties:
@@ -4246,7 +4262,9 @@ components:
           description: 'Present only for a sensitive setting: whether it has a value.'
           type: boolean
         default:
-          x-nullable: true
+          anyOf:
+            - {}
+            - type: 'null'
         key:
           description: Dotted config.json key, such as ports.core.
           type: string
@@ -4258,8 +4276,10 @@ components:
         sensitive:
           type: boolean
         value:
+          anyOf:
+            - {}
+            - type: 'null'
           description: Applied value; always null for a sensitive setting.
-          x-nullable: true
       type: object
     api.ProjectAPIKeyRequest:
       properties:
@@ -4281,13 +4301,15 @@ components:
     api.RuntimeDiskObservation:
       properties:
         limit_bytes:
-          minimum: 1
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 1
+              type: integer
+            - type: 'null'
         usage_bytes:
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: integer
+            - type: 'null'
       required:
         - limit_bytes
         - usage_bytes
@@ -4383,127 +4405,156 @@ components:
             $ref: '#/components/schemas/coremetrics.DatabaseBucket'
           type: array
         size_bytes:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
       type: object
     coremetrics.DatabaseBucket:
       properties:
         ping_p95_ms:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         pool_in_use:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         start:
           type: string
       type: object
     coremetrics.Execution:
       properties:
         connected_daemons:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         in_progress_turns:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         interrupted:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         oldest_queued_seconds:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         queue_wait_ms:
           $ref: '#/components/schemas/coremetrics.Latency'
         queued_turns:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         series:
           items:
             $ref: '#/components/schemas/coremetrics.ExecutionBucket'
           type: array
         slots_in_use:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         slots_total:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         unavailable:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         waiting_for_daemon:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
       type: object
     coremetrics.ExecutionBucket:
       properties:
         in_progress:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         queue_wait_p95_ms:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         queued:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         start:
           type: string
       type: object
     coremetrics.Job:
       properties:
         failed:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         id:
           type: string
         last_run_at:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         processed:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         status:
           type: string
       type: object
     coremetrics.Latency:
       properties:
         p50:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         p95:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
       type: object
     coremetrics.Pool:
       properties:
         idle:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         in_use:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         max:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
       type: object
     coremetrics.Process:
       properties:
         cpu_cores:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         cpu_limit_cores:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         goroutines:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         memory_bytes:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         memory_limit_bytes:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         rss_bytes:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         series:
           items:
             $ref: '#/components/schemas/coremetrics.ProcessBucket'
@@ -4512,11 +4563,13 @@ components:
     coremetrics.ProcessBucket:
       properties:
         cpu_cores:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         rss_bytes:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         start:
           type: string
       type: object
@@ -4532,14 +4585,17 @@ components:
     coremetrics.ServiceState:
       properties:
         execution_owner:
-          type: boolean
-          x-nullable: true
+          anyOf:
+            - type: boolean
+            - type: 'null'
         revision:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         started_at:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         status:
           type: string
       type: object
@@ -4634,8 +4690,9 @@ components:
         id:
           type: string
         project_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         request_id:
           type: string
         resource_id:
@@ -4681,8 +4738,9 @@ components:
           format: uuid
           type: string
         revoked_at:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
       type: object
     store.IssuedExecutorCredential:
       properties:
@@ -4731,14 +4789,17 @@ components:
     store.NodeHostHistoryPoint:
       properties:
         available_disk_bytes_min:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         cpu_utilization_max:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         memory_used_bytes_max:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         start:
           type: string
       type: object
@@ -4825,10 +4886,11 @@ components:
         specification_digest:
           type: string
         suspension:
-          allOf:
-            - $ref: '#/components/schemas/store.SandboxSuspensionView'
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/store.SandboxSuspensionView'
+            - type: 'null'
           description: Idle suspension policy; microsandbox only, otherwise null.
-          x-nullable: true
       type: object
     store.RuntimeNode:
       properties:
@@ -4861,9 +4923,10 @@ components:
             - capacity_insufficient
           type: string
         enrollment_id:
+          anyOf:
+            - type: string
+            - type: 'null'
           description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
-          type: string
-          x-nullable: true
         id:
           type: string
         last_seen_at:
@@ -4894,9 +4957,10 @@ components:
         compute_phase:
           type: string
         compute_phase_changed_at:
+          anyOf:
+            - type: string
+            - type: 'null'
           description: The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
-          type: string
-          x-nullable: true
         created_at:
           type: string
         diagnostic:
@@ -4947,9 +5011,10 @@ components:
             - capacity_insufficient
           type: string
         enrollment_id:
+          anyOf:
+            - type: string
+            - type: 'null'
           description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
-          type: string
-          x-nullable: true
         history:
           $ref: '#/components/schemas/store.NodeHostHistory'
         host:
@@ -4982,23 +5047,29 @@ components:
     store.RuntimeNodeHost:
       properties:
         available_disk_bytes:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         available_memory_bytes:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         cpu_utilization:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         effective_cpu_cores:
-          type: number
-          x-nullable: true
+          anyOf:
+            - type: number
+            - type: 'null'
         observed_at:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         total_memory_bytes:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
       type: object
     store.RuntimeNodeUpdate:
       properties:
@@ -5022,9 +5093,10 @@ components:
         resources:
           $ref: '#/components/schemas/store.SandboxTemplateResources'
         status:
+          anyOf:
+            - type: string
+            - type: 'null'
           description: Build status at selection time; validation admits only ready builds.
-          type: string
-          x-nullable: true
       type: object
     store.SandboxE2BView:
       properties:
@@ -5054,14 +5126,17 @@ components:
     store.SandboxTemplateResources:
       properties:
         cpus:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         memory_mib:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         root_disk_mib:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
       type: object
     store.WriteOperation:
       properties:
@@ -5098,13 +5173,15 @@ components:
     v1.APIError:
       properties:
         code:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         message:
           type: string
         param:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         type:
           type: string
       required:
@@ -5116,15 +5193,17 @@ components:
         id:
           type: string
         instructions:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         model:
           type: string
         multi_agent:
           $ref: '#/components/schemas/v1.MultiAgentConfig'
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         reasoning:
           $ref: '#/components/schemas/v1.Reasoning'
         service_tier:
@@ -5138,9 +5217,10 @@ components:
             type: object
           type: array
         x_agents_core:
-          allOf:
-            - $ref: '#/components/schemas/v1.AgentsCore'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.AgentsCore'
+            - type: 'null'
       required:
         - id
         - model
@@ -5208,14 +5288,16 @@ components:
     v1.CredentialAuth:
       properties:
         expires_at:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         mcp_server_url:
           type: string
         refresh:
-          allOf:
-            - $ref: '#/components/schemas/v1.OAuthCredentialRefresh'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.OAuthCredentialRefresh'
+            - type: 'null'
         type:
           enum:
             - static_bearer
@@ -5247,13 +5329,15 @@ components:
             $ref: '#/components/schemas/v1.Credential'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -5313,8 +5397,9 @@ components:
         id:
           type: string
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         network:
           $ref: '#/components/schemas/v1.EnvironmentNetwork'
         object:
@@ -5367,13 +5452,15 @@ components:
             $ref: '#/components/schemas/v1.EnvironmentTemplate'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -5393,9 +5480,10 @@ components:
     v1.ExecutionProviderSelection:
       properties:
         configuration:
-          allOf:
-            - $ref: '#/components/schemas/v1.ModelProviderView'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.ModelProviderView'
+            - type: 'null'
         source:
           enum:
             - session
@@ -5424,8 +5512,9 @@ components:
             - unknown
           type: string
         value:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
       required:
         - source
         - value
@@ -5467,11 +5556,12 @@ components:
           type: string
         output: {}
         phase:
-          enum:
-            - commentary
-            - final_answer
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - commentary
+                - final_answer
+              type: string
+            - type: 'null'
         reasoning_effort:
           type: string
         recipient_agent_id:
@@ -5549,13 +5639,15 @@ components:
             $ref: '#/components/schemas/v1.Item'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -5610,8 +5702,9 @@ components:
         enabled:
           type: boolean
         max_concurrent_subagents:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
       required:
         - enabled
       type: object
@@ -5620,11 +5713,13 @@ components:
         client_id:
           type: string
         resource:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         scope:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         token_endpoint:
           type: string
         token_endpoint_auth:
@@ -5655,11 +5750,13 @@ components:
     v1.Reasoning:
       properties:
         effort:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         summary:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
       type: object
     v1.RequiredAction:
       properties:
@@ -5683,21 +5780,25 @@ components:
     v1.RuntimeCPUObservation:
       properties:
         capacity_cores:
-          minimum: 5.e-324
-          type: number
-          x-nullable: true
+          anyOf:
+            - minimum: 5.e-324
+              type: number
+            - type: 'null'
         usage_cores:
-          minimum: 0
-          type: number
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: number
+            - type: 'null'
         usage_seconds_total:
-          minimum: 0
-          type: number
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: number
+            - type: 'null'
         utilization_ratio:
-          minimum: 0
-          type: number
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: number
+            - type: 'null'
       required:
         - capacity_cores
         - usage_cores
@@ -5753,17 +5854,19 @@ components:
     v1.RuntimeHistoryCPU:
       properties:
         capacity_cores:
-          minimum: 5.e-324
-          type: number
-          x-nullable: true
+          anyOf:
+            - minimum: 5.e-324
+              type: number
+            - type: 'null'
         contributor_count:
           maximum: 9007199254740991
           minimum: 1
           type: integer
         utilization_ratio:
-          minimum: 0
-          type: number
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: number
+            - type: 'null'
       required:
         - capacity_cores
         - contributor_count
@@ -5781,15 +5884,17 @@ components:
           minimum: 0
           type: integer
         first_sample_at:
-          maximum: 9007199254740991
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - maximum: 9007199254740991
+              minimum: 0
+              type: integer
+            - type: 'null'
         last_sample_at:
-          maximum: 9007199254740991
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - maximum: 9007199254740991
+              minimum: 0
+              type: integer
+            - type: 'null'
         retained_start:
           maximum: 9007199254740991
           minimum: 0
@@ -5813,15 +5918,17 @@ components:
           minimum: 1
           type: integer
         first_observed_at:
-          maximum: 9007199254740991
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - maximum: 9007199254740991
+              minimum: 0
+              type: integer
+            - type: 'null'
         last_observed_at:
-          maximum: 9007199254740991
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - maximum: 9007199254740991
+              minimum: 0
+              type: integer
+            - type: 'null'
         observation_count:
           maximum: 9007199254740991
           minimum: 0
@@ -5854,15 +5961,17 @@ components:
           minimum: 1
           type: integer
         limit_bytes:
-          maximum: 9007199254740991
-          minimum: 1
-          type: integer
-          x-nullable: true
+          anyOf:
+            - maximum: 9007199254740991
+              minimum: 1
+              type: integer
+            - type: 'null'
         usage_bytes:
-          maximum: 9007199254740991
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - maximum: 9007199254740991
+              minimum: 0
+              type: integer
+            - type: 'null'
       required:
         - contributor_count
         - limit_bytes
@@ -5871,27 +5980,31 @@ components:
     v1.RuntimeHistoryPoint:
       properties:
         cpu:
-          allOf:
-            - $ref: '#/components/schemas/v1.RuntimeHistoryCPU'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.RuntimeHistoryCPU'
+            - type: 'null'
         end:
           maximum: 9007199254740991
           minimum: 1
           type: integer
         first_observed_at:
-          maximum: 9007199254740991
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - maximum: 9007199254740991
+              minimum: 0
+              type: integer
+            - type: 'null'
         last_observed_at:
-          maximum: 9007199254740991
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - maximum: 9007199254740991
+              minimum: 0
+              type: integer
+            - type: 'null'
         memory:
-          allOf:
-            - $ref: '#/components/schemas/v1.RuntimeHistoryMemory'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.RuntimeHistoryMemory'
+            - type: 'null'
         observation_count:
           maximum: 9007199254740991
           minimum: 0
@@ -6004,17 +6117,20 @@ components:
     v1.RuntimeInstance:
       properties:
         allocation_id:
-          format: uuid
-          type: string
-          x-nullable: true
+          anyOf:
+            - format: uuid
+              type: string
+            - type: 'null'
         connection_generation:
-          format: uuid
-          type: string
-          x-nullable: true
+          anyOf:
+            - format: uuid
+              type: string
+            - type: 'null'
         device_id:
-          format: uuid
-          type: string
-          x-nullable: true
+          anyOf:
+            - format: uuid
+              type: string
+            - type: 'null'
         kind:
           enum:
             - managed_allocation
@@ -6030,13 +6146,15 @@ components:
     v1.RuntimeMemoryObservation:
       properties:
         limit_bytes:
-          minimum: 1
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 1
+              type: integer
+            - type: 'null'
         usage_bytes:
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: integer
+            - type: 'null'
       required:
         - limit_bytes
         - usage_bytes
@@ -6044,35 +6162,40 @@ components:
     v1.RuntimeObservation:
       properties:
         allocation_created_at:
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: integer
+            - type: 'null'
         cpu:
-          allOf:
-            - $ref: '#/components/schemas/v1.RuntimeCPUObservation'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.RuntimeCPUObservation'
+            - type: 'null'
         environment_id:
-          format: uuid
-          type: string
-          x-nullable: true
+          anyOf:
+            - format: uuid
+              type: string
+            - type: 'null'
         id:
           format: uuid
           type: string
         instance:
           $ref: '#/components/schemas/v1.RuntimeInstance'
         lifecycle_state:
-          enum:
-            - active
-            - sleeping
-            - transitioning
-            - pending
-            - stopped
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - active
+                - sleeping
+                - transitioning
+                - pending
+                - stopped
+              type: string
+            - type: 'null'
         memory:
-          allOf:
-            - $ref: '#/components/schemas/v1.RuntimeMemoryObservation'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.RuntimeMemoryObservation'
+            - type: 'null'
         mode:
           enum:
             - none
@@ -6084,22 +6207,25 @@ components:
             - agent.runtime_observation
           type: string
         observed_at:
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: integer
+            - type: 'null'
         provider_type:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         reason:
-          enum:
-            - runtime_mode_not_observable
-            - allocation_pending
-            - runtime_not_running
-            - source_not_configured
-            - sample_timeout
-            - sample_unavailable
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - runtime_mode_not_observable
+                - allocation_pending
+                - runtime_not_running
+                - source_not_configured
+                - sample_timeout
+                - sample_unavailable
+              type: string
+            - type: 'null'
         resolved_at:
           minimum: 0
           type: integer
@@ -6107,9 +6233,10 @@ components:
           format: uuid
           type: string
         started_at:
-          minimum: 0
-          type: integer
-          x-nullable: true
+          anyOf:
+            - minimum: 0
+              type: integer
+            - type: 'null'
         status:
           enum:
             - observed
@@ -6141,8 +6268,9 @@ components:
         id:
           type: string
         instructions:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         metadata:
           additionalProperties:
             type: string
@@ -6152,8 +6280,9 @@ components:
         multi_agent:
           $ref: '#/components/schemas/v1.MultiAgentConfig'
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - agent
@@ -6177,9 +6306,10 @@ components:
         updated_at:
           type: integer
         x_agents_core:
-          allOf:
-            - $ref: '#/components/schemas/v1.SavedAgentCore'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.SavedAgentCore'
+            - type: 'null'
       required:
         - created_at
         - id
@@ -6211,13 +6341,15 @@ components:
             $ref: '#/components/schemas/v1.SavedAgent'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -6262,8 +6394,9 @@ components:
         environment:
           $ref: '#/components/schemas/v1.SessionEnvironment'
         error:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         id:
           type: string
         last_active_at:
@@ -6288,9 +6421,10 @@ components:
             - failed
           type: string
         usage:
-          allOf:
-            - $ref: '#/components/schemas/v1.TokenUsage'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.TokenUsage'
+            - type: 'null'
         vault_ids:
           items:
             type: string
@@ -6359,13 +6493,15 @@ components:
             $ref: '#/components/schemas/v1.SessionArtifact'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -6460,13 +6596,15 @@ components:
             $ref: '#/components/schemas/v1.Session'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -6525,13 +6663,15 @@ components:
             $ref: '#/components/schemas/v1.Skill'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -6593,13 +6733,15 @@ components:
             $ref: '#/components/schemas/v1.SkillVersion'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -6617,8 +6759,9 @@ components:
         created_at:
           type: integer
         expires_at:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         filename:
           type: string
         id:
@@ -6636,8 +6779,9 @@ components:
             - processed
           type: string
         status_details:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
       required:
         - bytes
         - created_at
@@ -6669,13 +6813,15 @@ components:
             $ref: '#/components/schemas/v1.SourceFile'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -6747,14 +6893,16 @@ components:
         agent_id:
           type: string
         completed_at:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         created_at:
           type: integer
         error:
-          allOf:
-            - $ref: '#/components/schemas/v1.TurnError'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.TurnError'
+            - type: 'null'
         id:
           type: string
         object:
@@ -6764,8 +6912,9 @@ components:
         session_id:
           type: string
         started_at:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         status:
           enum:
             - queued
@@ -6776,12 +6925,14 @@ components:
             - cancelled
           type: string
         subagent_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         usage:
-          allOf:
-            - $ref: '#/components/schemas/v1.TokenUsage'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.TokenUsage'
+            - type: 'null'
       required:
         - agent_id
         - created_at
@@ -6824,13 +6975,15 @@ components:
             $ref: '#/components/schemas/v1.Turn'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -6851,8 +7004,9 @@ components:
             type: string
           type: object
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - vault
@@ -6885,13 +7039,15 @@ components:
             $ref: '#/components/schemas/v1.Vault'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list

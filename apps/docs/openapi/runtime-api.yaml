@@ -178,7 +178,7 @@ paths:
 schemes:
   - http
   - https
-openapi: 3.0.4
+openapi: 3.1.0
 servers:
   - url: https://core.example.com
     description: Documentation placeholder; substitute your Core public origin.
@@ -297,13 +297,15 @@ components:
     v1.APIError:
       properties:
         code:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         message:
           type: string
         param:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         type:
           type: string
       required:

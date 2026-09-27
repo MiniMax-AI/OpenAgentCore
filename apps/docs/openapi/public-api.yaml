@@ -3416,7 +3416,7 @@ paths:
 schemes:
   - http
   - https
-openapi: 3.0.4
+openapi: 3.1.0
 servers:
   - url: https://core.example.com/v1
     description: Documentation placeholder; substitute your Core public origin.
@@ -3425,13 +3425,15 @@ components:
     v1.APIError:
       properties:
         code:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         message:
           type: string
         param:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         type:
           type: string
       required:
@@ -3443,15 +3445,17 @@ components:
         id:
           type: string
         instructions:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         model:
           type: string
         multi_agent:
           $ref: '#/components/schemas/v1.MultiAgentConfig'
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         reasoning:
           $ref: '#/components/schemas/v1.Reasoning'
         service_tier:
@@ -3465,9 +3469,10 @@ components:
             type: object
           type: array
         x_agents_core:
-          allOf:
-            - $ref: '#/components/schemas/v1.AgentsCore'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.AgentsCore'
+            - type: 'null'
       required:
         - id
         - model
@@ -3522,48 +3527,57 @@ components:
     v1.CreateAgentRequest:
       properties:
         instructions:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         metadata:
-          additionalProperties:
-            type: string
-          type: object
-          x-nullable: true
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
         model:
           type: string
         multi_agent:
-          type: object
-          x-nullable: true
+          anyOf:
+            - type: object
+            - type: 'null'
         name:
-          maxLength: 128
-          type: string
-          x-nullable: true
+          anyOf:
+            - maxLength: 128
+              type: string
+            - type: 'null'
         reasoning:
-          allOf:
-            - $ref: '#/components/schemas/v1.Reasoning'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.Reasoning'
+            - type: 'null'
         service_tier:
-          enum:
-            - auto
-            - default
-            - flex
-            - priority
-            - fast
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - auto
+                - default
+                - flex
+                - priority
+                - fast
+              type: string
+            - type: 'null'
         text:
-          allOf:
-            - $ref: '#/components/schemas/v1.SavedAgentTextInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.SavedAgentTextInput'
+            - type: 'null'
         tools:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         x_agents_core:
-          allOf:
-            - $ref: '#/components/schemas/v1.SavedAgentCoreInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.SavedAgentCoreInput'
+            - type: 'null'
       required:
         - model
       type: object
@@ -3595,15 +3609,18 @@ components:
         environment:
           $ref: '#/components/schemas/v1.Environment'
         input:
+          anyOf:
+            - {}
+            - type: 'null'
           description: |-
             Input accepts a string or an ordered array of user InputMessage objects.
             Required for none and streamed creation outside self_hosted; otherwise optional.
-          x-nullable: true
         metadata:
-          additionalProperties:
-            type: string
-          type: object
-          x-nullable: true
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
         stream:
           default: false
           type: boolean
@@ -3619,10 +3636,11 @@ components:
     v1.CreateVaultRequest:
       properties:
         metadata:
-          additionalProperties:
-            type: string
-          type: object
-          x-nullable: true
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
         name:
           type: string
       type: object
@@ -3656,14 +3674,16 @@ components:
     v1.CredentialAuth:
       properties:
         expires_at:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         mcp_server_url:
           type: string
         refresh:
-          allOf:
-            - $ref: '#/components/schemas/v1.OAuthCredentialRefresh'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.OAuthCredentialRefresh'
+            - type: 'null'
         type:
           enum:
             - static_bearer
@@ -3679,14 +3699,16 @@ components:
           minLength: 1
           type: string
         expires_at:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         mcp_server_url:
           type: string
         refresh:
-          allOf:
-            - $ref: '#/components/schemas/v1.OAuthCredentialRefreshInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.OAuthCredentialRefreshInput'
+            - type: 'null'
         token:
           minLength: 1
           type: string
@@ -3702,16 +3724,19 @@ components:
     v1.CredentialAuthReplacement:
       properties:
         access_token:
-          minLength: 1
-          type: string
-          x-nullable: true
+          anyOf:
+            - minLength: 1
+              type: string
+            - type: 'null'
         expires_at:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         refresh:
-          allOf:
-            - $ref: '#/components/schemas/v1.OAuthCredentialRefreshReplacement'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.OAuthCredentialRefreshReplacement'
+            - type: 'null'
         token:
           minLength: 1
           type: string
@@ -3745,13 +3770,15 @@ components:
             $ref: '#/components/schemas/v1.Credential'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -3764,45 +3791,53 @@ components:
     v1.Environment:
       properties:
         capability_directories:
-          items:
-            type: string
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
         env:
-          additionalProperties:
-            type: string
-          type: object
-          x-nullable: true
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
         environment_template_id:
           type: string
         files:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         network:
-          allOf:
-            - $ref: '#/components/schemas/v1.EnvironmentNetworkInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.EnvironmentNetworkInput'
+            - type: 'null'
         packages:
-          allOf:
-            - $ref: '#/components/schemas/v1.EnvironmentPackages'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.EnvironmentPackages'
+            - type: 'null'
         plugins:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         setup_commands:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         skills:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         type:
           enum:
             - none
@@ -3859,8 +3894,9 @@ components:
         has_more:
           type: boolean
         next:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - page
@@ -3937,10 +3973,11 @@ components:
             - restricted
           type: string
         allowed_domains:
-          items:
-            type: string
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
       required:
         - access
       type: object
@@ -3966,20 +4003,23 @@ components:
     v1.EnvironmentPackagesInput:
       properties:
         npm:
-          items:
-            type: string
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
         python:
-          items:
-            type: string
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
         system:
-          items:
-            type: string
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
       type: object
     v1.EnvironmentTemplate:
       properties:
@@ -3996,8 +4036,9 @@ components:
         id:
           type: string
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         network:
           $ref: '#/components/schemas/v1.EnvironmentNetwork'
         object:
@@ -4050,13 +4091,15 @@ components:
             $ref: '#/components/schemas/v1.EnvironmentTemplate'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -4069,46 +4112,55 @@ components:
     v1.EnvironmentTemplateRequest:
       properties:
         capability_directories:
-          items:
-            type: string
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
         env:
-          additionalProperties:
-            type: string
-          type: object
-          x-nullable: true
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
         files:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         network:
-          allOf:
-            - $ref: '#/components/schemas/v1.EnvironmentNetworkInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.EnvironmentNetworkInput'
+            - type: 'null'
         packages:
-          allOf:
-            - $ref: '#/components/schemas/v1.EnvironmentPackagesInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.EnvironmentPackagesInput'
+            - type: 'null'
         plugins:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         setup_commands:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         skills:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
       type: object
     v1.ErrorResponse:
       properties:
@@ -4120,39 +4172,46 @@ components:
     v1.InlineAgent:
       properties:
         instructions:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         model:
           type: string
         multi_agent:
-          type: object
-          x-nullable: true
+          anyOf:
+            - type: object
+            - type: 'null'
         reasoning:
-          allOf:
-            - $ref: '#/components/schemas/v1.Reasoning'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.Reasoning'
+            - type: 'null'
         service_tier:
-          enum:
-            - auto
-            - default
-            - flex
-            - priority
-            - fast
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - auto
+                - default
+                - flex
+                - priority
+                - fast
+              type: string
+            - type: 'null'
         text:
-          allOf:
-            - $ref: '#/components/schemas/v1.SavedAgentTextInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.SavedAgentTextInput'
+            - type: 'null'
         tools:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         x_agents_core:
-          allOf:
-            - $ref: '#/components/schemas/v1.AgentsCore'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.AgentsCore'
+            - type: 'null'
       type: object
     v1.InputContent:
       properties:
@@ -4223,11 +4282,12 @@ components:
           type: string
         output: {}
         phase:
-          enum:
-            - commentary
-            - final_answer
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - commentary
+                - final_answer
+              type: string
+            - type: 'null'
         reasoning_effort:
           type: string
         recipient_agent_id:
@@ -4305,13 +4365,15 @@ components:
             $ref: '#/components/schemas/v1.Item'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -4366,8 +4428,9 @@ components:
         enabled:
           type: boolean
         max_concurrent_subagents:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
       required:
         - enabled
       type: object
@@ -4376,11 +4439,13 @@ components:
         client_id:
           type: string
         resource:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         scope:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         token_endpoint:
           type: string
         token_endpoint_auth:
@@ -4397,11 +4462,13 @@ components:
         refresh_token:
           type: string
         resource:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         scope:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         token_endpoint:
           type: string
         token_endpoint_auth:
@@ -4415,15 +4482,18 @@ components:
     v1.OAuthCredentialRefreshReplacement:
       properties:
         refresh_token:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         scope:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         token_endpoint_auth:
-          allOf:
-            - $ref: '#/components/schemas/v1.OAuthEndpointAuthReplacement'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.OAuthEndpointAuthReplacement'
+            - type: 'null'
       type: object
     v1.OAuthEndpointAuth:
       properties:
@@ -4452,8 +4522,9 @@ components:
     v1.OAuthEndpointAuthReplacement:
       properties:
         client_secret:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         type:
           enum:
             - client_secret_basic
@@ -4472,11 +4543,13 @@ components:
     v1.Reasoning:
       properties:
         effort:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         summary:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
       type: object
     v1.RequiredAction:
       properties:
@@ -4504,8 +4577,9 @@ components:
         id:
           type: string
         instructions:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         metadata:
           additionalProperties:
             type: string
@@ -4515,8 +4589,9 @@ components:
         multi_agent:
           $ref: '#/components/schemas/v1.MultiAgentConfig'
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - agent
@@ -4540,9 +4615,10 @@ components:
         updated_at:
           type: integer
         x_agents_core:
-          allOf:
-            - $ref: '#/components/schemas/v1.SavedAgentCore'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.SavedAgentCore'
+            - type: 'null'
       required:
         - created_at
         - id
@@ -4576,9 +4652,10 @@ components:
             - mcode
           type: string
         model_provider:
-          allOf:
-            - $ref: '#/components/schemas/v1.ModelProviderInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.ModelProviderInput'
+            - type: 'null'
       type: object
     v1.SavedAgentList:
       properties:
@@ -4587,13 +4664,15 @@ components:
             $ref: '#/components/schemas/v1.SavedAgent'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -4632,15 +4711,17 @@ components:
     v1.SavedAgentTextInput:
       properties:
         format:
-          type: object
-          x-nullable: true
+          anyOf:
+            - type: object
+            - type: 'null'
         verbosity:
-          enum:
-            - low
-            - medium
-            - high
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - low
+                - medium
+                - high
+              type: string
+            - type: 'null'
       type: object
     v1.Session:
       properties:
@@ -4651,8 +4732,9 @@ components:
         environment:
           $ref: '#/components/schemas/v1.SessionEnvironment'
         error:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         id:
           type: string
         last_active_at:
@@ -4677,9 +4759,10 @@ components:
             - failed
           type: string
         usage:
-          allOf:
-            - $ref: '#/components/schemas/v1.TokenUsage'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.TokenUsage'
+            - type: 'null'
         vault_ids:
           items:
             type: string
@@ -4748,13 +4831,15 @@ components:
             $ref: '#/components/schemas/v1.SessionArtifact'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -4819,9 +4904,10 @@ components:
     v1.SessionEnvironmentState:
       properties:
         error:
-          allOf:
-            - $ref: '#/components/schemas/v1.StreamError'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.StreamError'
+            - type: 'null'
         id:
           type: string
         status:
@@ -4856,8 +4942,9 @@ components:
         item_id:
           type: string
         output_index:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         part:
           $ref: '#/components/schemas/v1.ItemContent'
         session:
@@ -4875,12 +4962,13 @@ components:
         type:
           type: string
         usage:
-          allOf:
-            - $ref: '#/components/schemas/v1.TokenUsage'
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.TokenUsage'
+            - type: 'null'
           description: |-
             Usage is present only on terminal Turn events, where it mirrors the Turn
             snapshot and is null when unknown. Other events omit it.
-          x-nullable: true
       required:
         - event_id
         - type
@@ -4895,14 +4983,17 @@ components:
         call_id:
           type: string
         error:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         input:
           items:
             $ref: '#/components/schemas/v1.InputMessage'
           type: array
         output:
-          x-nullable: true
+          anyOf:
+            - {}
+            - type: 'null'
         success:
           type: boolean
         turn_id:
@@ -4923,13 +5014,15 @@ components:
             $ref: '#/components/schemas/v1.Session'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -4988,13 +5081,15 @@ components:
             $ref: '#/components/schemas/v1.Skill'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -5063,13 +5158,15 @@ components:
             $ref: '#/components/schemas/v1.SkillVersion'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -5087,8 +5184,9 @@ components:
         created_at:
           type: integer
         expires_at:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         filename:
           type: string
         id:
@@ -5106,8 +5204,9 @@ components:
             - processed
           type: string
         status_details:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
       required:
         - bytes
         - created_at
@@ -5139,13 +5238,15 @@ components:
             $ref: '#/components/schemas/v1.SourceFile'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -5162,30 +5263,34 @@ components:
         message:
           type: string
         param:
+          anyOf:
+            - type: string
+            - type: 'null'
           description: |-
             Param is the pinned SessionError field. An error SessionEvent always
             carries it, null when unset; Environment state errors and Core's own
             stream_interrupted frame omit it.
-          type: string
-          x-nullable: true
         type:
           type: string
       type: object
     v1.Subagent:
       properties:
         closed_at:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         id:
           type: string
         instructions:
-          items:
-            $ref: '#/components/schemas/v1.AgentContent'
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                $ref: '#/components/schemas/v1.AgentContent'
+              type: array
+            - type: 'null'
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - agent.session.subagent
@@ -5216,13 +5321,15 @@ components:
             $ref: '#/components/schemas/v1.Subagent'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -5294,14 +5401,16 @@ components:
         agent_id:
           type: string
         completed_at:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         created_at:
           type: integer
         error:
-          allOf:
-            - $ref: '#/components/schemas/v1.TurnError'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.TurnError'
+            - type: 'null'
         id:
           type: string
         object:
@@ -5311,8 +5420,9 @@ components:
         session_id:
           type: string
         started_at:
-          type: integer
-          x-nullable: true
+          anyOf:
+            - type: integer
+            - type: 'null'
         status:
           enum:
             - queued
@@ -5323,12 +5433,14 @@ components:
             - cancelled
           type: string
         subagent_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         usage:
-          allOf:
-            - $ref: '#/components/schemas/v1.TokenUsage'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.TokenUsage'
+            - type: 'null'
       required:
         - agent_id
         - created_at
@@ -5371,13 +5483,15 @@ components:
             $ref: '#/components/schemas/v1.Turn'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list
@@ -5390,48 +5504,57 @@ components:
     v1.UpdateAgentRequest:
       properties:
         instructions:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         metadata:
-          additionalProperties:
-            type: string
-          type: object
-          x-nullable: true
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
         model:
           type: string
         multi_agent:
-          type: object
-          x-nullable: true
+          anyOf:
+            - type: object
+            - type: 'null'
         name:
-          maxLength: 128
-          type: string
-          x-nullable: true
+          anyOf:
+            - maxLength: 128
+              type: string
+            - type: 'null'
         reasoning:
-          allOf:
-            - $ref: '#/components/schemas/v1.Reasoning'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.Reasoning'
+            - type: 'null'
         service_tier:
-          enum:
-            - auto
-            - default
-            - flex
-            - priority
-            - fast
-          type: string
-          x-nullable: true
+          anyOf:
+            - enum:
+                - auto
+                - default
+                - flex
+                - priority
+                - fast
+              type: string
+            - type: 'null'
         text:
-          allOf:
-            - $ref: '#/components/schemas/v1.SavedAgentTextInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.SavedAgentTextInput'
+            - type: 'null'
         tools:
-          items:
-            type: object
-          type: array
-          x-nullable: true
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: 'null'
         x_agents_core:
-          allOf:
-            - $ref: '#/components/schemas/v1.SavedAgentCoreInput'
-          x-nullable: true
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/v1.SavedAgentCoreInput'
+            - type: 'null'
       type: object
     v1.UpdateCredentialRequest:
       properties:
@@ -5443,10 +5566,11 @@ components:
     v1.UpdateSessionRequest:
       properties:
         metadata:
-          additionalProperties:
-            type: string
-          type: object
-          x-nullable: true
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
       required:
         - metadata
       type: object
@@ -5461,8 +5585,9 @@ components:
             type: string
           type: object
         name:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - vault
@@ -5495,13 +5620,15 @@ components:
             $ref: '#/components/schemas/v1.Vault'
           type: array
         first_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         has_more:
           type: boolean
         last_id:
-          type: string
-          x-nullable: true
+          anyOf:
+            - type: string
+            - type: 'null'
         object:
           enum:
             - list

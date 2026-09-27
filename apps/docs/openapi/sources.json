@@ -18,7 +18,7 @@
     "content/docs/api-reference/skills.mdx": "774ea05a7a8250fe5af5164388b98dafca99d56dc2eae686e8f628acb4e7c10b",
     "content/docs/api-reference/vaults.mdx": "d80eade1c2f8100030866abbb0fb6b7a09c94250a859c97cdf1abce32fdfdf1e",
     "content/docs/api-reference/credentials.mdx": "f129a51f74a3c7021c016600518e2350023f8d29571666ac5d64b7584cd7c7d0",
-    "openapi/public-api.yaml": "751f85ebd5dbfc3ff0536b21d08668945396983fb3ef3b0757d2fff4308af867",
+    "openapi/public-api.yaml": "84ae8a33717c817950d757990018edd10a4d31d5a343c8172baa099d101c5a1f",
     "content/docs/api-reference/meta.json": "56bf1dc145ccc8adde38c5f956f1a06f18ef18b646122250d01a294c516f8f83",
     "content/docs/api-reference/index.mdx": "9fd6b1c54149874d2999235067c101326f9e8a2e707a70b6672c81eb3ebfe63f",
     "content/docs/api-reference/core/core-administration.mdx": "a1261c7998017de3761ca90ca073a0b89a6c528ff37a634f3d8b986ee9540fc5",
@@ -40,11 +40,11 @@
     "content/docs/api-reference/core/vaults.mdx": "12d0aac96cd4a3472ef4eaa287f7945f78862017956e79bfc3ed0ef8e772e78a",
     "content/docs/api-reference/core/credentials.mdx": "27d586b9a8fd738b9947802f32c80458195370252886bc26abedccf2125ee981",
     "content/docs/api-reference/core/sandbox-manager.mdx": "36f2895b9969d27be843d5cebf935bf14ca9400ad076e56074a25905e3df5d1b",
-    "openapi/core-api.yaml": "769928115c3f8f96b4186cffded99648e40205193018ac830fdfa118a832adad",
+    "openapi/core-api.yaml": "4d0ea2efd63af1074edd67b41d3252caa19a888b89f3cf79c5cbb1ab5b413b20",
     "content/docs/api-reference/core/meta.json": "588b163ed2de2100b0f8376688274f80698a6bf6ac037eef56d17c93fa8a5062",
     "content/docs/api-reference/core/index.mdx": "ddf0a8d87a6c21761beac703a32f2a40486a1c74abb341bd726f40c44a866405",
     "content/docs/api-reference/machine/sandbox-node.mdx": "5b367a08d43cea82686345d2ba1c75cc90627a7b2970fe42a0df9d77fb3e1e80",
-    "openapi/runtime-api.yaml": "96e9d70b4ce78ad193c07325f587f72a880667c010c43d85ba188fb4f260b9cc",
+    "openapi/runtime-api.yaml": "bca127037ffb1e132e7f26bffada5e3da70f4b2534926a04e1e65029d885afe9",
     "content/docs/api-reference/machine/meta.json": "12a1a6534c1cae32918282da2110e4b64c43f17abb868486b5eff50ceb0b01c1",
     "content/docs/api-reference/machine/index.mdx": "792c1ce86a6653943021eb5cd03a2c6b5c604f7f012da5ef06f3ffa027b12973"
   }

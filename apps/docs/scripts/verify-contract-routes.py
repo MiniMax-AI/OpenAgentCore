@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Check the generated OpenAPI contracts against the routes the code registers.
 
-The contracts are produced by `swag` from handler annotations, and an annotation
-can drift from the route it documents. This reads the real `chi` route table out
-of services/agents-api/internal/api and compares it with the published paths.
+The public contract is constrained by its pinned upstream baseline; Core and
+machine contracts are generated from handler annotations. This reads the real
+`chi` route table from services/agents-api/internal/api and compares all three
+contracts with the registered paths.
 
 Two checks:
   [A] routes the code registers that no contract publishes
@@ -14,25 +15,21 @@ Scope resolution is brace-matched rather than line-based, because chi nests
 at each level.
 
 Read-only. Usage (from apps/docs):
-    python3 scripts/verify-contract-routes.py
+    node scripts/check-python.mjs routes
 """
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import sys
 
-import yaml
 
 APP = pathlib.Path(__file__).resolve().parent.parent
 REPO = APP.parent.parent
 API = REPO / "services/agents-api/internal/api"
-CONTRACTS = [
-    (REPO / "contracts/agents-api/openapi.yaml", "public-api"),
-    (REPO / "contracts/agents-api/core.openapi.yaml", "core-api"),
-    (REPO / "contracts/agents-api/runtime.openapi.yaml", "runtime-api"),
-]
+
 
 VERBS = ("Get", "Post", "Put", "Patch", "Delete", "Head", "Options", "Trace")
 ROUTE = re.compile(r"\b(\w+)\.(%s)\(\s*([^,)]+?)\s*[,)]" % "|".join(VERBS))
@@ -187,8 +184,9 @@ def main() -> int:
         calls.extend(region.calls({param: prefix}))
 
     documented: dict[tuple[str, str], str] = {}
-    for contract, label in CONTRACTS:
-        document = yaml.safe_load(contract.read_text(encoding="utf-8"))
+    # YAML is decoded by the declared Node dependency; Python uses only stdlib.
+    for contract in json.load(sys.stdin):
+        document, label = contract["document"], contract["label"]
         base = (document.get("basePath") or "").rstrip("/")
         for route, item in (document.get("paths") or {}).items():
             for method in item:
