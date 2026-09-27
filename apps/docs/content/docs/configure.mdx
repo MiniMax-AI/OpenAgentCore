@@ -1,0 +1,253 @@
+---
+title: "Configuration reference"
+description: "The operator config.json, generated files and database-owned runtime settings."
+---
+
+Every setting of a Core installation has exactly one home. There are two kinds:
+
+| Kind | Examples | Home | Change it with | Takes effect |
+| --- | --- | --- | --- | --- |
+| [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, database pool, Runtime history export | `config.json` in the installation directory (default `~/.oac/core`) | Edit the file, then run `oac apply` | `oac apply` restarts the services that read the changed settings |
+| [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | At once, without a restart |
+
+Web's **System** page shows both: the installation's addresses, the process settings
+read-only under **Startup settings** with the path of `config.json` and the apply
+command, the default models, and the sandbox configuration. Secrets live in
+[`secrets/`](#secrets-and-identity), one copy each. Each setting is set in one place;
+the files in `generated/` are only derived from `config.json`. No configuration file
+defines Projects or API keys.
+
+## Process settings: config.json
+
+The installer writes every setting that applies to the installation's
+[mode](/install#modes), so the file shows each value. Installer flags
+such as `--public-url`, `--core-port` and `--web-port` only seed it. To change a
+setting, edit the file and apply it:
+
+```sh
+~/.oac/core/oac apply --dry-run   # show the changed settings, files and restarts
+~/.oac/core/oac apply
+```
+
+### How oac apply works
+
+1. It validates `config.json` and changes nothing if a value is invalid. `mode` and
+   `native_core` are fixed after installation; to change them, install into a new
+   directory.
+2. It writes the files Core, Web and Compose read into `generated/`: `compose.json`,
+   `core.env`, `core-key-digests.json`, `settings.json` and, when used,
+   `runtime-history.json` and the native Core unit. Don't edit them. A generated file
+   edited by hand stops `apply` until you move the change into `config.json` and run
+   `oac apply --discard-edits`, which keeps the edited copy as
+   `generated/<file>.edited-<time>`.
+3. It compares what it wrote with what actually runs. Each container carries a digest
+   of its inputs (the `io.oac.inputs` label; native Core carries `OAC_INPUTS`),
+   and `apply` recreates or restarts exactly the services whose inputs differ: Core
+   first, then Web. The **Restarts** column below says which services a setting
+   affects. Restarting Web signs everyone out of the console.
+4. While any service runs, `apply` also starts the stopped ones. After `oac stop`,
+   it only writes the files and the installation stays stopped.
+5. If Core refuses a value at startup, `apply` prints Core's startup error. If every
+   service was running with the previous files, it restores them and starts the
+   services again; otherwise it reports the failure, and the next `apply` finishes
+   the work.
+
+`oac status` reports changes to `config.json` that are not applied yet and
+generated files edited by hand.
+
+### Changing the public URL
+
+`public_url` is the one origin that applications, nodes, sandboxes and self-hosted
+executors use; Core derives the daemon WebSocket URL, the self-hosted `remote_url` and
+each sandbox's connection address from it. With `null`, Core uses
+`http://127.0.0.1:<ports.core>` and only this host can reach it.
+
+You can set or change it at any time with `oac apply`. When nodes, hosted
+sandboxes or self-hosted executors are bound to the current address, `apply` lists
+them and asks you to type the new URL (`--confirm-public-url-change URL` when not
+interactive). Afterwards, nodes on the old address get no new sandboxes: remove them
+in Web and add them again. Existing sandboxes and executors keep working only while
+the old address still reaches this Core, and `apply` warns that self-hosted executors
+must restart with the new `remote_url`. Their installer refuses to reuse an
+installation made for the old address, and moving an executor isn't supported yet:
+create new self-hosted Sessions and connect their hosts again. Update your reverse
+proxy first.
+
+### Settings
+
+`core.runtime_history.headers` may hold export credentials. They stay in the
+`0600` `config.json` and the generated file Core reads, and never appear in `oac`
+output or in Core's settings snapshot. Model providers are not process settings; see
+[Default models](#default-models).
+
+
+| Key | Type | Default | Modes | Change | Restarts | Meaning |
+| --- | --- | --- | --- | --- | --- | --- |
+| `$schema` | string | none | all | any time | none | Editor hint that points at the installed copy of this schema. Ignored. |
+| `format` | `1` | none | all | fixed | none | Configuration format. Only an upgrade changes it. |
+| `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. Install flag: `--core-only` or `--web-only`. |
+| `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. Install flag: `--native-core`. |
+| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1. Install flag: `--public-url`. |
+| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `oac apply` | core (core, web with native Core) | Loopback port of the Core API. With native Core, Web follows it. Install flag: `--core-port`. |
+| `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `oac apply` | web | Loopback port of Web. Install flag: `--web-port`. |
+| `ports.database` | integer 1024–65535 | none | `all`, `core-only` | `oac apply` | database, core | Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port. |
+| `web.core_url` | string (canonical origin; HTTP only on loopback) | none | `web-only` | `oac apply` | web | Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host. Install flag: `--core-url`. |
+| `log.level` | `"debug"` \| `"info"` \| `"warn"` \| `"error"` | `"info"` | all | `oac apply` | core, web | Minimum log level of Core and Web. |
+| `log.format` | `"auto"` \| `"text"` \| `"json"` | `"auto"` | all | `oac apply` | core, web | Log format. auto writes text to a terminal and JSON otherwise. |
+| `log.add_source` | boolean | `false` | all | `oac apply` | core, web | Add the source file and line to each log record. |
+| `core.execution_concurrency` | integer 1–1024 | `4` | `all`, `core-only` | `oac apply` | core | Concurrent execution work units in Core. Unrelated to node sandbox capacity. |
+| `core.harnesses` | array of `"claude_sdk"` \| `"codex"` \| `"mcode"` | `["claude_sdk", "codex", "mcode"]` | `all`, `core-only` | `oac apply` | core | Harnesses that Sessions may select. |
+| `core.default_harness` | `"claude_sdk"` \| `"codex"` \| `"mcode"` | `"codex"` | `all`, `core-only` | `oac apply` | core | Harness used when a Session names none. It must be listed in core.harnesses. |
+| `core.write_audit_retention` | string (Go duration, at least `1h`) | `"2160h"` | `all`, `core-only` | `oac apply` | core | How long non-creation write history is kept, as a Go duration of at least 1h. |
+| `core.oauth_trusted_origins` | array of string (canonical HTTPS origin) | `[]` | `all`, `core-only` | `oac apply` | core | Extra HTTPS origins trusted as private OAuth issuers. |
+| `core.database_pool.max_conns` | integer or null ≥ 1 | `null` | `all`, `core-only` | `oac apply` | core | Maximum database connections. null keeps the driver default, max(4, CPU count). |
+| `core.database_pool.min_conns` | integer or null ≥ 0 | `null` | `all`, `core-only` | `oac apply` | core | Minimum idle database connections. null keeps the driver default, 0. |
+| `core.database_pool.max_conn_lifetime` | string or null (Go duration) | `null` | `all`, `core-only` | `oac apply` | core | Go duration. null keeps the driver default, 1h. |
+| `core.database_pool.max_conn_idle_time` | string or null (Go duration) | `null` | `all`, `core-only` | `oac apply` | core | Go duration. null keeps the driver default, 30m. |
+| `core.database_pool.health_check_period` | string or null (Go duration) | `null` | `all`, `core-only` | `oac apply` | core | Go duration. null keeps the driver default, 1m. |
+| `core.runtime_history` | object or null | `null` | `all`, `core-only` | `oac apply` | core | Runtime history collection and OTLP export. null keeps local collection with Core's defaults. Core checks the values at startup. |
+| `core.runtime_history.transport` | string | none | `all`, `core-only` | `oac apply` | core | OTLP export transport. |
+| `core.runtime_history.endpoint` | string | none | `all`, `core-only` | `oac apply` | core | OTLP collector endpoint. Omit it to keep history local. |
+| `core.runtime_history.insecure` | boolean | none | `all`, `core-only` | `oac apply` | core | Export without TLS. |
+| `core.runtime_history.headers` | object of string values | none | `all`, `core-only` | `oac apply` | core | Headers sent with each export, such as credentials. Never shown by oac or Core. Sensitive. |
+| `core.runtime_history.queue_capacity` | integer | none | `all`, `core-only` | `oac apply` | core | Export queue capacity. |
+| `core.runtime_history.timeout_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | Export and query timeout in seconds. |
+| `core.runtime_history.sample_interval_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | Periodic sampling interval in seconds. |
+
+
+The schema is
+[`deploy/install/config.schema.json`](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/deploy/install/config.schema.json); each
+installation keeps a copy in `generated/config.schema.json` for editors. Core serves
+the non-secret settings snapshot, with the path of `config.json` and the apply
+command, at `GET /core/v1/installation`.
+
+## Runtime settings: Web
+
+Runtime settings live in Core's database. Change them in Web; scripts use the same
+Core API with the Core key.
+
+| Setting | Where in Web | Core API | Notes |
+| --- | --- | --- | --- |
+| Sandbox backend: Docker, microsandbox or E2B | **Nodes** (**Sandbox backend** with E2B): the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per deployment. `install.sh --sandbox` saves the first choice. To change it, see the Nodes page; that flow will change in a coming release |
+| Sandbox size and Runtime release | **Nodes**: the setup wizard | `/core/v1/sandbox/deployment` | Every sandbox gets the same size. See [Sandbox deployment](#sandbox-deployment) |
+| E2B API key and template build | **Nodes**: the setup wizard's **E2B cloud** (the page is then called **Sandbox backend**) | `/core/v1/sandbox/deployment` | The key is write-only and encrypted |
+| Nodes and their capacity | **Nodes**: **Add node**, **Edit node**, **Remove node** on a node's page (**Remove** in its list row) | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and the [nodes guide](/hosted-providers) |
+| Projects and API keys | **Projects and keys**: **Create project**, **Rename**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
+| Default model per harness | **System**: **Default model** | `/core/v1/harnesses/{harness}/model-provider` | See [Default models](#default-models) |
+| Executor credentials of a self-hosted Session | **Session log**, the Session's page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](/self-hosted-execution) |
+
+Which harnesses are enabled, and the default one, are process settings
+(`core.harnesses`, `core.default_harness`); System shows them read-only. The
+[API index](/public-api#core-api) lists every Core API route.
+
+### Sandbox deployment
+
+Exactly one provider serves the deployment: Docker, microsandbox or E2B. The
+deployment specification holds the per-sandbox resources and, for Docker and
+microsandbox, the Runtime release. Web's setup proposes the Standard size from
+[`standard-sizes.json`](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/apps/web/src/features/sandbox/standard-sizes.json) and
+derives Small and Large from it; the installer applies the bundle's copy of the same
+file. The database owns the saved values.
+
+| Setting | Standard | Meaning |
+| --- | --- | --- |
+| `resources.cpus` | 2 | Whole vCPUs per sandbox, 1 through 255 |
+| `resources.memory_mib` | Docker 2048, microsandbox 4096 | MiB per sandbox, 512 through 1048576 |
+| `resources.root_disk_mib`, `environment_disk_mib` | microsandbox 8192 each | At least 1024 MiB; microsandbox only |
+| `runtime` | The bundle's Runtime release | Source revision, exact image ID and manifest, and Runtime and firmware hashes; never a mutable tag |
+| Idle suspension, snapshot retention | 300 and 86400 seconds | microsandbox only; fixed |
+
+E2B takes no `runtime`, and Web sends no resources for it: Core adopts the CPU and
+memory of the ready template build `template-id:build-uuid`, and supplied values must
+match it. Docker has no separate disk quota.
+
+Changing the provider, the size or the Runtime applies to the whole deployment; see the
+**Nodes** page, and note that this flow will change in a coming release. A successful
+change retires the old nodes and enrollment commands; history stays, and existing
+Sessions never move between providers. See the
+[operator reference](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-maintenance)
+and the [deployment contract](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/sandbox-deployment.md).
+
+### Node capacity
+
+Core approves a node's capacity when you generate its Add node command: **Sandboxes at
+once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes**
+(`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never
+suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to
+`max_active`. Change them later with **Edit node**. Reservations and cleanup that is
+not confirmed count against capacity; lowering a limit stops no running sandbox. A
+node's own files can't change its capacity, size or Runtime.
+
+`core.execution_concurrency` is unrelated: it limits concurrent execution work in Core.
+
+### Default models
+
+Each harness has at most one default model provider: `protocol`, HTTPS `base_url`,
+a write-only `api_key` and, for MiniMax Code, `context_window` and
+`max_output_tokens`. It is the same bundle as `x_agents_core.model_provider`. Core
+encrypts it with `secrets/credential.key` and never returns the key.
+
+New Core-hosted (`openai_hosted`) Sessions and Sessions without an environment
+(`none`) use it when neither the request nor the Agent carries a provider; each
+Session freezes the provider it starts with, so a later change affects only new
+Sessions. Self-hosted Sessions never use it. A hosted or self-hosted Session with no
+provider is refused with 400 `model_provider_required`. See
+[model providers](/quickstart#model-providers) and the
+[model execution contract](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/model-execution.md#deployment-defaults).
+
+The operator file `AGENTS_API_EXECUTION_OPTIONS_FILE` is retired; see
+[Upgrade notes](/troubleshooting#upgrade-notes).
+
+## Secrets and identity
+
+| File | Content | Changed by |
+| --- | --- | --- |
+| `secrets/core.key` | The [Core key](/troubleshooting#core-key) | `oac rotate-core-key` |
+| `secrets/credential.key` | Encryption key for what Core stores sealed in the database: model providers, the E2B key, Vault credentials, Skills, initial files and environment setup | Nothing. Keep it with the database; `oac apply` refuses a changed file |
+| `secrets/database.password` | PostgreSQL password | Nothing. PostgreSQL reads it only when the database is created; `oac apply` refuses a changed file |
+| `state.json` | Installation ID, Compose project, image IDs, source commit and the digests of generated files | The tools only |
+
+A Web-only installation has only `secrets/core.key`, a copy of its Core's key.
+
+## Appendix: Core environment without the installer
+
+Core reads only its environment. The installer renders `generated/core.env` from
+`config.json`; if you run Core yourself (see
+[Maintainers and advanced deployments](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/docs/maintainers.md)), set these variables. Compose
+loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose must be
+2.26.0 or newer.
+
+| Variable | Set from |
+| --- | --- |
+| `OAC_PUBLIC_URL` | `public_url`, or Core's loopback origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it. Required with `OAC_INSTALLATION_ID` |
+| `OAC_ADDR` | `ports.core` (native Core) or the container port |
+| `OAC_DATABASE_URL` | The installation's PostgreSQL without a password, plus `core.database_pool` as `pool_*` query parameters |
+| `OAC_DATABASE_PASSWORD_FILE` | `secrets/database.password`. The URL must then carry no password; migrations and the maintenance commands read the file too |
+| `OAC_CREDENTIAL_KEY_FILE` | `secrets/credential.key` |
+| `OAC_CORE_KEY_DIGESTS_FILE` | `generated/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
+| `OAC_INSTALLATION_ID` | `state.json`; pinned to the database |
+| `OAC_SETTINGS_FILE` | `generated/settings.json`, the snapshot Core serves at `GET /core/v1/installation`; Core does not act on it |
+| `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching `core.*` settings |
+| `OAC_HISTORY_SETTINGS_FILE` | `generated/runtime-history.json` when `core.runtime_history` is set; see the [history contract](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/runtime-history-api.md) |
+| `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
+| `OAC_E2B_STATE_DIR`, `OAC_E2B_PROVIDER_BIN` | The E2B receipt directory and, for native Core, the bundled helper. The E2B key and template live in the database |
+
+A Web you run without the installer reads the variables in
+[Connecting the administrator console to Core](/bootstrap-projects-keys#server-configuration-and-login),
+plus `OAC_WEB_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's
+node payload (the installer's `node-payload/`). Without it, Add node and the
+self-hosted install command are unavailable.
+
+Core fails at startup, naming the replacement, while a retired variable is set:
+`AGENTS_API_DAEMON_WS_URL` (use `OAC_PUBLIC_URL`), `AGENTS_API_CONFIG_FILE` (no
+replacement), `AGENTS_API_EXECUTION_OPTIONS_FILE` (use
+[default models](#default-models)), `AGENTS_API_SANDBOX_ADMIN_DIGESTS_FILE` (use
+`OAC_CORE_KEY_DIGESTS_FILE`), and `AGENTS_API_MANAGED_RUNTIMES_FILE`,
+`AGENTS_API_SANDBOX_NODE_STATE_DIR` and `AGENTS_API_SANDBOX_NODE_CORE_URL` (the
+sandbox deployment lives in the database and nodes enroll separately). Core logs the
+file paths it loads, never environment values or file contents. Native installation
+paths must be canonical absolute paths without control characters, quotes, backslashes
+or wildcards. Keep the installation ID and the database together; Core refuses a
+missing installation ID when its database already has a deployment.
+
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/docs/configuration.md)

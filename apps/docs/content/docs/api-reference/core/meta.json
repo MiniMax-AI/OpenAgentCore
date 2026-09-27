@@ -1,0 +1,25 @@
+{
+  "title": "Core administration API",
+  "pages": [
+    "index",
+    "core-administration",
+    "deployment-model-providers",
+    "administrator-projects",
+    "agents",
+    "environment-templates",
+    "executor-credentials",
+    "files",
+    "write-audit",
+    "sessions",
+    "artifacts",
+    "execution-configuration",
+    "items",
+    "runtime-history",
+    "runtime-observations",
+    "turns",
+    "skills",
+    "vaults",
+    "credentials",
+    "sandbox-manager"
+  ]
+}

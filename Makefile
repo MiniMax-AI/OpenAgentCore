@@ -8,7 +8,7 @@ SWAG_VERSION ?= v1.16.4
 help:
 	@printf '%s\n' 'make build-agents-api  Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
-check: check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-agents-api check-claude-sdk check-web check-mcode-harness check-agents-executor
+check: check-docs check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-agents-api check-claude-sdk check-web check-mcode-harness check-agents-executor
 	@printf 'OpenAgentCore checks passed.\n'
 
 .PHONY: check-names
@@ -145,3 +145,7 @@ build-e2b-provider:
 check-e2b-provider:
 	PYTHONDONTWRITEBYTECODE=1 $${OAC_TEST_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/agents-api/deploy/e2b -p '*_test.py'
 	PYTHONDONTWRITEBYTECODE=1 $${OAC_TEST_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/agents-api/tools/e2b-provider -p '*_test.py'
+
+.PHONY: check-docs
+check-docs: node-deps
+	pnpm check:docs

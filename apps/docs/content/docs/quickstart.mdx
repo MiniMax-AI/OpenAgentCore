@@ -1,0 +1,149 @@
+---
+title: "Call the Agent API"
+description: "Use the pinned SDK, a Project API key and an explicit model provider to run a Session."
+---
+
+Core serves the OpenAI Agents API. Applications use the official OpenAI SDK with two
+environment variables, which the SDK reads by default:
+
+| Variable | Value | From |
+| --- | --- | --- |
+| `OPENAI_BASE_URL` | The installation's API base URL: its public URL followed by `/v1`, such as `https://core.example/v1` | The administrator; Web's **System** page shows it as **API base URL** |
+| `OPENAI_API_KEY` | A Project API key | The administrator issues it on **Projects and keys**; see [Sign in to Web](/install#sign-in-to-web) |
+
+The Project API key authenticates your application to this Core. It is separate from
+the model provider's key that a harness uses, and neither belongs in source control.
+The API base URL reaches Core directly; Web does not serve `/v1`.
+
+## First request
+
+Use the pinned client version:
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+pip install openai==3.13.0
+export OPENAI_BASE_URL=https://core.example/v1
+read -rs OPENAI_API_KEY && export OPENAI_API_KEY   # paste the Project API key; it isn't echoed
+```
+
+```python
+from openai import OpenAI
+
+client = OpenAI()  # reads OPENAI_BASE_URL and OPENAI_API_KEY
+print(client.beta.agents.list().data)
+```
+
+`read -rs` keeps the key out of your shell history. This read checks access; it runs no
+model and creates no sandbox. The same request with curl, which keeps the key off its
+command line:
+
+```sh
+curl "$OPENAI_BASE_URL/agents" -H "OpenAI-Beta: agents=v1" \
+  -H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")
+```
+
+All keys of a Project share its assets and execution principal; other Projects are
+isolated. When the administrator rotates your key, they issue a new one in the same
+Project and revoke the old one; your assets stay.
+
+## Run a Session
+
+A Core-hosted Session (`openai_hosted`) runs in a sandbox that Core creates: on a node
+with free capacity, or on E2B. Core prepares the daemon, native harness and workspace
+inside it. The installation needs a ready node or an E2B backend; see
+[Nodes](/hosted-providers).
+
+```python
+import os
+
+session = client.beta.agents.sessions.create(
+    environment={"type": "openai_hosted"},
+    input="Create /workspace/hello.txt with a short greeting, then describe it.",
+    extra_body={
+        "agent": {
+            "model": os.environ["MODEL_NAME"],
+            "x_agents_core": {"harness": "codex"},
+        },
+        "x_agents_core": {
+            "model_provider": {
+                "protocol": "responses",
+                "base_url": os.environ["MODEL_BASE_URL"],
+                "api_key": os.environ["MODEL_API_KEY"],
+            }
+        },
+    },
+)
+print(session.id)
+```
+
+This makes a real model request and may incur charges. If the administrator set a
+default model for the harness, omit `x_agents_core.model_provider`; `agent.model` is
+still required, so ask the administrator which model ID the default provider serves.
+SDK 3.13.0 replaces an ordinary body field with the matching `extra_body` field
+instead of merging nested fields, so keep the whole `agent` object in `extra_body`.
+
+## Core extensions: x_agents_core
+
+`/v1` has exactly the official routes. Core's additions are fields inside
+`x_agents_core`, passed through `extra_body`; any other member is rejected with 400.
+
+| Field | Where | Meaning |
+| --- | --- | --- |
+| `x_agents_core.harness` | A saved Agent, or the Session's inline `agent` | Which native harness runs the Agent: `codex` (Codex), `claude_sdk` (Claude Code) or `mcode` (MiniMax Code). Omitted: the installation's default harness (`core.default_harness`, Codex unless changed) |
+| `x_agents_core.model_provider` | A saved Agent, or Session creation | The model provider bundle: `protocol`, HTTPS `base_url`, write-only `api_key`, and for `mcode` also `context_window` and `max_output_tokens`. Reads return `api_key_configured` instead of the key |
+
+The provider's protocol must match the harness:
+
+| Harness | `protocol` | Also required |
+| --- | --- | --- |
+| Codex (`codex`) | `responses` | The provider's exact model ID in `agent.model` |
+| Claude Code (`claude_sdk`) | `anthropic` | The provider's exact model ID |
+| MiniMax Code (`mcode`) | `anthropic` | `context_window` and `max_output_tokens` |
+
+See [harness selection](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/harness-selection.md) and
+[model execution](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/model-execution.md) for the full contract.
+Selecting a harness doesn't make an unsupported model or operation work.
+
+## Model providers
+
+A Session takes its model provider from the first of these that has one; bundles are
+never merged:
+
+1. `x_agents_core.model_provider` in the Session creation request;
+2. the saved Agent's `x_agents_core.model_provider`;
+3. the installation's default model for the harness, set in Web on **System**,
+   **Default model**.
+
+| Environment | Request or saved Agent | Default model | None of them |
+| --- | --- | --- | --- |
+| `openai_hosted` | Used | Used | 400 `model_provider_required` |
+| `self_hosted` | Used | Never | 400 `model_provider_required` |
+| `none` | Rejected with 400 `unsupported_or_invalid_configuration` | Used | Allowed: the device's own environment supplies the model |
+
+A Session freezes its provider when it is created; later changes to the Agent or the
+default affect only new Sessions. Core encrypts the key with the Session and never
+returns it. Self-hosted Sessions always bring their own provider, because the default
+holds the operator's key and the executor host belongs to the application; see
+[Self-hosted executors](/self-hosted-execution).
+
+## Observe and recover
+
+```python
+current = client.beta.agents.sessions.retrieve(session.id)
+turns = client.beta.agents.sessions.turns.list(session.id)
+items = client.beta.agents.sessions.items.list(session.id)
+print(current.id, turns.data, items.data)
+```
+
+Wait for the Turn's final state before treating a task as done. After a disconnect,
+recover through Session, Turn and Items reads: the event stream is live only and does
+not replay history. Don't submit the same work as a new Session when a response is
+lost.
+
+Files, Artifacts, cancellation and their current limits are in the
+[coverage ledger](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/README.md). MCP credentials use the
+separate Vault API; they are neither Project API keys nor model provider keys. The
+[API index](/public-api) lists every route.
+
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/docs/getting-started/quickstart.md)

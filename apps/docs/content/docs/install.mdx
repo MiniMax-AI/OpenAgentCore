@@ -1,0 +1,533 @@
+---
+title: "Install Core and Web"
+description: "Current distribution, host prerequisites, HTTPS, first sign-in and installation options."
+---
+
+One command installs Core, the Web console and PostgreSQL on a Linux host. Web is
+the administrator console: you sign in with the Core key, issue Project API keys and
+add nodes. Applications call Core's API with those keys.
+
+1. [Check the prerequisites](#prerequisites).
+2. [Download a release bundle](#download-a-release).
+3. [Run the installer](#install).
+4. [Put Core and Web behind HTTPS](#https-and-the-reverse-proxy), or
+   [try it locally first](#try-it-locally-with-a-quick-tunnel).
+5. [Sign in to Web and issue a key](#sign-in-to-web).
+6. [Add a node](/hosted-providers).
+
+These pages describe the current source. Every bundle carries the docs that match it
+under `docs/`; if you install an older bundle, follow those.
+
+## Prerequisites
+
+**The Core host**
+
+- Linux amd64 with Python 3.9 or newer.
+- Docker Engine with Docker Compose 2.26.0 or newer (`docker compose version`).
+- A non-root user who can run `docker`. The installer refuses root.
+- Free loopback ports 8091 (Core) and 8080 (Web), or
+  [other ports](#ports-and-directory).
+- The GitHub CLI, `gh`, to download the bundle.
+
+The Core host needs no KVM and no systemd user services, unless you choose
+[native Core](#native-core).
+
+**Network, for nodes and remote access**
+
+- A DNS name for Core and Web, such as `core.example`, with a TLS certificate.
+- A reverse proxy on the Core host that sends three routes to the right service; see
+  [HTTPS and the reverse proxy](#https-and-the-reverse-proxy).
+
+Node hosts and their sandboxes, E2B sandboxes and self-hosted executors all reach
+Core at this HTTPS address. A local trial needs none of this: install without a
+public URL and set it later.
+
+## Download a release
+
+The repository is internal for now, so GitHub asks you to sign in first:
+
+```sh
+gh auth login
+```
+
+Pick a release, download its offline bundle and check it:
+
+```sh
+gh release list --repo MiniMax-AI/parsar-core
+mkdir -p "$HOME/.oac/releases" && cd "$HOME/.oac/releases"
+gh release download <tag> --repo MiniMax-AI/parsar-core --pattern '*-linux-amd64-offline.tar.gz*'
+sha256sum -c oac-<commit>-linux-amd64-offline.tar.gz.sha256
+tar -xzf oac-<commit>-linux-amd64-offline.tar.gz
+cd oac-<commit>-linux-amd64
+```
+
+`<tag>` is the release tag from the list, and `<commit>` is the source commit in the
+asset names. The installer also checks every file in the bundle against its
+`SHA256SUMS` before it changes anything.
+
+Each release has two bundles:
+
+| Bundle | Contains | Use it for |
+| --- | --- | --- |
+| `oac-<commit>-linux-amd64-offline.tar.gz` | Core, Web and PostgreSQL images, the installers and every node and Runtime file | Any installation. Web serves the node files to your nodes and self-hosted executors |
+| `oac-<commit>-linux-amd64.tar.gz` | The same without the node and Runtime files | Core-only hosts, and installations that use only E2B. Web can't add nodes or connect self-hosted executors until the files are present |
+
+To add the node files to the smaller bundle, create an `artifacts/` directory in the
+extracted bundle, download the release's other `oac-<commit>-linux-amd64-*`
+assets (not the two bundles) into it, then run `./install.sh`, or rerun it if the
+installation already exists. Nodes download these files only from your Web console,
+never from GitHub, so node hosts need no GitHub access.
+
+## Install
+
+From the extracted bundle:
+
+```sh
+./install.sh --public-url https://core.example
+```
+
+The installer:
+
+1. checks the host and the bundle, and loads the Core, Web and PostgreSQL images;
+2. creates private `~/.oac` (mode `0700`) and the installation directory `~/.oac/core` with the Core key, `config.json`
+   and the `oac` command ([what it creates](#what-the-installer-creates));
+3. starts PostgreSQL, Core and Web with Docker Compose, on loopback ports only;
+4. selects microsandbox at Web's Standard size (2 CPUs, 4 GiB memory and two 8 GiB
+   disks each). It adds no node, so this host needs no KVM; you add nodes in Web.
+
+It creates no Project or API key, makes no model request and runs no sample task.
+It ends by printing the console address, the API base URL and the next steps.
+
+Without `--public-url`, the installation serves only this host
+(`http://127.0.0.1:8080` for Web, `http://127.0.0.1:8091/v1` for the API). Set
+`public_url` in `config.json` later and run `oac apply`; you don't reinstall. Nodes,
+E2B and self-hosted executors need the public URL.
+
+### Installer options
+
+Flags only seed `config.json` for a new installation. Afterwards you change settings in
+`config.json` with [`oac apply`](/configure#process-settings-configjson),
+and rerunning `install.sh` accepts no flag except `--install-dir`.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--public-url URL` | none: local access only | Public origin of Core and Web behind your reverse proxy, such as `https://core.example`: HTTPS, no path. Plain HTTP only for a loopback host. Seeds `public_url` |
+| `--sandbox docker\|microsandbox\|e2b\|none` | `microsandbox` (`none` with `--web-only`) | [Sandbox backend](#sandbox-backend) to start with. A one-time choice saved in the database; change it later in Web |
+| `--accept-docker-risks` | | With `--sandbox docker`: accept Docker's [weaker isolation](#sandbox-backend) without the prompt; required without a terminal |
+| `--e2b-api-key-file FILE` | | With `--sandbox e2b`: absolute path of a private file (no group or other access, at most 4 KiB) holding the E2B API key |
+| `--e2b-template ID:BUILD` | | With `--sandbox e2b`: the ready template build, `template-id:build-uuid` |
+| `--core-only` | | [Mode](#modes): Core and PostgreSQL, without Web |
+| `--web-only` | | [Mode](#modes): Web only, connected to an existing Core. Needs `--core-url` and `--core-key-file` |
+| `--core-url URL` | | With `--web-only`: origin of the existing Core, HTTPS or loopback HTTP. Seeds `web.core_url` |
+| `--core-key-file FILE` | | With `--web-only`: absolute path of a private file holding that Core's Core key (at least 32 characters) |
+| `--native-core` | off | Run [Core as a systemd user service](#native-core) instead of a container |
+| `--core-port PORT` | `8091` | Loopback port of Core. Seeds `ports.core` |
+| `--web-port PORT` | `8080` | Loopback port of Web. Seeds `ports.web` |
+| `--install-dir DIR` | `~/.oac/core` | Absolute installation directory. It must be empty or missing |
+| `--config FILE` | | Seed `config.json` from a prepared file instead of the setting flags above (`--public-url`, the mode flags, `--native-core`, ports, `--core-url`) |
+| `--convert`, `--yes` | | [Convert an installation](/troubleshooting#convert-an-earlier-installation) made before the OpenAgentCore rename; `--yes` skips the confirmation |
+
+#### Sandbox backend
+
+A deployment runs its sandboxes on exactly one backend:
+
+| `--sandbox` | Sandboxes run on | You then |
+| --- | --- | --- |
+| `microsandbox` (default) | microVMs on your nodes (KVM), 2 CPUs, 4 GiB memory and two 8 GiB disks each | [Add nodes](/hosted-providers) in Web |
+| `docker` | Docker on your nodes, 2 CPUs and 2 GiB each; weaker isolation, confirmed at install | [Add nodes](/hosted-providers) in Web |
+| `e2b` | E2B's cloud, with the CPU and memory of your template build | Nothing: E2B needs no nodes |
+| `none` | Nothing yet | Choose the backend on the **Nodes** page in Web |
+
+The Standard sizes come from the bundle's copy of Web's
+[`standard-sizes.json`](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/apps/web/src/features/sandbox/standard-sizes.json). The
+installer saves the choice through the same administrator API that Web uses once the
+services are healthy. If Core refuses it, for example because E2B rejects the key,
+the installer prints Core's message and exits with an error; the services keep
+running, and you choose the backend on the Nodes page.
+
+`--sandbox docker` first prints Docker's drawbacks. Containers share the host kernel,
+so a container escape reaches the node host, while microsandbox runs each sandbox in
+its own microVM. The node service account in the `docker` group is root-equivalent
+on each node host. Choose Docker only for trusted workloads or hosts without KVM.
+The installer then asks for confirmation, defaulting to No; without a terminal, pass
+`--accept-docker-risks`. Unconfirmed, it exits with an error before it installs
+anything.
+
+E2B also needs an HTTPS public URL that is not loopback, because E2B's sandboxes
+call Core from E2B's cloud. The installer refuses `--sandbox e2b` without one, before
+it installs anything:
+
+```sh
+./install.sh --public-url https://core.example --sandbox e2b \
+  --e2b-api-key-file "$HOME/.oac/e2b-api-key" --e2b-template '<template-id>:<build-uuid>'
+```
+
+Prepare the template build with the
+[E2B guide](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/services/agents-api/deploy/e2b/README.md). To change the backend or
+the sandbox size later, use the Nodes page in Web; see
+[Nodes](/hosted-providers#change-the-sandbox-backend-or-size).
+
+#### Modes
+
+| Mode | Runs | Use it for |
+| --- | --- | --- |
+| all (default) | PostgreSQL, Core and Web | Most installations |
+| `--core-only` | PostgreSQL and Core | A Core whose Web runs on another host, or scripts only. Without Web there is no Add node command |
+| `--web-only` | Web | A second host for the console, paired with an existing Core |
+
+A Web-only console forwards every signed-in `/core/v1` request to its Core with the
+Core key, so `--core-url` must reach Core's `/core/v1` directly. The default reverse
+proxy sends `/core/v1` to Web, so the Core's public URL doesn't work here:
+
+- **Web on the Core host:** use Core's loopback port,
+  `--core-url http://127.0.0.1:8091`.
+- **Web on another host:** give Core a second HTTPS name whose proxy sends every path to
+  Core, such as `https://core-api.example` to `127.0.0.1:8091` on the Core host, and use
+  it as `--core-url`. Allow only the Web host's address on that name; anyone else who
+  reaches it still needs the Core key.
+
+##### Split deployment
+
+| Host | Install | Reverse proxy |
+| --- | --- | --- |
+| Core | `./install.sh --core-only --public-url https://core.example` | `core.example`: `/v1`, `/v1/*` and `/api/v1/*` to Core; `/node-install/*` to the Web host, with Host rewritten to `console.example`; nothing else. `core-api.example`: every path to Core, for the Web host's address only |
+| Web | `./install.sh --web-only …`, below | `console.example`: every path to Web |
+
+```sh
+./install.sh --web-only --install-dir "$HOME/.oac/web" \
+  --public-url https://console.example \
+  --core-url https://core-api.example \
+  --core-key-file "$HOME/core.key"
+```
+
+Browsers use `console.example`, and nodes download their installer from it.
+Applications, nodes and sandboxes call Core at `core.example`, and self-hosted
+executors download their installer from there too, which is why `core.example` sends
+`/node-install/*` to the Web host. Web serves those files only for its own name, so the
+proxy rewrites Host. The Web host serves every node and executor file, so install it
+from the offline bundle (or add `artifacts/`) when the deployment has nodes or
+self-hosted executors.
+
+Caddy on the Core host, where `203.0.113.10` stands for the Web host's address:
+
+```text
+core.example {
+	@core path /v1 /v1/* /api/v1/*
+	handle @core {
+		reverse_proxy 127.0.0.1:8091
+	}
+	handle /node-install/* {
+		reverse_proxy https://console.example {
+			header_up Host console.example
+		}
+	}
+	handle {
+		respond 404
+	}
+}
+
+core-api.example {
+	@web remote_ip 203.0.113.10
+	handle @web {
+		reverse_proxy 127.0.0.1:8091
+	}
+	handle {
+		respond 403
+	}
+}
+```
+
+nginx on the Core host, with the `map` from the
+[main example](#https-and-the-reverse-proxy):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name core.example;
+    ssl_certificate     /etc/letsencrypt/live/core.example/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/core.example/privkey.pem;
+
+    client_max_body_size 0;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 1h;
+    proxy_send_timeout 1h;
+
+    location = /v1    { proxy_pass http://127.0.0.1:8091; }
+    location /v1/     { proxy_pass http://127.0.0.1:8091; }
+    location /api/v1/ { proxy_pass http://127.0.0.1:8091; }
+    location /node-install/ {
+        proxy_pass https://console.example;
+        proxy_set_header Host console.example;   # Web serves node files only for its own name
+        proxy_ssl_server_name on;
+        proxy_ssl_name console.example;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+    }
+    location / { return 404; }
+}
+
+server {
+    listen 443 ssl;
+    server_name core-api.example;
+    ssl_certificate     /etc/letsencrypt/live/core-api.example/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/core-api.example/privkey.pem;
+
+    allow 203.0.113.10;                        # the Web host
+    deny all;
+    client_max_body_size 0;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+    location / { proxy_pass http://127.0.0.1:8091; }
+}
+```
+
+The Web host's proxy sends every path to Web, for example
+`console.example { reverse_proxy 127.0.0.1:8080 }` in Caddy.
+
+Copy the key file from the Core host's `secrets/core.key` with mode `0600`; the
+installer keeps its own copy in `secrets/core.key`, so delete `$HOME/core.key`
+afterwards. After the Core key is rotated, copy the new key again; see
+[Rotate the Core key](/troubleshooting#rotate-the-core-key). A Web-only install selects no
+sandbox backend: the Core host's `--sandbox` does, or later the paired console's
+**Nodes** page.
+
+The mode and native Core are fixed once installed. To change them, install into a
+new directory.
+
+#### Native Core
+
+`--native-core` runs Core as a systemd user service of the installing user;
+PostgreSQL and Web stay in containers. It needs a running systemd user manager and
+lingering for that user (`sudo loginctl enable-linger "$USER"`), and the bundle's
+native binaries must load on the host. PostgreSQL then listens on a loopback port
+the installer picks (`ports.database`), and Web uses the host network. Native Core
+needs no KVM and is unrelated to the sandbox backend.
+
+#### Ports and directory
+
+Core and Web listen on `127.0.0.1` only; the reverse proxy reaches them there. The
+installer refuses a port that is in use. Several installations can share a host with
+their own `--install-dir` and ports, for example
+`--install-dir "$HOME/.oac/core-2" --core-port 8092 --web-port 8081`. Each has its
+own database, Core key and nodes.
+
+## HTTPS and the reverse proxy
+
+By default, Core and Web share one public origin; for Web on its own host, see the
+[split deployment](#split-deployment). Your reverse proxy terminates TLS and routes by
+path:
+
+| Path | Goes to | Callers |
+| --- | --- | --- |
+| `/v1`, `/v1/*` | Core, `127.0.0.1:8091` | Applications, with a Project API key |
+| `/api/v1/*` | Core, `127.0.0.1:8091` | Nodes, sandboxes and self-hosted executors, with their own machine credentials. Uses WebSockets |
+| Everything else | Web, `127.0.0.1:8080` | Browsers: the console, its sign-in and `/core/v1/*`. Node and executor hosts download their installers from `/node-install/*` |
+
+The proxy must:
+
+- **Preserve Host.** Web accepts only requests for the host of its public URL.
+- **Pass WebSocket upgrades** on `/api/v1`. Nodes and Runtime daemons hold long-lived
+  WebSocket connections.
+- **Not buffer or time out streams.** `/v1` streams Session events (server-sent events).
+- **Accept large uploads.** Core enforces its own limits; source files may reach
+  512 MiB.
+
+Web answers 404 on `/v1` and `/api/v1` and never forwards them. If those paths reach
+Web, application calls, node enrollment and every sandbox connection fail. Run the
+proxy on the Core host, since Core and Web listen on loopback. `oac status` prints
+the routes with this installation's ports.
+
+**Caddy** (obtains and renews the certificate itself; passes Host and WebSockets by
+default):
+
+```text
+core.example {
+	@core path /v1 /v1/* /api/v1/*
+	handle @core {
+		reverse_proxy 127.0.0.1:8091
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
+}
+```
+
+**nginx** (for example `/etc/nginx/conf.d/oac.conf`, inside the `http` block;
+use your certificate paths):
+
+```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name core.example;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name core.example;
+    ssl_certificate     /etc/letsencrypt/live/core.example/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/core.example/privkey.pem;
+
+    client_max_body_size 0;          # Core enforces its own upload limits
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_buffering off;             # server-sent events on /v1
+    proxy_request_buffering off;
+    proxy_read_timeout 1h;           # long-lived WebSockets and streams
+    proxy_send_timeout 1h;
+
+    location = /v1    { proxy_pass http://127.0.0.1:8091; }
+    location /v1/     { proxy_pass http://127.0.0.1:8091; }
+    location /api/v1/ { proxy_pass http://127.0.0.1:8091; }
+    location /        { proxy_pass http://127.0.0.1:8080; }
+}
+```
+
+Replace `core.example` and, if you changed them, the ports. To check the routing:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -H 'OpenAI-Beta: agents=v1' https://core.example/v1/agents
+```
+
+`401` means `/v1` reached Core, which asks for a key; `404` means it reached Web.
+
+Install with `--public-url https://core.example`, or, for an existing installation,
+set `public_url` in `~/.oac/core/config.json` and run `~/.oac/core/oac apply`.
+Core derives every address it hands out from this one setting. If you change it while
+nodes, sandboxes or self-hosted executors use the old address, `oac apply` lists
+them and asks you to confirm; those nodes must then be added again. See
+[Changing the public URL](/configure#changing-the-public-url).
+
+TLS verification stays on everywhere. With a private certificate authority, node
+hosts, executor hosts and the Runtime image must trust it.
+
+## Try it locally with a quick tunnel
+
+For a trial without DNS or certificates, a
+[Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)
+gives the installation a temporary public HTTPS address. It forwards to one local
+port, so put a plain-HTTP proxy with the same three routes in front, for example this
+Caddyfile on `127.0.0.1:8443`:
+
+```text
+http://:8443 {
+	bind 127.0.0.1
+	@core path /v1 /v1/* /api/v1/*
+	handle @core {
+		reverse_proxy 127.0.0.1:8091
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
+}
+```
+
+1. Install, with or without a public URL (`./install.sh`).
+2. Start the local proxy: `caddy run --config Caddyfile`.
+3. Start the tunnel: `cloudflared tunnel --url http://127.0.0.1:8443`. It prints an
+   address such as `https://random-words.trycloudflare.com`.
+4. Set `"public_url": "https://random-words.trycloudflare.com"` in
+   `~/.oac/core/config.json` and run `~/.oac/core/oac apply`.
+5. Open that address and [sign in](#sign-in-to-web).
+
+A quick tunnel is for trials only. Its address changes whenever `cloudflared`
+restarts; nodes and executors bound to the old address must then be added again.
+Its throughput is low, so the first node download of the Runtime (about 500 MB) can
+be slow; see [slow links](/hosted-providers#rerun-expiry-and-slow-links). Nodes and E2B need a
+reachable HTTPS address, so a loopback-only installation can't have nodes: Web says so
+at Add node.
+
+## Sign in to Web
+
+1. Open the console address the installer printed: your public URL, or
+   `http://127.0.0.1:8080` on the Core host. Use exactly that address; Web refuses
+   other host names. For a loopback installation on a remote machine, forward the port
+   first: `ssh -L 8080:127.0.0.1:8080 <core-host>`.
+2. Sign in with the Core key:
+
+   ```sh
+   cat ~/.oac/core/secrets/core.key
+   ```
+
+   The Core key is the installation's administrator credential. Keep it private; see
+   [Core key](/troubleshooting#core-key). Web has no user accounts.
+3. **Set a default model.** Open **System** and find **Default model**. On the harness
+   card marked **Default** (Codex unless you changed `core.default_harness`), choose
+   **Set**; once a provider is configured, the button reads **Replace**. Enter the
+   model provider's base URL and API key; MiniMax Code also needs the context window
+   and max output tokens. Core encrypts the key and never shows it again. The default
+   applies to Core-hosted Sessions and Sessions without an environment when the request
+   and the Agent carry no model provider; self-hosted Sessions never use it. See
+   [model providers](/quickstart#model-providers).
+4. **Create a project and issue a key.** Open **Projects and keys**, choose
+   **Create project** and give it a **Name**, then **Issue key** in it with a
+   **Key name**. The **Key issued** dialog shows the key once: choose **Copy key**, keep
+   it somewhere safe, then **I've saved this key**. Core keeps only a digest. The
+   dialog's **How to call** card shows the API base URL and sample requests.
+5. Give the application developer the key, the API base URL and the model ID to use
+   with the default model provider (Sessions must name `agent.model`). They follow the
+   [API quickstart](/quickstart).
+
+**Overview** tracks the setup in a **Getting started** checklist, in any order:
+**Get sandboxes ready** ([add a node](/hosted-providers)), **Set a default model**,
+**Create a project and issue a key**, and **Run the first Session**. After you hide it,
+**Show Getting started** in the sidebar brings it back.
+
+An existing pre-rename installation at `~/.parsar/core` blocks a new default install.
+Use `./install.sh --convert` after draining it with the old release, or explicitly
+choose another `--install-dir`. See [conversion and retained backups](/troubleshooting#convert-an-earlier-installation).
+
+## What the installer creates
+
+The installation directory, `~/.oac/core` by default, mode `0700`:
+
+| Path | Content |
+| --- | --- |
+| `config.json` | Process settings. The only file you edit; see the [configuration reference](/configure) |
+| `oac` | The [management command](/troubleshooting#the-oac-command) |
+| `secrets/core.key` | The Core key |
+| `secrets/credential.key` | Encryption key for credentials stored in the database. Back it up with the database; never replace it |
+| `secrets/database.password` | PostgreSQL password |
+| `state.json` | Format 2, installation ID, Compose project name, image IDs and source commit. Written by the tools only |
+| `generated/` | Files derived from `config.json`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json`, `config.schema.json`, and `runtime-history.json` or the native Core unit when used. `oac apply` rewrites them; don't edit them |
+| `node-payload/` | The node and self-hosted installers, the manifest and the node files that Web serves at `/node-install/` |
+| `state/e2b/` | Private E2B receipts |
+| `native/` | Core binaries, with `--native-core` only |
+
+Web-only installations have only `secrets/core.key` among the secrets, and no
+`state/e2b/`; Core-only installations have no `node-payload/`.
+
+In Docker, the installer creates a Compose project named `oac-<10 hex digits>`
+(`project` in `state.json`) with the containers `database`, `migrate` (runs the
+migrations, then exits), `core` and `web`, and the volume `<project>_database` that
+holds all data. Core and Web publish only `127.0.0.1:8091` and `127.0.0.1:8080`. The
+database publishes no port unless Core is native.
+
+The database holds the sandbox backend selection, and later your Projects, keys,
+nodes, default models and all execution history. Apart from Docker's own storage,
+nothing is written outside your home directory: no system service and no file under
+`/etc`. Native Core adds a systemd user unit, enabled from `generated/`.
+
+## Rerun the installer
+
+Rerunning `./install.sh` from the same bundle repairs an installation: it reloads
+missing images, restores a missing `oac` command, copies node files newly placed in
+`artifacts/`, applies `config.json` and starts the services. It accepts only
+`--install-dir`. It refuses a bundle from another release; see
+[Upgrades](/troubleshooting#upgrade-an-installation).
+
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/docs/getting-started/install.md)

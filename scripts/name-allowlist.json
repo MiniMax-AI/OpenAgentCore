@@ -778,5 +778,50 @@
     "path": "apps/web/src/style.css",
     "regex": "Parsar apply_patch",
     "reason": "This comment identifies the recognized product-origin patch extension, matching the intentionally retained parser symbol."
+  },
+  {
+    "path": "apps/docs/content/docs/concepts.mdx",
+    "regex": "Parsar is an ordinary API-key holder",
+    "reason": "Generated copy of docs/design-principles.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
+  },
+  {
+    "path": "apps/docs/content/docs/execution-model.mdx",
+    "regex": "including Parsar",
+    "reason": "Generated copy of docs/web/architecture.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
+  },
+  {
+    "path": "apps/docs/content/docs/install.mdx",
+    "regex": "~?/\\.parsar/core",
+    "reason": "Generated copy of docs/getting-started/install.md: The installer refuses the old default installation and directs the operator to conversion."
+  },
+  {
+    "path": "apps/docs/content/docs/configure.mdx",
+    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
+    "reason": "Generated copy of docs/configuration.md: These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
+  },
+  {
+    "path": "apps/docs/content/docs/hosted-providers.mdx",
+    "regex": "parsar-node(?:-[A-Za-z0-9<>_.-]*)?|\\.parsar/nodes",
+    "reason": "Generated copy of docs/getting-started/nodes.md: The legacy-node section gives scoped uninstall instructions; new installation and enrollment examples use oac-node."
+  },
+  {
+    "path": "apps/docs/content/docs/self-hosted-execution.mdx",
+    "regex": "parsar-selfhost-\\*|\\.parsar/self-hosted",
+    "reason": "Generated copy of docs/getting-started/self-hosted.md: The legacy self-hosted section explains retained old resources and explicit refusal, not conversion or new defaults."
+  },
+  {
+    "path": "apps/docs/content/docs/troubleshooting.mdx",
+    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|parsar(?:[A-Za-z0-9_.*/-]*)|agents-api(?:-[a-z0-9*-]+)?|core-console|agents-runtime-",
+    "reason": "Generated copy of docs/getting-started/operations.md: The conversion and retirement table must name the exact old commands, paths, labels, settings and retained backups that operators migrate."
+  },
+  {
+    "path": "apps/docs/content/docs/troubleshooting.mdx",
+    "regex": "Parsar-product hooks",
+    "reason": "Generated copy of docs/getting-started/operations.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
+  },
+  {
+    "path": "apps/docs/lib/legacy-redirects.ts",
+    "regex": "\"agents-api(?:-sessions|-errors)?\"",
+    "reason": "Retired documentation URL keys redirect to the current public API guide; these are not current commands or API namespaces."
   }
 ]

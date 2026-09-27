@@ -1,0 +1,97 @@
+---
+title: "Sessions and public resources"
+description: "Agents, Sessions, Turns, events and resources in the pinned public contract."
+---
+
+Applications call Core directly with an API key issued inside a Project. They use
+the public API to create and execute Agents, query history, and manage their assets.
+They never use the Core key or the console's browser session cookie.
+
+## Authentication and base URL
+
+Set `OPENAI_BASE_URL` to the installation's API base URL (`api_base_url` in
+`GET /core/v1/installation`: the public URL followed by `/v1`) and `OPENAI_API_KEY`
+to a Project API key; the official SDK reads both. Raw HTTP callers send
+`Authorization: Bearer <project-api-key>`. The fixed SDK supplies
+`OpenAI-Beta: agents=v1` for the Beta Agents resources; raw HTTP callers must add
+it. General Files and Skills endpoints do not require that Beta header.
+
+```python
+from openai import OpenAI
+
+client = OpenAI()  # Reads OPENAI_API_KEY and OPENAI_BASE_URL.
+page = client.beta.agents.list()
+```
+
+This read does not execute a model. See the [real execution quickstart](/quickstart)
+for separate model access configuration and a complete Session example.
+
+All keys in a Project share assets and Session creator identity. Revoking one key
+leaves the others valid; archiving the Project revokes all its keys. The optional
+`OpenAI-Organization` and `OpenAI-Project` headers must match `core` and
+`proj_<project UUID>` respectively. Do not send a key's UUID as the project scope.
+
+## Public resources
+
+Paths are relative to `/v1`. Detailed fields, union types and response shapes are
+in the [public OpenAPI](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/openapi.yaml), fixed SDK source
+and linked semantic records. The [resource inventory](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/README.md#upstream-resource-inventory)
+lists each operation and its coverage.
+
+| Resource | Route family | Semantics |
+| --- | --- | --- |
+| Agents | `/agents` | Reusable configuration, CRUD and lists |
+| Sessions and Turns | `/agents/sessions`, nested `/turns` | Admission, metadata, state and recovery queries |
+| Items and events | Session `/items`, `/events` | Persisted history and live SSE |
+| Artifacts | Session `/artifacts` | Captured output metadata, immutable content and deletion |
+| Subagents | Session `/subagents`, nested `/turns` and `/items` | Scoped child execution reads; [native limits](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/subagents.md) |
+| Environments and workspace Files | `/agents/environments`, nested `/files` | [Environment state](/environments-and-files) and [workspace access](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/environment-files.md) |
+| Environment Templates | `/agents/environments/templates` | [Reusable initialization](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/environment-templates.md) |
+| Source Files | `/files` | [Uploaded content resources](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/source-files.md), distinct from live workspace files |
+| Skills and versions | `/skills`, nested `/versions` | [Bundles and versions](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/file-resource-semantics.md) |
+| Vaults and Credentials | `/vaults`, nested `/credentials` | [Scoped write-only credential storage](/environments-and-files) |
+
+SSE is live, not a historical replay service. After a disconnect, query the Session,
+Turns and Items to reconcile state. An accepted request is not proof of completed
+native execution. Do not automatically replay uncertain tool or file effects.
+
+## Core extension fields
+
+The `/v1` route set is exactly the pinned SDK's operations, listed in
+[upstream-routes.json](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/upstream-routes.json); Core adds
+no route. It adds fields only inside `x_agents_core`, because it runs several
+harnesses and accepts custom model access:
+
+| Field | Where | Reference |
+| --- | --- | --- |
+| `x_agents_core.harness` | Saved Agent create, update and read; the inline Session `agent`; the Session's effective `agent` | [Harness selection](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/harness-selection.md) |
+| `x_agents_core.model_provider` | Saved Agent create, update and read; Session creation. It takes `protocol`, `base_url`, optional `context_window` and `max_output_tokens`, and a write-only `api_key`; reads return `api_key_configured` instead of the key | [Model execution](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/model-execution.md) |
+
+Any other member of `x_agents_core` is rejected with 400. Deployment, placement,
+credential issuance and operational reads are not part of `/v1`; they belong to
+`/core/v1`, which only the Core key can call (see the [API index](/public-api)).
+
+A Session's model provider comes from the Session's `x_agents_core.model_provider`,
+then a saved Agent's, then the deployment default that the administrator sets per
+harness. The deployment default applies to `openai_hosted` and `none` Sessions,
+never to `self_hosted`; `none` Sessions accept only the deployment default.
+`openai_hosted` and `self_hosted` Sessions must end up with one: otherwise creation
+returns 400 with code `model_provider_required` and param
+`x_agents_core.model_provider`, and nothing is written. See
+[model execution](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/model-execution.md).
+
+An application reads a Session's model from `agent.model` and an explicitly
+selected harness from `agent.x_agents_core.harness`; a Session on the deployment
+default harness omits `agent.x_agents_core`. `/v1` has no execution-configuration
+read.
+
+`openai_hosted` keeps the official wire name and means Core-managed compute here.
+The deployment chooses E2B or its own Docker/microsandbox nodes. A public
+`self_hosted` Environment uses caller-owned compute and the same colocated
+Runtime. For a `self_hosted` Session, the deployment operator issues the
+Environment's executor credential with the Core key; see
+[executor credentials](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/contracts/agents-api/environment-executor-credentials.md).
+Our daemon transport and the supported native harness differences are
+explicit; they do not imply interoperability with OpenAI's stock executor transport.
+
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/75bf4484ba957344ae374354858bbdfe104f5c4f/docs/api/public-agent-api.md)

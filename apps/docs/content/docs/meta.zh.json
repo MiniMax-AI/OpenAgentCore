@@ -1,0 +1,27 @@
+{
+  "title": "OpenAgentCore 文档",
+  "pages": [
+    "---从这里开始---",
+    "index",
+    "concepts",
+    "execution-model",
+    "install",
+    "configure",
+    "---应用接入---",
+    "bootstrap-projects-keys",
+    "quickstart",
+    "public-api",
+    "agents-and-tools",
+    "sessions",
+    "---执行环境---",
+    "environments-and-files",
+    "hosted-providers",
+    "self-hosted-execution",
+    "---管理---",
+    "console",
+    "admin-api",
+    "observability",
+    "troubleshooting",
+    "api-reference"
+  ]
+}
