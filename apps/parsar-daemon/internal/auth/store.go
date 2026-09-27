@@ -1,7 +1,7 @@
 // Package auth persists the credential bundle from
 // /api/v1/runtimes/pair: server URL, runtime row id (= device_id), and
 // the long-lived runner_credential. Stored as JSON per-profile at
-// ~/.parsar/parsar-daemon/<profile>/auth.json (0o600), written via
+// ~/.oac/daemon/<profile>/auth.json (0o600), written via
 // atomic rename so a half-flushed pair never leaves the daemon paired
 // with garbage state.
 package auth
@@ -56,7 +56,7 @@ type Profile struct {
 
 // ErrNotPaired is returned by Load when no auth.json exists for the
 // requested profile.
-var ErrNotPaired = errors.New("auth: not paired — use `parsar-daemon connect --url ... --token ...`")
+var ErrNotPaired = errors.New("auth: not paired — use `oac-daemon connect --url ... --token ...`")
 
 // Save writes p atomically to the profile's auth.json (0o600 even if
 // the previous file was world-readable).

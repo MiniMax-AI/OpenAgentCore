@@ -18,11 +18,11 @@ import (
 const bootstrapScript = `
 import ctypes,json,os,stat,subprocess,sys
 b=json.load(sys.stdin)
-for p in ['/home/runtime','/home/runtime/.parsar','/home/runtime/.parsar/parsar-daemon','/home/runtime/.parsar/parsar-daemon/default','/environment','/environment/workspace','/environment/staging','/environment/initialization','/environment/packages','/run/parsar']:
+for p in ['/home/runtime','/home/runtime/.oac','/home/runtime/.oac/daemon','/home/runtime/.oac/daemon/default','/environment','/environment/workspace','/environment/staging','/environment/initialization','/environment/packages','/run/oac']:
     os.makedirs(p,mode=0o700,exist_ok=True)
     if not stat.S_ISDIR(os.lstat(p).st_mode): raise RuntimeError('invalid bootstrap directory')
     os.chmod(p,0o700);os.chown(p,1000,1000)
-p='/home/runtime/.parsar/parsar-daemon/default/auth.json'
+p='/home/runtime/.oac/daemon/default/auth.json'
 fd=os.open(p,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
 with os.fdopen(fd,'w') as f:
     json.dump({'server_url':b['CoreURL'],'runtime_id':b['DeviceID'],'runner_credential':b['Credential']},f)
@@ -33,7 +33,7 @@ if libc.mount(b'/environment/workspace',b'/workspace',None,4096,None)!=0:
     raise OSError(ctypes.get_errno(),'workspace bind mount failed')
 def runtime_user():
     os.setgroups([]);os.setgid(1000);os.setuid(1000)
-subprocess.run(['/usr/local/bin/parsar-daemon','connect','--profile','default','-b'],
+subprocess.run(['/usr/local/bin/oac-daemon','connect','--profile','default','-b'],
                stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
                cwd='/environment/workspace',preexec_fn=runtime_user,check=True)
 `
@@ -61,10 +61,10 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 		}),
 		sdk.WithLabels(labels), sdk.WithDetached(), sdk.WithQuietLogs(), sdk.WithNetwork(b.network()),
 		sdk.WithEnv(map[string]string{
-			"HOME": "/home/runtime", "PARSAR_HOME": "/home/runtime/.parsar",
-			"PARSAR_RUNTIME_ENVIRONMENT_ID": bootstrap.EnvironmentID, "PARSAR_RUNTIME_SESSION_ID": bootstrap.SessionID,
-			"PARSAR_RUNTIME_NETWORK_ACCESS": policy.Access, "PARSAR_RUNTIME_ALLOWED_DOMAINS": string(domains),
-			"PARSAR_DAEMON_SUSPEND_PID_FILE": "/run/parsar/daemon-suspend.json",
+			"HOME": "/home/runtime", "OAC_RUNTIME_HOME": "/home/runtime/.oac",
+			"OAC_RUNTIME_ENVIRONMENT_ID": bootstrap.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bootstrap.SessionID,
+			"OAC_RUNTIME_NETWORK_ACCESS": policy.Access, "OAC_RUNTIME_ALLOWED_DOMAINS": string(domains),
+			"OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE": "/run/oac/daemon-suspend.json",
 		}))
 	if e != nil {
 		return wire.Response{}, e

@@ -8,7 +8,7 @@ import (
 func TestVerbosityConfiguration(t *testing.T) {
 	for _, mode := range []string{"", "low", "medium", "high"} {
 		t.Run(mode, func(t *testing.T) {
-			t.Setenv("PARSAR_HOME", t.TempDir())
+			t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 			opts := map[string]any{}
 			var want [][2]string
 			if mode != "" {

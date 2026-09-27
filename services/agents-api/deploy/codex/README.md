@@ -14,7 +14,7 @@ Use Codex 0.153.4 and its matching `codex-resources` directory. Install the immu
 requirements file at `/etc/codex/requirements.toml`, mount only the authorized
 Environment parent at `/environment`, containing `workspace`, private `staging`, tool `initialization` and `packages`
 directories on one mount for trusted writes. Retain daemon/native state beneath `/home`. Set
-`PARSAR_CODEX_PERMISSION_PROFILE=managed-workspace` on the daemon. This operator
+`OAC_RUNTIME_CODEX_PERMISSION_PROFILE=managed-workspace` on the daemon. This operator
 setting enables adapter selection of the immutable Runtime network profile at
 startup and on both new/resumed threads;
 it also filters native shell inheritance to process essentials, retaining default
@@ -35,7 +35,7 @@ The workspace and initialized package prefix are writable by native tools;
 initialized tool configuration is read-only. Staging and its ancestors
 are unavailable for native tool writes; staging is also explicitly denied for reads.
 The image includes enabled and disabled native network profiles with the same
-filesystem restrictions. Bootstrap freezes `PARSAR_RUNTIME_NETWORK_ACCESS`;
+filesystem restrictions. Bootstrap freezes `OAC_RUNTIME_NETWORK_ACCESS`;
 preparation must match it, and the adapter selects the native profile. Public
 omission defaults to enabled. Restricted domains are unimplemented and rejected.
 The trusted harness and daemon retain model/Core connectivity with either policy.
@@ -66,10 +66,10 @@ not an isolation or public API acceptance result. Qualification applies only to
 the selected deployment profile, not complete protocol compatibility or another
 engine/provider.
 
-The optional local file writer uses the existing `agents-api-codex-write` binary
-outside `/environment`, with `PARSAR_RUNTIME_WRITE_HELPER` selecting that immutable
-executable and `PARSAR_RUNTIME_STAGING=/environment/staging`. Set
-`PARSAR_RUNTIME_WORKSPACE=/environment/workspace`; the public file path remains
+The optional local file writer uses the existing `oac-codex-write` binary
+outside `/environment`, with `OAC_RUNTIME_WRITE_HELPER` selecting that immutable
+executable and `OAC_RUNTIME_STAGING=/environment/staging`. Set
+`OAC_RUNTIME_WORKSPACE=/environment/workspace`; the public file path remains
 `/workspace/...` and Core sends only the relative path to the bound Runtime.
 Docker mounts the existing volume's `workspace` subdirectory at `/workspace` as
 a second view of the same files. The image contains the initial directory before
@@ -83,8 +83,8 @@ them separately or put daemon/model credentials, native history or other tenants
 inside `/environment`. The read-only Runtime can omit both writer settings.
 
 Hosted Turn output publication additionally requires the immutable
-`agents-api-workspace-export` executable selected by
-`PARSAR_RUNTIME_EXPORT_HELPER`. The Runtime bundle includes it outside the workspace.
+`oac-workspace-export` executable selected by
+`OAC_RUNTIME_EXPORT_HELPER`. The Runtime bundle includes it outside the workspace.
 It exports regular files below `outputs` through the authenticated daemon connection;
 Core stores immutable copies and publishes them with successful Turn completion.
 Use a matched Core/Runtime release: older Runtime images without bounded output

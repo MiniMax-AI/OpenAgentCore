@@ -18,7 +18,7 @@ func TestMessageObservations(t *testing.T) {
 	for _, mode := range []string{"messages-success", "messages-partial", "messages-unrequested", "messages-missing-id", "messages-invalid-snapshot"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}
 			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), ObserveMessages: mode != "messages-unrequested", AgentSessionID: "native-session", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

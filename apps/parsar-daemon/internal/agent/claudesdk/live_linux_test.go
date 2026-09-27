@@ -26,7 +26,7 @@ import (
 )
 
 func TestLiveClaudeSDKTextResume(t *testing.T) {
-	entrypoint := os.Getenv("PARSAR_CLAUDE_SDK_ENTRYPOINT")
+	entrypoint := os.Getenv("OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT")
 	keyFile := os.Getenv("OAC_TEST_CLAUDE_SDK_MINIMAX_KEY_FILE")
 	if entrypoint == "" || keyFile == "" {
 		t.Skip("real SDK/provider acceptance requires explicit entrypoint and private key file")
@@ -46,7 +46,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	target, _ := url.Parse("https://api.minimax.cn/anthropic")
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	director := proxy.Director

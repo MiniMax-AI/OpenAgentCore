@@ -80,7 +80,7 @@ func (b *Bridge) Listen(parent context.Context, runID string) (string, func(), e
 	if err != nil {
 		return "", nil, err
 	}
-	dir := filepath.Join(home, ".parsar", "authoring")
+	dir := filepath.Join(home, ".oac", "authoring")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", nil, err
 	}

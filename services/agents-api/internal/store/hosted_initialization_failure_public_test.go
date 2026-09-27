@@ -66,7 +66,7 @@ type hostedFailureProvider struct {
 
 func (p *hostedFailureProvider) RunCommand(_ context.Context, _ sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
 	action := "file"
-	if c.Args[len(c.Args)-1] == "/usr/local/bin/agents-api-runtime-initialize" {
+	if c.Args[len(c.Args)-1] == "/usr/local/bin/oac-runtime-initialize" {
 		var operation struct {
 			Action string `json:"action"`
 		}

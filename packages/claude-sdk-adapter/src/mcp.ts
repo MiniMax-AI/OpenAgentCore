@@ -38,7 +38,7 @@ export function parseHTTPServers(value: unknown): HTTPServer[] | undefined {
     if (server.bearer_token_env_var !== undefined) {
       const reference = server.bearer_token_env_var;
       if (url.protocol !== "https:" || typeof reference !== "string" ||
-          !/^PARSAR_MCP_BEARER_[A-Z2-7]{26,}$/.test(reference) || references.has(reference)) throw new Error("invalid_request");
+          !/^OAC_RUNTIME_MCP_BEARER_[A-Z2-7]{26,}$/.test(reference) || references.has(reference)) throw new Error("invalid_request");
       references.add(reference);
     }
     labels.add(server.server_label);

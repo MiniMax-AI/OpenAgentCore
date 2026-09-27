@@ -5,7 +5,7 @@ package placement
 import "time"
 
 // BindingLabel marks a container explicitly created for operator enrollment.
-const BindingLabel = "parsar.runtime.placement"
+const BindingLabel = "io.oac.placement"
 
 // Receipt is durable local evidence for one exact placement incarnation.
 // Only State == "retired" reports qualified settlement; other states are unknown.

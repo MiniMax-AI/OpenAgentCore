@@ -8,7 +8,7 @@ import (
 )
 
 func TestExecutionControlsOverrideWithoutMutatingNativeOptions(t *testing.T) {
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	original := map[string]any{"model": "test-model", "web_search": "live", "model_verbosity": "high"}
 	request := proto.PromptRequestPayload{AgentOptions: original}
 	if got := executionOptions(request); !reflect.DeepEqual(got, original) {
@@ -43,7 +43,7 @@ func TestExecutionControlsOverrideWithoutMutatingNativeOptions(t *testing.T) {
 }
 
 func TestExecutionControlsRejectIncompleteOrInvalidValues(t *testing.T) {
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	for _, controls := range []proto.ExecutionControls{
 		{}, {WebSearch: "disabled"}, {TextVerbosity: "medium"},
 		{WebSearch: "invalid", TextVerbosity: "medium"}, {WebSearch: "disabled", TextVerbosity: "invalid"},

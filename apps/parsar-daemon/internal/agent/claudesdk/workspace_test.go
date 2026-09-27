@@ -16,7 +16,7 @@ func workspaceFixture(t *testing.T) Config {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	for _, name := range []string{"workspace", "home", "state", "scratch", "secrets", "bin", "runtime/dist", "runtime/node_modules"} {
 		if err := os.MkdirAll(filepath.Join(root, name), 0o700); err != nil {
 			t.Fatal(err)

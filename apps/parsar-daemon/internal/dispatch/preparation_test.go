@@ -77,15 +77,15 @@ func preparationWorkspace(t *testing.T) *localworkspace.Binding {
 		t.Fatal(err)
 	}
 	for name, value := range map[string]string{
-		"PARSAR_RUNTIME_ENVIRONMENT_ID":   preparationEnvironmentID,
-		"PARSAR_RUNTIME_SESSION_ID":       preparationSessionID,
-		"PARSAR_RUNTIME_WORKSPACE":        t.TempDir(),
-		"PARSAR_RUNTIME_DIRECTORY_HELPER": helper,
-		"PARSAR_RUNTIME_NETWORK_ACCESS":   "enabled",
-		"PARSAR_RUNTIME_ALLOWED_DOMAINS":  "",
-		"PARSAR_RUNTIME_WRITE_HELPER":     "",
-		"PARSAR_RUNTIME_EXPORT_HELPER":    "",
-		"PARSAR_RUNTIME_STAGING":          "",
+		"OAC_RUNTIME_ENVIRONMENT_ID":   preparationEnvironmentID,
+		"OAC_RUNTIME_SESSION_ID":       preparationSessionID,
+		"OAC_RUNTIME_WORKSPACE":        t.TempDir(),
+		"OAC_RUNTIME_DIRECTORY_HELPER": helper,
+		"OAC_RUNTIME_NETWORK_ACCESS":   "enabled",
+		"OAC_RUNTIME_ALLOWED_DOMAINS":  "",
+		"OAC_RUNTIME_WRITE_HELPER":     "",
+		"OAC_RUNTIME_EXPORT_HELPER":    "",
+		"OAC_RUNTIME_STAGING":          "",
 	} {
 		t.Setenv(name, value)
 	}

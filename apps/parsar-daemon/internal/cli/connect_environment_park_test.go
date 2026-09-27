@@ -48,7 +48,7 @@ func TestEnvironmentRejectionParksUntilTerminated(t *testing.T) {
 			os.Exit(2)
 		}
 		if err := Execute(args); err != nil {
-			fmt.Fprintln(os.Stderr, "parsar-daemon:", err)
+			fmt.Fprintln(os.Stderr, "oac-daemon:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -78,7 +78,7 @@ func TestEnvironmentRejectionParksUntilTerminated(t *testing.T) {
 			args, _ := json.Marshal([]string{"connect", "--remote", "ws" + strings.TrimPrefix(server.URL, "http") + "/api/v1/agent-daemon/ws",
 				"--environment-id", environment, "--credential-file", credential, "--self-hosted-install"})
 			cmd := exec.Command(os.Args[0], "-test.run=^TestEnvironmentRejectionParksUntilTerminated$")
-			cmd.Env = append(os.Environ(), "OAC_TEST_ENVIRONMENT_CONNECT="+string(args), "PARSAR_HOME="+home)
+			cmd.Env = append(os.Environ(), "OAC_TEST_ENVIRONMENT_CONNECT="+string(args), "OAC_RUNTIME_HOME="+home)
 			var stderr lockedBuffer
 			cmd.Stderr = &stderr
 			if err := cmd.Start(); err != nil {

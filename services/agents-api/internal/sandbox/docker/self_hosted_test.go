@@ -115,7 +115,7 @@ func TestSelfHostedLaunchUsesQualifiedIsolationAndPrivateBootstrap(t *testing.T)
 	if strings.Contains(string(command), value.Credential.Token) || !strings.Contains(string(command), value.RemoteURL) || configuration.Cmd[len(configuration.Cmd)-1] != "--self-hosted-install" {
 		t.Fatal("credential in argv or remote URL changed")
 	}
-	key := "/home/runtime/.parsar/parsar-daemon/executor-key.json"
+	key := "/home/runtime/.oac/daemon/executor-key.json"
 	for name, header := range privateFiles {
 		if header.Uid != 1000 || header.Gid != 1000 || header.Mode != 0700 && header.Mode != 0600 {
 			t.Fatal("unsafe archive ownership", name)
@@ -164,9 +164,9 @@ func TestSelfHostedCredentialReplacementOnlyWritesStoppedOwnedRuntime(t *testing
 		{"stopped", "exited", name, name + "-home", "", labels, true},
 		{"running", "running", name, name + "-home", "", labels, false},
 		{"unlabeled", "exited", name, name + "-home", "", map[string]string{}, false},
-		{"other installation", "exited", "parsar-selfhost-" + strings.Repeat("0", 32), name + "-home", "", labels, false},
+		{"other installation", "exited", "oac-selfhost-" + strings.Repeat("0", 32), name + "-home", "", labels, false},
 		{"victim volume at /home", "exited", name, "victim-home", "", labels, false},
-		{"redirected daemon directory", "exited", name, name + "-home", "/home/runtime/.parsar/parsar-daemon", labels, false},
+		{"redirected daemon directory", "exited", name, name + "-home", "/home/runtime/.oac/daemon", labels, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			files := map[string]*tar.Header{}
@@ -211,7 +211,7 @@ func TestSelfHostedCredentialReplacementOnlyWritesStoppedOwnedRuntime(t *testing
 				}
 				return
 			}
-			key := "/home/runtime/.parsar/parsar-daemon/executor-key.json"
+			key := "/home/runtime/.oac/daemon/executor-key.json"
 			if err != nil || len(files) != 1 || files[key] == nil || files[key].Uid != 1000 || files[key].Gid != 1000 || files[key].Mode != 0600 ||
 				!strings.Contains(contents[key], rotated.Token) {
 				t.Fatal("credential not replaced privately", err)

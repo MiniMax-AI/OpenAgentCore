@@ -208,7 +208,7 @@ func environmentRejection(err error, keyID, environment string, selfHosted bool)
 func parkEnvironment(stderr io.Writer, message string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	fmt.Fprintln(stderr, "parsar-daemon: "+message)
+	fmt.Fprintln(stderr, "oac-daemon: "+message)
 	<-ctx.Done()
 	return nil
 }

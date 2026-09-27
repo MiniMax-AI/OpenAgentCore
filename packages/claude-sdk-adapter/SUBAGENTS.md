@@ -2,7 +2,7 @@
 
 The adapter uses the pinned Claude Agent SDK 0.3.269 and its native Agent and
 SendMessage execution. It does not implement a model loop. An explicit Runtime
-request enables `parsar_worker`; ordinary requests retain their previous tools.
+request enables `oac_worker`; ordinary requests retain their previous tools.
 The packaged `subagent_resources` readiness feature gates this request.
 
 A child identity comes from native task admission and persisted child metadata.

@@ -15,7 +15,7 @@ import (
 func withTempHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("PARSAR_HOME", dir)
+	t.Setenv("OAC_RUNTIME_HOME", dir)
 	return dir
 }
 

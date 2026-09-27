@@ -19,7 +19,7 @@ import (
 )
 
 func TestLiveClaudeSDKCancelResume(t *testing.T) {
-	entrypoint := os.Getenv("PARSAR_CLAUDE_SDK_ENTRYPOINT")
+	entrypoint := os.Getenv("OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT")
 	keyFile := os.Getenv("OAC_TEST_CLAUDE_SDK_MINIMAX_KEY_FILE")
 	if entrypoint == "" || keyFile == "" {
 		t.Skip("real cancellation acceptance requires explicit SDK entrypoint and private key file")
@@ -33,7 +33,7 @@ func TestLiveClaudeSDKCancelResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("real cancellation evidence: %s", root)
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	key, err := os.ReadFile(keyFile)
 	if err != nil {
 		t.Fatal(err)

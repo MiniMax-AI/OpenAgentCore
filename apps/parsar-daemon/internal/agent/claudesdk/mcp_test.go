@@ -13,7 +13,7 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 	for _, mode := range []string{"unrestricted", "selected", "empty", "nil-slice", "required", "auth", "url-auth", "query", "wildcard", "reserved", "duplicate", "environment"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 			servers := []proto.MCPHTTPServer{{ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}
 			req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "fixture"}}

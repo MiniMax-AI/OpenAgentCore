@@ -25,7 +25,7 @@ import (
 // alternative logger, shorter SIGTERM→SIGKILL escalation).
 type sessionConfig struct {
 	// claudeBinary defaults to binpath.ClaudeCode(): the bare name
-	// "claude" for a PATH lookup, or the PARSAR_CLAUDE_BIN override.
+	// "claude" for a PATH lookup, or the OAC_RUNTIME_CLAUDE_BIN override.
 	claudeBinary string
 
 	// extraArgs are appended after BuildArgs' output. Tests use this
@@ -658,7 +658,7 @@ func (s *Session) closeOut() {
 // resolveSessionWorkDir returns the directory that BOTH plugin installs
 // AND the claude_code subprocess cwd share for this run. Keeping them
 // on the same tree prevents the bug where the subprocess ran in one
-// place (sandbox image WORKDIR) while plugins sat under ~/.parsar/
+// place (sandbox image WORKDIR) while plugins sat under ~/.oac/
 // — `--plugin-dir` still worked but the agent's own `ls .claude/
 // plugins/` self-check answered "no plugins here".
 //
@@ -670,7 +670,7 @@ func (s *Session) closeOut() {
 //     not a meaningful anchor for user-facing config) and we mkdir -p
 //     so the user can name a path that doesn't exist yet.
 //  2. conversationID present → per-conversation scratch dir under
-//     daemon HOME (~/.parsar/runtime/claudecode/conv-<id>).
+//     daemon HOME (~/.oac/runtime/claudecode/conv-<id>).
 //     Consecutive turns reuse the same .cache-key files. Sandbox-mode
 //     default, also the local fallback when work_dir is unbound.
 //  3. Both empty → daemon's own cwd (os.Getwd). Backstop matching
@@ -699,7 +699,7 @@ func resolveSessionWorkDir(workDir, conversationID string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("os.UserHomeDir: %w", err)
 		}
-		dir := filepath.Join(home, ".parsar", "runtime", "claudecode", "conv-"+convID)
+		dir := filepath.Join(home, ".oac", "runtime", "claudecode", "conv-"+convID)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return "", fmt.Errorf("mkdir %s: %w", dir, err)
 		}

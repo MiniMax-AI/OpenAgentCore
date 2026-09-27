@@ -27,13 +27,13 @@ type Controller struct {
 	syncDir    func(string) error
 }
 
-// New uses a fixed local Docker endpoint and private state beneath ~/.parsar.
+// New uses a fixed local Docker endpoint and private state beneath ~/.oac.
 func New() (*Controller, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
-	return &Controller{root: filepath.Join(home, ".parsar", "placements"), run: runDocker,
+	return &Controller{root: filepath.Join(home, ".oac", "placements"), run: runDocker,
 		procRoot: "/proc", cgroupRoot: "/sys/fs/cgroup", socketPath: localDockerSocket, syncDir: syncDirectory}, nil
 }
 

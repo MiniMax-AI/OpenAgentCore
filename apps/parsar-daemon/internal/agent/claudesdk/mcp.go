@@ -74,7 +74,7 @@ func prepareMCPHTTP(declarations *[]proto.MCPHTTPServer) (*[]mcpHTTPServer, []st
 			server.AllowedTools = &tools
 		}
 		if declaration.BearerToken != nil {
-			server.BearerTokenEnvVar = "PARSAR_MCP_BEARER_" + rand.Text()
+			server.BearerTokenEnvVar = "OAC_RUNTIME_MCP_BEARER_" + rand.Text()
 			env = append(env, server.BearerTokenEnvVar+"="+*declaration.BearerToken)
 		}
 		servers[i] = server

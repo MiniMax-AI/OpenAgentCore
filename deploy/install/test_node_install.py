@@ -53,7 +53,7 @@ class NodeInstallTests(unittest.TestCase):
         self.root = self.home / ".parsar/nodes" / self.args.installation_id
         self.manifest = {"platform": "linux/amd64", "source_commit": "a" * 40, "images": {"runtime": "sha256:" + "b" * 64},
                          "image_manifest_digests": {"runtime": "sha256:" + "c" * 64},
-                         "runtime_ref": "parsar-core-runtime@sha256:" + "c" * 64,
+                         "runtime_ref": "oac-runtime@sha256:" + "c" * 64,
                          "microsandbox": {"runtime_sha256": "d" * 64, "firmware_sha256": "e" * 64}}
         self.payloads = {name: b"fixture-payload-" + name.encode() for name in installer.COMMON + installer.MICRO}
         self.payloads["images/runtime.tar.gz"] = gzip.compress(b"runtime archive")

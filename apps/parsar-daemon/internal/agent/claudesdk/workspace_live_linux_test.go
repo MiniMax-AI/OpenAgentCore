@@ -45,7 +45,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 		t.Fatal(err)
 	}
 	t.Logf("workspace factory proof: %s", root)
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	t.Setenv("OAC_TEST_PARENT_SECRET", "parent-must-not-enter-workspace")
 	key, err := os.ReadFile(placement.KeyFile)
 	if err != nil || len(bytes.TrimSpace(key)) == 0 {

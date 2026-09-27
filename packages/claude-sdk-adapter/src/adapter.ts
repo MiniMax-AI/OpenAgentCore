@@ -86,9 +86,9 @@ export async function execute(request: Start | Prepare, emit: (event: Event) => 
         ...(request.resume ? { resume: request.resume } : {}),
         tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed, strictMcpConfig: true, settingSources: [],
         ...(profile && !workspace ? {
-          agent: "parsar_root", disallowedTools: profile.denied,
+          agent: "oac_root", disallowedTools: profile.denied,
           hooks: { PreToolUse: [{ hooks: [profile.beforeTool] }] },
-          agents: { parsar_root: { description: "Execution root.", prompt: request.system_prompt,
+          agents: { oac_root: { description: "Execution root.", prompt: request.system_prompt,
             model: request.model, tools: profile.allowed } },
         } : {}),
         persistSession: true, includePartialMessages: true, abortController: abort,

@@ -96,8 +96,8 @@ Create outcomes, timeouts and ownership failures cannot acquire this proof. Core
 still requires authorized, ownership-checked cleanup before releasing the
 allocation; missing compute alone never proves creation settled.
 
-The private daemon control directory is `/run/parsar` (0700, uid/gid 1000).
-`PARSAR_DAEMON_SUSPEND_PID_FILE=/run/parsar/daemon-suspend.json` enables the
+The private daemon control directory is `/run/oac` (0700, uid/gid 1000).
+`OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE=/run/oac/daemon-suspend.json` enables the
 daemon's separately owned idle park/wake control. RunCommandCompute can execute
 the exact daemon resume command authorized by Core; it never uses pkill.
 

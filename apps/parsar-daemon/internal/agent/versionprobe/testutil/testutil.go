@@ -27,7 +27,7 @@ func RunContract(t *testing.T, contract Contract) {
 	t.Helper()
 
 	t.Run("missing binary wraps exported sentinel", func(t *testing.T) {
-		binary := "parsar-daemon-nonexistent-" + contract.Name + "-stub"
+		binary := "oac-daemon-nonexistent-" + contract.Name + "-stub"
 		_, err := contract.Check(context.Background(), binary)
 		if err == nil {
 			t.Fatal("expected error, got nil")

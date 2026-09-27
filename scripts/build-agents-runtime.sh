@@ -19,19 +19,19 @@ package = json.load(open(sys.argv[1]))
 assert package['name'] == '@openai/codex' and package['version'] == '0.153.4-linux-x64', 'Expected pinned official Linux x64 package'
 PY
 native_dir="$package_dir/vendor/x86_64-unknown-linux-musl"
-for executable in "$native_dir/bin/codex" "$helpers_dir/agents-api-codex-directory" "$helpers_dir/agents-api-codex-write" "$helpers_dir/agents-api-workspace-export"; do
+for executable in "$native_dir/bin/codex" "$helpers_dir/oac-codex-directory" "$helpers_dir/oac-codex-write" "$helpers_dir/oac-workspace-export"; do
   test -x "$executable" || { printf 'Missing executable: %s\n' "$executable" >&2; exit 1; }
 done
 test -d "$native_dir/codex-resources"
-mkdir -p "$runtime_root/cache/agents-runtime-builds"
-context="$(mktemp -d "$runtime_root/cache/agents-runtime-builds/bundle.XXXXXX")"
+mkdir -p "$runtime_root/cache/oac-runtime-builds"
+context="$(mktemp -d "$runtime_root/cache/oac-runtime-builds/bundle.XXXXXX")"
 trap 'rm -rf "$context"' EXIT
 (
   cd "$repo_root"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
-    -o "$context/parsar-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+    -o "$context/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
 )
-cp "$helpers_dir/agents-api-codex-directory" "$helpers_dir/agents-api-codex-write" "$helpers_dir/agents-api-workspace-export" "$context/"
+cp "$helpers_dir/oac-codex-directory" "$helpers_dir/oac-codex-write" "$helpers_dir/oac-workspace-export" "$context/"
 cp "$native_dir/bin/codex" "$context/codex"
 cp -R "$native_dir/codex-resources" "$context/codex-resources"
 cp "$repo_root/services/agents-api/deploy/codex/tool-env.py" "$context/tool-env.py"

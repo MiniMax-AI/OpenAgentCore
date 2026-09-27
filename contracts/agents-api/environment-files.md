@@ -277,7 +277,7 @@ files guide saved beside them. The batch plan is
 
 Decisions:
 
-- The shared `agents-api-codex-write` helper takes an explicit per-call mode. Only
+- The shared `oac-codex-write` helper takes an explicit per-call mode. Only
   the daemon's local workspace writer, which serves only Files.create, passes
   `create`. Core's initial Session file installer and the Skill installer keep the
   four-argument replace mode, which older Runtime images also understand. Plugins

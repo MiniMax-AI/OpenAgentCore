@@ -11,7 +11,7 @@ managed-workspace-enabled = true
 "/environment/initialization" = "read"
 "/environment/packages" = "write"
 "/environment/packages/system" = "read"
-"/tmp/parsar-tool-root" = "read"
+"/tmp/oac-tool-root" = "read"
 [permissions.managed-workspace.network]
 enabled = false
 [permissions.managed-workspace-enabled]
@@ -21,10 +21,10 @@ enabled = true
 [permissions.filesystem]
 deny_read = [
   "/environment/staging",
-  "/home/*/.parsar/parsar-daemon/*/auth.json",
-  "/home/*/.parsar/parsar-daemon/agent-sessions/*/config.toml",
-  "/home/*/.parsar/parsar-daemon/agent-sessions/*/sessions",
-  "/home/*/.parsar/parsar-daemon/agent-sessions/*/archived_sessions",
+  "/home/*/.oac/daemon/*/auth.json",
+  "/home/*/.oac/daemon/agent-sessions/*/config.toml",
+  "/home/*/.oac/daemon/agent-sessions/*/sessions",
+  "/home/*/.oac/daemon/agent-sessions/*/archived_sessions",
 ]
 
 [features]

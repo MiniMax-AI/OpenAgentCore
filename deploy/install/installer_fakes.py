@@ -270,7 +270,7 @@ MANIFEST = {
         ("core", "1"), ("runtime", "2"), ("database", "3"), ("web", "4"))},
     "image_manifest_digests": {name: "sha256:" + digit * 64 for name, digit in (
         ("core", "a"), ("runtime", "b"), ("database", "c"), ("web", "d"))},
-    "runtime_ref": "parsar-core-runtime@sha256:" + "b" * 64,
+    "runtime_ref": "oac-runtime@sha256:" + "b" * 64,
     "microsandbox": {"runtime_sha256": "5" * 64, "firmware_sha256": "6" * 64},
 }
 MODULES = ("install.py", "configuration.py", "config_model.py", "config.schema.json", "parsar_cli.py", "convert.py",

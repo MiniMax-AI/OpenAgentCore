@@ -85,7 +85,7 @@ class DistributionTests(unittest.TestCase):
     def test_oci_manifest_identity_is_distinct_from_docker_config_identity(self):
         self.manifest()
         metadata = json.loads((self.bundle / "manifest.json").read_text())
-        self.assertEqual(metadata["runtime_ref"], "parsar-core-runtime@sha256:" + "a" * 64)
+        self.assertEqual(metadata["runtime_ref"], "oac-runtime@sha256:" + "a" * 64)
         self.assertEqual(metadata["images"]["runtime"], self.identities["runtime"][0])
         self.assertEqual(metadata["image_manifest_digests"]["runtime"], self.identities["runtime"][1])
         self.assertEqual(metadata["microsandbox"]["runtime_sha256"], hashlib.sha256(b"runtime").hexdigest())

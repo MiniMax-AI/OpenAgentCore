@@ -13,7 +13,7 @@ import (
 const InstallURL = "https://opencode.ai/docs"
 
 // defaultBinary is the executable to probe and spawn: binpath.OpenCode()
-// honours the PARSAR_OPENCODE_BIN override so a bare-name PATH lookup can
+// honours the OAC_RUNTIME_OPENCODE_BIN override so a bare-name PATH lookup can
 // be bypassed in images where PATH is not under our control. A function
 // rather than a const so the env is read at call time.
 func defaultBinary() string { return binpath.OpenCode() }

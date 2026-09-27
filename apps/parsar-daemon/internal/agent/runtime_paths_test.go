@@ -7,7 +7,7 @@ import (
 
 func TestManagedSkillsRootUsesStableAgentState(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("PARSAR_HOME", home)
+	t.Setenv("OAC_RUNTIME_HOME", home)
 	got, err := ManagedSkillsRoot("codex", "conv-1/agent-1/codex", "ignored", "ignored")
 	if err != nil {
 		t.Fatalf("ManagedSkillsRoot: %v", err)
@@ -20,7 +20,7 @@ func TestManagedSkillsRootUsesStableAgentState(t *testing.T) {
 
 func TestManagedSkillsRootSanitizesFallback(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("PARSAR_HOME", home)
+	t.Setenv("OAC_RUNTIME_HOME", home)
 	got, err := ManagedSkillsRoot("opencode", "", "../conv name", "ignored")
 	if err != nil {
 		t.Fatalf("ManagedSkillsRoot: %v", err)

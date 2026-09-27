@@ -145,7 +145,7 @@ func TestBuildSessionPlan_ParsesCollaborationMode(t *testing.T) {
 }
 
 func TestBuildSessionPlan_OmittedModeRetainsCurrentInstructions(t *testing.T) {
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	for _, mode := range []string{"", "default"} {
 		opts := map[string]any{"system_prompt": "current reference", "model": "MiniMax-M3"}
 		if mode != "" {

@@ -71,7 +71,7 @@ Agent API, the Core API or node enrollment.
    × keeps the credential on the page until you choose **Done**.
 
 The installer downloads the Runtime from the console and checks it, starts a container
-named `parsar-selfhost-<32 hex digits>`, and waits until Core confirms that the
+named `oac-selfhost-<32 hex digits>`, and waits until Core confirms that the
 Environment is connected. The Session then runs its Turns there. Rerunning the same
 command resumes the same installation. It refuses, with "This installation belongs to
 another Environment or distribution", once Core runs another release or its public URL

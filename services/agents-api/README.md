@@ -295,12 +295,12 @@ After migrations, an operator can provision a device for an execution tenant:
 
 ```bash
 umask 077
-mkdir -p ~/.parsar/parsar-daemon/agents-api
+mkdir -p ~/.oac/daemon/agents-api
 go run ./services/agents-api/cmd/device \
   --tenant '<execution-tenant-uuid>' --name 'local executor' \
   --url 'http://127.0.0.1:8091' \
-  > ~/.parsar/parsar-daemon/agents-api/auth.json
-parsar-daemon connect --profile agents-api
+  > ~/.oac/daemon/agents-api/auth.json
+oac-daemon connect --profile agents-api
 ```
 
 The command requires `OAC_DATABASE_URL` and emits a secret profile once.
@@ -336,9 +336,9 @@ for build outputs, version checks and platform restrictions.
 ```bash
 make build-claude-sdk-runtime
 # After extracting the matching archive into this operator-chosen directory:
-export PARSAR_CLAUDE_SDK_ENTRYPOINT="$HOME/.parsar/runtimes/claude-sdk/dist/main.js"
-export PARSAR_CLAUDE_SDK_NODE="/absolute/path/to/node"
-parsar-daemon connect --profile agents-api
+export OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT="$HOME/.parsar/runtimes/claude-sdk/dist/main.js"
+export OAC_RUNTIME_CLAUDE_SDK_NODE="/absolute/path/to/node"
+oac-daemon connect --profile agents-api
 ```
 
 Set `OAC_DEFAULT_HARNESS=claude_sdk` on the API service. Configure provider access in
@@ -504,18 +504,18 @@ management ID and full principal; neither changes the key's restriction. Unknown
 historical creators cannot enroll. API bearer keys and executor keys are separate.
 
 Inside the qualified Linux Runtime, install that JSON as an owned mode-0600
-`$PARSAR_HOME/parsar-daemon/executor-key.json`, outside the tool workspace. The
+`$OAC_RUNTIME_HOME/daemon/executor-key.json`, outside the tool workspace. The
 packaged Runtime supplies its native harness, filesystem helpers and isolation
 profile. Start its daemon with the values returned by Session creation:
 
 ```bash
-parsar-daemon connect --remote "$REMOTE_URL" \
+oac-daemon connect --remote "$REMOTE_URL" \
   --environment-id "$ENVIRONMENT_ID" \
-  --credential-file "$PARSAR_HOME/parsar-daemon/executor-key.json"
+  --credential-file "$OAC_RUNTIME_HOME/daemon/executor-key.json"
 ```
 
 Use TLS outside loopback. Enrollment supplies the trusted Session identity; do
-not inject an unrelated `PARSAR_RUNTIME_SESSION_ID`. The daemon persists its
+not inject an unrelated `OAC_RUNTIME_SESSION_ID`. The daemon persists its
 immutable Environment binding beside the key and refuses to adopt another
 Environment's existing native history. Rotation keeps the same key ID: update the
 protected file, then restart the daemon to authenticate with the new token.

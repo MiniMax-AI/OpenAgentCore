@@ -18,8 +18,8 @@ func TestWriteCodexProviderConfig_Minimal(t *testing.T) {
 	}
 	body := mustReadFile(t, filepath.Join(dir, "config.toml"))
 	for _, want := range []string{
-		`[model_providers.parsar]`,
-		`name = "Parsar"`,
+		`[model_providers.oac]`,
+		`name = "OpenAgentCore"`,
 		`base_url = "https://platform-api.example.com/v1"`,
 		`experimental_bearer_token = "sk-test"`,
 		`wire_api = "responses"`,
@@ -77,10 +77,10 @@ func TestWriteCodexProviderConfig_FullProvider(t *testing.T) {
 		`experimental_bearer_token = "sk-test-fixture"`,
 		`request_max_retries = 4`,
 		`stream_max_retries = 3`,
-		`[model_providers.parsar.http_headers]`,
+		`[model_providers.oac.http_headers]`,
 		`"X-Sub-Module" = "codex-internal"`,
 		`"X-Request-ID" = "abc"`,
-		`[model_providers.parsar.query_params]`,
+		`[model_providers.oac.query_params]`,
 		`"api-version" = "2025-04-01-preview"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -127,7 +127,7 @@ func TestWriteCodexProviderConfig_AppendsAlongsideMCP(t *testing.T) {
 	if !strings.Contains(body, `[mcp_servers."docs"]`) {
 		t.Errorf("mcp_servers block lost after provider write:\n%s", body)
 	}
-	if !strings.Contains(body, `[model_providers.parsar]`) {
+	if !strings.Contains(body, `[model_providers.oac]`) {
 		t.Errorf("model_providers block missing:\n%s", body)
 	}
 }
@@ -189,12 +189,12 @@ func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
 	defer plan.Cleanup()
-	if plan.ModelProvider != "parsar" {
-		t.Fatalf("plan.ModelProvider = %q, want parsar", plan.ModelProvider)
+	if plan.ModelProvider != "oac" {
+		t.Fatalf("plan.ModelProvider = %q, want oac", plan.ModelProvider)
 	}
 	found := false
 	for _, kv := range plan.ExtraConfig {
-		if kv[0] == "model_provider" && kv[1] == `"parsar"` {
+		if kv[0] == "model_provider" && kv[1] == `"oac"` {
 			found = true
 			break
 		}
@@ -210,7 +210,7 @@ func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
 		}
 	}
 	body := mustReadFile(t, filepath.Join(codexHome, "config.toml"))
-	if !strings.Contains(body, `[model_providers.parsar]`) {
+	if !strings.Contains(body, `[model_providers.oac]`) {
 		t.Fatalf("config.toml missing provider block:\n%s", body)
 	}
 }

@@ -38,7 +38,7 @@ func startNativeDispatchDaemon(t *testing.T, h *dispatchHarness, home, binary st
 	if h.conn != nil {
 		_ = h.conn.Close()
 	}
-	profile := filepath.Join(home, "parsar-daemon", "execution")
+	profile := filepath.Join(home, "daemon", "execution")
 	if err := os.MkdirAll(profile, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func startNativeDispatchDaemon(t *testing.T, h *dispatchHarness, home, binary st
 	}
 	t.Cleanup(func() { _ = daemonLog.Close() })
 	cmd := exec.Command(binary, "connect", "--profile", "execution")
-	cmd.Env = append(os.Environ(), "PARSAR_HOME="+home)
+	cmd.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home)
 	cmd.Stdout, cmd.Stderr = daemonLog, daemonLog
 	if err = cmd.Start(); err != nil {
 		t.Fatal(err)

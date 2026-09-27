@@ -10,7 +10,7 @@ func SandboxDeploymentTestSpec(provider string) sandbox.DeploymentSpec {
 	if provider == "e2b" {
 		return s
 	}
-	s.Runtime = &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "parsar-core-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
+	s.Runtime = &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
 		s.Resources.EnvironmentDiskMiB = 8192

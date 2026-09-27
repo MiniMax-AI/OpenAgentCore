@@ -185,5 +185,5 @@ for component in parts[:-1]:
     os.close(fd)
     fd = child
 os.close(fd)
-os.execv('/usr/local/bin/agents-api-codex-write', ['agents-api-codex-write', '/environment/workspace', sys.argv[1], sys.argv[2], '/environment/staging'])
+os.execv('/usr/local/bin/oac-codex-write', ['oac-codex-write', '/environment/workspace', sys.argv[1], sys.argv[2], '/environment/staging'])
 `

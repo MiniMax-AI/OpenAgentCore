@@ -1,5 +1,5 @@
-// Package paths resolves on-disk locations for parsar-daemon state under
-// ~/.parsar/parsar-daemon/<profile>/ — one subdir per profile so "test"
+// Package paths resolves on-disk locations for oac-daemon state under
+// ~/.oac/daemon/<profile>/ — one subdir per profile so "test"
 // and "prod" servers can be paired in parallel without colliding.
 //
 // Files are 0o600, parent dir 0o700. These functions only resolve
@@ -31,20 +31,20 @@ func ValidateProfile(name string) error {
 	return nil
 }
 
-// Root returns ~/.parsar. Honours PARSAR_HOME for tests /
+// Root returns ~/.oac. Honours OAC_RUNTIME_HOME for tests /
 // sandbox environments without a writable home.
 func Root() (string, error) {
-	if override := os.Getenv("PARSAR_HOME"); override != "" {
+	if override := os.Getenv("OAC_RUNTIME_HOME"); override != "" {
 		return override, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home dir: %w", err)
 	}
-	return filepath.Join(home, ".parsar"), nil
+	return filepath.Join(home, ".oac"), nil
 }
 
-// ProfileDir returns ~/.parsar/parsar-daemon/<profile>. NOT created;
+// ProfileDir returns ~/.oac/daemon/<profile>. NOT created;
 // use EnsureProfileDir.
 func ProfileDir(profile string) (string, error) {
 	if err := ValidateProfile(profile); err != nil {
@@ -54,7 +54,7 @@ func ProfileDir(profile string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(root, "parsar-daemon", profile), nil
+	return filepath.Join(root, "daemon", profile), nil
 }
 
 // EnsureProfileDir mkdirs the profile dir at mode 0o700 and returns

@@ -80,7 +80,7 @@ func IsAlive(pid int) error {
 }
 
 // RemovePIDFile deletes the pidfile. Missing files aren't an error so
-// `parsar-daemon stop` is idempotent.
+// `oac-daemon stop` is idempotent.
 func RemovePIDFile(path string) error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("daemonize: remove pidfile: %w", err)

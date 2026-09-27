@@ -17,7 +17,7 @@ import (
 
 func testRequest(t *testing.T) proto.PromptRequestPayload {
 	t.Helper()
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	return proto.PromptRequestPayload{RunID: "run-1", ConversationID: "conversation-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"), AgentOptions: map[string]any{
 		"model": "fixture", "mcode_provider": map[string]any{"kind": "custom", "enabled": true}, "system_prompt": "Current instructions",
 	}}
@@ -239,7 +239,7 @@ func TestMCodeProcess(t *testing.T) {
 			if frame.Method == "session/load" {
 				update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "OLD HISTORY"}})
 			}
-			model := "m:custom_provider%3Aparsar:fixture:v:"
+			model := "m:custom_provider%3Aoac:fixture:v:"
 			if scenario == "unknown-model" {
 				model = "m:minimax:native:u"
 			}
@@ -250,7 +250,7 @@ func TestMCodeProcess(t *testing.T) {
 		case "session/set_config_option":
 			var params map[string]string
 			_ = json.Unmarshal(frame.Params, &params)
-			if params["configId"] == "model" && params["value"] != "m:custom_provider%3Aparsar:fixture:v:" {
+			if params["configId"] == "model" && params["value"] != "m:custom_provider%3Aoac:fixture:v:" {
 				os.Exit(4)
 			}
 		case "session/prompt":

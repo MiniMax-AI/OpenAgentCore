@@ -119,15 +119,15 @@ record = json.loads(Path('/private/launch.json').read_text())
 api_key = Path('/private/e2b.key').read_text().strip()
 sandbox_id = record['sandbox_id']
 info = Sandbox.get_info(sandbox_id, api_key=api_key)
-assert info.metadata['parsar_launch_id'] == record['launch_id']
-assert info.metadata['parsar_environment_id'] == record['environment_id']
+assert info.metadata['oac_launch_id'] == record['launch_id']
+assert info.metadata['oac_environment_id'] == record['environment_id']
 Sandbox.set_timeout(sandbox_id, 7200, api_key=api_key)  # When renewing the live VM.
 # When the application is finished, or explicitly abandons this allocation:
 Sandbox.kill(sandbox_id, api_key=api_key)
 ```
 
 If Create's response was lost before its ID was saved, discover candidates using
-`Sandbox.list(query=SandboxQuery(metadata={'parsar_launch_id': launch_id}),
+`Sandbox.list(query=SandboxQuery(metadata={'oac_launch_id': launch_id}),
 api_key=api_key)`, importing `SandboxQuery` from `e2b`. Consume pages while
 `paginator.has_next` via `paginator.next_items()`. Verify both metadata fields
 against the private record, retain every matching provider ID, and explicitly
@@ -135,12 +135,12 @@ inspect or destroy those allocations. An empty lookup is not permission to retry
 an uncertain Create. Do not select an arbitrary candidate or rotate its identity.
 
 An uncertain startup result requires inspection of the same VM or explicit
-cleanup. Root-only `/root/.parsar/e2b/launch.json` records the startup claim;
+cleanup. Root-only `/root/.oac/e2b/launch.json` records the startup claim;
 `ready.json` records only successful process handoff (`daemon_started`), even if
 the daemon subsequently exits. Neither proves enrollment, native readiness or a
 successful Turn. Check public Core Environment status and the private daemon log
-at `/home/runtime/.parsar/parsar-daemon/default/daemon.log`. The daemon's separate
-`/home/runtime/.parsar/parsar-daemon/environment.json` records the verified
+at `/home/runtime/.oac/daemon/default/daemon.log`. The daemon's separate
+`/home/runtime/.oac/daemon/environment.json` records the verified
 Environment/Session binding. Keep these records and native history on failure.
 Do not rerun `init.py`; it refuses any claimed attempt, including interrupted ones.
 The SDK's `Sandbox.connect` can resume paused sandboxes, so it is not used as an
@@ -157,7 +157,7 @@ inside the protected daemon directory, then starts the existing daemon as UID
 the daemon's argv or inherited environment. Enrollment and immutable local binding
 remain daemon responsibilities; startup does not invent device/Session IDs.
 
-E2B clears `/run` at boot, so startup records live under `/root/.parsar/e2b`.
+E2B clears `/run` at boot, so startup records live under `/root/.oac/e2b`.
 Native sandboxing remains mandatory. Each actual template must verify private
 credential/history isolation, protected binary/config ownership, privilege denial
 and stopped descendant effects, rather than infer safety from file modes alone.

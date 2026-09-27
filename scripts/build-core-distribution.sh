@@ -156,8 +156,8 @@ build_image web "$stage/web"
 
 export AGENTS_EXECUTOR_BUILD_DIR="$stage/helpers"
 scripts/build-agents-executor.sh
-CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/parsar-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
-cp "$stage/parsar-daemon" "$bundle/native/bin/parsar-daemon"
+CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+cp "$stage/oac-daemon" "$bundle/native/bin/oac-daemon"
 CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$bundle/native/bin/parsar-runtime" ./services/agents-api/cmd/runtime
 codex_image="${CORE_DISTRIBUTION_CODEX_IMAGE:-}"
 claude_image="${CORE_DISTRIBUTION_CLAUDE_IMAGE:-}"
@@ -183,12 +183,12 @@ else
   mcode_image="$(cat "$stage/mcode.id")"
 fi
 for image in "$codex_image" "$claude_image" "$mcode_image"; do
-  python3 scripts/core-distribution-manifest.py verify-runtime "$image" "$stage/parsar-daemon" "$stage/helpers" "$source_dir"
+  python3 scripts/core-distribution-manifest.py verify-runtime "$image" "$stage/oac-daemon" "$stage/helpers" "$source_dir"
 done
 tag_suffix="${stage##*.}"
 for harness in codex claude mcode; do
   image_variable="${harness}_image"
-  tag="parsar-core-distribution:$harness-$revision-$tag_suffix"
+  tag="oac-distribution:$harness-$revision-$tag_suffix"
   docker image tag "${!image_variable}" "$tag"
   image_tags+=("$tag")
 done
@@ -224,8 +224,8 @@ msb=(docker run --rm --network none --user "$(id -u):$(id -g)" \
   --env MSB_HOME=/cache --env MSB_BACKEND=local --env MSB_PATH=/opt/microsandbox/msb \
   --env MSB_LIBKRUNFW_PATH=/opt/microsandbox/libkrunfw.so.5.6.1 \
   --entrypoint /opt/microsandbox/msb "$core_image")
-"${msb[@]}" image load --input /runtime.tar --tag parsar-core-runtime:distribution --quiet
-"${msb[@]}" image inspect parsar-core-runtime:distribution --format json > "$stage/runtime-inspect.json"
+"${msb[@]}" image load --input /runtime.tar --tag oac-runtime:distribution --quiet
+"${msb[@]}" image inspect oac-runtime:distribution --format json > "$stage/runtime-inspect.json"
 python3 scripts/core-distribution-manifest.py manifest "$bundle" "$stage" "$revision" "$source_tree" "$release_base_url" "$offline"
 require_clean_source
 if [[ "$(git -C "$repo_root" rev-parse HEAD)" != "$revision" ]]; then

@@ -30,7 +30,7 @@ const (
 	PackageDirectory        = "/environment/packages"
 	SystemPackageDirectory  = PackageDirectory + "/system"
 	SystemPackageReceipt    = InitializationDirectory + "/system-root.json"
-	SystemToolLauncher      = "/usr/local/bin/agents-api-tool-root"
+	SystemToolLauncher      = "/usr/local/bin/oac-tool-root"
 )
 
 // VerifyToolEnvironment is required only for execution consuming initialized

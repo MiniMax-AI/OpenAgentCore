@@ -17,7 +17,7 @@ if (!Array.isArray(domains) || (profile.network==='restricted'
 const baseEnv = {PATH:'/usr/local/bin:/usr/bin:/bin',HOME:profile.scratch,TMPDIR:profile.scratch,LANG:'C.UTF-8'};
 if (profile.systemPackages) {
  if (!profile.toolEnvironment) throw new Error('System packages require initialized tool configuration');
- baseEnv.PARSAR_RUNTIME_TOOL_SCRATCH=profile.scratch;
+ baseEnv.OAC_RUNTIME_TOOL_SCRATCH=profile.scratch;
 }
 let child;
 let cancelled=false;

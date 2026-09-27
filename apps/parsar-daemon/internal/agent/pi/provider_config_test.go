@@ -42,7 +42,7 @@ func TestWritePiModelsJSON_AnthropicProvider(t *testing.T) {
 		Name:      "Parsar Anthropic",
 		BaseURL:   "https://platform-api.example.com",
 		API:       "anthropic-messages",
-		APIKeyEnv: "PARSAR_PI_API_KEY",
+		APIKeyEnv: "OAC_RUNTIME_PI_API_KEY",
 		Model:     "claude-opus-4-6-thinking-max",
 		Headers:   map[string]string{"X-Sub-Module": "claude-code-internal"},
 	}
@@ -63,8 +63,8 @@ func TestWritePiModelsJSON_AnthropicProvider(t *testing.T) {
 	// pi's resolveConfigValue() only resolves a "$NAME" template from
 	// process.env; a bare string is a literal key. So the env var name must
 	// be written with a "$" prefix.
-	if p.APIKey != "$PARSAR_PI_API_KEY" {
-		t.Errorf("apiKey = %q, want $PARSAR_PI_API_KEY (env ref, with $)", p.APIKey)
+	if p.APIKey != "$OAC_RUNTIME_PI_API_KEY" {
+		t.Errorf("apiKey = %q, want $OAC_RUNTIME_PI_API_KEY (env ref, with $)", p.APIKey)
 	}
 	if p.Headers["X-Sub-Module"] != "claude-code-internal" {
 		t.Errorf("headers[X-Sub-Module] = %q, want claude-code-internal", p.Headers["X-Sub-Module"])
@@ -87,7 +87,7 @@ func TestWritePiModelsJSON_OpenAIAuthHeader(t *testing.T) {
 	cfg := piProviderConfig{
 		BaseURL:    "https://gw.example.com/v1",
 		API:        "openai-completions",
-		APIKeyEnv:  "PARSAR_PI_API_KEY",
+		APIKeyEnv:  "OAC_RUNTIME_PI_API_KEY",
 		Model:      "gpt-5.5",
 		AuthHeader: true,
 	}
@@ -107,7 +107,7 @@ func TestWritePiModelsJSON_RejectsMissingFields(t *testing.T) {
 	base := piProviderConfig{
 		BaseURL:   "https://x/v1",
 		API:       "anthropic-messages",
-		APIKeyEnv: "PARSAR_PI_API_KEY",
+		APIKeyEnv: "OAC_RUNTIME_PI_API_KEY",
 		Model:     "m",
 	}
 	cases := map[string]func(*piProviderConfig){
@@ -136,7 +136,7 @@ func TestNormalisePiProvider_FullRoundTrip(t *testing.T) {
 		"name":        "Parsar Anthropic",
 		"base_url":    "https://platform-api.example.com",
 		"api":         "openai-completions",
-		"api_key_env": "PARSAR_PI_API_KEY",
+		"api_key_env": "OAC_RUNTIME_PI_API_KEY",
 		"model":       "gpt-5.5",
 		"auth_header": true,
 		// Headers cross the daemon boundary as JSON, so they arrive as
@@ -153,7 +153,7 @@ func TestNormalisePiProvider_FullRoundTrip(t *testing.T) {
 	if cfg.Name != "Parsar Anthropic" || cfg.BaseURL != "https://platform-api.example.com" {
 		t.Fatalf("scalar fields wrong: %+v", cfg)
 	}
-	if cfg.API != "openai-completions" || cfg.APIKeyEnv != "PARSAR_PI_API_KEY" || cfg.Model != "gpt-5.5" {
+	if cfg.API != "openai-completions" || cfg.APIKeyEnv != "OAC_RUNTIME_PI_API_KEY" || cfg.Model != "gpt-5.5" {
 		t.Fatalf("scalar fields wrong: %+v", cfg)
 	}
 	if !cfg.AuthHeader {
@@ -190,7 +190,7 @@ func TestResolveAgentDirConversationScoped(t *testing.T) {
 	}
 	// Sibling of resolveSkillsRoot's conv-<id>/skills so one conversation's
 	// pi runtime state (models.json, sessions) co-locates under one dir.
-	want := filepath.Join(tmp, ".parsar", "runtime", "pi", "conv-conv-abc", "agent")
+	want := filepath.Join(tmp, ".oac", "runtime", "pi", "conv-conv-abc", "agent")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -203,7 +203,7 @@ func TestResolveAgentDirStateKeyScoped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveAgentDir: %v", err)
 	}
-	want := filepath.Join(tmp, ".parsar", "runtime", "pi", "state", "conv-abc", "agent-xyz", "pi", "agent")
+	want := filepath.Join(tmp, ".oac", "runtime", "pi", "state", "conv-abc", "agent-xyz", "pi", "agent")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -216,7 +216,7 @@ func TestResolveAgentDirSanitizesStateKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveAgentDir: %v", err)
 	}
-	want := filepath.Join(tmp, ".parsar", "runtime", "pi", "state", "conv_abc", "agent_xyz", "pi", "agent")
+	want := filepath.Join(tmp, ".oac", "runtime", "pi", "state", "conv_abc", "agent_xyz", "pi", "agent")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -229,7 +229,7 @@ func TestResolveAgentDirRunScopedFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveAgentDir: %v", err)
 	}
-	want := filepath.Join(tmp, ".parsar", "runtime", "pi", "run-run-9", "agent")
+	want := filepath.Join(tmp, ".oac", "runtime", "pi", "run-run-9", "agent")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -238,14 +238,14 @@ func TestResolveAgentDirRunScopedFallback(t *testing.T) {
 func TestApplyPiRuntimeState_WritesModelsSetsEnvAndSessionDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
-	callerEnv := map[string]any{"PARSAR_PI_API_KEY": "sk-proxy", "OTHER": "x"}
+	callerEnv := map[string]any{"OAC_RUNTIME_PI_API_KEY": "sk-proxy", "OTHER": "x"}
 	opts := map[string]any{
 		"model": "parsar/claude-opus-4-6-thinking-max",
 		"env":   callerEnv,
 		"pi_provider": map[string]any{
 			"base_url":    "https://platform-api.example.com",
 			"api":         "anthropic-messages",
-			"api_key_env": "PARSAR_PI_API_KEY",
+			"api_key_env": "OAC_RUNTIME_PI_API_KEY",
 			"model":       "claude-opus-4-6-thinking-max",
 			"headers":     map[string]any{"X-Sub-Module": "claude-code-internal"},
 		},
@@ -256,7 +256,7 @@ func TestApplyPiRuntimeState_WritesModelsSetsEnvAndSessionDir(t *testing.T) {
 		t.Fatalf("applyPiRuntimeState: %v", err)
 	}
 
-	agentDir := filepath.Join(tmp, ".parsar", "runtime", "pi", "state", "conv-xyz", "agent-1", "pi", "agent")
+	agentDir := filepath.Join(tmp, ".oac", "runtime", "pi", "state", "conv-xyz", "agent-1", "pi", "agent")
 	sessionDir := filepath.Join(agentDir, "sessions")
 	env, ok := out["env"].(map[string]any)
 	if !ok {
@@ -265,7 +265,7 @@ func TestApplyPiRuntimeState_WritesModelsSetsEnvAndSessionDir(t *testing.T) {
 	if env["PI_CODING_AGENT_DIR"] != agentDir {
 		t.Errorf("PI_CODING_AGENT_DIR = %v, want %q", env["PI_CODING_AGENT_DIR"], agentDir)
 	}
-	if env["PARSAR_PI_API_KEY"] != "sk-proxy" || env["OTHER"] != "x" {
+	if env["OAC_RUNTIME_PI_API_KEY"] != "sk-proxy" || env["OTHER"] != "x" {
 		t.Errorf("pre-existing env not preserved: %+v", env)
 	}
 	if out["session_dir"] != sessionDir {
@@ -276,7 +276,7 @@ func TestApplyPiRuntimeState_WritesModelsSetsEnvAndSessionDir(t *testing.T) {
 	}
 
 	p := readModelsJSON(t, agentDir).Providers[piManagedProviderSlug]
-	if p.APIKey != "$PARSAR_PI_API_KEY" || p.BaseURL != "https://platform-api.example.com" {
+	if p.APIKey != "$OAC_RUNTIME_PI_API_KEY" || p.BaseURL != "https://platform-api.example.com" {
 		t.Errorf("models.json not materialised correctly: %+v", p)
 	}
 
@@ -301,7 +301,7 @@ func TestApplyPiRuntimeState_NoProviderStillPinsSessionDir(t *testing.T) {
 			t.Fatal("PI_CODING_AGENT_DIR must not be set when no pi_provider present")
 		}
 	}
-	want := filepath.Join(tmp, ".parsar", "runtime", "pi", "state", "conv-1", "agent-1", "pi", "agent", "sessions")
+	want := filepath.Join(tmp, ".oac", "runtime", "pi", "state", "conv-1", "agent-1", "pi", "agent", "sessions")
 	if out["session_dir"] != want {
 		t.Fatalf("session_dir = %v, want %q", out["session_dir"], want)
 	}

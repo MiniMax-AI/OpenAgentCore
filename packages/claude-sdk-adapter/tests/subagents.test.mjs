@@ -49,11 +49,11 @@ test("native admission reserves before start across the whole tree and releases 
   const profile = new Subagents("/workspace", 1, undefined), context = { signal: new AbortController().signal };
   profile.consume({ type: "system", subtype: "init", session_id: "root" });
   const before = (id, actor) => profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "Agent", tool_use_id: id, agent_id: actor,
-    tool_input: { subagent_type: "parsar_worker", prompt: "work" } }, id, context);
+    tool_input: { subagent_type: "oac_worker", prompt: "work" } }, id, context);
   assert.equal((await before("one")).hookSpecificOutput.permissionDecision, "allow");
   assert.equal((await before("two")).hookSpecificOutput.permissionDecision, "deny");
   profile.consume({ type: "system", subtype: "task_started", task_type: "local_agent", task_id: "child", session_id: "root", tool_use_id: "one" });
-  await profile.childStart({ hook_event_name: "SubagentStart", session_id: "root", agent_id: "child", agent_type: "parsar_worker" }, undefined, context);
+  await profile.childStart({ hook_event_name: "SubagentStart", session_id: "root", agent_id: "child", agent_type: "oac_worker" }, undefined, context);
   assert.equal((await before("nested", "child")).hookSpecificOutput.permissionDecision, "deny");
   const send = await profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "SendMessage", tool_use_id: "send",
     tool_input: { to: "child", message: "continue" } }, "send", context);
@@ -68,7 +68,7 @@ test("native admission reserves before start across the whole tree and releases 
 test("an unadmitted native start cannot authorize a child tool actor", async () => {
   const profile = new Subagents("/workspace", 1, undefined);
   profile.consume({ type: "system", subtype: "init", session_id: "root" });
-  await assert.rejects(profile.childStart({ hook_event_name: "SubagentStart", session_id: "root", agent_id: "foreign", agent_type: "parsar_worker" }), /invalid native child start/);
+  await assert.rejects(profile.childStart({ hook_event_name: "SubagentStart", session_id: "root", agent_id: "foreign", agent_type: "oac_worker" }), /invalid native child start/);
   assert.equal(profile.permitsActor("foreign"), false);
 });
 

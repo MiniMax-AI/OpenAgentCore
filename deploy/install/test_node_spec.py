@@ -16,7 +16,7 @@ class SpecificationTests(unittest.TestCase):
         self.spec = {"resources": {"cpus": 2, "memory_mib": 4096}, "runtime": {
             "source_commit": "a" * 40, "image_id": "sha256:" + "b" * 64,
             "image_manifest_digest": "sha256:" + "c" * 64,
-            "microsandbox_ref": "parsar-core-runtime@sha256:" + "d" * 64,
+            "microsandbox_ref": "oac-runtime@sha256:" + "d" * 64,
             "runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}}
         self.data = {"installation_id": self.args.installation_id, "provider": "docker", "generation": 3,
                      "specification": self.spec, "specification_digest": node_spec.digest("docker", self.spec),

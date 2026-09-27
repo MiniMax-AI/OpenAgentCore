@@ -13,7 +13,7 @@ import (
 )
 
 func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	tools := []string{"lookup.docs", `quote"tool`}
 	denyAll := []string{}
 	servers := []proto.MCPHTTPServer{
@@ -100,7 +100,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 			t.Fatal("unsupported configuration was accepted or exposed", err)
 		}
 	}
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	home, err := allocCodexHome("credentials")
 	if err != nil {
 		t.Fatal(err)

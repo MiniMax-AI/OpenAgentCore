@@ -43,7 +43,7 @@ func BuildArgs(opts map[string]any, resumeSessionID string) (BuildResult, error)
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 		// IS_SANDBOX=1 tells Claude Code to skip the "cannot be used
 		// with root/sudo privileges" guard. envd's RunCommand only
-		// passes a fixed PARSAR_* env allowlist into parsar-daemon, so the
+		// passes only selected Runtime settings into oac-daemon, so the
 		// sandbox image's own IS_SANDBOX=1 does NOT propagate down to
 		// claude. Re-asserting it here is the actually-honored opt-out
 		// (--allow-dangerously-skip-permissions alone does NOT satisfy
@@ -224,7 +224,7 @@ func writeMCPTempfile(mcp map[string]any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("claudecode: marshal mcp_servers: %w", err)
 	}
-	f, err := os.CreateTemp("", "parsar-daemon-mcp-*.json")
+	f, err := os.CreateTemp("", "oac-daemon-mcp-*.json")
 	if err != nil {
 		return "", fmt.Errorf("claudecode: create mcp tempfile: %w", err)
 	}

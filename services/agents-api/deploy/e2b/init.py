@@ -7,9 +7,9 @@ import subprocess
 from uuid import UUID
 from urllib.parse import urlsplit
 
-ROOT = Path('/root/.parsar/e2b')
-PROFILE = Path('/home/runtime/.parsar/parsar-daemon/default')
-IMAGE_ENV = Path('/etc/parsar-runtime-env.json')
+ROOT = Path('/root/.oac/e2b')
+PROFILE = Path('/home/runtime/.oac/daemon/default')
+IMAGE_ENV = Path('/etc/oac-runtime-env.json')
 
 
 def launch_identity(payload):
@@ -68,7 +68,7 @@ def prepare_runtime():
     # E2B finalization makes /usr/local world-writable after template commands.
     subprocess.run(['chown', '-R', 'root:root', '/usr/local'], check=True)
     subprocess.run(['chmod', '-R', 'go-w', '/usr/local'], check=True)
-    os.chmod('/usr/local/bin/agents-api-tool-root', 0o555)
+    os.chmod('/usr/local/bin/oac-tool-root', 0o555)
     for protected in ['/usr/bin/envd', '/etc/inittab', '/etc/init.d/rcS']:
         if protected == '/etc/init.d/rcS' and not Path(protected).exists():
             continue
@@ -77,15 +77,15 @@ def prepare_runtime():
     # Disable E2B's unused passwordless sudo account before unprivileged startup.
     subprocess.run(['usermod', '--lock', '--shell', '/usr/sbin/nologin', 'user'], check=True)
     environment = json.loads(IMAGE_ENV.read_text())
-    if (environment.get('PARSAR_HOME') != '/home/runtime/.parsar'
-            or environment.get('PARSAR_RUNTIME_WORKSPACE') != '/environment/workspace'
-            or any(key in environment for key in ['PARSAR_RUNTIME_ENVIRONMENT_ID',
-                                                 'PARSAR_RUNTIME_SESSION_ID'])):
+    if (environment.get('OAC_RUNTIME_HOME') != '/home/runtime/.oac'
+            or environment.get('OAC_RUNTIME_WORKSPACE') != '/environment/workspace'
+            or any(key in environment for key in ['OAC_RUNTIME_ENVIRONMENT_ID',
+                                                 'OAC_RUNTIME_SESSION_ID'])):
         raise ValueError('Image must contain an unbound packaged Runtime profile')
     environment['PATH'] = '/usr/local/bin:/usr/bin:/bin'
     subprocess.run(['mount', '--bind', '/environment/workspace', '/workspace'], check=True)
     PROFILE.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for directory in [Path('/home/runtime'), Path('/home/runtime/.parsar'), PROFILE.parent, PROFILE,
+    for directory in [Path('/home/runtime'), Path('/home/runtime/.oac'), PROFILE.parent, PROFILE,
                       Path('/environment/workspace'), Path('/environment/staging'),
                       Path('/environment/initialization'), Path('/environment/packages')]:
         os.chown(directory, 1000, 1000)
@@ -114,7 +114,7 @@ def initialize():
         os.fchmod(stream.fileno(), 0o600)
         os.fchown(stream.fileno(), 1000, 1000)
         child = subprocess.Popen(
-            ['/usr/local/bin/parsar-daemon', 'connect', '--profile', 'default',
+            ['/usr/local/bin/oac-daemon', 'connect', '--profile', 'default',
              '--remote', payload['remote_url'], '--environment-id', payload['environment_id'],
              '--credential-file', str(credential)],
             cwd='/environment/workspace', env=environment, user=1000, group=1000,

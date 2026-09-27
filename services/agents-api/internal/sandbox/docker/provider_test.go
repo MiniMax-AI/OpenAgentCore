@@ -127,7 +127,7 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	if strings.Contains(string(inspected.Raw), b.Credential) || inspected.Container.Config.User != "1000:1000" || !inspected.Container.HostConfig.ReadonlyRootfs || inspected.Container.HostConfig.Privileged {
 		t.Fatal("unsafe Docker configuration")
 	}
-	for _, value := range []string{"PARSAR_RUNTIME_NETWORK_ACCESS=restricted", `PARSAR_RUNTIME_ALLOWED_DOMAINS=["api.example.com","example.com"]`} {
+	for _, value := range []string{"OAC_RUNTIME_NETWORK_ACCESS=restricted", `OAC_RUNTIME_ALLOWED_DOMAINS=["api.example.com","example.com"]`} {
 		found := false
 		for _, entry := range inspected.Container.Config.Env {
 			found = found || entry == value
@@ -141,7 +141,7 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	if _, e = p.Create(ctx, changed); !errors.Is(e, sandbox.ErrExists) {
 		t.Fatalf("duplicate not rejected: %v", e)
 	}
-	r, e := p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"cat", "/home/runtime/.parsar/parsar-daemon/default/auth.json"}})
+	r, e := p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"cat", "/home/runtime/.oac/daemon/default/auth.json"}})
 	if e != nil {
 		t.Fatal(e)
 	}

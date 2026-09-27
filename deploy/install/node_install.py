@@ -1140,7 +1140,7 @@ def release_docker_network(installation_id):
     try:
         if network not in checked(list(DOCKER) + ["network", "ls", "--format", "{{.Name}}"], "Docker unavailable").splitlines():
             return
-        remaining = checked(list(DOCKER) + ["ps", "--all", "--filter", "label=io.parsar.agents-api.installation=" + installation_id,
+        remaining = checked(list(DOCKER) + ["ps", "--all", "--filter", "label=io.oac.installation=" + installation_id,
                                             "--format", "{{.Names}}"], "Docker unavailable").split()
     except InstallError:
         print("Docker is unavailable, so network " + network + " was not removed.")

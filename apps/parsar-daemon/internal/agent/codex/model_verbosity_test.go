@@ -31,7 +31,7 @@ func TestPrepareModelVerbosity(t *testing.T) {
 	if !SupportsTextVerbosity {
 		t.Skip("catalog probe requires Unix")
 	}
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	binary := filepath.Join(t.TempDir(), "codex")
 	catalog := `{"models":[{"slug":"known-model","support_verbosity":true,"native_extra":{"keep":true}}]}`
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s' '"+catalog+"'\n"), 0700); err != nil {
@@ -71,7 +71,7 @@ func TestPrepareDefaultModelVerbosity(t *testing.T) {
 	if !SupportsTextVerbosity {
 		t.Skip("catalog probe requires Unix")
 	}
-	t.Setenv("PARSAR_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	binary := filepath.Join(t.TempDir(), "codex")
 	catalog := `{"models":[{"slug":"supported","support_verbosity":true,"default_verbosity":"low"},{"slug":"unsupported","support_verbosity":false}]}`
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s' '"+catalog+"'\n"), 0700); err != nil {

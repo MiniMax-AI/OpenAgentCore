@@ -6,7 +6,7 @@ import shlex
 import sys
 
 try:
-    if os.environ.get('PARSAR_RUNTIME_TOOL_ENV') != '1':
+    if os.environ.get('OAC_RUNTIME_TOOL_ENV') != '1':
         print('{}')
         sys.exit(0)
     value = json.load(sys.stdin)
@@ -18,8 +18,8 @@ try:
     # POSIX sh does not accept eval --. A leading space prevents option parsing
     # while preserving the native shell, cwd and command text.
     rewritten = '. /environment/initialization/tool-env.sh && eval ' + shlex.quote(' ' + command)
-    if os.environ.get('PARSAR_RUNTIME_SYSTEM_PACKAGES') == '1':
-        rewritten = '/usr/bin/python3 -I -S /usr/local/bin/agents-api-tool-root ' + shlex.quote(command)
+    if os.environ.get('OAC_RUNTIME_SYSTEM_PACKAGES') == '1':
+        rewritten = '/usr/bin/python3 -I -S /usr/local/bin/oac-tool-root ' + shlex.quote(command)
     print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse',
           'permissionDecision': 'allow', 'updatedInput': {
           'command': rewritten}}}))

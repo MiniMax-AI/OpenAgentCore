@@ -18,7 +18,7 @@ func prepareMCPHTTPBearer(servers map[string]mcpServerConfig, declarations *[]pr
 			continue
 		}
 		server := servers[declaration.ServerLabel]
-		server.BearerTokenEnvVar = "PARSAR_MCP_BEARER_" + rand.Text()
+		server.BearerTokenEnvVar = "OAC_RUNTIME_MCP_BEARER_" + rand.Text()
 		servers[declaration.ServerLabel] = server
 		env = append(env, server.BearerTokenEnvVar+"="+*declaration.BearerToken)
 	}

@@ -66,7 +66,7 @@ def validate(data, args):
         runtime = spec["runtime"]
         patterns = {"source_commit": r"[0-9a-f]{40}", "image_id": r"sha256:[0-9a-f]{64}",
                     "image_manifest_digest": r"sha256:[0-9a-f]{64}",
-                    "microsandbox_ref": r"parsar-core-runtime@sha256:[0-9a-f]{64}",
+                    "microsandbox_ref": r"oac-runtime@sha256:[0-9a-f]{64}",
                     "runtime_sha256": r"[0-9a-f]{64}", "firmware_sha256": r"[0-9a-f]{64}"}
         if set(runtime) != set(patterns) or any(not isinstance(runtime[key], str) or not re.fullmatch(pattern, runtime[key])
                                                for key, pattern in patterns.items()):

@@ -9,7 +9,7 @@ import (
 
 // SupportsExecution is an operator opt-in, separate from ordinary product availability.
 func SupportsExecution(version string) bool {
-	return os.Getenv("PARSAR_MCODE_AGENTS_API") == "1" && version == SupportedVersion
+	return os.Getenv("OAC_RUNTIME_MCODE_AGENTS_API") == "1" && version == SupportedVersion
 }
 
 func validateExecutionRequest(req proto.PromptRequestPayload) error {

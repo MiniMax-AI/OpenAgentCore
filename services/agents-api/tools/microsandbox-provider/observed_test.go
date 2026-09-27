@@ -48,7 +48,7 @@ func TestInitialIdentityNeedsAllLabelsAndBootstrapReceipt(t *testing.T) {
 		t.Fatalf("running implied bootstrap completion: %+v %v", state, e)
 	}
 	labels[bootstrapLabel] = "complete"
-	delete(labels, "io.parsar.tenant")
+	delete(labels, "io.oac.tenant")
 	raw, _ = json.Marshal(map[string]any{"labels": labels})
 	_, e = qualifyCompute(config, ref, wire.Compute{ID: "local:4"}, "local:4", "running", string(raw))
 	if !errors.Is(e, sandbox.ErrOwnership) {

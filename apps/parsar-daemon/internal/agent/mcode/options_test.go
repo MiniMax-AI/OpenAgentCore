@@ -18,7 +18,7 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(opts.Dir, os.Getenv("PARSAR_HOME")+string(os.PathSeparator)) {
+	if !strings.HasPrefix(opts.Dir, os.Getenv("OAC_RUNTIME_HOME")+string(os.PathSeparator)) {
 		t.Fatalf("workdir escaped managed state: %s", opts.Dir)
 	}
 	if opts.Env[len(opts.Env)-1] != "MINIMAX_DATA_DIR="+opts.DataDir {

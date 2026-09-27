@@ -33,7 +33,7 @@ class ObservationTest(ProviderTest):
     def test_one_metrics_request_maps_owned_running_sandboxes(self):
         self.assertEqual(self.call('create')['ErrorCode'], '')
         self.cloud.started_at = datetime(2026, 9, 25, 10, 31, 34, tzinfo=timezone.utc)
-        other = SimpleNamespace(sandbox_id='other-id', metadata={'parsar_installationid': self.config['InstallationID']})
+        other = SimpleNamespace(sandbox_id='other-id', metadata={'oac_installationid': self.config['InstallationID']})
         paginator = self.listing([other, self.cloud], [other])
         stopped = {key: str(uuid4()) for key in self.reference}
         point = {'cpuCount': 2, 'cpuUsedPct': 19.55, 'memUsed': 183836672, 'memTotal': 2079141888,
@@ -49,7 +49,7 @@ class ObservationTest(ProviderTest):
         self.api.connect.assert_not_called()
         self.api.set_timeout.assert_not_called()
         self.assertEqual(self.api.list.call_args.kwargs['query'].metadata,
-                         {'parsar_installationid': self.config['InstallationID']})
+                         {'oac_installationid': self.config['InstallationID']})
         owned, missing = result['Observations']
         self.assertEqual(owned, dict(self.reference, Status='observed',
                                      ObservedAt='2026-09-25T10:31:36.667115+00:00',

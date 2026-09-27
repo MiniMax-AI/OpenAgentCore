@@ -13,7 +13,7 @@ import (
 const InstallURL = "https://github.com/earendil-works/pi"
 
 // defaultBinary is the executable to probe and spawn: binpath.Pi()
-// honours the PARSAR_PI_BIN override so a bare-name PATH lookup can be
+// honours the OAC_RUNTIME_PI_BIN override so a bare-name PATH lookup can be
 // bypassed in images where PATH is not under our control. A function
 // rather than a const so the env is read at call time.
 func defaultBinary() string { return binpath.Pi() }

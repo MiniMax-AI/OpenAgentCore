@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-HELPER = '/usr/local/bin/agents-api-runtime-initialize'
+HELPER = '/usr/local/bin/oac-runtime-initialize'
 CANARY = 'private-initialization-canary-47a8'
 
 
@@ -56,8 +56,8 @@ def main():
         invoke('system', packages=['jq', 'build-essential', 'libpq-dev'])
         invoke('system', succeeds=False, packages=['jq'])
         invoke('setup', command='''set -eu
-test ! -e /usr/local/bin/parsar-daemon
-test ! -e /usr/local/bin/agents-api-tool-root
+test ! -e /usr/local/bin/oac-daemon
+test ! -e /usr/local/bin/oac-tool-root
 test ! -e /opt/agents-runtime/system-root.tar.gz
 printf '{"value":42}' | jq -e '.value == 42'
 printf '#include <libpq-fe.h>\nint main(void){return PQlibVersion() > 0 ? 0 : 1;}\n' > /workspace/link.c
@@ -73,7 +73,7 @@ node -e 'if (1 + 1 !== 2) process.exit(1)'
     invoke('setup', command='printf "%s" "$INITIALIZATION_VALUE" > first; printf secret; printf secret >&2')
     assert Path('/environment/workspace/first').read_text() == CANARY
     check = '''import os, pathlib, socket
-for path in ('/environment/private/credential', '/environment/staging/request', '/home/runtime/.parsar'):
+for path in ('/environment/private/credential', '/environment/staging/request', '/home/runtime/.oac'):
     assert not pathlib.Path(path).exists(), path
 assert 'DAEMON_PRIVATE_CANARY' not in os.environ
 assert os.environ['INITIALIZATION_VALUE'] == 'private-initialization-canary-47a8'
@@ -96,7 +96,7 @@ assert len(socket.if_nameindex()) == 1
             result = subprocess.run(
                 ['/usr/bin/bwrap', '--bind', '/', '/',
                  '--bind', '/environment/workspace', '/workspace', '--',
-                 '/usr/bin/python3', '-I', '/usr/local/bin/agents-api-tool-root',
+                 '/usr/bin/python3', '-I', '/usr/local/bin/oac-tool-root',
                  "pwd; printf '{\"value\":42}' | jq -r .value"],
                 cwd=cwd, capture_output=True, text=True, timeout=15)
             assert result.returncode == 0, result.stderr

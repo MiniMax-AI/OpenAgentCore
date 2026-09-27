@@ -62,7 +62,7 @@ func TestNewSessionInstallsSkillsAndInjectsSkillFlag(t *testing.T) {
 		}
 	}
 
-	wantDir := filepath.Join(home, ".parsar", "runtime", "pi", "conv-conv-skill", "skills", "code-review")
+	wantDir := filepath.Join(home, ".oac", "runtime", "pi", "conv-conv-skill", "skills", "code-review")
 	if _, err := os.Stat(filepath.Join(wantDir, "SKILL.md")); err != nil {
 		t.Fatalf("SKILL.md not installed at %s: %v", wantDir, err)
 	}

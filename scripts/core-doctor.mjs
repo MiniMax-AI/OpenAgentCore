@@ -29,7 +29,7 @@ const CONFIG_KEYS = new Set([
   "AGENTS_API_PROXY_TOKEN_FILE",
 ]);
 const PATH_CONFIG_KEYS = new Set(["AGENTS_API_PROXY_TOKEN_FILE"]);
-const SAFE_PATH_EXPANSION_KEYS = new Set(["HOME", "PARSAR_HOME"]);
+const SAFE_PATH_EXPANSION_KEYS = new Set(["HOME", "OAC_RUNTIME_HOME"]);
 
 const HELP = `Agents Core Doctor (read-only)
 
@@ -681,7 +681,7 @@ export async function probeCore({ target, token, timeoutMs, fetchImpl, report })
 }
 
 function minimalCommandEnvironment(env) {
-  const allowed = ["GOCACHE", "GOENV", "GOMODCACHE", "GOPATH", "GOROOT", "HOME", "PARSAR_HOME", "PATH", "TMPDIR"];
+  const allowed = ["GOCACHE", "GOENV", "GOMODCACHE", "GOPATH", "GOROOT", "HOME", "OAC_RUNTIME_HOME", "PATH", "TMPDIR"];
   return Object.fromEntries(allowed.flatMap((name) =>
     typeof env[name] === "string" && env[name] !== "" ? [[name, env[name]]] : [],
   ));
@@ -768,7 +768,7 @@ export async function inspectDaemon({ parsarPath, profile, timeoutMs, env, runCo
     command = "go";
     args = ["run", "./apps/parsar-daemon/cmd/parsar-daemon", "status", "--profile", profile];
   } else {
-    command = "parsar-daemon";
+    command = "oac-daemon";
     args = ["status", "--profile", profile];
   }
 

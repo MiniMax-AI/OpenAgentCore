@@ -33,7 +33,7 @@ func (p *initializingProvider) RunCommand(_ context.Context, _ sandbox.Reference
 	if p.fail {
 		return sandbox.CommandResult{}, sandbox.ErrCommandUnconfirmed
 	}
-	if c.Args[len(c.Args)-1] == "/usr/local/bin/agents-api-runtime-initialize" {
+	if c.Args[len(c.Args)-1] == "/usr/local/bin/oac-runtime-initialize" {
 		var operation struct {
 			Version int    `json:"version"`
 			Action  string `json:"action"`

@@ -102,8 +102,8 @@ export class WorkspaceProfile {
       env[reference] = process.env[reference]!;
     }
     if (config.system_packages) {
-      env.CLAUDE_CODE_SHELL_PREFIX = "/usr/local/bin/agents-api-claude-shell-prefix";
-      env.PARSAR_RUNTIME_TOOL_SCRATCH = config.scratch;
+      env.CLAUDE_CODE_SHELL_PREFIX = "/usr/local/bin/oac-claude-shell-prefix";
+      env.OAC_RUNTIME_TOOL_SCRATCH = config.scratch;
     }
     const skills = workspaceSkills(config.skills ?? []);
     this.skillNames = skills?.names ?? [];

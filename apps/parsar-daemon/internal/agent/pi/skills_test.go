@@ -298,7 +298,7 @@ func TestResolveSkillsRootConversationScoped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveSkillsRoot: %v", err)
 	}
-	want := filepath.Join(tmp, ".parsar", "runtime", "pi", "conv-conv-abc", "skills")
+	want := filepath.Join(tmp, ".oac", "runtime", "pi", "conv-conv-abc", "skills")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -311,7 +311,7 @@ func TestResolveSkillsRootRunScopedFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveSkillsRoot: %v", err)
 	}
-	want := filepath.Join(tmp, ".parsar", "runtime", "pi", "run-run-9", "skills")
+	want := filepath.Join(tmp, ".oac", "runtime", "pi", "run-run-9", "skills")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}

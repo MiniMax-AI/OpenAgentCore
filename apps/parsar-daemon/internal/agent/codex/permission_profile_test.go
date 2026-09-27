@@ -23,7 +23,7 @@ func TestPermissionProfileRejectsIncompatiblePreparationBeforeState(t *testing.T
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "uncreated")
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			if _, _, err := prepareSessionPlan(context.Background(), tc.req, sessionConfig{permissionProfile: tc.profile}); err == nil {
 				t.Fatal("incompatible profile accepted")
 			}
@@ -35,8 +35,8 @@ func TestPermissionProfileRejectsIncompatiblePreparationBeforeState(t *testing.T
 }
 
 func TestPermissionProfileSelectsNativeStartupConfig(t *testing.T) {
-	t.Setenv("PARSAR_HOME", t.TempDir())
-	t.Setenv("PARSAR_CODEX_PERMISSION_PROFILE", "managed-workspace")
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_CODEX_PERMISSION_PROFILE", "managed-workspace")
 	plan, _, err := prepareSessionPlan(context.Background(), proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true}, defaultSessionConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestManagedNetworkPolicySelectsNativeProfileAndRejectsMismatchBeforeState(t
 	for _, mode := range []string{"enabled", "disabled"} {
 		t.Run(mode, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "uncreated")
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			req := proto.PromptRequestPayload{AgentStateKey: "session", LocalEnvironment: &proto.LocalEnvironment{ID: "environment", NetworkAccess: mode}}
 			cfg := sessionConfig{permissionProfile: "managed-workspace", runtimeNetwork: agentnetwork.Policy{Access: mode}}
 			wrong := req

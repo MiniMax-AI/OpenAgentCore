@@ -22,7 +22,7 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 	for _, mode := range []string{"success", "phased", "timeout", "wrong-receipt", "duplicate-usage", "cancel", "blocked-write"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("PARSAR_HOME", root)
+			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=steering-" + mode, "GORACE=atexit_sleep_ms=0"}}
 			if mode == "phased" {
 				config.Env[1] = "SDK_HELPER_MODE=steering-timeout"

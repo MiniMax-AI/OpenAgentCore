@@ -166,8 +166,7 @@ history routes register an explicit HEAD 405 instead. Every 405 of the API route
 body and lists the route's methods in `Allow`.
 
 Keep test artifacts under `~/.oac/` and build output under
-`${OAC_DEV_HOME:-$HOME/.oac}`. Runtime state still uses its existing runtime
-configuration. Require
+`${OAC_DEV_HOME:-$HOME/.oac}`. Runtime state uses `${OAC_RUNTIME_HOME:-$HOME/.oac}`. Require
 absolute user-supplied working directories. Keep credentials out of source and
 logs. Update this guide when architecture, ownership or generated contracts change.
 Comments and documentation are English. Reuse existing helpers and error mapping;
@@ -1090,7 +1089,7 @@ mechanisms. Remove superseded unused code, configuration, tests, scripts and
 task-owned temporary resources as each replacement is accepted. Preserve necessary
 regressions, still-used official capabilities, product data and others' work.
 
-The opt-in Codex deployment selector `PARSAR_CODEX_PERMISSION_PROFILE` chooses a
+The opt-in Codex deployment selector `OAC_RUNTIME_CODEX_PERMISSION_PROFILE` chooses a
 native named profile at harness startup and on both new/resumed threads, omitting
 the legacy sandbox override. It is operator configuration, never a prompt option,
 and rejects remote, none and temporary read preparations. Native managed
@@ -1255,8 +1254,8 @@ capability advertisement alone does not qualify an operator's deployment.
 Exporter component checks do not establish public Artifact compatibility.
 
 Local inline file delivery uses the same authenticated daemon connection and exact
-Environment/Session binding. The optional startup-owned `PARSAR_RUNTIME_WRITE_HELPER`
-and `PARSAR_RUNTIME_STAGING` enable only the bounded installer primitive; they do
+Environment/Session binding. The optional startup-owned `OAC_RUNTIME_WRITE_HELPER`
+and `OAC_RUNTIME_STAGING` enable only the bounded installer primitive; they do
 not grant public feature admission. Require a canonical executable outside the
 Environment parent, canonical sibling workspace/staging directories on one mount,
 and verified native tool denial of staging and its ancestors. Native credentials
@@ -3028,11 +3027,11 @@ See [deployment and engine onboarding](services/agents-api/deploy/claude/README.
 The helper executables retain their historical Codex names; their local directory,
 write and export operations are shared and do not launch an engine.
 
-`PARSAR_CLAUDE_SDK_WORKSPACE=managed` requires the shared dedicated local binding,
+`OAC_RUNTIME_CLAUDE_SDK_WORKSPACE=managed` requires the shared dedicated local binding,
 canonical workspace and its same-inode `/workspace` mount, and explicit immutable
 network policy. Native history, home and scratch live separately under
-`PARSAR_HOME/runtime/claude-sdk`; daemon authentication stays under
-`PARSAR_HOME/parsar-daemon`. The trusted image and protected staging directory
+`OAC_RUNTIME_HOME/runtime/claude-sdk`; daemon authentication stays under
+`OAC_RUNTIME_HOME/daemon`. The trusted image and protected staging directory
 remain outside writable workspace roots. No product state or native user profile
 is imported. The separate unbound `environment:none` profile keeps its behavior.
 
@@ -3342,8 +3341,8 @@ remote tool effects were cancelled. Rich content, native truncation and asynchro
 MCP task results remain unverified.
 
 Daemon `connect` optionally registers this factory as `claude_sdk` when the
-operator sets `PARSAR_CLAUDE_SDK_ENTRYPOINT` to the absolute packaged `dist/main.js`.
-`PARSAR_CLAUDE_SDK_NODE` selects Node (default: `node` on PATH). Discovery resolves
+operator sets `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT` to the absolute packaged `dist/main.js`.
+`OAC_RUNTIME_CLAUDE_SDK_NODE` selects Node (default: `node` on PATH). Discovery resolves
 Node once and checks that exact configuration before pairing; the SDK's bounded
 runtime check is independent of legacy CLI version probes. A ready SDK alone is
 sufficient to start the daemon. No configuration means no SDK probe or descriptor;
@@ -3594,3 +3593,27 @@ audit metadata. Read models are Core-key `/core/v1` routes; keep `/v1` wire
 contracts unchanged. See
 [write-audit.md](contracts/agents-api/write-audit.md) for coverage, retention and
 console integration. Do not confuse key identity with Session creator identity.
+
+
+## OpenAgentCore Runtime names
+
+Runtime distributions use `oac-daemon`, the `oac-*` filesystem and initialization
+helpers, `OAC_RUNTIME_*` settings, and `~/.oac/daemon` state. Provider bootstrap,
+Runtime images and harness adapters must agree on these names. Daemon startup
+rejects renamed settings before any subcommand and reports replacements without
+values; the separate Parsar product integration settings remain unchanged.
+Environment `env` reserves every `OAC_` name. Provider ownership labels use
+`io.oac.*`, and E2B metadata uses `oac_*`; neither accepts old labels as a fallback.
+Before upgrading, use the previous release to drain every hosted allocation,
+including suspended compute and cleanup still awaiting confirmation. Migration
+000078 atomically checks the drain and rewrites the saved microsandbox reference
+to `oac-runtime@sha256:`; its rollback has the same drain requirement. Session
+history and recorded node identities are never rewritten. Replace old E2B
+templates with this release's template builder before resuming admission.
+
+The dormant Pi adapter retains its `parsar` provider slug because the separate
+Parsar product pins model selections to that external identity. This is a product
+boundary exception for the name guard, like the skill-upload integration, rather
+than a legacy Runtime setting. Build the MiniMax companion from this revision's
+patched native sources when packaging a renamed Runtime; an older companion still
+uses the old model-provider, workspace and subagent names and cannot be reused.

@@ -1,4 +1,4 @@
-// Package cli is the parsar-daemon subcommand router. Stdlib-only flag
+// Package cli is the oac-daemon subcommand router. Stdlib-only flag
 // dispatch — no cobra — so the produced binary stays small.
 package cli
 
@@ -51,6 +51,9 @@ func Execute(argv []string) error {
 }
 
 func execute(ctx *runContext, argv []string) error {
+	if err := validateRuntimeConfiguration(); err != nil {
+		return err
+	}
 	if len(argv) == 0 || argv[0] == "-h" || argv[0] == "--help" || argv[0] == "help" {
 		printRootHelp(ctx.stdout)
 		if len(argv) == 0 {
@@ -69,21 +72,21 @@ func execute(ctx *runContext, argv []string) error {
 }
 
 func printRootHelp(w io.Writer) {
-	fmt.Fprintln(w, "parsar-daemon — Parsar reverse-WebSocket agent daemon")
+	fmt.Fprintln(w, "oac-daemon — OpenAgentCore reverse-WebSocket agent daemon")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Usage: parsar-daemon <subcommand> [flags]")
+	fmt.Fprintln(w, "Usage: oac-daemon <subcommand> [flags]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Subcommands:")
 	for _, c := range commands {
 		fmt.Fprintf(w, "  %-10s %s\n", c.name, c.summary)
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Run `parsar-daemon <subcommand> --help` for subcommand-specific flags.")
+	fmt.Fprintln(w, "Run `oac-daemon <subcommand> --help` for subcommand-specific flags.")
 }
 
 // newFlagSet returns a FlagSet that doesn't print its own usage to
 // stderr on error — we surface the error via Execute's return value
-// so stderr noise stays predictable for callers piping parsar-daemon.
+// so stderr noise stays predictable for callers piping oac-daemon.
 func newFlagSet(name string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)

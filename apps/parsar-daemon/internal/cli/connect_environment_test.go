@@ -158,7 +158,7 @@ func TestEnvironmentBindingPreservesIdentityAndHistory(t *testing.T) {
 	if err := saveEnvironmentBinding(root, want); err != nil {
 		t.Fatal(err)
 	}
-	history := filepath.Join(root, "parsar-daemon", "agent-sessions", "retained")
+	history := filepath.Join(root, "daemon", "agent-sessions", "retained")
 	if err := os.MkdirAll(filepath.Dir(history), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestEnvironmentBindingPreservesIdentityAndHistory(t *testing.T) {
 	if raw, _ := os.ReadFile(history); string(raw) != "unchanged-history" {
 		t.Fatal("history changed")
 	}
-	if err := os.Remove(filepath.Join(root, "parsar-daemon", "environment.json")); err != nil {
+	if err := os.Remove(filepath.Join(root, "daemon", "environment.json")); err != nil {
 		t.Fatal(err)
 	}
 	if err := saveEnvironmentBinding(root, want); err == nil {
@@ -198,7 +198,7 @@ func TestEnvironmentBindingAllowsPackagedFilesAndRejectsUnsafeReceipt(t *testing
 	if err := saveEnvironmentBinding(root, want); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(root, "parsar-daemon", "environment.json")
+	path := filepath.Join(root, "daemon", "environment.json")
 	if err := os.Chmod(path, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestEnvironmentTargetCheckedBeforeCredentialTransmission(t *testing.T) {
 	if err := os.Chmod(root, 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PARSAR_HOME", root)
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", environmentEnrollment{uuid.NewString(), uuid.NewString(), uuid.NewString(), "/workspace"}, "/environment/workspace"}
 	if err := saveEnvironmentBinding(root, want); err != nil {
 		t.Fatal(err)

@@ -13,7 +13,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
-const suspendControlEnv = "PARSAR_DAEMON_SUSPEND_PID_FILE"
+const suspendControlEnv = "OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE"
 
 type suspendIdentity struct {
 	PID           int    `json:"pid"`
@@ -47,7 +47,7 @@ func newSuspendControl() (*suspendControl, error) {
 	if !ok || st.Uid != uint32(os.Getuid()) {
 		return nil, errors.New("connect: owned suspend control directory required")
 	}
-	environment := os.Getenv("PARSAR_RUNTIME_ENVIRONMENT_ID")
+	environment := os.Getenv("OAC_RUNTIME_ENVIRONMENT_ID")
 	if environment == "" {
 		return nil, errors.New("connect: suspend control requires an Environment binding")
 	}

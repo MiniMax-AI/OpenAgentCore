@@ -20,7 +20,7 @@ if [[ "$(git -C "$source" rev-parse HEAD)" != "$revision" ]]; then
 fi
 mkdir "$context/upstream"
 git -C "$source" archive "$revision" | tar -x -C "$context/upstream"
-printf '%s\n' "$revision" > "$context/upstream/.parsar-source-revision"
+printf '%s\n' "$revision" > "$context/upstream/.oac-source-revision"
 cp "$package/"*.mjs "$package/"*.ts "$package/"*.json "$context/"
 test "$(node "$native/cli.js" --version)" = 0.4.12
 (
@@ -46,7 +46,7 @@ cp "$package/subagent-snapshot.mjs" "$artifact/"
 mkdir "$artifact/native"
 cp -R "$context/upstream/dist/." "$artifact/native/"
 cp -R "$native/node_modules" "$artifact/native/"
-cp "$context/upstream/.parsar-native-patch.json" "$artifact/native-patch.json"
+cp "$context/upstream/.oac-native-patch.json" "$artifact/native-patch.json"
 cp "$context/upstream/LICENSE" "$artifact/UPSTREAM_LICENSE"
 cp "$context/upstream/third_party/sandbox-runtime/LICENSE" "$artifact/SANDBOX_LICENSE"
 cp "$context/upstream/third_party/pi-mono/LICENSE" "$artifact/PI_LICENSE"

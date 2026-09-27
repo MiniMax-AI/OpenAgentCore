@@ -19,7 +19,7 @@ func TestReadOnlyPreparationRejectedBeforeNativeSetup(t *testing.T) {
 	if len(preparationFrames(t, root)) != 0 {
 		t.Fatal("read-only request started native child")
 	}
-	if _, err := os.Stat(filepath.Join(root, "parsar-daemon", "agent-sessions")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "daemon", "agent-sessions")); !os.IsNotExist(err) {
 		t.Fatal("read-only request created native state", err)
 	}
 }
@@ -46,7 +46,7 @@ func TestRetiredNativeTransportOptionsRejectedBeforeState(t *testing.T) {
 					if len(preparationFrames(t, root)) != 0 {
 						t.Fatal("retired transport started native process")
 					}
-					if _, err := os.Stat(filepath.Join(root, "parsar-daemon", "agent-sessions")); !os.IsNotExist(err) {
+					if _, err := os.Stat(filepath.Join(root, "daemon", "agent-sessions")); !os.IsNotExist(err) {
 						t.Fatal("retired transport created state", err)
 					}
 				})

@@ -75,9 +75,9 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 	}
 	config := map[string]any{"logLevel": "error", "skills": map[string]any{"external": map[string]any{"enabled": false}}}
 	if provider, ok := opts["mcode_provider"].(map[string]any); ok {
-		config["custom_provider"] = map[string]any{"parsar": provider}
+		config["custom_provider"] = map[string]any{"oac": provider}
 	} else {
-		return result, fmt.Errorf("mcode: a Parsar-managed model is required")
+		return result, fmt.Errorf("mcode: a OpenAgentCore-managed model is required")
 	}
 	result.Model = optionString(opts, "model")
 	if result.Model == "" {
@@ -110,14 +110,14 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 	}
 	result.Env = append([]string{}, os.Environ()...)
 	if req.StrictResume {
-		result.Env = append(executionEnvironment(), "PARSAR_MCODE_TOOL_POLICY=protected-mcp-v1")
+		result.Env = append(executionEnvironment(), "OAC_RUNTIME_MCODE_TOOL_POLICY=protected-mcp-v1")
 		if err := os.WriteFile(filepath.Join(result.DataDir, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
 			return result, err
 		}
 		if !req.DisableSubagents {
-			result.Env = append(result.Env, "PARSAR_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
+			result.Env = append(result.Env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
 		} else {
-			result.Env = append(result.Env, "PARSAR_MCODE_MAX_SUBAGENTS=0")
+			result.Env = append(result.Env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS=0")
 		}
 	}
 	if raw := opts["env"]; raw != nil && !req.StrictResume {

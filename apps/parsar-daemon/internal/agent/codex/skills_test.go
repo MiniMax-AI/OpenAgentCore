@@ -45,7 +45,7 @@ func TestSetSkillExtraRootsUsesCodexRPC(t *testing.T) {
 
 func TestPrepareManagedSkillsPrunesWhenPayloadOmitsSkills(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("PARSAR_HOME", home)
+	t.Setenv("OAC_RUNTIME_HOME", home)
 	stale := filepath.Join(home, "runtime", "codex", "state", "conv-1", "agent-1", "codex", "skills", "stale")
 	if err := os.MkdirAll(stale, 0o755); err != nil {
 		t.Fatal(err)

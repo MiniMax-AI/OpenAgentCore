@@ -394,7 +394,7 @@ the following existing Linux Runtime packaging requirements through Provider
 - `/workspace` is the public workspace. `/environment/workspace` names the same
   storage for trusted initialization; `/environment/staging` is private staging.
 - `/usr/bin/python3 -I -S` runs the trusted, fd-anchored initial-file installer.
-  It invokes the existing `/usr/local/bin/agents-api-codex-write` atomic writer in
+  It invokes the existing `/usr/local/bin/oac-codex-write` atomic writer in
   its four-argument replace mode; only public Files.create uses the create mode.
   That executable is a shared filesystem helper packaged for every harness; its
   historical name does not select Codex or invoke native Codex tools.
@@ -409,7 +409,7 @@ the following existing Linux Runtime packaging requirements through Provider
 New hosted harnesses reuse these helpers and paths; new Providers deploy the same
 Runtime contract. Neither addition should change template validation, storage or
 resolution. Extend this contract only for an accepted initialization requirement.
-The trusted `/usr/local/bin/agents-api-runtime-initialize` receives a bounded
+The trusted `/usr/local/bin/oac-runtime-initialize` receives a bounded
 version-1 JSON operation on stdin. It configures read-only tool env under
 `/environment/initialization`, installs packages under `/environment/packages`,
 and runs ordered commands through distro bubblewrap. The fixed mount/process map
@@ -533,7 +533,10 @@ available after initialization. Unsupported requests reject without echoing payl
 The [hosted guide](https://developers.openai.com/api/docs/guides/agents-api/environments/openai-hosted)
 clarifies that configured env values are readable by Agent code, files/packages
 precede setup commands, nonzero setup prevents start, and runtime-reserved env names
-must reject. The shared initialization batch implements those fields with encrypted snapshots
+must reject. OpenAgentCore reserves the complete `OAC_` prefix in Environment
+`env` (including Runtime, Web, logging, developer and test names); it replaces the
+former `PARSAR_` reservation. `PATH`, `OPENAI_API_KEY` and `CODEX_` remain reserved.
+The shared initialization batch implements those fields with encrypted snapshots
 and the existing readiness gate. Public reads show packages but omit env/commands.
 Template updates replace each supplied field; omission preserves it and null clears
 it. Referencing Sessions use the composition rules below; these differ from

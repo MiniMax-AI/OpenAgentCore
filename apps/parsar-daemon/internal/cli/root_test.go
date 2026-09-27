@@ -30,8 +30,8 @@ func TestExecuteHelpFlagSucceeds(t *testing.T) {
 		if err != nil {
 			t.Errorf("%s returned error: %v", arg, err)
 		}
-		if !strings.Contains(stdout, "parsar-daemon") {
-			t.Errorf("%s output missing parsar-daemon banner:\n%s", arg, stdout)
+		if !strings.Contains(stdout, "oac-daemon") {
+			t.Errorf("%s output missing oac-daemon banner:\n%s", arg, stdout)
 		}
 	}
 }
