@@ -1,4 +1,19 @@
 export const common = {
+  readFailure: {
+    title: "Could not read the data",
+    partial: "Some reads failed. Any figures and rows shown cover only data already read; they may be incomplete or out of date.",
+    request: "Core request failed ({{status}}).",
+    unknown: "Could not read from Core. Retry to update the data.",
+  },
+  installationNotice: {
+    title: "Public address needs attention",
+    body: "The public address is local to the Core machine. Applications, nodes and executors on other machines cannot connect.",
+    repair: "In <path/>, change public_url to an HTTPS address reachable from other machines, then run <command/>.",
+    noConfiguration: "Set public_url to an HTTPS address reachable from other machines in the installation configuration, then apply it on the Core host. Core has not reported the configuration path or apply command.",
+    copyPath: "Copy configuration path",
+    copyCommand: "Copy apply command",
+    addBlocked: "Add node is unavailable while the public address is local only.",
+  },
   actions: {
     cancel: "Cancel",
     close: "Close",

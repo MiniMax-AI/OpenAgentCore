@@ -10,6 +10,7 @@ import { CopyableId } from "../../components/list-ui";
 import { TableSkeleton } from "../../components/Skeleton";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatPeriod } from "../../lib/format";
+import { InstallationNotice } from "../../components/InstallationNotice";
 import { installationQuery } from "../../lib/installation";
 import { sandboxSize, templateBuildSize, templateBuildStatus } from "../sandbox/deployment-specification";
 import { sandboxDeploymentQuery } from "../sandbox/sandbox-queries";
@@ -141,6 +142,7 @@ export function SystemPage() {
         actions={<RefreshButton onClick={refresh} refreshing={deployment.isFetching || installation.isFetching || harnesses.isFetching} label={t("refresh")} />}
       />
       <PageBody>
+        <InstallationNotice installation={about} />
         {reading ? <p className="visually-hidden" role="status">{t("loading")}</p> : null}
         {facts}
         <DefaultModelsSection />

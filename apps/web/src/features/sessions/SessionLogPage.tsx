@@ -2,6 +2,7 @@ import { MessageSquareText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ReadFailure } from "../../components/ReadFailure";
 import { useFailureToast } from "../../components/Toast";
 import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, SegmentedControl } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
@@ -48,7 +49,7 @@ export function SessionLogPage() {
   const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
   const { params, navigate, intent } = useConsoleNavigation();
-  const { state: projects, byId, refresh: refreshProjects } = useProjects();
+  const { state: projects, byId, refresh: refreshProjects, refreshError: projectsRefreshError } = useProjects();
   const [project, setProject] = useState<ProjectFilterValue>(() => params.project ?? remembered.project);
   // A linked ID (a Session or an Agent) prefills the search, like the other lists;
   // a link that says it is an Agent's ("agent-sessions") sets the Agent filter instead.
@@ -92,21 +93,25 @@ export function SessionLogPage() {
   };
   const refresh = () => {
     setDeleted(new Set());
-    if (projects.status === "failed") refreshProjects();
+    refreshProjects();
     collection.refresh();
   };
   const open = (projectId: string, sessionId: string) => navigate("session", { project: projectId, id: sessionId });
   const failures = collection.failures;
+  const readFailed = projects.status === "failed" || projectsRefreshError !== null || failures.length > 0;
+  const countsKnown = !loading && !readFailed;
   const allFailed = collection.status === "ready" && !rows.length && failures.length > 0 && failures.length >= (allProjects ? projects.projects.length : 1);
 
   useFailureToast(failures.length > 0 && !allFailed, tCommon("project.partial", { names: failures.map((failure) => failure.project.name).join(", ") }), "sessions-partial");
   let body;
   if (projects.status === "failed" && !projects.projects.length) {
-    body = <EmptyState title={t("log.loadFailed")} description={projects.error} action={<button className="button outline" type="button" onClick={refresh}>{tCommon("actions.retry")}</button>} />;
+    body = <ReadFailure onRetry={refresh} />;
   } else if (loading && !rows.length) {
     body = <TableSkeleton label={t("log.loading")} rows={8} columns={8} />;
   } else if (allFailed) {
-    body = <EmptyState title={t("log.loadFailed")} description={failures[0]?.message} action={<button className="button outline" type="button" onClick={refresh}>{tCommon("actions.retry")}</button>} />;
+    body = <ReadFailure onRetry={refresh} />;
+  } else if (readFailed && !rows.length) {
+    body = <ReadFailure onRetry={refresh} />;
   } else if (!rows.length) {
     body = <EmptyState icon={MessageSquareText} title={t("log.emptyTitle")} hint={t("log.emptyDescription")} />;
   } else if (!filtered.length) {
@@ -169,16 +174,17 @@ export function SessionLogPage() {
         actions={<RefreshButton onClick={refresh} refreshing={loading} updatedAt={loadedAt ? formatClock(loadedAt, locale) : null} />}
       />
       <PageBody>
+        {readFailed && rows.length > 0 ? <ReadFailure onRetry={refresh} partial /> : null}
         <ListToolbar
           label={t("log.filters")}
-          summary={rows.length ? listSummary(tCommon, filtered.length, rows.length, { hasMore: isLogTruncated(rows), locale }) : undefined}
+          summary={rows.length ? listSummary(tCommon, filtered.length, rows.length, { hasMore: isLogTruncated(rows) || readFailed, locale }) : undefined}
         >
           <ProjectFilter value={selected} onChange={(value) => { setProject(value); setLimit(PAGE_SIZE); }} />
           <SearchField value={filters.query} onChange={(query) => update({ query })} placeholder={t("log.search")} />
           <SegmentedControl
             label={t("log.statusFilter")}
             value={filters.status}
-            options={(["all", ...sessionStatuses] as const).map((value) => ({ value, label: t(`sessionStatus.${value}`), count: formatInteger(counts[value], locale) }))}
+            options={(["all", ...sessionStatuses] as const).map((value) => ({ value, label: t(`sessionStatus.${value}`), count: countsKnown ? formatInteger(counts[value], locale) : MISSING }))}
             onChange={(status) => update({ status })}
           />
           <ConsoleSelect

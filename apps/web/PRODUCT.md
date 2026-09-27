@@ -180,6 +180,15 @@ workbench.
   connected. Without a `public_url`, with a loopback one, or when the Session's
   `remote_url` is not `wss://`, the section says why instead of showing a
   command.
+- **Read failures.** Overview and Session log distinguish unavailable reads from
+  successful empty results. Failed reads have a visible retry; retained or partial
+  data says it may be incomplete or out of date, and Session filter totals stay
+  missing while any required read has failed. Only successful empty reads show zero.
+- **Local-only address.** Overview, Nodes and System warn when Core reports
+  `local_only`, with the configuration path and apply command Core supplies as
+  copyable instructions. Without a configuration snapshot they state what is
+  missing. Add node is unavailable with a reason; Getting started keeps the first
+  step to do until the public address is fixed.
 - **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
   tool and activity figures are still assembled in the browser from bounded reads
   and state their coverage. Metrics that need new Core endpoints are recorded as

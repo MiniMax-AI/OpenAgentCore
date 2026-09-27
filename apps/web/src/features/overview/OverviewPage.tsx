@@ -4,6 +4,10 @@ import { useCallback, useMemo, type CSSProperties, type ReactNode } from "react"
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
+import { InstallationNotice } from "../../components/InstallationNotice";
+import { installationQuery } from "../../lib/installation";
+import { ReadFailure } from "../../components/ReadFailure";
+import { readError } from "../../lib/read-error";
 import { failedLast, useFailureToast } from "../../components/Toast";
 import { LiveNumber } from "../../components/live-number";
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
@@ -81,7 +85,7 @@ function useOverviewData(projects: readonly Project[], projectsReady: boolean) {
   const { refetch } = query;
   const refresh = useCallback(() => { void refetch(); }, [refetch]);
   // The failure lasts through the polls that retry it, so its toast shows once.
-  return { state, refresh, failure: failedLast(query) ? errorText(query.error) : null };
+  return { state, refresh, refreshing: query.isFetching, failure: failedLast(query) ? errorText(query.error) : null };
 }
 
 export function OverviewPage() {
@@ -91,17 +95,22 @@ export function OverviewPage() {
   const { navigate } = useConsoleNavigation();
   const projectsState = useProjects();
   const projects = projectsState.state.projects;
-  const projectsReady = projectsState.state.status !== "loading" || projects.length > 0;
-  const { state, refresh, failure } = useOverviewData(projects, projectsReady);
+  const projectsReady = projectsState.state.status === "ready" || projects.length > 0;
+  const projectsFailed = projectsState.state.status === "failed" || projectsState.refreshError !== null;
+  const installation = useQuery(installationQuery);
+  const { state, refresh, refreshing, failure } = useOverviewData(projects, projectsReady);
   const { state: fleetState, refresh: refreshFleet } = useSandboxFleet();
   const fleet = fleetSnapshot(fleetState);
-  const data = state.data;
+  const data = projectsReady ? state.data : null;
+  const refreshAll = () => { projectsState.refresh(); if (projectsReady) refresh(); refreshFleet(); void installation.refetch(); };
+  const readFailed = projectsFailed || failure !== null;
+  const sessionReadsFailed = readFailed || Boolean(data?.sessions.failures.length);
   const now = Math.floor((data?.loadedAt ?? Date.now()) / 1000);
 
   const summaryRows = data?.summary.status === "ready" ? data.summary.rows : null;
   const totals = useMemo(() => (summaryRows ? summaryTotals(summaryRows) : null), [summaryRows]);
   const usageRows = useMemo(() => (summaryRows ? projectUsageRows(projects, summaryRows) : null), [projects, summaryRows]);
-  const sessions = data?.sessions.sessions ?? null;
+  const sessions = data && (data.sessions.sessions.length || !sessionReadsFailed) ? data.sessions.sessions : null;
   const activity = useMemo(() => (sessions ? sessionActivity(sessions.map((entry) => entry.value), now) : null), [now, sessions]);
   const attention = useMemo(() => (sessions ? attentionSessions(sessions, ATTENTION_LIMIT) : null), [sessions]);
   const capacity = fleet ? capacitySummary(fleet.nodes) : null;
@@ -112,12 +121,12 @@ export function OverviewPage() {
   const summaryError = data?.summary.status === "failed" ? data.summary.error : null;
   const readFailures = data?.sessions.failures ?? [];
   const reachable = webApiReachable([
-    projectsState.state.status === "failed" ? { status: "failed", error: projectsState.state.error } : projectsState.state.status === "ready" ? { status: "ready" } : { status: "pending" },
+    projectsFailed ? { status: "failed", error: projectsState.failure } : projectsState.state.status === "ready" ? { status: "ready" } : { status: "pending" },
     data === null ? { status: "pending" } : data.summary.status === "failed" ? { status: "failed", error: data.summary.error } : { status: "ready" },
   ]);
   const health = serviceHealth({
     coreReachable: reachable,
-    collectionFailed: summaryError !== null || readFailures.length > 0 || projectsState.state.status === "failed",
+    collectionFailed: summaryError !== null || readFailures.length > 0 || projectsFailed,
     capacity,
     recentFailedSessions: failuresLastHour,
   });
@@ -130,26 +139,26 @@ export function OverviewPage() {
       ? t("tiles.nodesOffline", { count: offline })
       : degraded > 0
         ? t("kpi.nodesNeedAttention", { count: degraded })
-        : summaryError !== null || readFailures.length > 0
+        : summaryError !== null || readFailures.length > 0 || projectsFailed
           ? t("kpi.readsFailed")
           : failuresLastHour
             ? t("tiles.failuresLastHour", { count: failuresLastHour })
             : reachable ? t("kpi.coreReachable") : t("health.unknown");
 
-  const loading = state.status === "loading" || (fleetState.status === "ready" && fleetState.refreshing);
+  const loading = refreshing || projectsState.state.status === "loading" || (fleetState.status === "ready" && fleetState.refreshing);
   const updatedAt = data?.loadedAt ?? fleet?.loadedAt ?? null;
   const attentionTotal = totals ? attentionCount(totals.sessions) : null;
   const truncated = data?.sessions.truncated ?? [];
   // Whether any Session exists: Core's summary counts them all; without it, any Session read counts.
   const sessionCount = totals ? totals.sessions.total
     : sessions?.length ? sessions.length
-    : summaryError !== null || (state.status === "failed" && data === null) ? "failed" : null;
+    : summaryError !== null || sessionReadsFailed ? "failed" : null;
 
   // Each failed read is its own toast, shown once while it lasts.
-  useFailureToast(failure !== null, t("errors.load", { reason: failure ?? "" }), "overview-load");
-  useFailureToast(summaryError !== null, t("errors.summary", { reason: summaryError === null ? "" : errorText(summaryError) }), "overview-summary");
+  useFailureToast(failure !== null, tCommon("readFailure.unknown"), "overview-load");
+  useFailureToast(summaryError !== null, t("errors.summary", { reason: summaryError === null ? "" : readError(summaryError, tCommon) }), "overview-summary");
   useFailureToast(readFailures.length > 0, tCommon("project.partial", { names: readFailures.map((entry) => entry.project.name).join(", ") }), "overview-partial");
-  useFailureToast(projectsState.state.status === "failed", t("errors.projects", { reason: projectsState.state.status === "failed" ? String(projectsState.state.error) : "" }), "overview-projects");
+  useFailureToast(projectsFailed, t("errors.projects", { reason: projectsState.state.status === "failed" ? projectsState.state.error : projectsState.refreshError ?? "" }), "overview-projects");
 
   const openSession = (entry: InProject<AgentSession>) => navigate("session", { project: entry.project.id, id: entry.value.id });
 
@@ -159,10 +168,12 @@ export function OverviewPage() {
         headingId="overview-heading"
         title={t("title")}
         help={t("description")}
-        actions={<RefreshButton refreshing={loading} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={() => { projectsState.refresh(); refresh(); refreshFleet(); }} />}
+        actions={<RefreshButton refreshing={loading} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={refreshAll} />}
       />
       <PageBody>
-        <GettingStarted fleet={fleetState} sessions={sessionCount} />
+        <InstallationNotice installation={installation.data} />
+        {!installation.isPending ? <GettingStarted fleet={fleetState} sessions={sessionCount} localOnly={installation.data?.local_only} /> : null}
+        {readFailed && data !== null ? <ReadFailure onRetry={refreshAll} partial /> : null}
         <div className="overview-tiles" aria-label={t("kpi.label")}>
           <MetricTile
             index={0}
@@ -227,6 +238,7 @@ export function OverviewPage() {
                 </span>
               ) : null}
             </header>
+            {sessionReadsFailed ? <ReadFailure onRetry={refreshAll} partial={activity !== null} /> : null}
             {activity ? (
               <div className="overview-card-body">
                 <TimeSeriesChart
@@ -241,10 +253,10 @@ export function OverviewPage() {
                   height={196}
                 />
               </div>
-            ) : <p className="detail-note overview-card-note" role="status">{t("activity.loading")}</p>}
+            ) : sessionReadsFailed ? null : <p className="detail-note overview-card-note" role="status">{t("activity.loading")}</p>}
           </section>
 
-          <FleetCard fleetState={fleetState} core={core} />
+          <FleetCard fleetState={fleetState} core={core} localOnly={installation.data?.local_only === true} />
         </div>
 
 
@@ -262,7 +274,8 @@ export function OverviewPage() {
             </div>
             <button className="button outline" type="button" onClick={() => navigate("sessions")}>{t("attention.viewLog")}</button>
           </header>
-          <AttentionTable sessions={attention} expected={attentionTotal} unread={readFailures.map((failure) => failure.project.name)} now={now} onOpen={openSession} />
+          {sessionReadsFailed || summaryError !== null ? <ReadFailure onRetry={refreshAll} partial={Boolean(attention?.length)} /> : null}
+          {attention?.length || (!sessionReadsFailed && summaryError === null) ? <AttentionTable sessions={attention} expected={attentionTotal} unread={readFailures.map((failure) => failure.project.name)} truncated={truncated.length > 0} now={now} onOpen={openSession} /> : null}
         </section>
 
         <section className="overview-card overview-table-card" aria-labelledby="projects-heading">
@@ -273,7 +286,8 @@ export function OverviewPage() {
             </div>
             <button className="button outline" type="button" onClick={() => navigate("projects")}>{t("projects.manage")}</button>
           </header>
-          <ProjectUsageTable rows={usageRows} failed={summaryError !== null || (state.status === "failed" && data === null)} now={now} onOpen={(project) => navigate("projects", { id: project.id })} />
+          {readFailed || summaryError !== null ? <ReadFailure onRetry={refreshAll} partial={Boolean(usageRows?.length)} /> : null}
+          {usageRows?.length || (!readFailed && summaryError === null) ? <ProjectUsageTable rows={usageRows} failed={false} now={now} onOpen={(project) => navigate("projects", { id: project.id })} /> : null}
         </section>
       </PageBody>
     </section>
@@ -302,7 +316,7 @@ function cloudHost(fleet: FleetSnapshot | null): CloudHost | null {
 }
 
 /** Core and its sandbox nodes (or E2B's cloud) as a topology; each opens a popover with the way onward. */
-function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreStatus }) {
+function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; core: CoreStatus; localOnly: boolean }) {
   const { t } = useTranslation("overview");
   const { navigate } = useConsoleNavigation();
   const fleet = fleetSnapshot(fleetState);
@@ -322,7 +336,7 @@ function FleetCard({ fleetState, core }: { fleetState: FleetState; core: CoreSta
             ? <button className="button outline" type="button" onClick={() => navigate("nodes")}>{t("fleet.setUp")}</button>
             : cloud || hosts.length
               ? <button className="button outline" type="button" onClick={() => navigate("nodes")}>{cloud ? t("fleet.cloud.openBackend") : t("fleet.manageNodes")}</button>
-              : <button className="button outline" type="button" onClick={() => navigate("nodes", {}, "add-node")}>{t("fleet.addNode")}</button>
+              : <button className="button outline" type="button" onClick={() => navigate("nodes", {}, localOnly ? undefined : "add-node")}>{t(localOnly ? "fleet.manageNodes" : "fleet.addNode")}</button>
         ) : null}
       </header>
       <div className="overview-card-body fleet-body">
@@ -431,12 +445,13 @@ function sessionTitle(session: AgentSession): string | null {
  * every Session list was read and Core's summary agrees; otherwise the empty
  * table says the Sessions could not be listed.
  */
-function AttentionTable({ sessions, expected, unread, now, onOpen }: {
+function AttentionTable({ sessions, expected, unread, truncated, now, onOpen }: {
   sessions: InProject<AgentSession>[] | null;
   /** Sessions needing attention by Core's summary, when it was read. */
   expected: number | null;
   /** Projects whose Session list could not be read. */
   unread: string[];
+  truncated: boolean;
   now: number;
   onOpen: (entry: InProject<AgentSession>) => void;
 }) {
@@ -449,7 +464,7 @@ function AttentionTable({ sessions, expected, unread, now, onOpen }: {
       ? t("attention.unreadDescription", { names: unread.join(", ") })
       : expected
         ? t("attention.unlistedDescription", { count: expected })
-        : null;
+        : truncated || expected === null ? t("attention.partialHelp") : null;
     return (
       <div className="overview-card-body">
         {description ? <EmptyState title={t("attention.unlistedTitle")} description={description} /> : <EmptyState title={t("attention.emptyTitle")} hint={t("attention.emptyDescription")} />}

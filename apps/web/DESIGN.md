@@ -658,21 +658,32 @@ key count in a section heading reads "3 active · 1 revoked" (revoked left out
 at zero).
 
 ### Notices
-Errors are popups, never lines inserted into a page. A failed action whose outcome
-needs a decision (a sandbox change with no answer, a timeout or a 5xx) opens an
-error dialog with the reason and the next step as its primary button. A failed
-refresh that keeps the last data on screen, projects that could not be read, and
+On Overview and Session log, failed reads that leave a section unavailable replace
+its contents with ErrorState and Retry. Partial or stale reads keep useful rows
+and figures, with a durable ErrorState and Retry beside them explaining that
+coverage may be incomplete or out of date. A failed read never supplies a zero
+chart or an all-clear; successfully read zero values stay zero. Session log status
+counts stay missing until the reads succeed.
+
+A failed action whose outcome needs a decision (a sandbox change with no answer,
+a timeout or a 5xx) opens an error dialog with the reason and the next step as its
+primary button. Failed refreshes and project reads also raise an error toast;
 other failed actions, Core's clear refusal of a sandbox change among them, are
-reported in an error toast with the reason; a refusal leaves the page usable as it
-was. Only when a page or section has nothing to show does an error state take the
-place of its content; errors inside a dialog or a form
-stay beside what they concern. Coverage notes (Margin Gray, Hairline, 12px corners,
-12.5px Graphite) state bounded aggregation. A standing warning that needs action,
-such as the Nodes page naming nodes still bound to an old Core address, is an
-amber-tinted line at the top of the page body; each of those nodes' status reads
-Old address (amber dot) with "Remove and add again" under it in 12px Graphite.
-Partial-data chips are amber-tinted pills with a help tip. Safety notices (a key
-shown once, a destructive consequence) stay visible in body text.
+reported there with the reason. A refusal leaves the page usable as it was.
+Errors inside a dialog or a form stay beside what they concern. Coverage notes
+(Margin Gray, Hairline, 12px corners, 12.5px Graphite) state bounded aggregation.
+Standing warnings that need action use an amber-tinted line at the top of the page
+body. On Nodes, this names nodes still bound to an old Core address; each of those
+nodes' status reads Old address (amber dot) with "Remove and add again" under it
+in 12px Graphite. Partial-data chips are amber-tinted pills with a help tip. Safety
+notices (a key shown once, a destructive consequence) stay visible in body text.
+
+A local-only installation has the same amber notice on Overview, Nodes and System:
+other machines cannot connect, followed by Core's configuration path and apply
+command as copyable values. If Core has no configuration snapshot, state that
+those instructions are unavailable; never fill in a path or command. Add node is
+disabled with its reason beside the action, and Getting started leaves its first
+step to do with the address fix visible.
 
 ### Onboarding
 Signing in and the console tour share one frame: a dark stage on the left (always

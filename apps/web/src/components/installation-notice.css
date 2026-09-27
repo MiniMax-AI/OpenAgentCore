@@ -1,0 +1,10 @@
+.installation-notice {
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--warning) 25%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning) 7%, var(--surface));
+  font-size: 13px;
+  line-height: 1.6;
+}
+.installation-notice p { margin: 0; }
+.installation-notice p + p { margin-top: 4px; }

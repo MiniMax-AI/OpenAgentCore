@@ -3,6 +3,7 @@ import { QueryClientProvider, useQueries, useQuery, useQueryClient } from "@tans
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { readError } from "./read-error";
 import { ConsoleSelect } from "../components/console-select";
 import { HelpTip } from "../components/console-ui";
 import { admin, listCreators, type Creator, type OwnerResourceType, type Project } from "./admin-view";
@@ -28,6 +29,8 @@ interface ProjectsContextValue {
   byId: ReadonlyMap<string, Project>;
   /** Why the last refresh failed while earlier projects stay on screen. */
   refreshError: string | null;
+  /** Original query failure for classification; translated display text is never evidence. */
+  failure: unknown;
 }
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
@@ -42,18 +45,20 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
 }
 
 function ProjectsState({ children }: { children: ReactNode }) {
+  const { t } = useTranslation("common");
   const query = useQuery(projectsQuery);
   const projects = useMemo(() => query.data ?? [], [query.data]);
   const state: ProjectsState = query.isPending
     ? { status: "loading", projects, error: null }
     : query.isError && !query.data
-      ? { status: "failed", projects, error: query.error instanceof Error ? query.error.message : String(query.error) }
+      ? { status: "failed", projects, error: readError(query.error, t) }
       : { status: query.isFetching ? "loading" : "ready", projects, error: null };
   const { refetch } = query;
   const refresh = useCallback(() => { void refetch(); }, [refetch]);
   const byId = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
-  const refreshError = query.isError && query.data ? (query.error instanceof Error ? query.error.message : String(query.error)) : null;
-  const value = useMemo(() => ({ state, refresh, byId, refreshError }), [state.status, state.error, projects, refresh, byId, refreshError]); // eslint-disable-line react-hooks/exhaustive-deps
+  const refreshError = query.isError && query.data ? (readError(query.error, t)) : null;
+  const failure = query.isError ? query.error : null;
+  const value = useMemo(() => ({ state, refresh, byId, refreshError, failure }), [state.status, state.error, projects, refresh, byId, refreshError, failure]); // eslint-disable-line react-hooks/exhaustive-deps
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;
 }
 

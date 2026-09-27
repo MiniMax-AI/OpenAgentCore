@@ -9,6 +9,7 @@ import { ErrorDialog } from "../../components/ErrorDialog";
 import { ErrorState } from "../../components/ErrorState";
 import { useFailureToast, useToast } from "../../components/Toast";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
+import { InstallationNotice } from "../../components/InstallationNotice";
 import { installationQuery } from "../../lib/installation";
 import { sandboxConfigurationRejection, sandboxRequestError, sandboxWriteUncertain } from "../../lib/sandbox-labels";
 import type { SandboxConsoleConfig } from "./console-config";
@@ -62,6 +63,9 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const client = sandboxAdmin;
   const queryClient = useQueryClient();
   const query = useQuery(sandboxSnapshotQuery);
+  const installation = useQuery(installationQuery);
+  const localOnly = installation.data?.local_only === true;
+  const { t: tCommon } = useTranslation("common");
   const snapshot: SandboxSnapshot | null = query.data ?? null;
   const loading = query.isFetching;
   // As before a reload clears the last error, a running read hides it.
@@ -151,7 +155,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   }
   /** First setup; own machines continue straight to adding the first node. */
   async function initialize(input: InitializeSandboxDeployment) {
-    if (await changeDeployment((signal) => client.initializeDeployment(input, { signal }), true) && input.provider !== "e2b") setAdding(true);
+    if (await changeDeployment((signal) => client.initializeDeployment(input, { signal }), true) && input.provider !== "e2b" && !localOnly) setAdding(true);
   }
   async function update(input: InitializeSandboxDeployment) {
     await changeDeployment((signal) => client.updateDeployment({ ...input, expected_generation: snapshot!.deployment.generation }, { signal }), true);
@@ -202,9 +206,9 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   // Getting started asks for Add node on arrival. A request the first settled read cannot
   // serve (no own-machines deployment, maintenance, a failed read) is dropped, so the
   // dialog never opens later on its own.
-  const addNodeReadiness = loading || busy ? "wait"
+  const addNodeReadiness = loading || busy || installation.isPending ? "wait"
     : !snapshot ? (query.isError ? "unavailable" : "wait")
-    : hostedNodes && fresh && !snapshot.deployment.maintenance ? "ready" : "unavailable";
+    : hostedNodes && fresh && !snapshot.deployment.maintenance && !localOnly ? "ready" : "unavailable";
   useConsoleIntent("add-node", addNodeReadiness, () => setAdding(true));
   // A node enrolled with another address than Core's current one (config.json's public_url) gets no new sandboxes until it is added again.
   const staleNodes = hostedNodes && snapshot ? nodes.filter((node) => onOldAddress(node, snapshot.deployment.core_url)).map((node) => node.name || node.id) : [];
@@ -214,6 +218,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   // A failed refresh keeps the last state on screen and says so in a toast, once while the failure lasts.
   useFailureToast(snapshot && query.isError ? sandboxRequestError(query.error, locale) : null, t("Refresh failed; showing the last loaded state."), "sandbox-read");
   const status = <>
+    <InstallationNotice installation={installation.data} />
     {!snapshot && (loading || query.isPending) ? <p role="status">{t("Loading sandbox state…")}</p> : null}
     {busy ? <span role="status">{t("Saving sandbox change…")}</span> : null}
     {!snapshot && readFailure ? <ErrorState title={t("Sandbox state couldn't be read")} detail={readFailure} onRetry={refresh} /> : null}
@@ -283,8 +288,9 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   }
 
   const actions = <>
+    {localOnly && hostedNodes ? <span id="add-node-blocked" className="muted">{tCommon("installationNotice.addBlocked")}</span> : null}
     {refreshButton}
-    {hostedNodes && snapshot ? <button type="button" className="button primary" disabled={busy || loading || !fresh || snapshot.deployment.maintenance} onClick={() => setAdding(true)}><Plus size={16} />{t("Add node")}</button> : null}
+    {hostedNodes && snapshot ? <button type="button" className="button primary" disabled={busy || loading || !fresh || snapshot.deployment.maintenance || localOnly} aria-describedby={localOnly ? "add-node-blocked" : undefined} onClick={() => setAdding(true)}><Plus size={16} />{t("Add node")}</button> : null}
   </>;
   return <>
     {enrollment}

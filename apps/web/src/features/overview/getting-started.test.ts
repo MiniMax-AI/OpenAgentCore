@@ -15,6 +15,12 @@ const provider = { object: "core.model_provider", protocol: "responses", base_ur
 const harness = (id: CoreHarness["id"], fields: Partial<CoreHarness> = {}): CoreHarness => ({ object: "core.harness", id, enabled: true, default: false, model_provider: null, ...fields });
 
 describe("Getting started steps", () => {
+  it("keeps local-only installations to do even with a ready node or cloud deployment", () => {
+    for (const provider of ["docker", "e2b"] as const) {
+      const steps = gettingStartedSteps({ fleet: fleet(deployment({ provider })), projects: [], sessions: 1, harnesses: [], localOnly: true });
+      expect(steps.sandboxes).toMatchObject({ state: "todo", action: "nodes", cloud: provider === "e2b" });
+    }
+  });
   it("counts sandboxes ready with a saved deployment and a ready node, or a saved E2B deployment whose build is not reported unready", () => {
     expect(sandboxes(fleet(deployment({ provider: "", mode: "" }), []))).toMatchObject({ state: "todo", action: "setup" });
     expect(sandboxes(fleet(deployment(), []))).toMatchObject({ state: "todo", action: "add-node" });

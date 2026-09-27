@@ -1,4 +1,19 @@
 export const common = {
+  readFailure: {
+    title: "无法读取数据",
+    partial: "部分读取失败。当前数字和列表仅来自已读取的数据，可能不完整或已过期。",
+    request: "Core 请求失败（{{status}}）。",
+    unknown: "无法从 Core 读取数据，请重试更新。",
+  },
+  installationNotice: {
+    title: "公开地址需要处理",
+    body: "当前公开地址只能在 Core 所在机器上访问，其他机器上的应用、节点和 executor 无法连接。",
+    repair: "在 <path/> 中将 public_url 改为其他机器可访问的 HTTPS 地址，然后运行 <command/>。",
+    noConfiguration: "请在安装配置中将 public_url 改为其他机器可访问的 HTTPS 地址，再在 Core 主机上应用配置。Core 尚未提供配置文件路径和应用命令。",
+    copyPath: "复制配置文件路径",
+    copyCommand: "复制应用命令",
+    addBlocked: "公开地址仅限本机访问，暂时无法添加节点。",
+  },
   actions: {
     cancel: "取消",
     close: "关闭",
