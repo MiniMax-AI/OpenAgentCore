@@ -137,9 +137,13 @@ test("issues no command before the installation is read, for a loopback public U
   await expect(add.getByRole("status")).toHaveText("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run parsar apply");
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   await add.getByRole("button", { name: "Close dialog" }).click();
+  await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeDisabled();
+  await expect(page.getByText("Add node is unavailable while the public address is local only.")).toBeVisible();
 
-  // A thin bundle: the console holds no node files at all.
+  // Applying a public address is an external change. Refresh the page's cached
+  // installation before Add node becomes available again, then check a thin bundle.
   await openConsole(page, request, "nodes", { nodeArtifacts: [] });
+  await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   await page.getByRole("button", { name: "Add node" }).click();
   await expect(add.getByRole("status")).toHaveText("This console has no node files for Docker. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.");
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
