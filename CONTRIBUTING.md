@@ -820,14 +820,14 @@ deployment. Harness selection and public/self-hosted contracts remain unchanged.
 The paired console serves only matched, non-secret distribution artifacts for node
 installation. Never serve private installation files or arbitrary paths. Installation
 reads `GET /api/v1/sandbox-node/configuration` using an unconsumed enrollment token,
-or a retained node credential with `X-Parsar-Node-ID`. Reads never consume enrollment;
+or a retained node credential with `X-OAC-Node-ID`. Reads never consume enrollment;
 registered nodes can read their matching configuration during maintenance. Validate
 installation, generation, specification digest and release before writing node files,
 registering or reconnecting. Reject drift rather than overwriting retained identity
 or using local resource defaults. Registration consumes a token only after these
 checks. The installer verifies downloaded files and starts the ordinary node process
 as a user service, or, run as root, as a root-owned system service for the dedicated
-`parsar-node` user it prepares; it performs no SSH installation, Session creation or
+`oac-node` user it prepares; it performs no SSH installation, Session creation or
 model call.
 
 Node management (Web's **Nodes** page; see the
@@ -1908,9 +1908,9 @@ preserves resident microVM/helper processes across a node-service restart. User 
 access and the Linux runtime libraries are prerequisites for microsandbox. The node
 installed by a normal user runs as a systemd user service and needs linger. Run as
 root (sudo mode), the installer instead prepares the host: it creates or adopts the
-`parsar-node` system user, adds it to the `docker` or `kvm` device group (no other
+`oac-node` system user, adds it to the `docker` or `kvm` device group (no other
 group), and installs one root-owned system service per installation that runs the
-same node program with `User=parsar-node`. Sudo mode serves one Core per host,
+same node program with `User=oac-node`. Sudo mode serves one Core per host,
 because its nodes share that account. Docker group membership makes that user,
 and so the node, root-equivalent on the host; that is inherent to Docker sandboxes,
 not a least-privilege boundary. Microsandbox needs only `kvm`. Files the service
@@ -1935,15 +1935,30 @@ The basic API image and binary builds remain independent artifacts.
 The standalone API release and Core distribution both include the nodes operator
 reference (`HOSTED-SANDBOX-MANAGER.md`) at the relative path used by their packaged README. Include the
 guide in each artifact checksum list so extracted documentation matches its build.
-The node asset includes the sandbox-node binary. The installer's Docker and
+The node asset includes the `oac-node` binary. The installer's Docker and
 microsandbox selections use Web's Standard size from
 `apps/web/src/features/sandbox/standard-sizes.json`, which the distribution build
 copies into the bundle; keep no second copy of those values. An existing database
 selection is never overwritten by installer defaults. Node configuration and identity live under
-`~/.parsar/nodes/<installation-id>/` in the node account's home (`/var/lib/parsar-node`
+`~/.oac/nodes/<installation-id>/` in the node account's home (`/var/lib/oac-node`
 in sudo mode); microsandbox uses its separate short private
 Runtime home. Zero-node installs create no node identity state but retain the paired
 Core key for first setup.
+
+Node installation refuses pre-rename resources for the same installation ID: old
+records, node directories, units and Docker networks. It never adopts those
+resources or removes another installation. Remove the node on its old Core, then
+uninstall with the previous release before adding it again. The machine
+configuration route rejects `X-Parsar-Node-ID` with `400 invalid_request`; only
+`X-OAC-Node-ID` identifies a retained node credential.
+
+Self-hosted installations use `oac-selfhost` and `~/.oac/self-hosted/<environment-id>`.
+The installer refuses an existing `~/.parsar/self-hosted/<environment-id>` for the
+same Environment, even with a custom new install directory. Old executors keep
+running with their own image and history; operators explicitly stop and remove
+them before replacing them. New installation never adopts their native history.
+Credential replacement for a new installer-owned executor retains its existing
+container and ownership checks.
 
 One Runtime image contains the existing daemon, shared helpers and three native
 harness packages. Their differences remain in the adapters. Core keeps exclusive

@@ -117,7 +117,7 @@ OAC_DEV_BUILD_REVISION="$revision" OAC_DEV_CORE_BUILD_DIR="$stage/core/bin" scri
 (
   cd services/agents-api/tools/microsandbox-provider
   GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath \
-    -o "$stage/core/bin/agents-api-microsandbox-provider" .
+    -o "$stage/core/bin/oac-microsandbox-provider" .
 )
 msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-v0.7.2-linux-x86_64.tar.gz}"
 if [[ ! -f "$msb_archive" ]]; then
@@ -143,7 +143,7 @@ core_image="$(cat "$stage/core.id")"
 # Fail at packaging time if the helper or runtime requires unavailable host libraries.
 docker run --rm --network none --entrypoint /bin/sh \
   --mount "type=bind,src=$stage/core/microsandbox,dst=/opt/microsandbox,readonly" \
-  --mount "type=bind,src=$stage/core/bin/agents-api-microsandbox-provider,dst=/opt/provider,readonly" \
+  --mount "type=bind,src=$stage/core/bin/oac-microsandbox-provider,dst=/opt/provider,readonly" \
   "$core_image" -ec \
   'for p in /opt/provider /opt/microsandbox/msb /opt/microsandbox/libkrunfw.so.5.6.1; do ! ldd "$p" | grep "not found"; done; /opt/microsandbox/msb --version'
 
@@ -158,7 +158,7 @@ export AGENTS_EXECUTOR_BUILD_DIR="$stage/helpers"
 scripts/build-agents-executor.sh
 CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
 cp "$stage/oac-daemon" "$bundle/native/bin/oac-daemon"
-CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$bundle/native/bin/parsar-runtime" ./services/agents-api/cmd/runtime
+CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$bundle/native/bin/oac-selfhost" ./services/agents-api/cmd/runtime
 codex_image="${CORE_DISTRIBUTION_CODEX_IMAGE:-}"
 claude_image="${CORE_DISTRIBUTION_CLAUDE_IMAGE:-}"
 mcode_image="${CORE_DISTRIBUTION_MCODE_IMAGE:-}"

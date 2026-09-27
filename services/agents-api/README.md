@@ -80,7 +80,7 @@ configuration and a separately installed execution daemon are still required;
 these binaries do not establish full protocol coverage. For a standalone Linux
 container, see [Container deployment](CONTAINER.md).
 
-`make build-agents-api-release` packages these commands and `parsar-sandbox-node` in a versioned
+`make build-agents-api-release` packages these commands and `oac-node` in a versioned
 Linux amd64 archive, with source/protocol identity, checksums, a license and
 [operator instructions](RELEASE.md). Build from a clean Git worktree with Go and
 Python 3.9+; output defaults to `~/.oac/build/agents-api-release` (or
@@ -637,7 +637,7 @@ not changes to the pinned official protocol.
 
 ## Hosted sandbox nodes
 
-The release includes `parsar-sandbox-node` for local and remote hosts. Add nodes with
+The release includes `oac-node` for local and remote hosts. Add nodes with
 Web's one-command flow in the [nodes guide](../../docs/getting-started/nodes.md); the
 [operator reference](HOSTED-SANDBOX-MANAGER.md) covers provider selection, manual
 registration, administrator credentials, fixed Session placement and maintenance.

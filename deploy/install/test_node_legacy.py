@@ -68,6 +68,16 @@ class LegacyNodeTests(unittest.TestCase):
         self.assert_refusal()
         self.assertTrue(path.is_symlink())
 
+    def test_intermediate_symlink_refuses_without_following_it(self):
+        target = self.root / "private-target"
+        target.mkdir()
+        (self.home / ".parsar").symlink_to(target, target_is_directory=True)
+        with mock.patch.object(installer, "open_node") as opened:
+            with self.assertRaisesRegex(installer.InstallError, "Cannot inspect possible legacy node state.*Nothing was changed"):
+                installer.install(self.args, "private-token")
+            opened.assert_not_called()
+        self.assertEqual(list(target.iterdir()), [])
+
     def test_other_installations_and_old_account_alone_do_not_refuse(self):
         for path in [installer.LEGACY_RECORDS / (self.other + ".json"),
                      installer.LEGACY_RECORDS / "account.json",

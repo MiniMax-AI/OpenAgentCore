@@ -368,16 +368,16 @@ def make_bundle(directory, manifest, commit=None):
         (bundle / name).write_bytes(b"synthetic verified Python bootstrap")
     (bundle / "oac.pyz").write_bytes(b"synthetic oac command " + manifest["source_commit"].encode())
     manifest["artifacts"] = {}
-    for name in ("images/runtime.tar.gz", "native/bin/parsar-sandbox-node",
-                 "native/bin/agents-api-microsandbox-provider", "native/microsandbox/msb",
+    for name in ("images/runtime.tar.gz", "native/bin/oac-node",
+                 "native/bin/oac-microsandbox-provider", "native/microsandbox/msb",
                  "native/microsandbox/libkrunfw.so.5.6.1"):
         manifest["artifacts"][name] = {"filename": "oac-" + manifest["source_commit"] + "-" + name.replace("/", "-"),
                                        "sha256": "a" * 64, "size": 1}
     (bundle / "manifest.json").write_text(json.dumps(manifest))
     for name in manifest["images"]:
         (bundle / "images" / (name + ".tar")).write_bytes(("synthetic " + name).encode())
-    for name in ("bin/oac-core", "bin/oac-core-migrate", "bin/agents-api-microsandbox-provider",
-                 "bin/parsar-sandbox-node", "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1",
+    for name in ("bin/oac-core", "bin/oac-core-migrate", "bin/oac-microsandbox-provider",
+                 "bin/oac-node", "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1",
                  "e2b/oac-e2b-provider"):
         path = bundle / "native" / name
         path.parent.mkdir(parents=True, exist_ok=True)

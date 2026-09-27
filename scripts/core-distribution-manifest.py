@@ -21,10 +21,10 @@ RUNTIME_ARCHIVE_SHA256 = "47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 ARTIFACTS = {
     "images/runtime.tar.gz": "runtime.tar.gz",
-    "native/bin/parsar-sandbox-node": "sandbox-node",
+    "native/bin/oac-node": "sandbox-node",
     "native/bin/oac-daemon": "daemon",
-    "native/bin/parsar-runtime": "runtime-launcher",
-    "native/bin/agents-api-microsandbox-provider": "microsandbox-provider",
+    "native/bin/oac-selfhost": "runtime-launcher",
+    "native/bin/oac-microsandbox-provider": "microsandbox-provider",
     "native/microsandbox/msb": "msb",
     "native/microsandbox/libkrunfw.so.5.6.1": "libkrunfw.so.5.6.1",
     "runtime/seccomp.json": "seccomp.json",

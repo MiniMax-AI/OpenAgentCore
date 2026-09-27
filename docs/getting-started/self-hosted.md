@@ -131,7 +131,7 @@ the credential and keep it:
 ```sh
 key_id=$(python3 -c 'import uuid; print(uuid.uuid4())'); echo "credential ID: $key_id"
 (umask 077; curl -fsS -X POST \
-  -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.parsar/core/secrets/core.key")") \
+  -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.oac/core/secrets/core.key")") \
   -H 'Content-Type: application/json' -d "{\"key_id\":\"$key_id\"}" \
   "http://127.0.0.1:8091/core/v1/projects/$PROJECT_ID/environments/$ENVIRONMENT_ID/executor-credentials" \
   -o executor-key.json)

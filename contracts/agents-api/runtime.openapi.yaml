@@ -144,11 +144,11 @@ info:
 paths:
   /api/v1/sandbox-node/configuration:
     get:
-      description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-Parsar-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.
+      description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-OAC-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.
       parameters:
         - description: Retained node UUID
           in: header
-          name: X-Parsar-Node-ID
+          name: X-OAC-Node-ID
           type: string
       produces:
         - application/json

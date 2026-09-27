@@ -475,6 +475,23 @@ LEGACY_RECORDS = Path("/etc/parsar-node")
 LEGACY_SERVICE_HOME = Path("/var/lib/parsar-node")
 
 
+def legacy_path_present(path):
+    """Inspect only metadata, without following links in user-controlled directories."""
+    descriptors = []
+    try:
+        descriptors.append(os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW))
+        for part in path.parts[1:-1]:
+            descriptors.append(os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                       dir_fd=descriptors[-1]))
+        os.stat(path.name, dir_fd=descriptors[-1], follow_symlinks=False)
+        return True
+    except FileNotFoundError:
+        return False
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
 def refuse_legacy_node(args):
     """Reject pre-rename resources for this installation, leaving every other one alone."""
     installation = args.installation_id
@@ -499,10 +516,8 @@ def refuse_legacy_node(args):
     found = []
     for path in paths:
         try:
-            path.lstat()  # A dangling final symlink is still retained state.
-            found.append(str(path))
-        except FileNotFoundError:
-            pass
+            if legacy_path_present(path):  # A dangling final symlink is still retained state.
+                found.append(str(path))
         except OSError:
             raise InstallError("Cannot inspect possible legacy node state at " + str(path)
                                + "; check this path before installing." + NOTHING_CHANGED) from None
