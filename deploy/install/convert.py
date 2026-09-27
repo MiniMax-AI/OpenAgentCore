@@ -240,7 +240,26 @@ def legacy_unit_name(old):
 
 
 def legacy_disable(old, run):
-    run(["systemctl", "--user", "disable", "--now", legacy_unit_name(old)])
+    unit = legacy_unit_name(old)
+
+    def status():
+        result = run(["systemctl", "--user", "show", unit,
+                      "--property=LoadState,ActiveState,SubState,MainPID"], capture_output=True, text=True)
+        return dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+
+    def require_stopped(properties):
+        if any(properties.get(key) != value for key, value in
+               (("ActiveState", "inactive"), ("SubState", "dead"), ("MainPID", "0"))):
+            raise ConvertError("The old native Core service is not confirmed inactive; refusing to copy its database")
+
+    before = status()
+    if before.get("LoadState") == "not-found":
+        # disable --now unlinks a linked user unit. A copy interrupted afterwards
+        # must resume without disabling it again, but never with an orphan writer.
+        require_stopped(before)
+        return
+    run(["systemctl", "--user", "disable", "--now", unit])
+    require_stopped(status())
 
 
 def old_core_deployment(root, old, plan, run):

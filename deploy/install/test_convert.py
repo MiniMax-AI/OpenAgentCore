@@ -372,5 +372,66 @@ class ConvertTests(unittest.TestCase):
         self.assertConverted()
 
 
+class LegacyDisableTests(unittest.TestCase):
+    unit = "parsar-0123456789-core.service"
+    old = {"project": "parsar-0123456789"}
+    show = ["systemctl", "--user", "show", unit, "--property=LoadState,ActiveState,SubState,MainPID"]
+    disable = ["systemctl", "--user", "disable", "--now", unit]
+
+    def status(self, load="loaded", active="inactive", sub="dead", pid="0"):
+        return subprocess.CompletedProcess(self.show, 0,
+            f"MainPID={pid}\nLoadState={load}\nActiveState={active}\nSubState={sub}\n", "")
+
+    def test_linked_unit_is_disabled_and_confirmed_stopped(self):
+        for active, sub, pid in (("active", "running", "1234"), ("inactive", "dead", "0")):
+            with self.subTest(active=active):
+                run = mock.Mock(side_effect=[self.status(active=active, sub=sub, pid=pid),
+                    subprocess.CompletedProcess(self.disable, 0), self.status(load="not-found")])
+                convert.legacy_disable(self.old, run)
+                self.assertEqual(run.call_args_list, [mock.call(self.show, capture_output=True, text=True),
+                    mock.call(self.disable), mock.call(self.show, capture_output=True, text=True)])
+
+    def test_unlinked_inactive_unit_is_already_stopped(self):
+        # Actual systemctl output after disable --now unlinks a user unit.
+        run = mock.Mock(return_value=self.status(load="not-found"))
+        convert.legacy_disable(self.old, run)
+        run.assert_called_once_with(self.show, capture_output=True, text=True)
+
+    def test_unlinked_orphan_and_uncertain_states_refuse(self):
+        for active, sub, pid in (("active", "running", "1234"), ("activating", "start", "0"),
+                                 ("deactivating", "stop", "0"), ("failed", "failed", "0"),
+                                 ("inactive", "dead", "1234"), ("inactive", "running", "0")):
+            with self.subTest(active=active, sub=sub, pid=pid):
+                run = mock.Mock(return_value=self.status(load="not-found", active=active, sub=sub, pid=pid))
+                with self.assertRaisesRegex(convert.ConvertError, "not confirmed inactive"):
+                    convert.legacy_disable(self.old, run)
+                self.assertEqual(run.call_count, 1)
+        for stdout in ("", "LoadState=not-found\n", "LoadState=not-found\nActiveState=inactive\nSubState=dead\n"):
+            run = mock.Mock(return_value=subprocess.CompletedProcess(self.show, 0, stdout, ""))
+            with self.assertRaisesRegex(convert.ConvertError, "not confirmed inactive"):
+                convert.legacy_disable(self.old, run)
+
+    def test_command_failures_are_never_treated_as_missing_inactive_units(self):
+        for command, message in ((self.show, "Failed to connect to bus: No medium found"),
+                                 (self.disable, f"Failed to disable unit: Unit file {self.unit} does not exist."),
+                                 (self.disable, "Failed to disable unit: Access denied")):
+            with self.subTest(command=command, message=message):
+                error = subprocess.CalledProcessError(1, command, stderr=message)
+                run = mock.Mock(side_effect=[error] if command == self.show else [self.status(), error])
+                with self.assertRaises(subprocess.CalledProcessError) as raised:
+                    convert.legacy_disable(self.old, run)
+                self.assertIs(raised.exception, error)
+        error = subprocess.CalledProcessError(1, self.show, stderr="Failed to connect to bus: Connection reset by peer")
+        run = mock.Mock(side_effect=[self.status(), subprocess.CompletedProcess(self.disable, 0), error])
+        with self.assertRaises(subprocess.CalledProcessError):
+            convert.legacy_disable(self.old, run)
+
+    def test_successful_disable_must_still_confirm_no_writer(self):
+        run = mock.Mock(side_effect=[self.status(active="active", sub="running", pid="1234"),
+            subprocess.CompletedProcess(self.disable, 0), self.status(active="active", sub="running", pid="1234")])
+        with self.assertRaisesRegex(convert.ConvertError, "not confirmed inactive"):
+            convert.legacy_disable(self.old, run)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -207,7 +207,16 @@ class RenameTests(unittest.TestCase):
                 self.assertFalse(any("rm" in command for command in self.host.commands))
 
     def test_interrupted_copy_restarts_only_owned_copy_and_preserves_old_data(self):
-        self.fixture()
+        self.assert_interrupted_copy_resumes(native=False)
+
+    def test_native_interrupted_copy_resumes_after_old_unit_was_unlinked(self):
+        self.assert_interrupted_copy_resumes(native=True)
+        disable = ["systemctl", "--user", "disable", "--now", "parsar-0123456789-core.service"]
+        self.assertEqual(self.host.commands.count(disable), 1)
+        self.assertTrue(self.host.native["active"])
+
+    def assert_interrupted_copy_resumes(self, native):
+        self.fixture(native=native)
         original = install.run
         interrupted = []
         def fail_copy(command, **kwargs):

@@ -38,6 +38,7 @@ class FakeHost:
         self.core = {"port": None, "digests": [], "fails": False, "log": "", "rejects": lambda environment: False}
         self.web_port = None
         self.native_root = None  # the installation whose native unit systemctl manages
+        self.disabled_native_units = set()
         self.missing_images = set()
         self.core_installation_id = "11111111-2222-4333-8444-555555555555"
         self.bindings = {"nodes": 0, "nodes_on_other_address": 0, "hosted_sandboxes": 0, "self_hosted_executors": 0}
@@ -239,11 +240,20 @@ class FakeHost:
                     native["environment"] = environment.read_text()
                     break
         elif args[0] in ("stop", "disable"):
+            if args[0] == "disable":
+                if args[-1] in self.disabled_native_units:
+                    return 1, ""  # A linked user unit was unlinked by the first disable.
+                self.disabled_native_units.add(args[-1])
             native["active"], native["inputs"] = False, None
         elif args[0] == "is-active":
             return (0 if native["active"] else 3), ""
         elif args[0] == "show" and "--property=MainPID" in args:
             return 0, "4242" if native["active"] else "0"
+        elif args[0] == "show" and "--property=LoadState,ActiveState,SubState,MainPID" in args:
+            missing = args[1] in self.disabled_native_units
+            active = native["active"] and not missing
+            return 0, (f"MainPID={4242 if active else 0}\nLoadState={'not-found' if missing else 'loaded'}\n"
+                       f"ActiveState={'active' if active else 'inactive'}\nSubState={'running' if active else 'dead'}\n")
         elif args[0] == "show":
             return 0, "252"
         return 0, ""
