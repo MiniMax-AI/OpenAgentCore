@@ -31,7 +31,7 @@ export const chinese = {
   "Old address": "地址已过期",
   "Remove and add again": "移除并重新添加",
   "Maintenance is enabled. New sandbox placement is paused.": "维护模式已开启，暂停分配新沙箱。",
-  "This console serves no node installer. For a console deployed by hand, point CORE_CONSOLE_NODE_PAYLOAD_DIR at the distribution's node payload and restart it.": "此控制台没有提供节点安装程序。手动部署的控制台需要把 CORE_CONSOLE_NODE_PAYLOAD_DIR 指向发行包的节点载荷目录，然后重启控制台。",
+  "This console serves no node installer. For a console deployed by hand, point OAC_WEB_NODE_PAYLOAD_DIR at the distribution's node payload and restart it.": "此控制台没有提供节点安装程序。手动部署的控制台需要把 OAC_WEB_NODE_PAYLOAD_DIR 指向发行包的节点载荷目录，然后重启控制台。",
   "This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.": "这个控制台没有 {{provider}} 的节点文件。请用离线包安装 Core，或补齐发布制品后重新运行 ./install.sh。",
   "Run on the host you want to add.": "在需要添加的主机上运行。",
   "Preparing your command…": "正在准备命令…",
