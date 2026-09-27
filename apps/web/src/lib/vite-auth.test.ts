@@ -17,22 +17,30 @@ afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
-describe("Vite Agent Core proxy authentication", () => {
+describe("Vite OpenAgentCore proxy authentication", () => {
   it("falls back to browser-managed authentication when the conventional file is absent", () => {
     const homeDir = makeTemporaryDirectory();
 
     expect(loadProxyBearerAuth({ homeDir })).toBeUndefined();
   });
 
+  it("does not read the retired conventional token path", () => {
+    const homeDir = makeTemporaryDirectory();
+    const retiredDirectory = join(homeDir, ".parsar", "agents-api");
+    mkdirSync(retiredDirectory, { recursive: true });
+    writeFileSync(join(retiredDirectory, "web-token"), "retired-token-marker", { mode: 0o600 });
+    expect(loadProxyBearerAuth({ homeDir })).toBeUndefined();
+  });
+
   it("expands the conventional home path and reads a private token file", () => {
     const homeDir = makeTemporaryDirectory();
-    const stateDirectory = join(homeDir, ".parsar", "agents-api");
+    const stateDirectory = join(homeDir, ".oac", "dev");
     const tokenFile = join(stateDirectory, "web-token");
     mkdirSync(stateDirectory, { recursive: true });
     writeFileSync(tokenFile, "local-tenant-token\n", { mode: 0o600 });
     chmodSync(tokenFile, 0o600);
 
-    expect(resolveProxyTokenFile("~/.parsar/agents-api/web-token", homeDir)).toBe(tokenFile);
+    expect(resolveProxyTokenFile("~/.oac/dev/web-token", homeDir)).toBe(tokenFile);
     expect(loadProxyBearerAuth({ homeDir })).toEqual({
       token: "local-tenant-token",
       source: "file",
@@ -43,7 +51,7 @@ describe("Vite Agent Core proxy authentication", () => {
   it("fails closed when an explicitly configured token file cannot be read", () => {
     const rootDir = makeTemporaryDirectory();
     expect(() => loadProxyBearerAuth({ tokenFile: "missing-token", rootDir })).toThrow(
-      "Cannot read Agent Core bearer token file",
+      "Cannot read OpenAgentCore bearer token file",
     );
   });
 

@@ -78,12 +78,12 @@ describe("protocol-aware Item rendering", () => {
     const html = renderToStaticMarkup(<ThreadItems items={values} agentName="Agent" />);
     for (const text of ["hello", "pwd", "other", "docs read", "Function result", "query", "Unsupported", "future_item Item"]) expect(html).toContain(text);
     expect(html).not.toContain("raw");
-    expect(html).not.toContain("Parsar apply patch diff");
+    expect(html).not.toContain("OpenAgentCore apply patch diff");
   });
 
   it("uses generic JSON for another Core's same-name payload", () => {
     const html = renderToStaticMarkup(<ThreadItems items={[item({ status: "in_progress", arguments: { patch: "*** Begin Patch" } })]} agentName="Agent" />);
     expect(html).toContain("Begin Patch");
-    expect(html).not.toContain("Parsar apply patch diff");
+    expect(html).not.toContain("OpenAgentCore apply patch diff");
   });
 });

@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
-export const DEFAULT_PROXY_TOKEN_FILE = "~/.parsar/agents-api/web-token";
+export const DEFAULT_PROXY_TOKEN_FILE = "~/.oac/dev/web-token";
 
 export interface ProxyBearerAuth {
   token: string;
@@ -44,10 +44,10 @@ export function loadProxyBearerAuth({
   const configuredFile = tokenFile?.trim();
 
   if (configuredToken && configuredFile) {
-    throw new Error("Set only one of AGENTS_API_PROXY_TOKEN or AGENTS_API_PROXY_TOKEN_FILE.");
+    throw new Error("Set only one of OAC_WEB_DEV_PROXY_TOKEN or OAC_WEB_DEV_PROXY_TOKEN_FILE.");
   }
   if (configuredToken) {
-    return { token: normalizeToken(configuredToken, "AGENTS_API_PROXY_TOKEN"), source: "environment" };
+    return { token: normalizeToken(configuredToken, "OAC_WEB_DEV_PROXY_TOKEN"), source: "environment" };
   }
 
   const explicitFile = Boolean(configuredFile);
@@ -57,23 +57,23 @@ export function loadProxyBearerAuth({
     metadata = statSync(filePath);
   } catch (error) {
     if (!explicitFile && (error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw new Error(`Cannot read Agent Core bearer token file: ${filePath}`);
+    throw new Error(`Cannot read OpenAgentCore bearer token file: ${filePath}`);
   }
 
-  if (!metadata.isFile()) throw new Error(`Agent Core bearer token path is not a file: ${filePath}`);
+  if (!metadata.isFile()) throw new Error(`OpenAgentCore bearer token path is not a file: ${filePath}`);
   if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
-    throw new Error(`Agent Core bearer token file must not be group/world accessible: ${filePath}`);
+    throw new Error(`OpenAgentCore bearer token file must not be group/world accessible: ${filePath}`);
   }
 
   let contents: string;
   try {
     contents = readFileSync(filePath, "utf8");
   } catch {
-    throw new Error(`Cannot read Agent Core bearer token file: ${filePath}`);
+    throw new Error(`Cannot read OpenAgentCore bearer token file: ${filePath}`);
   }
 
   return {
-    token: normalizeToken(contents, `Agent Core bearer token file ${filePath}`),
+    token: normalizeToken(contents, `OpenAgentCore bearer token file ${filePath}`),
     source: "file",
     filePath,
   };

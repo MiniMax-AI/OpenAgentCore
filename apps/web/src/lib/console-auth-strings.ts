@@ -1,6 +1,6 @@
 export const consoleAuthChinese = {
   "Try again": "重试",
-  "Sign in to Parsar Core": "登录 Parsar Core",
+  "Sign in to OpenAgentCore": "登录 OpenAgentCore",
   "Core key": "Core Key",
   "The Core key is an administration credential: it cannot call the /v1 Agents API, and the console never keeps it in your browser.":
     "Core Key 是管理凭据：不能调用 /v1 Agents API，控制台也不会把它保存在你的浏览器里。",
