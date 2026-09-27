@@ -15,16 +15,16 @@ func TestTranslatePerBlockAssistantPreservesStreamWithoutCopies(t *testing.T) {
 		`{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Checking."}]}}`,
 		`{"type":"stream_event","event":{"type":"content_block_stop","index":0}}`,
 		`{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}}`,
-		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"PARSAR"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"OAC"}}}`,
 		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"-IM-OK"}}}`,
-		`{"type":"assistant","message":{"content":[{"type":"text","text":"PARSAR-IM-OK"}]}}`,
+		`{"type":"assistant","message":{"content":[{"type":"text","text":"OAC-IM-OK"}]}}`,
 		`{"type":"stream_event","event":{"type":"content_block_stop","index":1}}`,
 		`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tool_1","name":"Read","input":{"path":"policy.md"}}]}}`,
 		`{"type":"stream_event","event":{"type":"content_block_start","index":3,"content_block":{"type":"text","text":""}}}`,
-		`{"type":"stream_event","event":{"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"PARSAR-IM-OK"}}}`,
-		`{"type":"assistant","message":{"content":[{"type":"text","text":"PARSAR-IM-OK"}]}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"OAC-IM-OK"}}}`,
+		`{"type":"assistant","message":{"content":[{"type":"text","text":"OAC-IM-OK"}]}}`,
 		`{"type":"stream_event","event":{"type":"content_block_stop","index":3}}`,
-		`{"type":"result","subtype":"success","result":"PARSAR-IM-OK"}`,
+		`{"type":"result","subtype":"success","result":"OAC-IM-OK"}`,
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"complete-only"}]}}`,
 	}
 	var text, thinking string
@@ -44,13 +44,13 @@ func TestTranslatePerBlockAssistantPreservesStreamWithoutCopies(t *testing.T) {
 				tools++
 			case proto.TypeDone:
 				done++
-				if got := mustDecode[proto.DonePayload](t, env.Payload).Content; got != "PARSAR-IM-OK" {
+				if got := mustDecode[proto.DonePayload](t, env.Payload).Content; got != "OAC-IM-OK" {
 					t.Fatalf("final content = %q", got)
 				}
 			}
 		}
 	}
-	if text != "PARSAR-IM-OKPARSAR-IM-OKcomplete-only" || thinking != "Checking." || tools != 1 || done != 1 {
+	if text != "OAC-IM-OKOAC-IM-OKcomplete-only" || thinking != "Checking." || tools != 1 || done != 1 {
 		t.Fatalf("text=%q thinking=%q tools=%d done=%d", text, thinking, tools, done)
 	}
 }

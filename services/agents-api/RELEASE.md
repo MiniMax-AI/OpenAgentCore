@@ -1,7 +1,7 @@
 # Standalone Core archive (advanced)
 
 This is not the installation path for new users. To install Core with Web, nodes and
-the `parsar` command, use the
+the `oac` command, use the
 [Core distribution and its installer](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/docs/getting-started/install.md).
 
 This Linux amd64 package contains the independent API, embedded migrator, operator
@@ -15,7 +15,7 @@ establish complete OpenAI Agents API compatibility.
 ## Verify and extract
 
 Verify the archive checksum supplied alongside the package, then extract into a
-new directory under `~/.parsar/`. Keep deployment configuration outside the extracted
+new directory under `~/.oac/`. Keep deployment configuration outside the extracted
 package so replacing binaries does not replace credentials or state.
 
 ```sh
@@ -40,7 +40,7 @@ the reachable WSS service address.
 
 ```sh
 umask 077
-core_config_dir="$HOME/.oac/agents-api-deployment"
+core_config_dir="$HOME/.oac/oac-core-deployment"
 mkdir -p "$core_config_dir"
 export OAC_DATABASE_URL='postgres://<account>:<password>@<host>/<execution-db>'
 export OAC_CORE_KEY_DIGESTS_FILE="$core_config_dir/core-key-digests.json"

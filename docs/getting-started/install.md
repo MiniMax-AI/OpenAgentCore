@@ -191,7 +191,7 @@ proxy sends `/core/v1` to Web, so the Core's public URL doesn't work here:
 | Web | `./install.sh --web-only …`, below | `console.example`: every path to Web |
 
 ```sh
-./install.sh --web-only --install-dir "$HOME/.oac/core-console" \
+./install.sh --web-only --install-dir "$HOME/.oac/web" \
   --public-url https://console.example \
   --core-url https://core-api.example \
   --core-key-file "$HOME/core.key"

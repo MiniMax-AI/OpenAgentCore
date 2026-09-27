@@ -211,7 +211,7 @@ describe("AdminClient response contracts", () => {
     expect((await clientWith(page([session])).client.listSessions(projectId)).data).toEqual([session]);
   });
 
-  it("projects saved Agent Core defaults, including the safe provider view, and rejects secrets", async () => {
+  it("projects saved OpenAgentCore defaults, including the safe provider view, and rejects secrets", async () => {
     const saved = { id: resourceId, object: "agent", model: "model", name: null, instructions: null, metadata: {}, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: { effort: null, summary: null }, service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [], created_at: 1, updated_at: 1 };
     const provider = { protocol: "anthropic", base_url: "https://provider.test/v1", context_window: 200000, max_output_tokens: 8000, api_key_configured: true };
     // Core omits the extension, or returns each default only when saved.
@@ -321,7 +321,7 @@ describe("AdminClient installation", () => {
   const installation = {
     object: "core.installation", installation_id: resourceId, public_url: "https://core.example", api_base_url: "https://core.example/v1",
     local_only: false, source_commit: "a".repeat(40),
-    configuration: { path: "/home/alice/.parsar/core/config.json", apply_command: "/home/alice/.parsar/core/parsar apply", applied_at: "2026-09-25T09:30:00Z", settings: [port, headers] },
+    configuration: { path: "/home/alice/.oac/core/config.json", apply_command: "/home/alice/.oac/core/oac apply", applied_at: "2026-09-25T09:30:00Z", settings: [port, headers] },
     address_bindings: { nodes: 2, nodes_on_other_address: 1, hosted_sandboxes: 3, self_hosted_executors: 1 },
   };
   it("reads installation facts before any deployment and rejects inconsistent snapshots", async () => {

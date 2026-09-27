@@ -1,6 +1,6 @@
 # Protocol coverage
 
-This matrix records which Core interfaces the Parsar Core console (`apps/web`)
+This matrix records which Core interfaces the OpenAgentCore console (`apps/web`)
 consumes and for what. It is not a statement of public Agents API compatibility;
 that inventory, its pinned baseline and its evidence live in the
 [Agents API contract](../../contracts/agents-api/README.md).
@@ -207,9 +207,9 @@ The aggregate endpoints that would replace these browser reads are proposed in
 ## Terminology
 
 - **OpenAI Agents API** is the managed-harness API described in the official
-  [Agents guide](https://developers.openai.com/api/docs/guides/agents). Parsar Core
+  [Agents guide](https://developers.openai.com/api/docs/guides/agents). OpenAgentCore
   implements part of its pinned beta resource shape under `/v1`.
-- **Administrator API** (also called the Web API) is Parsar Core's management
+- **Administrator API** (also called the Web API) is OpenAgentCore's management
   extension under `/core/v1`. It is not part of the public Agents API.
 - **OpenAI Agents SDK** and **Responses API** are different interfaces and are not
   used by the console.

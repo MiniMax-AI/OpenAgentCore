@@ -208,14 +208,14 @@ the duration shown by Core. Run, with real absolute paths:
 
 ```sh
 oac-node register \
-  --config /var/lib/parsar/provider.json \
-  --state-dir /var/lib/parsar/node \
+  --config /var/lib/oac/provider.json \
+  --state-dir /var/lib/oac/node \
   --core-url https://core.example \
   --name worker-1 \
-  --enrollment-token-file /var/lib/parsar/enrollment-token
+  --enrollment-token-file /var/lib/oac/enrollment-token
 oac-node run \
-  --config /var/lib/parsar/provider.json \
-  --state-dir /var/lib/parsar/node
+  --config /var/lib/oac/provider.json \
+  --state-dir /var/lib/oac/node
 ```
 
 Run the second command under the host's service supervisor. The node initiates

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Parsar Core installation configuration",
+  "title": "OpenAgentCore installation configuration",
   "description": "Process settings of one installation. Edit config.json, then run oac apply.",
   "type": "object",
   "additionalProperties": false,

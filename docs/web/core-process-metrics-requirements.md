@@ -6,7 +6,7 @@ the fields below. Unavailable measurements show as missing ("—", "No data").
 
 ## Why
 
-Core is one `agents-api` process. Operators size and alert on its CPU and
+Core is one `oac-core` process. Operators size and alert on its CPU and
 resident memory, and today the response carries only the Go heap in use
 (`process.memory_bytes`, `runtime.MemStats.Alloc`) and the goroutine count, read
 when requested. The heap is neither what the operating system

@@ -6,7 +6,7 @@ import test from "node:test";
 import { WorkspaceDirectories } from "../dist/workspace_directories.js";
 
 async function fixture(t) {
-  const root = await mkdtemp(join(tmpdir(), "parsar-directories-"));
+  const root = await mkdtemp(join(tmpdir(), "oac-directories-"));
   const workspace = join(root, "workspace");
   await mkdir(workspace);
   const abort = new AbortController();

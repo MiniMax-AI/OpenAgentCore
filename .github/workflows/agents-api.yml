@@ -1,4 +1,4 @@
-name: agents-api
+name: OpenAgentCore checks
 
 on:
   push:
@@ -31,7 +31,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: agents-api-${{ github.ref }}
+  group: oac-core-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -62,10 +62,10 @@ jobs:
         env:
           OAC_TEST_DATABASE_URL: postgres://agents_api:agents_api_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_ci_tests?sslmode=disable
         run: |
-          OAC_DEV_CORE_BUILD_DIR="$RUNNER_TEMP/agents-api-build" make check-agents-api
-          OAC_DATABASE_URL="$OAC_TEST_DATABASE_URL" "$RUNNER_TEMP/agents-api-build/oac-core-migrate"
-          "$RUNNER_TEMP/agents-api-build/oac-core-device" --help
-          "$RUNNER_TEMP/agents-api-build/oac-core-environment-key" --help
+          OAC_DEV_CORE_BUILD_DIR="$RUNNER_TEMP/oac-core-build" make check-agents-api
+          OAC_DATABASE_URL="$OAC_TEST_DATABASE_URL" "$RUNNER_TEMP/oac-core-build/oac-core-migrate"
+          "$RUNNER_TEMP/oac-core-build/oac-core-device" --help
+          "$RUNNER_TEMP/oac-core-build/oac-core-environment-key" --help
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -80,7 +80,7 @@ jobs:
       - name: Verify official-client HTTP compatibility
         env:
           OAC_TEST_DATABASE_URL: postgres://agents_api:agents_api_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_ci_tests?sslmode=disable
-          OAC_TEST_SERVER_BIN: ${{ runner.temp }}/agents-api-build/oac-core
+          OAC_TEST_SERVER_BIN: ${{ runner.temp }}/oac-core-build/oac-core
           OAC_TEST_OFFICIAL_SDK_PYTHON: python
         run: |
           python services/agents-api/tests/official_client.py
@@ -88,6 +88,6 @@ jobs:
       - name: Verify standalone container distribution
         env:
           OAC_TEST_DATABASE_URL: postgres://agents_api:agents_api_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_ci_tests?sslmode=disable
-          OAC_DEV_CORE_IMAGE: agents-api:ci
+          OAC_DEV_CORE_IMAGE: oac-core:ci
           OAC_TEST_OFFICIAL_SDK_PYTHON: python
         run: make check-agents-api-container

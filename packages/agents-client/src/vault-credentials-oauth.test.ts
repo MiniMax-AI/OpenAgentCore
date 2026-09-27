@@ -74,7 +74,7 @@ describe("OAuth Credential metadata", () => {
     await expect(client.retrieveVaultCredential(vaultId, credentialId)).rejects.toMatchObject({
       status: 502,
       code: "invalid_vault_credential",
-      message: "Agent Core returned invalid Credential metadata.",
+      message: "OpenAgentCore returned invalid Credential metadata.",
     });
   });
 

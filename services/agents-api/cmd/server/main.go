@@ -1,6 +1,6 @@
 // Package main runs the standalone Agents API service.
 //
-// @title Agents API
+// @title OpenAgentCore Agents API
 // @version 1
 // @description Supported single-Agent execution resources from the pinned openai-python beta/agents contract. Bearer keys bind an execution principal to one project; optional OpenAI-Organization and OpenAI-Project headers must match that binding.
 // @license.name Apache 2.0

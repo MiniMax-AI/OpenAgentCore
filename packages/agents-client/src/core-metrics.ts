@@ -7,7 +7,7 @@ function invalidCoreMetrics(): never {
 }
 
 /**
- * Core's own health as the one `agents-api` process sees it: execution slots
+ * Core's own health as the one `oac-core` process sees it: execution slots
  * and the Turn queue (a Postgres table polled by the worker), connected
  * daemons, the PostgreSQL database, background jobs and the process itself.
  * `GET /core/v1/metrics`, defined in

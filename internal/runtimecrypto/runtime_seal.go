@@ -1,6 +1,6 @@
 // Package runtimecrypto implements envelope-encryption for shipping
 // sensitive payloads (model API keys, per-run secrets) from the
-// Parsar server to a paired Agent Daemon without putting plaintext
+// OpenAgentCore server to a paired Agent Daemon without putting plaintext
 // on the wire.
 //
 // Algorithm: NaCl sealed box (X25519 + XSalsa20-Poly1305) via

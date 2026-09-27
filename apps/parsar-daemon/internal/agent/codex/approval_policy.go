@@ -11,7 +11,7 @@ func SilentGranularPolicy() AskForApproval {
 	return AskForApproval{Granular: &g}
 }
 
-// HumanApprovalPolicy lets Codex request sandbox escalation from Parsar.
+// HumanApprovalPolicy lets Codex request sandbox escalation from Core.
 func HumanApprovalPolicy() AskForApproval {
 	return AskForApproval{String: "on-request"}
 }

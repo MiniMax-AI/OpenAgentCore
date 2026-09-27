@@ -116,7 +116,7 @@ assert len(socket.if_nameindex()) == 1
         invoke('npm', packages=['is-number@7.0.0'])
         invoke('python', packages=['packaging==26.0'])
         # pip's diagnostics name the package and can echo configuration; only its status is reported.
-        invoke('python', succeeds=False, exit_code=1, packages=['parsar-initializer-nonexistent-4f7e-zz'])
+        invoke('python', succeeds=False, exit_code=1, packages=['oac-initializer-nonexistent-4f7e-zz'])
         invoke('setup', cwd='/workspace/sub', command="node -e \"if (!require('/environment/packages/npm/lib/node_modules/is-number')(42)) process.exit(1)\" && python3 -c 'import packaging; assert packaging.__version__ == \"26.0\"'")
     print(json.dumps({'initialization': 'passed', 'real_packages': '--packages' in sys.argv,
                       'system_packages': '--system' in sys.argv}))

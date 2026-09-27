@@ -1,4 +1,4 @@
-# Parsar Core Web
+# OpenAgentCore Web
 
 Core Web 是 Core 部署的管理员控制台。浏览器登录控制台后，通过管理接口操作；
 应用使用自己的 Project API key 直接调用 Core 的公开 Agents API。

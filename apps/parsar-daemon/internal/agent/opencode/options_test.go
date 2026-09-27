@@ -66,7 +66,7 @@ func TestBuildArgsCreatesMissingWorkdir(t *testing.T) {
 	}
 }
 
-func TestBuildArgsWritesManagedConfigUnderParsarHome(t *testing.T) {
+func TestBuildArgsWritesManagedConfigUnderOpenAgentCoreHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", home)
 	res, err := opencode.BuildArgs("run/id", "hello", "", map[string]any{

@@ -200,5 +200,5 @@ func publicConsoleAsset(r *http.Request) bool {
 		return false
 	}
 	return r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/favicon.png" ||
-		r.URL.Path == "/parsar-mark-light.png" || r.URL.Path == "/parsar-mark-dark.png" || strings.HasPrefix(r.URL.Path, "/assets/")
+		r.URL.Path == "/oac-mark-light.png" || r.URL.Path == "/oac-mark-dark.png" || strings.HasPrefix(r.URL.Path, "/assets/")
 }

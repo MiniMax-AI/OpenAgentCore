@@ -101,7 +101,7 @@ func TestNativeMCodeACP(t *testing.T) {
 	req.AgentOptions["skills"] = []any{map[string]any{"name": "qa-mcode-skill", "version": "1", "download_url": skill.URL, "sha256": hex.EncodeToString(digest[:])}}
 	req.AgentOptions["mcp_servers"] = map[string]any{"qa": map[string]any{"type": "http", "url": mcp.URL}}
 	req.AgentOptions["system_prompt"] = "SP-MCODE-672: use the available tools when requested."
-	req.Input = proto.TextInput("QA-CALL-MCP: call get_fixture, then reply PARSAR-MCODE-OK.")
+	req.Input = proto.TextInput("QA-CALL-MCP: call get_fixture, then reply OAC-MCODE-OK.")
 	run := func() proto.DonePayload {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		t.Cleanup(cancel)
@@ -127,7 +127,7 @@ func TestNativeMCodeACP(t *testing.T) {
 				_ = json.Unmarshal(event.Payload, &done)
 			}
 		}
-		if done.Content != "PARSAR-MCODE-OK" {
+		if done.Content != "OAC-MCODE-OK" {
 			t.Fatalf("native output=%q", done.Content)
 		}
 		if _, ok := done.Metadata[proto.DoneMetaAgentSessionID].(string); !ok {
@@ -156,7 +156,7 @@ func TestNativeMCodeACP(t *testing.T) {
 	models["fixture-new"] = models["fixture"]
 	delete(models, "fixture")
 	req.AgentOptions["model"] = "fixture-new"
-	req.Input = proto.TextInput("Now reply PARSAR-MCODE-OK.")
+	req.Input = proto.TextInput("Now reply OAC-MCODE-OK.")
 	run()
 	mu.Lock()
 	resumed := strings.Join(requests, "\n")
@@ -184,7 +184,7 @@ func writeNativeResponse(w http.ResponseWriter, tool string) {
 		stop = "tool_use"
 	} else {
 		send("content_block_start", map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]string{"type": "text", "text": ""}})
-		send("content_block_delta", map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]string{"type": "text_delta", "text": "PARSAR-MCODE-OK"}})
+		send("content_block_delta", map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]string{"type": "text_delta", "text": "OAC-MCODE-OK"}})
 	}
 	send("content_block_stop", map[string]any{"type": "content_block_stop", "index": 0})
 	send("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": stop, "stop_sequence": nil}, "usage": map[string]int{"output_tokens": 8}})

@@ -146,7 +146,7 @@ export function projectSessionItem(value: unknown, invalid: () => never): Sessio
       }
       break;
     case "web_search_call":
-      // Parsar omits action when the runtime has not reported one yet.
+      // OpenAgentCore omits action when the runtime has not reported one yet.
       if (hasOwn(value, "action")) projected.action = projectWebSearchAction(value.action, invalid);
       break;
     case "reasoning":

@@ -1,4 +1,4 @@
-# Parsar Core
+# OpenAgentCore
 
 ![One core. Many agents. Open infrastructure for AI agents.](docs/assets/openagentcore-banner.png)
 
@@ -18,9 +18,9 @@ administrator console that issues the keys applications call Core with.
    ```sh
    gh auth login
    gh release download <tag> --repo MiniMax-AI/parsar-core --pattern '*-linux-amd64-offline.tar.gz*'
-   sha256sum -c parsar-core-<commit>-linux-amd64-offline.tar.gz.sha256
-   tar -xzf parsar-core-<commit>-linux-amd64-offline.tar.gz
-   cd parsar-core-<commit>-linux-amd64
+   sha256sum -c oac-<commit>-linux-amd64-offline.tar.gz.sha256
+   tar -xzf oac-<commit>-linux-amd64-offline.tar.gz
+   cd oac-<commit>-linux-amd64
    ./install.sh --public-url https://core.example
    ```
 
@@ -29,7 +29,7 @@ administrator console that issues the keys applications call Core with.
    [installation guide](docs/getting-started/install.md). If you're reading this on
    GitHub, follow the docs inside the downloaded bundle (`README.md` and `docs/`)
    instead: they match its installer, while GitHub shows the current source.
-2. **Sign in to Web with the Core key**, from `~/.parsar/core/secrets/core.key`. On
+2. **Sign in to Web with the Core key**, from `~/.oac/core/secrets/core.key`. On
    **System**, set a default model; on **Projects and keys**, create a project and
    issue a key. See [Sign in to Web](docs/getting-started/install.md#sign-in-to-web).
 3. **Add a node by pasting one command.** On **Nodes**, choose **Add node**, then
@@ -70,7 +70,7 @@ native differences.
 | [Install Core and Web](docs/getting-started/install.md) | Prerequisites, download, installer options, HTTPS and the reverse proxy, first sign-in |
 | [Nodes](docs/getting-started/nodes.md) | Adding, removing and troubleshooting nodes |
 | [Self-hosted executors](docs/getting-started/self-hosted.md) | Connecting an application's own machine to a Session |
-| [Operations](docs/getting-started/operations.md) | The `parsar` command, the Core key, backups, upgrades, troubleshooting |
+| [Operations](docs/getting-started/operations.md) | The `oac` command, the Core key, backups, upgrades, troubleshooting |
 | [Configuration reference](docs/configuration.md) | Every setting in `config.json` and in Web |
 | [Call the API](docs/getting-started/quickstart.md) | The application developer's quickstart |
 | [API reference](docs/api/README.md) | The `/v1`, `/core/v1` and `/api/v1` namespaces |

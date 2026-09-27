@@ -136,7 +136,7 @@ export function skillUploadBody(input: SkillUploadInput, setDefault?: boolean): 
 }
 
 export function projectSkill(value: unknown, invalid: Invalid, expectedId?: string): Skill {
-  const message = "Agent Core returned an invalid Skill.";
+  const message = "OpenAgentCore returned an invalid Skill.";
   if (!isRecord(value) || !exactFields(value, skillFields)) return invalid(message);
   if (
     !isSkillId(value.id) || (expectedId !== undefined && value.id !== expectedId) ||
@@ -164,7 +164,7 @@ export function projectSkillVersion(
   expectedSkillId: string,
   expectedVersion?: string,
 ): SkillVersion {
-  const message = "Agent Core returned an invalid Skill version.";
+  const message = "OpenAgentCore returned an invalid Skill version.";
   if (!isRecord(value) || !exactFields(value, skillVersionFields)) return invalid(message);
   if (
     !isSkillVersionId(value.id) ||
@@ -223,7 +223,7 @@ export function projectSkillList(value: unknown, invalid: Invalid, options?: Ski
     // Public timestamps are whole seconds, so equal neighbours cannot prove the private tie-break.
     (previous, next, order) => order === "asc" ? previous.created_at <= next.created_at : previous.created_at >= next.created_at,
     invalid,
-    "Agent Core returned an invalid Skill list.",
+    "OpenAgentCore returned an invalid Skill list.",
   );
 }
 
@@ -242,7 +242,7 @@ export function projectSkillVersionList(
       return order === "asc" ? comparison < 0 : comparison > 0;
     },
     invalid,
-    "Agent Core returned an invalid Skill version list.",
+    "OpenAgentCore returned an invalid Skill version list.",
   );
 }
 
@@ -250,7 +250,7 @@ export function projectSkillDeleted(value: unknown, invalid: Invalid, skillId: s
   if (
     !isRecord(value) || !exactFields(value, skillDeletedFields) ||
     value.id !== skillId || value.object !== "skill.deleted" || value.deleted !== true
-  ) return invalid("Agent Core returned an invalid Skill deletion receipt.");
+  ) return invalid("OpenAgentCore returned an invalid Skill deletion receipt.");
   return { id: skillId, object: "skill.deleted", deleted: true };
 }
 
@@ -259,6 +259,6 @@ export function projectSkillVersionDeleted(value: unknown, invalid: Invalid, ver
     !isRecord(value) || !exactFields(value, skillVersionDeletedFields) ||
     !isSkillVersionId(value.id) || value.object !== "skill.version.deleted" ||
     value.deleted !== true || value.version !== version
-  ) return invalid("Agent Core returned an invalid Skill version deletion receipt.");
+  ) return invalid("OpenAgentCore returned an invalid Skill version deletion receipt.");
   return { id: value.id, object: "skill.version.deleted", deleted: true, version };
 }

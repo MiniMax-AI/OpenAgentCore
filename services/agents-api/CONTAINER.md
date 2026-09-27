@@ -1,7 +1,7 @@
 # Standalone container (advanced)
 
 This is not the installation path for new users. To install Core with Web, nodes and
-the `parsar` command, use the [installation guide](../../docs/getting-started/install.md).
+the `oac` command, use the [installation guide](../../docs/getting-started/install.md).
 
 This image packages the execution API, its embedded migrator and device operator
 command. It needs a dedicated PostgreSQL database/account and an external daemon
@@ -15,7 +15,7 @@ Container packaging does not imply complete protocol compatibility.
 ```bash
 make docker-build-agents-api
 # Optional local image name:
-OAC_DEV_CORE_IMAGE=agents-api:local make docker-build-agents-api
+OAC_DEV_CORE_IMAGE=oac-core:local make docker-build-agents-api
 ```
 
 The target needs Go, Docker and access to pinned Go modules and the base image.
@@ -41,10 +41,10 @@ Run migrations explicitly before starting the service. They belong to this API
 alone and must never target the product database:
 
 ```bash
-config_dir="$HOME/.parsar/agents-api-deployment"
+config_dir="$HOME/.oac/oac-core-deployment"
 docker run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges \
   --env-file "$config_dir/api.env" \
-  agents-api:dev /usr/local/bin/oac-core-migrate
+  oac-core:dev /usr/local/bin/oac-core-migrate
 ```
 
 The following Linux example uses the non-root host UID to read its private key
@@ -52,22 +52,22 @@ file. Alternatively, grant the image's default UID read access and omit `--user`
 Do not run the example from a root shell.
 
 ```bash
-docker run --name agents-api --detach --read-only \
+docker run --name oac-core --detach --read-only \
   --cap-drop=ALL --security-opt=no-new-privileges \
   --user "$(id -u):$(id -g)" \
   --publish 127.0.0.1:8091:8091 \
   --env-file "$config_dir/api.env" \
   --mount "type=bind,source=$config_dir/core-key-digests.json,target=/run/core-key-digests.json,readonly" \
-  agents-api:dev
+  oac-core:dev
 curl --fail http://127.0.0.1:8091/healthz
-docker logs agents-api
+docker logs oac-core
 ```
 
 The container listens on `:8091`; use a TLS reverse proxy for remote clients.
 `/healthz` is liveness only. Database startup validation does not make it a
 continuous readiness probe. Persistent API state is in PostgreSQL, so the image
-needs no writable application volume. Send SIGTERM with `docker stop agents-api`
-and start it again with `docker start agents-api`; never remove database storage
+needs no writable application volume. Send SIGTERM with `docker stop oac-core`
+and start it again with `docker start oac-core`; never remove database storage
 as part of replacing the API container. An execution worker currently permits one
 active service per execution database; container replicas do not add HA/recovery.
 
@@ -107,5 +107,5 @@ The image also includes `/usr/local/bin/oac-core-environment-key` for operator
 issuance, rotation and revocation of exact-Environment executor credentials. Run it
 with only the execution database configuration and the arguments in the
 [native transport guide](README.md#user-managed-runtime-enrollment). Redirect
-its secret stdout to a mode-0600 file under `~/.parsar/`; do not bake credentials
+its secret stdout to a mode-0600 file under `~/.oac/`; do not bake credentials
 into the image or pass the broader caller key to an executor.

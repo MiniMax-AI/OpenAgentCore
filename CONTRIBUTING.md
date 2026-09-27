@@ -1,4 +1,4 @@
-# Contributing to Parsar Core
+# Contributing to OpenAgentCore
 
 ## Repository boundary
 
@@ -10,9 +10,9 @@ business assets, the Parsar product Web, product API and product migrations rema
 in Parsar. Do not import `server/`, `apps/parsar/`, product CLI/plugin packages or
 their deployment stack.
 
-Preserve copied runtime and protocol behavior. Existing Go import paths, binary
-names and runtime environment variables remain unchanged for this copy; they do
-not require fetching the original repository. The source snapshot and per-file
+Preserve copied runtime and protocol behavior. Existing Go import paths remain unchanged and do not require fetching the original
+repository. Installed commands and environment settings use the OpenAgentCore names
+documented below. The source snapshot and per-file
 hashes provide an audit trail; future Core development need not preserve those
 hashes. Do not automatically sync or delete the original repository's Core.
 
@@ -1677,7 +1677,7 @@ from prior Docker or retired remote-executor evidence.
 #### Independent build artifacts
 
 `make build-agents-api` produces `oac-core`, `oac-core-migrate`,
-`oac-core-device` and `oac-core-environment-key` under `${OAC_DEV_HOME:-$HOME/.oac}/build/agents-api`.
+`oac-core-device` and `oac-core-environment-key` under `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core`.
 `OAC_DEV_CORE_BUILD_DIR` may select another absolute output directory. The build
 uses only the explicit source set in `scripts/build-agents-api.sh`: the execution
 service, its Go contracts and required shared daemon/logging packages, plus the
@@ -2055,7 +2055,7 @@ secrets. Installation exposes only loopback API/console ports. Remote exposure
 requires an operator-configured HTTPS/access boundary. Web-only mode can connect
 to a loopback existing Core on the same Linux host or a remote HTTPS Core.
 
-Installation state and secrets live in a private directory under `~/.parsar/` by
+Installation state and secrets live in a private directory under `~/.oac/` by
 default. No credential enters build arguments, image layers, browser bundles or
 diagnostic output. Compose configuration is confidential. The generated database,
 Projects and their issued keys, provider identity and encryption
@@ -2969,7 +2969,7 @@ a qualified profile in `services/agents-api/internal/engine`, registration and
 an independently verified deployment. It does not add engine-name branches to
 API handlers, persistence, dispatch or scheduling.
 
-Agents Core is pre-release. Replace superseded internal interfaces and execution
+OpenAgentCore is pre-release. Replace superseded internal interfaces and execution
 paths cleanly; do not retain version fallbacks or compatibility shims. Preserve
 the pinned official public protocol, valid data and still-used infrastructure.
 
@@ -3649,3 +3649,19 @@ boundary exception for the name guard, like the skill-upload integration, rather
 than a legacy Runtime setting. Build the MiniMax companion from this revision's
 patched native sources when packaging a renamed Runtime; an older companion still
 uses the old model-provider, workspace and subagent names and cannot be reused.
+
+
+## OpenAgentCore name guard
+
+`make check-names` scans tracked text for retired branding, settings and installed
+command names. Exceptions in `scripts/name-allowlist.json` name a path glob, a
+regular expression and a reason. An exception covers only its matched text: an
+allowed repository import cannot hide a retired setting elsewhere on the line.
+Keep exceptions narrow and explain the preserved contract or historical input.
+
+Go module and source directory paths, npm and Cargo package identities, public
+`AgentCoreError`, upstream contract fields and the separate Parsar product remain
+unchanged. Persisted credential encryption domains and native-session resume keys
+also remain stable so existing data can be decrypted and Sessions can resume.
+Conversion inputs, retirement diagnostics and historical evidence must still name
+the identifiers they reject or migrate; current examples use the new names.

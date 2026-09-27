@@ -27,7 +27,7 @@ the bundle nor root:
 
 `install.sh --status` and `--stop` are retired; they name the `oac` command instead.
 For a second installation, use its own command, such as
-`~/.oac/core-console/oac status`.
+`~/.oac/web/oac status`.
 
 ## Service health
 

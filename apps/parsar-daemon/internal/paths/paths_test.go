@@ -43,7 +43,7 @@ func TestValidateProfile(t *testing.T) {
 	}
 }
 
-func TestRootHonoursParsarHome(t *testing.T) {
+func TestRootHonoursOpenAgentCoreHome(t *testing.T) {
 	home := withTempHome(t)
 	got, err := paths.Root()
 	if err != nil {

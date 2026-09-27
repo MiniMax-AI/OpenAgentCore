@@ -23,7 +23,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	_ = withTempHome(t)
 	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
 	want := auth.Profile{
-		ServerURL:        "https://parsar.example.com",
+		ServerURL:        "https://core.example.com",
 		RuntimeID:        "rt_abc123",
 		RunnerCredential: "secret-credential",
 		DeviceName:       "alice-mac",

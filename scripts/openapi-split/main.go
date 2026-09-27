@@ -44,10 +44,10 @@ func run(input, projectOutput, coreOutput, runtimeOutput string) error {
 	filterPaths(field(m, "paths"), coreSurface)
 	filterPaths(field(rt, "paths"), runtimeSurface)
 	field(m, "basePath").Value = "/"
-	field(field(m, "info"), "title").Value = "Core API"
+	field(field(m, "info"), "title").Value = "OpenAgentCore Core API"
 	field(field(m, "info"), "description").Value = "Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted."
 	field(rt, "basePath").Value = "/"
-	field(field(rt, "info"), "title").Value = "Core Machine Connections"
+	field(field(rt, "info"), "title").Value = "OpenAgentCore Machine Connections"
 	field(field(rt, "info"), "description").Value = "Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the Core key are not accepted. See each operation's security requirements."
 	// Retain exactly the definitions referenced by each surface, including shared
 	// error DTOs. Follow nested references instead of duplicating the project schema.

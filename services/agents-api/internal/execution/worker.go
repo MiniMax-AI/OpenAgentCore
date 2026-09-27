@@ -317,7 +317,7 @@ func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
 	if turn.Status == store.TurnCompleted || turn.Status == store.TurnFailed || turn.Status == store.TurnCancelled {
 		return nil
 	}
-	log.Ctx(ctx).Error("agents-api dispatch did not complete", "turn_id", item.TurnID)
+	log.Ctx(ctx).Error("oac-core dispatch did not complete", "turn_id", item.TurnID)
 	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: turn.Status, Status: store.TurnFailed, Outcome: outcome})
 	if errors.Is(err, store.ErrTurnConflict) {
 		return nil

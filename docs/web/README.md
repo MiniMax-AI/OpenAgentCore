@@ -1,4 +1,4 @@
-# Parsar Core Web
+# OpenAgentCore Web
 
 Core Web is the administrator console for a Core deployment. Its Go service
 provides Core key login and forwards signed-in, same-origin `/core/v1` requests to
@@ -66,4 +66,4 @@ management routes and resource behavior. The [public API contracts](../../contra
 define the separate application interface. See the [design principles](../design-principles.md)
 for ownership and [contributor guide](../../CONTRIBUTING.md) for required checks.
 
-Parsar Core Web is available under the [MIT License](../../LICENSE).
+OpenAgentCore Web is available under the [MIT License](../../LICENSE).

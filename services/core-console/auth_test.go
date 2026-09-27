@@ -25,7 +25,7 @@ func coreKeyConsoleConfig(t *testing.T, backend http.Handler) config {
 	if err := os.Mkdir(filepath.Join(dist, "assets"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for name, body := range map[string]string{"index.html": "console application", "assets/main.js": "app script", "private.txt": "not public"} {
+	for name, body := range map[string]string{"index.html": "console application", "assets/main.js": "app script", "private.txt": "not public", "oac-mark-light.png": "light mark", "oac-mark-dark.png": "dark mark", "parsar-mark-light.png": "retired mark"} {
 		if err := os.WriteFile(filepath.Join(dist, name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -100,14 +100,22 @@ func TestCoreKeySignInSessionAndLogout(t *testing.T) {
 	if w := authRequest(h, "GET", "/console/auth", "", nil); w.Code != 200 || strings.TrimSpace(w.Body.String()) != `{"mode":"login"}` {
 		t.Fatalf("initial mode: %d %s", w.Code, w.Body)
 	}
-	for _, path := range []string{"/core/v1/projects", "/console/config", "/core/v1/sandbox/nodes", "/private.txt"} {
+	for _, path := range []string{"/core/v1/projects", "/console/config", "/core/v1/sandbox/nodes", "/private.txt", "/parsar-mark-light.png", "/parsar-mark-dark.png", "/oac-mark-other.png"} {
 		if w := authRequest(h, "GET", path, "", nil); w.Code != 401 {
 			t.Errorf("private path %s returned %d", path, w.Code)
 		}
 	}
-	for _, path := range []string{"/", "/index.html", "/assets/main.js"} {
+	for _, path := range []string{"/", "/index.html", "/assets/main.js", "/oac-mark-light.png", "/oac-mark-dark.png"} {
 		if w := authRequest(h, "GET", path, "", nil); w.Code != 200 {
 			t.Errorf("login asset %s returned %d", path, w.Code)
+		}
+	}
+	for _, path := range []string{"/oac-mark-light.png", "/oac-mark-dark.png"} {
+		if w := authRequest(h, "HEAD", path, "", nil); w.Code != 200 {
+			t.Errorf("login asset HEAD %s returned %d", path, w.Code)
+		}
+		if w := authRequest(h, "POST", path, "", nil); w.Code != 401 {
+			t.Errorf("login asset write %s returned %d", path, w.Code)
 		}
 	}
 	wrong := authRequest(h, "POST", "/console/auth/login", coreKeyInput("incorrect-core-key"), nil)

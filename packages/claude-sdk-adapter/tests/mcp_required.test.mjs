@@ -51,7 +51,7 @@ process.disconnect();
 
 for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "missing-hooks", "cancelled", "resume", "wrong-history", "missing-history", "optional"]) {
   test(`required MCP entrypoint holds input through readiness: ${mode}`, async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "parsar-required-"));
+    const cwd = mkdtempSync(join(tmpdir(), "oac-required-"));
     const child = spawn(process.execPath, ["--input-type=module", "-e", fixture, mode], { stdio: ["pipe", "pipe", "pipe", "ipc"] });
     const observations = [];
     let stdout = "", stderr = "";

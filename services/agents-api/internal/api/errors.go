@@ -184,7 +184,7 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusBadRequest, "invalid_request_error", unstorableTextMessage)
 	default:
 		// Driver errors can include submitted values; do not log the raw error.
-		log.Ctx(r.Context()).Error("agents-api persistence operation failed")
+		log.Ctx(r.Context()).Error("oac-core persistence operation failed")
 		writeError(w, http.StatusInternalServerError, "internal_error", "The operation could not be completed.")
 	}
 }

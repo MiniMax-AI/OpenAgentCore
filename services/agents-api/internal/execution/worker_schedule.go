@@ -99,7 +99,7 @@ func (w *Worker) runEnvironmentInput(ctx context.Context, item scheduledWork) er
 		return err
 	}
 	if ctx.Err() == nil && !errors.Is(err, store.ErrNotFound) {
-		log.Ctx(ctx).Warn("agents-api environment preparation did not complete", "reservation_id", item.reservationID)
+		log.Ctx(ctx).Warn("oac-core environment preparation did not complete", "reservation_id", item.reservationID)
 	}
 	return nil
 }

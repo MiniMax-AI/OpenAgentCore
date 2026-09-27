@@ -1,4 +1,4 @@
-// Package v1 configures the official Go SDK for Parsar's independent Agents API.
+// Package v1 configures the official Go SDK for the OpenAgentCore Agents API.
 package v1
 
 import (

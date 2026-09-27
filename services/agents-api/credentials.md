@@ -16,10 +16,10 @@ command refuses to replace an existing file:
 (
   umask 077
   set -C
-  mkdir -p "$HOME/.parsar/agents-api"
-  openssl rand -base64 32 > "$HOME/.parsar/agents-api/credential.key"
+  mkdir -p "$HOME/.oac/core"
+  openssl rand -base64 32 > "$HOME/.oac/core/credential.key"
 )
-export OAC_CREDENTIAL_KEY_FILE="$HOME/.parsar/agents-api/credential.key"
+export OAC_CREDENTIAL_KEY_FILE="$HOME/.oac/core/credential.key"
 ```
 
 Keep the same key across service restarts and retain a protected backup separately
