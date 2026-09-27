@@ -18,7 +18,7 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   // What a Docker host needs for the default command, which installs the node with sudo.
   await expect(add.getByText("Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)")).toBeVisible();
   await expect(add.getByText("SELinux is not enforcing (otherwise use the no-sudo command)")).toBeVisible();
-  await expect(add.getByText("One Core per host: a host already running a node for another Core is refused.")).toBeVisible();
+  await expect(add.getByText("In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused.")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
   await expect(add.getByText("Reaches https://core.example.com, as do its sandboxes")).toBeVisible();
   await expect(add.getByText("parsar-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
