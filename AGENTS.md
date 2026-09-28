@@ -4,6 +4,16 @@ OpenAgentCore is the independent execution service behind Parsar. Product busine
 code, its database and migrations stay in the Parsar repository. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) before changing code.
 
+## Decoupling principle
+
+Sandbox providers (including user-owned machines), models and harnesses must be
+replaceable through shared protocols and interfaces. Keep implementation-specific
+behavior inside registered providers and adapters; do not add harness-, runtime-
+or vendor-name branches to Core orchestration. Fix shared lifecycle or performance
+problems in the common protocol and flow. Validate combinations through declared
+capabilities, with explicit errors rather than silent fallback. See
+[the canonical rules](CONTRIBUTING.md#decoupling-principle).
+
 ## Interfaces and credentials
 
 Core serves three namespaces. Each has one kind of caller and its own credential;

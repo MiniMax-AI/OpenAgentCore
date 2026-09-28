@@ -16,6 +16,34 @@ documented below. The source snapshot and per-file
 hashes provide an audit trail; future Core development need not preserve those
 hashes. Do not automatically sync or delete the original repository's Core.
 
+## Decoupling principle
+
+Core orchestrates protocol-defined operations. Sandbox providers, Runtime
+implementations, harnesses and model providers are replaceable components.
+User-owned machines, E2B, Docker and other environments must expose the same
+execution protocol; placement and connection details belong to their providers.
+
+- Keep component boundaries explicit through shared interfaces and versioned
+  protocols. Register implementations behind those interfaces. Adding an
+  implementation must not require a new orchestration path selected by its name.
+- Core owns durable Session/Turn state and scheduling. Runtime owns local
+  execution resources. Harness adapters translate the common execution contract
+  into native operations; model and sandbox provider details remain behind their
+  respective interfaces.
+- Fix shared lifecycle, admission, cancellation, reuse and performance problems
+  in the common protocol or flow. Do not patch them with harness-, runtime- or
+  vendor-specific branches in Core. Adapters may implement native differences,
+  but must preserve the shared operation and event semantics.
+- Express compatibility through declared capabilities and validate selected
+  combinations explicitly. Replaceability does not guarantee that every model,
+  harness and environment combination is supported. Do not silently substitute
+  another implementation or give a capability different meanings per vendor.
+- Evolve shared contracts and their implementations together, documenting
+  ownership and validating the same contract across implementations. This rule
+  does not claim existing implementations already satisfy every target, change
+  the pinned public API, or authorize unrelated refactors or live Session
+  configuration switching.
+
 ## Workflow and quality
 
 Develop in an isolated worktree on a feature branch and submit a PR. Do not edit
