@@ -118,7 +118,7 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     // The demo deployment's default harness has a default model; a fresh install has none.
     harnesses: {
       claude_sdk: { enabled: true, default: false, provider: null },
-      codex: { enabled: true, default: true, provider: fresh ? null : { object: "core.model_provider", harness: "codex", protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true, updated_at: new Date((now - 86400) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") } },
+      codex: { enabled: true, default: true, provider: fresh ? null : { object: "core.model_provider", harness: "codex", protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true, last_used_at: null, last_error_code: null, last_error_at: null, updated_at: new Date((now - 86400) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") } },
       mcode: { enabled: false, default: false, provider: null },
     },
     // "none": the deployment is not configured yet, so the Nodes page offers setup.
@@ -534,6 +534,7 @@ async function harnessRoute(request, response, path) {
     object: "core.model_provider", harness, protocol: input.protocol, base_url: input.base_url, api_key_configured: true,
     ...(input.context_window ? { context_window: input.context_window } : {}),
     ...(input.max_output_tokens ? { max_output_tokens: input.max_output_tokens } : {}),
+    last_used_at: null, last_error_code: null, last_error_at: null,
     updated_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
   };
   return send(response, 200, entry.provider);
