@@ -1,13 +1,12 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -75,24 +74,19 @@ func TestBusyStreamRechecksAuthorityAndFailsClosed(t *testing.T) {
 		t.Fatal("stream status", response.StatusCode)
 	}
 	done := make(chan error, 1)
-	var once sync.Once
 	// Fail the resolver only after receiving real event data.
 	go func() {
-		buffer := make([]byte, 4096)
-		for {
-			n, err := response.Body.Read(buffer)
-			if n > 0 {
-				once.Do(func() { resolver.unavailable.Store(true) })
-			}
-			if err != nil {
-				done <- err
-				return
+		scanner := bufio.NewScanner(response.Body)
+		for scanner.Scan() {
+			if scanner.Text() == "event: agent.session.idle" {
+				resolver.unavailable.Store(true)
 			}
 		}
+		done <- scanner.Err()
 	}()
 	select {
 	case err := <-done:
-		if err != io.EOF {
+		if err != nil {
 			t.Fatal(err)
 		}
 	case <-time.After(3 * time.Second):
