@@ -174,16 +174,18 @@ func (s *Store) CancelEnvironmentInput(ctx context.Context, tenantID, sessionID,
 	return s.settleEnvironmentInput(ctx, tenantID, sessionID, reservationID, EnvironmentInputCancelled)
 }
 
-// FailEnvironmentInputWithoutModelProvider settles pending input of a Session
-// that has no frozen model provider, reserved before providers were required,
-// instead of letting it wait for its deadline. Settled input is unchanged.
-func (s *Store) FailEnvironmentInputWithoutModelProvider(ctx context.Context, tenantID, sessionID, reservationID string) error {
+// FailEnvironmentInput settles a confirmed pre-admission failure. The Session
+// lock and pending-state predicate preserve cancellation and newer input.
+func (s *Store) FailEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID, code string) error {
+	if code != "model_provider_required" && code != "runtime_preparation_failed" {
+		return ErrInvalidInput
+	}
 	id, err := parseID(reservationID)
 	if err != nil {
 		return err
 	}
 	return s.withEnvironmentInputSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-		_, err := q.FailEnvironmentInputWithoutModelProvider(ctx, sqlc.FailEnvironmentInputWithoutModelProviderParams{SessionID: session, ID: id})
+		_, err := q.FailEnvironmentInput(ctx, sqlc.FailEnvironmentInputParams{SessionID: session, ID: id, FailureCode: pgtype.Text{String: code, Valid: true}})
 		return err
 	})
 }

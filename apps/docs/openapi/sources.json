@@ -1,6 +1,6 @@
 {
   "sources": {
-    "contracts/agents-api/openapi.yaml": "b706abf259542b7b9a833b566f20048412d3cbc27c4c4284ed6baf5edc605489",
+    "contracts/agents-api/openapi.yaml": "c68be89861971f10f01e129a3fbed1b18ad177516959acdce15339863ce65de9",
     "contracts/agents-api/core.openapi.yaml": "5f17f3049a0892888bf4abe919b791b2df45c161b5fa4ee6e27efae2145c7d01",
     "contracts/agents-api/runtime.openapi.yaml": "505286d5eacf94a14f9527fcf4e7beb4fba4f792681be26ba966254cbf49b4aa"
   },
@@ -10,7 +10,7 @@
     "content/docs/api-reference/environment-templates.mdx": "68df9276e858e525e15bb88af624fc8adee8bcdcc03a788faaff56b560fd038c",
     "content/docs/api-reference/sessions.mdx": "7c12ac70dfdfef86b5d08b9151a7fafdbec6df4848760c81f059b6a331db81a1",
     "content/docs/api-reference/artifacts.mdx": "8df8d008126b49b1df88f28a676c4b237ccffc45a470b35ec30eab2daf1c0f7f",
-    "content/docs/api-reference/events.mdx": "83d7f56a788d073e0b19f0bc9197f39ec364375b9cc3a7ec69b79b54bc71e3eb",
+    "content/docs/api-reference/events.mdx": "fa509794f3c208c0cdcdaa68615c26b7e400ea6c892922a4e0a6a833e42fe5dd",
     "content/docs/api-reference/items.mdx": "fa4d248ac5623beb3f00a4ebb5a6c4ff477865ebee351e0c543a970a7ec3654d",
     "content/docs/api-reference/subagents.mdx": "90e2a1a9129111332e36715de2078ee595590c4c25c7b355962e4185bdeb5388",
     "content/docs/api-reference/turns.mdx": "46ee9e43aae4ec85b3ee335939dc1e0a238cfda0fb996c6af4d2831bef3377f1",
@@ -18,7 +18,7 @@
     "content/docs/api-reference/skills.mdx": "774ea05a7a8250fe5af5164388b98dafca99d56dc2eae686e8f628acb4e7c10b",
     "content/docs/api-reference/vaults.mdx": "d80eade1c2f8100030866abbb0fb6b7a09c94250a859c97cdf1abce32fdfdf1e",
     "content/docs/api-reference/credentials.mdx": "f129a51f74a3c7021c016600518e2350023f8d29571666ac5d64b7584cd7c7d0",
-    "openapi/public-api.yaml": "a546a465b7e8e0206a0b60f28533a1ee78f21417c7b54bcdb6e98d7b3638d940",
+    "openapi/public-api.yaml": "5439ed8aa9109dea4c07718302d6612d600a78f110068ccd3fcd8c6f89eb2b61",
     "content/docs/api-reference/meta.json": "56bf1dc145ccc8adde38c5f956f1a06f18ef18b646122250d01a294c516f8f83",
     "content/docs/api-reference/index.mdx": "9fd6b1c54149874d2999235067c101326f9e8a2e707a70b6672c81eb3ebfe63f",
     "content/docs/api-reference/core/core-administration.mdx": "5fc3ada51d2190a141f13738151e4d513390cc3bd66ce6f5013994bda68569b0",

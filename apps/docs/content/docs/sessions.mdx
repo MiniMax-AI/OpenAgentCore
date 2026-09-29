@@ -324,6 +324,11 @@ cancel while idle does nothing.
 events sent while you were disconnected are not replayed. Open it before sending
 input, and recover gaps from [Turns and Items](#turns-and-items).
 
+Open streams recheck the original Project key once per second, including before
+output. Revocation or Project archival closes the stream; authentication failure
+also closes it. Rechecks use the normal five-second authentication timeout and
+send no Session data while waiting. Bytes already sent cannot be recalled.
+
 ```python
 with client.beta.agents.sessions.events.stream(session.id) as stream:
     for event in stream:

@@ -236,6 +236,13 @@ is rejected while input is pending and changes nothing. A terminal reservation r
 affect a later reservation or Turn. Evaluate deadlines after acquiring the Session
 lock, and return terminal storage outcomes without rolling their transaction back.
 
+A validated Runtime `failed` response with `preparation_failed` and no Run settles
+the pending input immediately with `runtime_preparation_failed`. It records a
+safe Session failure before any Turn exists and releases the input gate; fixing
+the local cause allows new input. Transport loss, capacity rejection and
+unconfirmed cleanup remain retryable within the original deadline. Core uses
+these common control states, never Harness-specific error text.
+
 Initial messages for a newly created Environment-bearing Session use that same
 reservation in the creation transaction, including its connection-action event.
 The creation winner alone inserts it; the stream cursor still precedes that

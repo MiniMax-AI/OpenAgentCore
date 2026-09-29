@@ -1417,7 +1417,9 @@ paths:
         - Artifacts
   /agents/sessions/{session_id}/events:
     get:
-      description: Live-only events, including command output fragments from capable Codex peers as agent.output.command_execution_output.delta with stable Item/output indexes. Native text conversion and output quotas apply; completion snapshots remain authoritative. Reconnect through Session, Turn and Items reads; missed events are not replayed. A lagging stream closes with an error when its bounded buffer is exceeded. When a hosted Environment fails to provision, the stream sends agent.session.environment.failed, an error event (environment_error/sandbox_error with the safe step and exit-status reason, never command output) and agent.session.failed, then ends. Session activity includes immutable pending-input connection actions before Turn creation; self_hosted environments use the same safe output as Session retrieval.
+      description: |-
+        Live-only events, including command output fragments from capable Codex peers as agent.output.command_execution_output.delta with stable Item/output indexes. Native text conversion and output quotas apply; completion snapshots remain authoritative. Reconnect through Session, Turn and Items reads; missed events are not replayed. A lagging stream closes with an error when its bounded buffer is exceeded. When a hosted Environment fails to provision, the stream sends agent.session.environment.failed, an error event (environment_error/sandbox_error with the safe step and exit-status reason, never command output) and agent.session.failed, then ends. Session activity includes immutable pending-input connection actions before Turn creation; self_hosted environments use the same safe output as Session retrieval.
+        Active streams revalidate the original Project key every second before output; revocation, Project archival or authentication unavailability closes the stream. Authentication checks use a five-second timeout.
       parameters:
         - schema:
             type: string
