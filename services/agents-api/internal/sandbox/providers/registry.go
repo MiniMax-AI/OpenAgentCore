@@ -35,9 +35,25 @@ type Adapter struct {
 }
 
 var adapters = map[string]Adapter{
-	"docker":       {Policy: docker.Policy(), BuildLocal: buildDocker, Mode: "nodes", ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources, Normalize: nodeSelection(docker.ValidateSpecification)},
-	"microsandbox": {Policy: microsandbox.Policy(), BuildLocal: buildMicrosandbox, Mode: "nodes", Checkpoint: true, IdleSeconds: 300, RetentionSeconds: 86400, ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources, Normalize: nodeSelection(microsandbox.ValidateSpecification)},
-	"e2b":          {Policy: e2b.Policy(), ReplaceCredential: e2b.ReplaceCredential, CredentialRequiresReset: e2b.CredentialRequiresReset, CredentialUnconfirmed: e2b.ErrRequestUnconfirmed, Restore: e2b.RestoreSelection, ResolveChange: e2b.ResolveChange, Credential: true, PublicOrigin: true, BuildDirect: buildE2B, Mode: "direct", ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources, Normalize: e2b.NormalizeSelection},
+	"docker": {
+		Policy: docker.Policy(), Mode: "nodes", BuildLocal: buildDocker,
+		ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
+		Normalize: nodeSelection(docker.ValidateSpecification),
+	},
+	"microsandbox": {
+		Policy: microsandbox.Policy(), Mode: "nodes", BuildLocal: buildMicrosandbox,
+		Checkpoint: true, IdleSeconds: 300, RetentionSeconds: 86400,
+		ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
+		Normalize: nodeSelection(microsandbox.ValidateSpecification),
+	},
+	"e2b": {
+		Policy: e2b.Policy(), Mode: "direct", BuildDirect: buildE2B,
+		Credential: true, PublicOrigin: true,
+		ReplaceCredential: e2b.ReplaceCredential, CredentialRequiresReset: e2b.CredentialRequiresReset,
+		CredentialUnconfirmed: e2b.ErrRequestUnconfirmed, Restore: e2b.RestoreSelection,
+		ResolveChange: e2b.ResolveChange, Normalize: e2b.NormalizeSelection,
+		ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
+	},
 }
 
 func Lookup(kind string) (Adapter, error) {

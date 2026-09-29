@@ -3,7 +3,6 @@ package e2b
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"strings"
 	"unicode"
@@ -12,18 +11,12 @@ import (
 	"github.com/google/uuid"
 )
 
-func Policy() sandbox.DeploymentPolicy { return sandbox.DeploymentPolicy{} }
-
-func ValidateResources(r sandbox.Resources) error { return r.ValidatePolicy("e2b", Policy()) }
-func ValidateSpecification(s sandbox.DeploymentSpec) error {
-	if err := ValidateResources(s.Resources); err != nil {
-		return err
-	}
-	if s.Runtime != nil {
-		return &sandbox.ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: E2B Runtime is selected by its immutable template build", sandbox.ErrInvalid)}
-	}
-	return nil
+func Policy() sandbox.DeploymentPolicy {
+	return sandbox.DeploymentPolicy{RuntimeError: "E2B Runtime is selected by its immutable template build"}
 }
+
+func ValidateResources(r sandbox.Resources) error          { return r.ValidatePolicy("e2b", Policy()) }
+func ValidateSpecification(s sandbox.DeploymentSpec) error { return s.ValidatePolicy("e2b", Policy()) }
 
 func ValidateConfiguration(c *sandbox.E2BConfiguration) error {
 	if c == nil || c.APIKey == "" || len(c.APIKey) > 4096 || strings.IndexFunc(c.APIKey, func(r rune) bool { return unicode.IsSpace(r) || r == 0 }) >= 0 {
@@ -50,7 +43,7 @@ func ValidateConfiguration(c *sandbox.E2BConfiguration) error {
 func NormalizeSelection(s sandbox.Selection) (sandbox.Selection, error) {
 	if s.Resources == (sandbox.Resources{}) {
 		if s.Runtime != nil {
-			return s, &sandbox.ValidationError{Param: "runtime", Message: "invalid sandbox configuration: E2B Runtime is selected by its immutable template build"}
+			return s, &sandbox.ValidationError{Param: "runtime", Message: sandbox.ErrInvalid.Error() + ": " + Policy().RuntimeError}
 		}
 	} else if err := ValidateSpecification(s.DeploymentSpec); err != nil {
 		return s, err

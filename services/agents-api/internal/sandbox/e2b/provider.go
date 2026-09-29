@@ -160,17 +160,11 @@ func (c Config) Validate() error {
 	if c.Resources != nil && ValidateResources(*c.Resources) != nil {
 		return sandbox.ErrInvalid
 	}
-	template, build, ok := strings.Cut(c.Template, ":")
-	if !ok || template == "" || !validID(build) || !validID(c.InstallationID) || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 86400 || c.APIKey == "" || len(c.APIKey) > 4096 || strings.ContainsFunc(c.APIKey, func(r rune) bool { return unicode.IsSpace(r) || r == 0 }) {
+	if !validID(c.InstallationID) || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 86400 {
 		return sandbox.ErrInvalid
 	}
-	if _, _, err := NormalizeEndpoint(c.APIURL, c.Domain); err != nil {
-		return sandbox.ErrInvalid
-	}
-	for _, r := range template {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
-			return sandbox.ErrInvalid
-		}
+	if err := ValidateConfiguration(&sandbox.E2BConfiguration{APIKey: c.APIKey, Template: c.Template, APIURL: c.APIURL, Domain: c.Domain}); err != nil {
+		return err
 	}
 	for _, path := range []string{c.Binary, c.StateDir} {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path {

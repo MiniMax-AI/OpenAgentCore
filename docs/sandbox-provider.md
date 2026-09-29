@@ -185,6 +185,9 @@ For a new implementation:
    `CredentialVerifier` when needed.
 3. Register its constructor, policies and defaults in `providers/registry.go`.
    Node proxy identity and checkpoint advertisement consume this same entry.
+   The installer projection uses those registered policies and the common field
+   bounds in `sandbox/deployment_contract.go`; regenerate it with
+   `go run ./services/agents-api/cmd/specification-contract -write`.
 4. If new configuration fields are necessary, extend the typed `sandbox.Selection`
    envelope and its dedicated encrypted persistence fields, API DTO and operator
    client. Do not replace typed configuration with unrestricted JSON. Field codecs

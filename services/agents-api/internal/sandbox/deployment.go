@@ -87,6 +87,23 @@ type DeploymentSpec struct {
 	Runtime   *RuntimeRelease `json:"runtime,omitempty"`
 }
 
+// ValidatePolicy applies a registered adapter's rules without knowing its kind.
+func (s DeploymentSpec) ValidatePolicy(provider string, policy DeploymentPolicy) error {
+	if err := s.Resources.ValidatePolicy(provider, policy); err != nil {
+		return err
+	}
+	if !policy.Runtime {
+		if s.Runtime != nil {
+			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: %s", ErrInvalid, policy.RuntimeError)}
+		}
+		return nil
+	}
+	if s.Runtime == nil {
+		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: managed nodes require a pinned Runtime release", ErrInvalid)}
+	}
+	return s.Runtime.Validate()
+}
+
 func (s DeploymentSpec) Digest(provider string) string {
 	raw, _ := json.Marshal(struct {
 		Provider string `json:"provider"`

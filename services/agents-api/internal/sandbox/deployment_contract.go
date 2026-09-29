@@ -22,9 +22,12 @@ type runtimeRule struct {
 	Name    string `json:"name"`
 	Pattern string `json:"pattern"`
 }
+
+// DeploymentPolicy is declared by an adapter and projected to the installer.
 type DeploymentPolicy struct {
-	Disk    bool `json:"disk"`
-	Runtime bool `json:"runtime"`
+	RuntimeError string `json:"-"`
+	Disk         bool   `json:"disk"`
+	Runtime      bool   `json:"runtime"`
 }
 
 var resourceContract = []resourceRule{
