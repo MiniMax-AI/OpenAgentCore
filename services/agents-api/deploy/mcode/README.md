@@ -79,6 +79,12 @@ Use the real provider endpoint for the selected credential. Test proxies may
 forward requests unchanged and capture tool names/status, but must not synthesize
 model responses or log keys.
 
+MiniMax M2 Chat Completions may return inline `<think>` content. The pinned native
+Harness does not expose the provider's `reasoning_split` option; the adapter does
+not guess which response text to remove. Anthropic Messages supplies distinct
+thinking blocks. File read/write utilities also have no qualified public Item
+mapping; only actual Bash calls become `command_execution`.
+
 ## Execution boundaries
 
 Each API Session uses a separate native state directory and cwd. The execution
@@ -96,9 +102,10 @@ permissions. `system_packages` is unsupported; missing dependencies fail the
 operation requiring them. npm/Python packages and setup retain direct execution
 with the user's existing permissions.
 
-The native model may still see `skill`, `task_query`, `task_output` and `task_stop`.
-The first loads an exact registered skill name and cannot execute a script; the
-configured builtin/external skill catalog is empty. Task utilities cannot create
+Workspace Skills use the frozen installation's exact names and native `skill`
+loader. Session-local links resolve to the installed package directories;
+external discovery stays disabled. The text-only profile has no selected Skills.
+Task utilities such as `task_query`, `task_output` and `task_stop` cannot create
 work and enforce native Session ownership. Auxiliary native title requests are
 internal bookkeeping. Do not equate these with public function or workspace tools.
 

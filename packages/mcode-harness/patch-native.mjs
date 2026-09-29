@@ -34,7 +34,7 @@ const withWorkspace = catalog.replace(selectorGate, `  const protectedWorkspace 
   if (!protectedWorkspace && !input.selector.allowsTool(input.tool.def.name, input.options.selectorAlias)) return false;
   if (!protectedWorkspace && !isMcpServerAllowed(input.selector, input.options)) return false;`);
 writeFileSync(catalogPath, withWorkspace.replace(gate, `  if (process.env.OAC_RUNTIME_MCODE_TOOL_POLICY === 'protected-mcp-v1') {
-    if (source === 'builtin' && !DELEGATION_TOOL_NAMES.has(toolName) && !TASK_CONTROL_TOOL_NAMES.has(toolName)) return false;
+    if (source === 'builtin' && toolName !== 'skill' && !DELEGATION_TOOL_NAMES.has(toolName) && !TASK_CONTROL_TOOL_NAMES.has(toolName)) return false;
     if (source === 'builtin-matrix') return false;
   }
 ${gate}`));

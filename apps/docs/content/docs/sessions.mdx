@@ -522,7 +522,7 @@ template = client.beta.agents.environments.templates.create(
     name="python-data",
     network={"access": "restricted", "allowed_domains": ["pypi.org", "files.pythonhosted.org"]},
     packages={"python": ["pandas"]},
-    setup_commands=["mkdir -p /workspace/outputs"],
+    setup_commands=[{"command": "mkdir -p /workspace/outputs"}],
 )
 ```
 
