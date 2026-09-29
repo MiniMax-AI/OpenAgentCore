@@ -502,12 +502,12 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
     return installation
 
 
-def finish_apply(root, config, state, rendered, will_run):
+def finish_apply(root, config, state, gateway_document, will_run):
     managed = ingress_config.enabled(config) and "gateway" in will_run
     if managed:
         import ingress
         # Container input labels cannot prove which configuration Caddy loaded.
-        ingress_config.reload(root, rendered.files["Caddyfile"])
+        ingress_config.reload(root, gateway_document)
         if config["public_url"]:
             ingress.verify(config["public_url"], state["installation_id"])
     health(root, config, will_run)
@@ -583,7 +583,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         (root / "secrets/core.key.new").unlink(missing_ok=True)
     if not (changed or removed or restarts or edited):
         if ingress_config.enabled(config):
-            finish_apply(root, config, state, rendered, will_run)
+            finish_apply(root, config, state, rendered.files.get("Caddyfile"), will_run)
         state = dict(state, core_installation_id=core_installation_id)
         if record_digests(state, rendered.files) != load_state(root):
             save_state(root, record_digests(state, rendered.files))
@@ -601,7 +601,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         (root / "generated" / name).unlink()
     try:
         converge(root, state, rendered.services, will_run, force)
-        finish_apply(root, config, state, rendered, will_run)
+        finish_apply(root, config, state, rendered.files.get("Caddyfile"), will_run)
     except (OacError, RuntimeError, subprocess.CalledProcessError) as error:
         line = core_error_line(root, state)
         if line:
@@ -761,7 +761,8 @@ def start(root, out=print):
         desired = configuration.rendered_inputs(read_generated(root, {"compose.json"} | ({unit} if unit else set())), unit)
         will_run = set(desired) - {"migrate"}
         converge(root, state, desired, will_run)
-        health(root, written, will_run)
+        gateway_document = (root / "generated/Caddyfile").read_text() if ingress_config.enabled(written) else None
+        finish_apply(root, written, state, gateway_document, will_run)
     out("Services started.")
 
 

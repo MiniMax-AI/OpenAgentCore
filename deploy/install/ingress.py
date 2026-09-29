@@ -69,9 +69,13 @@ def prepare(root, name, confirmation):
     if previous is None or any(previous.get(key) != value for key, value in config_model.values(config).items()
                                if key != "public_url"):
         raise DomainError("configuration_pending", "Apply or revert pending config.json changes before changing the domain", 409)
-    # A previous attempt may have saved desired inputs without applying them.
-    # Keep the address from the generated service configuration during verification.
-    config = dict(config, public_url=previous.get("public_url"))
+    # Both desired and generated files may be ahead of the running services.
+    # Common apply/start records this address only after successful convergence.
+    receipt = Path(root) / "ingress/status.json"
+    if not receipt.exists():
+        raise DomainError("installation_not_ready", "Run oac apply before configuring the domain", 409)
+    applied = json.loads(oac_cli.read_private(receipt, "domain setup status"))
+    config = dict(config, public_url=applied["public_url"])
     candidate = dict(config, public_url=target)
     config_model.validate(candidate)
     actual = oac_cli.observe(state)
@@ -113,7 +117,6 @@ def verify(target, installation_id, timeout=180):
 
 def execute(root, prepared):
     config, state, candidate, args, job = prepared
-    changed = False
     try:
         gateway.reload(root, gateway.caddyfile(config, state, candidate=candidate["public_url"]))
         verify(candidate["public_url"], state["installation_id"])
@@ -122,18 +125,18 @@ def execute(root, prepared):
         # Persist desired inputs before apply. An interrupted operation can be retried
         # with the same hostname, or completed by the ordinary oac apply command.
         oac_cli.write_private(Path(root) / "config.json", json.dumps(candidate, indent=2) + "\n")
-        changed = True
         oac_cli._apply(Path(root), args, False, False, False, lambda _: None)
         job.update(state="ready", public_url=candidate["public_url"], message=None)
         save(root, job)
     except Exception as error:
         recovery_failed = False
         try:
-            if changed:
-                oac_cli.write_private(Path(root) / "config.json", json.dumps(config, indent=2) + "\n")
-                restore = argparse.Namespace(dry_run=False, yes=False,
-                                             confirm_public_url_change=configuration.local_public_url(config))
-                oac_cli._apply(Path(root), restore, False, False, False, lambda _: None)
+            # A retry may inherit partially applied services from an interrupted
+            # attempt. Restore through common apply even if this attempt only probed TLS.
+            oac_cli.write_private(Path(root) / "config.json", json.dumps(config, indent=2) + "\n")
+            restore = argparse.Namespace(dry_run=False, yes=False,
+                                         confirm_public_url_change=configuration.local_public_url(config))
+            oac_cli._apply(Path(root), restore, False, False, False, lambda _: None)
             gateway.reload(root, gateway.caddyfile(config, state))
         except Exception:
             recovery_failed = True

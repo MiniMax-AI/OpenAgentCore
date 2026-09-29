@@ -166,6 +166,40 @@ class DomainTests(unittest.TestCase):
                     oac_cli.status(self.root, out=lambda _: None)
                 self.host.containers[name]["running"] = True
 
+    def test_failed_retry_restores_the_receipt_before_and_after_service_convergence(self):
+        before = (self.root / "generated/core.env").read_bytes()
+        converge = oac_cli.converge
+        for restarted in (False, True):
+            with self.subTest(services_restarted=restarted):
+                def interrupt(*args, **kwargs):
+                    if restarted:
+                        converge(*args, **kwargs)
+                    raise KeyboardInterrupt()
+                with mock.patch.object(oac_cli, "converge", side_effect=interrupt), self.assertRaises(KeyboardInterrupt):
+                    ingress.configure(self.root, "core.example.com", out=lambda _: None)
+                ingress_config.reload.reset_mock()
+                ingress.verify.side_effect = ingress.DomainError("https_not_ready", "DNS not ready")
+                with self.assertRaisesRegex(ingress.DomainError, "DNS not ready"):
+                    ingress.configure(self.root, "core.example.com", out=lambda _: None)
+                for call in ingress_config.reload.call_args_list:
+                    self.assertNotIn("redir", call.args[1])
+                self.assertIsNone(oac_cli.load_config(self.root)["public_url"])
+                self.assertIsNone(ingress.status(self.root)["public_url"])
+                self.assertEqual((self.root / "generated/core.env").read_bytes(), before)
+                self.assertTrue(self.host.core_listening(8091))
+                ingress.verify.side_effect = None
+
+    def test_start_records_the_applied_address_after_an_offline_edit(self):
+        oac_cli.stop(self.root, out=lambda _: None)
+        config = oac_cli.load_config(self.root)
+        config["public_url"] = "https://core.example.com"
+        oac_cli.write_private(self.root / "config.json", json.dumps(config))
+        oac_cli.apply(self.root, interactive=False, confirm_public_url_change=config["public_url"], out=lambda _: None)
+        self.assertIsNone(ingress.status(self.root)["public_url"])
+        oac_cli.start(self.root, out=lambda _: None)
+        self.assertEqual(ingress.status(self.root)["public_url"], config["public_url"])
+        self.assertEqual(ingress.status(self.root)["state"], "ready")
+
     def test_untrusted_hostnames_never_reach_gateway(self):
         for value in ("https://example.com", "example.com:8443", "127.0.0.1", "localhost", "a.local", "a.com\n}", None):
             with self.subTest(value=value), self.assertRaises(ingress.DomainError):

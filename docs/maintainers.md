@@ -276,16 +276,19 @@ the private Caddy socket even when container inputs already match. A successful
 apply reconciles domain operation status after verifying the running services.
 Domain preparation retains the old entry point while
 verifying a trusted certificate and installation-specific response over HTTPS.
-It takes that address from the generated service settings, so pending desired
-inputs left by an interrupted attempt cannot redirect first-run access prematurely.
+The existing operation record retains the last successfully applied public address.
+Apply and start update it after gateway verification and service health checks;
+generated files alone do not establish that a new address is active. Failed retries
+restore through common apply even when a previous attempt partially changed services.
 Only then does it update `public_url` and call the common apply path. Failure
 restores the previous desired configuration and reports incomplete recovery.
 Interrupted operations retain desired files and a visible failure/retry state;
 they never create another service project or delete execution data.
 
 The domain operation refuses unrelated pending config edits and shares `.oac.lock`
-with CLI mutations. Its status file is operation bookkeeping, not another source
-of process settings. A Web restart ends console sessions; the UI provides the new
+with CLI mutations. Its status file is operation bookkeeping and the public-address
+recovery receipt; `config.json` remains the source of desired process settings.
+A Web restart ends console sessions; the UI provides the new
 HTTPS login address instead of treating a dropped request as proof of success.
 Split/native installations use external ingress and explicitly report automatic
 Web setup unavailable. Ingress is an installation concern, independent of Runtime
