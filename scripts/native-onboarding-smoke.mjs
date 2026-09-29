@@ -67,7 +67,7 @@ function run(executable, args, input = '') {
     let output = '';
     child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
     child.stdin.on('error', () => {}); child.stdin.end(input);
-    const timer = setTimeout(() => { child.kill(); reject(new Error('Native onboarding did not settle')); }, 180000);
+    const timer = setTimeout(() => { child.kill(); reject(new Error('Native onboarding did not settle: '+(secret ? output.replaceAll(secret, '[redacted]') : output).slice(-4096))); }, 180000);
     child.on('error', reject);
     child.on('close', code => { clearTimeout(timer); if (secret) assert.ok(!output.includes(secret), 'Credential leaked into terminal'); resolve({ code, output }); });
   });
