@@ -141,7 +141,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 		return store.RuntimeDeploymentView{}
 	}
 	empty = reset(2)
-	cloud := store.SandboxDeploymentSetupRequest{ExpectedGeneration: empty.Generation, DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
+	cloud := store.SandboxDeploymentSetupRequest{ExpectedGeneration: empty.Generation, DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
 	if _, err := w.InitializeSandboxDeployment(t.Context(), cloud); err != nil {
 		t.Fatal("setup after unconfigured publication", err)
 	}

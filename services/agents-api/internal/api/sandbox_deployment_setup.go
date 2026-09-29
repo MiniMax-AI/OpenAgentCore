@@ -37,7 +37,7 @@ type SandboxDeploymentChangeInput struct {
 func (v SandboxDeploymentInput) request() store.SandboxDeploymentSetupRequest {
 	input := store.SandboxDeploymentSetupRequest{ExpectedGeneration: *v.ExpectedGeneration, Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Runtime: v.Runtime}}
 	if v.E2B != nil {
-		input.E2B = &store.SandboxE2BConfiguration{Template: v.E2B.Template, APIURL: v.E2B.APIURL, Domain: v.E2B.Domain}
+		input.E2B = &sandbox.E2BConfiguration{Template: v.E2B.Template, APIURL: v.E2B.APIURL, Domain: v.E2B.Domain}
 		if v.E2B.APIKey != nil {
 			input.E2B.APIKey = *v.E2B.APIKey
 			input.E2B.ReplaceCredential = true

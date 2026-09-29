@@ -1443,9 +1443,8 @@ change guard. This boundary does not add cross-node Session
 migration, Core multi-active, autoscaling, Kubernetes or harness residency.
 
 The common
-`services/agents-api/internal/sandbox` contract owns the four base operations
-(Create, GetInfo, Renew, Kill) and the optional CheckpointProvider
-capability. Core orchestration must not import an adapter or SDK. Exact compute
+`services/agents-api/internal/sandbox` contract owns the five required operations and optional capabilities documented
+in [the Provider guide](../../docs/sandbox-provider.md). Core orchestration must not import an adapter or SDK. Exact compute
 identity, generation construction, inspection, full snapshot capture, restore,
 thaw and owned artifact cleanup use that common capability. Initialization and
 execution use the authenticated Runtime peer.

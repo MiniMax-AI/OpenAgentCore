@@ -30,22 +30,18 @@ type Resources struct {
 	EnvironmentDiskMiB uint32 `json:"environment_disk_mib,omitempty"`
 }
 
-func (r Resources) Validate(provider string) error {
-	rules, ok := deploymentProviders[provider]
+func (r Resources) ValidatePolicy(provider string, rules DeploymentPolicy) error {
 	values := reflect.ValueOf(r)
 	for i, rule := range resourceContract {
 		min, max := rule.Min, rule.Max
 		message := rule.Message
 		var maximum *uint32 = validationBound(max)
 		if rule.OmitZero {
-			if !ok {
-				break
-			}
 			min, max = 0, 0
 			message = provider + " does not support independent disk capacity limits"
 			if rules.Disk {
 				min, max = minimumDiskMiB, ^uint32(0)
-				message = "microsandbox requires root_disk_mib and environment_disk_mib of at least 1024 MiB"
+				message = provider + " requires root_disk_mib and environment_disk_mib of at least 1024 MiB"
 				maximum = nil
 			} else {
 				maximum = validationBound(max)
@@ -55,9 +51,6 @@ func (r Resources) Validate(provider string) error {
 		if value < uint64(min) || value > uint64(max) {
 			return &ValidationError{Param: "resources." + rule.Name, Min: validationBound(min), Max: maximum, Message: fmt.Sprintf("%s: %s", ErrInvalid, message)}
 		}
-	}
-	if !ok {
-		return fmt.Errorf("%w: unsupported sandbox provider", ErrInvalid)
 	}
 	return nil
 }
@@ -92,22 +85,6 @@ func (r RuntimeRelease) Validate() error {
 type DeploymentSpec struct {
 	Resources Resources       `json:"resources"`
 	Runtime   *RuntimeRelease `json:"runtime,omitempty"`
-}
-
-func (s DeploymentSpec) Validate(provider string) error {
-	if err := s.Resources.Validate(provider); err != nil {
-		return err
-	}
-	if !deploymentProviders[provider].Runtime {
-		if s.Runtime != nil {
-			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: E2B Runtime is selected by its immutable template build", ErrInvalid)}
-		}
-		return nil
-	}
-	if s.Runtime == nil {
-		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: managed nodes require a pinned Runtime release", ErrInvalid)}
-	}
-	return s.Runtime.Validate()
 }
 
 func (s DeploymentSpec) Digest(provider string) string {

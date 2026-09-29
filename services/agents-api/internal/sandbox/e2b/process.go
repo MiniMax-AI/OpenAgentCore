@@ -9,13 +9,15 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
 // ProcessCaller retains and drains an outstanding helper after caller timeout.
 // The helper keeps its allocation lock until its bounded SDK operation settles.
 var errHelperNotStarted = errors.New("helper did not start")
 
-type ProcessCaller struct{ Fence *CallFence }
+type ProcessCaller struct{ Fence *sandbox.CallFence }
 
 func (p *ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 	data, err := json.Marshal(q)
@@ -41,7 +43,7 @@ func (p *ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 	}
 	finished := func() {}
 	if p.Fence != nil {
-		finished = p.Fence.childStarted()
+		finished = p.Fence.ChildStarted()
 	}
 	done := make(chan error, 1)
 	go func() { err := cmd.Wait(); finished(); done <- err }()

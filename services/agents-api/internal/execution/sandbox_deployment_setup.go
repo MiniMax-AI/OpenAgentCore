@@ -10,27 +10,13 @@ import (
 
 // PreparedRuntimeDeployment has completed provider validation without publishing
 // a selection. Publish must only update in-memory state and must not fail.
-// E2BTemplateBuild is the fixed build's specification read by that validation.
+// Selection is the resolved typed configuration returned by preparation.
 type PreparedRuntimeDeployment struct {
 	Config           *RuntimeProvider
 	Publish          func(*RuntimeProvider)
-	E2BTemplateBuild *store.SandboxE2BTemplateBuild
+	Selection        *sandbox.Selection
 	VerifyCredential func(context.Context) error
 	FenceCredential  func(context.Context) (func(), error)
-}
-
-// withTemplateBuild saves the validated build with the selection and fills
-// omitted E2B resources from it, without changing the caller's request.
-func withTemplateBuild(input store.SandboxDeploymentSetupRequest, candidate PreparedRuntimeDeployment) store.SandboxDeploymentSetupRequest {
-	if input.E2B != nil && candidate.E2BTemplateBuild != nil {
-		e2b, build := *input.E2B, *candidate.E2BTemplateBuild
-		if store.E2BResourcesPending(input) {
-			input.Resources = sandbox.Resources{CPUs: uint32(build.CPUs), MemoryMiB: uint32(build.MemoryMiB)}
-		}
-		e2b.TemplateBuild = &build
-		input.E2B = &e2b
-	}
-	return input
 }
 
 type RuntimeDeploymentPreparer func(context.Context, store.SandboxSetup) (PreparedRuntimeDeployment, error)
@@ -70,7 +56,7 @@ func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input store.Sa
 			return store.RuntimeDeploymentView{}, err
 		}
 	}
-	result, err := m.store.InitializeSandboxDeployment(ctx, m.setupInstallationID, withTemplateBuild(input, candidate))
+	result, err := m.store.InitializeSandboxDeployment(ctx, m.setupInstallationID, *candidate.Selection)
 	if err != nil {
 		return store.RuntimeDeploymentView{}, err
 	}
@@ -161,6 +147,13 @@ func (m *runtimeManager) prepareCandidate(ctx context.Context, input store.Sandb
 	if closed {
 		return PreparedRuntimeDeployment{}, ErrExecutionUnavailable
 	}
+	if candidate.Selection == nil {
+		candidate.Selection = &input
+	}
+	if candidate.Selection.Provider != input.Provider {
+		return PreparedRuntimeDeployment{}, sandbox.ErrInvalid
+	}
+	candidate.Selection.ExpectedGeneration = input.ExpectedGeneration
 	candidate.Config = &copied
 	return candidate, nil
 }

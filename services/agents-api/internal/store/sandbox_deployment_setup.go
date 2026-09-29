@@ -4,26 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var ErrSandboxDeploymentConflict = errors.New("sandbox deployment is already configured differently")
 
-type SandboxDeploymentSetupRequest struct {
-	sandbox.DeploymentSpec
-	ExpectedGeneration uint64                   `json:"expected_generation"`
-	Provider           string                   `json:"provider"`
-	E2B                *SandboxE2BConfiguration `json:"e2b,omitempty"`
-}
+type SandboxDeploymentSetupRequest = sandbox.Selection
 
 // SandboxSetup is the immutable configuration selected by the deployment admin.
 // An empty Provider means that Web setup has not yet selected an adapter.
@@ -33,7 +28,7 @@ type SandboxSetup struct {
 	Generation                                   uint64
 	Mode                                         string
 	AdmissionPaused                              bool
-	E2B                                          *SandboxE2BConfiguration
+	E2B                                          *sandbox.E2BConfiguration
 	IdleSeconds, RetentionSeconds                int64
 }
 
@@ -56,20 +51,20 @@ func (s *Store) sandboxSetup(d sqlc.RuntimeDeployment) (SandboxSetup, error) {
 		return SandboxSetup{}, err
 	}
 	if d.ProviderKind != "" && !unspecifiedNodeDeployment(d) {
-		if err := result.Specification.Validate(d.ProviderKind); err != nil {
+		if err := providers.ValidateSpecification(d.ProviderKind, result.Specification); err != nil {
 			return SandboxSetup{}, err
 		}
 	}
-	if d.ProviderKind == "e2b" {
+	if providers.UsesCredential(d.ProviderKind) {
 		credential, err := s.credentialCipher.OpenSandboxDeployment(d.E2bCredential, result.InstallationID, result.Generation)
 		if err != nil {
 			return SandboxSetup{}, ErrSandboxCredentialUnavailable
 		}
-		apiURL, domain, err := e2b.NormalizeEndpoint(d.E2bApiUrl, d.E2bDomain)
+		selection, err := providers.Restore(sandbox.Selection{Provider: d.ProviderKind, DeploymentSpec: result.Specification, E2B: &sandbox.E2BConfiguration{APIKey: string(credential), Template: d.E2bTemplate, APIURL: d.E2bApiUrl, Domain: d.E2bDomain}})
 		if err != nil {
 			return SandboxSetup{}, ErrSandboxDeploymentConflict
 		}
-		result.E2B = &SandboxE2BConfiguration{APIKey: string(credential), Template: d.E2bTemplate, APIURL: apiURL, Domain: domain}
+		result.E2B = selection.E2B
 	}
 	return result, nil
 }
@@ -169,8 +164,9 @@ func runtimeDeploymentView(d sqlc.RuntimeDeployment, publicURL string) RuntimeDe
 			result.SpecificationDigest = spec.Digest(d.ProviderKind)
 		}
 	}
-	if d.ProviderKind == "e2b" {
-		apiURL, domain, _ := e2b.NormalizeEndpoint(d.E2bApiUrl, d.E2bDomain)
+	if providers.UsesCredential(d.ProviderKind) {
+		selection, _ := providers.Restore(sandbox.Selection{Provider: d.ProviderKind, E2B: &sandbox.E2BConfiguration{Template: d.E2bTemplate, APIURL: d.E2bApiUrl, Domain: d.E2bDomain}})
+		apiURL, domain := selection.E2B.APIURL, selection.E2B.Domain
 		result.E2B = &SandboxE2BView{Template: d.E2bTemplate, APIURL: apiURL, Domain: domain, CredentialConfigured: len(d.E2bCredential) > 0,
 			TemplateBuild: SandboxE2BTemplateBuildView{Resources: SandboxTemplateResources{
 				CPUs: optionalInt32(d.E2bTemplateCpus), MemoryMiB: optionalInt32(d.E2bTemplateMemoryMib), RootDiskMiB: optionalInt32(d.E2bTemplateRootDiskMib)}}}
@@ -179,7 +175,7 @@ func runtimeDeploymentView(d sqlc.RuntimeDeployment, publicURL string) RuntimeDe
 			result.E2B.TemplateBuild.Status = &status
 		}
 	}
-	if d.ProviderKind == "microsandbox" {
+	if providers.SupportsCheckpoint(d.ProviderKind) {
 		result.Suspension = &SandboxSuspensionView{IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds}
 	}
 	return result

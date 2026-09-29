@@ -17,8 +17,8 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
-	providerconfig "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/config"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
+	providerconfig "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 )
 
 func main() {

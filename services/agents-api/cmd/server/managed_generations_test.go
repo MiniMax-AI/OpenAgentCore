@@ -52,16 +52,16 @@ print(json.dumps({'Version':1,'Info':info}))
 	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
 	t.Setenv("OAC_E2B_STATE_DIR", state)
 	id := uuid.NewString()
-	old := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, E2B: &store.SandboxE2BConfiguration{APIKey: "old-key", Template: "old:" + uuid.NewString()}}
+	old := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, E2B: &sandbox.E2BConfiguration{APIKey: "old-key", Template: "old:" + uuid.NewString()}}
 	current := old
 	current.Generation = 2
 	current.Specification.Resources.CPUs = 4
-	current.E2B = &store.SandboxE2BConfiguration{APIKey: "new-key", Template: "new:" + uuid.NewString()}
+	current.E2B = &sandbox.E2BConfiguration{APIKey: "new-key", Template: "new:" + uuid.NewString()}
 	ref := sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
 	db := &routingSetupStore{setupStore: setupStore{value: current}, old: old, oldID: ref.AllocationID}
 	setup := &managedSetup{store: db, installationID: id}
 	// A facade retained by a generation-one lifecycle still reads current credentials.
-	router := &e2bGenerationRouter{setup: setup, store: db}
+	router := &generationRouter{setup: setup, store: db}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if _, err := router.GetInfo(ctx, ref); err != nil {
@@ -152,7 +152,7 @@ print(json.dumps(result))
 			id, build := uuid.NewString(), ":"+uuid.NewString()
 			current := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
 				Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
-				E2B:           &store.SandboxE2BConfiguration{APIKey: tc.committedKey, Template: tc.committedTemplate + build}}
+				E2B:           &sandbox.E2BConfiguration{APIKey: tc.committedKey, Template: tc.committedTemplate + build}}
 			db := &setupStore{value: current}
 			s := &managedSetup{installationID: id, store: db}
 			loaded, err := s.load(t.Context())
@@ -160,7 +160,7 @@ print(json.dumps(result))
 				t.Fatal(err)
 			}
 			next := current
-			next.E2B = &store.SandboxE2BConfiguration{APIKey: tc.candidateKey, Template: tc.candidateTemplate + build}
+			next.E2B = &sandbox.E2BConfiguration{APIKey: tc.candidateKey, Template: tc.candidateTemplate + build}
 			candidate, err := s.prepare(t.Context(), next)
 			if err != nil {
 				t.Fatal(err)

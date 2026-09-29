@@ -22,7 +22,7 @@ type runtimeRule struct {
 	Name    string `json:"name"`
 	Pattern string `json:"pattern"`
 }
-type providerRule struct {
+type DeploymentPolicy struct {
 	Disk    bool `json:"disk"`
 	Runtime bool `json:"runtime"`
 }
@@ -41,13 +41,10 @@ var runtimeContract = []runtimeRule{
 	{"runtime_sha256", "[0-9a-f]{64}"},
 	{"firmware_sha256", "[0-9a-f]{64}"},
 }
-var deploymentProviders = map[string]providerRule{
-	"docker": {Runtime: true}, "microsandbox": {Disk: true, Runtime: true}, "e2b": {},
-}
 
 // PythonDeploymentContract generates the installer projection. Struct order is
 // checked before generation because it also defines Go's canonical JSON bytes.
-func PythonDeploymentContract() string {
+func PythonDeploymentContract(policies map[string]DeploymentPolicy) string {
 	for _, item := range []struct {
 		value any
 		names []string
@@ -65,11 +62,11 @@ func PythonDeploymentContract() string {
 		}
 	}
 	raw, _ := json.Marshal(struct {
-		Resources   []resourceRule          `json:"resources"`
-		Runtime     []runtimeRule           `json:"runtime"`
-		Providers   map[string]providerRule `json:"providers"`
-		MinimumDisk uint32                  `json:"minimum_disk"`
-	}{resourceContract, runtimeContract, deploymentProviders, minimumDiskMiB})
+		Resources   []resourceRule              `json:"resources"`
+		Runtime     []runtimeRule               `json:"runtime"`
+		Providers   map[string]DeploymentPolicy `json:"providers"`
+		MinimumDisk uint32                      `json:"minimum_disk"`
+	}{resourceContract, runtimeContract, policies, minimumDiskMiB})
 	return "# BEGIN GENERATED DEPLOYMENT CONTRACT\n# Generated from sandbox/deployment_contract.go; do not edit.\n_CONTRACT = json.loads(" + fmt.Sprintf("%q", string(raw)) + ")\n# END GENERATED DEPLOYMENT CONTRACT"
 }
 func resourceNames() []string {

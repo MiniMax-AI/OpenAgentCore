@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -14,7 +15,7 @@ func configureRuntimeManager(ctx context.Context, q *sqlc.Queries, previous sqlc
 	if selected.ProviderKind == "" {
 		return nil
 	}
-	if selected.ProviderKind != "docker" && selected.ProviderKind != "microsandbox" {
+	if !providers.IsNode(selected.ProviderKind) {
 		return ErrInvalidInput
 	}
 	installation, err := parseConnectionGeneration(selected.InstallationID)

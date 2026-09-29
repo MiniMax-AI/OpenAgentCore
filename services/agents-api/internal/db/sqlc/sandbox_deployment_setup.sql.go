@@ -81,7 +81,7 @@ func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg Initializ
 const recordSandboxTemplateBuild = `-- name: RecordSandboxTemplateBuild :exec
 UPDATE runtime_deployment SET e2b_template_build_status=$1, e2b_template_cpus=$2,
 e2b_template_memory_mib=$3, e2b_template_root_disk_mib=$4,
-updated_at=clock_timestamp() WHERE singleton=true AND provider_kind='e2b'
+updated_at=clock_timestamp() WHERE singleton=true AND e2b_template<>''
 `
 
 type RecordSandboxTemplateBuildParams struct {

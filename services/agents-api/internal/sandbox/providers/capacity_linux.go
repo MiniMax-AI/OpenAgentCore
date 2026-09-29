@@ -1,12 +1,13 @@
 //go:build linux
 
-package config
+package providers
 
 import (
 	"fmt"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"runtime"
 	"syscall"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
 func hostCapacity(r sandbox.Resources) error {

@@ -2,85 +2,28 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math"
-	"strings"
-	"unicode"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
-	"github.com/google/uuid"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var ErrSandboxCredentialUnavailable = errors.New("sandbox credential encryption is unavailable")
 
-// APIKey is internal configuration. HTTP requests use a write-only DTO.
-// TemplateBuild is set only by Core after it validates the candidate.
-type SandboxE2BConfiguration struct {
-	ReplaceCredential bool                     `json:"-"`
-	APIKey            string                   `json:"-"`
-	APIURL            string                   `json:"api_url,omitempty"`
-	Domain            string                   `json:"domain,omitempty"`
-	Template          string                   `json:"template"`
-	TemplateBuild     *SandboxE2BTemplateBuild `json:"-"`
-}
-
-// SandboxE2BTemplateBuild is the fixed build as read by the validation that
-// admitted a selection. RootDiskMiB is nil when E2B does not report it.
-type SandboxE2BTemplateBuild struct {
-	Status          string
-	CPUs, MemoryMiB int32
-	RootDiskMiB     *int32
-}
 type SandboxDeploymentUpdateRequest struct {
 	SandboxDeploymentSetupRequest
 	ExpectedGeneration uint64 `json:"expected_generation"`
 }
 
-// E2BResourcesPending reports an E2B selection that omitted resources. Core
-// fills them from the validated template build before any write.
-func E2BResourcesPending(input SandboxDeploymentSetupRequest) bool {
-	return input.Provider == "e2b" && input.Resources == (sandbox.Resources{})
-}
-
 func validateSandboxSelection(input SandboxDeploymentSetupRequest) error {
-	if E2BResourcesPending(input) {
-		if input.Runtime != nil {
-			return sandboxConfigurationError(&sandbox.ValidationError{Param: "runtime", Message: "invalid sandbox configuration: E2B Runtime is selected by its immutable template build"})
-		}
-	} else if err := input.DeploymentSpec.Validate(input.Provider); err != nil {
+	_, err := providers.Normalize(input)
+	if err != nil {
 		return sandboxConfigurationError(err)
-	}
-	switch input.Provider {
-	case "docker", "microsandbox":
-		if input.E2B != nil {
-			return ErrInvalidInput
-		}
-	case "e2b":
-		if input.E2B == nil || input.E2B.APIKey == "" || len(input.E2B.APIKey) > 4096 || strings.IndexFunc(input.E2B.APIKey, func(r rune) bool { return unicode.IsSpace(r) || r == 0 }) >= 0 {
-			return ErrInvalidInput
-		}
-		if _, _, err := e2b.NormalizeEndpoint(input.E2B.APIURL, input.E2B.Domain); err != nil {
-			return ErrInvalidInput
-		}
-		template, build, ok := strings.Cut(input.E2B.Template, ":")
-		id, err := uuid.Parse(build)
-		if !ok || template == "" || len(template) > 128 || err != nil || id == uuid.Nil || id.String() != build {
-			return ErrInvalidInput
-		}
-		for _, c := range template {
-			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
-				return ErrInvalidInput
-			}
-		}
-	default:
-		return ErrInvalidInput
 	}
 	return nil
 }
@@ -102,9 +45,11 @@ func (s *Store) sandboxSelectionEqual(d sqlc.RuntimeDeployment, input SandboxDep
 	if d.E2bTemplate != input.E2B.Template {
 		return false, nil
 	}
-	savedAPI, savedDomain, savedErr := e2b.NormalizeEndpoint(d.E2bApiUrl, d.E2bDomain)
-	inputAPI, inputDomain, inputErr := e2b.NormalizeEndpoint(input.E2B.APIURL, input.E2B.Domain)
-	if savedErr != nil || inputErr != nil || savedAPI != inputAPI || savedDomain != inputDomain {
+	saved := input
+	saved.E2B = &sandbox.E2BConfiguration{APIKey: input.E2B.APIKey, Template: d.E2bTemplate, APIURL: d.E2bApiUrl, Domain: d.E2bDomain}
+	saved, savedErr := providers.Normalize(saved)
+	normalized, inputErr := providers.Normalize(input)
+	if savedErr != nil || inputErr != nil || saved.E2B.APIURL != normalized.E2B.APIURL || saved.E2B.Domain != normalized.E2B.Domain {
 		return false, nil
 	}
 	key, err := s.credentialCipher.OpenSandboxDeployment(d.E2bCredential, runtimeUUID(d.InstallationID), uint64(d.Generation))
@@ -116,25 +61,24 @@ func (s *Store) sandboxSelectionEqual(d sqlc.RuntimeDeployment, input SandboxDep
 
 func (s *Store) saveSandboxSelection(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDeployment, input SandboxDeploymentSetupRequest) error {
 	// Only a complete specification is stored, including derived E2B resources.
-	if err := input.DeploymentSpec.Validate(input.Provider); err != nil {
+	if err := providers.ValidateSpecification(input.Provider, input.DeploymentSpec); err != nil {
 		return sandboxConfigurationError(err)
 	}
 	if d.Generation == math.MaxInt64 {
 		return ErrSandboxDeploymentConflict
 	}
 	generation := d.Generation + 1
-	mode := "nodes"
-	namespace := "nodes:" + runtimeUUID(d.InstallationID)
-	if input.Provider == "e2b" {
-		mode = "direct"
-		namespace = "e2b:" + runtimeUUID(d.InstallationID)
+	description, err := providers.Describe(input.Provider, runtimeUUID(d.InstallationID))
+	if err != nil {
+		return sandboxConfigurationError(err)
 	}
-	digest := sha256.Sum256([]byte(input.Provider + "\x00" + namespace))
-	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: input.Provider, BackendFingerprint: hex.EncodeToString(digest[:]), Generation: generation, Mode: mode}
+	normalized, err := providers.Normalize(input)
+	if err != nil {
+		return sandboxConfigurationError(err)
+	}
+	input = normalized
+	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: input.Provider, BackendFingerprint: description.BackendFingerprint, Generation: generation, Mode: description.Mode, IdleSeconds: description.IdleSeconds, RetentionSeconds: description.RetentionSeconds}
 	params.Specification, _ = json.Marshal(input.DeploymentSpec)
-	if input.Provider == "microsandbox" {
-		params.IdleSeconds, params.RetentionSeconds = 300, 86400
-	}
 	if input.E2B != nil {
 		encrypted, err := s.credentialCipher.SealSandboxDeployment([]byte(input.E2B.APIKey), runtimeUUID(d.InstallationID), uint64(generation))
 		if err != nil {
@@ -149,7 +93,7 @@ func (s *Store) saveSandboxSelection(ctx context.Context, q *sqlc.Queries, d sql
 	return q.InitializeSandboxDeployment(ctx, params)
 }
 
-func templateBuildColumns(build *SandboxE2BTemplateBuild) sqlc.RecordSandboxTemplateBuildParams {
+func templateBuildColumns(build *sandbox.TemplateBuild) sqlc.RecordSandboxTemplateBuildParams {
 	var params sqlc.RecordSandboxTemplateBuildParams
 	if build != nil {
 		params.E2bTemplateBuildStatus = pgtype.Text{String: build.Status, Valid: true}

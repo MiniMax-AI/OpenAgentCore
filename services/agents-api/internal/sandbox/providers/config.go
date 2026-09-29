@@ -1,23 +1,18 @@
-// Package config constructs the selected node-local sandbox adapter.
-package config
+// Node-local adapter configuration and construction.
+package providers
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"net/url"
 	"os"
-	"path/filepath"
 
-	"context"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
-	sandboxdocker "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/docker"
 	"github.com/google/uuid"
-	"github.com/moby/moby/client"
 )
 
 type Config struct {
@@ -79,51 +74,14 @@ func Build(config Config) (*Built, func(), error) {
 	if err != nil || id == uuid.Nil || id.String() != config.InstallationID {
 		return nil, closeProvider, errors.New("sandbox requires a canonical installation_id UUID")
 	}
-	if config.Provider != "docker" && config.Provider != "microsandbox" {
-		return nil, closeProvider, errors.New("sandbox provider must be docker or microsandbox")
+	adapter, err := Lookup(config.Provider)
+	if err != nil || adapter.BuildLocal == nil {
+		return nil, closeProvider, errors.New("sandbox provider is not node-local")
 	}
-
-	hasDocker, hasMicrosandbox := config.Docker != nil, config.Microsandbox != nil
 	result := &Built{InstallationID: config.InstallationID, SpecificationDigest: config.Specification.Digest(config.Provider)}
-	switch config.Provider {
-	case "docker":
-		if config.Docker == nil || !hasDocker || hasMicrosandbox {
-			return nil, closeProvider, errors.New("managed Docker requires only the docker configuration object")
-		}
-		entry := config.Docker
-		host, err := url.Parse(entry.Host)
-		if err != nil || host.Scheme != "unix" || host.Host != "" || host.User != nil || host.RawQuery != "" || host.Fragment != "" || host.RawPath != "" || host.Path == "/" || !filepath.IsAbs(host.Path) || filepath.Clean(host.Path) != host.Path || entry.Host != "unix://"+host.Path {
-			return nil, closeProvider, errors.New("managed Docker host must be an explicit canonical unix socket")
-		}
-		seccomp, err := os.ReadFile(entry.SeccompFile)
-		if err != nil {
-			return nil, closeProvider, fmt.Errorf("cannot read managed Docker seccomp JSON: %w", err)
-		}
-		if !json.Valid(seccomp) {
-			return nil, closeProvider, errors.New("invalid managed Docker seccomp JSON")
-		}
-		c, err := client.New(client.WithHost(entry.Host))
-		if err != nil {
-			return nil, closeProvider, errors.New("invalid managed Docker endpoint")
-		}
-		closeProvider = func() { _ = c.Close() }
-		provider, err := sandboxdocker.New(c, sandboxdocker.Config{InstallationID: config.InstallationID, Image: entry.Image, Network: entry.Network, Seccomp: string(seccomp), ExtraHosts: entry.ExtraHosts, NestedSandbox: entry.NestedSandbox, Resources: &config.Specification.Resources})
-		if err != nil {
-			closeProvider()
-			return nil, func() {}, errors.New("invalid managed Docker provider configuration")
-		}
-		result.Provider = provider
-		result.Probe = dockerProbe(c, entry.Image, config.Specification.Resources)
-		result.BackendFingerprint = BackendFingerprint(config.Provider, entry.Host)
-	case "microsandbox":
-		if config.Microsandbox == nil || !hasMicrosandbox || hasDocker {
-			return nil, closeProvider, errors.New("managed microsandbox requires only the microsandbox configuration object")
-		}
-		if err := configureMicrosandbox(*config.Microsandbox, config.Specification.Resources, result); err != nil {
-			return nil, closeProvider, err
-		}
-	default:
-		return nil, closeProvider, errors.New("managed provider must be docker or microsandbox")
+	closeProvider, err = adapter.BuildLocal(config, result)
+	if err != nil {
+		return nil, closeProvider, err
 	}
 	return result, closeProvider, nil
 }

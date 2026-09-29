@@ -38,7 +38,7 @@ connectivity; see [Runtime and outer isolation](design-principles.md#runtime-and
    (native SDK calls, ownership checks, identity translation, private config).
    Assert `var _ sandbox.SandboxProvider = (*YourAdapter)(nil)` at compile time.
    Out-of-process helpers live in `services/agents-api/tools/<kind>-provider`.
-3. **Register the kind** in every file listed in
+3. **Register the kind** once using
    [Register the provider kind](#register-the-provider-kind). Registration is
    explicit construction, not an init-time plugin registry.
 4. **Label owned resources** with `io.oac.*` labels, or `oac_*` metadata keys
@@ -168,25 +168,48 @@ A provider must not implement a competing preparation path.
 
 ## Register the provider kind
 
-Provider kinds are enumerated explicitly. Add a new kind to each surface
-below; none accepts an arbitrary provider string.
+`sandbox/providers/registry.go` is the sole registration table. Each entry binds
+an adapter's specification/resource validators, selection normalization, deployment
+mode, defaults, optional checkpoint capability, and local or direct constructor.
+`providers.Build` constructs node-local adapters; `providers.BuildDirect` constructs
+direct adapters. Neither allocates compute. There is no init-time registration or
+runtime plugin loading.
 
-| Surface | File | What it enumerates |
-| --- | --- | --- |
-| Node-local construction | [`sandbox/config/config.go`](../services/agents-api/internal/sandbox/config/config.go), [`specification.go`](../services/agents-api/internal/sandbox/config/specification.go) | Typed construction, readiness probe and node specification |
-| Direct construction | [`cmd/server/managed_setup.go`](../services/agents-api/cmd/server/managed_setup.go) (`managedSetup.provider`) | Direct adapters (E2B) and node-proxied kinds (Docker, microsandbox) |
-| Resource validation | [`sandbox/deployment.go`](../services/agents-api/internal/sandbox/deployment.go) (`Resources.Validate`) | Per-kind resource limits |
-| Node proxy and identity | [`sandbox/node/proxy.go`](../services/agents-api/internal/sandbox/node/proxy.go), [`node/identity.go`](../services/agents-api/internal/sandbox/node/identity.go) | Node-capable kinds and their checkpoint capability |
-| Deployment persistence | [`sandbox_deployment_mutations.go`](../services/agents-api/internal/store/sandbox_deployment_mutations.go), [`sandbox_deployment_setup.go`](../services/agents-api/internal/store/sandbox_deployment_setup.go), [`sandbox_specification.go`](../services/agents-api/internal/store/sandbox_specification.go), [`runtime_node_deployment.go`](../services/agents-api/internal/store/runtime_node_deployment.go) | Deployment admission and node-mode kinds |
-| Database constraint | A new migration in [`migrations/`](../services/agents-api/migrations) | `provider_kind` `CHECK` constraints, last set in `000081_sandbox_generations.sql`; never edit a landed migration |
-| Node installation | [`node_installation.go`](../services/core-console/node_installation.go) | Node artifacts per kind |
-| Installer | [`deploy/install/sandbox_setup.py`](../deploy/install/sandbox_setup.py) (`CHOICES`, used by `install.py --sandbox`) | Installer backend choices |
-| Distribution | [`scripts/core-distribution-manifest.py`](../scripts/core-distribution-manifest.py) | Bundled provider helper binaries |
-| Clients and Web | [`sandbox-client.ts`](../packages/agents-client/src/sandbox-client.ts) (`SandboxProvider`), [`features/sandbox`](../apps/web/src/features/sandbox) (`SandboxSetupWizard.tsx`, `console-config.ts`, `node-enrollment.ts`), [`sandbox-labels.ts`](../apps/web/src/lib/sandbox-labels.ts) | Backend choices and labels shown to operators |
+For a new implementation:
+
+1. Implement `SandboxProvider` in its adapter package and add native contract tests.
+2. Add its configuration validators and optional read-only `SelectionDiscoverer`
+   for native resource discovery. Normalization must copy input before changing it.
+   `RestoreSelection` must retain access to owned resources without requiring new
+   template validation. Put native credential verification behind
+   `CredentialVerifier` when needed.
+3. Register its constructor, policies and defaults in `providers/registry.go`.
+   Node proxy identity and checkpoint advertisement consume this same entry.
+4. If new configuration fields are necessary, extend the typed `sandbox.Selection`
+   envelope and its dedicated encrypted persistence fields, API DTO and operator
+   client. Do not replace typed configuration with unrestricted JSON. Field codecs
+   may map columns; Store must not parse native endpoints, templates or defaults.
+5. Supply required installer/distribution artifacts and operator labels. A new
+   provider must not add a Session/Turn scheduling path or a Store vendor switch.
+
+Preview and persistence use `providers.Normalize` and `providers.Describe`.
+`SelectionDiscoverer` resolves omitted native resource values before commit; the
+complete specification is validated again at persistence. Store owns transactions,
+credential encryption, generation fencing, resource ownership and typed column
+mapping. Database constraints validate structure, not the registration list.
+`providers.ResolveChange` owns configuration inheritance and comparison uses
+normalized selectors, so preview, retry and commit share the same defaults.
+
+A direct adapter with credentials verifies all retained generations and allocation
+references before replacing a key. The common `sandbox.CallFence` excludes native
+calls and waits for helper completion, including calls whose callers timed out.
+Execution invokes prepared verification/fencing callbacks without branching on a
+vendor. A transport wrapper advertises only capabilities that its adapter supports;
+new optional capabilities need forwarding and qualification before registration.
 
 Keep vendor-specific deployment validation and SDK setup at the construction
 boundary. Construction must not create an Environment. For node-local adapters
-the `Built` result returns the provider, probe, installation identity, backend
+the `providers.Built` result returns the provider, probe, installation identity, backend
 fingerprint and specification digest; the factory also returns its close function.
 
 Preserve the `execution.RuntimeProvider` deployment binding: `ProviderKind`,

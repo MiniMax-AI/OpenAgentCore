@@ -10,7 +10,7 @@
 // of qualification: run the common contract tests and adapter-specific acceptance.
 //
 // Registration is explicit construction, not a global init-time registry. Node-local
-// adapters register in sandbox/config.Build; Core's cmd/server managedSetup.provider
+// adapters register in sandbox/providers; Core's managed setup
 // constructs direct adapters or node proxies. execution.RuntimeProvider binds the
 // selected adapter to installation, backend, deployment generation and node identity.
 // Keep vendor configuration at those construction boundaries; common lifecycle code

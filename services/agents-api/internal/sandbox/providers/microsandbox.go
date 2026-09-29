@@ -1,4 +1,4 @@
-package config
+package providers
 
 import (
 	"errors"
@@ -61,4 +61,12 @@ func configureMicrosandbox(entry Microsandbox, resources sandbox.Resources, resu
 	result.Probe = microsandboxProbe(entry, resources)
 	result.BackendFingerprint = BackendFingerprint("microsandbox", entry.RuntimeHome)
 	return nil
+}
+
+func buildMicrosandbox(c Config, result *Built) (func(), error) {
+	closeProvider := func() {}
+	if c.Microsandbox == nil || c.Docker != nil {
+		return closeProvider, errors.New("managed microsandbox requires only the microsandbox configuration object")
+	}
+	return closeProvider, configureMicrosandbox(*c.Microsandbox, c.Specification.Resources, result)
 }

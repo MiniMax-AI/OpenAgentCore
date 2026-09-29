@@ -191,6 +191,8 @@ The Runtime is not a sandbox; see
 - Keep component boundaries explicit through shared interfaces and versioned
   protocols. Register implementations behind those interfaces. Adding an
   implementation must not require a new orchestration path selected by its name.
+  Sandbox registration, configuration adaptation and persistence boundaries follow
+  the [Sandbox Provider guide](docs/sandbox-provider.md#register-the-provider-kind).
 - Core owns durable Session/Turn state and scheduling. Runtime owns local
   execution resources. Harness adapters translate the common execution contract
   into native operations; model and sandbox provider details stay behind their

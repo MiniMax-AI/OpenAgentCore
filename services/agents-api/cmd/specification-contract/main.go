@@ -4,7 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"os"
 	"strings"
 )
@@ -12,7 +12,7 @@ import (
 func main() {
 	write := flag.Bool("write", false, "update deploy/install/node_spec.py from the repository root")
 	flag.Parse()
-	projection := sandbox.PythonDeploymentContract()
+	projection := providers.PythonDeploymentContract()
 	if !*write {
 		fmt.Println(projection)
 		return

@@ -1,17 +1,19 @@
-package config
+package providers
 
-import "errors"
+import (
+	"errors"
+)
 
 // Local paths belong to the node. Core owns reservation capacity, execution
 // resources and the immutable deployment release it enrolled with.
 func validateSpecification(c Config) error {
-	if c.Provider != "docker" && c.Provider != "microsandbox" {
+	if !IsNode(c.Provider) {
 		return errors.New("nodes support Docker or microsandbox; E2B is managed by Core")
 	}
 	if c.Generation == 0 {
 		return errors.New("node requires a deployment generation; obtain configuration from Core")
 	}
-	if err := c.Specification.Validate(c.Provider); err != nil {
+	if err := ValidateSpecification(c.Provider, c.Specification); err != nil {
 		return err
 	}
 	r := c.Specification.Runtime

@@ -157,7 +157,7 @@ func validReference(r sandbox.Reference) bool {
 	return validID(r.TenantID) && validID(r.EnvironmentID) && validID(r.AllocationID)
 }
 func (c Config) Validate() error {
-	if c.Resources != nil && c.Resources.Validate("e2b") != nil {
+	if c.Resources != nil && ValidateResources(*c.Resources) != nil {
 		return sandbox.ErrInvalid
 	}
 	template, build, ok := strings.Cut(c.Template, ":")

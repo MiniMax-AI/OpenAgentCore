@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
-	"os"
 	"sync/atomic"
 	"time"
 
@@ -13,8 +11,8 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -28,9 +26,9 @@ type managedSetup struct {
 	hub            *node.Hub
 	installationID string
 	// publicURL is OAC_PUBLIC_URL; every sandbox reaches Core through it.
-	publicURL string
-	selected  atomic.Pointer[managedSelection]
-	e2bCalls  e2b.CallFence
+	publicURL     string
+	selected      atomic.Pointer[managedSelection]
+	providerCalls sandbox.CallFence
 }
 
 // Empty selections retain their generation so a delayed provider load cannot
@@ -84,40 +82,30 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 
 func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
 	// E2B guests reach Core from E2B's cloud, over the internet.
-	if setup.Provider == "e2b" && store.LoopbackOrigin(s.publicURL) {
+	adapter, err := providers.Lookup(setup.Provider)
+	if err != nil {
+		return execution.PreparedRuntimeDeployment{}, err
+	}
+	if adapter.PublicOrigin && store.LoopbackOrigin(s.publicURL) {
 		return execution.PreparedRuntimeDeployment{}, store.ErrSandboxPublicURLUnreachable
 	}
 	candidate, err := s.configuration(setup)
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
 	}
-	if provider, ok := candidate.Config.Provider.(*e2b.Provider); ok {
-		build, err := provider.ValidateDeployment(ctx)
+	selection := sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, E2B: setup.E2B}
+	if discoverer, ok := candidate.Config.Provider.(sandbox.SelectionDiscoverer); ok {
+		selection, err = discoverer.DiscoverSelection(ctx, selection)
 		if err != nil {
-			if errors.Is(err, e2b.ErrCredentialInvalid) || errors.Is(err, e2b.ErrTeamMismatch) {
-				return execution.PreparedRuntimeDeployment{}, err
-			}
-			if errors.Is(err, sandbox.ErrInvalid) {
-				return execution.PreparedRuntimeDeployment{}, e2b.ErrTemplateInvalid
-			}
-			return execution.PreparedRuntimeDeployment{}, e2b.ErrRequestUnconfirmed
+			return execution.PreparedRuntimeDeployment{}, err
 		}
-		if setup.Specification.Resources == (sandbox.Resources{}) {
-			// Omitted E2B resources take the validated build's CPU and memory.
-			setup.Specification.Resources = sandbox.Resources{CPUs: build.CPUs, MemoryMiB: build.MemoryMiB}
-			if err := setup.Specification.Validate("e2b"); err != nil {
-				return execution.PreparedRuntimeDeployment{}, &store.SandboxConfigurationError{Message: "E2B template build resources are outside the supported sandbox limits; select another build"}
-			}
-			if candidate, err = s.configuration(setup); err != nil {
-				return execution.PreparedRuntimeDeployment{}, err
-			}
-		}
-		candidate.E2BTemplateBuild = &store.SandboxE2BTemplateBuild{Status: build.Status, CPUs: int32(build.CPUs), MemoryMiB: int32(build.MemoryMiB)}
-		if build.RootDiskMiB != nil && *build.RootDiskMiB <= math.MaxInt32 {
-			disk := int32(*build.RootDiskMiB)
-			candidate.E2BTemplateBuild.RootDiskMiB = &disk
+		setup.Specification, setup.E2B = selection.DeploymentSpec, selection.E2B
+		candidate, err = s.configuration(setup)
+		if err != nil {
+			return execution.PreparedRuntimeDeployment{}, err
 		}
 	}
+	candidate.Selection = &selection
 	return s.routeGenerations(candidate, setup)
 }
 
@@ -177,34 +165,15 @@ func (s *managedSetup) Observe(ctx context.Context, target runtimeobs.Target) (r
 }
 
 func (s *managedSetup) provider(setup store.SandboxSetup) (sandbox.SandboxProvider, error) {
-	switch setup.Provider {
-	case "docker", "microsandbox":
+	adapter, err := providers.Lookup(setup.Provider)
+	if err != nil {
+		return nil, err
+	}
+	if adapter.Mode == "nodes" {
 		if s.hub == nil {
 			return nil, errors.New("sandbox node transport is unavailable")
 		}
 		return s.hub.GenerationProvider(setup.Provider, s.store.ResolveRuntimeGeneration), nil
-	case "e2b":
-		if setup.E2B == nil {
-			return nil, errors.New("E2B deployment configuration is unavailable")
-		}
-		binary := os.Getenv("OAC_E2B_PROVIDER_BIN")
-		if binary == "" {
-			binary = "/opt/oac/e2b/oac-e2b-provider"
-		}
-		// Only a candidate that omitted its resources has none; its validation
-		// reads them from the template build before the candidate is rebuilt.
-		var resources *sandbox.Resources
-		if setup.Specification.Resources != (sandbox.Resources{}) {
-			resources = &setup.Specification.Resources
-		}
-		provider, err := e2b.NewWithCaller(e2b.Config{Binary: binary, StateDir: os.Getenv("OAC_E2B_STATE_DIR"),
-			Resources: resources, InstallationID: setup.InstallationID, APIKey: setup.E2B.APIKey, Template: setup.E2B.Template,
-			APIURL: setup.E2B.APIURL, Domain: setup.E2B.Domain, TimeoutSeconds: 3600}, &e2b.ProcessCaller{Fence: &s.e2bCalls})
-		if err != nil {
-			return nil, errors.New("E2B provider cannot load; check the installed helper and private state directory")
-		}
-		return provider, nil
-	default:
-		return nil, errors.New("sandbox provider is unavailable")
 	}
+	return providers.BuildDirect(providers.DirectConfig{InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, E2B: setup.E2B}, Fence: &s.providerCalls})
 }

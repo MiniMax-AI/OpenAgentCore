@@ -140,7 +140,7 @@ func TestRejectedSandboxCandidatePreservesActiveGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}}
+	input := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}}
 	if _, err := m.prepareCandidate(t.Context(), input); !errors.Is(err, rejected) {
 		t.Fatal("candidate rejection was lost", err)
 	}
@@ -170,7 +170,7 @@ func TestSandboxCandidateValidationDoesNotHoldManagerLock(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = m.prepareCandidate(t.Context(), store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}})
+		_, _ = m.prepareCandidate(t.Context(), store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}})
 	}()
 	<-entered
 	stopped := make(chan struct{})

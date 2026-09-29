@@ -1,11 +1,12 @@
-package config
+package providers
 
 import (
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
 func TestNodeRejectsCoreConfigurationAndUnknownProvider(t *testing.T) {

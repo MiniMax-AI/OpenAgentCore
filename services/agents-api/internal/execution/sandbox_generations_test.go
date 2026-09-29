@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -20,7 +21,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 	if err := writer.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
-	input := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "old-key", Template: "runtime:" + uuid.NewString()}}
+	input := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "old-key", Template: "runtime:" + uuid.NewString()}}
 	input.Resources.CPUs = 2
 	input.Resources.MemoryMiB = 2048
 	if _, err := writer.InitializeSandboxDeployment(t.Context(), id, input); err != nil {

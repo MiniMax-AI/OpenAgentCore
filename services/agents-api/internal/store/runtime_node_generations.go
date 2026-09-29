@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -21,7 +22,7 @@ func nodeGenerationSpec(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDepl
 	if err != nil {
 		return spec, err
 	}
-	if row.ProviderKind != d.ProviderKind || json.Unmarshal(row.Specification, &spec) != nil || spec.Validate(d.ProviderKind) != nil {
+	if row.ProviderKind != d.ProviderKind || json.Unmarshal(row.Specification, &spec) != nil || providers.ValidateSpecification(d.ProviderKind, spec) != nil {
 		return spec, ErrRuntimeSpecificationMismatch
 	}
 	return spec, nil

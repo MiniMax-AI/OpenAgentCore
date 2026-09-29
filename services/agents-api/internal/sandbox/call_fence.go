@@ -1,4 +1,4 @@
-package e2b
+package sandbox
 
 import (
 	"context"
@@ -27,7 +27,7 @@ func (f *CallFence) Enter(ctx context.Context) (func(), error) {
 	}
 	return func() { f.gate.Release(1) }, nil
 }
-func (f *CallFence) childStarted() func() {
+func (f *CallFence) ChildStarted() func() {
 	f.mu.Lock()
 	if f.active == 0 {
 		f.idle = make(chan struct{})

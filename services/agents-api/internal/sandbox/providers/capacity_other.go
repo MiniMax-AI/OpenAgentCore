@@ -1,9 +1,10 @@
 //go:build !linux
 
-package config
+package providers
 
 import (
 	"errors"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 

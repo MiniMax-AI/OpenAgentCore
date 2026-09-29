@@ -8,7 +8,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -22,13 +22,13 @@ type generationStore interface {
 // Every facade, including already running lifecycles, resolves the allocation's
 // immutable specification and current credential. There is no mutable provider
 // map to unload and no current-generation fallback for a missing historical row.
-type e2bGenerationRouter struct {
+type generationRouter struct {
 	setup *managedSetup
 	store generationStore
 }
 
-func (p *e2bGenerationRouter) route(ctx context.Context, r sandbox.Reference) (sandbox.SandboxProvider, func(), error) {
-	release, err := p.setup.e2bCalls.Enter(ctx)
+func (p *generationRouter) route(ctx context.Context, r sandbox.Reference) (sandbox.SandboxProvider, func(), error) {
+	release, err := p.setup.providerCalls.Enter(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -44,7 +44,7 @@ func (p *e2bGenerationRouter) route(ctx context.Context, r sandbox.Reference) (s
 	}
 	return provider, release, nil
 }
-func (p *e2bGenerationRouter) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
+func (p *generationRouter) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	v, done, err := p.route(ctx, b.Reference)
 	if err != nil {
 		return sandbox.Info{}, err
@@ -52,7 +52,7 @@ func (p *e2bGenerationRouter) Create(ctx context.Context, b sandbox.Bootstrap) (
 	defer done()
 	return v.Create(ctx, b)
 }
-func (p *e2bGenerationRouter) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
+func (p *generationRouter) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
 	v, done, err := p.route(ctx, r)
 	if err != nil {
 		return sandbox.Info{}, err
@@ -60,7 +60,7 @@ func (p *e2bGenerationRouter) GetInfo(ctx context.Context, r sandbox.Reference) 
 	defer done()
 	return v.GetInfo(ctx, r)
 }
-func (p *e2bGenerationRouter) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
+func (p *generationRouter) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
 	v, done, err := p.route(ctx, r)
 	if err != nil {
 		return sandbox.Info{}, err
@@ -68,7 +68,7 @@ func (p *e2bGenerationRouter) Renew(ctx context.Context, r sandbox.Reference) (s
 	defer done()
 	return v.Renew(ctx, r)
 }
-func (p *e2bGenerationRouter) Kill(ctx context.Context, r sandbox.Reference) error {
+func (p *generationRouter) Kill(ctx context.Context, r sandbox.Reference) error {
 	v, done, err := p.route(ctx, r)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func (p *e2bGenerationRouter) Kill(ctx context.Context, r sandbox.Reference) err
 	defer done()
 	return v.Kill(ctx, r)
 }
-func (p *e2bGenerationRouter) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
+func (p *generationRouter) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
 	v, done, err := p.route(ctx, r)
 	if err != nil {
 		return sandbox.CommandResult{}, err
@@ -84,28 +84,47 @@ func (p *e2bGenerationRouter) RunCommand(ctx context.Context, r sandbox.Referenc
 	defer done()
 	return v.RunCommand(ctx, r, c)
 }
-func (p *e2bGenerationRouter) Observe(ctx context.Context, t runtimeobs.Target) (runtimeobs.Sample, error) {
+
+type observedGenerationRouter struct{ *generationRouter }
+
+func (p *observedGenerationRouter) Observe(ctx context.Context, t runtimeobs.Target) (runtimeobs.Sample, error) {
 	v, done, err := p.route(ctx, sandbox.Reference{TenantID: t.TenantID, EnvironmentID: t.EnvironmentID, AllocationID: t.Instance.AllocationID})
 	if err != nil {
 		return runtimeobs.Sample{}, err
 	}
 	defer done()
-	return v.(*e2b.Provider).Observe(ctx, t)
+	source, ok := v.(runtimeobs.Source)
+	if !ok {
+		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
+	}
+	return source.Observe(ctx, t)
 }
 
 func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeployment, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
-	if setup.Provider != "e2b" {
+	adapter, err := providers.Lookup(setup.Provider)
+	if err != nil {
+		return execution.PreparedRuntimeDeployment{}, err
+	}
+	if adapter.Mode == "nodes" {
 		return candidate, nil
 	}
 	db, ok := s.store.(generationStore)
 	if !ok {
 		return execution.PreparedRuntimeDeployment{}, errors.New("sandbox generation store is unavailable")
 	}
-	candidate.Config.Provider = &e2bGenerationRouter{setup: s, store: db}
+	router := &generationRouter{setup: s, store: db}
+	if _, ok := candidate.Config.Provider.(runtimeobs.Source); ok {
+		candidate.Config.Provider = &observedGenerationRouter{router}
+	} else {
+		candidate.Config.Provider = router
+	}
+	if !adapter.Credential {
+		return candidate, nil
+	}
 	candidate.FenceCredential = func(ctx context.Context) (func(), error) {
-		release, err := s.e2bCalls.Fence(ctx)
+		release, err := s.providerCalls.Fence(ctx)
 		if err != nil {
-			return nil, e2b.ErrRequestUnconfirmed
+			return nil, adapter.CredentialUnconfirmed
 		}
 		return release, nil
 	}
@@ -120,25 +139,33 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 			if err != nil {
 				return err
 			}
-			return provider.(*e2b.Provider).VerifyCredential(ctx, refs)
+			verifier, ok := provider.(sandbox.CredentialVerifier)
+			if !ok {
+				return sandbox.ErrInvalid
+			}
+			return verifier.VerifyCredential(ctx, refs)
 		}
 		current, err := db.GetSandboxSetup(ctx)
 		if err != nil {
 			return err
 		}
-		if current.Provider != "e2b" || current.E2B == nil {
-			return &store.SandboxResetRequiredError{CurrentProvider: current.Provider, RequestedProvider: "e2b"}
+		if current.Provider != setup.Provider {
+			return &store.SandboxResetRequiredError{CurrentProvider: current.Provider, RequestedProvider: setup.Provider}
 		}
 		if err := verify(current, nil); err != nil {
-			if errors.Is(err, e2b.ErrCredentialInvalid) || errors.Is(err, e2b.ErrTeamMismatch) {
+			if adapter.CredentialRequiresReset != nil && adapter.CredentialRequiresReset(err) {
 				// A revoked legacy key or a public template outside its team cannot
 				// anchor ownership. This says nothing about the candidate key's validity.
-				return &store.SandboxResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}
+				return &store.SandboxResetRequiredError{CurrentProvider: setup.Provider, RequestedProvider: setup.Provider}
 			}
 			return err
 		}
 		withCandidateKey := func(value store.SandboxSetup, refs []sandbox.Reference) error {
-			value.E2B = &store.SandboxE2BConfiguration{APIKey: setup.E2B.APIKey, Template: value.E2B.Template, APIURL: value.E2B.APIURL, Domain: value.E2B.Domain}
+			selection, err := providers.WithCredential(sandbox.Selection{Provider: value.Provider, DeploymentSpec: value.Specification, E2B: value.E2B}, sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, E2B: setup.E2B})
+			if err != nil {
+				return err
+			}
+			value.E2B = selection.E2B
 			return verify(value, refs)
 		}
 		if err := withCandidateKey(current, nil); err != nil {
@@ -177,7 +204,7 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 			for generation, refs := range refsByGeneration {
 				owner, ok := generations[generation]
 				if !ok {
-					return e2b.ErrRequestUnconfirmed
+					return adapter.CredentialUnconfirmed
 				}
 				if err := withCandidateKey(owner, refs); err != nil {
 					return err
@@ -194,6 +221,6 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 
 // A batch can contain allocations from different endpoint generations. Let the
 // observation worker route each allocation through its immutable generation.
-func (p *e2bGenerationRouter) ObserveBatch(_ context.Context, _ []runtimeobs.Target) ([]runtimeobs.BatchResult, bool) {
+func (p *observedGenerationRouter) ObserveBatch(_ context.Context, _ []runtimeobs.Target) ([]runtimeobs.BatchResult, bool) {
 	return nil, false
 }

@@ -1,15 +1,16 @@
-package sandbox
+package providers
 
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"os"
 	"strings"
 	"testing"
 )
 
 func TestInstallerDeploymentProjectionIsCurrent(t *testing.T) {
-	raw, err := os.ReadFile("../../../../deploy/install/node_spec.py")
+	raw, err := os.ReadFile("../../../../../deploy/install/node_spec.py")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,7 +20,7 @@ func TestInstallerDeploymentProjectionIsCurrent(t *testing.T) {
 	}
 }
 func TestDeploymentContractFixtures(t *testing.T) {
-	raw, err := os.ReadFile("testdata/deployment-contract.json")
+	raw, err := os.ReadFile("../testdata/deployment-contract.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,12 +34,12 @@ func TestDeploymentContractFixtures(t *testing.T) {
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture.Name, func(t *testing.T) {
-			var spec DeploymentSpec
+			var spec sandbox.DeploymentSpec
 			decoder := json.NewDecoder(bytes.NewReader(fixture.Specification))
 			decoder.DisallowUnknownFields()
 			err := decoder.Decode(&spec)
 			if err == nil {
-				err = spec.Validate(fixture.Provider)
+				err = ValidateSpecification(fixture.Provider, spec)
 			}
 			if (err == nil) != fixture.Valid {
 				t.Fatalf("validation differs: %v", err)
@@ -48,7 +49,7 @@ func TestDeploymentContractFixtures(t *testing.T) {
 			}
 			canonical, _ := json.Marshal(struct {
 				Provider string `json:"provider"`
-				DeploymentSpec
+				sandbox.DeploymentSpec
 			}{fixture.Provider, spec})
 			if string(canonical) != fixture.Canonical || spec.Digest(fixture.Provider) != fixture.Digest {
 				t.Fatalf("canonical contract differs: %s", canonical)

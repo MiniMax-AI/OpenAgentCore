@@ -2,7 +2,9 @@ package node
 
 import (
 	"context"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 )
 
 type provider struct {
@@ -18,6 +20,7 @@ var _ sandbox.CheckpointProvider = (*checkpointProvider)(nil)
 // Proxy binds a fixed node and deployment generation explicitly.
 func (h *Hub) Proxy(id, kind string, generation uint64) sandbox.SandboxProvider {
 	return h.GenerationProvider(kind, func(context.Context, sandbox.Reference) (string, uint64, error) { return id, generation, nil })
+
 }
 func (p *provider) call(ctx context.Context, q request) (response, error) {
 	id, generation, err := p.resolveGeneration(ctx, q.Reference)
@@ -139,7 +142,7 @@ func (p *checkpointProvider) ResumeCompute(ctx context.Context, r sandbox.Refere
 // distinct from the request's compute generation.
 func (h *Hub) GenerationProvider(kind string, resolve func(context.Context, sandbox.Reference) (string, uint64, error)) sandbox.SandboxProvider {
 	p := &provider{hub: h, kind: kind, resolveGeneration: resolve}
-	if kind == "microsandbox" {
+	if providers.SupportsCheckpoint(kind) {
 		return &checkpointProvider{p}
 	}
 	return p

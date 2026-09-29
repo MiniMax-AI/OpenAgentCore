@@ -10,11 +10,12 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/google/uuid"
 )
 
 func e2bSelection() SandboxDeploymentSetupRequest {
-	return SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &SandboxE2BConfiguration{APIKey: "fixture-private-api-key", Template: "runtime:" + uuid.NewString()}}
+	return SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture-private-api-key", Template: "runtime:" + uuid.NewString()}}
 }
 
 func TestSandboxE2BEndpointPersistenceAndOnlineSwitch(t *testing.T) {

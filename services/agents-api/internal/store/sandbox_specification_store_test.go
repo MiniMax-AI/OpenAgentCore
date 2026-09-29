@@ -60,6 +60,10 @@ func TestSandboxSpecificationRoundTripAndFileConfigurationCannotOverride(t *test
 			if err != nil || !reflect.DeepEqual(setup.Specification, input.DeploymentSpec) || view.Specification == nil || !reflect.DeepEqual(*view.Specification, input.DeploymentSpec) || view.SpecificationDigest != input.DeploymentSpec.Digest(provider) {
 				t.Fatal("saved deployment lost its resources or Runtime provenance", err)
 			}
+			preview, err := SandboxSetupForSelection(view.InstallationID, input)
+			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || preview.IdleSeconds != setup.IdleSeconds || preview.RetentionSeconds != setup.RetentionSeconds || !reflect.DeepEqual(preview.E2B, setup.E2B) {
+				t.Fatal("preview and persisted normalized deployment disagree", err)
+			}
 			input.ExpectedGeneration = view.Generation
 			retry, err := w.InitializeSandboxDeployment(t.Context(), view.InstallationID, input)
 			if err != nil || !reflect.DeepEqual(retry, view) {
@@ -430,5 +434,27 @@ func TestE2BAdmitsNothingWhileThePublicURLIsLoopback(t *testing.T) {
 	s.SetPublicURL("https://core.example")
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDatabaseDoesNotEnumerateProviderRegistrations(t *testing.T) {
+	s, w, view, input := webSpecificationFixture(t, "docker")
+	tx, err := s.pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(t.Context())
+	if _, err = tx.Exec(t.Context(), "UPDATE runtime_deployment SET provider_kind='new-adapter' WHERE singleton=true"); err != nil {
+		t.Fatal("database enumerated provider implementations", err)
+	}
+	// Roll back before calling the serialized Store, which still rejects unknown
+	// registrations even though persistence can represent a new adapter.
+	if err = tx.Rollback(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	input.Provider = "new-adapter"
+	input.ExpectedGeneration = view.Generation
+	if _, err = w.InitializeSandboxDeployment(t.Context(), view.InstallationID, input); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unknown adapter reached persistence", err)
 	}
 }
