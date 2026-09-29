@@ -18,7 +18,7 @@ try {
   if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Installer checksum mismatch; download again.' }
   $bundle = Join-Path $work 'bundle'
   New-Item -ItemType Directory -Path $bundle | Out-Null
-  & tar.exe -xzf $archive -C $bundle
+  & (Join-Path $env:SystemRoot 'System32\tar.exe') -xzf $archive -C $bundle
   if ($LASTEXITCODE -ne 0) { throw 'Installer extraction failed.' }
   $endpoint = $Base -replace '/install/[^/]+$', '/installation'
   & (Join-Path $bundle 'oac-daemon.exe') install --onboard-url $endpoint --authorization $Authorization @InstallArguments

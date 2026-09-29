@@ -43,94 +43,75 @@ by a Session's capability dependencies, must be available. Missing system
 components are reported. Install those through the host's normal administration
 process; the daemon never runs apt, sudo or an elevation command.
 
-## Obtain a distribution
+## Install and connect
 
-Before a public release exists, build a native package with the repository's
-`native-installer` workflow and download its artifact for the target platform.
-Extract the archive before running the executable. The workflow publishes CI
-artifacts, not a production release or an automatic update channel.
+Create a Session using the public Agents API with `environment.type: "self_hosted"`.
+The response retains the official Environment `id` and `remote_url`, and adds
+`x_agents_core.installation` with `commands.posix`, `commands.powershell` and
+`expires_at`. Execute the command for your target platform. Core Web shows the
+same commands in the **Self-hosted** Session's connection section; Web is not a
+prerequisite for API callers.
 
-For a local release build, use `scripts/build-native-installer.mjs --daemon PATH
---node DIR --codex DIR --claude DIR --minimax DIR --output ABS`. Select the
-components to include; omit MiniMax on Windows. Build on the target OS, using
-the existing pinned native artifacts. The builder verifies native startup and
-creates `bundle.json`, `oac-daemon` (or `.exe`) and `components/`.
-`bundle.json` describes release files and checksums. It does not accept user
-installation options, connection settings or credentials.
+The command downloads the distribution matched to this Core, verifies its archive,
+asks which Harnesses to install and where, installs them, starts the daemon and
+checks its authenticated connection. The Session's required Harness must remain
+selected. Its workspace is frozen at Session creation; the installer creates that
+directory if necessary using your existing permissions. To choose a different
+workspace, create a Session with that path. No administrator privileges or Docker
+are required.
 
-The Claude source is the existing compiled adapter export from modern
-`pnpm deploy`. Reify its dedicated frozen lock with
-`pnpm install --prod --frozen-lockfile --config.node-linker=hoisted --ignore-scripts`
-in a fresh export before packaging. This preserves dependency resolution when
-the builder converts contained links to regular files. MiniMax must be built
-from the pinned source with this revision's patches and native dependencies;
-copying a Linux companion onto macOS does not produce a macOS distribution.
+For automation, append `--non-interactive --harness codex` and optionally
+`--install-dir ABS` to the command. Multiple Harnesses use a comma-separated value,
+for example `--harness codex,claude`. Missing required input fails without prompting.
+Interactive installation defaults to a separate directory for each Environment:
+`~/.oac/environments/<environment-id>` (or beneath `OAC_RUNTIME_HOME`).
 
-## Install and start
+The command carries a 30-minute authorization restricted to this Environment and
+Core build. Treat it as a temporary credential. Refresh the Session detail or
+copy a fresh Web command after expiry. It cannot execute tasks or read files.
+The installer generates a private connect-only credential file before claiming
+its key, so a lost response can be retried without losing the credential. The
+long-term secret never appears in the command or terminal. A different machine
+cannot use the command to replace an already claimed key. Session deletion,
+Project archival, expiry or a different Core build invalidates the authorization;
+new commands never revive revoked credentials.
 
-Create a `self_hosted` Session with its model provider and an existing absolute
-`workspace_directory` on the executor host. Save its `environment.id` and
-unchanged `environment.remote_url`. Have the administrator issue an
-[executor credential](/self-hosted-execution#without-web) and save the JSON
-as a private file. It contains `key_id`, `environment_id` and `executor_token`.
-Pass the file path, never the token. Use `wss://` outside loopback; `ws://` is
-accepted only for a loopback Core. The workspace must match the Session.
+Installation reports three separate results: **Installation**, **Daemon
+connection**, and **Model configuration**. This workflow does not configure or
+validate model access. If connection is not confirmed, inspect the reported local
+log and the Session's connection status. Rerun with the same installation directory
+to resume; completed components and credentials are retained and an existing
+daemon is reused. After authentication failures, check the Environment credential
+in Core. Do not remove the workspace or Session history to retry.
 
-From the extracted distribution, interactive installation asks for Harnesses
-(comma-separated, multiple selections allowed), installation directory, workspace
-and connection settings. Existing command-line values also work with the prompts:
+Qualified release distributions contain Linux amd64, macOS arm64 and Windows
+amd64 installers. Core serves these matched artifacts directly, including in a
+private repository deployment. Unsupported platforms fail explicitly. Operators
+running a standalone Core binary can set `OAC_NATIVE_INSTALLER_DIR` to its matched
+`native-installers` directory. Without qualified artifacts, Session responses
+report installation unavailable instead of selecting another version.
+
+## Manual distribution installation
+
+The same installer also accepts an already-extracted distribution and an explicitly
+supplied private executor credential, without the bootstrap command:
 
 ```sh
-./oac-daemon install --interactive
-```
-
-Noninteractive installation accepts command-line arguments only and never waits
-for input. On Linux or macOS:
-
-```sh
-mkdir -p "$HOME/agent-workspace"
-chmod 600 "$HOME/executor-credential.json"
-./oac-daemon install --non-interactive \
-  --harness codex,claude,minimax \
-  --install-dir "$HOME/.oac/runtime-example" \
+./oac-daemon install --non-interactive --harness codex \
+  --install-dir "$HOME/.oac/my-runtime" \
   --remote 'wss://core.example/api/v1/agent-daemon/ws' \
   --environment-id '11111111-2222-4333-8444-555555555555' \
-  --workspace "$HOME/agent-workspace" \
+  --workspace "$HOME/workspace" \
   --credential-file "$HOME/executor-credential.json"
-"$HOME/.oac/runtime-example/bin/oac-daemon" start
+"$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-On Windows, use native absolute paths in PowerShell:
-
-```powershell
-New-Item -ItemType Directory -Force "$HOME\agent-workspace" | Out-Null
-.\oac-daemon.exe install --non-interactive `
-  --harness codex,claude `
-  --install-dir "$HOME\.oac\runtime-example" `
-  --remote 'wss://core.example/api/v1/agent-daemon/ws' `
-  --environment-id '11111111-2222-4333-8444-555555555555' `
-  --workspace "$HOME\agent-workspace" `
-  --credential-file "$HOME\executor-credential.json"
-& "$HOME\.oac\runtime-example\bin\oac-daemon.exe" start
-```
-
-Replace the URL and UUID with the Session's values. Keep the credential file in
-the account's private storage. The installer does not print credential contents
-or pass them in the background daemon's arguments.
-
-| Option | Meaning |
-| --- | --- |
-| `--harness` | Comma-separated `codex`, `claude`, `minimax`; unsupported combinations fail |
-| `--install-dir ABS` | User-writable installation; defaults to `OAC_RUNTIME_HOME`, then `~/.oac` |
-| `--bundle-dir ABS` | Extracted release directory; defaults beside the executable |
-| `--remote`, `--environment-id`, `--workspace`, `--credential-file` | Required connection inputs, equally available in both modes |
-| `--capability-directory ABS` | Capability snapshot destination, default `capabilities` under the installation |
-| `--tool-env-file ABS` | Optional JSON object of string-valued tool/MCP variables, not installation options |
-
-Installation reports three independent facts: local installation readiness,
-connection not yet checked, and model configuration not yet checked. It does not
-start a daemon, provision a machine, configure a model or create an OS service.
-`start --foreground` runs under an operator's preferred service manager.
+Use `.\oac-daemon.exe` and native absolute paths in PowerShell. This manual mode
+requires an existing workspace and starts only when `start` is invoked. Optional
+`--capability-directory ABS` selects snapshot storage; `--tool-env-file ABS`
+supplies tool/MCP variables. They do not introduce another installation workflow.
+Build distributions on their target OS with `scripts/build-native-installer.mjs`;
+`bundle.json` describes release content and checksums, not installation options.
 
 ## Add Harnesses and operate the installation
 

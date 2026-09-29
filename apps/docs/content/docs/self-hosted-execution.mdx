@@ -4,8 +4,8 @@ description: "Connect a user-owned Runtime to its Environment with a restricted 
 ---
 
 A `self_hosted` Session runs on a machine the application owns. The application
-creates the Session through `/v1`; the administrator issues an executor credential
-in Web or through `/core/v1`; the host runs `oac-daemon` with that credential.
+creates the Session through `/v1` and receives a command that installs and connects
+`oac-daemon`. Web displays the same command in the Session; it is optional.
 Linux, macOS and Windows use the same Runtime protocol. Core-managed Providers
 remain Linux-only.
 
@@ -23,8 +23,8 @@ Otherwise creation fails with 400 `model_provider_required`.
 
 ## Connect a host
 
-1. Create an existing workspace on the executor host. The application creates a
-   Session using that host's absolute path and its own Project API key:
+1. Choose an absolute workspace path on the target host. Create a Session with
+   that path and the application's Project API key:
 
    ```python
    import os
@@ -45,23 +45,20 @@ Otherwise creation fails with 400 `model_provider_required`.
            }},
        },
    )
-   print(session.id, session.environment.id, session.environment.remote_url)
+   installation = session.model_dump()["x_agents_core"]["installation"]
+   print(installation["commands"]["posix"])  # use "powershell" for Windows
    ```
 
-2. In Web, open **Session log**, then the Session's **Executor credentials**
-   section. Choose **Issue credential**, then **Download credential file**. Core
-   returns the credential only once; retain it privately before choosing **Done**.
-3. Extract the native distribution and run `oac-daemon install --interactive`
-   (or supply all options with `--non-interactive --harness`). Use the returned
-   remote URL, Environment ID, matching workspace and credential file path, then
-   start the installed `bin/oac-daemon`.
-   The [native guide](/self-hosted-native#install-and-start) has Linux/macOS and
-   PowerShell examples. No Docker installation is required for this native path.
+2. Run the returned command on the target machine. Select the Harnesses and
+   installation directory when prompted. Installation creates the workspace if
+   needed, starts the daemon and checks its connection. For automation, append
+   `--non-interactive --harness codex` and optionally `--install-dir ABS`.
 
-The console's **Connect a host** flow provides native installation guidance and
-the executor credential download. Obtain the matching native distribution before
-running its command. Core must be reachable from the host: `wss://` is required
-outside loopback, while a local Core can use a loopback `ws://` URL.
+In Web, open the **Self-hosted** Session and copy the command under **Connect a
+host**. A command expires after 30 minutes; fetch the Session again for a fresh
+one. The [native guide](/self-hosted-native#install-and-connect) covers retry,
+platform prerequisites and credential storage. Core must be reachable from the
+host with TLS outside loopback. Native installation does not require Docker.
 
 A connected Environment proves only the machine connection. Send a Turn to check
 the selected harness and model. Core supplies the Session's model provider over
@@ -122,26 +119,12 @@ Stopping the daemon keeps its workspace and native history. Deleting a Session
 does not remove host files. In an archived Project, credentials cannot be issued
 or rotated; revocation remains available.
 
-## Without Web
+## Operator credential management
 
-Scripts on the Core host can issue credentials with the Core key through Core's
-loopback port (`ports.core` in `config.json`, 8091 by default). Choose a new UUID for
-the credential and keep it:
-
-```sh
-key_id=$(python3 -c 'import uuid; print(uuid.uuid4())'); echo "credential ID: $key_id"
-(umask 077; curl -fsS -X POST \
-  -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.oac/core/secrets/core.key")") \
-  -H 'Content-Type: application/json' -d "{\"key_id\":\"$key_id\"}" \
-  "http://127.0.0.1:8091/core/v1/projects/$PROJECT_ID/environments/$ENVIRONMENT_ID/executor-credentials" \
-  -o executor-key.json)
-```
-
-Rotate with `{"key_id":"…","rotate":true}` on the same route; revoke with
-`DELETE …/executor-credentials/<key_id>`. After an uncertain response, list the
-credentials with `GET` before trying again. The
-[credential contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/environment-executor-credentials.md)
-has every rule and error.
+Operators can still issue, rotate or revoke executor credentials using a Core key
+through Core's loopback port. This is not required for one-command onboarding.
+See the [credential contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/environment-executor-credentials.md)
+for those routes and uncertain-response handling.
 
 ## Historical executor installations
 

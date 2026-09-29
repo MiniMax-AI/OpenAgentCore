@@ -3948,6 +3948,24 @@ components:
         - status
         - type
       type: object
+    v1.EnvironmentInstallation:
+      properties:
+        commands:
+          additionalProperties:
+            type: string
+          type: object
+        expires_at:
+          type: integer
+        message:
+          type: string
+        status:
+          enum:
+            - available
+            - unavailable
+          type: string
+        version:
+          type: string
+      type: object
     v1.EnvironmentNetwork:
       properties:
         access:
@@ -4777,6 +4795,8 @@ components:
           items:
             type: string
           type: array
+        x_agents_core:
+          $ref: '#/components/schemas/v1.SessionCore'
       required:
         - agent
         - created_at
@@ -4858,6 +4878,11 @@ components:
         - data
         - has_more
         - object
+      type: object
+    v1.SessionCore:
+      properties:
+        installation:
+          $ref: '#/components/schemas/v1.EnvironmentInstallation'
       type: object
     v1.SessionDeleted:
       properties:

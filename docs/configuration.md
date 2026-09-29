@@ -265,3 +265,11 @@ file paths it loads, never environment values or file contents. Native installat
 paths must be canonical absolute paths without control characters, quotes, backslashes
 or wildcards. Keep the installation ID and the database together; Core refuses a
 missing installation ID when its database already has a deployment.
+
+### Native daemon distributions
+
+Release Core images include matched self-hosted installers. A standalone Core
+process can set `OAC_NATIVE_INSTALLER_DIR` to the release's `native-installers`
+directory. Core checks the catalog's source revision, Runtime protocol and archive
+checksums before serving it. This setting supplies installation artifacts only;
+it does not change Runtime preparation, permissions or execution.

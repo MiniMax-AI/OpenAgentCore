@@ -8,6 +8,7 @@
     "agents",
     "environment-templates",
     "executor-credentials",
+    "native-installation",
     "files",
     "write-audit",
     "sessions",

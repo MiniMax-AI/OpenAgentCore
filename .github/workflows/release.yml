@@ -102,9 +102,9 @@ jobs:
         with:
           pattern: oac-native-installer-*
           merge-multiple: true
-          path: native-artifacts
+          path: ${{ runner.temp }}/native-artifacts
       - name: Assemble the native installation catalog
-        run: node scripts/build-native-catalog.mjs native-artifacts "$RUNNER_TEMP/native-installers"
+        run: node scripts/build-native-catalog.mjs "$RUNNER_TEMP/native-artifacts" "$RUNNER_TEMP/native-installers"
       - name: Build matched artifacts
         env:
           OAC_NATIVE_INSTALLER_BUILD_DIR: ${{ runner.temp }}/native-installers

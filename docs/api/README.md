@@ -1,13 +1,14 @@
 # API documentation
 
-Core serves three namespaces. Each has one kind of caller and its own credential;
-no credential works in another namespace.
+Core serves three namespaces. Protected operations authenticate their own callers;
+credentials cannot be substituted across these boundaries. Versioned native
+installer downloads are public release content.
 
 | Namespace | Caller | Credential | Contents | Reference |
 | --- | --- | --- | --- | --- |
-| `/v1` | Applications (business systems, SDKs) | Project API key | Exactly the pinned official Agents API routes. Core-only fields live only in `x_agents_core` (`harness`, `model_provider`) | [Public API](public-agent-api.md) |
+| `/v1` | Applications (business systems, SDKs) | Project API key | Exactly the pinned official Agents API routes. Core-only fields live only in `x_agents_core` (`harness`, `model_provider`, Session `installation`) | [Public API](public-agent-api.md) |
 | `/core/v1` | Core Web's server and operator scripts | [Core key](../getting-started/operations.md#core-key) | Installation facts, Projects and keys, resource reads and deletion, Session archive, credential issuance, metrics, audit, sandbox deployment and nodes, deployment model providers | [Core API](#core-api), [Web API](web-management.md), [Core OpenAPI](../../contracts/agents-api/core.openapi.yaml) |
-| `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials: node enrollment tokens and executor credentials issued through `/core/v1`, node credentials registered with an enrollment token, and daemon credentials Core writes into hosted sandboxes | Machine connections only: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets; each credential works only on its own routes | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [executor credentials](../../contracts/agents-api/environment-executor-credentials.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
+| `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials: short-lived Session installation grants, node enrollment tokens and executor credentials issued through `/core/v1` or claimed by installation, node credentials registered with an enrollment token, and daemon credentials Core writes into hosted sandboxes | Machine bootstrap and connections: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets; each credential works only on its own routes | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [executor credentials](../../contracts/agents-api/environment-executor-credentials.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
 
 A Project API key gets 401 on `/core/v1` and `/api/v1`; the Core key gets 401 on
 `/v1` and `/api/v1`. Projects own assets. Multiple equally privileged keys share
