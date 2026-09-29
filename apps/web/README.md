@@ -157,3 +157,26 @@ pnpm --filter @agents-core-web/web build
 These checks cover the application source. Browser acceptance through
 `services/core-console` is tracked in the [frontend roadmap](../../docs/web/roadmap.md).
 Required repository checks are documented in [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+### README screenshots
+
+The browser fixture has an opt-in scene for Overview and Agent metrics, including
+five available nodes. From the repository root, start these in separate terminals:
+
+```sh
+OAC_WEB_SCREENSHOT_DEMO=1 AGENTS_FIXTURE_PORT=18394 node apps/web/e2e/fixture-console.mjs
+```
+
+```sh
+OAC_WEB_DEV_PROXY_TARGET=http://127.0.0.1:18394 pnpm --filter @agents-core-web/web exec vite --host 127.0.0.1 --mode test --port 4394
+```
+
+Open `http://127.0.0.1:4394` in Chrome and sign in with the fixture-only key
+`fixture-core-key-3f9a2c71`. Capture Overview and Agent metrics in light mode,
+once in English and once in Chinese using the console language menu. Check that
+all five nodes load and metrics have no partial-data warning before capturing.
+For a remote preview, forward port 4394 over SSH and capture in local Chrome.
+Keep the original resolution, crop browser chrome and add a plain macOS-style
+window bar. The four PNGs in `docs/assets/console-*.png` are linked by the matching
+README and included in the distribution manifest. Normal acceptance data and
+production builds do not enable this scene.

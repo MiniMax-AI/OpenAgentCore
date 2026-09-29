@@ -10,6 +10,7 @@ import { buildAdmin } from "./data/admin.mjs";
 import { coreMetrics } from "./data/core-metrics.mjs";
 import { buildResources } from "./data/resources.mjs";
 import { buildDemo } from "./data/routes.mjs";
+import { buildScreenshotDemo } from "../screenshots/data.mjs";
 
 const port = Number(process.env.AGENTS_FIXTURE_PORT ?? 18092);
 const SESSION_COOKIE = "core_console=fixture-session";
@@ -94,8 +95,9 @@ function e2bDeployment() {
 
 function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured", installers = true, artifacts = "docker,microsandbox") {
   // Self-hosted Sessions get their remote_url from public_url, as in Core.
-  const base = buildDemo(undefined, address === "local" ? LOCAL_URL : PUBLIC_URL);
+  const screenshots = process.env.OAC_WEB_SCREENSHOT_DEMO === "1";
   const now = Math.floor(Date.now() / 1000);
+  const base = (screenshots ? buildScreenshotDemo : buildDemo)(now, address === "local" ? LOCAL_URL : PUBLIC_URL);
   const resources = buildResources(now, base.agents, base.sessions);
   const admin = buildAdmin(now, base, resources);
   // A fresh install: no project, Session or Runtime yet; Getting started leads.

@@ -54,6 +54,10 @@ BUNDLED_FILES = (
     "docs/assets/openagentcore-banner.jpeg",
     "docs/assets/architecture.png",
     "docs/assets/development-architecture.png",
+    "docs/assets/console-overview-en.png",
+    "docs/assets/console-overview-zh.png",
+    "docs/assets/console-agent-metrics-en.png",
+    "docs/assets/console-agent-metrics-zh.png",
 )
 REPOSITORY_URL = "https://github.com/MiniMax-AI/parsar-core"
 MARKDOWN_LINK = re.compile(r"(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")
