@@ -119,10 +119,8 @@ through Core's loopback port. This is not required for one-command onboarding.
 See the [credential contract](../../contracts/agents-api/environment-executor-credentials.md)
 for those routes and uncertain-response handling.
 
-## Historical executor installations
+## Installation scope
 
-The native installer supports its current version only. It does not adopt or
-upgrade an older daemon or container installation. Preserve old files, containers
-and native history; use a fresh Runtime home and Session when moving versions.
-Historical container-installer instructions and qualification records describe
-those earlier artifacts, not acceptance of the current native daemon.
+The [native installation guide](../self-hosted-native.md#add-harnesses-and-operate-the-installation)
+owns supported installation operations and component validation. Stopping a Runtime
+or deleting a Session never removes the user's files or native history.

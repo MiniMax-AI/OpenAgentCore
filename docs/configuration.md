@@ -174,9 +174,9 @@ Same-team E2B template, resource and key changes apply online through the Core A
 new allocations use the new generation, while existing sandboxes retain their
 original specification. Omit the key to preserve it; explicitly submitting a key,
 even the same value, verifies the replacement and advances the generation. Keep the
-old key valid until the update succeeds. Initial setup requires a team-owned template;
-a legacy public-template configuration or an already revoked old key requires reset
-when Core cannot verify the committed ownership anchor.
+old key valid until the update succeeds. Initial setup requires a team-owned template.
+If Core cannot verify the committed ownership anchor, reset the deployment before
+setting it up again.
 
 Docker and microsandbox size/Runtime edits advance the target generation online.
 They require neither zero held resources nor node retirement or reenrollment.
@@ -187,9 +187,8 @@ preparing or has failed. Target rollout and serving readiness are separate facts
 Use **System** → **Sandbox backend** → **Change resources** to edit the target;
 **Nodes** owns node management and readiness.
 
-Current Runtime generation coexistence and ownership-scoped garbage collection
-remain supported. They do not upgrade the installed node program or convert an old
-installation. History stays, and existing Sessions never move between providers.
+Runtime generation coexistence and ownership-scoped garbage collection operate
+within the installed node release. Existing Sessions retain their placement and history.
 See the [nodes guide](getting-started/nodes.md#change-the-sandbox-backend-or-size),
 [operator reference](../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-reset)
 and [deployment contract](../contracts/agents-api/sandbox-deployment.md).

@@ -25,7 +25,6 @@ type pendingCodexPermission struct {
 type pendingCodexAsk struct {
 	rpcID       any
 	questionIDs []string
-	answerKeys  []string
 	timeout     time.Duration
 	timer       *time.Timer
 }
@@ -142,7 +141,6 @@ func (s *Session) handleCodexUserInput(raw json.RawMessage, rpcID any) (any, err
 	askID := codexInteractionID("ask")
 	questions := make([]proto.PromptForUserChoiceQuestion, 0, len(params.Questions))
 	questionIDs := make([]string, 0, len(params.Questions))
-	answerKeys := make([]string, 0, len(params.Questions))
 	for index, question := range params.Questions {
 		options := make([]proto.PromptForUserChoiceOption, 0, len(question.Options))
 		for _, option := range question.Options {
@@ -157,7 +155,6 @@ func (s *Session) handleCodexUserInput(raw json.RawMessage, rpcID any) (any, err
 			questionID = header
 		}
 		questionIDs = append(questionIDs, questionID)
-		answerKeys = append(answerKeys, header)
 		questions = append(questions, proto.PromptForUserChoiceQuestion{
 			ID: questionID, Header: header, Question: question.Question, Options: options,
 			IsOther: question.IsOther, IsSecret: question.IsSecret,
@@ -170,7 +167,7 @@ func (s *Session) handleCodexUserInput(raw json.RawMessage, rpcID any) (any, err
 			timeout = time.Duration(*params.AutoResolutionMs) * time.Millisecond
 		}
 	}
-	pending := pendingCodexAsk{rpcID: rpcID, questionIDs: questionIDs, answerKeys: answerKeys, timeout: timeout}
+	pending := pendingCodexAsk{rpcID: rpcID, questionIDs: questionIDs, timeout: timeout}
 	s.interactions.mu.Lock()
 	pending.timer = time.AfterFunc(pending.timeout, func() { s.expireCodexAsk(askID) })
 	s.interactions.asks[askID] = pending
@@ -253,7 +250,14 @@ func (s *Session) submitCodexUserInput(askID string, decision proto.PromptForUse
 	defer s.endOperation()
 	s.interactions.mu.Lock()
 	pending, ok := s.interactions.asks[askID]
+	var answers map[string][]string
 	if ok {
+		var err error
+		answers, err = decision.AnswersFor(pending.questionIDs)
+		if err != nil {
+			s.interactions.mu.Unlock()
+			return err
+		}
 		delete(s.interactions.asks, askID)
 	}
 	s.interactions.mu.Unlock()
@@ -277,34 +281,11 @@ func (s *Session) submitCodexUserInput(askID string, decision proto.PromptForUse
 		}
 		return nil
 	}
-	byID := make(map[string][]string, len(decision.QuestionAnswers))
-	byHeader := make(map[string][]string, len(decision.QuestionAnswers))
-	for _, answer := range decision.QuestionAnswers {
-		values := answer.Answers
-		if len(values) == 0 {
-			values = splitCodexAnswers(answer.Answer)
-		}
-		if answer.QuestionID != "" {
-			byID[answer.QuestionID] = values
-		}
-		if answer.Header != "" {
-			byHeader[answer.Header] = values
-		}
-	}
 	result := ToolRequestUserInputResponse{Answers: make(map[string]ToolRequestUserInputAnswer, len(pending.questionIDs))}
-	for index, questionID := range pending.questionIDs {
-		values := byID[questionID]
-		if len(values) == 0 && index < len(pending.answerKeys) {
-			values = byHeader[pending.answerKeys[index]]
-		}
-		if len(values) == 0 && index < len(decision.QuestionAnswers) {
-			values = decision.QuestionAnswers[index].Answers
-			if len(values) == 0 {
-				values = splitCodexAnswers(decision.QuestionAnswers[index].Answer)
-			}
-		}
-		if len(values) == 0 && index == 0 && len(decision.Answers) > 0 {
-			values = decision.Answers
+	for _, questionID := range pending.questionIDs {
+		values := answers[questionID]
+		if values == nil {
+			values = []string{}
 		}
 		result.Answers[questionID] = ToolRequestUserInputAnswer{Answers: values}
 	}
@@ -371,17 +352,6 @@ func (s *Session) stopCodexInteractionTimers() {
 		}
 		delete(s.interactions.asks, id)
 	}
-}
-
-func splitCodexAnswers(answer string) []string {
-	parts := strings.Split(strings.TrimSpace(answer), ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if value := strings.TrimSpace(part); value != "" {
-			out = append(out, value)
-		}
-	}
-	return out
 }
 
 func stringPointer(value *string) string {

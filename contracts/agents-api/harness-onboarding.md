@@ -81,7 +81,12 @@ model communication configuration, not Turn scheduling or native process ownersh
    the [qualification table](harnesses.md#current-qualified-operations).
 
 Start with the mandatory text lifecycle, then qualify optional operations one at
-a time. Do not copy an adapter's native limitations into the shared Core protocol.
+a time. Call the reusable `agent/contracttest.TextLifecycle` assertions with the
+adapter's prepared Executor and deterministic native fixture. These assertions
+cover healthy reuse, durable input and cancellation; keep native fault and live
+acceptance separate. Name the entry test `TestSharedTextLifecycle` so
+`make check-runtime-contract` includes it. Do not copy an adapter's native
+limitations into the shared Core protocol.
 
 ## Architecture rules
 
@@ -212,12 +217,15 @@ never attribute a late result to whichever Turn is currently active.
 Initial input and steering use ordered `proto.MessageInput`. Preserve user-message
 and content order. Text-only adapters reject images through `TextOnly()` instead
 of dropping them. A successful transport write is distinct from confirmed native
-application. Resume only the exact history bound to the Session; missing or
-ambiguous required history fails before new model input.
+application. User-choice answers use the emitted question ID and an array of
+values; shared `PromptForUserChoiceDecisionPayload.AnswersFor` validates identity
+before consuming a pending interaction. Do not map answers by header or position.
+Resume only the exact history bound to the Session; missing or ambiguous required
+history fails before new model input.
 
 | Interface or contract | When required | Obligation |
 | --- | --- | --- |
-| `agent.DurableSteerer` | Current public text execution | Distinguish write and application receipts; preserve retry identity |
+| `agent.DurableSteerer` | Current public text execution | Distinguish write and application receipts; preserve retry identity; independent of the optional non-durable `Steerer` |
 | `agent.FunctionResultSubmitter` | Public function tools | Match call/result identity and acknowledge native application |
 | `agent.PermissionResponder`, `agent.UserChoiceResponder` | When emitting these interactions | Route exact identities and settle receipts |
 | `agent.WorkspaceReader`, `agent.WorkspaceDirectoryLister`, `agent.WorkspaceWriter` | Qualified workspace operations | Use the fixed authorized workspace and retain accepted operations through close |

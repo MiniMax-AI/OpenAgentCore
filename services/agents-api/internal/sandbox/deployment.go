@@ -5,7 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strings"
+	"reflect"
+	"regexp"
 )
 
 // ValidationError preserves the sandbox error text and identity while identifying
@@ -30,31 +31,32 @@ type Resources struct {
 }
 
 func (r Resources) Validate(provider string) error {
-	if r.CPUs == 0 || r.CPUs > 255 || r.MemoryMiB < 512 || r.MemoryMiB > 1048576 {
-		field, min, max := "resources.cpus", uint32(1), uint32(255)
-		if r.CPUs > 0 && r.CPUs <= 255 {
-			field, min, max = "resources.memory_mib", 512, 1048576
+	rules, ok := deploymentProviders[provider]
+	values := reflect.ValueOf(r)
+	for i, rule := range resourceContract {
+		min, max := rule.Min, rule.Max
+		message := rule.Message
+		var maximum *uint32 = validationBound(max)
+		if rule.OmitZero {
+			if !ok {
+				break
+			}
+			min, max = 0, 0
+			message = provider + " does not support independent disk capacity limits"
+			if rules.Disk {
+				min, max = minimumDiskMiB, ^uint32(0)
+				message = "microsandbox requires root_disk_mib and environment_disk_mib of at least 1024 MiB"
+				maximum = nil
+			} else {
+				maximum = validationBound(max)
+			}
 		}
-		return &ValidationError{Param: field, Min: &min, Max: &max, Message: fmt.Sprintf("%s: cpus must be 1..255 and memory_mib must be 512..1048576", ErrInvalid)}
+		value := values.Field(i).Uint()
+		if value < uint64(min) || value > uint64(max) {
+			return &ValidationError{Param: "resources." + rule.Name, Min: validationBound(min), Max: maximum, Message: fmt.Sprintf("%s: %s", ErrInvalid, message)}
+		}
 	}
-	switch provider {
-	case "microsandbox":
-		if r.RootDiskMiB < 1024 || r.EnvironmentDiskMiB < 1024 {
-			field := "resources.root_disk_mib"
-			if r.RootDiskMiB >= 1024 {
-				field = "resources.environment_disk_mib"
-			}
-			return &ValidationError{Param: field, Min: validationBound(1024), Message: fmt.Sprintf("%s: microsandbox requires root_disk_mib and environment_disk_mib of at least 1024 MiB", ErrInvalid)}
-		}
-	case "docker", "e2b":
-		if r.RootDiskMiB != 0 || r.EnvironmentDiskMiB != 0 {
-			field := "resources.root_disk_mib"
-			if r.RootDiskMiB == 0 {
-				field = "resources.environment_disk_mib"
-			}
-			return &ValidationError{Param: field, Min: validationBound(0), Max: validationBound(0), Message: fmt.Sprintf("%s: %s does not support independent disk capacity limits", ErrInvalid, provider)}
-		}
-	default:
+	if !ok {
 		return fmt.Errorf("%w: unsupported sandbox provider", ErrInvalid)
 	}
 	return nil
@@ -78,11 +80,11 @@ func lowerHex(v string, bytes int) bool {
 }
 
 func (r RuntimeRelease) Validate() error {
-	if !lowerHex(r.SourceCommit, 20) || !strings.HasPrefix(r.ImageID, "sha256:") || !lowerHex(strings.TrimPrefix(r.ImageID, "sha256:"), 32) ||
-		!strings.HasPrefix(r.ImageManifestDigest, "sha256:") || !lowerHex(strings.TrimPrefix(r.ImageManifestDigest, "sha256:"), 32) ||
-		!strings.HasPrefix(r.MicrosandboxRef, "oac-runtime@sha256:") || !lowerHex(strings.TrimPrefix(r.MicrosandboxRef, "oac-runtime@sha256:"), 32) ||
-		!lowerHex(r.RuntimeSHA256, 32) || !lowerHex(r.FirmwareSHA256, 32) {
-		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: Runtime must reference one immutable distribution", ErrInvalid)}
+	values := reflect.ValueOf(r)
+	for i, rule := range runtimeContract {
+		if !regexp.MustCompile("^(?:" + rule.Pattern + ")$").MatchString(values.Field(i).String()) {
+			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: Runtime must reference one immutable distribution", ErrInvalid)}
+		}
 	}
 	return nil
 }
@@ -96,7 +98,7 @@ func (s DeploymentSpec) Validate(provider string) error {
 	if err := s.Resources.Validate(provider); err != nil {
 		return err
 	}
-	if provider == "e2b" {
+	if !deploymentProviders[provider].Runtime {
 		if s.Runtime != nil {
 			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: E2B Runtime is selected by its immutable template build", ErrInvalid)}
 		}

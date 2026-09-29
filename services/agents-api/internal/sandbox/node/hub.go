@@ -35,21 +35,22 @@ type Hub struct {
 }
 
 type peer struct {
-	version         int
-	generations     map[uint64]sandbox.GenerationStatus
-	controlSequence uint64
-	identity        Identity
-	id              string
-	epoch           uint64
-	conn            *websocket.Conn
-	send            chan struct{}
-	mu              sync.Mutex
-	sequence        uint64
-	ready           bool
-	pending         map[string]chan response
-	done            chan struct{}
-	once            sync.Once
-	cancel          context.CancelFunc
+	generationManagement bool
+	version              int
+	generations          map[uint64]sandbox.GenerationStatus
+	controlSequence      uint64
+	identity             Identity
+	id                   string
+	epoch                uint64
+	conn                 *websocket.Conn
+	send                 chan struct{}
+	mu                   sync.Mutex
+	sequence             uint64
+	ready                bool
+	pending              map[string]chan response
+	done                 chan struct{}
+	once                 sync.Once
+	cancel               context.CancelFunc
 }
 
 func NewHub(options HubOptions) *Hub {
@@ -158,7 +159,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		return
 	}
-	p := &peer{version: hello.Version, generations: map[uint64]sandbox.GenerationStatus{}, identity: identity, id: uuid.NewString(), epoch: epoch, conn: conn, cancel: cancel, send: make(chan struct{}, 1), pending: map[string]chan response{}, ready: hello.Health.ProviderReady, done: make(chan struct{})}
+	p := &peer{generationManagement: hello.GenerationManagement, version: hello.Version, generations: map[uint64]sandbox.GenerationStatus{}, identity: identity, id: uuid.NewString(), epoch: epoch, conn: conn, cancel: cancel, send: make(chan struct{}, 1), pending: map[string]chan response{}, ready: hello.Health.ProviderReady, done: make(chan struct{})}
 	stopPeerClose := context.AfterFunc(ctx, p.close)
 	defer stopPeerClose()
 	presenceAttempted := false
@@ -191,7 +192,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	welcome := frame{Version: p.version, Type: "welcome", ConnectionID: p.id, OwnerEpoch: epoch}
-	if p.version == GenerationProtocolVersion {
+	if p.generationManagement {
 		deployment, _, err := h.retention(ctx, p, nil)
 		if err != nil {
 			return
@@ -241,7 +242,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if e != nil || current != epoch {
 				return
 			}
-			if p.version == GenerationProtocolVersion && f.OwnerEpoch != p.epoch {
+			if f.OwnerEpoch != p.epoch {
 				return
 			}
 			if h.recordHealth(ctx, p, *f.Health) != nil {
@@ -251,7 +252,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			ack := frame{Version: p.version, Type: "heartbeat_ack", ConnectionID: p.id, OwnerEpoch: p.epoch}
-			if p.version == GenerationProtocolVersion {
+			if p.generationManagement {
 				deployment, _, readErr := h.retention(ctx, p, nil)
 				if readErr != nil {
 					p.unlockSend()
@@ -265,7 +266,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case "retention":
-			if p.version != GenerationProtocolVersion || f.Control == nil {
+			if !p.generationManagement || f.Control == nil {
 				return
 			}
 			c := f.Control
@@ -329,10 +330,10 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	}
 	p.mu.Lock()
 	ready := p.ready
-	if p.version == GenerationProtocolVersion {
+	if p.generationManagement {
 		status, ok := p.generations[q.DeploymentGeneration]
 		ready = ok && status.State == "ready"
-	} else if q.DeploymentGeneration != 0 && q.DeploymentGeneration != p.identity.DeploymentGeneration {
+	} else if q.DeploymentGeneration != p.identity.DeploymentGeneration {
 		p.mu.Unlock()
 		return response{}, uncertain(q.Operation, ErrUnavailable)
 	}
@@ -340,9 +341,7 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	if requiresReady(q) && !ready {
 		return response{}, uncertain(q.Operation, ErrUnavailable)
 	}
-	if p.version == ProtocolVersion {
-		q.DeploymentGeneration = 0
-	}
+
 	deadline, _ := ctx.Deadline()
 	q.ID, q.ConnectionID, q.OwnerEpoch = uuid.NewString(), p.id, p.epoch
 	if err = q.setTimeout(deadline); err != nil {
@@ -391,10 +390,11 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	}
 }
 
-type Resolver func(context.Context, sandbox.Reference) (string, error)
-
 func (h *Hub) recordHealth(ctx context.Context, p *peer, health Health) error {
-	if p.version == GenerationProtocolVersion {
+	if !p.generationManagement && health.Generations != nil {
+		return sandbox.ErrInvalid
+	}
+	if p.generationManagement {
 		if h.options.Generations == nil {
 			return sandbox.ErrInvalid
 		}

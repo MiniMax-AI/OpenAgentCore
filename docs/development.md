@@ -86,6 +86,7 @@ site; `pnpm dev:docs` starts its development server.
 | `services/agents-api/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](runtime-protocol.md) |
 | `services/agents-api/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
 | `internal/agentdaemon/proto` and `gateway` | Shared wire types, validators and authenticated Runtime connections | [Runtime protocol](runtime-protocol.md) |
+| `internal/runtimebootstrap` | Provider-to-Runtime startup input | [Runtime bootstrap](runtime-bootstrap.md) |
 | `apps/parsar-daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](../contracts/agents-api/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/parsar-daemon/internal/agent` | Native harness adapters | [Native references](../contracts/agents-api/harness-onboarding.md#native-references) |
 | `services/agents-api/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](sandbox-provider.md) |
@@ -109,6 +110,7 @@ only helps you pick the right one.
 | --- | --- | --- |
 | Harness adapter | A native agent engine behind the Runtime | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
 | Sandbox Provider | Outer compute that creates and reclaims Environments | [Sandbox Provider guide](sandbox-provider.md) |
+| Runtime bootstrap | Starting a managed Runtime with its connection identity | [Runtime bootstrap](runtime-bootstrap.md) |
 | Core–Runtime protocol | A message, receipt or lifecycle rule between Core and the daemon | [Core–Runtime protocol](runtime-protocol.md) |
 | Public API operation | A `/v1`, `/core/v1` or `/api/v1` route | [API index](api/README.md) and [contracts](../contracts/agents-api/README.md) |
 | Environment capability | Skills, Plugins, MCP or `packages.system` preparation | [Environments](../contracts/agents-api/environments.md#runtime-capability-preparation) |

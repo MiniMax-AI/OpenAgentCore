@@ -107,7 +107,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 }
 
 func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T) {
-	for _, name := range []string{"run", "prompt", "conversation", "attachments", "authoring", "subagents", "workspace-missing", "none", "functions", "mcp", "tools", "controls", "old-runtime"} {
+	for _, name := range []string{"run", "prompt", "conversation", "attachments", "authoring", "subagents", "workspace-missing", "none", "functions", "mcp", "controls", "old-runtime"} {
 		t.Run(name, func(t *testing.T) {
 			config := preparationFixture(t, name)
 			req := preparationRequest()
@@ -132,8 +132,6 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 				req.FunctionTools = []proto.FunctionTool{{Name: "hello", Parameters: json.RawMessage(`{"type":"object"}`)}}
 			case "mcp":
 				req.MCPHTTPServers = &[]proto.MCPHTTPServer{}
-			case "tools":
-				req.ObserveTools = true
 			case "controls":
 				req.ExecutionControls = &proto.ExecutionControls{WebSearch: "enabled", TextVerbosity: "medium"}
 			}

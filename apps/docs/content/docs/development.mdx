@@ -89,6 +89,7 @@ site; `pnpm dev:docs` starts its development server.
 | `services/agents-api/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](/runtime-protocol) |
 | `services/agents-api/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](/harness-onboarding) |
 | `internal/agentdaemon/proto` and `gateway` | Shared wire types, validators and authenticated Runtime connections | [Runtime protocol](/runtime-protocol) |
+| `internal/runtimebootstrap` | Provider-to-Runtime startup input | [Runtime bootstrap](/runtime-bootstrap) |
 | `apps/parsar-daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](/harness-onboarding#required-adapter-interfaces) |
 | `apps/parsar-daemon/internal/agent` | Native harness adapters | [Native references](/harness-onboarding#native-references) |
 | `services/agents-api/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](/sandbox-provider) |
@@ -112,6 +113,7 @@ only helps you pick the right one.
 | --- | --- | --- |
 | Harness adapter | A native agent engine behind the Runtime | [Harness onboarding](/harness-onboarding) |
 | Sandbox Provider | Outer compute that creates and reclaims Environments | [Sandbox Provider guide](/sandbox-provider) |
+| Runtime bootstrap | Starting a managed Runtime with its connection identity | [Runtime bootstrap](/runtime-bootstrap) |
 | Core–Runtime protocol | A message, receipt or lifecycle rule between Core and the daemon | [Core–Runtime protocol](/runtime-protocol) |
 | Public API operation | A `/v1`, `/core/v1` or `/api/v1` route | [API index](/public-api) and [contracts](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md) |
 | Environment capability | Skills, Plugins, MCP or `packages.system` preparation | [Environments](/environments-and-files#runtime-capability-preparation) |

@@ -90,7 +90,9 @@ stopping conditions. A batch ends when its declared operations pass; it does not
 expand to match another Harness's feature list. A small adapter does not remove
 the need for native qualification.
 
-- Adapter tests: two ordinary Turns share one native process/connection and history;
+- Adapter tests: reuse `agent/contracttest.TextLifecycle` with a controlled native
+  fixture or real provider. Record which one was used. Two ordinary Turns share
+  one native process/connection and history;
   cancellation followed by another Turn; stale cancellation and late events; native
   exit, cleanup failure, input write/application receipts and unknown outcomes.
   Verify fresh per-Turn usage, function, input and child-observation state.

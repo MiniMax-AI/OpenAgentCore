@@ -92,16 +92,15 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 		return &ack
 	}
 	session := state.session
-	steerer, ok := session.(agent.Steerer)
-	if !ok {
-		ack.ErrorCode, ack.Error = "unsupported", "This engine does not support active-turn input."
-		return &ack
-	}
+	steerer, supportsSteering := session.(agent.Steerer)
 	if input.DurableReceipt {
 		if _, ok := session.(agent.DurableSteerer); !ok || (!state.releaseOnCompletion && state.preparedHandoff == nil) {
 			ack.ErrorCode, ack.Error = "unsupported", "Durable input receipts require a supported Turn settlement contract."
 			return &ack
 		}
+	} else if !supportsSteering {
+		ack.ErrorCode, ack.Error = "unsupported", "This engine does not support active-turn input."
+		return &ack
 	}
 	if state.steerBusy {
 		ack.ErrorCode, ack.Error = "busy", "Another input is awaiting an engine receipt; retry this input later."

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -77,8 +76,7 @@ func ValidateSnapshot(c Config, r sandbox.Reference, s SnapshotIdentity) error {
 	return nil
 }
 func ValidateBootstrap(b sandbox.Bootstrap) error {
-	u, e := url.Parse(b.CoreURL)
-	if !ValidReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || e != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.TrimSpace(b.Credential) == "" {
+	if !ValidReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
 		return sandbox.ErrInvalid
 	}
 	return (agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}).Validate()

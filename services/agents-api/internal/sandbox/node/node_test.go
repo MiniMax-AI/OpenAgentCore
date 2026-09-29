@@ -60,7 +60,7 @@ func reference() sandbox.Reference {
 	return sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
 }
 func identity() Identity {
-	return Identity{NodeID: uuid.NewString(), InstallationID: uuid.NewString(), Provider: "docker", BackendFingerprint: strings.Repeat("1", 64), MaxActive: 4, MaxRetained: 16}
+	return Identity{DeploymentGeneration: 1, SpecificationDigest: strings.Repeat("a", 64), NodeID: uuid.NewString(), InstallationID: uuid.NewString(), Provider: "docker", BackendFingerprint: strings.Repeat("1", 64), MaxActive: 4, MaxRetained: 16}
 }
 func stateDir(t *testing.T) string {
 	t.Helper()
@@ -122,7 +122,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 		t.Fatal("running node did not retain lifetime identity lock")
 	}
 	r := reference()
-	proxy := hub.Proxy(id.NodeID, "docker")
+	proxy := hub.Proxy(id.NodeID, "docker", 1)
 	createCtx, stopCreate := context.WithTimeout(ctx, 150*time.Millisecond)
 	defer stopCreate()
 	createDone := make(chan error, 1)
@@ -165,7 +165,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 
 func TestOfflineIsUnknownAndDockerDoesNotAdvertiseCheckpoint(t *testing.T) {
 	h := NewHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
-	p := h.Proxy(uuid.NewString(), "docker")
+	p := h.Proxy(uuid.NewString(), "docker", 1)
 	if _, ok := p.(sandbox.CheckpointProvider); ok {
 		t.Fatal("docker advertised checkpoint")
 	}
@@ -191,7 +191,7 @@ func TestAgentRejectsDuplicateSequenceAndRetainsEpoch(t *testing.T) {
 		}
 		connectionID := uuid.NewString()
 		_ = writeFrame(conn, frame{Type: "welcome", ConnectionID: connectionID, OwnerEpoch: 9})
-		q := request{ID: uuid.NewString(), Sequence: 1, ConnectionID: connectionID, OwnerEpoch: 9, Operation: "info", TimeoutMillis: 60000, Reference: reference()}
+		q := request{DeploymentGeneration: id.DeploymentGeneration, ID: uuid.NewString(), Sequence: 1, ConnectionID: connectionID, OwnerEpoch: 9, Operation: "info", TimeoutMillis: 60000, Reference: reference()}
 		_ = writeFrame(conn, frame{Type: "request", Request: &q})
 		_, _ = readFrame(conn)
 		q.ID = uuid.NewString()
@@ -233,7 +233,7 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(EnrollmentResponse{NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8})
+			_ = json.NewEncoder(w).Encode(EnrollmentResponse{SpecificationDigest: id.SpecificationDigest, DeploymentGeneration: id.DeploymentGeneration, NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8})
 			return
 		}
 		if r.URL.Path != "/api/v1/sandbox-node/enroll" || r.Header.Get("Authorization") != "Bearer enrollment" {

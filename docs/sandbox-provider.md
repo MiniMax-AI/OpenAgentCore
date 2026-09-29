@@ -234,6 +234,10 @@ Node tests separately exercise disconnect/reconnect fencing and cleanup after a
 lost create response. Provider helper protocols and the node protocol require an
 exact version match and reject mismatches; do not add fallback decoders or old
 binary migration. Direct in-process interfaces have no independent wire version.
+Node generation management is an explicit current hello capability, not another
+wire version. Fixed-configuration manual nodes use the same protocol and only
+serve their enrolled deployment generation. See the
+[node contract](../contracts/agents-api/node-generation-protocol.md).
 
 Run `make check` with its dedicated database before completion. Retain native
 acceptance for SDK behavior that fixtures cannot prove: creation, lease behavior,

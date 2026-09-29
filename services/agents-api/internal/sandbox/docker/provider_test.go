@@ -5,13 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/internal/runtimebootstrap"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/contracttest"
@@ -137,12 +137,12 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	if _, e = p.Create(ctx, changed); !errors.Is(e, sandbox.ErrExists) {
 		t.Fatalf("duplicate not rejected: %v", e)
 	}
-	r, e := p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"cat", "/home/runtime/.oac/daemon/default/auth.json"}})
+	r, e := p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"cat", "/home/runtime/runtime-bootstrap.json"}})
 	if e != nil {
 		t.Fatal(e)
 	}
-	var auth map[string]string
-	if json.Unmarshal([]byte(r.Stdout), &auth) != nil || auth["runner_credential"] != b.Credential || auth["runtime_id"] != b.DeviceID {
+	auth, decodeErr := runtimebootstrap.Decode([]byte(r.Stdout))
+	if decodeErr != nil || auth.Credential != b.Credential || auth.DeviceID != b.DeviceID {
 		t.Fatal("bootstrap changed or malformed")
 	}
 	r, e = p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"sh", "-c", "printf retained > /environment/workspace/history; printf failed >&2; exit 7"}})

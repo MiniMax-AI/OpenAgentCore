@@ -226,7 +226,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 				if err := event.DecodePayload(&tool); err != nil {
 					t.Fatal(err)
 				}
-				if tool.Observation == nil || tool.Observation.Kind != "function" || tool.NativeItem != nil || (tool.Stage != "before" && tool.Stage != "after") {
+				if tool.Observation == nil || tool.Observation.Kind != "function" || (tool.Stage != "before" && tool.Stage != "after") {
 					t.Fatal("invalid live neutral function observation")
 				}
 				if tool.Stage == "after" {
@@ -267,12 +267,17 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 				_ = json.Unmarshal(event.Payload, &payload)
 				proof.Text = payload.Content
 				proof.SessionID, _ = payload.Metadata[proto.DoneMetaAgentSessionID].(string)
-				select {
-				case <-s.process.Done():
-				default:
-					t.Fatal("daemon Done preceded process release")
-				}
 			}
+		}
+		// Done reports the Turn outcome; the direct factory closes its Executor
+		// after output settlement. Verify release at that boundary.
+		if _, err := s.AwaitSettlement(ctx); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-s.process.Done():
+		case <-time.After(5 * time.Second):
+			t.Fatal("direct factory retained its process after settlement")
 		}
 		if !steeringAt.IsZero() {
 			receipt := <-steeringReply

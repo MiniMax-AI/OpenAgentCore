@@ -22,7 +22,7 @@ The console endpoint and the public application endpoint serve different purpose
 even if they share a host.
 
 Use the [installation guide](../getting-started/install.md) for deployment and the
-[operations guide](../getting-started/operations.md) for storage, upgrades and node
+[operations guide](../getting-started/operations.md) for storage, same-release repair and node
 management. A Core, Web and PostgreSQL installation may have zero execution nodes.
 Opening the console neither allocates compute nor invokes a model. Deployment
 sandbox management selects E2B, Docker or microsandbox independently of an

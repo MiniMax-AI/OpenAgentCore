@@ -550,7 +550,12 @@ func TestSessionAskUserQuestionRoundTrip(t *testing.T) {
 	}
 
 	if err := sess.SubmitPromptForUserChoiceForTest(askID, proto.PromptForUserChoiceDecisionPayload{
-		Answers: []string{"Confirm delete"},
+		QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "foreign", Answers: []string{"wrong"}}},
+	}); err == nil {
+		t.Fatal("accepted a foreign question ID")
+	}
+	if err := sess.SubmitPromptForUserChoiceForTest(askID, proto.PromptForUserChoiceDecisionPayload{
+		QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"Confirm delete"}}},
 	}); err != nil {
 		t.Fatalf("SubmitPromptForUserChoice: %v", err)
 	}
@@ -575,7 +580,7 @@ func TestSessionAskUserQuestionRoundTrip(t *testing.T) {
 	}
 
 	// Second submit must look unknown.
-	err = sess.SubmitPromptForUserChoiceForTest(askID, proto.PromptForUserChoiceDecisionPayload{Answers: []string{"x"}})
+	err = sess.SubmitPromptForUserChoiceForTest(askID, proto.PromptForUserChoiceDecisionPayload{QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"x"}}}})
 	if !errors.Is(err, agent.ErrUnknownAsk) {
 		t.Errorf("second SubmitPromptForUserChoice err = %v, want ErrUnknownAsk", err)
 	}

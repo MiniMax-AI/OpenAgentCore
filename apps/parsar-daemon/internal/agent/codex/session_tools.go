@@ -10,26 +10,22 @@ func (s *Session) sendItemEvents(events []proto.Envelope, notification json.RawM
 	var native struct {
 		Item json.RawMessage `json:"item"`
 	}
-	if s.observeTools || s.observeToolObservations {
+	if s.observeToolObservations {
 		if err := json.Unmarshal(notification, &native); err != nil {
 			return
 		}
 	}
 	for _, event := range events {
-		if (s.observeTools || s.observeToolObservations) && event.Type == proto.TypeToolCall {
+		if (s.observeToolObservations) && event.Type == proto.TypeToolCall {
 			var tool proto.ToolCallPayload
 			if err := event.DecodePayload(&tool); err != nil {
 				return
 			}
-			if s.observeToolObservations {
-				var err error
-				tool.Observation, err = normalizeToolObservation(tool.ID, tool.Stage, native.Item)
-				if err != nil {
-					s.emitTerminal("codex: invalid tool observation", true)
-					return
-				}
-			} else {
-				tool.NativeItem = native.Item
+			var err error
+			tool.Observation, err = normalizeToolObservation(tool.ID, tool.Stage, native.Item)
+			if err != nil {
+				s.emitTerminal("codex: invalid tool observation", true)
+				return
 			}
 			payload, err := json.Marshal(tool)
 			if err != nil {

@@ -139,11 +139,9 @@ that already owns the Executor. Connection shutdown owns transport-loss cleanup.
 Preserve the ten-second settlement wait and separate five-second receipt
 send budget; timeout is not proof of quiescence. The observed cancellation outcome
 retains native identity, Usage and output without fabricating missing evidence.
-Codex native Turn interruption can leave background terminals alive. Its adapter
-uses the exact thread-owned terminal list and confirmed per-terminal termination
-before settling cancellation, and repeats this cleanup during Executor close.
-The bulk clean acknowledgement does not prove termination. Failed cleanup keeps
-the native owner available for a later close attempt.
+Adapters must include owned background work in settlement and retain the exact
+native cleanup target after failure. Native termination mechanisms belong to the
+adapter; a bulk cleanup acknowledgement alone cannot establish quiescence.
 
 Private preparation controls reserve a per-Turn admission, not a new Executor.
 They carry an explicit Session identity and immutable configuration without model
@@ -200,6 +198,14 @@ Decision and permission-cancel envelopes use the interaction ID. Cancellation an
 function-result acknowledgements use the Run ID. All application decision
 receipts additionally match the delivery ID. A reply without the required
 correlation cannot establish acceptance.
+
+User-choice decisions carry `question_answers` with an explicit `question_id`
+and an `answers` array for each provided answer. The IDs must belong to the emitted
+questions and cannot repeat. Question order and display headers do not identify
+answers; omitted questions remain unanswered and an empty array is an explicit
+non-answer. Cancellation carries `cancelled: true` without answers. Shared
+validation rejects other shapes before native submission. Adapters translate the
+identified values into their native response without changing question identity.
 
 ## Message families
 
@@ -302,13 +308,10 @@ Workspace reads may request the private `workspace_read_only` preparation profil
 through the existing preparation factory and verified `workspace_read_preparation`
 capability. It accepts only the bound Environment and resource identity; execution
 options, model/MCP credentials, native Session continuation and model/tool input are excluded.
-The Codex adapter creates temporary local state, reuses its native connection and
-directory transport, and rejects Start. Its child inherits only process/transport
-essentials. The private native read mode excludes system, managed, user and project
-execution configuration and plugin startup while preserving native security
-requirements. Ordinary execution keeps its stable state and configuration.
-Reject the legacy mixed managed-config profile for reads rather than discarding
-its enforced constraints together with execution settings.
+A read-only owner rejects Start and excludes model input, execution configuration
+and plugin startup. A Runtime may satisfy this contract through its bound local
+filesystem implementation; starting a native Harness process is not required.
+Adapters that use native filesystem controls retain their own initialization rules.
 For this read profile, `released` is published only after local Close succeeds;
 cleanup errors retain ownership and report `cleanup_unconfirmed`. A failed factory
 must return its resource with the error if cleanup remains unconfirmed; wrappers
@@ -443,10 +446,9 @@ Return single-component names, entry kind, regular-file byte size and explicit
 truncation only after directory/metadata access and handle cleanup settle. Reuse
 byte-read admission, uncertainty and caller-detach ownership where applicable.
 Do not promise a snapshot, recursive traversal or public pagination through this
-private interface. The Runtime invokes the retained directory helper against the
-frozen local workspace. Keep the qualified helper outside writable paths, anchor
-traversal to no-follow descriptors, bound enumeration and require a complete
-validated result. Helper availability alone does not enable public Files admission.
+private interface. The Runtime binds access to the frozen local workspace,
+prevents path escape, bounds enumeration and requires a complete validated result.
+Filesystem readiness alone does not enable public Files admission.
 
 Bound encoded request payloads to 8 KiB and correlation IDs to 128 bytes before
 admission. Do not echo oversized IDs; omit oversized trace metadata in replies.
@@ -460,11 +462,6 @@ The gateway bounds subscriptions and never retries or replays on reconnect. Dupl
 pending operation IDs cannot start another read; this control does not promise durable
 idempotency or result recovery. Preparation/Run ownership, public path authorization,
 public file authorization and native cleanup retain their separate requirements.
-
-The retained Rust directory, write and workspace-export helpers provide bounded
-filesystem operations for the colocated Runtime. Their protected executable paths,
-descriptor-relative traversal and exact workspace binding remain required. They
-do not implement an executor transport or grant tenant authority.
 
 Connection observations use the existing execution lease and Session lock. A
 separate `environment_connections` row retains the current generation and revision;
@@ -505,3 +502,12 @@ then run its own native acceptance for the capabilities it advertises. A passing
 controlled-adapter test establishes the transport contract, not native Harness
 behavior, OS support, provider authentication or sandbox isolation. Update the
 shared types, this guide and the contract checks together when semantics change.
+
+The reusable [Harness text assertions](../apps/parsar-daemon/internal/agent/contracttest/text.go)
+accept any prepared Executor and a small fixture supplying deterministic normal,
+active and steering inputs. They check independent Turn streams, native owner and
+history continuity, durable write/application receipts, stale cancellation and
+healthy continuation after cancellation. The Claude Go adapter runs them against
+its controlled native subprocess fixture. New adapters can call the same assertions;
+no optional feature is implied. Native failures, uncertain cleanup and exact-history
+recovery still require the adapter's fault and real-provider acceptance tests.

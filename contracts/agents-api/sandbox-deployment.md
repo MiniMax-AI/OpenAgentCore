@@ -528,3 +528,24 @@ supported and are independent of installed program version changes. See
 `runtime_download_failed` means the exact Runtime artifacts could not be transferred
 or verified. It is distinct from provider probe and image availability failures;
 the diagnostic never contains artifact URLs, credentials or transport output.
+
+
+## Canonical node specification
+
+`sandbox/deployment_contract.go` owns resource bounds, provider requirements,
+release patterns and canonical field order. `sandbox/deployment.go` applies those
+rules in Core. The installer consumes the generated declaration in
+`deploy/install/node_spec.py`; do not maintain a second set of limits or patterns.
+Regenerate it from the repository root with
+`go run ./services/agents-api/cmd/specification-contract -write`.
+The sandbox Go tests, included in `make check`, reject a stale projection.
+
+The specification digest is SHA-256 of UTF-8 compact JSON, with `provider` first,
+then `resources`, then `runtime` when required by the provider. Resource and
+Runtime fields follow the contract declaration order. Zero optional disk fields
+are omitted; required fields remain present. Release identities are lowercase
+ASCII; the digest never hashes the incoming JSON field order or whitespace.
+`internal/sandbox/testdata/deployment-contract.json` (under `services/agents-api/`)
+contains shared acceptance cases, exact canonical bytes and digests consumed by
+both Go and Python tests. Cross-language validation is required; distinct peers
+must not invent distinct rules.

@@ -18,6 +18,7 @@ copy, when a contract changes.
 | API callers, credentials and route inventory | [API index](docs/api/README.md) |
 | Public wire types and qualified behavior | [Agents API contracts](contracts/agents-api/README.md), [pinned upstream](contracts/agents-api/upstream.json), and linked operation contracts |
 | Core service implementation constraints | [Agents API implementation constraints](services/agents-api/IMPLEMENTATION.md) and [service README](services/agents-api/README.md) |
+| Provider-to-Runtime startup input | [Runtime bootstrap](docs/runtime-bootstrap.md) and `internal/runtimebootstrap` |
 | Runtime messages, Executor/Turn lifetimes, receipts and failure ownership | [Core–Runtime protocol](docs/runtime-protocol.md) and `internal/agentdaemon/proto` |
 | Environment ownership and capability preparation (Skills, Plugins, MCP, `packages.system`) | [Environments](contracts/agents-api/environments.md) |
 | Adding a Harness (steps) | [Harness onboarding](contracts/agents-api/harness-onboarding.md), `apps/parsar-daemon/internal/agent/harness.go` and `internal/harnessconfig/harness.go` |
@@ -205,7 +206,10 @@ The Runtime is not a sandbox; see
   Environment source. Platform support requires native CI builds and automated
   tests; cross-compilation alone is insufficient.
 - Evolve shared contracts and their implementations together, document
-  ownership and validate the same contract across implementations. This rule
+  ownership and validate the same contract across implementations. Each rule has
+  one authored definition; cross-language projections are generated from it or
+  checked against common fixtures. Bootstrap credentials use the Runtime-owned
+  launch input, never a Provider-authored private auth file. This rule
   does not claim every implementation already meets every target, change the
   pinned public API, or authorize unrelated refactors.
 
@@ -213,6 +217,7 @@ The Runtime is not a sandbox; see
 
 | Boundary | Canonical guide | Code entry point |
 | --- | --- | --- |
+| Provider–Runtime startup | [Runtime bootstrap](docs/runtime-bootstrap.md) | `internal/runtimebootstrap` |
 | Core–Runtime wire | [Core–Runtime protocol](docs/runtime-protocol.md) | `internal/agentdaemon/proto` |
 | Harness | [Harness onboarding](contracts/agents-api/harness-onboarding.md) | `apps/parsar-daemon/internal/agent/harness.go`, `internal/harnessconfig/harness.go` |
 | Sandbox Provider | [Sandbox Provider guide](docs/sandbox-provider.md) | `services/agents-api/internal/sandbox/sandbox_provider.go` |
@@ -359,9 +364,7 @@ The dormant Pi adapter keeps its `parsar` provider slug because the separate
 Parsar product pins model selections to that identity. This is a product
 boundary exception for the name guard, like the skill-upload integration.
 
-Build the MiniMax companion from this revision's patched native sources when
-packaging a renamed Runtime. An older companion still uses the old
-model-provider, workspace and subagent names and cannot be reused.
+Build the MiniMax companion from this revision's pinned patched native sources.
 
 ## Branding
 

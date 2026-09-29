@@ -140,7 +140,7 @@ func TestPreparedCancellationWaitsForOutputAndCleanup(t *testing.T) {
 	}
 	for _, decision := range []proto.Envelope{
 		mustEnv(t, proto.TypePermissionDecision, "permission", proto.PermissionDecisionPayload{DeliveryID: "permission-reply", Approved: true}),
-		mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "ask-reply", Answers: []string{"yes"}}),
+		mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "ask-reply", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}}),
 	} {
 		if err := r.Handle(t.Context(), decision); err != nil {
 			t.Fatal(err)

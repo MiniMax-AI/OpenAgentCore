@@ -48,7 +48,7 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	if len(args) == 1 && args[0] == "protocol-version" {
-		fmt.Println(node.GenerationProtocolVersion)
+		fmt.Println(node.ProtocolVersion)
 		return nil
 	}
 	if len(args) == 0 || (args[0] != "register" && args[0] != "run") {

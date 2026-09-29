@@ -56,13 +56,14 @@ const (
 func runConnect(ctx *runContext, args []string) error {
 	fs := newFlagSet("connect")
 	var (
-		profile        = fs.String("profile", paths.DefaultProfile, "profile name for reading legacy auth.json state or writing pid/log files")
+		profile        = fs.String("profile", paths.DefaultProfile, "profile name for paired credentials and pid/log files")
 		background     = fs.Bool("b", false, "fork into the background; writes connect.pid + connect.log")
 		serverURL      = fs.String("url", "", "Core server base URL; with --token, pair inline before connecting")
 		token          = fs.String("token", "", "pairing token; with --url, connect consumes it without writing auth.json")
 		deviceName     = fs.String("device-name", "", "human label for inline pairing (defaults to hostname)")
 		remote         = fs.String("remote", "", "self-hosted Environment remote_url, unchanged")
 		environment    = fs.String("environment-id", "", "self-hosted Environment ID")
+		bootstrapFile  = fs.String("bootstrap-file", "", "absolute path to Provider-to-Runtime connection JSON")
 		credentialFile = fs.String("credential-file", "", "absolute path to protected executor credential JSON")
 	)
 	if err := fs.Parse(args); err != nil {
@@ -87,6 +88,16 @@ func runConnect(ctx *runContext, args []string) error {
 	loadInlineConnectEnv(serverURL, token, deviceName)
 	if err := paths.ValidateProfile(*profile); err != nil {
 		return fmt.Errorf("connect: %w", err)
+	}
+	var bootstrapped *auth.Profile
+	if *bootstrapFile != "" {
+		if *serverURL != "" || *token != "" || *deviceName != "" || *remote != "" || *environment != "" || *credentialFile != "" || fs.NArg() != 0 {
+			return errors.New("connect: bootstrap input cannot be combined with enrollment or pairing options")
+		}
+		bootstrapped, err = bootstrapProfile(*bootstrapFile)
+		if err != nil {
+			return err
+		}
 	}
 	if *remote != "" || *environment != "" || *credentialFile != "" {
 		if *serverURL != "" || *token != "" || *deviceName != "" || fs.NArg() != 0 {
@@ -114,7 +125,7 @@ func runConnect(ctx *runContext, args []string) error {
 		// Validate auth.json exists before forking so the error
 		// surfaces in the user's terminal instead of the background
 		// child's log.
-		if !inlinePair {
+		if !inlinePair && bootstrapped == nil {
 			if _, err := auth.Load(*profile); err != nil {
 				return fmt.Errorf("connect: %w", err)
 			}
@@ -135,9 +146,14 @@ func runConnect(ctx *runContext, args []string) error {
 		return err
 	}
 
-	prof, err := resolveConnectProfile(*profile, *serverURL, *token, *deviceName)
-	if err != nil {
-		return err
+	var prof auth.Profile
+	if bootstrapped != nil {
+		prof = *bootstrapped
+	} else {
+		prof, err = resolveConnectProfile(*profile, *serverURL, *token, *deviceName)
+		if err != nil {
+			return err
+		}
 	}
 
 	return mainLoop(ctx, *profile, prof, agentCLIs)

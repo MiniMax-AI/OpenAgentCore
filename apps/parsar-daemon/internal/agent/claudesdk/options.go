@@ -64,7 +64,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		return startRequest{}, nil, err
 	}
 	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig)
-	if req.WorkspaceAuthoring || req.ObserveTools {
+	if req.WorkspaceAuthoring {
 		return fail("requested capability is not available in the private SDK adapter")
 	}
 	if err := req.ValidateToolSearch(true); err != nil {

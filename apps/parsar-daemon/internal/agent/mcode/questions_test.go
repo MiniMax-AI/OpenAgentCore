@@ -39,13 +39,13 @@ func TestQuestionnaireOtherUsesOneQuestion(t *testing.T) {
 				answer = "Asia"
 				want = map[string]any{"region__other": "Asia"}
 			}
-			got, err := questionContent(pending, proto.PromptForUserChoiceDecisionPayload{Answers: []string{answer}})
+			got, err := questionContent(pending, proto.PromptForUserChoiceDecisionPayload{QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "region", Answers: []string{answer}}}})
 			if err != nil || !reflect.DeepEqual(got, want) {
 				t.Fatalf("multiple=%t custom=%t: got=%v err=%v", multiple, custom, got, err)
 			}
 		}
 		if multiple {
-			got, err := questionContent(pending, proto.PromptForUserChoiceDecisionPayload{Answers: []string{"Europe", "Asia"}})
+			got, err := questionContent(pending, proto.PromptForUserChoiceDecisionPayload{QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "region", Answers: []string{"Europe", "Asia"}}}})
 			want := map[string]any{"region": []string{"eu"}, "region__other": "Asia"}
 			if err != nil || !reflect.DeepEqual(got, want) {
 				t.Fatalf("combined choice and custom: got=%v err=%v", got, err)

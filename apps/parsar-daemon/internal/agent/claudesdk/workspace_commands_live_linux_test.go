@@ -22,7 +22,7 @@ func liveWorkspaceCommands(t *testing.T, runID string, events []proto.Envelope, 
 			continue
 		}
 		var call proto.ToolCallPayload
-		if terminal || event.ID != runID || event.DecodePayload(&call) != nil || call.ID == "" || call.NativeItem != nil || call.Observation == nil || call.Observation.Kind != "command" {
+		if terminal || event.ID != runID || event.DecodePayload(&call) != nil || call.ID == "" || call.Observation == nil || call.Observation.Kind != "command" {
 			t.Fatal("invalid command frame or execution identity")
 		}
 		o := call.Observation

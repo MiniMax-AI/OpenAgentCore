@@ -7,7 +7,6 @@ import (
 
 type provider struct {
 	hub               *Hub
-	resolve           Resolver
 	resolveGeneration func(context.Context, sandbox.Reference) (string, uint64, error)
 	kind              string
 }
@@ -16,31 +15,19 @@ type checkpointProvider struct{ *provider }
 var _ sandbox.SandboxProvider = (*provider)(nil)
 var _ sandbox.CheckpointProvider = (*checkpointProvider)(nil)
 
-// Provider advertises checkpoint support only for a deployment using microsandbox.
-func (h *Hub) Provider(kind string, resolve Resolver) sandbox.SandboxProvider {
-	p := &provider{hub: h, resolve: resolve, kind: kind}
-	if kind == "microsandbox" {
-		return &checkpointProvider{p}
-	}
-	return p
-}
-func (h *Hub) Proxy(id, kind string) sandbox.SandboxProvider {
-	return h.Provider(kind, func(context.Context, sandbox.Reference) (string, error) { return id, nil })
+// Proxy binds a fixed node and deployment generation explicitly.
+func (h *Hub) Proxy(id, kind string, generation uint64) sandbox.SandboxProvider {
+	return h.GenerationProvider(kind, func(context.Context, sandbox.Reference) (string, uint64, error) { return id, generation, nil })
 }
 func (p *provider) call(ctx context.Context, q request) (response, error) {
-	var id string
-	var err error
-	if p.resolveGeneration != nil {
-		id, q.DeploymentGeneration, err = p.resolveGeneration(ctx, q.Reference)
-	} else {
-		id, err = p.resolve(ctx, q.Reference)
-	}
+	id, generation, err := p.resolveGeneration(ctx, q.Reference)
 	if err != nil {
 		return response{}, err
 	}
-	if !validID(id) {
+	if !validID(id) || !validGeneration(generation) {
 		return response{}, sandbox.ErrOwnership
 	}
+	q.DeploymentGeneration = generation
 	return p.hub.call(ctx, id, q)
 }
 func (p *provider) info(ctx context.Context, q request) (sandbox.Info, error) {

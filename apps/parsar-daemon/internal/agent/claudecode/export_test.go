@@ -39,7 +39,8 @@ func (p *PendingAskTable) RecordControl(askID, ccRequestID string, questions []p
 	(*pendingAskTable)(p).RecordControl(askID, ccRequestID, questions)
 }
 func (p *PendingAskTable) Take(askID string) (PendingAskEntry, bool) {
-	return (*pendingAskTable)(p).Take(askID)
+	entry, ok, _ := (*pendingAskTable)(p).Take(askID, proto.PromptForUserChoiceDecisionPayload{Cancelled: true})
+	return entry, ok
 }
 func (p *PendingAskTable) Peek(askID string) (PendingAskEntry, bool) {
 	p.mu.Lock()

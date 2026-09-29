@@ -931,11 +931,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   completion text snapshot. A snapshot is not another delta; uncompleted messages
   remain partial when their Turn ends. Keep these observations in the journal
   before projecting public Items. This does not promise daemon event replay.
-- Legacy `tool_items` / `observe_tools` raw snapshots remain available to old
-  daemon callers. New Agents API execution does not request or decode them.
 - `tool_observations` advertises engine-neutral tool snapshots. The opt-in
-  `observe_tool_observations` takes precedence over legacy `observe_tools`:
-  attach the typed `observation` to existing tool-call frames without `native_item`.
+  `observe_tool_observations` attaches the typed `observation` to tool-call frames.
   Native adapters own discriminator/status/action translation and preserve raw
   structured values; reuse the shared function-result content type. Kinds are
   `command`, `mcp`, `function` and `web_search`; observation status is
@@ -1202,9 +1199,11 @@ and owner epoch. Promote a durable pin only for readiness of the then-current ta
 under deployment serialization. Late superseded readiness cannot acquire a pin.
 Filter online/readiness/address/capacity before preferring the newest eligible pin;
 newest-full must not mask older-free. Route Create, restore and cleanup through the
-immutable allocation/placement generation. V1 keeps its qualified enrolled fallback.
+immutable allocation/placement generation. Fixed-configuration manual nodes serve
+only their enrolled generation; generation management is an explicit hello capability
+on the same current wire protocol, never a historical-version fallback.
 
-Use sparse v2 control batches of at most eight entries with no lifetime cap. Omitted
+Use sparse generation control batches of at most eight entries with no lifetime cap. Omitted
 facts never authorize deletion. Correlate whole retention grants to connection,
 epoch, sequence, generation and digest; recheck queued/inflight/helper references.
 Permanent generation flock files survive updates and GC. Before any helper starts,
@@ -1217,7 +1216,7 @@ Only transfer/checksum/provenance errors report runtime_download_failed; preserv
 other fixed causes without parsing native error text. Retained Runtime bytes and
 the console's exact-release HTTP allowlist must agree. See
 `contracts/agents-api/node-generation-protocol.md` for recovery, immutable artifacts
-and the conservative v1 legacy-helper retention boundary.
+and conservative retention of unproven historical helper ownership.
 Interrupted node collection keeps an exact private generation journal and immutable
 configuration. Restart treats it only as a candidate for a fresh correlated Core
 drop grant, never as preparation or serving readiness. Persist native cleanup
@@ -1255,7 +1254,7 @@ alone never imply preparation or high-frequency polling. Rollout state is settle
 unless actual target preparation is active. Offline/unconfirmed nodes are unknown;
 only exact current connection/epoch/generation readiness is ready. A durable pin is
 not connectivity. Fixed diagnostics alone may explain failed preparation. Report
-preparing only from an actual target observation; an online v1 node can be
+preparing only from an actual target observation; an online fixed-configuration node can be
 update_required while its valid pin remains available for admission.
 
 Reset is durable execution state, advanced by the existing manager outside its

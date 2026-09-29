@@ -49,7 +49,7 @@ func connectRawNode(t *testing.T, origin string, id Identity) *websocket.Conn {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true}}); err != nil {
+	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}}); err != nil {
 		conn.Close()
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestCopiedIdentityCannotReplaceNodeWithInflightCreate(t *testing.T) {
 	hub.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	proxy := hub.Proxy(id.NodeID, "docker")
+	proxy := hub.Proxy(id.NodeID, "docker", 1)
 	r := reference()
 	created := make(chan error, 1)
 	go func() { _, err := proxy.Create(ctx, sandbox.Bootstrap{Reference: r}); created <- err }()

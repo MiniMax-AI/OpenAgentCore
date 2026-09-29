@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
@@ -18,21 +17,14 @@ type entry struct {
 }
 
 func (p *Provider) bootstrap(ctx context.Context, id string, b sandbox.Bootstrap) error {
-	// The existing daemon auth profile is the shared managed/user-managed boundary.
-	// This file is injected before the untrusted workspace or harness can run.
-	auth, e := json.Marshal(struct {
-		ServerURL  string `json:"server_url"`
-		RuntimeID  string `json:"runtime_id"`
-		Credential string `json:"runner_credential"`
-	}{b.CoreURL, b.DeviceID, b.Credential})
+	// Deliver the Runtime-owned connection contract before native work can start.
+	auth, e := b.RuntimeConnection().Marshal()
 	if e != nil {
 		return e
 	}
 	if e = copyRuntimeFiles(ctx, p.client, id, "/home", []entry{
 		{name: "runtime", directory: true}, {name: "runtime/.oac", directory: true},
-		{name: "runtime/.oac/daemon", directory: true},
-		{name: "runtime/.oac/daemon/default", directory: true},
-		{name: "runtime/.oac/daemon/default/auth.json", content: auth},
+		{name: "runtime/runtime-bootstrap.json", content: auth},
 	}); e != nil {
 		return e
 	}

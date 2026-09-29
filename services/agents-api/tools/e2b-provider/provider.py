@@ -219,14 +219,16 @@ class Provider:
         except Failure:
             self.receipt.save(status='configuration_rejected', settled=True)
             raise
-        # Refuse a pre-rename template before writing any executor credential.
+        # Validate the current template entry point before writing any credential.
         check = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c',
-                    "import os,sys; sys.exit(78 if not os.path.isfile('/opt/oac-e2b/managed_init.py') and os.path.isdir('/opt/parsar-e2b') else 0)"]},
+                    "import os,sys; sys.exit(78 if not os.path.isfile('/opt/oac-e2b/managed_init.py') or not os.access('/opt/oac-e2b/managed_init.py', os.R_OK) else 0)"]},
                     self.remaining, user='root')
         if check['ExitCode'] != 0:
             self.receipt.save(status='bootstrap_failed', settled=True)
-            raise Failure('legacy_template' if check['ExitCode'] == 78 else 'unconfirmed')
-        payload = dict(bootstrap, InstallationID=self.config['InstallationID'])
+            raise Failure('template_invalid' if check['ExitCode'] == 78 else 'unconfirmed')
+        payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
+                       RuntimeBootstrap=self.q['RuntimeBootstrap'])
+        del payload['CoreURL'], payload['Credential']
         cloud.files.write('/root/.oac/e2b/managed-bootstrap.json', json.dumps(payload),
                           user='root', request_timeout=self.remaining())
         self.receipt.save(status='bootstrap_pending')

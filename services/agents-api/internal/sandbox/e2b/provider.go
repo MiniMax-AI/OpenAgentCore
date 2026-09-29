@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
+	"github.com/MiniMax-AI-Dev/parsar/internal/runtimebootstrap"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -36,10 +36,11 @@ type Request struct {
 	Config    Config
 	Reference sandbox.Reference
 	// References lists the allocations of one read-only observe request.
-	References []sandbox.Reference `json:",omitempty"`
-	Bootstrap  *sandbox.Bootstrap  `json:",omitempty"`
-	Command    *sandbox.Command    `json:",omitempty"`
-	Deadline   time.Time
+	References       []sandbox.Reference          `json:",omitempty"`
+	Bootstrap        *sandbox.Bootstrap           `json:",omitempty"`
+	RuntimeBootstrap *runtimebootstrap.Connection `json:",omitempty"`
+	Command          *sandbox.Command             `json:",omitempty"`
+	Deadline         time.Time
 }
 type Response struct {
 	Version         int
@@ -205,7 +206,15 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 	if err := ctx.Err(); err != nil {
 		return unstarted(operation, r), err
 	}
-	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, Command: command, Deadline: deadline})
+	var connection *runtimebootstrap.Connection
+	if b != nil {
+		value := b.RuntimeConnection()
+		if value.Validate() != nil {
+			return unstarted(operation, r), sandbox.ErrInvalid
+		}
+		connection = &value
+	}
+	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, RuntimeBootstrap: connection, Command: command, Deadline: deadline})
 	if errors.Is(err, errHelperNotStarted) {
 		return unstarted(operation, r), sandbox.ErrComputeUnconfirmed
 	}
@@ -221,8 +230,8 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 	switch out.ErrorCode {
 	case "":
 		return out, nil
-	case "legacy_template":
-		return out, fmt.Errorf("%w: This E2B template was built before OpenAgentCore renamed its paths. Build a template with this release's build-template.py and replace it in the sandbox deployment.", sandbox.ErrInvalid)
+	case "template_invalid":
+		return out, fmt.Errorf("%w: This E2B template lacks the current Runtime startup entry point. Build a template with this release's build-template.py and select it in the sandbox deployment.", sandbox.ErrInvalid)
 	case "team_mismatch":
 		return out, ErrTeamMismatch
 	case "unauthorized":
@@ -272,9 +281,8 @@ func (p *Provider) info(ctx context.Context, operation string, r sandbox.Referen
 	return sandbox.Info{Reference: r}, err
 }
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
-	u, err := url.Parse(b.CoreURL)
 	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
-	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || policy.Validate() != nil || err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.TrimSpace(b.Credential) == "" {
+	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || policy.Validate() != nil || b.RuntimeConnection().Validate() != nil {
 		info := sandbox.Info{Reference: b.Reference}
 		if validReference(b.Reference) {
 			info.State, info.CreateSettled = "absent", true

@@ -101,7 +101,7 @@ func TestQueuedMutationExpiresWithoutExecution(t *testing.T) {
 		}
 	}()
 	wait(t, func() bool { return hub.Online(id.NodeID) })
-	proxy := hub.Proxy(id.NodeID, "docker")
+	proxy := hub.Proxy(id.NodeID, "docker", 1)
 	r := reference()
 	createCtx, stopCreate := context.WithTimeout(ctx, 3*time.Second)
 	defer stopCreate()
