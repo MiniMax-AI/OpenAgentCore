@@ -72,7 +72,7 @@ func TestSandboxSpecificationRoundTripAndFileConfigurationCannotOverride(t *test
 			}
 			file := RuntimeDeployment{InstallationID: view.InstallationID, BackendFingerprint: setup.BackendFingerprint, ProviderKind: provider, AdmissionPaused: true}
 			for _, candidate := range []*RuntimeDeployment{nil, &file} {
-				if err := w.ConfigureRuntimeDeployment(t.Context(), candidate, nil); !errors.Is(err, ErrSandboxDeploymentConflict) {
+				if err := w.ConfigureRuntimeDeployment(t.Context(), candidate); !errors.Is(err, ErrSandboxDeploymentConflict) {
 					t.Fatal("file configuration replaced database ownership", err)
 				}
 			}

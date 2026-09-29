@@ -335,7 +335,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 // with an empty specification and its nodes with empty digests. The retained
 // node reconnects to drain resources; fresh admission and node configuration
 // stay closed until an administrator replaces the selection.
-func TestUnspecifiedNodeDeploymentDrainsBeforeReplacement(t *testing.T) {
+func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
 	s := NewWithCredentialCipher(pool, cipher)
@@ -364,12 +364,11 @@ func TestUnspecifiedNodeDeploymentDrainsBeforeReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if setup, err := s.GetSandboxSetup(t.Context()); err != nil || setup.Provider != "docker" {
-		t.Fatal("unspecified deployment could not load for draining", err)
+	if _, err := s.GetSandboxSetup(t.Context()); err == nil {
+		t.Fatal("missing deployment specification accepted")
 	}
-	identity, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential)
-	if err != nil || identity.SpecificationDigest != "" || identity.DeploymentGeneration != 0 {
-		t.Fatal("retained unspecified node could not reconnect", identity, err)
+	if _, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
+		t.Fatal("unspecified node authenticated", err)
 	}
 	if _, err := s.RuntimeNodeConfiguration(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
 		t.Fatal("node configuration served without a specification", err)
@@ -381,14 +380,15 @@ func TestUnspecifiedNodeDeploymentDrainsBeforeReplacement(t *testing.T) {
 		t.Fatal("unspecified deployment issued an enrollment token", err)
 	}
 
-	if _, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
-		t.Fatal(err)
+	epoch := managerEpoch(t, s)
+	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err == nil {
+		t.Fatal("unsupported installation claimed")
 	}
-	view, err := resetAndSelect(t, w, id, 1, selection)
-	if err != nil || view.Generation != 3 || view.Specification == nil {
-		t.Fatal("replacement did not record the specification", view, err)
+	if managerEpoch(t, s) != epoch {
+		t.Fatal("refused startup changed owner epoch")
 	}
-	if _, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeNodeCredential) {
-		t.Fatal("unspecified node survived replacement", err)
+	var specification string
+	if err := pool.QueryRow(t.Context(), "SELECT specification::text FROM runtime_deployment").Scan(&specification); err != nil || specification != "{}" {
+		t.Fatal("deployment silently repaired", specification, err)
 	}
 }

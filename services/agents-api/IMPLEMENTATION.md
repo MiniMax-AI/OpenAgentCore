@@ -1185,7 +1185,9 @@ All sandbox writes require the observed generation, including initial POST at
 zero; reject stale state before provider preparation, reset or no-op checks, and
 repeat it under the committing row lock. Same-provider PUT advances the target
 without draining execution or retiring nodes, tokens or the owner epoch. Node
-providers prepare independently and keep their old qualified serving pin. A different backend, E2B team or unspecified old selection requires reset.
+providers prepare independently and keep their old qualified serving pin. A different backend or E2B team requires reset. Historical selections without a
+valid specification are unsupported and rejected at startup; keep their original
+Core responsible for retained resources and install the current release separately.
 Preserve historical allocation ownership and placement, never migrate a Session.
 
 Persist immutable allocation and placement deployment generations, distinct from

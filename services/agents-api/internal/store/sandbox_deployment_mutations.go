@@ -251,7 +251,10 @@ func checkSandboxSwitch(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDepl
 	if d.ProviderKind == "" {
 		return ErrSandboxNotConfigured
 	}
-	if d.ProviderKind != input.Provider || unspecifiedNodeDeployment(d) {
+	if _, err := deploymentSpecification(d); err != nil {
+		return err
+	}
+	if d.ProviderKind != input.Provider {
 		return &SandboxResetRequiredError{CurrentProvider: d.ProviderKind, RequestedProvider: input.Provider}
 	}
 
@@ -322,7 +325,12 @@ func (s *Store) CheckSandboxDeploymentSetup(ctx context.Context, installation st
 		if err := validateSandboxSelection(input); err != nil {
 			return err
 		}
-		if d.ProviderKind != "" && (d.ProviderKind != input.Provider || unspecifiedNodeDeployment(d)) {
+		if d.ProviderKind != "" {
+			if _, err := deploymentSpecification(d); err != nil {
+				return err
+			}
+		}
+		if d.ProviderKind != "" && d.ProviderKind != input.Provider {
 			return &SandboxResetRequiredError{CurrentProvider: d.ProviderKind, RequestedProvider: input.Provider}
 		}
 		return nil

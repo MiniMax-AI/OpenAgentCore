@@ -27,7 +27,6 @@ type RuntimeProvider struct {
 	Mode                             string
 	loadDeployment                   func(context.Context) (*RuntimeProvider, error)
 	prepareDeployment                RuntimeDeploymentPreparer
-	VerifyLegacyOwnership            store.RuntimeOwnershipVerifier
 	ProviderKind                     string
 	LocalNodeID                      string
 	LocalCredentialSHA256            string

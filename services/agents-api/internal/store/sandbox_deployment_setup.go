@@ -55,7 +55,7 @@ func (s *Store) sandboxSetup(d sqlc.RuntimeDeployment) (SandboxSetup, error) {
 	if err := json.Unmarshal(d.Specification, &result.Specification); err != nil {
 		return SandboxSetup{}, err
 	}
-	if d.ProviderKind != "" && !unspecifiedNodeDeployment(d) {
+	if d.ProviderKind != "" {
 		if err := result.Specification.Validate(d.ProviderKind); err != nil {
 			return SandboxSetup{}, err
 		}
@@ -100,6 +100,11 @@ func (s *Store) ClaimWebSandboxDeployment(ctx context.Context, installationID st
 			}
 			if resources.Allocations != 0 || resources.Pending != 0 {
 				return ErrSandboxDeploymentConflict
+			}
+		}
+		if d.ProviderKind != "" {
+			if _, err := deploymentSpecification(d); err != nil {
+				return err
 			}
 		}
 		return q.ClaimWebSandboxDeployment(ctx, id)

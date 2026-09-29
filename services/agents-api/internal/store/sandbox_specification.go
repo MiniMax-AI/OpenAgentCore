@@ -50,14 +50,6 @@ func SandboxSetupForSelection(installationID string, input SandboxDeploymentSetu
 	return result, nil
 }
 
-// unspecifiedNodeDeployment identifies a node-backed selection saved before
-// deployments carried a specification; migration left the empty default. Its
-// retained nodes may reconnect to drain resources, but it cannot create
-// sandboxes or enroll nodes until an administrator replaces the selection.
-func unspecifiedNodeDeployment(d sqlc.RuntimeDeployment) bool {
-	return d.WebManaged && d.Mode == "nodes" && (d.ProviderKind == "docker" || d.ProviderKind == "microsandbox") && string(d.Specification) == "{}"
-}
-
 func deploymentSpecification(d sqlc.RuntimeDeployment) (sandbox.DeploymentSpec, error) {
 	var spec sandbox.DeploymentSpec
 	if json.Unmarshal(d.Specification, &spec) != nil || spec.Validate(d.ProviderKind) != nil {

@@ -164,7 +164,10 @@ func (s *Store) CreateRuntimeEnrollment(ctx context.Context, capacity RuntimeNod
 		if d.ResetClear.Valid {
 			return ErrSandboxResetInProgress
 		}
-		if d.Mode != "nodes" || d.AdmissionPaused || unspecifiedNodeDeployment(d) {
+		if d.Mode != "nodes" || d.AdmissionPaused {
+			return ErrSandboxDeploymentConflict
+		}
+		if _, err := deploymentSpecification(d); err != nil {
 			return ErrSandboxDeploymentConflict
 		}
 		if err := q.CreateRuntimeEnrollment(ctx, sqlc.CreateRuntimeEnrollmentParams{ID: pgtype.UUID{Bytes: id, Valid: true}, TokenSha256: runtimeTokenDigest(result.Token), InstallationID: d.InstallationID, MaxActive: int32(capacity.MaxActive), MaxRetained: int32(capacity.MaxRetained)}); err != nil {
@@ -263,12 +266,6 @@ func (s *Store) AuthenticateRuntimeNode(ctx context.Context, nodeID, credential 
 	}
 	if n.InstallationID != d.InstallationID || d.Mode != "nodes" {
 		return RuntimeNodeIdentity{}, ErrRuntimeNodeCredential
-	}
-	if unspecifiedNodeDeployment(d) {
-		if n.SpecificationDigest != "" || n.DeploymentGeneration != 0 {
-			return RuntimeNodeIdentity{}, ErrRuntimeSpecificationMismatch
-		}
-		return nodeIdentity(n, d.ProviderKind), nil
 	}
 	if err := validateNodeEnrollmentIdentity(ctx, s.queries, d, n); err != nil {
 		return RuntimeNodeIdentity{}, err

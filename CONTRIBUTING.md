@@ -356,7 +356,11 @@ settings remain unchanged. No old label is accepted as a fallback.
 
 Historical Runtime and project-version upgrades are not supported. Preserve
 older installations, Runtime files, provider resources and Session history;
-install the current release separately. Use this release's template builder for
+install the current release separately. Startup never verifies and rebinds historical
+allocations or accepts node deployments without a valid specification. Keep the
+original Core responsible for unresolved resources; see the
+[operator boundary](services/agents-api/HOSTED-SANDBOX-MANAGER.md#historical-installations).
+Use this release's template builder for
 new E2B templates. Landed migrations and historical evidence stay as repository
 history; ordinary current-version database initialization uses the migration runner.
 

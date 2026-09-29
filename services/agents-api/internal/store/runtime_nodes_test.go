@@ -231,42 +231,20 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 		t.Fatal("removed node credential accepted", err)
 	}
 }
-func TestRuntimeNodesLegacyAdoptionAndRetention(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
-	d := deploymentSelection()
-	deploymentConfigure(t, w, &d)
+func TestRuntimeNodesRetention(t *testing.T) {
+	s, w, next := managerFixture(t, 2, 2)
 	tenant := uuid.NewString()
-	first, environment := localEnvironment(t, s, tenant)
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, d.InstallationID, device.HashCredential("runtime"))
+	first, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	pending, _ := localEnvironment(t, s, tenant)
-	next := d
-	next.ProviderKind = "docker"
-	next.LocalNodeID = uuid.NewString()
-	next.LocalCredentialSHA256 = device.HashCredential("node")
-	next.LocalMaxActive = 1
-	next.LocalMaxRetained = 1
-	wrong := next
-	wrong.BackendFingerprint = strings.Repeat("c", 64)
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &wrong, nil); err == nil {
-		t.Fatal("adopted wrong backend")
-	}
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &next, func(context.Context, RuntimeAllocation) error { return nil }); err != nil {
+	retained, err := w.ReserveRuntimeAllocation(t.Context(), tenant, first.Environment.ID, next.InstallationID, device.HashCredential("runtime"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	legacyRuntimeSpecification(t, w, next.ProviderKind)
-	retained, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
-	if err != nil || retained.NodeID != next.LocalNodeID || retained.ProviderKey != d.InstallationID || retained.ID != owner.ID {
-		t.Fatal("adoption lost identity", retained, err)
-	}
-	for _, session := range []Session{first, pending} {
-		placement, err := sessionRuntimePlacement(t.Context(), s, tenant, session.ID)
-		if err != nil || placement.NodeID != next.LocalNodeID {
-			t.Fatal("legacy Session reassigned", placement, err)
-		}
+	pending, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
+	if err != nil {
+		t.Fatal(err)
 	}
 	if err := s.RemoveRuntimeNode(t.Context(), next.LocalNodeID); !errors.Is(err, ErrRuntimeNodeInUse) {
 		t.Fatal(err)
@@ -294,7 +272,7 @@ func TestRuntimeNodesLegacyAdoptionAndRetention(t *testing.T) {
 	if err := s.RemoveRuntimeNode(t.Context(), next.LocalNodeID); !errors.Is(err, ErrRuntimeLocalNodeConfigured) {
 		t.Fatal("configured local node was removed", err)
 	}
-	if _, err := s.AuthenticateRuntimeNode(t.Context(), next.LocalNodeID, "node"); err != nil {
+	if _, err := s.AuthenticateRuntimeNode(t.Context(), next.LocalNodeID, "local-node-credential"); err != nil {
 		t.Fatal("rejected removal changed local credentials", err)
 	}
 	next.AdmissionPaused = true
@@ -397,7 +375,7 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	}
 	changed := d
 	changed.LocalNodeID = uuid.NewString()
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &changed, nil); err == nil {
+	if err := w.ConfigureRuntimeDeployment(t.Context(), &changed); err == nil {
 		t.Fatal("lost local state created replacement identity")
 	}
 	onlineManagerNode(t, s, d.LocalNodeID)

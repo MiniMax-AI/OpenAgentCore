@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func configureRuntimeManager(ctx context.Context, q *sqlc.Queries, previous sqlc.RuntimeDeployment, selected *RuntimeDeployment, plan *runtimeAdoptionPlan) error {
+func configureRuntimeManager(ctx context.Context, q *sqlc.Queries, previous sqlc.RuntimeDeployment, selected *RuntimeDeployment) error {
 	if selected.ProviderKind == "" {
 		return nil
 	}
@@ -22,22 +22,16 @@ func configureRuntimeManager(ctx context.Context, q *sqlc.Queries, previous sqlc
 		return err
 	}
 	if previous.ProviderKind == "" {
-		if err := checkLegacyRuntimeAdoption(ctx, q, previous, plan); err != nil {
+		resources, err := q.CountRuntimeDeploymentResources(ctx)
+		if err != nil {
 			return err
+		}
+		if resources.Allocations != 0 || resources.Pending != 0 {
+			return fmt.Errorf("cannot adopt historical sandbox resources: keep the original Core responsible for retained resources and install this release separately")
 		}
 	}
 	var localNode pgtype.UUID
-	if selected.LocalNodeID == "" {
-		if previous.ProviderKind == "" {
-			resources, err := q.CountRuntimeDeploymentResources(ctx)
-			if err != nil {
-				return err
-			}
-			if resources.Allocations != 0 || resources.Pending != 0 {
-				return fmt.Errorf("cannot adopt existing local resources without their verified local node")
-			}
-		}
-	} else {
+	if selected.LocalNodeID != "" {
 		id, err := parseConnectionGeneration(selected.LocalNodeID)
 		if err != nil {
 			return err
@@ -69,17 +63,6 @@ func configureRuntimeManager(ctx context.Context, q *sqlc.Queries, previous sqlc
 		}
 		if err != nil {
 			return err
-		}
-		if previous.ProviderKind == "" {
-			if err := q.AdoptRuntimePlacements(ctx, sqlc.AdoptRuntimePlacementsParams{NodeID: id, ProviderKey: installation}); err != nil {
-				return err
-			}
-			if err := q.AdoptPendingRuntimePlacements(ctx, id); err != nil {
-				return err
-			}
-			if err := q.BindLegacyRuntimeAllocations(ctx, sqlc.BindLegacyRuntimeAllocationsParams{NodeID: id, ProviderKey: installation}); err != nil {
-				return err
-			}
 		}
 	}
 	return q.SetRuntimeManagerDeployment(ctx, sqlc.SetRuntimeManagerDeploymentParams{ProviderKind: selected.ProviderKind, LocalNodeID: localNode})
