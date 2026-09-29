@@ -71,6 +71,10 @@ func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Re
 		return
 	}
 	created := v1.SessionEvent{Type: "agent.session.created", EventID: uuid.NewString(), Session: &response}
+	if err := h.addSessionInstallation(w, r, &response); err != nil {
+		writeStoreError(w, r, err)
+		return
+	}
 	if session := result.Session; sessionSettled(session, response) && session.LastTurn == nil && session.EnvironmentInputActivity == nil {
 		// Nothing was admitted, e.g. self_hosted creation without input.
 		if write := openEventStream(w, http.StatusCreated); write != nil {

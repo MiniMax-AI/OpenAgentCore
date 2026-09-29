@@ -11,6 +11,8 @@ on:
       - 'packages/tsconfig/**'
       - 'scripts/build-native-installer*'
       - 'scripts/native-harness-smoke.mjs'
+      - 'scripts/native-onboarding-smoke.mjs'
+      - 'services/agents-api/internal/nativeinstaller/**'
       - 'scripts/build-mcode-harness.sh'
       - 'go.mod'
       - 'go.sum'
@@ -23,6 +25,11 @@ on:
       - '.npmrc'
       - '.github/workflows/native.yml'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -44,6 +51,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -52,7 +61,7 @@ jobs:
           node-version: '22.22.0'
       - name: Build the native daemon and test bundle boundaries
         run: |
-          go build -ldflags "-X github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/cli.Version=$GITHUB_SHA" -o "$RUNNER_TEMP/oac-daemon${{ runner.os == 'Windows' && '.exe' || '' }}" ./apps/parsar-daemon/cmd/parsar-daemon
+          go build -ldflags "-X github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/cli.Version=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/oac-daemon${{ runner.os == 'Windows' && '.exe' || '' }}" ./apps/parsar-daemon/cmd/parsar-daemon
           node --test scripts/build-native-installer.test.mjs
       - name: Native filesystem, authentication and process lifecycle
         run: >-
@@ -116,6 +125,8 @@ jobs:
             export CLAUDE_CODE_GIT_BASH_PATH='C:\Program Files\Git\bin\bash.exe'
           fi
           node scripts/build-native-installer-ci.mjs
+      - name: Bootstrap, authenticate, install and connect natively
+        run: node scripts/native-onboarding-smoke.mjs
       - name: Verify native Harness protocols without model requests
         run: |
           if [[ "$RUNNER_OS" == Windows ]]; then

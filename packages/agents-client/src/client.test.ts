@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminClient } from "./admin-client";
-import { AgentCoreError, CreationStreamRetryError, createIdempotencyKey, isSessionDeletionConflict, OpenAIAgentsClient } from "./client";
+import { AgentCoreError, projectAgentSession, CreationStreamRetryError, createIdempotencyKey, isSessionDeletionConflict, OpenAIAgentsClient } from "./client";
 import hostedDadf64 from "./fixtures/parsar-dadf64a7/openai-hosted.json";
 import eventBatchDadf64 from "./fixtures/parsar-dadf64a7/session-event-batch.json";
 import type {
@@ -2878,4 +2878,11 @@ describe("OpenAIAgentsClient", () => {
       code: "invalid_runtime_observation",
     });
   });
+});
+
+it("preserves Session installation commands without treating them as execution configuration", () => {
+  const installation = { status: "available", version: "source", expires_at: 2000000000, commands: { posix: "bootstrap-posix", powershell: "bootstrap-windows" } };
+  const resource = { ...sessionResource(), x_agents_core: { installation } };
+  expect(projectAgentSession(resource).x_agents_core).toEqual({ installation });
+  expect(() => projectAgentSession({ ...resource, x_agents_core: { installation: { ...installation, expires_at: "later" } } })).toThrow();
 });

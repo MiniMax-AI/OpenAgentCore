@@ -665,7 +665,16 @@ export interface TokenUsage {
   };
 }
 
+export interface EnvironmentInstallation {
+  status: "available" | "unavailable";
+  version: string;
+  expires_at?: number;
+  commands?: { posix: string; powershell: string };
+  message?: string;
+}
+
 export interface AgentSession {
+  x_agents_core?: { installation: EnvironmentInstallation };
   id: string;
   object: "agent.session";
   agent: AgentSnapshot;

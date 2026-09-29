@@ -97,6 +97,16 @@ func runInstall(rc *runContext, args []string) error {
 	}
 	ctx, stop := daemonize.NotifyContext(context.Background())
 	defer stop()
+	if err := installNativeOptions(ctx, rc, &o); err != nil {
+		return err
+	}
+	if o.OnboardURL != "" {
+		return finishOnboarding(ctx, rc, o)
+	}
+	return nil
+}
+
+func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallOptions) error {
 	if runtimefs.ValidateLocalPath(o.Directory) != nil || runtimefs.ValidateLocalPath(o.Bundle) != nil {
 		return errors.New("install: --install-dir and --bundle-dir must be clean absolute directories")
 	}
@@ -104,12 +114,12 @@ func runInstall(rc *runContext, args []string) error {
 	if err != nil {
 		return err
 	}
+	if o.RequiredHarness != "" && !slices.Contains(selected, o.RequiredHarness) {
+		return errors.New("install: --harness must include the Session Harness")
+	}
 	o.Version = Version
 	if o.CapabilityDirectory == "" {
 		o.CapabilityDirectory = filepath.Join(o.Directory, "capabilities")
-	}
-	if err = validateNativeInstallation(o.nativeInstallation); err != nil {
-		return err
 	}
 	bundle, err := readNativeBundle(o.Bundle, selected)
 	if err != nil {
@@ -120,6 +130,20 @@ func runInstall(rc *runContext, args []string) error {
 		return err
 	}
 	defer unlock()
+	if o.OnboardURL != "" {
+		if runtimefs.ValidateLocalPath(o.Workspace) != nil {
+			return errors.New("install: Session workspace is invalid on this platform")
+		}
+		if err = prepareOnboardingCredential(ctx, o, held); err != nil {
+			return err
+		}
+		if err = os.MkdirAll(o.Workspace, 0700); err != nil {
+			return errors.New("install: cannot create workspace with the current user's permissions; prepare it manually and retry")
+		}
+	}
+	if err = validateNativeInstallation(o.nativeInstallation); err != nil {
+		return err
+	}
 	var previous nativeInstallation
 	raw, err := runtimefs.ReadPrivate(held, "installation.json", 1<<20)
 	if err == nil {
@@ -172,7 +196,9 @@ func runInstall(rc *runContext, args []string) error {
 		return err
 	}
 	fmt.Fprintln(rc.stdout, "Installation: ready; verified Harnesses:", all)
-	fmt.Fprintln(rc.stdout, "Daemon connection: not checked by install; run the installed oac-daemon start, then check Host connection in Core.")
+	if o.OnboardURL == "" {
+		fmt.Fprintln(rc.stdout, "Daemon connection: not checked by install; run the installed oac-daemon start, then check Host connection in Core.")
+	}
 	fmt.Fprintln(rc.stdout, "Model configuration: not checked; configure the Session model provider in Core and send a Turn.")
 	return nil
 }

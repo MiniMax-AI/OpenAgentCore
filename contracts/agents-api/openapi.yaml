@@ -490,6 +490,24 @@ definitions:
     - status
     - type
     type: object
+  v1.EnvironmentInstallation:
+    properties:
+      commands:
+        additionalProperties:
+          type: string
+        type: object
+      expires_at:
+        type: integer
+      message:
+        type: string
+      status:
+        enum:
+        - available
+        - unavailable
+        type: string
+      version:
+        type: string
+    type: object
   v1.EnvironmentNetwork:
     properties:
       access:
@@ -1273,6 +1291,8 @@ definitions:
         items:
           type: string
         type: array
+      x_agents_core:
+        $ref: '#/definitions/v1.SessionCore'
     required:
     - agent
     - created_at
@@ -1352,6 +1372,11 @@ definitions:
     - data
     - has_more
     - object
+    type: object
+  v1.SessionCore:
+    properties:
+      installation:
+        $ref: '#/definitions/v1.EnvironmentInstallation'
     type: object
   v1.SessionDeleted:
     properties:

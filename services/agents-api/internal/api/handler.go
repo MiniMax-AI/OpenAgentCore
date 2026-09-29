@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/nativeinstaller"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -37,6 +38,8 @@ type ResourceStore interface {
 }
 
 type Handler struct {
+	nativeInstaller       *nativeinstaller.Catalog
+	nativeVersion         string
 	executorConnections   func(context.Context, string, string) (bool, error)
 	coreMetrics           CoreMetricsService
 	sandboxStore          *store.Store
@@ -107,6 +110,7 @@ func (h *Handler) routes() *chi.Mux {
 	})
 	h.registerSandboxNodeRoutes(router)
 	h.registerCoreRoutes(router)
+	h.registerNativeInstallationRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)
 		r.Post("/vaults", h.createVault)
@@ -333,6 +337,10 @@ func (h *Handler) respondSession(w http.ResponseWriter, r *http.Request, session
 func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, session store.Session, status int) {
 	response, err := sessionResponse(session, h.executorURL)
 	if err != nil {
+		writeStoreError(w, r, err)
+		return
+	}
+	if err := h.addSessionInstallation(w, r, &response); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}

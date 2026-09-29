@@ -99,3 +99,14 @@ relevant contract and this index when adding or moving an API surface.
 Core administration failures use the [Core error envelope](../../contracts/agents-api/core-errors.md),
 including typed optional safe details and distinct console proxy rejection codes.
 The public and machine error contracts remain unchanged.
+
+### Self-hosted installation
+
+Authenticated Session creation/detail responses include short-lived commands in
+`x_agents_core.installation`. Core Web reads the same commands at
+`GET /core/v1/projects/{project_id}/environments/{environment_id}/installation`.
+Machine installers use `POST /api/v1/agent-daemon/installation` and its `/claim`
+subroute with the installation Bearer authorization. Qualified artifacts beneath
+`/api/v1/agent-daemon/install/{version}/` are public, immutable release content.
+See [native self-hosted installation](../self-hosted-native.md) for expiry, retry,
+credential ownership and platform rules.

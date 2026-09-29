@@ -195,8 +195,8 @@ existing ownership boundary rather than adding unrelated responsibilities.
 
 The [API documentation index](docs/api/README.md) lists the three namespaces:
 `/v1` for applications (Project API key), `/core/v1` for Core Web's server and
-operator scripts (Core key) and `/api/v1` for machine connections (credentials
-issued through `/core/v1`). New or changed routes must identify their caller and
+operator scripts (Core key) and `/api/v1` for machine connections (executor credentials issued through `/core/v1`
+or claimed using a short-lived Session installation authorization). New or changed routes must identify their caller and
 credential there, and link their detailed contract.
 Keep current integration guidance separate from historical qualification evidence.
 
@@ -3773,6 +3773,21 @@ The release bundles pinned Node/npm, native Harnesses and required adapter asset
 registration lives in CLI and native activation/readiness in each adapter's optional
 `agent.Installation` descriptor. Core never selects native paths or OS-specific
 installation steps. See [native installation](docs/self-hosted-native.md).
+Self-hosted onboarding extends authenticated Session creation/detail responses with
+`x_agents_core.installation`; Web displays the same Core-produced commands. Lists
+and durable event journals never retain installation authorizations. The command
+uses a 30-minute, Environment- and build-scoped grant to claim one connect-only
+credential. The installer persists its generated secret before claiming it; retries
+must prove that same secret. Reserve the Environment UUID as the onboarding key ID.
+Existing, rotated or revoked credentials are never replaced by onboarding. Machine
+bootstrap routes use this grant, not an Environment ID as authentication. Public
+artifact routes contain no credentials. Native bundles must match the Core source
+revision and Runtime wire version. Core release qualification consumes the same
+three-platform native CI artifacts and includes them in its distribution.
+Bootstrap scripts own platform download/extraction only; installation, startup,
+connection verification and Runtime execution remain common. Serialize background
+PID inspection and publication so concurrent starts cannot create duplicate daemons.
+
 An installed daemon discovers and registers only the adapter kinds named by its
 verified installation manifest. The host PATH stays available to tools; its other
 Harness executables and activation variables cannot extend that installation.

@@ -99,6 +99,7 @@ type TextFormat struct {
 }
 
 type Session struct {
+	XAgentsCore     *SessionCore       `json:"x_agents_core,omitempty"`
 	ID              string             `json:"id" binding:"required"`
 	Agent           Agent              `json:"agent" binding:"required"`
 	CreatedAt       int64              `json:"created_at" binding:"required"`

@@ -36,6 +36,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/coremetrics"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/databaseurl"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/nativeinstaller"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeenrollment"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimehistory"
@@ -222,7 +223,20 @@ func run() error {
 			return err
 		}
 		defer runtime.CloseConnections(registry)
-		options = append(options, api.WithEnvironmentRemoteURL(wsURL))
+		var catalog *nativeinstaller.Catalog
+		directory := os.Getenv("OAC_NATIVE_INSTALLER_DIR")
+		if directory == "" {
+			if _, err := os.Stat("/opt/oac/native-installers/catalog.json"); err == nil {
+				directory = "/opt/oac/native-installers"
+			}
+		}
+		if directory != "" {
+			catalog, err = nativeinstaller.Load(directory, buildRevision)
+			if err != nil {
+				return err
+			}
+		}
+		options = append(options, api.WithEnvironmentRemoteURL(wsURL), api.WithNativeInstaller(catalog, buildRevision))
 	}
 	options = append(options, api.WithExecutorConnections(func(ctx context.Context, environment, digest string) (bool, error) {
 		return runtimeenrollment.RuntimeConnected(ctx, executionStore, registry, environment, digest)

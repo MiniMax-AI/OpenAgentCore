@@ -78,13 +78,13 @@ test("shows a self-hosted Session's install command, issues its credential once,
   await expect(section).toContainText("No executor credentials yet");
   const environmentId = await page.getByLabel("Session facts").locator("div").filter({ hasText: /^Environment/ }).locator("code").getAttribute("title");
 
-  // Connect a host: the exact install command, which carries no secret.
+  // Web displays Core-provided commands with short-lived installation authority.
   const install = section.getByRole("region", { name: "Connect a host" });
-  await expect(install.getByLabel("Executor install command").locator("pre")).toHaveText(`./oac-daemon install --interactive --remote 'wss://core.example.com/api/v1/agent-daemon/ws' --environment-id '${environmentId}' --workspace '/srv/work'`);
+  await expect(install.getByLabel("Executor install command").locator("pre")).toHaveText("bash fixture-bootstrap --authorization fixture-short-lived");
   await expect(install.getByRole("link")).toHaveAttribute("href", /docs\/self-hosted-native.md$/);
   await install.getByRole("combobox", { name: "Host platform" }).click();
   await page.getByRole("option", { name: "Windows · PowerShell" }).click();
-  await expect(install.locator("pre")).toContainText(".\\oac-daemon.exe install --interactive");
+  await expect(install.locator("pre")).toContainText("fixture-bootstrap.ps1 -Authorization fixture-short-lived");
   await install.screenshot({ path: test.info().outputPath("native-host.png") });
 
   await section.getByRole("button", { name: "Issue credential" }).click();

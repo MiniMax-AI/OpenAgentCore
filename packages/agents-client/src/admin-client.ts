@@ -1,3 +1,5 @@
+import { projectEnvironmentInstallation } from "./installation-projection";
+import type { EnvironmentInstallation } from "./types";
 import { projectSessionDiagnostics, projectTurnDiagnostics } from "./session-diagnostics";
 import {
   addVaultPageOptions, projectAgentSession, projectRuntimeObservation,
@@ -264,6 +266,11 @@ export class AdminClient {
       created_after: options?.created_after, created_before: options?.created_before,
     });
     return projectWriteOperations(await this.#json(path, options));
+  }
+
+  /** Short-lived installation commands; never persist these beyond the current view. */
+  async environmentInstallation(projectId: string, environmentId: string, options?: ReadOptions): Promise<EnvironmentInstallation> {
+    return projectEnvironmentInstallation(await this.#json(`${scope(projectId)}/environments/${segment(environmentId)}/installation`, options)) ?? invalidAdminResponse();
   }
 
   /** Credential metadata for one self_hosted Environment; the credentials themselves are never listed. */

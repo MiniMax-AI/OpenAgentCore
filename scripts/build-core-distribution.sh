@@ -137,6 +137,11 @@ mkdir -p "$stage/core/e2b"
 tar -xzf "$stage/e2b-build/oac-e2b-provider-linux-amd64.tar.gz" \
   --strip-components=1 -C "$stage/core/e2b"
 cp -R "$stage/core/e2b" "$bundle/native/e2b"
+mkdir -p "$stage/core/native-installers"
+if [[ -n "${OAC_NATIVE_INSTALLER_BUILD_DIR:-}" ]]; then
+  cp -R "$OAC_NATIVE_INSTALLER_BUILD_DIR/." "$stage/core/native-installers/"
+  cp -R "$stage/core/native-installers" "$bundle/native/"
+fi
 cp deploy/distribution/Dockerfile "$stage/core/Dockerfile"
 build_image core "$stage/core"
 core_image="$(cat "$stage/core.id")"

@@ -183,6 +183,8 @@ def core_environment(root, config, state):
     }
     if native:
         result["OAC_E2B_PROVIDER_BIN"] = str(root / "native/e2b/oac-e2b-provider")
+        if (root / "native/native-installers/catalog.json").is_file():
+            result["OAC_NATIVE_INSTALLER_DIR"] = str(root / "native/native-installers")
     if core["oauth_trusted_origins"]:
         result["OAC_OAUTH_TRUSTED_ORIGINS"] = ",".join(core["oauth_trusted_origins"])
     if core["runtime_history"] is not None:

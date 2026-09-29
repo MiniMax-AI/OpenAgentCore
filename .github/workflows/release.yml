@@ -31,7 +31,13 @@ jobs:
     with:
       ref: ${{ inputs.ref || github.sha }}
 
+  native:
+    uses: ./.github/workflows/native.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+
   build:
+    needs: native
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     outputs:
@@ -92,8 +98,16 @@ jobs:
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
           bash scripts/prepare-release-runtimes.sh
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: oac-native-installer-*
+          merge-multiple: true
+          path: native-artifacts
+      - name: Assemble the native installation catalog
+        run: node scripts/build-native-catalog.mjs native-artifacts "$RUNNER_TEMP/native-installers"
       - name: Build matched artifacts
         env:
+          OAC_NATIVE_INSTALLER_BUILD_DIR: ${{ runner.temp }}/native-installers
           RELEASE_REVISION: ${{ steps.source.outputs.revision }}
           RELEASE_TAG: ${{ steps.source.outputs.release_tag }}
           RELEASE_REPOSITORY: ${{ github.repository }}

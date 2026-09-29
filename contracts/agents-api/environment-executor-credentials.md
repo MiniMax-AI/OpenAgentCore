@@ -1,12 +1,12 @@
 # Environment executor credentials
 
-An executor credential lets one self-hosted executor host enroll its daemon and
-connect for one `self_hosted` Environment. The application creates the
-`self_hosted` Session with its Project API key; the operator then issues the
-credential with the Core key, through Web or a Core-key script, and gives the
-returned credential file to the executor host. Project API keys cannot issue
-credentials; the former Project-key route
-`/core/v1/environments/{environment_id}/executor-credentials` is removed.
+An executor credential lets a daemon enroll and connect for one `self_hosted`
+Environment. An application creates the Session with its Project API key and
+receives an Environment-scoped installation command. The installer claims its
+connect-only key and connects without requiring Web or a Core key. Operators
+retain the explicit Core-key issuance, rotation and revocation routes below.
+The command's short-lived authorization and the daemon's long-term credential
+are separate; their lifecycle is defined in [native installation](../../docs/self-hosted-native.md).
 
 ## Routes
 
@@ -112,25 +112,17 @@ can read it.
 
 ## Executor host
 
-The [native installer](../../docs/self-hosted-native.md) installs the same daemon
-and pinned Harness adapters on Linux, macOS and Windows. It neither identifies
-the machine's supplier nor creates a Docker container or Core allocation. The
-operator supplies a user-writable installation directory, an existing workspace,
-the unchanged Environment ID and remote URL, and a private executor credential file.
-Files, native history and machine lifecycle remain the operator's responsibility.
-Session deletion, cancellation and disconnect do not reclaim them.
+The [native installer](../../docs/self-hosted-native.md) uses the same daemon and
+pinned adapters on every supported platform. Session responses provide commands
+in `x_agents_core.installation`; Web displays them without reconstructing them.
+The bootstrap only downloads and extracts a qualified distribution, then invokes
+the common installer to select Harnesses, install, start and verify connection.
+The Session's Environment identity and workspace are fixed inputs. Installation
+never creates or reclaims the user's machine, workspace or native history.
 
-Interactive multi-selection and command-line-only installation share one flow.
-`install --non-interactive --harness codex,claude --install-dir ABS --remote URL
---environment-id UUID --workspace ABS --credential-file ABS` requires all inputs
-without prompting. Readiness checks do not authenticate a model or prove a daemon
-connection. The installed `bin/oac-daemon start` connects; verify connection through
-the route below and send a Turn to verify the Session model configuration.
-
-Web's **Connect a host** panel links the native distribution instructions and
-prepares a secret-free interactive command using the Session's remote URL,
-Environment ID and workspace. Save the one-time credential JSON as a private file
-and supply its absolute path. Credentials never belong in the command itself.
+Explicit distribution installation with `--credential-file` remains available
+for operator-managed credentials. Readiness and connection checks do not validate
+model access. Runtime preparation and execution use the existing common protocol.
 
 ### Revoked or rotated credential
 

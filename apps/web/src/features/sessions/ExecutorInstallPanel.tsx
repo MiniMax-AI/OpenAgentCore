@@ -4,10 +4,23 @@ import { useTranslation } from "react-i18next";
 import { HelpTip } from "../../components/console-ui";
 import { ConsoleSelect } from "../../components/console-select";
 import { useCopy } from "../api-keys/IssuedKey";
-import { executorInstall, type ExecutorInstall, type HostShell } from "./executor-install";
+import { useQuery } from "@tanstack/react-query";
+import { admin } from "../../lib/projects";
+import type { ExecutorInstall, HostShell } from "./executor-install";
 
-export function useExecutorInstall(environmentId: string, remoteUrl: string, workspaceDirectory: string): ExecutorInstall {
-  return executorInstall({ environmentId, remoteUrl, workspaceDirectory });
+export function useExecutorInstall(projectId: string, environmentId: string, archived: boolean): ExecutorInstall {
+  const query = useQuery({
+    queryKey: ["environment-installation", projectId, environmentId],
+    queryFn: ({ signal }) => admin.environmentInstallation(projectId, environmentId, { signal }),
+    enabled: !archived,
+    staleTime: 20 * 60_000,
+    refetchInterval: 20 * 60_000,
+    gcTime: 0,
+    retry: false,
+  });
+  const data = query.data;
+  return !archived && data?.status === "available" && data.commands && (data.expires_at ?? 0) > Date.now() / 1000
+    ? { kind: "ready", commands: data.commands } : { kind: "unavailable" };
 }
 
 /** One home for native installation instructions; issuing a credential does not establish a connection. */

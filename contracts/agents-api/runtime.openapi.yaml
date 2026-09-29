@@ -1,5 +1,39 @@
 basePath: /
 definitions:
+  api.CoreAPIError:
+    properties:
+      code:
+        type: string
+        x-nullable: true
+      details:
+        description: |-
+          Details contains only documented, Core-owned facts: string, finite number,
+          boolean, null or string array values. Never include request echoes, secrets
+          or native/provider error text. Empty or invalid details are omitted.
+        type: object
+      message:
+        type: string
+      param:
+        type: string
+        x-nullable: true
+      type:
+        type: string
+    required:
+      - message
+      - type
+    type: object
+  api.CoreErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/api.CoreAPIError'
+    required:
+      - error
+    type: object
+  api.NativeInstallationClaim:
+    properties:
+      executor_token:
+        type: string
+    type: object
   sandbox.DeploymentSpec:
     properties:
       resources:
@@ -133,6 +167,21 @@ definitions:
     required:
       - error
     type: object
+  v1.NativeInstallationContext:
+    properties:
+      environment_id:
+        type: string
+      harness:
+        type: string
+      protocol_version:
+        type: string
+      remote_url:
+        type: string
+      version:
+        type: string
+      workspace_directory:
+        type: string
+    type: object
 info:
   contact: {}
   description: Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the Core key are not accepted. See each operation's security requirements.
@@ -142,6 +191,65 @@ info:
   title: OpenAgentCore Machine Connections
   version: "1"
 paths:
+  /api/v1/agent-daemon/installation:
+    post:
+      description: Accepts a short-lived Environment installation Bearer authorization, not a Project or Core key. Returns frozen connection constraints; it does not claim or rotate credentials.
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.NativeInstallationContext'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+      summary: Resolve a native installation authorization
+      tags:
+        - Native Installation
+  /api/v1/agent-daemon/installation/claim:
+    post:
+      consumes:
+        - application/json
+      description: A valid installation Bearer authorization can claim one connect-only key. The client persists its generated secret before submitting it. Retries must present that same secret; a different, rotated or revoked credential is never replaced.
+      parameters:
+        - description: Locally persisted executor secret
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.NativeInstallationClaim'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+      summary: Claim an Environment's installation credential
+      tags:
+        - Native Installation
   /api/v1/sandbox-node/configuration:
     get:
       description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-OAC-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.

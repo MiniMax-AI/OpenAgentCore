@@ -1671,6 +1671,24 @@ definitions:
       - has_more
       - object
     type: object
+  v1.EnvironmentInstallation:
+    properties:
+      commands:
+        additionalProperties:
+          type: string
+        type: object
+      expires_at:
+        type: integer
+      message:
+        type: string
+      status:
+        enum:
+          - available
+          - unavailable
+        type: string
+      version:
+        type: string
+    type: object
   v1.EnvironmentNetwork:
     properties:
       access:
@@ -2698,6 +2716,8 @@ definitions:
         items:
           type: string
         type: array
+      x_agents_core:
+        $ref: '#/definitions/v1.SessionCore'
     required:
       - agent
       - created_at
@@ -2777,6 +2797,11 @@ definitions:
       - data
       - has_more
       - object
+    type: object
+  v1.SessionCore:
+    properties:
+      installation:
+        $ref: '#/definitions/v1.EnvironmentInstallation'
     type: object
   v1.SessionDeleted:
     properties:
@@ -4181,6 +4206,42 @@ paths:
       summary: Revoke a self_hosted Environment executor credential
       tags:
         - Executor Credentials
+  /core/v1/projects/{project_id}/environments/{environment_id}/installation:
+    get:
+      description: Core key only. The commands contain a 30-minute installation authorization, never an executor secret. Web displays these same commands provided in public Session creation and detail responses.
+      parameters:
+        - description: Project UUID
+          in: path
+          name: project_id
+          required: true
+          type: string
+        - description: Environment UUID
+          in: path
+          name: environment_id
+          required: true
+          type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.EnvironmentInstallation'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Get a self_hosted Session's installation commands
+      tags:
+        - Native Installation
   /core/v1/projects/{project_id}/files:
     get:
       description: Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.

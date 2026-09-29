@@ -634,6 +634,8 @@ http.createServer(async (request, response) => {
     if (url.pathname.startsWith("/core/v1/")) {
       const path = url.pathname.slice("/core/v1".length);
       if (path === "/harnesses" || path.startsWith("/harnesses/")) return await harnessRoute(request, response, path);
+      const installation = path.match(/^\/projects\/([^/]+)\/environments\/([^/]+)\/installation$/);
+      if (installation && request.method === "GET") return send(response, 200, { status: "available", version: "fixture", expires_at: Math.floor(Date.now()/1000)+1800, commands: { posix: "bash fixture-bootstrap --authorization fixture-short-lived", powershell: "& fixture-bootstrap.ps1 -Authorization fixture-short-lived" } });
       const credentials = path.match(EXECUTOR_CREDENTIALS);
       if (credentials) return await executorCredentialRoute(request, response, credentials[1], credentials[2], credentials[3]);
       return write ? await adminWrite(request, response, path) : adminRead(response, path, url);

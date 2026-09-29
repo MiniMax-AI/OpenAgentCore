@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/transport"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	obslog "github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
+	"github.com/MiniMax-AI-Dev/parsar/internal/runtimefs"
 )
 
 const (
@@ -218,6 +220,20 @@ func spawnBackground(ctx context.Context, rc *runContext, profile string, argv [
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
+	// Serialize the live-process check and publication across concurrent starts.
+	if err := runtimefs.EnsurePrivateDir(filepath.Dir(pidPath)); err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(filepath.Dir(pidPath))
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	unlock, err := runtimefs.LockDirectory(root)
+	if err != nil {
+		return errors.New("connect: startup is busy; wait and retry")
+	}
+	defer unlock()
 	// Refuse to start a second background daemon for the same profile.
 	if pid, err := daemonize.ReadPIDFile(pidPath); err == nil {
 		return fmt.Errorf("connect: background daemon already running (pid=%d); run `oac-daemon stop` first", pid)

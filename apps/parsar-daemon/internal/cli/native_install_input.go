@@ -15,13 +15,16 @@ import (
 
 type nativeInstallOptions struct {
 	nativeInstallation
-	Directory, Bundle, Harness  string
-	Interactive, NonInteractive bool
+	Directory, Bundle, Harness                 string
+	OnboardURL, Authorization, RequiredHarness string
+	Interactive, NonInteractive                bool
 }
 
 func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, error) {
 	var o nativeInstallOptions
 	flags := newFlagSet("install")
+	flags.StringVar(&o.OnboardURL, "onboard-url", "", "Core installation endpoint")
+	flags.StringVar(&o.Authorization, "authorization", "", "short-lived installation authorization (never an executor credential)")
 	flags.StringVar(&o.Remote, "remote", "", "Environment remote_url from Core")
 	flags.StringVar(&o.Environment, "environment-id", "", "Environment ID from Core")
 	flags.StringVar(&o.Workspace, "workspace", "", "existing absolute workspace directory")
@@ -44,6 +47,9 @@ func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, er
 	}
 	if flags.NArg() != 0 || (o.Interactive && o.NonInteractive) {
 		return o, errors.New("install: unexpected arguments or conflicting interaction modes")
+	}
+	if err := prepareOnboarding(&o); err != nil {
+		return o, err
 	}
 	if o.Directory == "" {
 		var err error
@@ -78,6 +84,9 @@ func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, er
 
 func promptNativeInstall(input io.Reader, output io.Writer, o *nativeInstallOptions) error {
 	r := bufio.NewReader(input)
+	if o.OnboardURL != "" {
+		return promptOnboarding(r, output, o)
+	}
 	// Only paths and connection identifiers are requested; tokens are read later
 	// from the private credential file, never entered or echoed by this prompt.
 	for _, p := range []struct {
@@ -108,6 +117,29 @@ func promptNativeInstall(input io.Reader, output io.Writer, o *nativeInstallOpti
 			*p.value = value
 		} else if !p.optional {
 			return errors.New("install: required interactive value missing")
+		}
+	}
+	return nil
+}
+
+func promptOnboarding(r *bufio.Reader, output io.Writer, o *nativeInstallOptions) error {
+	fmt.Fprintf(output, "Environment: %s\nWorkspace: %s (set by this Session)\n", o.Environment, o.Workspace)
+	if o.Harness == "" {
+		o.Harness = o.RequiredHarness
+	}
+	for _, item := range []struct {
+		label string
+		value *string
+	}{
+		{"Harnesses, comma-separated", &o.Harness}, {"Installation directory", &o.Directory},
+	} {
+		fmt.Fprintf(output, "%s [%s]: ", item.label, *item.value)
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return errors.New("install: interactive input ended; use --non-interactive with --harness and optional --install-dir")
+		}
+		if value := strings.TrimSpace(line); value != "" {
+			*item.value = value
 		}
 	}
 	return nil

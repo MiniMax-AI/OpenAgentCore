@@ -73,13 +73,13 @@ function seconds(value: string | null): number | null {
  * revoked but neither issued nor rotated. Below the list, Connect a host gives
  * the command that installs the executor with one of these credentials.
  */
-export function ExecutorCredentialsSection({ projectId, sessionId, environmentId, remoteUrl, workspaceDirectory = "" }: { projectId: string; sessionId: string; environmentId: string; remoteUrl: string; workspaceDirectory?: string }) {
+export function ExecutorCredentialsSection({ projectId, sessionId, environmentId }: { projectId: string; sessionId: string; environmentId: string; remoteUrl: string; workspaceDirectory?: string }) {
   const { t, i18n } = useTranslation("sessions");
   const locale = i18n.resolvedLanguage;
   const toast = useToast();
   const { byId, refresh: refreshProjects } = useProjects();
   const archived = byId.get(projectId)?.status === "archived";
-  const install = useExecutorInstall(environmentId, remoteUrl, workspaceDirectory);
+  const install = useExecutorInstall(projectId, environmentId, archived);
   const query = useQuery(executorConnectionQuery(projectId, sessionId, environmentId));
   const credentials = query.data?.data ?? null;
   const connectionStale = failedLast(query) || query.isStale;
@@ -299,8 +299,8 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
         </section>
       ) : null}
       <ExecutorConnectionPanel read={query.data} stale={connectionStale} failed={failedLast(query)} refreshing={query.isFetching} onRefresh={reread} />
-      {body}
       <ExecutorInstallPanel install={install} archived={archived} connected={connectionState === "connected"} />
+      {body}
       <Modal
         open={shown?.open ?? false}
         title={t("executor.issued.title")}

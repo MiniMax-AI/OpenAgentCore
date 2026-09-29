@@ -1,3 +1,4 @@
+import { projectEnvironmentInstallation } from "./installation-projection";
 import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId } from "./response-projection";
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
@@ -903,7 +904,13 @@ export function projectAgentSession(
   expectedEnvironment?: ExpectedCreationEnvironment,
   expectedImmutable?: ImmutableSessionProjection,
 ): AgentSession {
-  if (!isRecord(value) || !exactFields(value, sessionFields)) return invalidSessionResource();
+  if (!isRecord(value) || !exactFields(Object.fromEntries(Object.entries(value).filter(([key]) => key !== "x_agents_core")), sessionFields)) return invalidSessionResource();
+  let installation;
+  if (value.x_agents_core !== undefined) {
+    if (!isRecord(value.x_agents_core) || !exactFields(value.x_agents_core, new Set(["installation"]))) return invalidSessionResource();
+    installation = projectEnvironmentInstallation(value.x_agents_core.installation);
+    if (!installation) return invalidSessionResource();
+  }
   if (
     typeof value.id !== "string" || value.id.trim() === "" ||
     (expectedSessionId !== undefined && !sameResourceId(value.id, expectedSessionId)) ||
@@ -964,6 +971,7 @@ export function projectAgentSession(
     created_at: value.created_at,
     last_active_at: value.last_active_at,
   };
+  if (installation) session.x_agents_core = { installation };
   if (expectedEnvironment !== undefined) bindCreatedEnvironment(session.environment, expectedEnvironment);
   if (expectedImmutable !== undefined && !matchesImmutableSession(session, expectedImmutable)) {
     return invalidSessionResource("OpenAgentCore changed immutable Session configuration in the event stream.");

@@ -58,6 +58,7 @@ func (h *Handler) registerExecutorCredentialRoutes(r chi.Router) {
 		return
 	}
 	const path = "/projects/{project_id}/environments/{environment_id}/executor-credentials"
+	r.Get("/projects/{project_id}/environments/{environment_id}/installation", h.getEnvironmentInstallation)
 	r.Get(path, func(w http.ResponseWriter, r *http.Request) { h.listExecutorCredentials(w, r, s) })
 	r.Post(path, func(w http.ResponseWriter, r *http.Request) { h.issueExecutorCredential(w, r, s) })
 	r.Delete(path+"/{key_id}", func(w http.ResponseWriter, r *http.Request) { h.revokeExecutorCredential(w, r, s) })

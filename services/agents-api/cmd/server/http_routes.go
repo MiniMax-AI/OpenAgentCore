@@ -26,6 +26,9 @@ func serverHandler(apiHandler http.Handler, daemon *daemonRoutes) http.Handler {
 	mux.Handle("/api/v1/agent-daemon/", daemon.gateway)
 	mux.Handle("/api/v1/agent-daemon/enroll", daemon.enrollment)
 	mux.Handle("/api/v1/agent-daemon/connection", daemon.connection)
+	mux.Handle("/api/v1/agent-daemon/install/", apiHandler)
+	mux.Handle("/api/v1/agent-daemon/installation", apiHandler)
+	mux.Handle("/api/v1/agent-daemon/installation/", apiHandler)
 	if daemon.nodeConnect != nil {
 		mux.Handle("/api/v1/sandbox-node/connect", daemon.nodeConnect)
 	}
