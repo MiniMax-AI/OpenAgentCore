@@ -130,6 +130,10 @@ When Core permanently rejects enrollment or the WebSocket, the daemon reports th
 reason and parks without retrying until stopped. A protocol mismatch requires the
 matching current distribution; it does not trigger a migration. Transient transport
 failures retain the existing reconnect behavior and never replay execution.
+Enrollment and the connection check answer failures with a plain-text status body
+and no error code, so the daemon decides by status alone; the WebSocket and
+bootstrap handlers answer the failures they detect with
+`{"error":"<code>","detail":"…"}` ([registry](error-codes.md#runtime-daemon-transport-codes)).
 
 Rotate the same `key_id`, stop the daemon, replace the configured credential JSON
 file, and start it again. Issuing a new key for an enrolled Environment fails with

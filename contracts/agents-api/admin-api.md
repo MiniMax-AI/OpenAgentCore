@@ -66,8 +66,33 @@ unusable key before issuing another; plaintext cannot be recovered.
 
 Paths below are relative to `/projects/{project_id}`. The Project selects a tenant, including
 an archived Project; it does not authenticate. Shared resource handlers preserve their
-public object serialization, pagination, errors and deletion preconditions. They
+public object serialization, cursors, ordering and deletion preconditions; Skill
+list bounds differ as the table below shows. They
 receive an explicit target tenant, not a fabricated caller identity.
+
+Errors use the [Core envelope](core-errors.md). The shared list parser and
+not-found mapping choose their error fields by request path, so every Core
+resource route gets the Agents API Beta fields for those cases. For Agents,
+Templates, Vaults, Credentials and Sessions this is the same family their `/v1`
+routes use. Files and Skills differ: their `/v1` routes keep the separately
+observed Files and Skills fields ([list query semantics](list-query-semantics.md)),
+which the Core routes do not reproduce. Errors a handler writes directly keep
+their `/v1` fields on both namespaces: an unknown Files `purpose` filter is 400
+with a null code and param `purpose`, and deleting the default Skill version is
+400 `invalid_value` with param `version`.
+
+| Case | `/v1/files`, `/v1/skills` | Core `/files`, `/skills` |
+| --- | --- | --- |
+| Missing resource | 404, null `code` (Files: param `id`) | 404, `not_found_error` (Files: param `id`) |
+| Unresolved Skill version `after` | 400 `invalid_value`, param `after` | 400 `invalid_request_error`, null param |
+| Repeated list key | Files 400 `unsupported_parameter`; Skills 400 `duplicate_parameter` with the key as param | 400 `invalid_request_error`, null param |
+| Invalid `order` | Files 400 with null `code`; Skills 400 `invalid_value`, param `order` | 400 `invalid_request_error`, null param |
+| `limit` out of range | Files 400 with null `code`; Skills `integer_below_min_value` or `integer_above_max_value`, param `limit` | 400 `invalid_request_error`, null param |
+| Skills `limit=0` | Empty page | 400 `invalid_request_error`; Core Skill lists accept 1–100 |
+
+Storage availability codes are the same on both namespaces: `file_storage_unavailable`,
+`skill_storage_unavailable` and `file_transfer_unavailable` (503). The
+[error code registry](error-codes.md) lists every code.
 
 | Resource | GET routes | DELETE routes |
 | --- | --- | --- |

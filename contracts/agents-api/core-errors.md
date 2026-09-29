@@ -50,7 +50,8 @@ through the proxy; the console does not reinterpret their codes or details.
 The first three use `type: "invalid_request_error"`; the last uses
 `type: "server_error"`. A Core `401 invalid_admin_key` remains distinguishable
 from a missing console sign-in. `/console/auth` keeps its existing
-`{"error":"…"}` errors. Bare, retired and direct public/machine paths do not
+`{"error":"…"}` errors without a code; their statuses are listed under
+[console sign-in responses](error-codes.md#console-sign-in-responses). Bare, retired and direct public/machine paths do not
 become proxyable operations. Host, origin, authentication, credential stripping,
 path checks and the no-retry rule are unchanged.
 
@@ -185,3 +186,7 @@ Model configuration writes additionally return `model_configuration_model_invali
 with `param: model`, or `harness_config_invalid` with `param: harness_config`.
 Both carry fixed messages without submitted values. Existing provider field errors
 retain their field params within the `model_provider` object.
+
+The [error code registry](error-codes.md) lists every code Core and the console
+write, separates them from node diagnostics and client-generated codes, and is
+checked against the code in both directions.

@@ -17,7 +17,8 @@ A credential used in another namespace gets 401: a Project API key on `/core/v1`
 **Routing.** The reverse proxy sends `/v1` and `/api/v1` to Core and everything else
 to Web ([proxy setup](../getting-started/install.md#https-and-the-reverse-proxy)).
 Browsers reach `/core/v1` only through Web's server, which adds the Core key after
-sign-in; Web returns 404 for `/v1` and `/api/v1`. Operator scripts call `/core/v1`
+sign-in; Web returns 404 for `/v1` and `/api/v1`, and answers an unauthenticated
+`GET /healthz` liveness probe with `200 ok`. Operator scripts call `/core/v1`
 on Core's loopback port. Details: [Web and Core](web-management.md).
 
 ## Public API
@@ -25,7 +26,8 @@ on Core's loopback port. Details: [Web and Core](web-management.md).
 Applications call `/v1` with a Project API key. The routes are exactly the 58 pairs
 in [upstream-routes.json](../../contracts/agents-api/upstream-routes.json). The
 [Agents API guide](public-agent-api.md) explains every resource with SDK and HTTP
-examples.
+examples. [Request conventions](request-conventions.md) covers the headers, JSON body
+checks and list parameters every `/v1` operation shares.
 
 ## Core API
 
@@ -90,6 +92,15 @@ the Core key or a Project API key.
 | `POST agent-daemon/enroll`, `GET agent-daemon/connection` | Self-hosted executor and its installer | Executor credential from `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) |
 | WebSocket `GET agent-daemon/ws`, `POST agent-daemon/bootstrap`, `GET agent-daemon/device-status` | Runtime daemons | Daemon credential: Core writes one into each hosted sandbox it prepares; a self-hosted executor uses its executor credential | [Runtime enrollment](../../services/agents-api/README.md#user-managed-runtime-enrollment) |
 
+Only the three `sandbox-node` HTTP routes are in the machine OpenAPI and use the
+JSON error envelope. The node WebSocket and the daemon transport are served
+beside the API router: `agent-daemon/enroll`, `agent-daemon/connection` and
+`sandbox-node/connect` answer failures with a plain-text body and no code, and
+`agent-daemon/ws`, `bootstrap` and `device-status` answer the failures their
+handlers detect with `{"error":"<code>","detail":"…"}`; router and WebSocket
+handshake failures stay plain text. Both are listed in the
+[error code registry](../../contracts/agents-api/error-codes.md#runtime-daemon-transport-codes).
+
 ## Contract sources
 
 - [Pinned upstream baseline](../../contracts/agents-api/upstream.json): OpenAI
@@ -133,3 +144,9 @@ The console-local `GET`/`POST /console/installation/domain` surface uses the sig
 browser session and same-origin checks. It delegates only domain setup to the
 installer, with the server-held Core key over a private Unix socket; it is not part
 of the Agents API or Core management API. See [Web request boundaries](../web/architecture.md#request-boundaries).
+
+Core administration failures use the [Core error envelope](../../contracts/agents-api/core-errors.md),
+including typed optional safe details and distinct console proxy rejection codes.
+The [error code registry](../../contracts/agents-api/error-codes.md) lists every error
+code in all three namespaces, the console and the daemon transport, and is checked
+against the code.
