@@ -137,23 +137,35 @@ test("shows a self-hosted Session's install command, issues its credential once,
   await expect(section.getByRole("button", { name: "Issue credential" })).toHaveCount(0);
   await expect(credentials.getByRole("button", { name: /^Rotate credential / })).toHaveCount(0);
   await expect(credentials.getByRole("button", { name: /^Revoke credential / })).toBeVisible();
-  // The command stays; the note says the host still needs a credential.
-  await expect(install).toContainText("Installation requires an existing credential file");
+  // Archiving removes the short-lived installation command, while existing credentials remain manageable.
+  await expect(install).toContainText("This project is archived. New installation authorizations are unavailable.");
+  await expect(install.getByLabel("Executor install command")).toHaveCount(0);
 });
 
-test("offers the native command for a loopback Core", async ({ page, request }) => {
+test("displays Core's installation command for a loopback Core", async ({ page, request }) => {
   await openConsole(page, request, "sessions", { installation: "local" });
+  const installationResponse = page.waitForResponse((response) => response.url().includes("/environments/") && response.url().endsWith("/installation"));
   await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();
+  const response = await installationResponse;
+  expect(response.ok()).toBe(true);
+  const installation = await response.json();
+  expect(installation.status).toBe("available");
   const install = page.getByRole("region", { name: "Connect a host" });
-  await expect(install.locator("pre")).toContainText("ws://127.0.0.1:8091/api/v1/agent-daemon/ws");
+  // Connection details belong to Core's authorization, not a command rebuilt in Web.
+  await expect(install.getByLabel("Executor install command").locator("pre")).toHaveText(installation.commands.posix);
 });
 
-test("offers native installation without console installer assets", async ({ page, request }) => {
+test("displays Core's installation command without console installer assets", async ({ page, request }) => {
   await openConsole(page, request, "sessions", { installers: "none" });
+  const installationResponse = page.waitForResponse((response) => response.url().includes("/environments/") && response.url().endsWith("/installation"));
   await page.getByRole("row").filter({ hasText: "Self-hosted" }).first().getByRole("button", { name: /^Open Session / }).click();
+  const response = await installationResponse;
+  expect(response.ok()).toBe(true);
+  const installation = await response.json();
+  expect(installation.status).toBe("available");
   const section = page.getByRole("region", { name: "Executor credentials" });
   await expect(section).toContainText("No executor credentials yet");
-  await expect(section.getByRole("region", { name: "Connect a host" })).toContainText("install --interactive");
+  await expect(section.getByLabel("Executor install command").locator("pre")).toHaveText(installation.commands.posix);
   await expect(section.getByRole("button", { name: "Issue credential" })).toBeVisible();
 });
 
