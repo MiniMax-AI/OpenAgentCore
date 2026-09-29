@@ -177,6 +177,6 @@ once in English and once in Chinese using the console language menu. Check that
 all five nodes load and metrics have no partial-data warning before capturing.
 For a remote preview, forward port 4394 over SSH and capture in local Chrome.
 Keep the original resolution, crop browser chrome and add a plain macOS-style
-window bar. The four lossless WebP images in `docs/assets/console-*.webp` are linked by the matching
+window bar. The four WebP images in `docs/assets/console-*.webp` are linked by the matching
 README and included in the distribution manifest. Normal acceptance data and
 production builds do not enable this scene.
