@@ -224,7 +224,6 @@ failure.
 | 405 | `method_not_allowed` | Bootstrap without POST, if the handler is reached; the router's empty 405 normally answers first |
 | 426 | `incompatible_version` | The daemon version is not supported by this Core |
 | 500 | `internal` | Authentication failed unexpectedly |
-| 503 | `bootstrap_unavailable` | The Runtime connection address is unavailable |
 
 ## Plain-text transport responses
 
