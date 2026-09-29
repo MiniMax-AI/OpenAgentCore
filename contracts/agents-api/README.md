@@ -442,7 +442,10 @@ upgrade the protocol.
   exact hosted error semantics remain gaps.
 
 [Environment Templates](environment-templates.md) provide tenant-owned CRUD/list
-and immutable Session resolution through the same hosted initialization. They do not
+and immutable Session resolution through common Environment preparation.
+The `x_agents_core.environment` extension supplies that configuration to either
+placement; self-hosted machines never need a managed allocation. See
+[shared preparation qualification](environment-preparation-qualification.md). They do not
 select an E2B image or make unsupported initialization executable.
 The supported Docker configuration has [composed real acceptance](environment-templates.md#composed-initialization-acceptance)
 across the three harnesses, including frozen source deletion, cold continuation

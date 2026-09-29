@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
@@ -17,6 +18,10 @@ var errNetworkPolicy = &fieldError{message: "network access must be enabled, dis
 // accepting the protocol's omitted/null/empty defaults for the basic profile.
 // Unsupported fields are reported before network policy, independently of map order.
 func decodeHostedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
+	return decodePreparedEnvironment(raw)
+}
+
+func decodePreparedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
 		return nil, store.ErrInvalidInput
@@ -25,10 +30,18 @@ func decodeHostedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	if err != nil {
 		return nil, err
 	}
-	env := &v1.Environment{Type: "openai_hosted", Network: &v1.EnvironmentNetworkInput{Access: "enabled"}}
+	var kind string
+	if json.Unmarshal(fields["type"], &kind) != nil || (kind != "openai_hosted" && kind != "self_hosted") {
+		return nil, store.ErrInvalidInput
+	}
+	env := &v1.Environment{Type: kind, Network: &v1.EnvironmentNetworkInput{Access: "enabled"}}
 	for name, value := range fields {
 		switch name {
 		case "type":
+		case "workspace_directory":
+			if kind != "self_hosted" || json.Unmarshal(value, &env.WorkspaceDirectory) != nil {
+				return nil, store.ErrInvalidInput
+			}
 		case "network":
 		case "files":
 			files, err := decodeInitialFiles(value)
@@ -60,6 +73,12 @@ func decodeHostedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 			return nil, errNetworkPolicy
 		}
 		env.Network = &network
+	}
+	if kind == "openai_hosted" && agentcapabilities.ValidateDirectories(env.CapabilityDirectories) != nil {
+		return nil, store.ErrInvalidInput
+	}
+	if kind == "self_hosted" && agentcapabilities.ValidateSourceDirectories([]string{env.WorkspaceDirectory}) != nil {
+		return nil, store.ErrInvalidInput
 	}
 	return env, nil
 }
@@ -95,7 +114,7 @@ func storedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	if json.Unmarshal(fields["type"], &kind) != nil {
 		return nil, store.ErrInvalidInput
 	}
-	if kind != "openai_hosted" {
+	if kind != "openai_hosted" && kind != "self_hosted" {
 		return decodeSessionEnvironment(raw)
 	}
 	// Confidential fields must never appear in the persisted public snapshot.
@@ -141,7 +160,7 @@ func storedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := decodeHostedEnvironment(base)
+	cfg, err := decodePreparedEnvironment(base)
 	if err != nil {
 		return nil, err
 	}

@@ -24,12 +24,12 @@ func (w *Worker) hintRuntimeWake(ctx context.Context, session store.Session) {
 	lookup, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	environment, err := w.admission.GetSessionEnvironment(lookup, session.TenantID, session.ID)
-	if err != nil {
+	if err != nil || environment.Initialization != "complete" {
 		return
 	}
 	owner, err := w.admission.GetRuntimeAllocation(lookup, session.TenantID, environment.ID)
 	if err != nil || owner.ProviderKey != config.InstallationID || owner.State != "running" ||
-		!owner.CreateSettled || owner.Initialization != "complete" || owner.SessionDeleted || owner.Expired {
+		!owner.CreateSettled || owner.SessionDeleted || owner.Expired {
 		return
 	}
 	switch owner.ComputePhase {

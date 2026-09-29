@@ -45,7 +45,7 @@ func (s EnvironmentSetup) Validate() error {
 }
 
 func (s EnvironmentSetup) validate(installed bool) error {
-	if validateEnvironmentSkills(s.Skills, installed) != nil || ValidateEnvironmentPlugins(s.Plugins) != nil || agentcapabilities.ValidateDirectories(s.CapabilityDirectories) != nil {
+	if validateEnvironmentSkills(s.Skills, installed) != nil || ValidateEnvironmentPlugins(s.Plugins) != nil || agentcapabilities.ValidateSourceDirectories(s.CapabilityDirectories) != nil {
 		return ErrInvalidInput
 	}
 	ordinary := s

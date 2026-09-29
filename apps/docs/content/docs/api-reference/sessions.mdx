@@ -123,29 +123,33 @@ _openapi:
           results alongside native workspace tools; HTTP MCP remains
           unsupported. Idle Sessions provision automatically; initial
           provisioning has no caller connection action. Network defaults to
-          enabled; disabled and restricted exact ASCII hostnames are supported.
-          Restricted policy requires 1–100 allowed domains. Unsupported hostname
-          forms and startup installations are rejected. Confidential env,
-          npm/Python packages and ordered setup commands use the shared
-          initialization lifecycle; requested network applies after setup.
-          System dependencies must be preinstalled in the sandbox image or
-          template, or on the host machine; packages.system is rejected. Initial
-          inline and tenant-owned file_id files freeze encrypted bytes before
-          provisioning, then install through the common Core lifecycle before
-          native execution or live Files access. With a template reference,
-          omitted/null files, env, packages and setup_commands inherit. Non-null
-          files and command lists replace; env overlays by key; each package
-          manager inherits on omission/null and otherwise replaces its list.
-          Empty lists clear their selected field. Tenant-owned
-          environment_template_id references inherit omitted/null network and
-          allow only narrowing overrides. Inline hosted network:null retains the
-          enabled default; updating a Template with network:null resets its
-          saved policy to enabled. Core freezes effective configuration;
-          template updates/deletion do not alter Session snapshots or
-          same-intent creation retries. Inline or tenant-owned skill_reference
-          Skills share initialization. Templates preserve
-          default/latest/explicit selectors; Session creation freezes concrete
-          metadata and encrypted content atomically. Skill, Plugin and
+          enabled; disabled and restricted policies reject before compute
+          allocation because the current Runtime cannot enforce them. The
+          x_agents_core.environment extension accepts common preparation fields
+          for either hosted or self-hosted placement: environment_template_id,
+          files, env, packages, setup_commands, skills, plugins and
+          capability_directories. Duplicate fields in environment and the
+          extension reject. Confidential env, npm/Python packages and ordered
+          setup commands use the same Environment-owned initialization
+          lifecycle; compute allocation does not own preparation. Unknown side
+          effects are not replayed after disconnect or restart. System
+          dependencies must be preinstalled in the sandbox image or template, or
+          on the host machine; packages.system is rejected. Initial inline and
+          tenant-owned file_id files freeze encrypted bytes before provisioning,
+          then install through the common Core lifecycle before native execution
+          or live Files access. With a template reference, omitted/null files,
+          env, packages and setup_commands inherit. Non-null files and command
+          lists replace; env overlays by key; each package manager inherits on
+          omission/null and otherwise replaces its list. Empty lists clear their
+          selected field. Tenant-owned environment_template_id references
+          inherit omitted/null network and allow only narrowing overrides.
+          Inline hosted network:null retains the enabled default; updating a
+          Template with network:null resets its saved policy to enabled. Core
+          freezes effective configuration; template updates/deletion do not
+          alter Session snapshots or same-intent creation retries. Inline or
+          tenant-owned skill_reference Skills share initialization. Templates
+          preserve default/latest/explicit selectors; Session creation freezes
+          concrete metadata and encrypted content atomically. Skill, Plugin and
           capability-directory list omission/null inherit; a non-null list
           replaces, including empty-list clearing. Omitted/null Skill version
           selectors resolve the default version. Source deletion/default updates

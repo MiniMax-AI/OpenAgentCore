@@ -51,8 +51,8 @@ func TestHostedProvisioningFailureSessionProjection(t *testing.T) {
 	}
 	session = environmentSession()
 	session.EnvironmentFailure = &store.EnvironmentFailure{Reason: hostedFailureReason, FailedAt: failedAt}
-	if _, err := sessionResponse(session, environmentOrigin); err == nil {
-		t.Fatal("self-hosted Session accepted a hosted provisioning failure")
+	if value, err := sessionResponse(session, environmentOrigin); err != nil || value.Status != "failed" || value.Error == nil || *value.Error != hostedFailureReason {
+		t.Fatal("self-hosted preparation failure lost its common projection", value, err)
 	}
 }
 

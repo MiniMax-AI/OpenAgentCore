@@ -15,6 +15,10 @@ import (
 // Validate the reference and inline shape without looking up mutable resources.
 // Caller intent remains available before any reference is resolved.
 func decodeTemplateEnvironment(raw json.RawMessage) (*v1.Environment, string, json.RawMessage, error) {
+	return decodePreparationTemplate(raw, false)
+}
+
+func decodePreparationTemplate(raw json.RawMessage, extension bool) (*v1.Environment, string, json.RawMessage, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
 		return nil, "", nil, store.ErrInvalidInput
@@ -22,10 +26,15 @@ func decodeTemplateEnvironment(raw json.RawMessage) (*v1.Environment, string, js
 	reference, supplied := fields["environment_template_id"]
 	if !supplied {
 		environment, err := decodeSessionEnvironment(raw)
+		var kind string
+		_ = json.Unmarshal(fields["type"], &kind)
+		if extension && kind != "none" {
+			environment, err = decodePreparedEnvironment(raw)
+		}
 		return environment, "", nil, err
 	}
 	var id, kind string
-	if json.Unmarshal(reference, &id) != nil || id == "" || json.Unmarshal(fields["type"], &kind) != nil || kind != "openai_hosted" {
+	if json.Unmarshal(reference, &id) != nil || id == "" || json.Unmarshal(fields["type"], &kind) != nil || (kind != "openai_hosted" && !(extension && kind == "self_hosted")) {
 		return nil, "", nil, store.ErrInvalidInput
 	}
 	delete(fields, "environment_template_id")
@@ -33,7 +42,7 @@ func decodeTemplateEnvironment(raw json.RawMessage) (*v1.Environment, string, js
 	if err != nil {
 		return nil, "", nil, err
 	}
-	environment, err := decodeHostedEnvironment(inline)
+	environment, err := decodePreparedEnvironment(inline)
 	return environment, id, raw, err
 }
 
@@ -48,6 +57,9 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(input.templateEnvironment, &fields) != nil {
 		return store.ErrInvalidInput
+	}
+	if input.Environment.Type == "self_hosted" && template.NetworkAccess != "enabled" {
+		return &fieldError{param: "x_agents_core.environment.environment_template_id", message: "This template requires a managed network policy; user-managed machines do not enforce it."}
 	}
 	if !templateFieldOverride(fields, "network") {
 		input.Environment.Network = &v1.EnvironmentNetworkInput{Access: template.NetworkAccess, AllowedDomains: append([]string{}, template.AllowedDomains...)}
@@ -113,7 +125,7 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	input.Environment.Packages = &packages
 	input.initialFiles = files
 	input.Environment.Files = initialFileResponse(files)
-	// Runtime sees only the effective ordinary hosted configuration.
+	// Runtime sees only the effective preparation snapshot.
 	return nil
 }
 

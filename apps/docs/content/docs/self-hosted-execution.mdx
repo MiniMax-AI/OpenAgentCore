@@ -75,10 +75,28 @@ environment = {
 
 Core accepts absolute Unix, Windows drive and UNC source paths without checking
 its own filesystem. Runtime validates them using the executor host's path syntax.
-Populate these directories before first execution. They are ordinary paths visible
+Populate these directories before connecting the Runtime. They are ordinary paths visible
 to that process; naming a directory does not mount it or create a sandbox.
-Self-hosted public input accepts local directories, not managed Skill/Plugin
-archives or hosted Templates.
+Use `x_agents_core.environment` for the same project-owned Skills, Plugin archives,
+files, dependencies, setup commands or Template used by a managed Session:
+
+```python
+session = client.beta.agents.sessions.create(
+    agent_id=agent_id,
+    environment=environment,
+    extra_body={"x_agents_core": {
+        "model_provider": model_provider,
+        "environment": {"environment_template_id": template_id},
+    }},
+)
+```
+
+The same extension works with `environment={"type": "openai_hosted"}`. Do not
+repeat a field in both `environment` and the extension. The
+[preparation contract](/environments-and-files#runtime-capability-preparation)
+lists fields, merge rules and failure semantics. Your machine needs the selected
+Harness and any required system dependencies; setup uses your account permissions.
+Deployment model keys are never sent automatically to a user-managed machine.
 
 Runtime snapshots sources before native execution and uses the same parser and
 `installed.json` format as managed bundles to supply Skills and Plugin MCP.

@@ -78,7 +78,10 @@ retention, tells roughly when Core reclaims it.
 
 The official `openai_hosted` discriminator means hosting by this independent Core
 service, using its configured hosted Provider. Keep the public value unchanged; a product-named hosted value is not
-a new API type. Public Environment Templates apply only to this hosted path.
+a new API type. Both placements resolve the same Environment Templates: hosted
+requests use the official field, and self-hosted requests use
+`x_agents_core.environment.environment_template_id`. See
+[Environment preparation](environments.md) for the shared snapshot contract.
 E2B onboarding follows the application-managed `self_hosted` resource workflow:
 the application owns sandbox provisioning and cleanup, and our daemon connects
 with the returned Environment ID, unchanged `remote_url` and scoped environment

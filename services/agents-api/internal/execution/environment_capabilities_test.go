@@ -25,8 +25,6 @@ func TestSelfHostedCapabilitySourcesAreFrozenAndStrict(t *testing.T) {
 		`{"type":"self_hosted","workspace_directory":"/a/../b"}`,
 		`{"type":"self_hosted","workspace_directory":"relative"}`,
 		`{"type":"self_hosted","workspace_directory":"/work","capability_directories":["/a","/a"]}`,
-		`{"type":"self_hosted","workspace_directory":"/work","skills":[]}`,
-		`{"type":"self_hosted","workspace_directory":"/work","initialization":true}`,
 	} {
 		if LocalWorkspaceConfiguration([]byte(configuration)) {
 			t.Fatal("invalid self-hosted shape accepted", configuration)

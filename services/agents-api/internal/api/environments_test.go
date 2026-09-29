@@ -91,8 +91,8 @@ func TestEnvironmentResourceRejectsUnknownInventoryAndInvalidState(t *testing.T)
 		"hosted":              `{"type":"openai_hosted","env":{"SECRET":"private-canary"}}`,
 		"unclean directories": `{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":["/skills/../private"]}`,
 		"files":               `{"type":"self_hosted","workspace_directory":"/workspace","files":[{"data":"private-canary"}]}`,
-		"plugins":             `{"type":"self_hosted","workspace_directory":"/workspace","plugins":[]}`,
-		"skills":              `{"type":"self_hosted","workspace_directory":"/workspace","skills":[]}`,
+		"plugins":             `{"type":"self_hosted","workspace_directory":"/workspace","plugins":[{"name":"missing-identity"}]}`,
+		"skills":              `{"type":"self_hosted","workspace_directory":"/workspace","skills":[{"name":"missing-identity"}]}`,
 		"wrong type":          `{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":false}`,
 		"invalid":             `{"type":"self_hosted","workspace_directory":`,
 	} {

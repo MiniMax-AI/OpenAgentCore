@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-func TestSelfHostedPathsDoNotCreateManagedInitialization(t *testing.T) {
+func TestSelfHostedPathsUseCommonInitialization(t *testing.T) {
 	raw := json.RawMessage(`{"type":"self_hosted","workspace_directory":"/home/user/work","capability_directories":["/opt/skills","/home/user/plugins"]}`)
 	request, err := (decodedSessionRequest{Environment: raw}).validated()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !request.initialization.Empty() || request.Environment.WorkspaceDirectory != "/home/user/work" || len(request.Environment.CapabilityDirectories) != 2 {
-		t.Fatal("local selections became managed initialization", request.initialization, request.Environment)
+	if len(request.initialization.CapabilityDirectories) != len(request.Environment.CapabilityDirectories) || request.Environment.WorkspaceDirectory != "/home/user/work" || len(request.Environment.CapabilityDirectories) != 2 {
+		t.Fatal("local selections missing from common initialization", request.initialization, request.Environment)
 	}
 	for _, raw := range []string{
 		`{"type":"self_hosted","workspace_directory":"/a/../b"}`,
@@ -32,7 +32,7 @@ func TestSelfHostedSourcePathsArePlatformNeutral(t *testing.T) {
 	for _, directory := range []string{`C:\work`, `D:/skills`, `\\server\share\project`, `/Users/user/work`} {
 		raw, _ := json.Marshal(map[string]any{"type": "self_hosted", "workspace_directory": directory, "capability_directories": []string{directory}})
 		request, err := (decodedSessionRequest{Environment: raw}).validated()
-		if err != nil || request.Environment.WorkspaceDirectory != directory || !request.initialization.Empty() {
+		if err != nil || request.Environment.WorkspaceDirectory != directory || len(request.initialization.CapabilityDirectories) != len(request.Environment.CapabilityDirectories) {
 			t.Fatal("Core interpreted a Runtime source path", directory, err)
 		}
 	}

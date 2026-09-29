@@ -186,6 +186,9 @@ Two lifetimes stay separate:
 Closing a Session Executor does not release its allocation, destroy its
 Environment or delete its workspace; see
 [Executor and Turn lifetimes](docs/runtime-protocol.md#executor-and-turn-lifetimes).
+Environment preparation state belongs to the Environment, independently of any
+managed allocation. Both user-owned and managed machines use the same frozen
+preparation input and initializer; resource managers never run installation steps.
 Capability preparation follows [Environments](contracts/agents-api/environments.md#runtime-capability-preparation).
 The Runtime is not a sandbox; see
 [Runtime and outer isolation](docs/design-principles.md#runtime-and-outer-isolation).

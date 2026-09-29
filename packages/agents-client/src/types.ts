@@ -721,8 +721,27 @@ export interface TolerantSessionList {
   last_id: string | null;
 }
 
+/** Common preparation for both managed and user-owned Runtime locations. */
+export interface EnvironmentCapabilityArchiveInput {
+  type: "inline";
+  name: string;
+  description: string;
+  source: { type: "base64"; media_type: "application/zip"; data: string };
+}
+
+export interface EnvironmentPreparationInput {
+  environment_template_id?: string;
+  env?: Record<string, string> | null;
+  files?: EnvironmentFileCreateInput[] | null;
+  packages?: { npm?: string[] | null; python?: string[] | null } | null;
+  setup_commands?: { command: string; cwd?: string }[] | null;
+  skills?: (EnvironmentCapabilityArchiveInput | { type: "skill_reference"; skill_id: string; version?: string | null })[] | null;
+  plugins?: EnvironmentCapabilityArchiveInput[] | null;
+  capability_directories?: string[] | null;
+}
+
 export interface CreateSessionInput {
-  x_agents_core?: { model_provider?: ModelProviderInput | null; harness_config?: HarnessConfig };
+  x_agents_core?: { model_provider?: ModelProviderInput | null; harness_config?: HarnessConfig; environment?: EnvironmentPreparationInput };
   agent_id?: string;
   agent?: InlineAgentInput;
   environment: AgentEnvironmentInput;

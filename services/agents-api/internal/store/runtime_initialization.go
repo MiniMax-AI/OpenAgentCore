@@ -17,20 +17,8 @@ func (s *Store) requireInitializedEnvironment(ctx context.Context, tenant, sessi
 	if err != nil {
 		return err
 	}
-	if !ready.Valid || !ready.Bool {
+	if !ready {
 		return ErrNotFound
 	}
 	return nil
-}
-
-func (s *Store) ClaimRuntimeInitialization(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {
-	return s.mutateRuntimeAllocation(ctx, owner, true, func(ctx context.Context, q *sqlc.Queries, row sqlc.RuntimeAllocation) (sqlc.RuntimeAllocation, error) {
-		return q.ClaimRuntimeInitialization(ctx, row.ID)
-	})
-}
-
-func (s *Store) CompleteRuntimeInitialization(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {
-	return s.mutateRuntimeAllocation(ctx, owner, true, func(ctx context.Context, q *sqlc.Queries, row sqlc.RuntimeAllocation) (sqlc.RuntimeAllocation, error) {
-		return q.CompleteRuntimeInitialization(ctx, row.ID)
-	})
 }

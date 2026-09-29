@@ -113,8 +113,8 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 				f.provider.mu.Lock()
 				restores := f.provider.restores
 				f.provider.mu.Unlock()
-				state := fmt.Sprintf("wake=%s/%s err=%v; deleted=%s/%s err=%v; initialized=%s/%s/%s err=%v; restores=%d writes=%d blocked_returns=%d", wake.State, wake.ComputePhase, e1, deleted.State, deleted.ComputePhase, e2, initialized.State, initialized.Initialization, initialized.ComputePhase, e3, restores, f.provider.writes.Load(), f.provider.returned.Load())
-				return e1 == nil && e2 == nil && e3 == nil && wake.ComputePhase == "running" && deleted.State == "released" && initialized.Initialization == "complete" && initialized.ComputePhase == "running", state
+				state := fmt.Sprintf("wake=%s/%s err=%v; deleted=%s/%s err=%v; initialized=%s/%s/%s err=%v; restores=%d writes=%d blocked_returns=%d", wake.State, wake.ComputePhase, e1, deleted.State, deleted.ComputePhase, e2, initialized.State, initializationState(t, f.store, initialized.TenantID, initialized.EnvironmentID), initialized.ComputePhase, e3, restores, f.provider.writes.Load(), f.provider.returned.Load())
+				return e1 == nil && e2 == nil && e3 == nil && wake.ComputePhase == "running" && deleted.State == "released" && initializationState(t, f.store, initialized.TenantID, initialized.EnvironmentID) == "complete" && initialized.ComputePhase == "running", state
 			})
 			if f.provider.returned.Load() != 0 || f.provider.writes.Load() != 1 {
 				t.Fatalf("A returned early or initialization replayed: returned=%d writes=%d", f.provider.returned.Load(), f.provider.writes.Load())

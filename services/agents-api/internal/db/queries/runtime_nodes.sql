@@ -77,7 +77,7 @@ WHERE environment_id IN(SELECT id FROM environments WHERE session_id=$1)
 AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id);
 
 -- name: ListNodeRuntimeAllocations :many
-SELECT a.id,a.node_id,a.deployment_generation,a.observation_error,a.state,a.compute_phase,a.compute_phase_changed_at,a.initialization,a.created_at,a.environment_id,e.session_id,s.tenant_id
+SELECT a.id,a.node_id,a.deployment_generation,a.observation_error,a.state,a.compute_phase,a.compute_phase_changed_at,e.initialization,a.created_at,a.environment_id,e.session_id,s.tenant_id
 FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN sessions s ON s.id=e.session_id
 WHERE a.node_id=$1 AND a.state<>'released' ORDER BY a.created_at,a.id LIMIT 1000;
 

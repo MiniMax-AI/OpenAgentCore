@@ -160,6 +160,9 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		err error
 	}
 	completed := make(chan completion, w.executionConcurrency())
+	preparationDone := make(chan error, 1)
+	running.Add(1)
+	go func() { defer running.Done(); preparationDone <- w.runEnvironmentInitializations(ctx) }()
 	lifecycleDone := make(chan error, 1)
 	if w.runtimes != nil {
 		running.Add(1)
@@ -192,6 +195,8 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-preparationDone:
+			return err
 		case err := <-lifecycleDone:
 			return err
 		case request := <-w.fileWrites:

@@ -101,7 +101,7 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 	// A hosted provisioning failure is terminal and supersedes the settled input
 	// activity: the Session reports its safe reason and failure time.
 	if failure := session.EnvironmentFailure; failure != nil {
-		if cfg.Environment.Type != "openai_hosted" {
+		if cfg.Environment.Type != "openai_hosted" && cfg.Environment.Type != "self_hosted" {
 			return v1.Session{}, errors.New("unsupported stored environment failure")
 		}
 		reason := failure.Reason

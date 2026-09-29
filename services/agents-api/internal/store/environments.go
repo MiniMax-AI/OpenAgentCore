@@ -16,12 +16,13 @@ import (
 
 // Environment retains execution ownership; its configuration is an internal snapshot, not a public response.
 type Environment struct {
-	ID            string
-	SessionID     string
-	TenantID      string
-	Status        string
-	CreatedAt     time.Time
-	Configuration json.RawMessage
+	Initialization string
+	ID             string
+	SessionID      string
+	TenantID       string
+	Status         string
+	CreatedAt      time.Time
+	Configuration  json.RawMessage
 }
 
 func createSessionEnvironment(ctx context.Context, q *sqlc.Queries, session sqlc.Session) error {
@@ -83,6 +84,6 @@ func environmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration 
 	return Environment{
 		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(),
 		TenantID: uuid.UUID(tenant.Bytes).String(), Status: row.Status,
-		CreatedAt: row.CreatedAt.Time, Configuration: configuration,
+		Initialization: row.Initialization, CreatedAt: row.CreatedAt.Time, Configuration: configuration,
 	}, nil
 }

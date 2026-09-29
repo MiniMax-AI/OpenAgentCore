@@ -9,7 +9,9 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
@@ -35,7 +37,7 @@ func (p *initializingProvider) RunCommand(ctx context.Context, r sandbox.Referen
 	return p.initializationPeer.RunCommand(ctx, r, c)
 }
 
-func TestManagedInitialFilesGateFairnessCompletionAndRestart(t *testing.T) {
+func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 	for _, mode := range []string{"complete", "restart", "uncertain", "setup-complete", "setup-restart", "setup-uncertain"} {
 		t.Run(mode, func(t *testing.T) {
 			setupOnly := strings.HasPrefix(mode, "setup-")
@@ -62,106 +64,74 @@ func TestManagedInitialFilesGateFairnessCompletionAndRestart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			p := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, initializationPeer: initializationPeer{deferred: true}}
-			key := uuid.NewString()
-			w, stop := managedWorker(t, s, key, p)
-			owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
-			if err != nil || owner.Initialization != "pending" {
-				t.Fatal("initialization ownership", owner, err)
-			}
-			credential, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID)
-			if err != nil || !ok || credential.ID != owner.DeviceID {
-				t.Fatal("pending initialization blocks daemon authentication")
-			}
-			targetCredential := p.credential
-			lastStepGets := 0
-			p.apply = func(_ proto.RuntimePreparePayload, _ []byte) proto.RuntimePrepareResultPayload {
-				p.mu.Lock()
-				defer p.mu.Unlock()
-				if p.gets-lastStepGets < 33 {
-					t.Fatal("initialization advanced before a full allocation scan", p.gets-lastStepGets)
+			if mode == "restart" {
+				if _, err := pool.Exec(t.Context(), "UPDATE environments SET initialization='running' WHERE id=$1", env.ID); err != nil {
+					t.Fatal(err)
 				}
-				lastStepGets = p.gets
+			}
+			p := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, initializationPeer: initializationPeer{deferred: true}}
+			p.apply = func(_ proto.RuntimePreparePayload, _ []byte) proto.RuntimePrepareResultPayload {
 				if _, err := s.GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, store.ErrNotFound) {
-					t.Fatal("pending file access", err)
+					t.Error("premature file access", err)
 				}
 				if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, store.ErrNotFound) {
-					t.Fatal("premature native preparation", err)
+					t.Error("premature execution", err)
 				}
 				if mode == "uncertain" {
 					return proto.RuntimePrepareResultPayload{Outcome: "unknown", ErrorCode: "runtime_preparation_unconfirmed"}
 				}
 				return completedInitialization(proto.RuntimePreparePayload{}, nil)
 			}
-			// A full page of other allocations is serviced between initialization steps.
-			for range 32 {
-				otherTenant, _, otherEnv := managedSession(t, s)
-				if _, err := w.ProvisionEnvironment(t.Context(), otherTenant, otherEnv.ID, key); err != nil {
-					t.Fatal(err)
+			key := uuid.NewString()
+			w, stop := managedWorkerMode(t, s, key, p, false, true)
+			if mode == "restart" {
+				awaitInitialization(t, s, tenant, env.ID, "failed")
+				if p.writes.Load() != 0 {
+					t.Fatal("recovered unknown operation replayed")
 				}
+				return
 			}
-			// A missing socket must leave every kind of initialization unclaimed.
-			for range 3 {
-				if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
-					t.Fatal(err)
-				}
-			}
-			pending, err := s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
-			if err != nil || pending.Initialization != "pending" || p.writes.Load() != 0 {
-				t.Fatal("missing peer claimed initialization", pending, err)
-			}
-			p.deferred = false
-			if err := p.connect(sandbox.Bootstrap{DeviceID: owner.DeviceID, Credential: targetCredential}); err != nil {
+			owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
+			if err != nil {
 				t.Fatal(err)
 			}
-			for n := 0; int(p.writes.Load()) == 0 && n < 100; n++ {
-				if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
-					t.Fatal(err)
-				}
+			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
+				t.Fatal("preparation blocked authentication", err)
 			}
-			if int(p.writes.Load()) != 1 {
-				t.Fatal("initialization did not perform one bounded file step", int(p.writes.Load()))
+			time.Sleep(350 * time.Millisecond)
+			if initializationState(t, s, tenant, env.ID) != "pending" || p.writes.Load() != 0 {
+				t.Fatal("missing socket consumed initialization")
 			}
-			afterFirst := p.gets
-			if mode == "restart" {
-				stop()
-				w, _ = managedWorker(t, s, key, p)
+			p.deferred = false
+			if err := p.connect(sandbox.Bootstrap{DeviceID: owner.DeviceID, Credential: p.credential}); err != nil {
+				t.Fatal(err)
 			}
+			want := "complete"
+			if mode == "uncertain" {
+				want = "failed"
+			}
+			awaitInitialization(t, s, tenant, env.ID, want)
 			if mode == "complete" {
-				for n := 0; int(p.writes.Load()) < expectedSteps && n < 100; n++ {
-					if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
-						t.Fatal(err)
-					}
-				}
-				got, err := s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
-				if err != nil || got.Initialization != "complete" || int(p.writes.Load()) != expectedSteps || p.gets <= afterFirst {
-					t.Fatal("completion or maintenance", got, err, int(p.writes.Load()))
+				if int(p.writes.Load()) != expectedSteps {
+					t.Fatal("missing operations", p.writes.Load())
 				}
 				if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); err != nil {
-					t.Fatal("ready execution still blocked", err)
+					t.Fatal("completed preparation blocked", err)
 				}
 				stop()
-				w, _ = managedWorker(t, s, key, p)
-				for range 4 {
-					if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
-						t.Fatal(err)
-					}
-				}
+				_, _ = managedWorkerMode(t, s, key, p, false, true)
+				time.Sleep(350 * time.Millisecond)
 				if int(p.writes.Load()) != expectedSteps {
-					t.Fatal("completed initialization replayed")
+					t.Fatal("completed preparation replayed")
 				}
-			} else {
-				reconcileManagedState(t, w, s, tenant, env.ID, "released")
-				if int(p.writes.Load()) != 1 || p.kills != 1 {
-					t.Fatal("uncertain initialization replayed or released twice", int(p.writes.Load()), p.kills)
-				}
-				failed, err := s.GetEnvironment(t.Context(), tenant, env.ID)
-				if err != nil || failed.Status != "failed" {
-					t.Fatal("failed initialization exposed", failed, err)
-				}
+			} else if p.writes.Load() != 1 {
+				t.Fatal("unknown operation replayed", p.writes.Load())
 			}
-			if p.commandCalls.Load() != 0 {
-				t.Fatal("initialization invoked Provider.RunCommand")
+			p.mu.Lock()
+			kills := p.kills
+			p.mu.Unlock()
+			if kills != 0 || p.commandCalls.Load() != 0 {
+				t.Fatal("preparation changed compute lifecycle", kills, p.commandCalls.Load())
 			}
 		})
 	}
@@ -191,6 +161,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	})
 	provider := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
 	var actions []string
+	var actionsMu sync.Mutex
 	provider.apply = func(request proto.RuntimePreparePayload, data []byte) proto.RuntimePrepareResultPayload {
 		if request.SessionID != session.ID || request.EnvironmentID != environment.ID {
 			t.Error("Runtime identity changed")
@@ -202,32 +173,25 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 		if action == "file" && !bytes.Equal(data, fileBody) {
 			t.Error("initial bytes changed")
 		}
+		actionsMu.Lock()
 		actions = append(actions, action)
+		actionsMu.Unlock()
 		return completedInitialization(request, data)
 	}
 	key := uuid.NewString()
-	worker, _ := managedWorker(t, s, key, provider)
+	worker, _ := managedWorkerMode(t, s, key, provider, false, true)
 	if _, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}
-	for range 30 {
-		if err := worker.ReconcileManagedRuntimes(t.Context()); err != nil {
-			t.Fatal(err)
-		}
-		allocation, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if allocation.Initialization == "complete" {
-			break
-		}
-	}
+	awaitInitialization(t, s, tenant, environment.ID, "complete")
+	actionsMu.Lock()
+	defer actionsMu.Unlock()
 	expected := []string{"file", "configure", "skill", "plugin", "npm", "python", "setup", "finalize"}
 	if !reflect.DeepEqual(actions, expected) || provider.commandCalls.Load() != 0 {
 		t.Fatal("typed ordering or provider isolation", actions, provider.commandCalls.Load())
 	}
 	allocation, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
-	if err != nil || allocation.Initialization != "complete" {
+	if err != nil || initializationState(t, s, allocation.TenantID, allocation.EnvironmentID) != "complete" {
 		t.Fatal("initialization incomplete", allocation, err)
 	}
 }

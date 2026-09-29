@@ -142,6 +142,17 @@ Exporter component checks do not establish public Artifact compatibility.
 
 ## Dispatch and pending input
 
+Environment initialization is owned by the leased Worker's common preparation
+scheduler, independently of any RuntimeAllocation. Both managed and enrolled
+connections use the same frozen files/setup/capability snapshots and typed Runtime
+operations. Preparation has bounded concurrency separate from Turn scheduling;
+a blocked Runtime must not block resource cleanup or other connections. Check
+Harness availability before installing. A persisted running initialization whose
+owner is lost fails without replaying side effects. Completion requires the same
+authorized Environment/device binding. Failure settles pending input and preserves
+compute ownership and user files. Connection observations do not imply completion.
+
+
 Successful input commits send a coalesced hint to the existing Worker scheduler.
 The scheduler keeps lease, capacity, cursor fairness and per-Session ownership
 checks; a hint does not admit work itself. If capacity is occupied, preserve one
@@ -1394,7 +1405,7 @@ unconfirmed resources; keep these separate from the lifecycle and do not invent
 a successful running observation after a host restart.
 
 Managed lifecycle state is owned by one serial worker per registered node:
-its gate, allocation and pending cursors, connections, initialization progress and
+its gate, allocation and pending cursors, connections and
 wake hints are not shared with other nodes. A thin coordinator discovers nodes
 and owns worker shutdown; it never holds its map mutex during database, provider
 or wait operations. Each worker advances independently, including when another

@@ -511,3 +511,14 @@ healthy continuation after cancellation. The Claude Go adapter runs them against
 its controlled native subprocess fixture. New adapters can call the same assertions;
 no optional feature is implied. Native failures, uncertain cleanup and exact-history
 recovery still require the adapter's fault and real-provider acceptance tests.
+
+### Environment preparation ownership
+
+Core tracks initialization on the Environment, independently of a managed
+allocation. After authentication, both managed and user-owned Runtime connections
+receive the same `runtime_prepare` operations and resource snapshots. Core never
+replays a running initialization whose owner or confirmation was lost. Preparation
+failure settles Environment input without destroying the machine or workspace.
+The public `connected` state describes transport; initialization completion and
+native executor readiness remain separate prerequisites for execution. Input
+sources and frozen metadata follow the [Environment contract](../contracts/agents-api/environments.md#runtime-capability-preparation).

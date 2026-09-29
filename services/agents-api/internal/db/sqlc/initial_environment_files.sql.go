@@ -11,76 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const claimRuntimeInitialization = `-- name: ClaimRuntimeInitialization :one
-UPDATE runtime_allocations SET initialization = 'running'
-WHERE id = $1 AND initialization = 'pending' AND state = 'running' AND create_settled
-AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour')
-RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, initialization, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
-`
-
-func (q *Queries) ClaimRuntimeInitialization(ctx context.Context, id pgtype.UUID) (RuntimeAllocation, error) {
-	row := q.db.QueryRow(ctx, claimRuntimeInitialization, id)
-	var i RuntimeAllocation
-	err := row.Scan(
-		&i.ID,
-		&i.EnvironmentID,
-		&i.DeviceID,
-		&i.ProviderKey,
-		&i.State,
-		&i.CreateSettled,
-		&i.CreatedAt,
-		&i.KeptAt,
-		&i.ReleasedAt,
-		&i.Initialization,
-		&i.ComputePhase,
-		&i.ComputeRevision,
-		&i.ComputeState,
-		&i.ComputeActivityAt,
-		&i.ComputeWakeRequested,
-		&i.ComputeRetainedUntil,
-		&i.NodeID,
-		&i.ObservationError,
-		&i.ComputePhaseChangedAt,
-		&i.DeploymentGeneration,
-	)
-	return i, err
-}
-
-const completeRuntimeInitialization = `-- name: CompleteRuntimeInitialization :one
-UPDATE runtime_allocations SET initialization = 'complete'
-WHERE id = $1 AND initialization = 'running' AND state = 'running' AND create_settled
-AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour')
-RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, initialization, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
-`
-
-func (q *Queries) CompleteRuntimeInitialization(ctx context.Context, id pgtype.UUID) (RuntimeAllocation, error) {
-	row := q.db.QueryRow(ctx, completeRuntimeInitialization, id)
-	var i RuntimeAllocation
-	err := row.Scan(
-		&i.ID,
-		&i.EnvironmentID,
-		&i.DeviceID,
-		&i.ProviderKey,
-		&i.State,
-		&i.CreateSettled,
-		&i.CreatedAt,
-		&i.KeptAt,
-		&i.ReleasedAt,
-		&i.Initialization,
-		&i.ComputePhase,
-		&i.ComputeRevision,
-		&i.ComputeState,
-		&i.ComputeActivityAt,
-		&i.ComputeWakeRequested,
-		&i.ComputeRetainedUntil,
-		&i.NodeID,
-		&i.ObservationError,
-		&i.ComputePhaseChangedAt,
-		&i.DeploymentGeneration,
-	)
-	return i, err
-}
-
 const createInitialEnvironmentFile = `-- name: CreateInitialEnvironmentFile :exec
 INSERT INTO initial_environment_files (id, session_id, position, path, size_bytes, contents)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -133,13 +63,7 @@ func (q *Queries) GetInitialEnvironmentFile(ctx context.Context, arg GetInitialE
 }
 
 const getSessionInitializationReady = `-- name: GetSessionInitializationReady :one
-SELECT NOT EXISTS (
- SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
- WHERE e.session_id = s.id AND a.initialization <> 'complete'
-) AND ((NOT EXISTS (SELECT 1 FROM initial_environment_files f WHERE f.session_id = s.id)
- AND NOT EXISTS (SELECT 1 FROM environment_setups f WHERE f.session_id = s.id))
- OR EXISTS (SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
- WHERE e.session_id = s.id AND a.initialization = 'complete')) AS ready
+SELECT NOT EXISTS (SELECT 1 FROM environments e WHERE e.session_id = s.id AND e.initialization <> 'complete') AS ready
 FROM sessions s WHERE s.tenant_id = $1 AND s.id = $2
 `
 
@@ -148,9 +72,9 @@ type GetSessionInitializationReadyParams struct {
 	ID       pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) GetSessionInitializationReady(ctx context.Context, arg GetSessionInitializationReadyParams) (pgtype.Bool, error) {
+func (q *Queries) GetSessionInitializationReady(ctx context.Context, arg GetSessionInitializationReadyParams) (bool, error) {
 	row := q.db.QueryRow(ctx, getSessionInitializationReady, arg.TenantID, arg.ID)
-	var ready pgtype.Bool
+	var ready bool
 	err := row.Scan(&ready)
 	return ready, err
 }

@@ -96,7 +96,7 @@ def main():
             populated_files = [inline("/workspace/overlap.txt", "-inline-file"),
                                {"type": "file_id", "path": "/workspace/selected-source.txt", "file_id": source.id}]
             template_body = {
-                "name": "composition", "network": {"access": "disabled"}, "files": template_files,
+                "name": "composition", "network": {"access": "enabled"}, "files": template_files,
                 "env": {"TEMPLATE_ONLY": marker + "-template-env", "SHARED": marker + "-template-shared"},
                 "setup_commands": [{"command": "printf " + marker + "-template-command", "cwd": "/workspace"}],
                 "packages": packages,

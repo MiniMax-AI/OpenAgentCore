@@ -183,6 +183,11 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 	if err != nil {
 		return err
 	}
+	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true}}})
+	if err := conn.WriteJSON(heartbeat); err != nil {
+		conn.Close()
+		return err
+	}
 	p.mu.Lock()
 	p.peers[b.AllocationID] = conn
 	p.mu.Unlock()
