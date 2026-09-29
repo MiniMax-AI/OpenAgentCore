@@ -96,12 +96,15 @@ class UnixHTTP(http.client.HTTPConnection):
 
 
 def reload(root, document):
-    with closing(UnixHTTP(Path(root) / "ingress/admin/caddy.sock")) as client:
-        client.request("POST", "/load", document.encode(), {"Content-Type": "text/caddyfile"})
-        response = client.getresponse()
-        response.read(65536)
-        if response.status != 200:
-            raise RuntimeError("HTTPS gateway refused the configuration; inspect gateway logs and retry")
+    try:
+        with closing(UnixHTTP(Path(root) / "ingress/admin/caddy.sock")) as client:
+            client.request("POST", "/load", document.encode(), {"Content-Type": "text/caddyfile"})
+            response = client.getresponse()
+            response.read(65536)
+            if response.status != 200:
+                raise RuntimeError("HTTPS gateway refused the configuration; inspect gateway logs and retry")
+    except (OSError, http.client.HTTPException):
+        raise RuntimeError("HTTPS gateway is unavailable; inspect gateway logs and retry") from None
 
 
 def services(root, config, state, bind):

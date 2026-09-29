@@ -24,6 +24,7 @@ class DomainTests(unittest.TestCase):
         self.root = Path(work.name) / "core"
         self.bundle, _ = make_bundle(Path(work.name) / "bundle", MANIFEST)
         self.host = FakeHost(self)
+        self.reload_gateway = ingress_config.reload
         for owner, name, replacement in (
             (ingress_config, "preflight", mock.Mock(return_value={"docker_socket": "/var/run/docker.sock", "docker_gid": 999})),
             (ingress_config, "reload", mock.Mock()),
@@ -142,6 +143,28 @@ class DomainTests(unittest.TestCase):
                 self.assertEqual(base, "http://127.0.0.1:8091")
                 self.assertTrue(answered)
                 self.assertEqual(self.host.requests, [base + "/core/v1/installation"])
+
+    def test_gateway_disconnect_uses_the_existing_apply_rollback(self):
+        before = (self.root / "generated/core.env").read_bytes()
+        config = oac_cli.load_config(self.root)
+        config["log"]["level"] = "debug"
+        oac_cli.write_private(self.root / "config.json", json.dumps(config))
+        ingress_config.reload.side_effect = self.reload_gateway
+        with mock.patch.object(ingress_config, "UnixHTTP") as connection:
+            connection.return_value.request.side_effect = [ConnectionRefusedError(), None]
+            connection.return_value.getresponse.return_value.status = 200
+            with self.assertRaisesRegex(oac_cli.OacError, "previous generated files were restored"):
+                oac_cli.apply(self.root, interactive=False, out=lambda _: None)
+        self.assertEqual((self.root / "generated/core.env").read_bytes(), before)
+        self.assertTrue(self.host.core_listening(8091))
+
+    def test_status_requires_both_managed_ingress_services(self):
+        for name in ("gateway", "installation"):
+            with self.subTest(service=name):
+                self.host.containers[name]["running"] = False
+                with self.assertRaisesRegex(oac_cli.OacError, "services are unavailable"):
+                    oac_cli.status(self.root, out=lambda _: None)
+                self.host.containers[name]["running"] = True
 
     def test_untrusted_hostnames_never_reach_gateway(self):
         for value in ("https://example.com", "example.com:8443", "127.0.0.1", "localhost", "a.local", "a.com\n}", None):

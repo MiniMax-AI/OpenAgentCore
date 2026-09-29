@@ -673,6 +673,8 @@ def status(root, out=print):
             line += " (runs with other inputs than config.json renders; run oac apply)"
         out(line)
     required = set(config_model.SERVICES[mode])
+    if ingress_config.enabled(config):
+        required.update(("gateway", "installation"))
     healthy = all(actual.get(name, {}).get("running") and actual[name]["health"] in ("", "healthy") for name in required)
     if mode != "web-only":
         core_ok = http(core_base(config) + "/healthz")[0] == 200
