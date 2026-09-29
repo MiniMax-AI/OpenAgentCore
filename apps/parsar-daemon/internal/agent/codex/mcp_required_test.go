@@ -26,7 +26,7 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 				req.AgentSessionID = "fixture-native-thread"
 				method = "thread/resume"
 			}
-			declarations, err := publicMCPHTTPServers(req)
+			declarations, _, err := runtimeMCPServers(req)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -52,7 +52,7 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
   const deferred = (request.functions as Start["functions"])?.some(tool => tool.defer_loading) ?? false;
   if ((request.tool_search !== undefined && typeof request.tool_search !== "boolean") ||
       (!!request.tool_search !== deferred) ||
-      (request.tool_search && (request.subagents || request.workspace || request.mcp_http_servers !== undefined || request.output_format))) throw new Error("invalid_request");
+      (request.tool_search && (request.subagents || request.mcp_http_servers !== undefined || request.output_format))) throw new Error("invalid_request");
   if (request.subagents !== undefined) {
     const value = request.subagents as Record<string, unknown>;
     if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1 ||
@@ -69,7 +69,7 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
   parseHTTPServers(request.mcp_http_servers);
   const workspace = parseWorkspace(request.workspace, request.cwd);
   if (request.subagents && workspace?.mcp?.length) throw new Error("invalid_request");
-  if (request.output_format && (workspace?.mcp?.length || workspace?.skills?.length)) throw new Error("invalid_request");
+  if ((request.output_format || request.tool_search) && (workspace?.mcp?.length || workspace?.skills?.length)) throw new Error("invalid_request");
   if (request.require_history && !workspace) throw new Error("invalid_request");
   if ((workspace && "mcp_http_servers" in request) ||
       (request.type === "prepare" && !workspace)) throw new Error("invalid_request");

@@ -30,7 +30,8 @@ const (
 
 	bootstrapTimeout = 10 * time.Second
 
-	killTimeout = 3 * time.Second
+	// Allow the native process grace period and subsequent owner/pipe cleanup.
+	stopTimeout = 10 * time.Second
 
 	connectInlineURLEnv        = "OAC_RUNTIME_DAEMON_CONNECT_URL"
 	connectInlineTokenEnv      = "OAC_RUNTIME_DAEMON_CONNECT_TOKEN"
@@ -276,7 +277,7 @@ func spawnBackground(ctx context.Context, rc *runContext, profile string, argv [
 	}
 
 	if err := ctx.Err(); err != nil {
-		if stopErr := daemonize.StopPIDFile(pidPath, killTimeout); stopErr != nil {
+		if stopErr := daemonize.StopPIDFile(pidPath, stopTimeout); stopErr != nil {
 			return fmt.Errorf("connect: interrupted startup cleanup: %w", stopErr)
 		}
 		return err

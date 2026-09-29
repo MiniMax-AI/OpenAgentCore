@@ -8,14 +8,15 @@ the existing Agent/Session configuration resolution and immutable snapshot.
 ## Qualified execution profile
 
 Claude SDK supports object-root schemas with `environment:none` or Core-managed
-Docker `openai_hosted`, medium verbosity, `multi_agent.enabled=false` and optional
+Docker `openai_hosted` or user-managed `self_hosted`, medium verbosity, `multi_agent.enabled=false` and optional
 ordinary function tools returning text. Hosted execution uses the existing native
 workspace tools, preparation, Files and Artifacts. The native SDK remains
 responsible for its model/tool loop and schema validation. Codex and MiniMax
-structured-output execution, self-hosted/E2B execution, Skills/Plugins/capability
+structured-output execution, Skills/Plugins/capability
 directories (including inherited template contents), HTTP MCP, Subagent/tool-search
 combinations and schemas without an explicit object root are unqualified and
-explicitly rejected. These are implementation gaps, not a redefinition of the
+explicitly rejected. E2B uses the common execution path but has not been
+requalified in this change. These are implementation gaps, not a redefinition of the
 official protocol. An explicit non-object root type is an official protocol error
 on save and Session creation for every harness
 ([validation](official-semantics-alignment.md#agent-configuration-validation--september-23)).
@@ -68,7 +69,7 @@ preparation checks that bundle before native launch. These remain adapter readin
 features, not new Core lifecycle or public protocol variants.
 
 The current qualified path is Claude SDK, `environment:none` or Core-managed
-Docker `openai_hosted`, medium verbosity, single Agent, with optional ordinary
+Docker `openai_hosted` or `self_hosted`, medium verbosity, single Agent, with optional ordinary
 function tools and text results. The workspace uses its existing preparation and
 bypass execution profile with the SDK's configured `StructuredOutput` tool added to
 inventory and permission checks. Frozen schemas reach preparation before the
@@ -119,3 +120,6 @@ of complete protocol compatibility.
 The retained Codex provider/tool-chain failure is not reopened by Claude's native
 qualification. Its next attempt needs a concrete changed prerequisite; do not
 weaken assertions, rewrite model output or repeatedly sample until one run passes.
+
+Self-hosted Claude structured output and cold continuation use the same workspace
+adapter as managed execution. See [current qualification](environment-capabilities-qualification.md).

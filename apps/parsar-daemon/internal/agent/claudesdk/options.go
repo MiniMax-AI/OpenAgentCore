@@ -71,7 +71,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		return startRequest{}, nil, err
 	}
 	if req.ToolSearch {
-		if config.Workspace != nil || req.LocalEnvironment != nil || req.MCPHTTPServers != nil || !req.DisableSubagents || (req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil) {
+		if (req.LocalEnvironment != nil && (len(req.LocalEnvironment.Skills) != 0 || len(req.LocalEnvironment.MCP) != 0)) || req.MCPHTTPServers != nil || !req.DisableSubagents || (req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil) {
 			return fail("tool discovery requires the single-agent text/function profile")
 		}
 		start.ToolSearch = true
@@ -187,8 +187,17 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
 	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"), "DISABLE_TELEMETRY=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
-	var mcpEnv []string
-	start.MCPHTTPServers, mcpEnv = prepareMCPHTTP(req.MCPHTTPServers)
+	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
+	if err != nil {
+		return startRequest{}, nil, err
+	}
+	if req.MCPHTTPServers != nil {
+		servers := make([]mcpHTTPServer, 0, len(projectedMCP))
+		for _, server := range projectedMCP {
+			servers = append(servers, server.mcpHTTPServer)
+		}
+		start.MCPHTTPServers = &servers
+	}
 	env = append(env, mcpEnv...)
 	return start, env, nil
 }

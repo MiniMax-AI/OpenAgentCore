@@ -58,7 +58,7 @@ func TestMCPHTTPBearerRejectsInvalidTokensWithoutPersistence(t *testing.T) {
 	for _, token := range []string{"", "=", " has-space", "has-space ", "has space", "line\r\ninjection", "nul\x00byte", "opaque中文", "middle=padding", "punctuation:invalid"} {
 		servers := []proto.MCPHTTPServer{{ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
 		req := proto.PromptRequestPayload{AgentStateKey: "invalid-bearer", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
-		if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil || err.Error() != "codex: unsupported HTTPS MCP bearer credential" {
+		if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil || err.Error() != "invalid HTTPS MCP bearer credential" {
 			t.Fatal("invalid bearer value accepted or unsafe error returned")
 		}
 	}

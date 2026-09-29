@@ -3,6 +3,7 @@ package claudesdk
 import (
 	"fmt"
 
+	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
@@ -15,45 +16,34 @@ type environmentMCPServer struct {
 	Args    []string `json:"args,omitempty"`
 }
 
-func prepareEnvironmentMCP(environment *proto.LocalEnvironment) ([]environmentMCPServer, []string, error) {
-	if environment == nil || len(environment.MCP) == 0 {
-		return nil, nil, nil
-	}
-	if environment.NetworkAccess != "enabled" {
-		return nil, nil, fmt.Errorf("claudesdk: environment MCP requires enabled network")
+func prepareRuntimeMCP(req proto.PromptRequestPayload) ([]environmentMCPServer, []string, error) {
+	bindings, err := agent.ResolveMCPBindings(req)
+	if err != nil {
+		return nil, nil, err
 	}
 	var servers []environmentMCPServer
 	var env []string
-	labels := map[string]bool{}
-	for _, item := range environment.MCP {
-		declaration := item.Server
-		if !mcpLabel.MatchString(declaration.Name) || declaration.Name == "functions" || labels[declaration.Name] {
-			return nil, nil, fmt.Errorf("claudesdk: unsupported environment MCP identity")
+	for _, binding := range bindings {
+		if !mcpLabel.MatchString(binding.ServerLabel) || binding.ServerLabel == "functions" {
+			return nil, nil, fmt.Errorf("claudesdk: unsupported MCP identity")
 		}
-		labels[declaration.Name] = true
-		switch declaration.Type {
-		case "stdio":
-			command, args := localworkspace.MCPStdioCommand(item)
-			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: declaration.Name}, Command: command, Args: args})
-		case "http":
-			// The pinned native client expands literal headers again and forwards
-			// custom headers across origins. Do not reinterpret their public meaning.
-			if len(declaration.HTTPHeaders) != 0 {
-				return nil, nil, fmt.Errorf("claudesdk: environment MCP literal HTTP headers are not supported")
-			}
-			if declaration.BearerTokenEnvVar != "" && item.BearerToken == nil {
-				return nil, nil, fmt.Errorf("claudesdk: environment MCP credential unavailable")
-			}
-			http := []proto.MCPHTTPServer{{ServerLabel: declaration.Name, ServerURL: declaration.URL, BearerToken: item.BearerToken}}
-			if err := validateMCPServers(http); err != nil {
-				return nil, nil, err
-			}
-			projected, credentials := prepareMCPHTTP(&http)
-			servers = append(servers, environmentMCPServer{mcpHTTPServer: (*projected)[0]})
-			env = append(env, credentials...)
-		default:
-			return nil, nil, fmt.Errorf("claudesdk: unsupported environment MCP transport")
+		if binding.Stdio != nil {
+			command, args := localworkspace.MCPStdioCommand(*binding.Stdio)
+			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel}, Command: command, Args: args})
+			continue
 		}
+		// Native header interpolation and redirect behavior cannot preserve literal
+		// custom-header authority. Reject this unqualified combination explicitly.
+		if len(binding.HTTPHeaders) != 0 {
+			return nil, nil, fmt.Errorf("claudesdk: literal MCP HTTP headers are not supported")
+		}
+		declarations := []proto.MCPHTTPServer{{ServerLabel: binding.ServerLabel, ServerURL: binding.ServerURL, AllowedTools: binding.AllowedTools, Required: binding.Required, BearerToken: binding.BearerToken}}
+		if err := validateMCPServers(declarations); err != nil {
+			return nil, nil, err
+		}
+		projected, credentials := prepareMCPHTTP(&declarations)
+		servers = append(servers, environmentMCPServer{mcpHTTPServer: (*projected)[0]})
+		env = append(env, credentials...)
 	}
 	return servers, env, nil
 }

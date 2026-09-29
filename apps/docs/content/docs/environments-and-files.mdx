@@ -641,17 +641,32 @@ initialized values override the selected declaration's variables. There is no
 Python sandbox launcher, mount policy, shell prefix or separate credential sandbox.
 Process groups and Windows Jobs own cancellation and descendant cleanup only.
 Claude composes MCP identity and observation with the same workspace profile;
-MiniMax keeps its existing supported transport qualification. A public capability
+MiniMax uses the same effective bindings for stdio and HTTP. A public capability
 advertisement must still match the installed engine's actual supported transport.
 
+Runtime resolves public HTTP declarations and installed Plugin MCP through
+`agent.ResolveMCPBindings` before adapter projection. Each transient binding
+retains its connection origin, transport, nullable tool allowlist, required flag,
+credential authority and installed stdio identity. Bindings are never persisted
+or logged. Duplicate identities and unavailable selected credentials reject.
+A service-origin request cannot silently become an Environment-origin connection;
+the existing public HTTP MCP profile remains service-origin `environment:none`.
+This internal consolidation does not qualify public `connection_origin=environment`.
+
 Environment-origin literal HTTP headers remain rejected for the pinned Claude
-client because its interpolation and cross-origin forwarding change their meaning.
-MiniMax accepts environment stdio only. Its adapter reads the existing Session-private
-native runtime-name registry for exact first-frame identities and cross-checks
-completed native results. Reuse existing observation and cancellation settlement;
-never fabricate a delayed start event, guess normalized identities or add a registry
-of our own. Its unqualified HTTP transport remains rejected.
-These mechanisms alone do not establish public MCP support or full compatibility.
+and MiniMax clients because their cross-origin forwarding cannot preserve header
+authority. MiniMax supports installed stdio and HTTP servers with anonymous or
+explicit user-selected HTTPS bearer authentication. ACP HTTP declarations remain
+Session-local native memory; tokens do not enter native configuration files or
+process arguments. Required initialization and tool allowlists are not exposed
+through the Plugin manifest, and public MiniMax MCP remains unqualified.
+MiniMax reads the existing Session-private native runtime-name registry for exact
+first-frame identities and cross-checks completed native results for both transports.
+Reuse existing observation and cancellation settlement; never fabricate a delayed
+start event, guess normalized identities or add a registry of our own.
+
+See [capability qualification](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-capabilities-qualification.md) for
+real model evidence and the remaining public-origin and image gaps.
 
 ## Contract inventory
 

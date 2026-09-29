@@ -17,16 +17,18 @@ loading belong to the harness adapter. Core retains the frozen definitions and
 existing public function calls, results and application receipts. The pinned Items
 union contains no tool-search Item; do not invent one.
 
-The first implementation is Claude SDK 0.3.269 / native 2.1.269, single Agent,
-`environment:none`, medium verbosity, object-root function schemas and text results.
+The implementation is Claude SDK 0.3.269 / native 2.1.269, single Agent,
+`environment:none` or a managed/user-owned workspace, medium verbosity, object-root
+function schemas and text results. Workspace tool discovery excludes Skills,
+Plugins and local capability directories; its ordinary native workspace tools remain available.
 It supports a mixture of eager and deferred application functions with text or
 previously qualified inline PNG/JPEG message inputs. The native MCP
 server marks eager definitions `anthropic/alwaysLoad:true`; deferred definitions use
-false and the adapter explicitly enables native ToolSearch. Only declared callbacks
-and ToolSearch are allowed. No search index, callback protocol, provider proxy or
+false and the adapter explicitly enables native ToolSearch. The function profile allows only declared callbacks and ToolSearch in addition
+to the selected workspace tools. No search index, callback protocol, provider proxy or
 model loop is added to production.
 
-Search-only, missing-search, workspace, HTTP MCP, structured-output and Subagent
+Search-only, missing-search, HTTP MCP, structured-output and Subagent
 combinations remain unqualified. A repeated `tool_search` is an official protocol
 error on saved and inline configuration. They are implementation/verification
 gaps, not claimed upstream restrictions. Codex and MiniMax discovery remain gaps.
@@ -42,20 +44,12 @@ model/tool loop. Additional harnesses implement the same intent in their adapter
 The pinned Session AgentTool response union excludes the tool_search input member;
 project it out of Session/SSE resources while preserving saved and frozen input.
 
-The bounded implementation targets Claude's single-agent `environment:none`
-function profile, including qualified inline message images. The adapter explicitly enables native ToolSearch and sets
-per-function MCP `anthropic/alwaysLoad` from the requested deferral flag. Ordinary
-functions stay eager. Existing function callbacks, application receipts, cancellation
-and cold continuation remain the only execution/result lifecycle. Runtime discovery
-advertises this operation only with an installed bridge supporting `tool_search`.
-
-Known conflicting native provider modes and search/beta settings reject in the
-adapter. The maintained native harness owns dynamic model/provider eligibility;
-its SDK exposes no reliable pre-input receipt proving effective deferral after a
-policy change. Do not represent tool inventory or an operator allowlist as that
-proof. Record exact real model/provider evidence and this detection gap separately.
-Search-only, missing-search, workspace, MCP and Subagent combinations remain
-unqualified; a repeated `tool_search` is a protocol error. See [the operation coverage](tool-search.md).
+Workspace discovery uses the same native ToolSearch and callback path. The
+installed bridge must additionally advertise `workspace_tool_search` and the
+complete local Runtime/function contract. The daemon derives its ordinary
+`tool_search` capability from these verified bridge features; Core does not branch
+on environment ownership. Existing callback receipts, cancellation and native cold
+continuation retain their semantics. See [current workspace qualification](environment-capabilities-qualification.md).
 
 ## Evidence and limitations
 

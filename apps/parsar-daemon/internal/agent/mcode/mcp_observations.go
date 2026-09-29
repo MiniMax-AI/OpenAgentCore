@@ -43,7 +43,7 @@ func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) 
 			var key []string
 			declared := 0
 			for _, item := range s.req.LocalEnvironment.MCP {
-				if item.Server.Name == server.Raw && item.Server.Type == "stdio" {
+				if item.Server.Name == server.Raw && (item.Server.Type == "stdio" || item.Server.Type == "http") {
 					declared++
 				}
 			}

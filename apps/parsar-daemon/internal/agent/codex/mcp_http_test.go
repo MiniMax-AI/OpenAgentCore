@@ -85,7 +85,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 	for _, req := range []proto.PromptRequestPayload{
 		{MCPHTTPServers: &valid},
 	} {
-		if _, err := publicMCPHTTPServers(req); err == nil {
+		if _, _, err := runtimeMCPServers(req); err == nil {
 			t.Fatal("non-service profile accepted")
 		}
 	}
@@ -96,7 +96,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 		{ServerLabel: "docs", ServerURL: "file:///tmp/mcp"},
 	} {
 		servers := []proto.MCPHTTPServer{server}
-		if _, err := publicMCPHTTPServers(proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}); err == nil || strings.Contains(err.Error(), "synthetic-secret") {
+		if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}); err == nil || strings.Contains(err.Error(), "synthetic-secret") {
 			t.Fatal("unsupported configuration was accepted or exposed", err)
 		}
 	}
@@ -151,11 +151,11 @@ func TestPublicMCPBearerRequiresHTTPS(t *testing.T) {
 	token := "synthetic-private-token"
 	servers := []proto.MCPHTTPServer{{ServerLabel: "tools", ServerURL: "http://tools.example/mcp", BearerToken: &token}}
 	req.MCPHTTPServers = &servers
-	if _, err := publicMCPHTTPServers(req); err == nil || strings.Contains(err.Error(), token) {
+	if _, _, err := runtimeMCPServers(req); err == nil || strings.Contains(err.Error(), token) {
 		t.Fatal("plaintext bearer accepted or exposed")
 	}
 	servers[0].ServerURL = "https://tools.example/mcp"
-	if _, err := publicMCPHTTPServers(req); err != nil {
+	if _, _, err := runtimeMCPServers(req); err != nil {
 		t.Fatal("HTTPS bearer declaration rejected", err)
 	}
 }

@@ -49,7 +49,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
   const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names);
   const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume) : undefined;
-  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents, !!request.output_format);
+  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents, !!request.output_format, !!request.tool_search);
   let commands = workspace ? new CommandObserver() : undefined;
   if (request.type === "prepare" && !workspace) throw new Error("invalid_request");
   if (workspace && "mcp_http_servers" in request) throw new Error("invalid_request");
@@ -89,7 +89,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         ...(request.native_model_options?.effort !== undefined ? { effort: request.native_model_options.effort } : {}),
         ...(request.native_model_options?.thinking !== undefined ? { thinking: request.native_model_options.thinking } : {}),
         cwd: request.cwd,
-        env: request.tool_search ? toolSearchEnvironment(process.env, request.model) : workspace?.options.env ?? { ...process.env, ...(subagents ? { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } : {}) },
+        env: workspace?.options.env ?? { ...process.env, ...(subagents ? { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } : {}) },
         model: request.model,
         ...(request.output_format ? { outputFormat: request.output_format } : {}),
         systemPrompt: request.system_prompt,
@@ -121,6 +121,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
           return child;
         },
     };
+    if (request.tool_search) options.env = toolSearchEnvironment(options.env ?? process.env, request.model);
     if(turns) {
       for(const matchers of Object.values(options.hooks ?? {})) for(const matcher of matchers ?? []) {
         matcher.hooks=matcher.hooks.map(hook=>(...args)=>turns.track(()=>hook(...args)));

@@ -1,55 +1,53 @@
 package codex
 
 import (
+	"crypto/rand"
 	"errors"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
+	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
-// A non-nil public declaration owns the complete MCP profile, including an empty
-// declaration. Product requests without this field retain their existing options.
-func publicMCPHTTPServers(req proto.PromptRequestPayload) (map[string]mcpServerConfig, error) {
-	if req.MCPHTTPServers == nil {
-		return nil, nil
+// One projection consumes both public and installed Runtime bindings. A non-nil
+// empty public declaration still owns the complete native MCP configuration.
+func runtimeMCPServers(req proto.PromptRequestPayload) (map[string]mcpServerConfig, []string, error) {
+	bindings, err := agent.ResolveMCPBindings(req)
+	if err != nil {
+		return nil, nil, err
 	}
-	if !req.DisableExecutionEnvironment {
-		return nil, errors.New("codex: public HTTP MCP requires environment:none")
+	if bindings == nil {
+		return nil, nil, nil
 	}
-	servers := make(map[string]mcpServerConfig, len(*req.MCPHTTPServers))
-	for _, declaration := range *req.MCPHTTPServers {
-		name := declaration.ServerLabel
-		if name == "" || strings.TrimSpace(name) != name || name == "codex_apps" {
-			return nil, errors.New("codex: unsupported public MCP server label")
+	servers := make(map[string]mcpServerConfig, len(bindings))
+	var env []string
+	for _, binding := range bindings {
+		if binding.ServerLabel == "codex_apps" {
+			return nil, nil, errors.New("codex: reserved MCP server label")
 		}
-		if _, exists := servers[name]; exists {
-			return nil, errors.New("codex: duplicate public MCP server label")
+		server := mcpServerConfig{Name: binding.ServerLabel, URL: binding.ServerURL, Required: binding.Required, EnabledTools: binding.AllowedTools, ApproveTools: binding.ConnectionOrigin == "environment"}
+		if binding.Stdio != nil {
+			server.Command, server.Args = localworkspace.MCPStdioCommand(*binding.Stdio)
 		}
-		endpoint, err := url.Parse(declaration.ServerURL)
-		if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.ForceQuery || endpoint.Fragment != "" || endpoint.Opaque != "" {
-			return nil, errors.New("codex: unsupported public MCP server URL")
+		if binding.BearerToken != nil {
+			server.BearerTokenEnvVar = "OAC_RUNTIME_MCP_BEARER_" + rand.Text()
+			env = append(env, server.BearerTokenEnvVar+"="+*binding.BearerToken)
 		}
-		if declaration.BearerToken != nil && (endpoint.Scheme != "https" || !agent.ValidMCPHTTPBearerToken(*declaration.BearerToken)) {
-			return nil, errors.New("codex: unsupported HTTPS MCP bearer credential")
-		}
-		server := mcpServerConfig{Name: name, URL: declaration.ServerURL, Required: declaration.Required}
-		if declaration.AllowedTools != nil {
-			tools := slices.Clone(*declaration.AllowedTools)
-			for _, tool := range tools {
-				if tool == "" || strings.TrimSpace(tool) != tool {
-					return nil, errors.New("codex: invalid public MCP tool allowlist")
-				}
+		if len(binding.HTTPHeaders) > 0 {
+			server.EnvHTTPHeaders = map[string]string{}
+			for name, value := range binding.HTTPHeaders {
+				reference := "OAC_RUNTIME_MCP_HEADER_" + rand.Text()
+				server.EnvHTTPHeaders[name] = reference
+				env = append(env, reference+"="+value)
 			}
-			server.EnabledTools = &tools
 		}
-		servers[name] = server
+		servers[server.Name] = server
 	}
-	return servers, nil
+	return servers, env, nil
 }
 
 func configureMCP(plan *SessionPlan, servers map[string]mcpServerConfig) error {
