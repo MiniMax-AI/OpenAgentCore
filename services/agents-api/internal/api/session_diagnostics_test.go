@@ -79,7 +79,7 @@ func TestDiagnosticsFailurePrecedenceAndUnknownTime(t *testing.T) {
 	for _, tc := range []struct {
 		activity     *store.EnvironmentInputActivity
 		code, source string
-	}{{nil, "harness_error", "turn"}, {&store.EnvironmentInputActivity{Status: "failed"}, "environment_connection_timeout", "environment_input"}, {&store.EnvironmentInputActivity{Status: "failed", Failure: "model_provider_required"}, "model_provider_required", "environment_input"}, {&store.EnvironmentInputActivity{Status: "failed", Failure: "secret-canary"}, "internal_error", "environment_input"}} {
+	}{{nil, "harness_error", "turn"}, {&store.EnvironmentInputActivity{Status: "failed"}, "environment_connection_timeout", "environment_input"}, {&store.EnvironmentInputActivity{Status: "failed", Failure: "model_provider_required"}, "model_provider_required", "environment_input"}, {&store.EnvironmentInputActivity{Status: "failed", Failure: "runtime_preparation_failed"}, "runtime_preparation_failed", "environment_input"}, {&store.EnvironmentInputActivity{Status: "failed", Failure: "secret-canary"}, "internal_error", "environment_input"}} {
 		value := base
 		value.EnvironmentInputActivity = tc.activity
 		h, _, _ := adminTestHandler(t, func(h *Handler) { h.store = diagnosticSnapshotStore{session: value} })

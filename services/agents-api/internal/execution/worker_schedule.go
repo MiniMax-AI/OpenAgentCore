@@ -94,7 +94,10 @@ func (w *Worker) runEnvironmentInput(ctx context.Context, item scheduledWork) er
 		return nil
 	}
 	if errors.Is(err, store.ErrModelProviderRequired) {
-		return w.dispatcher.Store.FailEnvironmentInputWithoutModelProvider(ctx, item.TenantID, item.SessionID, item.reservationID)
+		return w.dispatcher.Store.FailEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID, "model_provider_required")
+	}
+	if errors.Is(err, errPreparationFailed) && run.Reservation.State == store.EnvironmentInputPending {
+		return w.dispatcher.Store.FailEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID, "runtime_preparation_failed")
 	}
 	if run.Reservation.State == store.EnvironmentInputAdmitted {
 		return err
