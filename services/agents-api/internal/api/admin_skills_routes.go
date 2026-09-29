@@ -8,9 +8,10 @@ import "net/http"
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Param after query string false "Skill resource cursor"
-// @Param limit query integer false "Page size; 0 returns an empty page" default(20) minimum(0) maximum(100)
+// @Param limit query integer false "Page size, 1–100" default(20) minimum(1) maximum(100)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillList
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/skills [get]
 func (h *Handler) adminListSkills(w http.ResponseWriter, r *http.Request) {
@@ -24,6 +25,7 @@ func (h *Handler) adminListSkills(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {object} v1.Skill
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/skills/{skill_id} [get]
 func (h *Handler) adminGetSkill(w http.ResponseWriter, r *http.Request) {
@@ -37,6 +39,7 @@ func (h *Handler) adminGetSkill(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {object} v1.SkillDeleted
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/skills/{skill_id} [delete]
 func (h *Handler) adminDeleteSkill(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +53,7 @@ func (h *Handler) adminDeleteSkill(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {file} binary
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/skills/{skill_id}/content [get]
 func (h *Handler) adminSkillContent(w http.ResponseWriter, r *http.Request) {
@@ -63,9 +67,10 @@ func (h *Handler) adminSkillContent(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param skill_id path string true "Skill ID"
 // @Param after query string false "Version resource cursor"
-// @Param limit query integer false "Page size; 0 returns an empty page" default(20) minimum(0) maximum(100)
+// @Param limit query integer false "Page size, 1–100" default(20) minimum(1) maximum(100)
 // @Param order query string false "Version order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillVersionList
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/skills/{skill_id}/versions [get]
 func (h *Handler) adminListSkillVersions(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +85,7 @@ func (h *Handler) adminListSkillVersions(w http.ResponseWriter, r *http.Request)
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"
 // @Success 200 {object} v1.SkillVersion
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version} [get]
 func (h *Handler) adminGetSkillVersion(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +100,7 @@ func (h *Handler) adminGetSkillVersion(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"
 // @Success 200 {object} v1.SkillVersionDeleted
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version} [delete]
 func (h *Handler) adminDeleteSkillVersion(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +115,7 @@ func (h *Handler) adminDeleteSkillVersion(w http.ResponseWriter, r *http.Request
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"
 // @Success 200 {file} binary
+// @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/skills/{skill_id}/versions/{version}/content [get]
 func (h *Handler) adminSkillVersionContent(w http.ResponseWriter, r *http.Request) {

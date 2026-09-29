@@ -57,6 +57,7 @@ func (h *Handler) skillsReady(w http.ResponseWriter) bool {
 // @Security BearerAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {object} v1.Skill
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /skills/{skill_id} [get]
 func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
 	if !h.skillsReady(w) {
@@ -79,6 +80,7 @@ func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Param body body v1.SkillUpdateRequest true "Default version"
 // @Success 200 {object} v1.Skill
+// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /skills/{skill_id} [post]
 func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 	if !h.skillsReady(w) {
@@ -108,6 +110,7 @@ func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 // @Security BearerAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {object} v1.SkillDeleted
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /skills/{skill_id} [delete]
 func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
 	if !h.skillsReady(w) {
@@ -128,6 +131,7 @@ func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"
 // @Success 200 {object} v1.SkillVersion
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /skills/{skill_id}/versions/{version} [get]
 func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 	if !h.skillsReady(w) {
@@ -149,6 +153,7 @@ func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"
 // @Success 200 {object} v1.SkillVersionDeleted
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /skills/{skill_id}/versions/{version} [delete]
 func (h *Handler) deleteSkillVersion(w http.ResponseWriter, r *http.Request) {
 	if !h.skillsReady(w) {

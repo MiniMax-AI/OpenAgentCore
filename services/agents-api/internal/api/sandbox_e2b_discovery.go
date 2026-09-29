@@ -33,7 +33,7 @@ func WithSandboxE2BDiscovery(discover func(context.Context, SandboxE2BDiscoveryI
 // @Security DeploymentAdminAuth
 // @Param body body api.SandboxE2BDiscoveryInput true "Transient E2B connection"
 // @Success 200 {object} api.SandboxE2BDiscoveryResult
-// @Failure 400,401,503 {object} CoreErrorResponse
+// @Failure 400,401,413,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/e2b/templates [post]
 func (h *Handler) discoverSandboxE2BTemplates(w http.ResponseWriter, r *http.Request) {
 	h.discoverSandboxE2B(w, r, "")
@@ -48,7 +48,7 @@ func (h *Handler) discoverSandboxE2BTemplates(w http.ResponseWriter, r *http.Req
 // @Param template_id path string true "Template ID"
 // @Param body body api.SandboxE2BDiscoveryInput true "Transient E2B connection"
 // @Success 200 {object} api.SandboxE2BDiscoveryResult
-// @Failure 400,401,503 {object} CoreErrorResponse
+// @Failure 400,401,413,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/e2b/templates/{template_id}/builds [post]
 func (h *Handler) discoverSandboxE2BBuilds(w http.ResponseWriter, r *http.Request) {
 	h.discoverSandboxE2B(w, r, chi.URLParam(r, "template_id"))

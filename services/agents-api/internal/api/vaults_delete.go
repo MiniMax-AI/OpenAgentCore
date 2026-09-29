@@ -15,7 +15,7 @@ import (
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param vault_id path string true "Vault ID"
 // @Success 200 {object} v1.VaultDeleted
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id} [delete]
 func (h *Handler) deleteVault(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSONBody(w, r)

@@ -20,7 +20,7 @@ import (
 // @Param session_id path string true "Session ID"
 // @Param turn_id path string true "Turn ID"
 // @Success 200 {object} v1.Turn
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/turns/{turn_id} [get]
 func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "session_id")
@@ -53,7 +53,7 @@ func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 // @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.TurnList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/turns [get]
 func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 	options, ok := readPage(w, r)

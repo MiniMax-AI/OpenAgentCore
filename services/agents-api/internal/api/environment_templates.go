@@ -94,7 +94,7 @@ func readTemplateInput(w http.ResponseWriter, r *http.Request) (store.Environmen
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param body body v1.EnvironmentTemplateRequest true "Reusable configuration"
 // @Success 201 {object} v1.EnvironmentTemplate
-// @Failure 400,401,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/templates [post]
 func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	in, ok := readTemplateInput(w, r)
@@ -117,7 +117,7 @@ func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param environment_template_id path string true "Template ID"
 // @Success 200 {object} v1.EnvironmentTemplate
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [get]
 func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	value, err := h.store.GetEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
@@ -138,7 +138,7 @@ func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request)
 // @Param environment_template_id path string true "Template ID"
 // @Param body body v1.EnvironmentTemplateRequest true "Configuration replacements"
 // @Success 200 {object} v1.EnvironmentTemplate
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [post]
 func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	in, ok := readTemplateInput(w, r)
@@ -161,7 +161,7 @@ func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param environment_template_id path string true "Template ID"
 // @Success 200 {object} v1.EnvironmentTemplateDeleted
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [delete]
 func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := h.store.DeleteEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
@@ -182,7 +182,7 @@ func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Param limit query integer false "Page size; 0 is treated as 1 and values above 100 as 100" default(20) minimum(0)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.EnvironmentTemplateList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/templates [get]
 func (h *Handler) listEnvironmentTemplates(w http.ResponseWriter, r *http.Request) {
 	options, ok := readClampedPage(w, r)

@@ -131,7 +131,7 @@ func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param body body api.ProjectRequest true "Project display name"
 // @Success 201 {object} store.Project
-// @Failure 400,401,409,500 {object} CoreErrorResponse
+// @Failure 400,401,409,413,500 {object} CoreErrorResponse
 // @Router /core/v1/projects [post]
 func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBodyLimit(w, r, 4096, "Project request is too large.")
@@ -161,7 +161,7 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 // @Param project_id path string true "Project UUID"
 // @Param body body api.ProjectRequest true "Project display name"
 // @Success 200 {object} store.Project
-// @Failure 400,401,404,409,500 {object} CoreErrorResponse
+// @Failure 400,401,404,409,413,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id} [post]
 func (h *Handler) renameProject(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
@@ -243,7 +243,7 @@ func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Param project_id path string true "Project UUID"
 // @Param body body api.ProjectAPIKeyRequest true "Key display name"
 // @Success 201 {object} store.IssuedProjectAPIKey
-// @Failure 400,401,404,409,500 {object} CoreErrorResponse
+// @Failure 400,401,404,409,413,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/keys [post]
 func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)

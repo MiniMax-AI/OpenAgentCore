@@ -17,7 +17,7 @@ import (
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param agent_id path string true "Agent ID"
 // @Success 200 {object} v1.AgentDeleted
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/{agent_id} [delete]
 func (h *Handler) deleteAgent(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSONBody(w, r)

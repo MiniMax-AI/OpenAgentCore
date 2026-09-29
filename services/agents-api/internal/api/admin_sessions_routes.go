@@ -197,7 +197,7 @@ func (h *Handler) adminGetRuntimeObservation(w http.ResponseWriter, r *http.Requ
 // @Param end query integer true "Exclusive Unix-second end" minimum(1) maximum(9007199254740991)
 // @Param max_points query integer false "Maximum points per series; defaults to the lower of 120 and the advertised service maximum" minimum(2) maximum(10000)
 // @Success 200 {object} v1.RuntimeHistory
-// @Failure 400,401,404,409,503 {object} CoreErrorResponse
+// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history [get]
 func (h *Handler) adminGetRuntimeHistory(w http.ResponseWriter, r *http.Request) {

@@ -28,7 +28,7 @@ type AgentStore interface {
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param body body v1.CreateAgentRequest true "Reusable Agent configuration"
 // @Success 201 {object} v1.SavedAgent
-// @Failure 400,401,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,413,500,503 {object} v1.ErrorResponse
 // @Router /agents [post]
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONObject(w, r)
@@ -70,7 +70,7 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param agent_id path string true "Agent ID"
 // @Success 200 {object} v1.SavedAgent
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/{agent_id} [get]
 func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
 	agent, err := h.lookupAgent(r.Context(), tenantID(r), chi.URLParam(r, "agent_id"))

@@ -16,7 +16,7 @@ import (
 // @Param vault_id path string true "Vault ID"
 // @Param credential_id path string true "Credential ID"
 // @Success 200 {object} v1.CredentialDeleted
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials/{credential_id} [delete]
 func (h *Handler) deleteCredential(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSONBody(w, r)

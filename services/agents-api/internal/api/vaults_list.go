@@ -18,7 +18,7 @@ import (
 // @Param status query string false "Scalar status filter" Enums(active,archived)
 // @Param status[] query []string false "Array status filter; combined with status as a union" collectionFormat(multi) Enums(active,archived)
 // @Success 200 {object} v1.VaultList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /vaults [get]
 func (h *Handler) listVaults(w http.ResponseWriter, r *http.Request) {
 	options, statuses, ok := readVaultPage(w, r)

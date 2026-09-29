@@ -16,7 +16,7 @@ import (
 // @Param limit query int false "Page size; 0 is treated as 1 and values above 100 as 100" minimum(0) default(20)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
 // @Success 200 {object} v1.ItemList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/items [get]
 func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 	options, ok := readClampedPage(w, r)

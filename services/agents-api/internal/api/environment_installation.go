@@ -91,7 +91,7 @@ func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Reque
 // @Tags Native Installation
 // @Produce json
 // @Success 200 {object} v1.NativeInstallationContext
-// @Failure 401,404,503 {object} CoreErrorResponse
+// @Failure 401,404,500,503 {object} CoreErrorResponse
 // @Router /api/v1/agent-daemon/installation [post]
 func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Request) {
 	_, claim, _, ok := h.installationAuthorization(w, r)
@@ -126,7 +126,7 @@ type NativeInstallationClaim struct {
 // @Accept json
 // @Param body body api.NativeInstallationClaim true "Locally persisted executor secret"
 // @Success 204
-// @Failure 400,401,409,503 {object} CoreErrorResponse
+// @Failure 400,401,409,413,500,503 {object} CoreErrorResponse
 // @Router /api/v1/agent-daemon/installation/claim [post]
 func (h *Handler) claimNativeInstallation(w http.ResponseWriter, r *http.Request) {
 	s, _, token, ok := h.installationAuthorization(w, r)
@@ -156,7 +156,7 @@ func (h *Handler) claimNativeInstallation(w http.ResponseWriter, r *http.Request
 // @Param project_id path string true "Project UUID"
 // @Param environment_id path string true "Environment UUID"
 // @Success 200 {object} v1.EnvironmentInstallation
-// @Failure 401,404,409 {object} CoreErrorResponse
+// @Failure 401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/environments/{environment_id}/installation [get]
 func (h *Handler) getEnvironmentInstallation(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)

@@ -18,7 +18,7 @@ import (
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param environment_id path string true "Environment ID"
 // @Success 200 {object} v1.EnvironmentInfo
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/{environment_id} [get]
 func (h *Handler) getEnvironment(w http.ResponseWriter, r *http.Request) {
 	environment, err := h.store.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))

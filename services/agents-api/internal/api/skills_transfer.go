@@ -21,6 +21,7 @@ import (
 // @Security BearerAuth
 // @Param files formData file true "Skill ZIP or directory files"
 // @Success 200 {object} v1.Skill
+// @Failure 400,401,413,500,503 {object} v1.ErrorResponse
 // @Router /skills [post]
 func (h *Handler) createSkill(w http.ResponseWriter, r *http.Request) { h.uploadSkill(w, r, false) }
 
@@ -33,6 +34,7 @@ func (h *Handler) createSkill(w http.ResponseWriter, r *http.Request) { h.upload
 // @Param files formData file true "Skill ZIP or directory files"
 // @Param default formData boolean false "Set as default"
 // @Success 200 {object} v1.SkillVersion
+// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /skills/{skill_id}/versions [post]
 func (h *Handler) createSkillVersion(w http.ResponseWriter, r *http.Request) {
 	h.uploadSkill(w, r, true)
@@ -85,6 +87,7 @@ func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bo
 // @Security BearerAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {file} binary
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /skills/{skill_id}/content [get]
 func (h *Handler) skillContent(w http.ResponseWriter, r *http.Request) {
 	if !h.skillsReady(w) {
@@ -113,6 +116,7 @@ func (h *Handler) skillContent(w http.ResponseWriter, r *http.Request) {
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"
 // @Success 200 {file} binary
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /skills/{skill_id}/versions/{version}/content [get]
 func (h *Handler) skillVersionContent(w http.ResponseWriter, r *http.Request) {
 	h.skillContent(w, r)

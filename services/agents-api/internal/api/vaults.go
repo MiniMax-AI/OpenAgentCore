@@ -29,7 +29,7 @@ type VaultStore interface {
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param body body v1.CreateVaultRequest true "Vault name and metadata"
 // @Success 201 {object} v1.Vault
-// @Failure 400,401,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults [post]
 func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONObject(w, r)
@@ -89,7 +89,7 @@ func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param vault_id path string true "Vault ID"
 // @Success 200 {object} v1.Vault
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id} [get]
 func (h *Handler) getVault(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "vault_id")

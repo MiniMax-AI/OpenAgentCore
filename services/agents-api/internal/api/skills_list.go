@@ -16,6 +16,7 @@ import (
 // @Param limit query integer false "Page size; 0 returns an empty page" default(20) minimum(0) maximum(100)
 // @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillList
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /skills [get]
 func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
 	if !h.skillsReady(w) {
@@ -51,6 +52,7 @@ func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
 // @Param limit query integer false "Page size; 0 returns an empty page" default(20) minimum(0) maximum(100)
 // @Param order query string false "Version order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
 // @Success 200 {object} v1.SkillVersionList
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /skills/{skill_id}/versions [get]
 func (h *Handler) listSkillVersions(w http.ResponseWriter, r *http.Request) {
 	if !h.skillsReady(w) {

@@ -112,7 +112,7 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 // @Param environment_id path string true "Environment UUID"
 // @Param body body api.EnvironmentExecutorCredentialRequest true "Request"
 // @Success 201 {object} store.IssuedExecutorCredential
-// @Failure 400,401,404,409,500 {object} CoreErrorResponse
+// @Failure 400,401,404,409,413,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials [post]
 func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request, s EnvironmentExecutorStore) {
 	// Check order: request body (400), target (404), archived Project (409),

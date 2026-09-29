@@ -80,7 +80,7 @@ func WithSandboxDeploymentChanges(
 // @Accept json
 // @Param body body api.SandboxDeploymentInput true "Deployment selection"
 // @Success 200 {object} store.RuntimeDeploymentView
-// @Failure 400,401,409,500,503 {object} CoreErrorResponse
+// @Failure 400,401,409,413,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/deployment [post]
 func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBody(w, r)
@@ -115,7 +115,7 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 // @Accept json
 // @Param body body api.SandboxDeploymentChangeInput true "Replacement deployment selection"
 // @Success 200 {object} store.RuntimeDeploymentView
-// @Failure 400,401,409,500,503 {object} CoreErrorResponse
+// @Failure 400,401,409,413,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/deployment [put]
 func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBody(w, r)
@@ -150,7 +150,7 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 // @Accept json
 // @Param body body store.SandboxResetRequest true "Reset mode and current deployment generation"
 // @Success 200 {object} store.RuntimeDeploymentView
-// @Failure 400,401,409,500,503 {object} CoreErrorResponse
+// @Failure 400,401,409,413,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/deployment/reset [post]
 func (h *Handler) startSandboxReset(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBodyLimit(w, r, 4096, "Reset request is too large.")

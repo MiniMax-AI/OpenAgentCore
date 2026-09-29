@@ -163,7 +163,7 @@ func requiredModelProviderShape() shape {
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Param harness path string true "Harness"
-// @Param body body v1.ModelConfigurationInput true "Complete model provider bundle"
+// @Param body body v1.ModelConfigurationInput true "Complete model configuration"
 // @Success 200 {object} api.HarnessModelConfiguration
 // @Failure 400,401,404,413,500,503 {object} CoreErrorResponse
 // @Router /core/v1/harnesses/{harness}/model-configuration [put]

@@ -110,7 +110,7 @@ func (h *Handler) sandboxNodes(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Param body body store.RuntimeNodeUpdate true "Request"
 // @Success 200 {object} api.SandboxMutationResponse
-// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
+// @Failure 400,401,404,409,413,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes/{node_id} [patch]
 func (h *Handler) updateSandboxNode(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBody(w, r)
@@ -174,7 +174,7 @@ func (h *Handler) sandboxAllocations(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Param body body api.SandboxEnrollmentTokenRequest true "Request"
 // @Success 201 {object} api.SandboxEnrollmentToken
-// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
+// @Failure 400,401,404,409,413,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/enrollment-tokens [post]
 func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBody(w, r)
@@ -209,7 +209,7 @@ func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request
 // @Accept json
 // @Param body body store.RuntimeNodeEnrollment true "Request"
 // @Success 201 {object} store.RuntimeNodeIdentity
-// @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
 // @Router /api/v1/sandbox-node/enroll [post]
 func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 	token, ok := sandboxBearer(r)

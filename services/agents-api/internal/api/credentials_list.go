@@ -19,7 +19,7 @@ import (
 // @Param status query string false "Scalar status filter" Enums(active,archived)
 // @Param status[] query []string false "Array status filter; combined with status as a union" collectionFormat(multi) Enums(active,archived)
 // @Success 200 {object} v1.CredentialList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials [get]
 func (h *Handler) listCredentials(w http.ResponseWriter, r *http.Request) {
 	vaultID := credentialPathID(r, "vault_id")

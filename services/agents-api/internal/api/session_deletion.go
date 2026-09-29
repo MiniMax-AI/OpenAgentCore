@@ -18,7 +18,7 @@ import (
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.SessionDeleted
-// @Failure 400,401,404,409,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id} [delete]
 func (h *Handler) deleteSession(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSONBody(w, r)

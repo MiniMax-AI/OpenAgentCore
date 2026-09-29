@@ -23,7 +23,7 @@ import (
 // @Param session_id path string true "Session ID"
 // @Param body body v1.UpdateSessionRequest true "Session metadata"
 // @Success 200 {object} v1.Session
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id} [post]
 func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONObject(w, r)
