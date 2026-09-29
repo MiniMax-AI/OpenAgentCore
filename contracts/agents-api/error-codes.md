@@ -16,23 +16,24 @@ Meaning columns are maintained by review.
 
 ## Which "code" is meant
 
-The word names seven different things. Only the first three are HTTP error codes.
+The word names eight different things. Only the first three are HTTP error codes.
 
 | Layer | Where it appears | Examples | Reference |
 | --- | --- | --- | --- |
-| API envelope | `error.code` of a `/v1`, `/core/v1` or `/api/v1` JSON error, or of an event stream `error` frame | `invalid_request_error`, `project_archived`, `stream_interrupted` | [Agents API and Core API codes](#agents-api-and-core-api-codes), [event stream codes](#event-stream-error-codes) |
+| API envelope | `error.code` of a `/v1`, `/core/v1` or `/api/v1` JSON error, or of an error object inside a Session event | `invalid_request_error`, `project_archived`, `stream_interrupted` | [HTTP API codes](#http-api-codes), [Session event codes](#session-event-error-codes) |
 | Console envelope | `error.code` of an error Web's server writes for `/core/*` | `console_sign_in_required`, `core_unreachable` | [Console codes](#console-codes), [Core errors](core-errors.md) |
 | Daemon transport | `error` member of an `/api/v1/agent-daemon/*` JSON error | `missing_bearer`, `incompatible_version` | [Runtime daemon transport codes](#runtime-daemon-transport-codes) |
 | Runtime protocol result | `error_code` of a Core–Runtime message after connection, such as a workspace, preparation or cancellation result; Core validates each value against its message and maps it to its own outcome or stored cause; no API response returns it | `write_rejected`, `read_unconfirmed`, `cancel_timeout` | [Core–Runtime protocol](../../docs/runtime-protocol.md) and its typed payloads; not listed here |
 | Node diagnostic | `diagnostic` value inside a node payload; never an HTTP status | `docker_unavailable`, `kvm_unavailable` | [Sandbox deployment](sandbox-deployment.md), [nodes](../../docs/getting-started/nodes.md) |
 | Session diagnostic category | `code` of a failure category inside a successful Session diagnostics snapshot | `harness_error`, `runtime_disconnected` | [Diagnostic failure categories](core-errors.md#diagnostic-failure-categories) |
+| Turn error | `error.code` of a failed Turn or subagent Turn in a successful read; Core always publishes `internal_error`, and the other values of the pinned enum are never returned | `internal_error` | The cause is in the [diagnostic failure categories](core-errors.md#diagnostic-failure-categories); not listed here |
 | Client identifier | `AgentCoreError.code` created by `packages/agents-client` without a response, or a local daemon/adapter error | `sandbox_configuration_unconfirmed`, `invalid_admin_response` | [Client-generated codes](#client-generated-codes), daemon and adapter guides |
 
 `error.type` is not a second code. It follows one rule: `server_error` for any 5xx,
 `conflict_error` for any 409, `not_found_error` or `invalid_beta` when the code is
 that value, and `invalid_request_error` otherwise.
 
-## Agents API and Core API codes
+## HTTP API codes
 
 `/v1`, `/core/v1` and `/api/v1` share one writer, so a code keeps its meaning in
 every namespace. `/core/v1` adds optional `details` ([Core errors](core-errors.md)).
@@ -100,7 +101,7 @@ Clients branch on `code`, never on `message`. A `null` row is a response whose
 | 413 | `request_too_large` | all | The body exceeds the operation's limit, or an uploaded File or Skill exceeds its content limit |
 | 500 | `internal_error` | all | An unexpected persistence failure; no detail is exposed |
 | 503 | `authentication_unavailable` | `/v1` | Project API key authentication is temporarily unavailable; written before any operation runs |
-| 503 | `execution_unavailable` | `/v1`, `/core/v1` | Execution is not available on this service, or a Core Runtime observation list exceeded its request budget |
+| 503 | `execution_unavailable` | `/v1`, `/core/v1` | Execution or Core Runtime observation is not available on this service, or a Core Runtime observation list exceeded its request budget |
 | 503 | `stream_unavailable` | `/v1` | Live events or streaming creation are unavailable |
 | 503 | `credential_storage_unavailable` | `/v1`, `/core/v1` | Credential encryption is not configured |
 | 503 | `file_storage_unavailable` | `/v1`, `/core/v1` | Source File storage is not configured |
@@ -128,15 +129,21 @@ Core's reverse-path canonicalization answers a path that cannot be decoded with 
 plain-text 400 before any namespace is selected; a parsed request path always
 decodes, so this is not expected in practice.
 
-## Event stream error codes
+## Session event error codes
 
-A live event stream has already answered 200. Core reports its own interruption
-as an `event: error` frame whose `error` object has `code`, `type` and `message`
-but no `param`; see [history, events and usage](history-events-usage.md).
+These codes appear inside Session events, in a live stream that has already
+answered 200 and in the saved event history. Core's own interruption is an
+`event: error` frame whose `error` object has `code`, `type` and `message` but no
+`param`. A hosted provisioning failure records the pinned `error` event, with a
+null `param`, and the Environment state `error` of
+`agent.session.environment.failed`, which has no `param`. See
+[history, events and usage](history-events-usage.md).
 
 | Status | Code | Meaning |
 | --- | --- | --- |
 | 200 | `stream_interrupted` | The live stream was interrupted; reconnect, then read the Session and its saved Items to recover |
+| 200 | `sandbox_error` | `error` event, type `environment_error`: the hosted Environment failed to provision; the message is a safe reason without command output |
+| 200 | `environment_connection_failed` | Environment state error, type `environment_error`, in `agent.session.environment.failed` |
 
 ## Console codes
 
@@ -199,7 +206,9 @@ Outside `/core/*` the console also answers an unsafe path with a plain-text 400,
 a wrong method on static pages and `/node-install/*` with a plain-text 405
 (`Allow: GET, HEAD`), and unknown or direct `/v1` and `/api/v1` paths with a
 plain-text 404. After sign-in, `/core` and `/core/*` paths outside `/core/v1`
-also get a plain-text 404. `GET /healthz` returns `200 ok` without
+also get a plain-text 404, `/console/api-keys` and its subpaths a plain-text 404,
+and `/console/installation/domain` with a method other than GET or POST a
+plain-text 405 (`Allow: GET, POST`). `GET /healthz` returns `200 ok` without
 authentication.
 
 ## Runtime daemon transport codes
@@ -236,6 +245,10 @@ These routes answer failures with a `text/plain` body and no code.
 | 405 | null | enroll, connection | Wrong method (`Allow` names the method) |
 | 409 | null | enroll, connection, sandbox-node/connect | The Environment is bound to another executor, or the node identity is already connected |
 | 503 | null | enroll, connection, sandbox-node/connect | Enrollment storage, node authentication or the connection owner is unavailable |
+
+The public installer artifacts under `/api/v1/agent-daemon/install/{version}/`
+answer a method other than GET or HEAD with an empty 405 and an unknown file with
+a plain-text 404.
 
 ## Client-generated codes
 

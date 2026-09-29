@@ -43,7 +43,8 @@ IGNORED = {("/healthz", "GET"): "liveness probe, not part of the Agent API"}
 
 # Machine transport served beside the API router by cmd/server. These are not
 # REST operations and no OpenAPI contract publishes them; each must be named in
-# the API index, and its error shapes in contracts/agents-api/error-codes.md.
+# the API index. Their error shapes are listed in contracts/agents-api/error-codes.md
+# and checked by the Go registry tests, not here.
 SERVER = REPO / "services/agents-api/cmd/server/http_routes.go"
 GATEWAY = REPO / "internal/agentdaemon/gateway/routes.go"
 # The Runtime gateway mounts the daemon routes under this prefix.

@@ -92,8 +92,9 @@ the Core key or a Project API key.
 | `POST agent-daemon/enroll`, `GET agent-daemon/connection` | Self-hosted executor and its installer | Executor credential from `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) |
 | WebSocket `GET agent-daemon/ws`, `POST agent-daemon/bootstrap`, `GET agent-daemon/device-status` | Runtime daemons | Daemon credential: Core writes one into each hosted sandbox it prepares; a self-hosted executor uses its executor credential | [Runtime enrollment](../../services/agents-api/README.md#user-managed-runtime-enrollment) |
 
-Only the three `sandbox-node` HTTP routes are in the machine OpenAPI and use the
-JSON error envelope. The node WebSocket and the daemon transport are served
+Only the three `sandbox-node` HTTP routes and the two native installation routes
+(`agent-daemon/installation` and its `/claim` subroute) are in the machine OpenAPI
+and use the JSON error envelope. The node WebSocket and the daemon transport are served
 beside the API router: `agent-daemon/enroll`, `agent-daemon/connection` and
 `sandbox-node/connect` answer failures with a plain-text body and no code, and
 `agent-daemon/ws`, `bootstrap` and `device-status` answer the failures their

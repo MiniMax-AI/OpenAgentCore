@@ -610,8 +610,8 @@ func returnedCodes(t *testing.T, p sourcePackage, out map[emittedCode][]string) 
 	}
 }
 
-// streamErrorCodes collects v1.StreamError{Code: "..."} literals: error frames
-// inside an event stream whose response status is already 200.
+// streamErrorCodes collects v1.StreamError{Code: "..."} literals: error objects
+// inside Session events, whose response status is already 200.
 func streamErrorCodes(p sourcePackage) map[emittedCode][]string {
 	out := map[emittedCode][]string{}
 	for _, file := range p.files {
@@ -790,14 +790,21 @@ func TestErrorCodeRegistryMatchesEmittedCodes(t *testing.T) {
 		"writeError": {1, 2}, "writeAPIError": {1, 2}, "writeCoreError": {1, 2},
 	})
 	returnedCodes(t, api, codes)
-	compareRegistry(t, "Agents API and Core API codes", codes)
+	compareRegistry(t, "HTTP API codes", codes)
 
 	console := parseSourcePackage(t, filepath.Join(conformanceRepoRoot, "services/core-console"))
 	consoleCodes := emittedCodes(t, console, map[string][2]int{"consoleCoreError": {1, 2}})
 	returnedCodes(t, console, consoleCodes)
 	compareRegistry(t, "Console codes", consoleCodes)
 
-	compareRegistry(t, "Event stream error codes", streamErrorCodes(api))
+	// The stream writes its own interruption; the store records the error objects
+	// of saved Session events.
+	events := streamErrorCodes(api)
+	store := parseSourcePackage(t, filepath.Join(conformanceRepoRoot, "services/agents-api/internal/store"))
+	for code, sites := range streamErrorCodes(store) {
+		events[code] = append(events[code], sites...)
+	}
+	compareRegistry(t, "Session event error codes", events)
 
 	gateway := parseSourcePackage(t, filepath.Join(conformanceRepoRoot, "internal/agentdaemon/gateway"))
 	daemon := emittedCodes(t, gateway, map[string][2]int{"writeAuthError": {1, 2}})
