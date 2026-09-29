@@ -28,7 +28,7 @@ const authorization = 'fixture-install-authorization';
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, origin);
   const json = (status, value) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(value)); };
-  if (url.pathname.endsWith('.sha256')) return response.end(checksum+'\n');
+  if (url.pathname.endsWith('.sha256')) { response.setHeader('Content-Type', 'text/plain; charset=utf-8'); return response.end(checksum+'\n'); }
   if (url.pathname.endsWith('.tar.gz')) return createReadStream(archive).pipe(response);
   if (url.pathname.endsWith('bootstrap.sh') || url.pathname.endsWith('bootstrap.ps1')) return createReadStream(resolve('services/agents-api/internal/nativeinstaller/assets', url.pathname.split('/').at(-1))).pipe(response);
   const body = []; for await (const chunk of request) body.push(chunk);

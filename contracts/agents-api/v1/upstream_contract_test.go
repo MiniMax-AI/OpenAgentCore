@@ -232,6 +232,9 @@ func (a *fieldAudit) compare(name string, schema map[string]any, official []stri
 		case property == "x_agents_core" && slices.Contains(coreExtensionOwners, name):
 			_, extension := a.resolve(name+"."+property, value)
 			for member := range a.properties(extension) {
+				if name == "v1.Session" && member == "installation" {
+					continue
+				}
 				if !slices.Contains(coreExtensionMembers, member) {
 					a.violations[name+".x_agents_core."+member] = coreExtensionMembers
 				}

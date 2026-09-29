@@ -88,6 +88,7 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if name == platform+".sha256" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		fmt.Fprintln(w, artifact.SHA256)
 		return
 	}
