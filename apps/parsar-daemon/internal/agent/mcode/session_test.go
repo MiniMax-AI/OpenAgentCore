@@ -222,6 +222,10 @@ func TestMCodeProcess(t *testing.T) {
 			_, _ = f.WriteString(frame.Method + "\n")
 			_ = f.Close()
 			if frame.Method == "session/new" || frame.Method == "session/load" {
+				cwd, err := os.Getwd()
+				if err != nil || os.WriteFile(record+".cwd", []byte(cwd), 0600) != nil {
+					os.Exit(11)
+				}
 				if os.WriteFile(record+".session", frame.Params, 0600) != nil {
 					os.Exit(11)
 				}

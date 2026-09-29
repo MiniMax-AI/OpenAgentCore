@@ -61,14 +61,15 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	if err != nil {
 		return launchOptions{}, err
 	}
-	// Reuse public option validation and private Session state provisioning. Native
-	// cwd remains private; only the internal MCP worker receives the public workspace.
+	// Reuse public option validation and private Session state provisioning.
+	// The native process, ACP Session and workspace tools share the declared cwd.
 	private := req
 	private.LocalEnvironment, private.WorkDir, private.DisableExecutionEnvironment = nil, "", true
 	opts, err := prepareOptionsWithSkills(ctx, private, false)
 	if err != nil {
 		return opts, err
 	}
+	opts.Dir = c.Directory
 	if len(req.LocalEnvironment.Skills) > 0 {
 		root := filepath.Join(opts.DataDir, "skills")
 		if err := os.MkdirAll(root, 0700); err != nil {

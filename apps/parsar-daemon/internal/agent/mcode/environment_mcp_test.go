@@ -43,6 +43,7 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 			}
 			var params struct {
 				SessionID string `json:"sessionId"`
+				Cwd       string `json:"cwd"`
 				MCP       []struct {
 					Name, Command string
 					Args          []string
@@ -51,6 +52,11 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 			}
 			if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 2 || params.MCP[0].Name != "oac_workspace" {
 				t.Fatal("environment MCP displaced workspace tools")
+			}
+			cwd, err := os.ReadFile(record + ".cwd")
+			workspace, pathErr := filepath.EvalSymlinks(req.WorkDir)
+			if err != nil || pathErr != nil || string(cwd) != workspace || params.Cwd != req.WorkDir {
+				t.Fatalf("native process and ACP Session must use the declared workspace: process=%q ACP=%q", cwd, params.Cwd)
 			}
 			server := params.MCP[1]
 			executable, _ := os.Executable()

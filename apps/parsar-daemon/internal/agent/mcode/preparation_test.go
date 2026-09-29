@@ -48,8 +48,8 @@ func TestPreparedWorkspaceHasOneInputAndOutputOwner(t *testing.T) {
 	if err != nil || strings.Contains(string(raw), "session/prompt") {
 		t.Fatalf("preparation consumed input: %q %v", raw, err)
 	}
-	if p.session.opts.Dir == r.WorkDir || !strings.HasPrefix(p.session.opts.Dir, p.session.opts.DataDir+string(filepath.Separator)) {
-		t.Fatal("native cwd is not private")
+	if p.session.opts.Dir != r.WorkDir || p.session.opts.DataDir == r.WorkDir {
+		t.Fatal("native cwd must use the workspace without moving Session state")
 	}
 	out := make(chan proto.Envelope)
 	var wg sync.WaitGroup

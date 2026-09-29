@@ -119,7 +119,8 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   Core handlers, storage or scheduling. Qualify public workflows through the same
   shared chain; direct native probes establish feasibility only.
 - Keep engine-specific types, process management and protocol translation inside
-  execution adapters. The public API and persistence/application core must not
+  execution adapters. Native workspace execution must use the declared Environment
+  directory; a separate native history/configuration directory is not a workspace. The public API and persistence/application core must not
   interpret Parsar product payloads or depend on one engine's native item types.
   Prefer maintained upstream SDKs and native execution protocols over a second
   hand-written model/tool loop or a general-purpose compatibility framework.

@@ -48,12 +48,12 @@ enrollment and the public protocol remain shared. The image supplies the private
 `OAC_RUNTIME_MCODE_WORKSPACE=managed` and companion paths; caller Agent options cannot
 change them. Public Files and Artifacts use the common bound workspace helpers.
 
-The native process and ACP Session use a private control directory, while six
-original native tools execute against `/workspace` through one trusted MCP bridge
+The native process, ACP Session and six original native tools use the declared
+Environment workspace (`/workspace` in the Docker image). The tools connect through one trusted MCP bridge
 with the daemon user's ordinary permissions and no inner sandbox. MCP is internal
-transport here; its presence alone does not enable caller-supplied public MCP servers. Project instructions must be read through the
-workspace tools. Native automatic project configuration and diff/undo capture do
-not apply to this adapter tool path. Exact native-ID continuation remains
+transport here; its presence alone does not enable caller-supplied public MCP servers.
+Native project discovery uses that same workspace; adapter-owned configuration and
+history remain in the private Session data directory. Exact native-ID continuation remains
 required; recovery without a recorded ID fails closed. Native Bash observations
 become public `command_execution` items after command arguments arrive. Their
 text output and status are retained; absent native exit code/duration stay unknown.
@@ -87,7 +87,8 @@ mapping; only actual Bash calls become `command_execution`.
 
 ## Execution boundaries
 
-Each API Session uses a separate native state directory and cwd. The execution
+Each API Session uses a separate native state directory. Workspace execution uses
+the declared Environment directory; text-only execution uses a private cwd. The execution
 child inherits only process and model-network essentials; it does not inherit
 Core/daemon tokens or arbitrary Node startup configuration. The adapter owns its
 native config, instructions and home and disables external skills, delegated work,
@@ -116,7 +117,7 @@ Cancellation waits for process-group exit and output settlement. Public slash
 text remains a model message instead of invoking native ACP operator commands.
 
 Cold continuation requires the exact persisted native Session ID and matching
-private cwd. Missing/foreign history fails; recovery by guessing an ID from native
+workspace cwd (or private cwd for text-only execution). Missing/foreign history fails; recovery by guessing an ID from native
 session listings is not qualified. Public usage breakdown is unavailable because
 native ACP context occupancy and cumulative cost are not per-Turn usage.
 
@@ -144,11 +145,10 @@ later work recovers the same native history in a new owner without replay.
 The MiniMax workspace profile builds one CLI from the fixed upstream source and
 lockfile through the existing companion packaging path, and connects native
 workspace tools through its standard MCP client. The process and native Session
-share one private control directory; public workspace files cannot configure that
-process or become privileged project instructions. A trusted adapter-owned bridge
+share the declared workspace directory, including for cold continuation. A trusted adapter-owned bridge
 runs the original six tool implementations with the launching user's ordinary
-permissions. It adds no inner sandbox on any platform. Keep native history bound
-to the control directory and Files/Artifacts bound to the public workspace. Core and shared file helpers remain engine
+permissions. It adds no inner sandbox on any platform. Keep native history in the Session data directory and native execution and
+Files/Artifacts bound to the same Environment workspace. Core and shared file helpers remain engine
 neutral. This internal MCP transport does not admit public MCP configuration.
 Record the upstream revision, native admission patch hashes and worker-source
 provenance. The bounded patch checks the shared descendant-task limit inside the
