@@ -57,6 +57,25 @@ as an ordinary user is rejected before reading the enrollment token or changing
 the host. This requirement applies to Sandbox Provider nodes, not the native
 self-hosted daemon installer.
 
+### Download through a proxy
+
+Export standard `http_proxy` / `https_proxy` and `no_proxy` variables before
+running the generated command. Uppercase `HTTP_PROXY`, `HTTPS_PROXY` and
+`NO_PROXY` work too; lowercase takes precedence when both are set (including an
+empty lowercase value). Use an HTTP proxy URL, optionally with URL-encoded
+credentials, and comma-separated host exclusions in `no_proxy`. A proxy for
+HTTPS downloads must support CONNECT.
+
+The command requests sudo preservation of only these six names and keeps them
+when dropping to `oac-node`. If sudo policy denies preservation, ask the host
+administrator to permit those names or run from a root shell with the variables
+exported there. A manually added outer `sudo` can discard them before the
+command starts. Do not put credentials in command arguments or share shell traces.
+
+These settings apply only to installation requests. They are not saved in node
+configuration or the systemd unit; the running node still needs its own network
+access to Core. Without proxy variables, downloads use the existing direct path.
+
 ### The command
 
 The command shows each installation phase as it runs. After Core confirms the
