@@ -421,7 +421,7 @@ def install_lock(root):
         yield
 
 
-def register_node(root, args, token):
+def register_node(root, args, token, helper_archive=None):
     """Download and verify the payload, prepare the Runtime and register; not the service."""
     print("Downloading and verifying node files...", flush=True)
     program_manifest, program_sums = metadata(args.source_url, getattr(args, "bundle", None))
@@ -457,7 +457,7 @@ def register_node(root, args, token):
             existing_file(target)
             distribution.obtain_artifact(program_manifest if name == COMMON[0] else manifest, name, target, getattr(args, "bundle", None))
             os.chmod(target, 0o700)
-    node_generations.install_helper(root, args, sys.modules[__name__])
+    node_generations.install_helper(root, args, sys.modules[__name__], helper_archive)
     safe_directory(root / "state/node")
     lease_identity = {"installation_id": args.installation_id, "generation": args.configuration["generation"],
                       "specification_digest": args.configuration["specification_digest"]}
@@ -594,11 +594,11 @@ def install(args, token):
     print("Logs: journalctl --user -u " + unit.name)
 
 
-def prepare_service_node(args, token):
+def prepare_service_node(args, token, helper_archive):
     """Sudo mode, as the service user: everything but the root-owned system unit."""
     root = open_node(args, token, system=True)
     with install_lock(root):
-        register_node(root, args, token)
+        register_node(root, args, token, helper_archive)
 
 
 
@@ -700,7 +700,8 @@ def as_service_user(account, function, *arguments):
     parent shows that output only as plain text. Interrupting the installer or
     closing its terminal stops the child too, and the child dies with the parent.
     Every installer module is already imported, so the child never reads the root
-    caller's private copy of this program, and the token stays in memory. Files the
+    caller's private copy of this program. Its retained-helper bytes are captured
+    before the fork, and the token stays in memory. Files the
     service user owns are read, written and deleted only here, never by root."""
     sys.stdout.flush()
     sys.stderr.flush()
@@ -1151,6 +1152,7 @@ def install_system(args, token):
         if node_record(args.installation_id) != record or (record is None and [i for i in node_records() if i != args.installation_id]):
             raise InstallError("Another node installation changed this host meanwhile; rerun the command." + NOTHING_CHANGED)
         account, account_record = account_plan()
+        helper_archive = node_generations.helper_archive(args, sys.modules[__name__])
         # Every check has passed; from here on the host changes.
         account = prepare_account(account, account_record, group)
         child_docker_config()
@@ -1160,7 +1162,7 @@ def install_system(args, token):
                   json_text({"format": 1, "installation_id": args.installation_id, "provider": provider,
                              "core_url": args.core_url, "node_root": str(root), "unit": str(unit)}))
         args.system, args.provider = True, provider
-        run_as(account, prepare_service_node, args, token)
+        run_as(account, prepare_service_node, args, token, helper_archive)
         root_file(unit, system_unit(root, provider))
         print("Starting the node service...", flush=True)
         checked(["systemctl", "daemon-reload"], "Cannot reload systemd")

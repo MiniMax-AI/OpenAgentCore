@@ -2173,6 +2173,11 @@ not widen sandbox network policies or change credential admission.
 
 The distribution build sets umask 022 for non-root-readable payloads; installation
 credentials and state retain their explicit private permissions.
+For a system node installation, capture the trusted bootstrap bytes before
+dropping to the service account. Pass those bytes through the fork; the service
+account writes its own retained generation helper. Never make the caller's private
+download directory accessible or let root write into service-owned state to
+work around bootstrap access.
 
 Installer progress describes the operation about to run. Do not imply fresh
 health checks on a no-change repair. Keep terminal styling optional, honor

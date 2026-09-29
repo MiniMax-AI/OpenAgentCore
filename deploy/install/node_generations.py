@@ -2,6 +2,7 @@
 import copy
 import contextlib
 import fcntl
+import io
 import stat
 import hashlib
 import json
@@ -34,7 +35,24 @@ def atomic_json(path, value):
             os.unlink(temporary)
 
 
-def install_helper(root, args, installer):
+def helper_archive(args, installer):
+    """Read the trusted bootstrap before dropping access to its private directory."""
+    source = Path(sys.argv[0])
+    if getattr(args, "bundle", None) is not None:
+        source = args.bundle / "node-install.pyz"
+    if source.suffix == ".pyz" and source.is_file() and not source.is_symlink():
+        return source.read_bytes()
+    with tempfile.TemporaryDirectory() as directory:
+        package = Path(directory)
+        source_dir = Path(installer.__file__).parent
+        for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py"):
+            shutil.copyfile(source_dir / name, package / ("__main__.py" if name == "node_install.py" else name))
+        archive = io.BytesIO()
+        zipapp.create_archive(package, archive, compressed=True)
+        return archive.getvalue()
+
+
+def install_helper(root, args, installer, archive=None):
     """Keep the executed, trusted installer available to the unprivileged node."""
     settings = root / "preparation.json"
     value = {"source_url": args.source_url or args.core_url}
@@ -42,20 +60,11 @@ def install_helper(root, args, installer):
         raise installer.InstallError("The retained node artifact origin differs; preserve its configuration")
     target = root / "generation-preparer.pyz"
     installer.existing_file(target)
-    source = Path(sys.argv[0])
-    if getattr(args, "bundle", None) is not None:
-        source = args.bundle / "node-install.pyz"
+    if archive is None:
+        archive = helper_archive(args, installer)
     with tempfile.TemporaryDirectory(dir=root) as directory:
         staged = Path(directory) / "helper.pyz"
-        if source.suffix == ".pyz" and source.is_file() and not source.is_symlink():
-            shutil.copyfile(source, staged)
-        else:
-            package = Path(directory) / "package"
-            package.mkdir(mode=0o700)
-            source_dir = Path(installer.__file__).parent
-            for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py"):
-                shutil.copyfile(source_dir / name, package / ("__main__.py" if name == "node_install.py" else name))
-            zipapp.create_archive(package, staged, compressed=True)
+        staged.write_bytes(archive)
         os.chmod(staged, 0o600)
         os.replace(staged, target)
     atomic_json(settings, value)

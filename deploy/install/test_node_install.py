@@ -684,6 +684,23 @@ class NodeInstallTests(unittest.TestCase):
         self.assertFalse([call for call, _ in self.calls if call[:1] in (["useradd"], ["usermod"], ["systemctl"])])
         self.assertEqual({path: path.read_bytes() for path in (system / "etc").iterdir()}, before)
 
+    def test_system_install_captures_helper_before_entering_service_user(self):
+        self.sudo_host()
+        source = self.home / "private-download" / "node-install.pyz"
+        source.parent.mkdir(mode=0o700)
+        source.write_bytes(b"trusted executed installer snapshot")
+        source.chmod(0o600)
+        original_run_as = installer.run_as
+        def run_as(account, function, *arguments):
+            if function is installer.prepare_service_node:
+                source.unlink()  # The child must not need the original path at all.
+            return original_run_as(account, function, *arguments)
+        with mock.patch.object(installer.sys, "argv", [str(source)]), \
+                mock.patch.object(installer, "run_as", side_effect=run_as):
+            installer.install_system(self.args, "synthetic-once-token")
+        self.assertEqual((self.root / "generation-preparer.pyz").read_bytes(), b"trusted executed installer snapshot")
+        self.assertTrue((self.root / "registered.json").is_file())
+
     def test_no_sudo_installs_can_share_the_host_lock_root_created(self):
         locks = self.home / "run"
         locks.mkdir()
