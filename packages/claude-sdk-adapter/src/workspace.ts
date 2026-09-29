@@ -96,10 +96,11 @@ export class WorkspaceProfile {
     this.options = {
       env, tools: [...nativeTools, ...skillTools, ...(subagents ? ["Agent", "SendMessage"] : [])],
       ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}), allowedTools: mcp?.allowed ?? [...functions], mcpServers: {}, strictMcpConfig: true,
-      settingSources: [], permissionMode: "bypassPermissions", persistSession: true,
+      // The existing callback authorizes tools without CLI permission bypass,
+      // which the native CLI refuses for root accounts.
+      settingSources: [], permissionMode: "default", persistSession: true,
       settings: {},
       sandbox: { enabled: false },
-      allowDangerouslySkipPermissions: true,
       canUseTool: this.canUseTool,
       hooks: { PreToolUse: [{ hooks: [this.beforeTool] }] },
     };

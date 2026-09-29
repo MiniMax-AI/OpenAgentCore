@@ -79,11 +79,11 @@ test("workspace native options bypass isolation and preserve selected tool inven
   assert.deepEqual(options.settingSources, []);
   assert.deepEqual(options.mcpServers, {});
   assert.equal(options.strictMcpConfig, true);
-  assert.equal(options.permissionMode, "bypassPermissions");
+  assert.equal(options.permissionMode, "default");
   assert.equal(options.persistSession, true);
   assert.equal(options.sandbox.enabled, false);
   assert.deepEqual(options.sandbox, { enabled: false });
-  assert.equal(options.allowDangerouslySkipPermissions, true);
+  assert.equal(options.allowDangerouslySkipPermissions, undefined);
   assert.deepEqual(options.settings, {});
   profile.verify(["Read", "Edit", "Bash"], []);
   for (const tools of [[], ["Bash", "Read", "Read"], ["Bash", "Read", "Write"], ["Bash", "Read", "Edit", "Agent"]]) {

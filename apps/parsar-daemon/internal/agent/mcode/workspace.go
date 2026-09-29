@@ -99,6 +99,17 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	}
 	config["permissionMode"] = "bypassPermissions"
 	config["sandbox"] = map[string]bool{"enabled": false}
+	if len(req.LocalEnvironment.Skills) > 0 {
+		selected := config["agents"].(map[string]any)["default"].(map[string]any)
+		names := make([]string, 0, len(req.LocalEnvironment.Skills))
+		for _, skill := range req.LocalEnvironment.Skills {
+			names = append(names, skill.Metadata.Name)
+		}
+		selected["skills"] = names
+		for _, key := range []string{"tools", "builtinTools"} {
+			selected[key] = append(selected[key].([]any), "skill")
+		}
+	}
 	raw, err = json.Marshal(config)
 	if err != nil {
 		return opts, err
