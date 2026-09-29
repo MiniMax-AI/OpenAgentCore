@@ -257,6 +257,12 @@ createServer(async (req, res) => {
                 plugins: [],
                 skills: [],
               },
+      ...(body.environment.type === "self_hosted" ? {
+        x_agents_core: { installation: {
+          status: "available", version: "fixture", expires_at: now() + 1800,
+          commands: { posix: "bash fixture-native-bootstrap.sh", powershell: "& fixture-native-bootstrap.ps1" },
+        } },
+      } : {}),
       status: "idle",
       error: null,
       metadata: body.metadata,

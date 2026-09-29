@@ -156,8 +156,9 @@ databases, credentials and migrations. The product uses Core exclusively; it has
 [README](example/parsar/README.md) owns its product behavior. The boundary rules are:
 
 - It calls only public `/v1` APIs. Its Project key stays server-side; it never
-  holds a Core key or issues machine credentials. Core-only credential issuance
-  stays in the operator console.
+  holds a Core key or issues machine credentials. Self-hosted connection displays
+  the public Session installation command unchanged; Core owns bootstrap
+  authorization and machine credential issuance.
 - It may reuse product UI and keep a small product-owned SQLite database (Node's
   built-in module, Node 22.13+), outside the checkout and isolated by Core origin
   and Project key fingerprint. Provider keys never reach the browser.

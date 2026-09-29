@@ -146,16 +146,14 @@ Agent organization informs the product flow; no Multica code is copied.
 
 ## Connect a user machine
 
-Run a matching Core and daemon version.
-
 Create a user-machine runtime and start a Session with an Agent using Codex or
-Claude Code. No initial Turn is sent. Open **Connect user machine**, obtain the
-Session's executor credential in Core Web (Session log), save the credential on
-the host as instructed, and run the generated platform-specific install/start
-command. The daemon binary and native harness must already be installed. Windows
-Claude Code also requires Git Bash. The page reads Core's public Environment
+Claude Code. No initial Turn is sent. Open **Connect user machine** and run the
+Core-provided command on the target host. The installer downloads the matching
+native distribution, installs the selected harness and starts the connection.
+Windows Claude Code also requires Git Bash. The page reads Core's public Environment
 status and enables sending after it reports connected. The example backend does
-not need or accept the administrator Core key.
+not need or accept the administrator Core key. Commands carry temporary
+Environment-scoped authorization; do not share them. Session refresh renews them.
 
 The selected model Provider needs an HTTPS Base URL and API key. Its protocol is
 Responses for Codex and Anthropic for Claude Code. Core freezes and delivers the
@@ -170,6 +168,4 @@ included in this example because its required token limits are not exposed.
 
 The daemon runs with the starting user's permissions and adds no sandbox. Runtime
 home is separate per Session; stopping it preserves local files. Credential
-rotation and revocation remain Core console operations. Native install commands
-are for fresh installations; restart an existing one with the same Runtime home
-and `start`, without rerunning `install`.
+rotation and revocation remain Core console operations. Reuse the original installation directory when reconnecting.

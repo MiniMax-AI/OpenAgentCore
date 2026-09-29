@@ -93,7 +93,10 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:18181/reset");
 });
 
-test("self-hosted Session shows native connection instructions and waits before sending", async ({
+for (const platform of [
+  { label: "macOS", path: "/Users/example/project", command: "bash fixture-native-bootstrap.sh" },
+  { label: "Windows", path: "C:\\Users\\example\\project", command: "& fixture-native-bootstrap.ps1" },
+]) test(`self-hosted ${platform.label} uses Core's command and waits before sending`, async ({
   page,
   request,
 }) => {
@@ -110,10 +113,10 @@ test("self-hosted Session shows native connection instructions and waits before 
   await page.getByLabel("环境类型").click();
   await page.getByRole("option", { name: "用户机器", exact: true }).click();
   await page.getByLabel("机器平台").click();
-  await page.getByRole("option", { name: "macOS", exact: true }).click();
+  await page.getByRole("option", { name: platform.label, exact: true }).click();
   await page
     .getByLabel("工作目录", { exact: true })
-    .fill("/Users/example/project");
+    .fill(platform.path);
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await navigate(page, "Agents");
@@ -138,10 +141,21 @@ test("self-hosted Session shows native connection instructions and waits before 
     page.getByRole("button", { name: "发送", exact: true }),
   ).toBeDisabled();
   await page.getByRole("button", { name: "连接用户机器", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("oac-daemon install");
+  await expect(page.getByRole("dialog")).toContainText(platform.command);
   await expect(page.getByRole("dialog")).toContainText(
-    "/Users/example/project",
+    platform.path,
   );
+  const sessionRoute = "**/v1/agents/sessions/*";
+  await page.route(sessionRoute, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.x_agents_core.installation.expires_at = 1;
+    await route.fulfill({ response, json: body });
+  });
+  await expect(page.getByRole("dialog")).toContainText("安装命令暂不可用");
+  await expect(page.getByRole("button", { name: "复制命令", exact: true })).toHaveCount(0);
+  await page.unroute(sessionRoute);
+  await expect(page.getByRole("dialog")).toContainText(platform.command);
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await request.post("http://127.0.0.1:18181/connect-executor");
   await expect(page.getByText("已连接", { exact: true })).toBeVisible();
