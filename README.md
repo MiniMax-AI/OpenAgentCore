@@ -1,8 +1,10 @@
-# OpenAgentCore
+![Open AgentCore red pixel wordmark](docs/assets/openagentcore-banner.png)
 
-![One core. Many agents. Open infrastructure for AI agents.](docs/assets/openagentcore-banner.png)
+<h1 align="center">OpenAgentCore</h1>
 
-**Open-source Agents API infrastructure, with your choice of native harness.**
+<p align="center"><strong>Open-source Agents API infrastructure, with your choice of native harness.</strong></p>
+
+[Get started](#get-started) · [Documentation](#documentation) · [Call the API](docs/getting-started/quickstart.md) · [Contributing](CONTRIBUTING.md)
 
 Run Codex, Claude Code and MiniMax Code behind the OpenAI Agents API, on machines you
 control. Core serves the API and runs each Session in a sandbox; Web is the
