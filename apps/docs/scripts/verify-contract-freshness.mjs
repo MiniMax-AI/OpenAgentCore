@@ -10,7 +10,8 @@ assert.deepEqual(Object.keys(record.sources).sort(), surfaces.map(s => 'contract
 function filesUnder(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     const file = path.join(directory, entry.name)
-    return entry.isDirectory() ? filesUnder(file) : [path.relative(appRoot, file)]
+    // Record keys are POSIX paths on every platform.
+    return entry.isDirectory() ? filesUnder(file) : [path.relative(appRoot, file).split(path.sep).join('/')]
   })
 }
 const rendered = [...filesUnder(path.join(appRoot, 'openapi')), ...filesUnder(path.join(appRoot, 'content/docs/api-reference'))]

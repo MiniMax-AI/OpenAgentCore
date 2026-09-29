@@ -18,7 +18,17 @@ page.on('pageerror', error => failures.push(error.message))
 const screenshots = process.env.DOCS_SCREENSHOT_DIR
 if (screenshots) fs.mkdirSync(screenshots, { recursive: true })
 try {
-  for (const route of ['/', '/install', '/configure', '/console', '/execution-model', '/api-reference/agents', '/api-reference/core/sandbox-manager', '/api-reference/machine/sandbox-node', '/harness-onboarding']) {
+  // Tag overviews name the surface credential; operation pages document the
+  // Authorization header of that operation.
+  const credentials = {
+    '/api-reference/agents': 'Project API key',
+    '/api-reference/core/sandbox-manager': 'Core key',
+    '/api-reference/machine/sandbox-node': 'enrollment',
+    '/api-reference/agents/list-reusable-agents': 'Authorization',
+    '/api-reference/core/sandbox-manager/retrieve-sandbox-deployment': 'Authorization',
+    '/api-reference/machine/sandbox-node/enroll-a-sandbox-node': 'Authorization',
+  }
+  for (const route of ['/', '/install', '/configure', '/console', '/execution-model', ...Object.keys(credentials), '/harness-onboarding']) {
     const response = await page.goto(origin + route, { waitUntil: 'networkidle' })
     assert.equal(response.status(), 200, route)
     assert.ok(await page.locator('h1').count(), 'Missing page title: ' + route)
@@ -26,7 +36,7 @@ try {
     assert.ok((await page.title()).includes('OpenAgentCore Docs'), 'Wrong page metadata: ' + route)
     if (route.includes('/api-reference/')) {
       assert.equal(await page.locator('input, form, textarea').count(), 0, 'Reference exposes request controls: ' + route)
-      assert.ok((await page.locator('body').innerText()).includes('Authorization'), 'Missing credential documentation: ' + route)
+      assert.ok((await page.locator('body').innerText()).includes(credentials[route]), 'Missing credential documentation: ' + route)
     }
     if (screenshots && ['/', '/console', '/execution-model', '/api-reference/core/sandbox-manager', '/harness-onboarding'].includes(route)) {
       await page.screenshot({ path: path.join(screenshots, (route.replaceAll('/', '-') || 'home') + '.png'), fullPage: false })
@@ -37,7 +47,7 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Mobile page overflows viewport')
   assert.deepEqual(failures, [], 'Browser runtime errors')
   assert.deepEqual(unexpected, [], 'Documentation made external requests')
-  console.log('Nine desktop routes, developer navigation, mobile layout and read-only API controls passed; no external requests.')
+  console.log('Twelve desktop routes, developer navigation, mobile layout, API credentials and read-only API controls passed; no external requests.')
 } finally {
   await context.close()
   await browser.close()

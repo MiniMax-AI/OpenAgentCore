@@ -54,6 +54,12 @@
     "description": "The public application API, private administration API and machine connection interface."
   },
   {
+    "slug": "request-conventions",
+    "source": "docs/api/request-conventions.md",
+    "title": "Request conventions",
+    "description": "Headers, JSON body checks, list parameters and errors shared by every /v1 operation."
+  },
+  {
     "slug": "agents-and-tools",
     "source": "contracts/agents-api/execution-tools.md",
     "title": "Agents, tools and harnesses",
@@ -109,6 +115,12 @@
     "source": "docs/api/web-management.md",
     "title": "Core administration API",
     "description": "Management operations and their server-side credential boundary."
+  },
+  {
+    "slug": "error-codes",
+    "source": "contracts/agents-api/error-codes.md",
+    "title": "Error codes",
+    "description": "Every error code Core, the console and the machine transport write, and what each means."
   },
   {
     "slug": "observability",

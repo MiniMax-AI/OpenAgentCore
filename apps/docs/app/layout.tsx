@@ -16,7 +16,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <DocsProviders>
-          <DocsLayout tree={source.pageTree} {...baseOptions}>{children}</DocsLayout>
+          <DocsLayout
+            tree={source.pageTree}
+            {...baseOptions}
+            // Every visible sidebar link would otherwise prefetch its whole
+            // page: expanding one API tag downloaded several MB of operation
+            // schemas before any click. Pages load on click instead.
+            sidebar={{ prefetch: false }}
+          >
+            {children}
+          </DocsLayout>
         </DocsProviders>
       </body>
     </html>

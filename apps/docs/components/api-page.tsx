@@ -9,5 +9,15 @@ export async function APIPage({
   ...props
 }: Omit<ApiPageProps, "document"> & { document: string }) {
   // References never collect credentials or dispatch requests from the browser.
-  return <OpenAPIPage {...props} document={await loadSurface(document)} disablePlayground={true} />
+  // Response schemas are shown in full; generating a TypeScript copy of every
+  // response for every status compiled the same schemas again and was about
+  // half of each page's render time.
+  return (
+    <OpenAPIPage
+      {...props}
+      document={await loadSurface(document)}
+      disablePlayground={true}
+      generateTypeScriptSchema={false}
+    />
+  )
 }

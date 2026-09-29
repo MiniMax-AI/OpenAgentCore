@@ -22,7 +22,7 @@ export default async function DocsPageRoute({
 
   const MDX = page.data.body
   return (
-    <DocsPage toc={page.data.toc}>
+    <DocsPage toc={page.data.toc} full={page.data.full}>
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>

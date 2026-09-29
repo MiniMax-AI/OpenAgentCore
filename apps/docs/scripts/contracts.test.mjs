@@ -6,7 +6,32 @@ import path from 'node:path'
 import yaml from 'js-yaml'
 import { createOpenAPI } from 'fumadocs-openapi/server'
 import { schemaToString } from '../node_modules/fumadocs-openapi/dist/utils/schema-to-string.js'
-import { appRoot, normalise, surfaces } from './contracts.mjs'
+import { appRoot, normalise, surfaces, splitDescription, mdxText, plainText, fullPath } from './contracts.mjs'
+
+test('overview paths carry the namespace a caller sends', () => {
+  const [publicApi, coreApi] = surfaces
+  assert.equal(fullPath(publicApi, '/agents/{agent_id}'), '/v1/agents/{agent_id}')
+  assert.equal(fullPath(coreApi, '/core/v1/sandbox/deployment'), '/core/v1/sandbox/deployment')
+  assert.equal(fullPath(publicApi, '/v1'), '/v1')
+})
+
+test('operation descriptions split into a lead and details', () => {
+  assert.deepEqual(splitDescription('Saves an Agent.\n\n- Limit one.\n- Limit two.'), { lead: 'Saves an Agent.', details: '- Limit one.\n- Limit two.' })
+  // A single paragraph splits after the first sentences that reach 40 characters.
+  assert.deepEqual(splitDescription('Core key only. Returns the harnesses Core supports. Keys are never returned.'),
+    { lead: 'Core key only. Returns the harnesses Core supports.', details: 'Keys are never returned.' })
+  // Abbreviations and paths do not end a sentence; a short description stays whole.
+  assert.deepEqual(splitDescription('Returns metadata, e.g. the ID, for /v1.x files.'), { lead: 'Returns metadata, e.g. the ID, for /v1.x files.', details: '' })
+  assert.deepEqual(splitDescription(undefined), { lead: '', details: '' })
+})
+
+test('a lead loses inline markdown because page descriptions are plain text', () => {
+  assert.equal(plainText('With `stream=true`, see **[Request conventions](/request-conventions)**.'), 'With stream=true, see Request conventions.')
+})
+
+test('contract markdown is escaped for MDX outside code spans only', () => {
+  assert.equal(mdxText('an empty body is {} and `{}` or <key>'), 'an empty body is &#123;&#125; and `{}` or &lt;key>')
+})
 
 test('public rendering preserves operation prose, schemas and project authentication', () => {
   const fixture = { swagger: '2.0', info: { title: 'Example', version: '1' }, basePath: '/v1', paths: {

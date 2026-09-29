@@ -14,6 +14,40 @@ export const surfaces = [
   { id: 'runtime-api', file: 'runtime.openapi.yaml', directory: '/machine', title: 'Machine connection API', prefix: '/api/v1', credential: 'Route-specific node enrollment, node, daemon, or executor credential', authority: 'Generated local machine contract. These connections reach Core directly, never through Web.' },
 ]
 export function sourcePath(surface) { return path.join(repoRoot, 'contracts/agents-api', surface.file) }
+
+// A contract route as a caller sends it. Core and machine routes already carry
+// their namespace; public routes are relative to /v1.
+export function fullPath(surface, route) {
+  return route === surface.prefix || route.startsWith(surface.prefix + '/') ? route : surface.prefix + route
+}
+
+// An operation description is a short lead and optional details. The lead is
+// the first paragraph, or for a single paragraph its first sentences up to at
+// least 40 characters ("Core key only." alone says too little).
+export function splitDescription(text = '') {
+  const trimmed = text.trim()
+  const paragraph = trimmed.indexOf('\n\n')
+  if (paragraph >= 0) return { lead: trimmed.slice(0, paragraph).trim(), details: trimmed.slice(paragraph + 2).trim() }
+  const sentence = /[.!?](?=\s+[A-Z`"(])/g
+  let end = -1
+  for (let match; (match = sentence.exec(trimmed));) {
+    end = match.index + 1
+    if (end >= 40) break
+  }
+  if (end < 0 || end >= trimmed.length - 1) return { lead: trimmed, details: '' }
+  return { lead: trimmed.slice(0, end), details: trimmed.slice(end).trim() }
+}
+
+// Markdown from a contract, made safe for MDX: braces and angle brackets stay
+// literal text outside code spans.
+// Page descriptions render as plain text, so the lead drops inline markdown.
+export function plainText(text) {
+  return text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\*\*([^*]*)\*\*/g, '$1').replace(/`([^`]*)`/g, '$1')
+}
+
+export function mdxText(text) {
+  return text.split(/(`+[^`]*`+)/g).map((part, i) => i % 2 ? part : part.replaceAll('{', '&#123;').replaceAll('}', '&#125;').replaceAll('<', '&lt;')).join('')
+}
 export function normalise(surface, source = yaml.load(fs.readFileSync(sourcePath(surface), 'utf8'))) {
   if (source.swagger !== '2.0' && !/^3\./.test(source.openapi ?? '')) throw new Error('Unsupported contract format: ' + surface.file)
   const base = source.basePath === '/' ? '' : (source.basePath ?? '')

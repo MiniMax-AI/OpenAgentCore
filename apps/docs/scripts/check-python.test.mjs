@@ -22,7 +22,7 @@ test('route gate and Python regressions honor the selected interpreter without s
     })
     assert.equal(result.status, 0, result.stdout + result.stderr)
     if (mode === 'routes') assert.match(result.stdout, /Contract operations:\s+[1-9]\d*\b/)
-    else assert.match(result.stderr, /Ran 2 tests/)
+    else assert.match(result.stderr, /Ran 3 tests/)
   }
   const invocations = fs.readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line))
   assert.equal(invocations.length, 2)

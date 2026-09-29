@@ -41,6 +41,30 @@ CONST = re.compile(r"\bconst\s+(\w+)\s*=\s*\"([^\"]*)\"")
 
 IGNORED = {("/healthz", "GET"): "liveness probe, not part of the Agent API"}
 
+# Machine transport served beside the API router by cmd/server. These are not
+# REST operations and no OpenAPI contract publishes them; each must be named in
+# the API index, and its error shapes in contracts/agents-api/error-codes.md.
+SERVER = REPO / "services/agents-api/cmd/server/http_routes.go"
+GATEWAY = REPO / "internal/agentdaemon/gateway/routes.go"
+# The Runtime gateway mounts the daemon routes under this prefix.
+GATEWAY_MOUNT = REPO / "services/agents-api/internal/runtime/gateway.go"
+MOUNT = re.compile(r"\.Route\(\s*\"([^\"]+)\"\s*,\s*func\([^)]*\)\s*\{\s*gateway\.RegisterRoutes\(")
+INDEX = REPO / "docs/api/README.md"
+# mux.Handle or mux.HandleFunc, with the handler expression.
+MUX = re.compile(r"\bmux\.Handle(?:Func)?\(\s*\"([^\"]+)\"\s*,\s*([\w.]+)")
+# A chi Handle or HandleFunc mounts a non-REST handler, such as static artifacts.
+CHI_HANDLE = re.compile(r"\b\w+\.Handle(?:Func)?\(\s*\"(/api/v1/[^\"]+)\"")
+TRANSPORT = {
+    "/api/v1/agent-daemon/": "prefix of the daemon gateway routes below",
+    "/api/v1/agent-daemon/enroll": "self-hosted executor enrollment; plain-text errors",
+    "/api/v1/agent-daemon/connection": "self-hosted executor connection check; plain-text errors",
+    "/api/v1/agent-daemon/ws": "daemon WebSocket",
+    "/api/v1/agent-daemon/bootstrap": "daemon bootstrap",
+    "/api/v1/agent-daemon/device-status": "daemon self-check",
+    "/api/v1/sandbox-node/connect": "node WebSocket; plain-text errors",
+    "/api/v1/agent-daemon/install/": "public immutable native installer artifacts",
+}
+
 # Differences between the contract and the registered route that the reference
 # accepts on purpose, keyed (path, method) as the contract spells them.
 ACCEPTED = {}
@@ -190,7 +214,7 @@ def main() -> int:
         base = (document.get("basePath") or "").rstrip("/")
         for route, item in (document.get("paths") or {}).items():
             for method in item:
-                if method in ("get", "post", "put", "patch", "delete", "head", "options"):
+                if method in ("get", "post", "put", "patch", "delete", "head", "options", "trace"):
                     documented.setdefault(((base + route) or "/", method.upper()), label)
 
     guard_paths = set()
@@ -220,7 +244,47 @@ def main() -> int:
         print("      %-6s %-72s [%s]" % (method, path, documented[(path, method)]))
     for path, method in accepted:
         print("      ok     %-72s %s" % (path, ACCEPTED[(path, method)]))
-    return 1 if real or undocumented else 0
+    print()
+    transport_problems = check_transport()
+    return 1 if real or undocumented or transport_problems else 0
+
+
+def transport_paths() -> set[str]:
+    """Paths cmd/server mounts beside the API, plus the daemon gateway routes."""
+    server = SERVER.read_text(encoding="utf-8")
+    # Paths handed back to the API router are API routes, checked by [A] and [B].
+    paths = {path for path, handler in MUX.findall(server) if path != "/" and handler != "apiHandler"}
+    for name in sorted(API.glob("*.go")):
+        if not name.name.endswith("_test.go"):
+            paths.update(path.rstrip("*") for path in CHI_HANDLE.findall(name.read_text(encoding="utf-8")))
+    mounts = MOUNT.findall(GATEWAY_MOUNT.read_text(encoding="utf-8"))
+    if len(mounts) != 1:
+        raise ValueError("expected one gateway.RegisterRoutes mount in " + str(GATEWAY_MOUNT))
+    gateway = Region(GATEWAY.read_text(encoding="utf-8"))
+    paths.update(path for path, _ in gateway.routes({"r": mounts[0]}))
+    return paths
+
+
+def check_transport() -> int:
+    registered = transport_paths()
+    index = INDEX.read_text(encoding="utf-8")
+    problems = []
+    for path in sorted(registered - TRANSPORT.keys()):
+        problems.append("registered transport path with no TRANSPORT entry: " + path)
+    for path in sorted(TRANSPORT.keys() - registered):
+        problems.append("TRANSPORT entry no longer registered: " + path)
+    for path in sorted(registered & TRANSPORT.keys()):
+        tail = path[len("/api/v1/"):].rstrip("/")
+        # The index names each route in backticks, optionally after its method.
+        mention = re.compile(r"`(?:[A-Z]+ )?" + re.escape(tail) + r"`")
+        if not path.endswith("/") and not mention.search(index):
+            problems.append("transport path missing from docs/api/README.md: " + path)
+    print("  [C] Machine transport outside the contracts: %d  (%d problems)" % (len(registered), len(problems)))
+    for path in sorted(registered & TRANSPORT.keys()):
+        print("      ok     %-72s %s" % (path, TRANSPORT[path]))
+    for problem in problems:
+        print("      " + problem)
+    return len(problems)
 
 
 if __name__ == "__main__":

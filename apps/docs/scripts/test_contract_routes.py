@@ -19,6 +19,12 @@ class RouteTests(unittest.TestCase):
         child = routes.Region('r.Get("/projects/{project_id}", h.getProject)')
         self.assertEqual(child.routes({"r": "/core/v1"}), [("/core/v1/projects/{project_id}", "GET")])
 
+    def test_transport_paths_are_all_accounted_for(self):
+        registered = routes.transport_paths()
+        self.assertIn("/api/v1/sandbox-node/connect", registered)
+        self.assertIn("/api/v1/agent-daemon/ws", registered)
+        self.assertEqual(registered, set(routes.TRANSPORT))
+
     def test_unrelated_router_does_not_acquire_a_prefix(self):
         region = routes.Region('unknown.Get("/projects", handler)')
         self.assertEqual(region.routes({"r": "/core/v1"}), [])
