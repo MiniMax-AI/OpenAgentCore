@@ -230,7 +230,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		daemonHandler, registry, err = runtime.NewGatewayWithURLResolver(executionStore, wsURL, managedNodes.webSocketURL(wsURL))
+		daemonHandler, registry, err = runtime.NewGateway(executionStore, wsURL)
 		if err != nil {
 			return err
 		}

@@ -399,3 +399,24 @@ reset its idle timer. An offline node or a provider without an observation sourc
 returns unavailable telemetry. Provider timestamps retain their existing
 validation, so excessive node/Core clock skew can also make a sample unavailable;
 suspension eligibility continues to use database time.
+
+## Historical installations
+
+Historical upgrades and resource adoption are unsupported. Core does not verify
+old allocation receipts to bind them to a new node, manufacture placements for
+pending Sessions, or reconnect nodes whose deployment has no valid specification.
+Startup rejects an incompatible saved selection before claiming its owner epoch.
+New installations use a separate database and state directory, select a deployment
+specification, and enroll nodes through the current configuration protocol.
+
+Keep the previous Core, its database, credentials, node identities and provider
+resources together until its work and cleanup are settled. Running compute,
+retained snapshots, uncertain create/restore operations and unconfirmed cleanup
+remain that installation's responsibility. Do not point a new installation at
+those resources, erase their receipts, or treat a refused startup as cleanup.
+Operators must explicitly settle them using the original installation before
+retiring it. This release does not perform that operation during startup.
+
+Current-version reconnect, immutable placement, maintenance fencing, idempotent
+receipts, cancellation and cleanup confirmation still apply. Released allocation
+history remains stored; it is never rebound to another node.
