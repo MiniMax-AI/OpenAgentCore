@@ -276,6 +276,8 @@ the private Caddy socket even when container inputs already match. A successful
 apply reconciles domain operation status after verifying the running services.
 Domain preparation retains the old entry point while
 verifying a trusted certificate and installation-specific response over HTTPS.
+It takes that address from the generated service settings, so pending desired
+inputs left by an interrupted attempt cannot redirect first-run access prematurely.
 Only then does it update `public_url` and call the common apply path. Failure
 restores the previous desired configuration and reports incomplete recovery.
 Interrupted operations retain desired files and a visible failure/retry state;

@@ -69,6 +69,9 @@ def prepare(root, name, confirmation):
     if previous is None or any(previous.get(key) != value for key, value in config_model.values(config).items()
                                if key != "public_url"):
         raise DomainError("configuration_pending", "Apply or revert pending config.json changes before changing the domain", 409)
+    # A previous attempt may have saved desired inputs without applying them.
+    # Keep the address from the generated service configuration during verification.
+    config = dict(config, public_url=previous.get("public_url"))
     candidate = dict(config, public_url=target)
     config_model.validate(candidate)
     actual = oac_cli.observe(state)

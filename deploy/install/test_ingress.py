@@ -84,6 +84,14 @@ class DomainTests(unittest.TestCase):
         with mock.patch.object(oac_cli, "_apply", side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
             ingress.configure(self.root, "core.example.com", out=lambda _: None)
         self.assertEqual(ingress.status(self.root)["state"], "failed")
+        ingress_config.reload.reset_mock()
+        ingress.verify.side_effect = ingress.DomainError("https_not_ready", "DNS not ready")
+        with self.assertRaisesRegex(ingress.DomainError, "DNS not ready"):
+            ingress.configure(self.root, "core.example.com", out=lambda _: None)
+        for call in ingress_config.reload.call_args_list:
+            self.assertNotIn("redir", call.args[1])
+        self.assertIsNone(ingress.status(self.root)["public_url"])
+        ingress.verify.side_effect = None
         ingress.configure(self.root, "core.example.com", out=lambda _: None)
         self.assertEqual(ingress.status(self.root)["state"], "ready")
 
