@@ -25,6 +25,12 @@ OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents
 - **Every part is replaceable.** Sandboxes, harnesses and model providers plug in
   through defined protocols.
 
+## Screenshots
+
+| Overview | Agent metrics |
+| --- | --- |
+| ![Deployment overview](docs/assets/console-overview-en.png) | ![Agent metrics](docs/assets/console-agent-metrics-en.png) |
+
 ## Install
 
 On a Linux amd64 host with Docker and Python 3.9+:
