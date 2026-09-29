@@ -92,7 +92,8 @@ def publish(assets, repository, revision, tag, mode):
         if not re.fullmatch(r"(linux|darwin|windows)-(amd64|arm64)", platform):
             raise ValueError("Invalid native installer platform")
         path = assets / f"oac-native-{revision}-{platform}.tar.gz"
-        if distribution.sha256(path) != entry["sha256"]:
+        if (distribution.sha256(path) != entry["sha256"]
+                or path.with_name(path.name + ".sha256").read_text() != entry["sha256"] + "  " + path.name + "\n"):
             raise ValueError("Native installer checksum mismatch")
 
     refuse_existing(repository, tag)

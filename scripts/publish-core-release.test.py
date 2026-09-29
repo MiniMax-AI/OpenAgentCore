@@ -34,7 +34,9 @@ class PublicationTests(unittest.TestCase):
         for platform in ("linux-amd64", "darwin-arm64", "windows-amd64"):
             name = f"oac-native-{self.revision}-{platform}.tar.gz"
             (self.assets / name).write_bytes(b"native archive")
-            catalog["artifacts"][platform] = {"sha256": hashlib.sha256(b"native archive").hexdigest()}
+            checksum = hashlib.sha256(b"native archive").hexdigest()
+            catalog["artifacts"][platform] = {"sha256": checksum}
+            (self.assets / (name + ".sha256")).write_text(checksum + "  " + name + "\n")
         with tarfile.open(self.assets / (self.stem + ".tar.gz"), "w:gz") as archive:
             raw = json.dumps(catalog).encode()
             member = tarfile.TarInfo(self.stem + "/native-installers/catalog.json")
@@ -101,7 +103,7 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertFalse(self.release["draft"])
         self.assertFalse(self.release["prerelease"])
-        self.assertEqual(len(self.release["assets"]), 9)
+        self.assertEqual(len(self.release["assets"]), 12)
         self.assertEqual(self.api.call_args.args[1:],
                          ("releases/7", "--method", "PATCH", "-F", "draft=false"))
 
