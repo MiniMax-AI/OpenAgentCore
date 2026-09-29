@@ -49,16 +49,17 @@ enrollment and the public protocol remain shared. The image supplies the private
 change them. Public Files and Artifacts use the common bound workspace helpers.
 
 The native process, ACP Session and six original native tools use the declared
-Environment workspace (`/workspace` in the Docker image). The tools connect through one trusted MCP bridge
-with the daemon user's ordinary permissions and no inner sandbox. MCP is internal
-transport here; its presence alone does not enable caller-supplied public MCP servers.
-Native project discovery uses that same workspace; adapter-owned configuration and
-history remain in the private Session data directory. Exact native-ID continuation remains
-required; recovery without a recorded ID fails closed. Native Bash observations
-become public `command_execution` items after command arguments arrive. Their
-text output and status are retained; absent native exit code/duration stay unknown.
-The private MCP server and file/skill/task utilities are not invented public MCP
-or function calls.
+Environment workspace (`/workspace` in the Docker image). The tools connect
+through one trusted MCP bridge with the daemon user's ordinary permissions and
+no inner sandbox. MCP is internal transport here; its presence alone does not
+enable caller-supplied public MCP servers. Native project discovery uses that
+same workspace; adapter-owned configuration and history remain in the private
+Session data directory. Exact native-ID continuation remains required; recovery
+without a recorded ID fails closed. Native Bash observations become public
+`command_execution` items after command arguments arrive. Their text output and
+status are retained; absent native exit code/duration stay unknown. The private
+MCP server and file/skill/task utilities are not invented public MCP or function
+calls.
 
 ## Provider configuration
 
@@ -87,15 +88,16 @@ mapping; only actual Bash calls become `command_execution`.
 
 ## Execution boundaries
 
-Each API Session uses a separate native state directory. Workspace execution uses
-the declared Environment directory; text-only execution uses a private cwd. The execution
-child inherits only process and model-network essentials; it does not inherit
-Core/daemon tokens or arbitrary Node startup configuration. The adapter owns its
-native config, instructions and home and disables external skills, delegated work,
-web search, builtin file/shell tools, browser tools, mcode-tools and native goals.
-The workspace profile uses its tool bridge without sandbox isolation. Tools can
-read any local state available to the launching user. The outer Environment owns
-managed isolation; daemon network modes do not add another network boundary.
+Each API Session uses a separate native state directory. Workspace execution
+uses the declared Environment directory; text-only execution uses a private cwd.
+The execution child inherits only process and model-network essentials; it does
+not inherit Core/daemon tokens or arbitrary Node startup configuration. The
+adapter owns its native config, instructions and home and disables external
+skills, delegated work, web search, builtin file/shell tools, browser tools,
+mcode-tools and native goals. The workspace profile uses its tool bridge without
+sandbox isolation. Tools can read any local state available to the launching
+user. The outer Environment owns managed isolation; daemon network modes do not
+add another network boundary.
 
 Provide system dependencies at image/template build time or on the self-hosted
 machine before execution. Runtime does not run apt or sudo or elevate daemon
@@ -117,9 +119,10 @@ Cancellation waits for process-group exit and output settlement. Public slash
 text remains a model message instead of invoking native ACP operator commands.
 
 Cold continuation requires the exact persisted native Session ID and matching
-workspace cwd (or private cwd for text-only execution). Missing/foreign history fails; recovery by guessing an ID from native
-session listings is not qualified. Public usage breakdown is unavailable because
-native ACP context occupancy and cumulative cost are not per-Turn usage.
+workspace cwd (or private cwd for text-only execution). Missing/foreign history
+fails; recovery by guessing an ID from native session listings is not qualified.
+Public usage breakdown is unavailable because native ACP context occupancy and
+cumulative cost are not per-Turn usage.
 
 ### Adapter rules
 
@@ -145,31 +148,34 @@ later work recovers the same native history in a new owner without replay.
 The MiniMax workspace profile builds one CLI from the fixed upstream source and
 lockfile through the existing companion packaging path, and connects native
 workspace tools through its standard MCP client. The process and native Session
-share the declared workspace directory, including for cold continuation. A trusted adapter-owned bridge
-runs the original six tool implementations with the launching user's ordinary
-permissions. It adds no inner sandbox on any platform. Keep native history in the Session data directory and native execution and
-Files/Artifacts bound to the same Environment workspace. Core and shared file helpers remain engine
-neutral. This internal MCP transport does not admit public MCP configuration.
-Record the upstream revision, native admission patch hashes and worker-source
-provenance. The bounded patch checks the shared descendant-task limit inside the
-existing native SQLite admission transaction before start, without another
-scheduler. ACP initialization must acknowledge the applied limit before input.
-The native tool catalog selects the same admitted workspace tools for every child,
-not only the root's configured profile; this is tool selection, not filesystem
-isolation. Only the Session's authorized internal
+share the declared workspace directory, including for cold continuation. A
+trusted adapter-owned bridge runs the original six tool implementations with the
+launching user's ordinary permissions. It adds no inner sandbox on any platform.
+Keep native history in the Session data directory and native execution and
+Files/Artifacts bound to the same Environment workspace. Core and shared file
+helpers remain engine neutral. This internal MCP transport does not admit public
+MCP configuration. Record the upstream revision, native admission patch hashes
+and worker-source provenance. The bounded patch checks the shared
+descendant-task limit inside the existing native SQLite admission transaction
+before start, without another scheduler. ACP initialization must acknowledge the
+applied limit before input. The native tool catalog selects the same admitted
+workspace tools for every child, not only the root's configured profile; this is
+tool selection, not filesystem isolation. Only the Session's authorized internal
 workspace MCP entry crosses the native child selector; this does not grant
 external MCP access. Initialization must acknowledge the admitted tool inventory
-before input as well. Subagent reads use the Session's native database; the daemon
-does not protect it from other tools running as the same user. Multi-agent
-workspace execution installs only the existing authorized workspace MCP entry in
-that private native configuration so children inherit the same tools; public MCP
-and Environment-origin MCP combinations remain separately qualified. Complete the hosted
-[acceptance checklist](../../../../contracts/agents-api/harnesses.md#acceptance-checklist) before enabling
-hosted execution. The standalone companion uses its own npm lock; `make check`
-runs its lifecycle tests and script checks, while its exact-source Linux build and
-native qualification for the actual supported platform and outer deployment
-are required when the companion changes. Historical tests of both inner network
-policies do not qualify the current bypass implementation.
+before input as well. Subagent reads use the Session's native database; the
+daemon does not protect it from other tools running as the same user.
+Multi-agent workspace execution installs only the existing authorized workspace
+MCP entry in that private native configuration so children inherit the same
+tools; public MCP and Environment-origin MCP combinations remain separately
+qualified. Complete the hosted [acceptance
+checklist](../../../../contracts/agents-api/harnesses.md#acceptance-checklist)
+before enabling hosted execution. The standalone companion uses its own npm
+lock; `make check` runs its lifecycle tests and script checks, while its
+exact-source Linux build and native qualification for the actual supported
+platform and outer deployment are required when the companion changes.
+Historical tests of both inner network policies do not qualify the current
+bypass implementation.
 
 ## Acceptance
 
