@@ -25,6 +25,7 @@ from urllib.parse import urlsplit
 
 import config_model
 import configuration
+import ingress_config
 from configuration import valid_core_origin
 import rename
 import native_installers
@@ -83,17 +84,17 @@ def verify_bundle(bundle):
             raise InstallError("Invalid distribution path")
         if digest(path) != expected:
             raise InstallError("Distribution checksum mismatch: " + name)
-    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "config_model.py",
+    required = {"manifest.json", "install.sh", "install.py", "configuration.py", "config_model.py", "ingress_config.py", "ingress.py",
                 "config.schema.json", "oac_cli.py", "convert.py", "rename.py", "oac.pyz", "native_service.py",
                 "sandbox_setup.py", "install_output.py", "install_display.py", "standard-sizes.json", "node_spec.py", "node-install.pyz",
                 "distribution.py", "runtime/seccomp.json"}
-    required.update(f"images/{name}.tar" for name in ("core", "web", "database"))
+    required.update(f"images/{name}.tar" for name in ("core", "web", "database", "ingress"))
     required.update("native/bin/" + name for name in ("oac-core", "oac-core-migrate"))
     required.add("native/e2b/oac-e2b-provider")
     if not required.issubset(covered):
         raise InstallError("Distribution checksum list is incomplete")
     manifest = json.loads((bundle / "manifest.json").read_text())
-    for name in ("core", "web", "database", "runtime"):
+    for name in ("core", "web", "database", "runtime", "ingress"):
         image_identities(manifest, name)
     for name in ("images/runtime.tar.gz", "native/bin/oac-node",
                  "native/bin/oac-microsandbox-provider", "native/microsandbox/msb",
@@ -234,6 +235,9 @@ def seed_config(args, document):
     native = bool(args.native_core)
     values = {key: getattr(args, flag.removeprefix("--").replace("-", "_"))
               for flag, (key, _) in SETTING_ARGUMENTS.items()}
+    values["ingress"] = values["ingress"] or ("managed" if mode == "all" and not native else "external")
+    if values["ingress"] == "managed" and values["host"] is None:
+        values["host"] = "0.0.0.0"
     values["ports.database"] = database_port() if native else None
     return config_model.initial(mode, native, **values)
 
@@ -322,11 +326,11 @@ def check_host():
     run(["docker", "info", "--format", "{{.ServerVersion}}"], stdout=subprocess.DEVNULL)
 
 
-def image_names(mode, native):
+def image_names(mode, native, managed=False):
     if mode == "web-only":
         return ["web"]
     names = ["database"] if native else ["core", "database"]
-    return names + (["web"] if mode == "all" else [])
+    return names + (["web"] if mode == "all" else []) + (["ingress"] if managed else [])
 
 
 def image_loader(manifest, bundle):
@@ -517,6 +521,9 @@ def create(root, args, config, manifest, images):
              "source_commit": manifest["source_commit"], "images": images,
              "secrets_sha256": configuration.secret_digests(root, mode), "core_installation_id": None,
              "converted_from": None, "generated": {}}
+    if ingress_config.enabled(config):
+        state["ingress"] = ingress_config.preflight()
+        ingress_config.prepare(root)
     state["secrets_sha256"].pop("core.key")
     # state.json first: whenever config.json exists, the installation can be repaired.
     write(root / "state.json", json.dumps(state, indent=2) + "\n")
@@ -531,6 +538,8 @@ def finish(root, bundle, manifest, fresh=False, selection=None):
     native_service.prepare(root, state, bundle)
     native_installers.prepare(root, state, bundle)
     install_oac(root, bundle)
+    if ingress_config.enabled(oac_cli.load_config(root)):
+        ingress_config.prepare(root)
     retry = f"rerun ./install.sh --install-dir {root}"
     try:
         args = argparse.Namespace(dry_run=False, yes=False, confirm_public_url_change=None)
@@ -566,7 +575,7 @@ def summary(root, config, fresh, selection=None, deployment=None, incomplete=Fal
     addresses = []
     if mode != "core-only":
         # Web accepts only its configured origin.
-        console = configuration.web_origin(config)
+        console = ingress_config.console_origin(config) if ingress_config.enabled(config) else configuration.web_origin(config)
         addresses.append("Console: " + console + (" (local only)" if loopback_origin(console) else ""))
     if mode != "web-only":
         api = configuration.service_origin(config, "core") + "/v1"
@@ -673,8 +682,10 @@ def install_locked(args, root, bundle, manifest, prepared):
     for key in ("core", "web", "database"):
         if key in config["ports"]:
             free_port(config["ports"][key], "127.0.0.1" if key == "database" else config["host"])
+    if ingress_config.enabled(config):
+        ingress_config.preflight()
     selection = None if choice == "none" else sandbox_setup.selection(bundle, manifest, choice, e2b)
-    images = image_loader(manifest, bundle)(image_names(config["mode"], config.get("native_core", False)))
+    images = image_loader(manifest, bundle)(image_names(config["mode"], config.get("native_core", False), ingress_config.enabled(config)))
     step("Creating installation settings and credentials")
     create(root, args, config, manifest, images)
     finish(root, bundle, manifest, fresh=True, selection=selection)

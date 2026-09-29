@@ -10,11 +10,8 @@ export const common = {
   },
   installationNotice: {
     title: "Public address needs attention",
-    body: "The public address is local to the Core machine. Applications, nodes and executors on other machines cannot connect.",
-    repair: "In <path/>, change public_url to an HTTPS address reachable from other machines, then run <command/>.",
-    noConfiguration: "Set public_url to an HTTPS address reachable from other machines in the installation configuration, then apply it on the Core host. Core has not reported the configuration path or apply command.",
-    copyPath: "Copy configuration path",
-    copyCommand: "Copy apply command",
+    body: "Configure HTTPS before connecting applications and nodes from other machines.",
+    configure: "Configure domain and HTTPS",
     addBlocked: "Add node is unavailable while the public address is local only.",
   },
   actions: {

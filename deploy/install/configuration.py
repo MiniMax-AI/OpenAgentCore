@@ -12,6 +12,7 @@ import re
 from urllib.parse import urlencode, urlsplit
 
 import config_model
+import ingress_config
 import native_service
 
 # Where Core and Web containers see secrets and generated inputs.
@@ -125,7 +126,7 @@ def loopback_listener(host):
 
 def service_address(config, service, connect=False):
     """One derivation for listen addresses and local operator connections."""
-    host = config["host"]
+    host = "127.0.0.1" if service == "core" and ingress_config.enabled(config) else config["host"]
     address = ipaddress.ip_address(host)
     host = str(address)
     if connect and address.is_unspecified:
@@ -269,7 +270,14 @@ def compose_config(root, config, state):
             web.pop("ports")
             web["network_mode"] = "host"
             environment["OAC_WEB_ADDR"] = service_address(config, "web")
+        if ingress_config.enabled(config):
+            web.pop("ports")
+            environment["OAC_WEB_INSTALLATION_SOCKET"] = "/installation/api.sock"
+            environment["OAC_WEB_BOOTSTRAP"] = "1" if not config["public_url"] else "0"
+            web["volumes"].append(bind(root / "ingress/api", "/installation"))
         services["web"] = web
+    if ingress_config.enabled(config):
+        services.update(ingress_config.services(root, config, state, bind))
     return doc
 
 
@@ -333,6 +341,8 @@ def render(root, config, state, applied_at):
         text = json.dumps(service, sort_keys=True) + (core_env if "env_file" in service else "")
         services[name] = sha256(text + external.get("core" if name == "migrate" else name, ""))
         service["labels"] = {LABEL: services[name]}
+    if ingress_config.enabled(config):
+        files["Caddyfile"] = ingress_config.caddyfile(config, state)
     files["compose.json"] = json.dumps(compose, indent=2) + "\n"
     if native:
         unit = native_service.unit_name(state)

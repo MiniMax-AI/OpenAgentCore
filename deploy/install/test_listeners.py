@@ -30,7 +30,7 @@ class ListenerTests(unittest.TestCase):
 
     def install(self, *flags):
         with contextlib.redirect_stdout(self.output):
-            run_installer(install, self.bundle, ["--install-dir", self.root, "--sandbox", "none", *flags])
+            run_installer(install, self.bundle, ["--install-dir", self.root, "--sandbox", "none", "--ingress", "external", *flags])
 
     def document(self, name):
         return json.loads((self.root / name).read_text())

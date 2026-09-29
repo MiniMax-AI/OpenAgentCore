@@ -25,6 +25,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 import config_model
+import ingress_config
 import configuration
 import native_service
 
@@ -291,7 +292,8 @@ def health(root, config, expected):
             raise OacError("Core did not accept the Core key at /core/v1/installation")
     if "web" in expected:
         url = configuration.service_origin(config, "web")
-        if wait_status(url + "/console/auth", {"Host": urlsplit(config["public_url"] or url).netloc}) is None:
+        path = "/healthz" if ingress_config.enabled(config) else "/console/auth"
+        if wait_status(url + path, {"Host": urlsplit(config["public_url"] or url).netloc}) is None:
             raise OacError("Web sign-in is unavailable")
 
 
@@ -299,6 +301,8 @@ def health(root, config, expected):
 
 def check_fixed(config, state):
     """state.json records mode and native_core at installation; it wins over config.json."""
+    if ingress_config.enabled(config) != ("ingress" in state["images"]):
+        raise OacError("ingress is fixed after installation; install separately to change it")
     for key in ("mode", "native_core"):
         if config.get(key, False) != state[key]:
             raise OacError(f"{key} is fixed after installation ({json.dumps(state[key])}). "
@@ -548,7 +552,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
     for name in edited:
         out(f"generated/{name} was edited by hand; it is overwritten and the edited copy is kept.")
     out("Files to write: " + (", ".join("generated/" + name for name in sorted(set(changed) | set(removed))) or "none"))
-    restarts = [name for name in ("database", "core", "web") if name in (todo | force)]
+    restarts = [name for name in ("database", "core", "web", "gateway", "installation") if name in (todo | force)]
     stale_stopped = [name for name in rendered.services if name != "migrate" and name not in will_run
                      and actual.get(name, {}).get("inputs") not in (None, rendered.services[name])]
     if restarts:
@@ -580,6 +584,11 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         (root / "generated" / name).unlink()
     try:
         converge(root, state, rendered.services, will_run, force)
+        if ingress_config.enabled(config) and "gateway" in will_run:
+            ingress_config.reload(root, rendered.files["Caddyfile"])
+            if config["public_url"]:
+                import ingress
+                ingress.verify(config["public_url"], state["installation_id"])
         health(root, config, will_run)
     except (OacError, RuntimeError, subprocess.CalledProcessError) as error:
         line = core_error_line(root, state)
@@ -602,6 +611,8 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
                 write_private(path, data)
         try:
             converge(root, state, written_inputs, will_run)
+            if ingress_config.enabled(config) and "gateway" in will_run:
+                ingress_config.reload(root, disk["Caddyfile"].decode())
         except (OacError, RuntimeError, subprocess.CalledProcessError) as second:
             raise OacError(f"config.json not applied: {describe(error)}. The previous generated files were restored, "
                               f"but the services could not be started with them either ({describe(second)}); run "
@@ -620,7 +631,7 @@ def written_view(root, state, config):
         if config is None:
             raise OacError("Neither config.json nor generated/settings.json can be read")
         return config
-    return {"mode": state["mode"], "public_url": values.get("public_url"), "host": values["host"],
+    return {"mode": state["mode"], "ingress": values.get("ingress"), "public_url": values.get("public_url"), "host": values["host"],
             "ports": {name: values[f"ports.{name}"] for name in ("core", "web", "database") if f"ports.{name}" in values},
             "web": {"core_url": values.get("web.core_url")}}
 
@@ -666,11 +677,12 @@ def status(root, out=print):
         web_ok = http(configuration.service_origin(config, "web") + "/healthz")[0] == 200
         healthy = healthy and web_ok
         out("Web: " + ("healthy" if web_ok else "unavailable"))
-    out("Public URL: " + (config["public_url"] or "none (local access only)"))
+    out("Public URL: " + (config["public_url"] or ("not configured; set up HTTPS in Web" if ingress_config.enabled(config) else "none (local access only)")))
     if mode != "web-only":
         out("API base URL: " + configuration.local_public_url(config) + "/v1")
     if mode != "core-only":
-        out("Console: " + (config["public_url"] or configuration.service_origin(config, "web")))
+        out("Console: " + (ingress_config.console_origin(config) if ingress_config.enabled(config) else
+                           config["public_url"] or configuration.service_origin(config, "web")))
     out("Source commit: " + state["source_commit"])
     if loaded is not None:
         for key in ("mode", "native_core"):
@@ -806,6 +818,10 @@ def main(argv=None, root=None, out=print):
                               help="Overwrite hand-edited generated files, keeping each edited copy")
     apply_parser.add_argument("--confirm-public-url-change", metavar="URL",
                               help="Confirm a public URL change non-interactively; must equal the new URL")
+    domain = commands.add_parser("domain", help="Configure and verify managed HTTPS using a DNS hostname")
+    domain.add_argument("hostname")
+    domain.add_argument("--confirm-public-url-change", metavar="URL")
+    commands.add_parser("domain-server", help=argparse.SUPPRESS)
     rotate = commands.add_parser("rotate-core-key", help="Replace the Core key; the old key stops working")
     rotate.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
     args = parser.parse_args(argv)
@@ -815,6 +831,12 @@ def main(argv=None, root=None, out=print):
     if args.command == "apply":
         apply(root, dry_run=args.dry_run, yes=args.yes, discard_edits=args.discard_edits,
               confirm_public_url_change=args.confirm_public_url_change, out=out)
+    elif args.command == "domain":
+        import ingress
+        ingress.configure(root, args.hostname, args.confirm_public_url_change, out)
+    elif args.command == "domain-server":
+        import ingress
+        ingress.serve(root)
     elif args.command == "rotate-core-key":
         rotate_core_key(root, yes=args.yes, out=out)
     else:

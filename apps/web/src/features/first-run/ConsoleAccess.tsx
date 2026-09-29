@@ -7,6 +7,7 @@ import { ThemeMenu } from "../../components/ThemeMenu";
 import { useToast } from "../../components/Toast";
 import { setLanguage } from "../../i18n";
 import { queryClient } from "../../lib/queries";
+import { DomainHandoff } from "../system/DomainHandoff";
 import { OnboardingLayout } from "../onboarding/OnboardingLayout";
 import { withTransition } from "../onboarding/view-transition";
 import { changeConsoleAuth, ConsoleAuthError, readConsoleAuth, type ConsoleAuth } from "./auth";
@@ -19,7 +20,7 @@ import "./console-access.css";
  */
 const CORE_KEY_LOCATION = { file: "secrets/core.key", defaultPath: "~/.oac/core/secrets/core.key" } as const;
 
-const ConsoleAccountContext = createContext<{ logout: () => Promise<void> } | null>(null);
+const ConsoleAccountContext = createContext<{ logout: () => Promise<void>; setDomainHandoff: (url: string | null) => void } | null>(null);
 export const useConsoleAccount = () => useContext(ConsoleAccountContext);
 
 export function ConsoleLanguage() {
@@ -47,6 +48,7 @@ export function ConsoleAccountMenu() {
 export function ConsoleAccess({ children }: { children: ReactNode }) {
   const { t } = useTranslation("firstRun");
   const [status, setStatus] = useState<ConsoleAuth | null>(null);
+  const [domainHandoff, setDomainHandoff] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [revision, setRevision] = useState(0);
   const generation = useRef(0);
@@ -75,15 +77,18 @@ export function ConsoleAccess({ children }: { children: ReactNode }) {
     window.addEventListener("focus", check);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", check); };
   }, [status?.mode, refresh]);
-  if (status?.mode === "authenticated") return <ConsoleAccountContext.Provider value={{ logout: async () => {
+  if (status?.mode === "authenticated") return <ConsoleAccountContext.Provider value={{ setDomainHandoff, logout: async () => {
     const next = await changeConsoleAuth({ action: "logout" });
     generation.current++;
+    setDomainHandoff(null);
     acceptStatus(next, true);
   } }}>{children}</ConsoleAccountContext.Provider>;
 
   return <OnboardingLayout scene={status ? "login" : null} controls={<><ThemeMenu /><ConsoleLanguage /></>}>
+    <DomainHandoff url={domainHandoff} />
     {status && !failed ? <CoreKeyForm key={revision} onAuthenticated={(next, from) => {
       queryClient.clear();
+      setDomainHandoff(null);
       // The console opens on the Overview, revealed from the pressed button.
       withTransition("enter", () => {
         generation.current++;

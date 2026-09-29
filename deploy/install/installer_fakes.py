@@ -188,6 +188,8 @@ class FakeHost:
                     self.containers[name]["running"] = True
             if "web" in names:
                 web = services["web"]
+                if "gateway" in services:
+                    web = services["gateway"]
                 self.web_port = int(web["ports"][0].rsplit(":", 2)[1]) if "ports" in web else int(
                     web["environment"]["OAC_WEB_ADDR"].rsplit(":", 1)[1])
             environment = path.parent / "core.env"
@@ -342,13 +344,13 @@ class FakeHost:
 MANIFEST = {
     "source_commit": "a" * 40,
     "images": {name: "sha256:" + digit * 64 for name, digit in (
-        ("core", "1"), ("runtime", "2"), ("database", "3"), ("web", "4"))},
+        ("core", "1"), ("runtime", "2"), ("database", "3"), ("web", "4"), ("ingress", "7"))},
     "image_manifest_digests": {name: "sha256:" + digit * 64 for name, digit in (
-        ("core", "a"), ("runtime", "b"), ("database", "c"), ("web", "d"))},
+        ("core", "a"), ("runtime", "b"), ("database", "c"), ("web", "d"), ("ingress", "e"))},
     "runtime_ref": "oac-runtime@sha256:" + "b" * 64,
     "microsandbox": {"runtime_sha256": "5" * 64, "firmware_sha256": "6" * 64},
 }
-MODULES = ("install.py", "install_output.py", "install_display.py", "configuration.py", "config_model.py", "config.schema.json", "oac_cli.py", "convert.py", "rename.py",
+MODULES = ("install.py", "install_output.py", "install_display.py", "configuration.py", "config_model.py", "ingress.py", "ingress_config.py", "config.schema.json", "oac_cli.py", "convert.py", "rename.py",
            "native_service.py", "sandbox_setup.py", "node_spec.py", "distribution.py", "install.sh")
 
 

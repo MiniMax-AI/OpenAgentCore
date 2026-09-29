@@ -22,7 +22,7 @@ export const overview = {
     },
     sandboxes: {
       addressFailed: "无法读取安装地址，请重试后再确认沙箱是否就绪。",
-      localOnly: "请修复公开地址，让其他机器上的应用、节点和 executor 能够连接。",
+      localOnly: "配置 HTTPS 后即可连接外部应用和节点。",
       title: "准备好沙箱",
       body: "保存沙箱的运行位置，再接入一台在线且就绪的节点。",
       bodyCloud: "保存 E2B 账号，并等它的模板构建就绪。",

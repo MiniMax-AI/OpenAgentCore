@@ -128,3 +128,8 @@ subroute with the installation Bearer authorization. Qualified artifacts under
 `/api/v1/agent-daemon/install/{version}/` are public, immutable release content. See
 the [native Runtime guide](../self-hosted-native.md) for expiry, retry, credential
 ownership and platform rules.
+
+The console-local `GET`/`POST /console/installation/domain` surface uses the signed-in
+browser session and same-origin checks. It delegates only domain setup to the
+installer, with the server-held Core key over a private Unix socket; it is not part
+of the Agents API or Core management API. See [Web request boundaries](../web/architecture.md#request-boundaries).

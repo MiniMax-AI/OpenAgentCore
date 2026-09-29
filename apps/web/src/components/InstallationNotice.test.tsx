@@ -10,22 +10,12 @@ const installation: CoreInstallation = {
 };
 
 describe("local-only installation notice", () => {
-  it("keeps missing configuration explicit and never invents a command", () => {
+  it("links to domain setup without exposing installer commands", () => {
     const html = renderToStaticMarkup(<InstallationNotice installation={installation} />);
-    expect(html).toContain("Core has not reported the configuration path or apply command");
-    expect(html).not.toContain("sudo");
-    expect(html).not.toContain("/opt/oac");
-  });
-  it.each([
-    { path: "/opt/oac/config.json", apply_command: "sudo oac apply" },
-    { path: "/srv/custom/config.json", apply_command: "/srv/custom/bin/core-wrapper apply --config /srv/custom/config.json" },
-  ])("uses the supplied path and command verbatim: $apply_command", ({ path, apply_command }) => {
-    const html = renderToStaticMarkup(<InstallationNotice installation={{ ...installation, configuration: {
-      path, apply_command, applied_at: "", settings: [],
-    } }} />);
-    expect(html).toContain(path);
-    expect(html).toContain(apply_command);
-    expect(html).toContain("Copy apply command");
+    expect(html).toContain("Configure domain and HTTPS");
+    expect(html).toContain("Configure HTTPS before connecting applications and nodes");
+    expect(html).not.toContain("config.json");
+    expect(html).not.toContain("oac apply");
   });
   it("does not warn without a Core local_only report", () => {
     expect(renderToStaticMarkup(<InstallationNotice installation={undefined} />)).toBe("");

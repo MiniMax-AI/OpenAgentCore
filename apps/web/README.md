@@ -104,6 +104,9 @@ on standard input.
 The `/core/v1` proxy retains fixed-origin, cross-site, safe-path, redirect and Upgrade
 restrictions through the standard Go reverse proxy with streaming/cancellation;
 literal or encoded dot segments can never move a request out of `/core/v1`.
+During managed HTTP bootstrap, the console accepts a literal IP host and requires
+writes to match that request's origin; domain hosts still require the configured
+origin.
 The console implements no product identity, resource semantics, Runtime discovery
 or execution loop. Signing in with the Core key grants the complete console
 surface; do not introduce Web accounts, roles, invitations or per-project Web
@@ -140,9 +143,15 @@ confirmed resources through the management API; do not infer Agent-to-node owner
 or execution readiness from a host connection. Preserve keyboard focus, reduced
 motion and the existing node enrollment/topology contract.
 The console has neither KVM nor Docker authority; its static root contains no
-secrets. Installation exposes only loopback API/console ports. Remote exposure
-requires an operator-configured HTTPS/access boundary. Web-only mode can connect
-to a loopback existing Core on the same Linux host or a remote HTTPS Core.
+secrets. A default container installation uses a managed gateway with its Web
+bootstrap port bound to `0.0.0.0`, so operators can sign in through the server's
+IP address and configure a domain under System → Domain and HTTPS. Core's direct
+host port remains on loopback and PostgreSQL stays on the private container
+network. After HTTPS setup, the gateway routes application and node traffic to
+Core and redirects the bootstrap Web entry to the configured HTTPS address.
+Native, Core-only, Web-only and explicit external-ingress installations keep an
+operator-managed HTTPS boundary. Web-only mode can connect to a loopback existing
+Core on the same Linux host or a remote HTTPS Core.
 
 ## Local checks
 
@@ -157,3 +166,19 @@ pnpm --filter @agents-core-web/web build
 These checks cover the application source. Browser acceptance through
 `services/core-console` is tracked in the [frontend roadmap](../../docs/web/roadmap.md).
 Required repository checks are documented in [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+### Domain setup
+
+System → Domain and HTTPS uses the authenticated, same-origin
+`/console/installation/domain` installation manager. It is not a Core API route.
+The form accepts one hostname, submits once, and polls backend-reported status.
+A changed public address requires explicit confirmation when requested by the
+manager. Failed or interrupted writes are not retried automatically; refresh
+status before retrying. During a console restart the new HTTPS address remains
+available as a sign-in link, including when the old session ends. Only the
+manager's `ready` state confirms HTTPS; the browser does not probe another origin.
+
+The Web bootstrap listener and Core's machine-facing public address are separate.
+A `local_only` Core address requires HTTPS setup for external clients; it does
+not mean the Web console is restricted to the local machine. Domain settings
+belong to their System subpage, not the read-only startup settings table.

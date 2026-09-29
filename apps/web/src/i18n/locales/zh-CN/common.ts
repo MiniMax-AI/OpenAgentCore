@@ -10,11 +10,8 @@ export const common = {
   },
   installationNotice: {
     title: "公开地址需要处理",
-    body: "当前公开地址只能在 Core 所在机器上访问，其他机器上的应用、节点和 executor 无法连接。",
-    repair: "在 <path/> 中将 public_url 改为其他机器可访问的 HTTPS 地址，然后运行 <command/>。",
-    noConfiguration: "请在安装配置中将 public_url 改为其他机器可访问的 HTTPS 地址，再在 Core 主机上应用配置。Core 尚未提供配置文件路径和应用命令。",
-    copyPath: "复制配置文件路径",
-    copyCommand: "复制应用命令",
+    body: "连接外部应用和节点前，请先配置 HTTPS。",
+    configure: "配置域名与 HTTPS",
     addBlocked: "公开地址仅限本机访问，暂时无法添加节点。",
   },
   actions: {
