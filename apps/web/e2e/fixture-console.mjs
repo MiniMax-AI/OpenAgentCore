@@ -6,6 +6,7 @@
 // the console stays on its management boundary.
 import http from "node:http";
 
+import { domainState, domainRoute } from "./data/domain.mjs";
 import { buildAdmin } from "./data/admin.mjs";
 import { coreMetrics } from "./data/core-metrics.mjs";
 import { buildResources } from "./data/resources.mjs";
@@ -105,7 +106,7 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
   // "none": no node has enrolled yet.
   if (nodes === "none") base.nodes.splice(0);
   state = {
-    ...base, resources, admin,
+    ...base, resources, admin, domain: domainState(),
     // "authenticated": the console holds a session for the fixture cookie; "login": it holds none.
     auth: { mode: mode === "authenticated" ? "authenticated" : "login", failures: 0, lockedUntil: 0 },
     violations: [], writes: [], failNext: null, nextId: 1,
@@ -200,6 +201,10 @@ async function consoleRoute(request, response, url) {
   if (url.pathname === "/console/auth/logout" && request.method === "POST") {
     auth.mode = "login";
     return send(response, 200, { mode: "login" }, { "set-cookie": `${SESSION_COOKIE.split("=")[0]}=; Path=/; Max-Age=0` });
+  }
+  if (url.pathname === "/console/installation/domain") {
+    if (auth.mode !== "authenticated" || !request.headers.cookie?.includes(SESSION_COOKIE)) return error(response, 401, "Sign in to the console.");
+    return domainRoute(request, response, state, { send, error, body });
   }
   if (url.pathname === "/console/config") {
     // Console assets cover node enrollment only; native self-hosted installation is independent.
@@ -587,6 +592,10 @@ async function harnessRoute(request, response, path) {
 
 /** Test controls: reset state, inject one failure, register or change a node, and read what the browser sent. */
 async function fixtureRoute(request, response, url) {
+  if (url.pathname === "/__fixture/domain" && request.method === "POST") {
+    Object.assign(state.domain, await body(request));
+    return send(response, 200, state.domain);
+  }
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
     reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("credentials") ?? "configured", url.searchParams.get("installers") !== "none", url.searchParams.get("artifacts") ?? undefined);

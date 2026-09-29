@@ -30,6 +30,7 @@ repairs the same version and accepts only `--install-dir`.
 | `--core-port` | `ports.core` |
 | `--port` | `ports.web` |
 | `--core-url` | `web.core_url` |
+| `--ingress` | `ingress` |
 
 
 `--config FILE` seeds `config.json` from a JSON file instead of these setting flags;
@@ -38,16 +39,24 @@ Generated Compose and environment files are derived outputs, not editable settin
 
 ## Listeners and access
 
-`--host` sets the IP address on which Core and Web listen. It accepts IPv4 or IPv6,
-without a port, URL scheme or IPv6 zone. `--port` changes Web's port;
-`--core-port` changes Core's API port. PostgreSQL remains private.
+The default combined Docker installation selects `--ingress managed` and
+`--host 0.0.0.0`. The gateway publishes Web on `--port` (8080 by default), and
+reserves ports 80 and 443 for automatic HTTPS. Core's `--core-port` remains on
+loopback; PostgreSQL remains private. `--host` accepts IPv4 or IPv6, without a
+port, scheme or zone. Use a concrete server IP in the browser, not a wildcard.
 
-A listener address selects a network interface; `--public-url` selects the canonical
-address that browsers, API clients, nodes and Runtime use. Non-loopback listeners,
-including `0.0.0.0` and `::`, require an HTTPS public URL and the
+`--ingress external` keeps the existing proxy arrangement. It is the default for
+Core-only, Web-only and native Core; these modes do not support managed ingress.
+Their Core/Web listeners default to loopback. External non-loopback listeners
+require an HTTPS `public_url` and your own
 [reverse proxy configuration](/install#https-and-the-reverse-proxy).
-Point the reverse proxy at the chosen listeners. Wildcard addresses are bind targets,
-not browser URLs. Changing the listener does not provide TLS or change authentication.
+
+`--public-url` can seed a DNS-based HTTPS origin for unattended managed setup;
+certificate and connectivity checks must pass. Without it, open Web by IP first
+and use **System → Domain and HTTPS**. An explicit `--config` document follows the
+schema defaults; set `ingress: "managed"` and `host: "0.0.0.0"` to choose that flow.
+The ingress mode is fixed for an installation. Managed ingress needs a local
+Docker Unix socket and Docker's ability to publish ports 80 and 443.
 
 ## Installation actions
 
@@ -68,6 +77,7 @@ create another process configuration file.
 See [deployment modes](/install#modes), [native Core](/install#native-core) and
 [sandbox setup](/install#sandbox-backend) for their prerequisites.
 Several installations can share a machine when they use distinct installation
-directories and ports. Each has its own database, Core key and node registrations.
+directories and ports. Only one managed gateway can own ports 80 and 443 on a
+particular IP; use distinct IPs or an external shared proxy for additional installations. Each has its own database, Core key and node registrations.
 
 [Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/install-options.md)

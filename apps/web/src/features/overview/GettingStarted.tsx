@@ -117,6 +117,8 @@ export function GettingStarted({ fleet, sessions, localOnly, sandboxReset, onRet
     ? { label: t("reset.view"), run: () => navigate("system", { id: "sandbox" }) }
     : localOnly === "failed"
     ? { label: t("actions.retry", { ns: "common" }), run: onRetryInstallation }
+    : localOnly === true
+    ? { label: t("installationNotice.configure", { ns: "common" }), run: () => navigate("system", { id: "domain" }) }
     : sandbox.action === "setup"
     ? { label: t("gettingStarted.sandboxes.setup"), run: () => navigate("system", { id: "sandbox" }) }
     : sandbox.action === "add-node"

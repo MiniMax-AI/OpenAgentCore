@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 
 import { HelpTip } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
-import { CopyableId } from "../../components/list-ui";
+import { useConsoleNavigation } from "../../lib/console-navigation";
 import { coreFieldError } from "../../lib/core-error";
 import { formatBytes } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
@@ -153,7 +153,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const [addressRejected, setAddressRejected] = useState(false);
   const installation = useQuery(installationQuery);
   const address = coreUrl || installation.data?.public_url || null;
-  const configuration = installation.data?.configuration ?? null;
+  const { navigate } = useConsoleNavigation();
 
   useEffect(() => {
     setTemplates([]); setBuilds([]); setDiscovery("idle"); setBuildDiscovery("idle");
@@ -377,8 +377,8 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
             <dt>{t("Core address")}<HelpTip>{t("The address nodes and sandboxes use to reach Core.")}</HelpTip></dt>
             <dd>
               {address ? <code>{address}</code> : "—"}
-              <span className="wizard-review-sub">{t("Set by public_url in config.json")}</span>
-              {installation.data?.local_only ? <span className="wizard-review-caution">{t("Only the Core machine can reach this address: nodes on other machines and E2B sandboxes can't. Set a public_url in config.json that other machines can reach (not loopback).")}</span> : null}
+              <span className="wizard-review-sub">{t("Managed in System")}</span>
+              {installation.data?.local_only ? <span className="wizard-review-caution">{t("Configure HTTPS in System before connecting remote nodes or E2B sandboxes.")}</span> : null}
             </dd>
           </div>
         </dl>
@@ -386,12 +386,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
           <div className="wizard-rejection" role="alert">
             <p>{rejection}</p>
             {resetRequired ? <p>{t("Cancel editing to use Reset deployment. This change requires an explicit reset; the saved configuration is unchanged.")}</p> : null}
-            {addressRejected && configuration ? (
-              <dl>
-                <div><dt>{t("Config file")}</dt><dd><CopyableId id={configuration.path} label={t("Copy path")} /></dd></div>
-                <div><dt>{t("Then run")}</dt><dd><CopyableId id={configuration.apply_command} label={t("Copy command")} /></dd></div>
-              </dl>
-            ) : null}
+            {addressRejected ? <button className="text-action" type="button" onClick={() => navigate("system", { id: "domain" })}>{t("Managed in System")}</button> : null}
           </div>
         ) : null}
         {/* Initial setup needs the cleared key re-entered; updates may keep the saved key. */}

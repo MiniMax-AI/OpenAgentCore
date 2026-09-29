@@ -28,7 +28,7 @@ copy, when a contract changes.
 | Hosted sandbox nodes | [Hosted sandbox manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md) |
 | Claude private bridge and Runtime artifact | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |
 | MiniMax Code and Claude Runtime adapter rules | [MiniMax Code Runtime](services/agents-api/deploy/mcode/README.md), [Claude Runtime](services/agents-api/deploy/claude/README.md) |
-| CI, distribution builds, installer internals and release publication | [Maintainer guide](docs/maintainers.md) |
+| CI, distribution builds, installer lifecycle and managed HTTPS, release publication | [Maintainer guide](docs/maintainers.md) |
 | Operator installation and configuration | [Installation](docs/getting-started/install.md), [installation options](docs/getting-started/install-options.md), [configuration](docs/configuration.md), [operations](docs/getting-started/operations.md) |
 | Core Web console server and sign-in | [Web README](apps/web/README.md) |
 | Web components, interaction and visual rules | [Web design](apps/web/DESIGN.md) and [Web architecture](docs/web/architecture.md) |

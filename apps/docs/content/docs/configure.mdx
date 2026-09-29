@@ -7,11 +7,11 @@ Every setting of a Core installation has exactly one home. There are two kinds:
 
 | Kind | Examples | Home | Change it with | Takes effect |
 | --- | --- | --- | --- | --- |
-| [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, database pool, Runtime history export | `config.json` in the installation directory (default `~/.oac/core`) | Edit the file, then run `oac apply` | `oac apply` restarts the services that read the changed settings |
+| [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, database pool, Runtime history export | `config.json` in the installation directory (default `~/.oac/core`) | Web domain setup or `oac domain` for managed HTTPS; otherwise edit the file, then run `oac apply` | `oac apply` restarts the services that read the changed settings |
 | [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | Saved without a Core restart; node Runtime changes prepare asynchronously |
 
 Web's **System** page shows both: the installation's addresses, the process settings
-read-only under **Startup settings** with the path of `config.json` and the apply
+read-only under **Startup settings**, and managed HTTPS under **Domain and HTTPS** with the path of `config.json` and the apply
 command, the default models, and the sandbox configuration. Secrets live in
 [`secrets/`](#secrets-and-identity), one copy each. Each setting is set in one place;
 the files in `generated/` are only derived from `config.json`. No configuration file
@@ -32,11 +32,11 @@ setting, edit the file and apply it:
 ### How oac apply works
 
 1. It validates `config.json` and changes nothing if a value is invalid. `mode` and
-   `native_core` are fixed after installation; to change them, install into a new
+   `native_core` and `ingress` are fixed after installation; to change them, install into a new
    directory.
 2. It writes the files Core, Web and Compose read into `generated/`: `compose.json`,
    `core.env`, `core-key-digests.json`, `settings.json` and, when used,
-   `runtime-history.json` and the native Core unit. Don't edit them. A generated file
+   `runtime-history.json`, the managed `Caddyfile` and the native Core unit. Don't edit them. A generated file
    edited by hand stops `apply` until you move the change into `config.json` and run
    `oac apply --discard-edits`, which keeps the edited copy as
    `generated/<file>.edited-<time>`.
@@ -60,9 +60,13 @@ generated files edited by hand.
 `public_url` is the one origin that applications, nodes, sandboxes and self-hosted
 executors use; Core derives the daemon WebSocket URL, the self-hosted `remote_url` and
 each sandbox's connection address from it. With `null`, Core uses
-the configured loopback listener origin and only this host can reach it.
+the configured loopback Core origin. The default managed installation still exposes
+Web by IP for setup; that initial HTTP endpoint does not expose the machine API.
 
-You can set or change it at any time with `oac apply`. When nodes, hosted
+For managed ingress, use **System → Domain and HTTPS** or `oac domain HOSTNAME`.
+Both use the installation lock and the same `config.json`/`oac apply` operation.
+The installer verifies the certificate before switching addresses. External ingress
+uses a separately configured proxy and `oac apply`. When nodes, hosted
 sandboxes or self-hosted executors are bound to the current address, `apply` lists
 them and asks you to type the new URL (`--confirm-public-url-change URL` when not
 interactive). Afterwards, nodes on the old address get no new sandboxes: remove them
@@ -71,7 +75,8 @@ the old address still reaches this Core, and `apply` warns that self-hosted exec
 must restart with the new `remote_url`. Their installer refuses to reuse an
 installation made for the old address, and moving an executor isn't supported yet:
 create new self-hosted Sessions and connect their hosts again. Update your reverse
-proxy first.
+proxy first when using external ingress. A managed domain change replaces the
+previous domain route; reconnect clients and executors that still use it.
 
 ### Settings
 
@@ -87,8 +92,8 @@ output or in Core's settings snapshot. Model providers are not process settings;
 | `format` | `1` | none | all | fixed | none | Configuration format for this release. Fixed after installation. |
 | `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. |
 | `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. |
-| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null uses the loopback listener origins. |
-| `host` | string (IPv4 or IPv6 address) | `"127.0.0.1"` | all | `oac apply` | core, web | IP address on which Core and Web listen. PostgreSQL stays on loopback. Non-loopback listeners require an HTTPS public_url. |
+| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Canonical public origin of Core and Web. With managed ingress, set the DNS hostname in Web or run oac domain; certificates are automatic. With external ingress, configure your TLS reverse proxy before applying this value. |
+| `host` | string (IPv4 or IPv6 address) | `"127.0.0.1"` | all | `oac apply` | core, web | Listener IP. With managed ingress only the gateway is public; Core stays on loopback. The default combined installer listens on all IPv4 interfaces. |
 | `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `oac apply` | core (core, web with native Core) | Host port of the Core API. With native Core, Web follows it. |
 | `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `oac apply` | web | Host port of Web. |
 | `ports.database` | integer 1024–65535 | none | `all`, `core-only` | `oac apply` | database, core | Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port. |
@@ -114,6 +119,7 @@ output or in Core's settings snapshot. Model providers are not process settings;
 | `core.runtime_history.queue_capacity` | integer | none | `all`, `core-only` | `oac apply` | core | Export queue capacity. |
 | `core.runtime_history.timeout_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | Export and query timeout in seconds. |
 | `core.runtime_history.sample_interval_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | Periodic sampling interval in seconds. |
+| `ingress` | `"managed"` \| `"external"` | `"external"` | all | fixed | none | managed provides automatic HTTPS and Web domain setup for a combined Docker installation; install.sh selects it by default. external uses your existing proxy. Fixed after installation. |
 
 
 The schema is

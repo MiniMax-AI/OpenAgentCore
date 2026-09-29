@@ -29,7 +29,7 @@ OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents
 
 | Overview | Agent metrics |
 | --- | --- |
-| ![Deployment overview](docs/assets/console-overview-en.png) | ![Agent metrics](docs/assets/console-agent-metrics-en.png) |
+| ![Deployment overview](docs/assets/console-overview-en.webp) | ![Agent metrics](docs/assets/console-agent-metrics-en.webp) |
 
 ## Install
 

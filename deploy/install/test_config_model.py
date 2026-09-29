@@ -39,9 +39,9 @@ class ConfigModelTests(unittest.TestCase):
                     "core.runtime_history.sample_interval_seconds"],
             "web-only": ["mode", "public_url", "host", "ports.web", "web.core_url", "log.level", "log.format", "log.add_source"],
         }
-        self.assertEqual(list(config_model.values(config_model.initial("all"))), expected["all"])
+        self.assertEqual(list(config_model.values(config_model.initial("all"))), expected["all"] + ["ingress"])
         web = config_model.initial("web-only", **{"web.core_url": "https://core.example"})
-        self.assertEqual(list(config_model.values(web)), expected["web-only"])
+        self.assertEqual(list(config_model.values(web)), expected["web-only"] + ["ingress"])
         self.assertEqual(config_model.initial("core-only", True, **{"ports.database": 15432})["ports"],
                          {"core": 8091, "database": 15432})
         native = config_model.initial("all", True, **{"ports.database": 15432})

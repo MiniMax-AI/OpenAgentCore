@@ -50,7 +50,7 @@ export function StartupSettings({ configuration }: { configuration: CoreInstalla
               </tr>
             </thead>
             <tbody>
-              {configuration.settings.map((setting) => {
+              {configuration.settings.filter((setting) => setting.key !== "public_url").map((setting) => {
                 const value = setting.sensitive ? null : display(setting.value);
                 return (
                   <tr key={setting.key}>

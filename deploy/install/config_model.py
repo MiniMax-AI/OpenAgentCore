@@ -198,7 +198,19 @@ def validate(config):
     if len(set(ports.values())) != len(ports):
         problems.append("ports: " + ", ".join(sorted(ports)) + " need different ports")
     from configuration import loopback_listener
-    if not loopback_listener(full["host"]) and not (full["public_url"] or "").startswith("https://"):
+    import ingress_config
+    managed = ingress_config.enabled(full)
+    if managed and (mode != "all" or native):
+        problems.append("ingress: managed requires a combined Docker installation; select external")
+    if managed and full["public_url"]:
+        try:
+            from urllib.parse import urlsplit
+            origin = full["public_url"]
+            if origin != "https://" + ingress_config.hostname(urlsplit(origin).hostname):
+                raise ValueError()
+        except ValueError:
+            problems.append("public_url: managed HTTPS requires https:// followed by a DNS hostname, without a port")
+    if not managed and not loopback_listener(full["host"]) and not (full["public_url"] or "").startswith("https://"):
         problems.append("public_url: an HTTPS origin is required when host is not loopback")
     core = full.get("core")
     if core and core["default_harness"] not in core["harnesses"]:

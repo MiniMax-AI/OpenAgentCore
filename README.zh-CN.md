@@ -27,7 +27,7 @@ OpenAgentCore 在你自己的基础设施上运行 AI Agent，对外提供 OpenA
 
 | 概览 | Agent 监控 |
 | --- | --- |
-| ![部署概览](docs/assets/console-overview-zh.png) | ![Agent 监控](docs/assets/console-agent-metrics-zh.png) |
+| ![部署概览](docs/assets/console-overview-zh.webp) | ![Agent 监控](docs/assets/console-agent-metrics-zh.webp) |
 
 ## 安装
 

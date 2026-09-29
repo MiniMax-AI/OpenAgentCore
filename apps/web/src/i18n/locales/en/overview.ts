@@ -22,7 +22,7 @@ export const overview = {
     },
     sandboxes: {
       addressFailed: "The installation address could not be read. Retry before confirming sandbox readiness.",
-      localOnly: "Fix the public address so applications, nodes and executors on other machines can connect.",
+      localOnly: "Configure HTTPS to connect applications and nodes.",
       title: "Get sandboxes ready",
       body: "Save where sandboxes run, then connect a node that is online and ready.",
       bodyCloud: "Save the E2B account; its template build must be ready.",

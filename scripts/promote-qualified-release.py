@@ -127,7 +127,7 @@ def verify_archive(path, offline, native=None):
         raise ValueError("Missing or unexpected Runtime artifacts")
     for key in ("images", "image_manifest_digests"):
         values = metadata.get(key, {})
-        if set(values) != {"core", "web", "runtime", "database"} or any(
+        if set(values) != {"core", "web", "runtime", "database", "ingress"} or any(
                 not distribution.DIGEST.fullmatch(value) for value in values.values()):
             raise ValueError("Missing immutable image identities")
     if not re.fullmatch(r"oac-runtime@sha256:[0-9a-f]{64}", metadata.get("runtime_ref", "")):
