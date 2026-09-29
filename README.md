@@ -4,7 +4,7 @@
 
 # OpenAgentCore
 
-Run Codex, Claude Code and MiniMax Code through one API, on infrastructure you control.
+An open-source, self-hosted implementation of the OpenAI Agents API with multiple native harnesses.
 
 [Get started](#quick-start) · [Documentation](#documentation) · [Call the API](docs/getting-started/quickstart.md) · [Contributing](CONTRIBUTING.md)
 
@@ -12,10 +12,9 @@ Run Codex, Claude Code and MiniMax Code through one API, on infrastructure you c
 
 </div>
 
-Run native Codex, Claude Code and MiniMax Code through one Agents API. Core owns
-Sessions and execution state; a daemon prepares capabilities and runs the selected
-Harness on a managed sandbox or a machine you connect yourself. Web is the
-administrator console.
+Choose Codex, Claude Code or MiniMax Code as your execution engine. Sandbox providers,
+model providers and harnesses connect through defined protocols and thin adapters,
+so you can add or replace components without changing Core orchestration.
 
 ## Quick start
 
@@ -32,8 +31,12 @@ To execute on your own Linux, macOS or Windows machine, follow the
 
 ## How it fits together
 
+Core manages Sessions and execution state. Runtime prepares Skills and MCP tools,
+then runs the selected harness. Sandbox providers manage environments; model providers
+serve inference requests. Web is the administrator console.
+
 ```text
-Application → Core API → common daemon protocol → Runtime → native Harness
+Application → Core API → common daemon protocol → Runtime → Harness → Model Provider
                   │
                   └→ Sandbox Provider → create / bootstrap / reclaim Environment
 ```
@@ -44,13 +47,10 @@ macOS and Windows, subject to the selected Harness's
 its starting account's permissions; isolation belongs to an outer sandbox.
 Releasing an executor does not destroy its Environment.
 
-The public contract follows the pinned OpenAI Agents API. See the
-[coverage record](contracts/agents-api/README.md) for supported operations and
-native differences. Core is independent of the Parsar product and its database.
+See the [coverage record](contracts/agents-api/README.md) for supported API operations
+and native harness differences.
 
 ## Documentation
-
-All documentation is in English; both README editions use the same sources.
 
 | Start here | Purpose |
 | --- | --- |

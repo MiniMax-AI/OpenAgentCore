@@ -4,7 +4,7 @@
 
 # OpenAgentCore
 
-通过同一套 API，在你自己的基础设施上运行 Codex、Claude Code 和 MiniMax Code。
+OpenAI Agents API 的开源实现，支持多种原生执行引擎，可部署在自己的基础设施上。
 
 [快速开始](#快速开始) · [文档](#文档) · [调用 API](docs/getting-started/quickstart.md) · [参与贡献](CONTRIBUTING.md)
 
@@ -12,9 +12,8 @@
 
 </div>
 
-通过一套 Agents API 运行原生 Codex、Claude Code 和 MiniMax Code。Core 管理 Session
-和执行状态；daemon 在托管沙箱或用户连接的机器上准备能力、运行所选 Harness。
-Web 提供管理员控制台。
+你可以选择 Codex、Claude Code 或 MiniMax Code 作为执行引擎。沙箱、模型供应商和
+Harness 都通过明确的协议和薄适配层接入，新增或替换组件无需修改 Core 的编排逻辑。
 
 ## 快速开始
 
@@ -30,8 +29,11 @@ Web 提供管理员控制台。
 
 ## 组件关系
 
+Core 管理 Session 和执行状态；Runtime 准备 Skill 和 MCP 工具并运行所选引擎；
+沙箱供应商管理运行环境，模型供应商提供推理服务。Web 提供管理员控制台。
+
 ```text
-应用 → Core API → 统一 daemon 协议 → Runtime → 原生 Harness
+应用 → Core API → 统一 daemon 协议 → Runtime → Harness → 模型供应商
           │
           └→ Sandbox Provider → 创建 / 引导 / 回收 Environment
 ```
@@ -40,12 +42,9 @@ Web 提供管理员控制台。
 具体组合见 [Harness 平台支持表](docs/self-hosted-native.md#platforms-and-prerequisites)。
 daemon 使用启动账户的权限，隔离由外层沙箱负责。释放执行器不会销毁 Environment。
 
-公开接口遵循固定版本的 OpenAI Agents API，已支持的操作和原生引擎差异见
-[协议覆盖记录](contracts/agents-api/README.md)。
+已支持的 API 操作和原生引擎差异见[协议覆盖记录](contracts/agents-api/README.md)。
 
 ## 文档
-
-正文统一使用英文；中英文 README 指向同一套文档。
 
 | 入口 | 内容 |
 | --- | --- |

@@ -1,7 +1,6 @@
 # OpenAgentCore documentation site
 
 A separate Next.js/Fumadocs documentation app. It starts no Core, database or Runtime.
-All documentation is served in English at `/`. The existing preview is not part of this checkout.
 
 The application reference reads the upstream-constrained public schema. Administration
 and machine references read their own local generated contracts. All three repository
@@ -11,7 +10,7 @@ and compositions). Normalization changes documentation servers and bearer presen
 prose, parameters, response schemas and credential boundaries. Examples use a reserved
 domain. The reference is read-only and must not collect keys or send execution requests.
 
-English guides are generated from the canonical repository docs, not maintained as a
+Guides are generated from the canonical repository docs, not maintained as a
 second manual. Edit those sources first, register pages in
 [guides.json](scripts/guides.json), then regenerate. Source/output hashes fail when
 copies drift; operation and route checks detect missing or mixed API surfaces.
@@ -35,7 +34,7 @@ to keep site packages out of the gate.
 
 `make check-docs` runs the focused gate and is included in `make check`. After starting
 the built site, run `pnpm --dir apps/docs check:site http://127.0.0.1:4275` and inspect
-the English guides in a browser with `pnpm --dir apps/docs check:browser http://127.0.0.1:4275`.
+the guides in a browser with `pnpm --dir apps/docs check:browser http://127.0.0.1:4275`.
 The check uses installed Playwright Chromium (or `DOCS_BROWSER_EXECUTABLE`), checks
 for credential/request controls and external traffic, and accepts only a local origin.
 Set `DOCS_SITE_ORIGIN` only when preparing actual publication.
