@@ -33,9 +33,12 @@ For a built version, run `pnpm --filter @oac/parsar-example build` and then
    to the browser; leaving the key blank while editing preserves it. Discovery
    sends only that Provider's key and does not follow redirects. The list expects
    the OpenAI-shaped `data: [{id: "..."}]` response. Discovery failures leave manual
-   entry available. This imports the catalog only: Core still owns execution
-   connections for hosted/text-only Sessions. Self-hosted Sessions instead pass
-   this Provider URL/key explicitly to Core, using the selected harness protocol.
+   entry available. Codex and Claude Code workspace Sessions pass the selected Provider URL/key
+   explicitly to Core, using the harness protocol. These Sessions require an HTTPS
+   Base URL and API key. Text-only Sessions and hosted MiniMax Code use Core's
+   deployment connection; the creation dialog states that their Provider is only
+   a catalog group. The example does not yet expose MiniMax Code's required token
+   limits.
 2. **Skills:** create a SKILL.md resource or upload a ZIP. Inspect versions,
    upload a new version, and choose the default. Core validates and stores bundles.
 3. **MCP:** save anonymous HTTPS endpoints and bind them to Agents. Hosted
@@ -53,7 +56,18 @@ For a built version, run `pnpm --filter @oac/parsar-example build` and then
    Create, copy and edit configurations without allocating a runtime.
 6. **Sessions:** open an Agent, choose a runtime and send the first message.
    Read streaming replies and tool activity, continue the conversation, cancel a running turn and reopen
-   history. Each hosted Session gets its own workspace; text-only has no workspace.
+   history. Unsupported Skill/MCP/runtime combinations are explained before creation.
+   The Session's **Files** dialog uploads one file at a time (up to 5 MiB) through
+   Core's public Environment Files API while idle. Each upload gets a unique path
+   under `/workspace/inputs`; a path relative to the working directory is inserted into the message draft,
+   not sent automatically. Unsent drafts, including uploaded file paths, survive
+   reloads and navigation in the same browser tab and remain scoped to the Session. This keeps the API's `/workspace` alias distinct from
+   the physical user-machine directory. Ask the Agent to save generated files
+   under `./outputs`;
+   published Artifacts can be paged and downloaded from the same dialog, even when
+   the live workspace is unavailable. Downloads remain binary; errors stay in the
+   dialog. Text-only Sessions have no file actions.
+   Each hosted Session gets its own workspace; text-only has no workspace.
 
 Agent edits and catalog updates apply to future Sessions. Core freezes existing
 Session configuration, including resolved Skill versions. Continuing a Session
@@ -71,7 +85,7 @@ execution database or imported Parsar backend.
 SQLite files live in `~/.oac/data/parsar-example/`. Set the absolute
 `OAC_EXAMPLE_DATA_DIR` to relocate them. A hash of the Core origin and Project key
 selects the file; changing either selects a different local catalog. Back up the
-SQLite file with the server stopped. No key is stored in it. Builds and caches
+SQLite file with the server stopped. The Core Project key is not stored in it. Provider keys are stored there. Builds and caches
 use `${OAC_DEV_HOME:-$HOME/.oac}`.
 
 Use one server process and a dedicated Project for this local single-user example.
@@ -97,7 +111,8 @@ A few more implementation details:
 - **Providers and models** are saved together in one SQLite transaction. Editing
   reads a Provider and its models as one snapshot; changing a model advances the
   Provider's revision.
-- **Browser calls** use `OpenAIAgentsClient`; only Session creation goes through a
+- **Browser calls** use `OpenAIAgentsClient`, with a small public HTTP reader for
+  Artifacts (not yet exposed by that client); only Session creation goes through a
   small server adapter. Closing the browser aborts the upstream stream, never the
   running Session.
 - **Workspaces:** hosted Sessions each get their own. User-machine Sessions use the

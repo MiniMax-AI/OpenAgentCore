@@ -94,7 +94,7 @@ export function ConfigurationFields({
             <Help>
               {group.key === "skill_ids"
                 ? "最多选择 8 个技能，运行时需支持托管沙箱。新会话使用技能的默认版本。"
-                : "最多选择 8 个 MCP。Core 负责连接服务，服务地址需从 Core 网络可达。"}
+                : "最多选择 8 个 MCP。托管会话从工作区连接，纯文本会话从 Core 连接；用户机器请在本地 Plugin 中配置。"}
             </Help>
           </div>
           <div className="max-h-48 space-y-2 overflow-auto">

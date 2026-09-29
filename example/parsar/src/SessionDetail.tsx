@@ -24,6 +24,7 @@ import { useSendTiming, timingLabel } from "./lib/session-timing";
 import { Help } from "./components/shared";
 import { useLiveSession } from "./lib/live-session";
 import { Composer } from "./Composer";
+import { SessionFiles } from "./SessionFiles";
 import { ConnectMachine } from "./ConnectMachine";
 import type { SessionRecord } from "./lib/product";
 
@@ -38,6 +39,9 @@ export function SessionDetail({
 }) {
   const timing = useSendTiming(id);
   const [info, setInfo] = useState(false);
+  const [messagePending, setMessagePending] = useState(false);
+  const [files, setFiles] = useState(false);
+  const [attachment, setAttachment] = useState("");
   const [machineConnected, setMachineConnected] = useState(false);
   const viewport = useRef<HTMLDivElement>(null);
   const followOutput = useRef(true);
@@ -60,6 +64,12 @@ export function SessionDetail({
       viewport.current.scrollTop = viewport.current.scrollHeight;
   }, [live.items]);
   const session = data?.session;
+  const environmentId =
+    session &&
+    "id" in session.environment &&
+    typeof session.environment.id === "string"
+      ? session.environment.id
+      : undefined;
   const state = session ? sessionState(session, data?.turns[0]) : undefined;
   return (
     <>
@@ -78,6 +88,11 @@ export function SessionDetail({
             {state.label}
           </span>
         )}
+        {environmentId && (
+          <Button variant="ghost" onClick={() => setFiles(true)}>
+            文件
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -88,6 +103,20 @@ export function SessionDetail({
           <Info />
         </Button>
       </header>
+      {files && session && environmentId && (
+        <SessionFiles
+          sessionId={id}
+          environmentId={environmentId}
+          writable={
+            !messagePending &&
+            !query.error &&
+            session.status === "idle" &&
+            (!machine || machineConnected)
+          }
+          close={() => setFiles(false)}
+          useFile={setAttachment}
+        />
+      )}
       {session && machine && (
         <ConnectMachine
           session={session}
@@ -131,17 +160,18 @@ export function SessionDetail({
                   <EmptyState title="等待执行记录" size="compact" />
                 )}
                 {data.session.status === "in_progress" && <Thinking />}
-                {data.session.status === "requires_action" && (
-                  <div role="status" className="py-4 text-base">
-                    此会话需要外部操作，当前示例暂不支持处理。可取消本次执行。
-                    <details className="mt-2">
-                      <summary className="cursor-pointer">查看所需操作</summary>
-                      <pre className="overflow-auto py-2 text-sm">
-                        {JSON.stringify(data.session.required_actions, null, 2)}
-                      </pre>
-                    </details>
-                  </div>
-                )}
+                {data.session.status === "requires_action" &&
+                  data.session.required_actions.some(
+                    (action) =>
+                      !machine || action.type !== "environment_connection",
+                  ) && (
+                    <div role="status" className="py-4 text-base">
+                      此会话需要外部操作，当前示例暂不支持处理。可取消本次执行。
+                      <Button variant="ghost" onClick={() => setInfo(true)}>
+                        查看所需操作
+                      </Button>
+                    </div>
+                  )}
               </div>
             </div>
             {timing && (
@@ -174,6 +204,8 @@ export function SessionDetail({
               </div>
             )}
             <Composer
+              onPendingChange={setMessagePending}
+              attachment={attachment}
               connectionPending={Boolean(machine) && !machineConnected}
               key={id}
               turnId={data.turns[0]?.id}
@@ -207,6 +239,20 @@ export function SessionDetail({
                 {session.usage?.total_tokens ?? "未报告"}
               </Property>
             </PropertyList>
+            {session.required_actions.some(
+              (action) => !machine || action.type !== "environment_connection",
+            ) && (
+              <pre className="max-h-64 overflow-auto text-base">
+                {JSON.stringify(
+                  session.required_actions.filter(
+                    (action) =>
+                      !machine || action.type !== "environment_connection",
+                  ),
+                  null,
+                  2,
+                )}
+              </pre>
+            )}
           </DialogContent>
         </Dialog>
       )}

@@ -224,8 +224,7 @@ function ProviderForm({
               <span>模型连接</span>
               <Help>
                 地址和密钥用于获取此 Provider
-                的模型列表。密钥仅保存在本机后端，不返回浏览器。执行会话仍使用
-                Core 已配置的模型连接。
+                的模型列表。密钥仅保存在本机后端，不返回浏览器。Codex 和 Claude Code 的托管及用户机器会话使用此连接；纯文本和 MiniMax Code 使用 Core 部署的连接。
               </Help>
             </div>
           </form>

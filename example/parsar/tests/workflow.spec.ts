@@ -15,6 +15,11 @@ async function resources(page: Page) {
   await page.getByLabel("kimi-k2.6", { exact: true }).check();
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "编辑 Provider Moonshot" }).click();
+  await page.getByLabel("Base URL").fill("https://provider.example/v1");
+  await page.getByRole("button", { name: "手动选择", exact: true }).click();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page
     .getByRole("button", { name: "编辑 kimi-k2.6", exact: true })
     .click();
@@ -294,6 +299,7 @@ test("Provider groups contain multiple models and retain manual names", async ({
   await resources(page);
   await navigate(page, "模型");
   await page.getByRole("button", { name: "编辑 Provider Moonshot" }).click();
+  await page.getByLabel("Base URL").fill("http://127.0.0.1:18181");
   await page.getByRole("button", { name: "获取模型", exact: true }).click();
   await expect(page.getByLabel("kimi-k2.6", { exact: true })).toBeChecked();
   await page.getByLabel("kimi-k2", { exact: true }).check();
@@ -455,4 +461,99 @@ test("an active reply without a replayed item baseline refreshes immediately on 
       .getByRole("article", { name: "Agent 回复" })
       .filter({ hasText: "断线前，断线后仍在生成" }),
   ).toBeVisible({ timeout: 1500 });
+});
+
+
+test("Session uploads insert a file path and download binary artifacts without leaving the conversation", async ({ page }) => {
+  await page.goto("/");
+  await resources(page);
+  await agent(page);
+  await page.getByRole("link", { name: "打开", exact: true }).click();
+  await session(page);
+  await expect(page.getByLabel("继续对话")).toBeVisible();
+  await page.getByRole("button", { name: "文件", exact: true }).click();
+  await page.getByLabel("选择上传文件").setInputFiles({ name: "large.bin", mimeType: "application/octet-stream", buffer: Buffer.alloc(5 * 1024 * 1024 + 1) });
+  await expect(page.getByRole("alert")).toContainText("文件不能超过 5 MiB");
+  await page.getByLabel("选择上传文件").setInputFiles({ name: "numbers.csv", mimeType: "text/csv", buffer: Buffer.from("a,b\n1,2") });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByLabel("继续对话")).toHaveValue(/请处理文件：\.\/inputs\/.*numbers.csv/);
+  const draft = await page.getByLabel("继续对话").inputValue();
+  const originalSessionURL = page.url();
+  await page.reload();
+  await expect(page.getByLabel("继续对话")).toHaveValue(draft);
+  await page.getByRole("link", { name: "返回 Agent" }).click();
+  await session(page, "第二个文件会话");
+  await expect(page.getByLabel("继续对话")).toHaveValue("");
+  await page.goto(originalSessionURL);
+  await expect(page.getByLabel("继续对话")).toHaveValue(draft);
+  await page.getByRole("button", { name: "文件", exact: true }).click();
+  const contentRoute = "**/artifacts/*/content";
+  await page.route(contentRoute, (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "文件暂不可用" } }) }));
+  await page.getByRole("button", { name: "下载 report.bin" }).click();
+  await expect(page.getByRole("alert")).toContainText("文件暂不可用");
+  await page.unroute(contentRoute);
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "下载 report.bin" }).click();
+  const download = await downloading;
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream!) chunks.push(chunk);
+  expect(Buffer.concat(chunks)).toEqual(Buffer.from([0, 255, 128, 13, 10]));
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByLabel("继续对话")).toHaveValue(/numbers.csv/);
+  await page.route(/\/v1\/agents\/sessions\/[a-f0-9-]+$/, async (route) => {
+    const response = await route.fetch();
+    const value = await response.json();
+    await route.fulfill({ json: { ...value, status: "failed", error: "运行环境准备失败，请检查配置。" } });
+  });
+  await expect(page.getByRole("alert")).toContainText("运行环境准备失败，请检查配置。");
+});
+
+
+test("unsupported runtime bindings are explained before Session creation", async ({ page, request }) => {
+  await resources(page);
+  await agent(page);
+  const runtime = await request.put("http://127.0.0.1:18180/app/runtimes/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
+    headers: { origin: "http://127.0.0.1:18180" },
+    data: { name: "用户机器", environment: "self_hosted", platform: "linux", workspace_directory: "/home/user/project" },
+  });
+  expect(runtime.ok()).toBe(true);
+  await page.getByRole("link", { name: "打开", exact: true }).click();
+  await page.getByRole("button", { name: "开始会话", exact: true }).click();
+  await page.getByLabel("会话名称").fill("Blocked");
+  await page.getByLabel("运行时", { exact: true }).click();
+  await page.getByRole("option", { name: "用户机器", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("不能绑定托管 Skill");
+  await expect(page.getByRole("button", { name: "开始", exact: true })).toBeDisabled();
+  const counts = await (await request.get("http://127.0.0.1:18181/counts")).json();
+  expect(counts.sessions).toHaveLength(0);
+});
+
+
+test("a send completed after leaving the Session does not restore a sent draft", async ({ page }) => {
+  await resources(page);
+  await agent(page);
+  await page.getByRole("link", { name: "打开", exact: true }).click();
+  await session(page);
+  await expect(page.getByLabel("继续对话")).toBeVisible();
+  const sessionURL = page.url();
+  let release!: () => void;
+  let arrived!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const received = new Promise<void>((resolve) => { arrived = resolve; });
+  await page.route("**/events", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    arrived();
+    await gate;
+    await route.fulfill({ response });
+  });
+  await page.getByLabel("继续对话").fill("Stream reply");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+  await received;
+  await page.getByRole("link", { name: "返回 Agent" }).click();
+  release();
+  await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith("oac-example-message-")).length)).toBe(0);
+  await page.goto(sessionURL);
+  await expect(page.getByLabel("继续对话")).toHaveValue("");
 });

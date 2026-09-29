@@ -317,6 +317,23 @@ createServer(async (req, res) => {
     }
     return reply(session, 201);
   }
+  const fileMatch = url.pathname.match(/^\/v1\/agents\/environments\/([^/]+)\/files$/);
+  if (fileMatch) {
+    if (req.method === "POST") return reply({
+      object: "agent.environment.file", environment_id: fileMatch[1], path: body.path,
+      size_bytes: Buffer.from(body.data, "base64").length,
+    }, 201);
+  }
+  const artifactMatch = url.pathname.match(/^\/v1\/agents\/sessions\/([^/]+)\/artifacts(?:\/([^/]+)\/content)?$/);
+  if (artifactMatch) {
+    if (artifactMatch[2]) {
+      res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Disposition": 'attachment; filename="report.bin"' });
+      return res.end(Buffer.from([0, 255, 128, 13, 10]));
+    }
+    return reply(page([{ id: "aabbccdd-0000-4000-8000-000000000001", object: "agent.session.artifact",
+      session_id: artifactMatch[1], environment_id: sessions.find((s) => s.id === artifactMatch[1])?.environment.id,
+      turn_id: "aabbccdd-0000-4000-8000-000000000002", path: "/workspace/outputs/report.bin", size_bytes: 5, created_at: now() }]));
+  }
   const match = url.pathname.match(
     /^\/v1\/agents\/sessions\/([^/]+)(?:\/(items|turns|events))?$/,
   );
