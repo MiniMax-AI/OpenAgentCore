@@ -45,7 +45,7 @@ def helper_archive(args, installer):
     with tempfile.TemporaryDirectory() as directory:
         package = Path(directory)
         source_dir = Path(installer.__file__).parent
-        for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py"):
+        for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py"):
             shutil.copyfile(source_dir / name, package / ("__main__.py" if name == "node_install.py" else name))
         archive = io.BytesIO()
         zipapp.create_archive(package, archive, compressed=True)

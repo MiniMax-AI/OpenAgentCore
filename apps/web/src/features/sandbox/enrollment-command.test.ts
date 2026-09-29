@@ -11,20 +11,26 @@ describe("sandbox connection and enrollment", () => {
   const install = (mode: NodeInstallMode) => nodeInstallCommand({ token: "secret'onetime", coreUrl: "https://core.example", sourceUrl: "https://console.example", provider: "docker", installationId: "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", scriptDigest: digest, mode });
   it("creates the exact sudo command: a leading space, the checked installer run as root, the token only on stdin", () => {
     expect(install("sudo")).toBe(` (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
+printf '\\n==> Downloading node installer...\\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://console.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
+printf '==> Verifying node installer...\\n' &&
 printf '%s  %s\\n' '${digest}' "$d/node-install.pyz" | sha256sum -c --status &&
 printf '%s\\n' 'secret'\\''onetime' | $s python3 "$d/node-install.pyz" --enrollment-token-stdin --source-url 'https://console.example' --core-url 'https://core.example' --provider 'docker' --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
   });
   it("creates the exact no-sudo command, which differs only in never calling sudo", () => {
     expect(install("user")).toBe(` (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
+printf '\\n==> Downloading node installer...\\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://console.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
+printf '==> Verifying node installer...\\n' &&
 printf '%s  %s\\n' '${digest}' "$d/node-install.pyz" | sha256sum -c --status &&
 printf '%s\\n' 'secret'\\''onetime' | python3 "$d/node-install.pyz" --enrollment-token-stdin --source-url 'https://console.example' --core-url 'https://core.example' --provider 'docker' --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
   });
   it("creates the exact uninstall commands, with no token", () => {
     const uninstall = (mode: NodeInstallMode) => nodeUninstallCommand({ sourceUrl: "https://console.example", installationId: "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", scriptDigest: digest, mode });
     expect(uninstall("sudo")).toBe(` (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
+printf '\\n==> Downloading node installer...\\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://console.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
+printf '==> Verifying node installer...\\n' &&
 printf '%s  %s\\n' '${digest}' "$d/node-install.pyz" | sha256sum -c --status &&
 $s python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
     expect(uninstall("user").split("\n").at(-1)).toBe(`python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
@@ -78,6 +84,10 @@ process.exit(process.env.SCENARIO==='installer failure'?7:0);`);
       const command = nodeInstallCommand({ token, coreUrl: "http://127.0.0.1:8091", sourceUrl: "http://localhost:8080", provider: "docker", installationId: "fixture-installation", scriptDigest: digest, mode });
       const result = spawnSync("sh", ["-c", command], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TMPDIR: temporary, SCENARIO: scenario, FIXTURE: fixture, REPORT: report, SUDO_REPORT: sudoReport, PRINTF_REPORT: printfReport }, encoding: "utf8" });
       expect(result.status).toBe(scenario === "installer failure" ? 7 : scenario === "download failure" ? 22 : scenario === "checksum mismatch" ? 1 : 0);
+      expect(result.stdout).toContain("==> Downloading node installer...");
+      expect(result.stdout.includes("==> Verifying node installer...")).toBe(scenario !== "download failure");
+      expect(result.stdout + result.stderr).not.toContain(token);
+      expect(result.stdout + result.stderr).not.toContain("\u001b[");
       expect(readdirSync(temporary)).toEqual([]);
       expect(readdirSync(root)).not.toContain("printf.log");
       if (scenario === "download failure" || scenario === "checksum mismatch") {

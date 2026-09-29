@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 
 import install_output as output
+import install_display as display
 
 
 class Terminal(io.StringIO):
@@ -22,18 +23,18 @@ class OutputTests(unittest.TestCase):
                                               (io.StringIO(), {"TERM": "xterm"}, False)):
             with self.subTest(environment=environment, colored=colored), \
                     mock.patch.dict(os.environ, environment, clear=True), contextlib.redirect_stdout(stream):
-                output.step("Loading images")
+                display.step("Loading images")
             self.assertEqual("\033[" in stream.getvalue(), colored)
             self.assertIn("==> Loading images...", stream.getvalue())
 
     def test_progress_is_flushed_before_returning_and_errors_use_stderr(self):
         stream = io.StringIO()
         with contextlib.redirect_stdout(stream), mock.patch.object(stream, "flush") as flush:
-            output.step("Checking services")
+            display.step("Checking services")
             flush.assert_called_once()
         error = io.StringIO()
         with contextlib.redirect_stderr(error):
-            output.error("service did not become healthy")
+            display.error("service did not become healthy")
         self.assertEqual(error.getvalue(), "Installation failed: service did not become healthy\n")
         self.assertNotIn("failed", stream.getvalue())
 

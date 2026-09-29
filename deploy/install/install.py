@@ -31,7 +31,9 @@ import native_service
 import oac_cli
 import sandbox_setup
 import install_output
-from install_output import choose_where, step
+import install_display
+from install_output import choose_where
+from install_display import step
 from distribution import DistributionError, artifact, image_identities, ensure_docker_image
 
 SETTING_FLAGS = ("core_only", "web_only", "native_core", "core_port", "web_port", "core_url", "public_url")
@@ -76,7 +78,7 @@ def verify_bundle(bundle):
             raise InstallError("Distribution checksum mismatch: " + name)
     required = {"manifest.json", "install.sh", "install.py", "configuration.py", "config_model.py",
                 "config.schema.json", "oac_cli.py", "convert.py", "rename.py", "oac.pyz", "native_service.py",
-                "sandbox_setup.py", "install_output.py", "standard-sizes.json", "node_spec.py", "node-install.pyz",
+                "sandbox_setup.py", "install_output.py", "install_display.py", "standard-sizes.json", "node_spec.py", "node-install.pyz",
                 "distribution.py", "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "database"))
     required.update("native/bin/" + name for name in ("oac-core", "oac-core-migrate"))
@@ -668,9 +670,9 @@ if __name__ == "__main__":
         main()
     except (InstallError, oac_cli.OacError, config_model.ConfigError,
             sandbox_setup.SandboxSetupError, DistributionError, RuntimeError) as error:
-        install_output.error(str(error))
+        install_display.error(str(error))
         sys.exit(1)
     except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
         # Errors never include generated configuration or external process output.
-        install_output.error("inspect prerequisites and private deployment files")
+        install_display.error("inspect prerequisites and private deployment files")
         sys.exit(1)

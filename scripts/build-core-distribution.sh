@@ -98,7 +98,7 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   printf 'Distribution build requires %s\n' "$required_go" >&2
   exit 1
 fi
-for file in install.sh install.py install_output.py configuration.py config_model.py config.schema.json oac_cli.py convert.py rename.py \
+for file in install.sh install.py install_output.py install_display.py node_output.py configuration.py config_model.py config.schema.json oac_cli.py convert.py rename.py \
     native_service.py node_install.py node_spec.py node_generations.py sandbox_setup.py distribution.py \
     model_provider_sessions.py; do
   cp "deploy/install/$file" "$bundle/$file"

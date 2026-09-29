@@ -1,5 +1,6 @@
 """Exercise node installation without running providers or changing user services."""
 import argparse
+import contextlib
 import copy
 import fcntl
 import hashlib
@@ -648,6 +649,30 @@ class NodeInstallTests(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
         return system
+
+    def test_completion_summary_follows_readiness_and_hides_enrollment_token(self):
+        for system in (False, True):
+            with self.subTest(system=system):
+                if system:
+                    self.sudo_host()
+                stream = io.StringIO()
+                action = installer.install_system if system else installer.install
+                with contextlib.redirect_stdout(stream), mock.patch.object(installer, "wait_ready") as ready:
+                    ready.side_effect = installer.InstallError("fixture readiness timeout")
+                    with self.assertRaisesRegex(installer.InstallError, "fixture readiness timeout"):
+                        action(self.args, "synthetic-once-token")
+                    self.assertNotIn("Node installation complete.", stream.getvalue())
+                    ready.side_effect = None
+                    action(self.args, "")
+                text = stream.getvalue()
+                self.assertIn("\nStatus\n  Core connection: connected\n  Sandbox Provider: Docker (ready)\n", text)
+                self.assertIn("\nNode\n", text)
+                self.assertIn("\nManage\n", text)
+                scope = "" if system else " --user"
+                self.assertIn("  Status: systemctl" + scope + " status oac-node-", text)
+                self.assertIn("  Logs: journalctl" + scope + " -u oac-node-", text)
+                self.assertNotIn("synthetic-once-token", text)
+                self.assertNotIn("\033[", text)
 
     def test_sudo_mode_prepares_the_host_and_reruns_without_changes(self):
         system = self.sudo_host()

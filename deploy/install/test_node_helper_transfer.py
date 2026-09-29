@@ -31,7 +31,7 @@ class HelperTransferTests(unittest.TestCase):
             self.assertEqual(helper.read_bytes(), captured)
             self.assertEqual(stat.S_IMODE(helper.stat().st_mode), 0o600)
             with zipfile.ZipFile(helper) as archive:
-                self.assertEqual(set(archive.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py"})
+                self.assertEqual(set(archive.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py"})
             self.assertEqual(json.loads((root / "preparation.json").read_text()), {"source_url": "https://core.example"})
 
     @unittest.skipUnless(hasattr(os, "fork") and os.geteuid() == 0, "requires a disposable Linux root test environment")

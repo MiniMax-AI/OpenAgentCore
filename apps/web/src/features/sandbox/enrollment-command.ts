@@ -19,7 +19,9 @@ export type NodeInstallMode = "sudo" | "user";
  */
 function nodeInstaller(sourceUrl: string, scriptDigest: string, mode: NodeInstallMode): string {
   return ` (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT${mode === "sudo" ? `; s=; [ "$(id -u)" -eq 0 ] || s=sudo` : ""}
+printf '\\n==> Downloading node installer...\\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 ${quote(sourceUrl + "/node-install/node-install.pyz")} -o "$d/node-install.pyz" &&
+printf '==> Verifying node installer...\\n' &&
 printf '%s  %s\\n' ${quote(scriptDigest)} "$d/node-install.pyz" | sha256sum -c --status &&
 `;
 }

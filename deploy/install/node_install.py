@@ -35,6 +35,8 @@ import uuid
 import distribution
 import node_spec
 import node_generations
+import install_display
+import node_output
 
 
 class InstallError(Exception):
@@ -394,11 +396,11 @@ def open_node(args, token, system=False):
     identity_file = root / "state/node/identity.json"
     retained = json.loads(identity_file.read_text()) if existing_file(identity_file) else None
     if not system:  # In sudo mode, root has already said so.
-        print("Reading the Core deployment specification...", flush=True)
+        install_display.step("Reading the Core deployment specification")
     args.configuration = node_spec.fetch(args, token, retained, open_request, allow_enrollment=not (root / "registered.json").exists())
     args.provider = args.configuration["provider"]
     if not system:
-        print("Checking host requirements...", flush=True)
+        install_display.step("Checking host requirements")
     preflight(args.provider, system)
     if args.provider == "microsandbox":
         runtime_home = micro_home(args.installation_id)
@@ -423,7 +425,7 @@ def install_lock(root):
 
 def register_node(root, args, token, helper_archive=None):
     """Download and verify the payload, prepare the Runtime and register; not the service."""
-    print("Downloading and verifying node files...", flush=True)
+    install_display.step("Downloading and verifying node files")
     program_manifest, program_sums = metadata(args.source_url, getattr(args, "bundle", None))
     selected = args.configuration["specification"]["runtime"]
     manifest, sums = program_manifest, program_sums
@@ -464,7 +466,7 @@ def register_node(root, args, token, helper_archive=None):
     with node_generations.collection_lease(root, args.configuration["generation"], sys.modules[__name__], lease_identity,
                                            initialize=not (root / "provider.json").exists()):
         pass
-    print("Checking the sandbox runtime...", flush=True)
+    install_display.step("Checking the sandbox runtime")
     runtime_image = prepare_runtime(root, args, manifest)
     # Retain the original network policy when recovering a partial installation.
     if not existing_file(root / "provider.json"):
@@ -478,7 +480,7 @@ def register_node(root, args, token, helper_archive=None):
         try:
             with os.fdopen(descriptor, "w") as secret:
                 secret.write(token)
-            print("Registering this node with Core...", flush=True)
+            install_display.step("Registering this node with Core")
             try:
                 checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
                          "--core-url", args.core_url, "--name", socket.gethostname(),
@@ -584,14 +586,13 @@ def install(args, token):
         register_node(root, args, token)
         unit = root / unit_name(args.installation_id)
         write_once(unit, service_unit(root))
-        print("Starting the node service...", flush=True)
+        install_display.step("Starting the node service")
         checked(["systemctl", "--user", "daemon-reload"], "Cannot reload the systemd user manager")
         checked(["systemctl", "--user", "enable", "--now", str(unit)], "Cannot start the node service; retained identity is unchanged")
         checked(["systemctl", "--user", "is-active", "--quiet", unit.name], "Node service is unavailable; inspect its systemd user journal")
-        print("Waiting for Core connection and provider readiness...", flush=True)
+        install_display.step("Waiting for Core connection and provider readiness")
         wait_ready(root, args)
-    print("Node connected to Core and provider ready. State: " + str(root))
-    print("Logs: journalctl --user -u " + unit.name)
+    node_output.summary(root, args, unit.name, getpass.getuser(), system=False)
 
 
 def prepare_service_node(args, token, helper_archive):
@@ -786,7 +787,7 @@ def service_child(account, function, arguments, parent, mask, read_ends, output_
         function(*arguments)
         code = 0
     except (InstallError, node_spec.SpecificationError, distribution.DistributionError) as error:
-        print(str(error), file=sys.stderr)
+        install_display.error(str(error))
     except Exception as error:  # noqa: BLE001 - the child must always report and exit
         print("The step running as " + SERVICE_USER + " failed unexpectedly (" + type(error).__name__
               + "). Inspect the host, then rerun the command.", file=sys.stderr)
@@ -847,7 +848,7 @@ def host_lock():
                     raise InstallError("Another node installation or uninstallation on this host still holds "
                                        + str(path) + "; find it with `sudo fuser " + str(path) + "`, then rerun.") from None
                 if not waiting:
-                    print("Waiting for another node installation or uninstallation on this host...", flush=True)
+                    install_display.step("Waiting for another node installation or uninstallation on this host")
                     waiting = True
                 time.sleep(1)
         yield
@@ -1135,7 +1136,7 @@ def install_system(args, token):
     record = node_record(args.installation_id)
     configuration = None
     if record is None:
-        print("Reading the Core deployment specification...", flush=True)
+        install_display.step("Reading the Core deployment specification")
         configuration = node_spec.fetch(args, token, None, open_request, allow_enrollment=True)
         provider = configuration["provider"]
     else:
@@ -1143,7 +1144,7 @@ def install_system(args, token):
         if record["core_url"] != args.core_url:
             raise InstallError("This host's node uses " + record["core_url"] + ", but this command uses " + args.core_url
                                + ". Remove the node on the Nodes page, uninstall it, then run a new command." + NOTHING_CHANGED)
-    print("Checking host requirements...", flush=True)
+    install_display.step("Checking host requirements")
     group, details = provider_group(provider)
     if record is None:
         other_node(args, provider)
@@ -1154,6 +1155,7 @@ def install_system(args, token):
         account, account_record = account_plan()
         helper_archive = node_generations.helper_archive(args, sys.modules[__name__])
         # Every check has passed; from here on the host changes.
+        install_display.step("Preparing the node service account")
         account = prepare_account(account, account_record, group)
         child_docker_config()
         root = SERVICE_HOME / ".oac/nodes" / args.installation_id
@@ -1164,14 +1166,13 @@ def install_system(args, token):
         args.system, args.provider = True, provider
         run_as(account, prepare_service_node, args, token, helper_archive)
         root_file(unit, system_unit(root, provider))
-        print("Starting the node service...", flush=True)
+        install_display.step("Starting the node service")
         checked(["systemctl", "daemon-reload"], "Cannot reload systemd")
         checked(["systemctl", "enable", "--now", unit.name], "Cannot start the node service; retained identity is unchanged")
         checked(["systemctl", "is-active", "--quiet", unit.name], "Node service is unavailable; inspect sudo journalctl -u " + unit.name)
-        print("Waiting for Core connection and provider readiness...", flush=True)
+        install_display.step("Waiting for Core connection and provider readiness")
         run_as(account, wait_ready, root, args)
-    print("Node connected to Core and provider ready. It runs as " + SERVICE_USER + " in the system service " + unit.name + ".")
-    print("Logs: sudo journalctl -u " + unit.name)
+    node_output.summary(root, args, unit.name, SERVICE_USER, system=True)
 
 
 # Uninstall -------------------------------------------------------------------
@@ -1507,5 +1508,5 @@ if __name__ == "__main__":
         print(INTERRUPTED, file=sys.stderr)
         sys.exit(130)
     except (InstallError, node_spec.SpecificationError, distribution.DistributionError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        print(str(error) if isinstance(error, (InstallError, node_spec.SpecificationError, distribution.DistributionError)) else "Node installation failed; check host prerequisites and retained private files", file=sys.stderr)
+        install_display.error(str(error) if isinstance(error, (InstallError, node_spec.SpecificationError, distribution.DistributionError)) else "check host prerequisites and retained private files")
         sys.exit(1)

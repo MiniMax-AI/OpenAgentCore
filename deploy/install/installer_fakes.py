@@ -348,7 +348,7 @@ MANIFEST = {
     "runtime_ref": "oac-runtime@sha256:" + "b" * 64,
     "microsandbox": {"runtime_sha256": "5" * 64, "firmware_sha256": "6" * 64},
 }
-MODULES = ("install.py", "install_output.py", "configuration.py", "config_model.py", "config.schema.json", "oac_cli.py", "convert.py", "rename.py",
+MODULES = ("install.py", "install_output.py", "install_display.py", "configuration.py", "config_model.py", "config.schema.json", "oac_cli.py", "convert.py", "rename.py",
            "native_service.py", "sandbox_setup.py", "node_spec.py", "distribution.py", "install.sh")
 
 
