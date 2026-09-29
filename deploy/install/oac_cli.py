@@ -405,7 +405,8 @@ def render_now(root, config, state):
 
 def old_public_url(root, config, previous, disk, actual):
     """The public URL things are bound to: Core's own answer, else the written core.env."""
-    old_config = {"host": previous["host"], "ports": {"core": previous["ports.core"]}} if previous else config
+    old_config = {"host": previous["host"], "ingress": previous.get("ingress"),
+                  "ports": {"core": previous["ports.core"]}} if previous else config
     base = core_base(old_config)
     if actual.get("core", {}).get("running"):
         status, body = http(base + "/core/v1/installation", bearer(configuration.read_core_key(root)))
@@ -501,6 +502,20 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
     return installation
 
 
+def finish_apply(root, config, state, rendered, will_run):
+    managed = ingress_config.enabled(config) and "gateway" in will_run
+    if managed:
+        import ingress
+        # Container input labels cannot prove which configuration Caddy loaded.
+        ingress_config.reload(root, rendered.files["Caddyfile"])
+        if config["public_url"]:
+            ingress.verify(config["public_url"], state["installation_id"])
+    health(root, config, will_run)
+    if managed:
+        ingress.save(root, {"state": "ready" if config["public_url"] else "unconfigured",
+                            "public_url": config["public_url"], "target_url": config["public_url"], "message": None})
+
+
 def apply(root, dry_run=False, yes=False, discard_edits=False, confirm_public_url_change=None,
           start=False, interactive=None, out=print, retry=None):
     root = Path(root)
@@ -567,6 +582,8 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         # A rotation that stopped before using its new key leaves only this file.
         (root / "secrets/core.key.new").unlink(missing_ok=True)
     if not (changed or removed or restarts or edited):
+        if ingress_config.enabled(config):
+            finish_apply(root, config, state, rendered, will_run)
         state = dict(state, core_installation_id=core_installation_id)
         if record_digests(state, rendered.files) != load_state(root):
             save_state(root, record_digests(state, rendered.files))
@@ -584,12 +601,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         (root / "generated" / name).unlink()
     try:
         converge(root, state, rendered.services, will_run, force)
-        if ingress_config.enabled(config) and "gateway" in will_run:
-            ingress_config.reload(root, rendered.files["Caddyfile"])
-            if config["public_url"]:
-                import ingress
-                ingress.verify(config["public_url"], state["installation_id"])
-        health(root, config, will_run)
+        finish_apply(root, config, state, rendered, will_run)
     except (OacError, RuntimeError, subprocess.CalledProcessError) as error:
         line = core_error_line(root, state)
         if line:

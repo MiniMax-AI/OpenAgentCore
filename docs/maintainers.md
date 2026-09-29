@@ -272,7 +272,9 @@ private API socket directory. Caddy's separate admin socket is never mounted in 
 The managed gateway owns ports 80/443 and the initial Web port. Caddy owns
 certificate issuance and renewal; its private data persists in `ingress/data`.
 `generated/Caddyfile` is derived from `config.json`, and apply reloads it through
-the private Caddy socket. Domain preparation retains the old entry point while
+the private Caddy socket even when container inputs already match. A successful
+apply reconciles domain operation status after verifying the running services.
+Domain preparation retains the old entry point while
 verifying a trusted certificate and installation-specific response over HTTPS.
 Only then does it update `public_url` and call the common apply path. Failure
 restores the previous desired configuration and reports incomplete recovery.

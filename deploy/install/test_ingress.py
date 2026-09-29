@@ -9,6 +9,7 @@ from unittest import mock
 
 import ingress
 import ingress_config
+import config_model
 import install
 import oac_cli
 from installer_fakes import FakeHost, MANIFEST, make_bundle, run_installer
@@ -99,6 +100,40 @@ class DomainTests(unittest.TestCase):
         oac_cli.write_private(self.root / "config.json", json.dumps(config))
         with self.assertRaisesRegex(ingress.DomainError, "pending config.json"):
             ingress.configure(self.root, "another.example.com", out=lambda _: None)
+
+    def test_apply_recovers_after_containers_converged_before_gateway_reload(self):
+        ingress_config.reload.side_effect = [None, KeyboardInterrupt]
+        with self.assertRaises(KeyboardInterrupt):
+            ingress.configure(self.root, "core.example.com", out=lambda _: None)
+        self.assertEqual(ingress.status(self.root)["state"], "applying")
+        self.assertIn("redir https://core.example.com", (self.root / "generated/Caddyfile").read_text())
+        self.host.recreated.clear()
+        ingress_config.reload.reset_mock(side_effect=True)
+        ingress.verify.reset_mock()
+        oac_cli.apply(self.root, interactive=False, out=lambda _: None)
+        ingress_config.reload.assert_called_once()
+        ingress.verify.assert_called_once_with("https://core.example.com", oac_cli.load_state(self.root)["installation_id"])
+        self.assertEqual(self.host.recreated, [])
+        self.assertEqual(ingress.status(self.root)["state"], "ready")
+        self.assertEqual(ingress.status(self.root)["public_url"], "https://core.example.com")
+        config = oac_cli.load_config(self.root)
+        config["public_url"] = "https://another.example.com"
+        oac_cli.write_private(self.root / "config.json", json.dumps(config))
+        oac_cli.apply(self.root, interactive=False, out=lambda _: None)
+        self.assertEqual(ingress.status(self.root)["public_url"], config["public_url"])
+        self.assertEqual(ingress.status(self.root)["target_url"], config["public_url"])
+
+    def test_old_address_probe_keeps_managed_core_on_ipv4_loopback(self):
+        config = oac_cli.load_config(self.root)
+        for host in ("203.0.113.10", "::"):
+            with self.subTest(host=host):
+                config["host"] = host
+                self.host.requests.clear()
+                _, base, answered = oac_cli.old_public_url(
+                    self.root, config, config_model.values(config), {}, {"core": {"running": True}})
+                self.assertEqual(base, "http://127.0.0.1:8091")
+                self.assertTrue(answered)
+                self.assertEqual(self.host.requests, [base + "/core/v1/installation"])
 
     def test_untrusted_hostnames_never_reach_gateway(self):
         for value in ("https://example.com", "example.com:8443", "127.0.0.1", "localhost", "a.local", "a.com\n}", None):

@@ -31,8 +31,9 @@ def save(root, value):
 def status(root):
     config = oac_cli.load_config(root)
     supported = gateway.enabled(config)
-    result = {"supported": supported, "state": "ready" if config["public_url"] else "unconfigured",
-              "public_url": config["public_url"], "target_url": None, "message": None}
+    written = oac_cli.written_view(root, oac_cli.load_state(root), config)
+    result = {"supported": supported, "state": "ready" if written["public_url"] else "unconfigured",
+              "public_url": written["public_url"], "target_url": None, "message": None}
     if not supported:
         result["message"] = "This installation uses an external reverse proxy. Configure HTTPS there, then set public_url and run oac apply."
     else:
