@@ -25,7 +25,7 @@ ALTER TABLE runtime_deployment ADD CONSTRAINT runtime_deployment_e2b_template_bu
     e2b_template <> '' OR (e2b_template_build_status IS NULL AND e2b_template_cpus IS NULL AND
         e2b_template_memory_mib IS NULL AND e2b_template_root_disk_mib IS NULL)
 );
-ALTER TABLE runtime_deployment DROP CONSTRAINT runtime_deployment_e2b_endpoint_check;
+ALTER TABLE runtime_deployment DROP CONSTRAINT IF EXISTS runtime_deployment_e2b_endpoint_check;
 ALTER TABLE runtime_deployment ADD CONSTRAINT runtime_deployment_e2b_endpoint_check CHECK (
     (e2b_api_url = '' AND e2b_domain = '') OR
     (e2b_template <> '' AND e2b_api_url <> '' AND e2b_domain <> '')
@@ -37,6 +37,15 @@ ALTER TABLE runtime_deployment_generations ADD CONSTRAINT runtime_deployment_gen
 );
 
 -- +goose Down
+-- Restore the previous representation of official endpoints. Custom endpoints
+-- remain explicit so older downgrade guards still protect their ownership.
+UPDATE runtime_deployment SET e2b_api_url = '', e2b_domain = ''
+WHERE e2b_api_url = 'https://api.e2b.app' AND e2b_domain = 'e2b.app';
+-- This transaction changes representation only, not the endpoint or resource owner.
+ALTER TABLE runtime_deployment_generations DISABLE TRIGGER immutable_sandbox_specification;
+UPDATE runtime_deployment_generations SET e2b_api_url = '', e2b_domain = ''
+WHERE e2b_api_url = 'https://api.e2b.app' AND e2b_domain = 'e2b.app';
+ALTER TABLE runtime_deployment_generations ENABLE TRIGGER immutable_sandbox_specification;
 -- Narrowing registration cannot silently invalidate retained resource ownership.
 ALTER TABLE runtime_deployment DROP CONSTRAINT runtime_deployment_provider_kind_check;
 ALTER TABLE runtime_deployment ADD CONSTRAINT runtime_deployment_provider_kind_check CHECK (provider_kind IN ('','docker','microsandbox','e2b'));
