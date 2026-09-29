@@ -65,6 +65,16 @@ func Lookup(kind string) (Adapter, error) {
 }
 func IsNode(kind string) bool             { a, e := Lookup(kind); return e == nil && a.Mode == "nodes" }
 func SupportsCheckpoint(kind string) bool { a, e := Lookup(kind); return e == nil && a.Checkpoint }
+
+// RetainedLimit keeps nodes without checkpoint support within their active capacity.
+func RetainedLimit(kind string, active, retained int) int {
+	a, err := Lookup(kind)
+	if err == nil && a.Mode == "nodes" && !a.Checkpoint {
+		return active
+	}
+	return retained
+}
+
 func ValidateSpecification(kind string, s sandbox.DeploymentSpec) error {
 	a, e := Lookup(kind)
 	if e != nil {

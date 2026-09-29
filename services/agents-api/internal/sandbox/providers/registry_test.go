@@ -77,3 +77,20 @@ func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 		t.Fatal("mixed configuration admitted", err)
 	}
 }
+
+func TestRetainedLimitUsesRegisteredCapabilities(t *testing.T) {
+	const kind = "capacity-test-provider"
+	defer delete(adapters, kind)
+	for _, checkpoint := range []bool{false, true} {
+		adapters[kind] = Adapter{Mode: "nodes", Checkpoint: checkpoint}
+		for _, retained := range []int{0, 20} {
+			want := 10
+			if checkpoint {
+				want = retained
+			}
+			if got := RetainedLimit(kind, 10, retained); got != want {
+				t.Fatalf("checkpoint=%v retained=%d: got %d, want %d", checkpoint, retained, got, want)
+			}
+		}
+	}
+}
