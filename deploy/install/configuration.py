@@ -183,8 +183,8 @@ def core_environment(root, config, state):
     }
     if native:
         result["OAC_E2B_PROVIDER_BIN"] = str(root / "native/e2b/oac-e2b-provider")
-        if (root / "native/native-installers/catalog.json").is_file():
-            result["OAC_NATIVE_INSTALLER_DIR"] = str(root / "native/native-installers")
+    if (root / "native-installers/catalog.json").is_file():
+        result["OAC_NATIVE_INSTALLER_DIR"] = str(root / "native-installers") if native else "/opt/oac/native-installers"
     if core["oauth_trusted_origins"]:
         result["OAC_OAUTH_TRUSTED_ORIGINS"] = ",".join(core["oauth_trusted_origins"])
     if core["runtime_history"] is not None:
@@ -234,6 +234,8 @@ def compose_config(root, config, state):
             services["database"]["ports"] = [f'127.0.0.1:{config["ports"]["database"]}:5432']
         else:
             mounts = [bind(root / "secrets" / name, f"{RUN}/{name}") for name in ("credential.key", "database.password")]
+            if (root / "native-installers/catalog.json").is_file():
+                mounts.append(bind(root / "native-installers", "/opt/oac/native-installers"))
             mounts += [bind(root / "generated" / name, f"{RUN}/{name}") for name in ("core-key-digests.json", "settings.json")]
             if config["core"]["runtime_history"] is not None:
                 mounts.append(bind(root / "generated/runtime-history.json", f"{RUN}/runtime-history.json"))
@@ -287,6 +289,16 @@ class Rendered:
         self.files, self.services, self.unit = files, services, unit
 
 
+def native_installer_inputs(root):
+    directory = root / "native-installers"
+    catalog = directory / "catalog.json"
+    if not catalog.is_file():
+        return None
+    # Archives are immutable and verified on installation/startup. Adding an
+    # offline archive must restart Core so its local availability map refreshes.
+    return [sha256(catalog.read_bytes()), sorted(p.name for p in directory.glob("*.tar.gz") if p.is_file())]
+
+
 def render(root, config, state, applied_at):
     root = Path(root)
     mode, native = config["mode"], config.get("native_core", False)
@@ -307,6 +319,7 @@ def render(root, config, state, applied_at):
         core_settings = [item for item in settings["settings"] if "core" in item["restarts"]]
         external["core"] = json.dumps({
             "core-key-digests.json": sha256(files["core-key-digests.json"]),
+            "native-installers": native_installer_inputs(root),
             "settings": sha256(json.dumps([settings["path"], settings["apply_command"], core_settings], sort_keys=True)),
             "runtime-history.json": sha256(files.get("runtime-history.json", "")),
             "credential.key": secrets["credential.key"], "database.password": secrets["database.password"],

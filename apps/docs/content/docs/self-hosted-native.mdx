@@ -81,12 +81,21 @@ to resume; completed components and credentials are retained and an existing
 daemon is reused. After authentication failures, check the Environment credential
 in Core. Do not remove the workspace or Session history to retry.
 
-Qualified release distributions contain Linux amd64, macOS arm64 and Windows
-amd64 installers. Core serves these matched artifacts directly, including in a
-private repository deployment. Unsupported platforms fail explicitly. Operators
-running a standalone Core binary can set `OAC_NATIVE_INSTALLER_DIR` to its matched
-`native-installers` directory. Without qualified artifacts, Session responses
-report installation unavailable instead of selecting another version.
+Qualified releases publish separate Linux amd64, macOS arm64 and Windows amd64
+installers. Default Core installation carries only their version and checksum
+catalog. The one-command bootstrap downloads only the current platform from the
+fixed Release URL and verifies its checksum before extraction. It requires access
+to that public download host; installation credentials stay on Core. Unsupported
+platforms fail explicitly, and download failure never selects a different version.
+
+The explicit offline Core archive carries one copy of each installer outside the
+Core image. Installing it retains the files in the installation's private
+`native-installers` directory and makes them available through Core's same public
+artifact endpoint. No external download is needed for these archives. Standalone
+Core operators can set `OAC_NATIVE_INSTALLER_DIR` to the matched catalog directory,
+with optional locally supplied archives. A corrupt local archive refuses startup;
+missing catalog metadata disables one-command installation. Model access and
+capability dependencies may still require networking.
 
 ## Manual distribution installation
 

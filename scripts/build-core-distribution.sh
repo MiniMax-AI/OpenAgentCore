@@ -99,7 +99,7 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   exit 1
 fi
 for file in install.sh install.py install_output.py install_display.py node_output.py configuration.py config_model.py config.schema.json oac_cli.py convert.py rename.py \
-    native_service.py node_install.py node_spec.py node_generations.py sandbox_setup.py distribution.py \
+    native_service.py native_installers.py node_install.py node_spec.py node_generations.py sandbox_setup.py distribution.py \
     model_provider_sessions.py; do
   cp "deploy/install/$file" "$bundle/$file"
 done
@@ -139,8 +139,8 @@ tar -xzf "$stage/e2b-build/oac-e2b-provider-linux-amd64.tar.gz" \
 cp -R "$stage/core/e2b" "$bundle/native/e2b"
 mkdir -p "$stage/core/native-installers"
 if [[ -n "${OAC_NATIVE_INSTALLER_BUILD_DIR:-}" ]]; then
-  cp -R "$OAC_NATIVE_INSTALLER_BUILD_DIR/." "$stage/core/native-installers/"
-  cp -R "$stage/core/native-installers" "$bundle/native/"
+  python3 scripts/core-distribution-manifest.py native-catalog "$bundle" "$stage" "$revision" \
+    "$OAC_NATIVE_INSTALLER_BUILD_DIR" "$release_base_url"
 fi
 cp deploy/distribution/Dockerfile "$stage/core/Dockerfile"
 build_image core "$stage/core"
@@ -248,10 +248,12 @@ if [[ "$offline" == 1 ]]; then
   mkdir "$bundle/artifacts"
   # Hard links keep the optional archive from requiring another Runtime-sized copy.
   for asset in "$stage/artifacts/"*; do ln "$asset" "$bundle/artifacts/"; done
+  python3 scripts/core-distribution-manifest.py native-offline "$bundle" "$stage"
   python3 scripts/core-distribution-manifest.py archive "$bundle" "$source_epoch" offline
   offline_name="${archive_name%.tar.gz}-offline.tar.gz"
   mv "$stage/$offline_name" "$stage/$offline_name.sha256" "$output_dir/"
   printf 'Offline Core distribution: %s/%s\n' "$output_dir" "$offline_name"
 fi
 mv "$stage/artifacts/"* "$output_dir/"
+if [[ -d "$stage/native-artifacts" ]]; then mv "$stage/native-artifacts/"* "$output_dir/"; fi
 mv "$bundle" "$output_dir/"

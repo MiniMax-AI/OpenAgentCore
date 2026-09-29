@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY --chmod=0555 bin/oac-core bin/oac-core-migrate bin/oac-core-device bin/oac-core-environment-key /usr/local/bin/
 
 COPY e2b/ /opt/oac/e2b/
+# Only the small version/checksum catalog, never native execution archives.
 COPY native-installers/ /opt/oac/native-installers/
 
 ENV OAC_ADDR=:8091

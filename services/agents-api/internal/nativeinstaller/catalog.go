@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -24,6 +25,7 @@ var bootstrap embed.FS
 
 type Artifact struct {
 	SHA256 string `json:"sha256"`
+	URL    string `json:"url,omitempty"`
 }
 
 type Catalog struct {
@@ -31,12 +33,15 @@ type Catalog struct {
 	ProtocolVersion string              `json:"protocol_version"`
 	Artifacts       map[string]Artifact `json:"artifacts"`
 	directory       string
+	local           map[string]bool
 }
+
+var checksum = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 var platformName = regexp.MustCompile(`^(linux|darwin|windows)-(amd64|arm64)$`)
 
-// Load refuses a different build or protocol, and verifies all archives once
-// before exposing them. The distribution directory is immutable while serving.
+// Load checks the matched catalog without downloading execution payloads. Local
+// offline archives are verified once; the directory stays immutable while serving.
 func Load(directory, version string) (*Catalog, error) {
 	raw, err := os.ReadFile(filepath.Join(directory, "catalog.json"))
 	if err != nil {
@@ -46,14 +51,26 @@ func Load(directory, version string) (*Catalog, error) {
 	if json.Unmarshal(raw, &c) != nil || c.Version != version || !proto.VersionCompatible(c.ProtocolVersion) || len(c.Artifacts) == 0 {
 		return nil, errors.New("native installer catalog does not match this Core build and protocol")
 	}
+	c.local = make(map[string]bool)
 	for platform, artifact := range c.Artifacts {
-		if !platformName.MatchString(platform) {
+		if !platformName.MatchString(platform) || !checksum.MatchString(artifact.SHA256) {
 			return nil, errors.New("invalid native installer platform")
 		}
+		if artifact.URL != "" {
+			u, err := url.Parse(artifact.URL)
+			filename := "oac-native-" + c.Version + "-" + platform + ".tar.gz"
+			if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !strings.HasSuffix(u.Path, "/"+filename) || strings.Contains(strings.ToLower(u.Path), "/latest/") {
+				return nil, errors.New("invalid versioned native installer URL")
+			}
+		}
 		file, err := os.Open(filepath.Join(directory, platform+".tar.gz"))
+		if errors.Is(err, os.ErrNotExist) && artifact.URL != "" {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
+		c.local[platform] = true
 		hash := sha256.New()
 		_, err = io.Copy(hash, file)
 		file.Close()
@@ -96,7 +113,11 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.ServeFile(w, r, filepath.Join(c.directory, name))
+	if c.local[platform] {
+		http.ServeFile(w, r, filepath.Join(c.directory, name))
+		return
+	}
+	http.Redirect(w, r, artifact.URL, http.StatusTemporaryRedirect)
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }

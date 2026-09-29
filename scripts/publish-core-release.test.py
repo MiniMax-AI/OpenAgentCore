@@ -3,6 +3,8 @@ import contextlib
 import hashlib
 import importlib.util
 import json
+import io
+import tarfile
 import pathlib
 import subprocess
 import tempfile
@@ -28,11 +30,35 @@ class PublicationTests(unittest.TestCase):
             (self.assets / name).write_bytes(b"archive fixture")
             (self.assets / (name + ".sha256")).write_text(
                 hashlib.sha256(b"archive fixture").hexdigest() + "  " + name + "\n")
+        catalog = {"version": self.revision, "artifacts": {}}
+        for platform in ("linux-amd64", "darwin-arm64", "windows-amd64"):
+            name = f"oac-native-{self.revision}-{platform}.tar.gz"
+            (self.assets / name).write_bytes(b"native archive")
+            catalog["artifacts"][platform] = {"sha256": hashlib.sha256(b"native archive").hexdigest()}
+        with tarfile.open(self.assets / (self.stem + ".tar.gz"), "w:gz") as archive:
+            raw = json.dumps(catalog).encode()
+            member = tarfile.TarInfo(self.stem + "/native-installers/catalog.json")
+            member.size = len(raw)
+            archive.addfile(member, io.BytesIO(raw))
+        path = self.assets / (self.stem + ".tar.gz")
+        path.with_name(path.name + ".sha256").write_text(publisher.distribution.sha256(path) + "  " + path.name + "\n")
         self.release = None
         self.existing = []
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
         self.api = stack.enter_context(mock.patch.object(publisher, "api", side_effect=self.response))
+
+    def test_missing_native_asset_refuses_release_creation(self):
+        (self.assets / f"oac-native-{self.revision}-windows-amd64.tar.gz").unlink()
+        with self.assertRaises(FileNotFoundError):
+            self.publish()
+        self.assertEqual(self.writes(), [])
+
+    def test_corrupt_native_asset_refuses_release_creation(self):
+        (self.assets / f"oac-native-{self.revision}-linux-amd64.tar.gz").write_bytes(b"corrupt")
+        with self.assertRaisesRegex(ValueError, "Native installer checksum"):
+            self.publish()
+        self.assertEqual(self.writes(), [])
 
     def response(self, repository, endpoint, *args):
         if endpoint.startswith("git/"):
@@ -75,7 +101,7 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertFalse(self.release["draft"])
         self.assertFalse(self.release["prerelease"])
-        self.assertEqual(len(self.release["assets"]), 6)
+        self.assertEqual(len(self.release["assets"]), 9)
         self.assertEqual(self.api.call_args.args[1:],
                          ("releases/7", "--method", "PATCH", "-F", "draft=false"))
 

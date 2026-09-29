@@ -207,6 +207,43 @@ def release_base(value):
     return value.rstrip("/")
 
 
+def native_catalog(bundle, stage, revision, source, artifact_base_url=""):
+    """Ship only catalog metadata in Core; publish native archives independently."""
+    bundle, stage, source = pathlib.Path(bundle), pathlib.Path(stage), pathlib.Path(source)
+    base = release_base(artifact_base_url)
+    catalog = json.loads((source / "catalog.json").read_text())
+    if catalog["version"] != revision or not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise ValueError("Native catalog must match the distribution revision")
+    if not catalog["artifacts"]:
+        raise ValueError("Native catalog has no qualified artifacts")
+    assets = stage / "native-artifacts"
+    assets.mkdir()
+    for platform, entry in catalog["artifacts"].items():
+        if not re.fullmatch(r"(linux|darwin|windows)-(amd64|arm64)", platform):
+            raise ValueError("Invalid native installer platform")
+        archive = source / (platform + ".tar.gz")
+        if archive.is_symlink() or sha256(archive) != entry["sha256"]:
+            raise ValueError("Native installer checksum mismatch")
+        filename = f"oac-native-{revision}-{platform}.tar.gz"
+        shutil.copyfile(archive, assets / filename)
+        (assets / (filename + ".sha256")).write_text(entry["sha256"] + "  " + filename + "\n")
+        catalog["artifacts"][platform] = {"sha256": entry["sha256"], **({"url": base + "/" + filename} if base else {})}
+    for directory in (stage / "core/native-installers", bundle / "native-installers"):
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "catalog.json").write_text(json.dumps(catalog, indent=2) + "\n")
+
+
+def native_offline(bundle, stage):
+    bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
+    path = bundle / "native-installers/catalog.json"
+    if not path.exists():
+        return
+    catalog = json.loads(path.read_text())
+    for platform in catalog["artifacts"]:
+        source = stage / "native-artifacts" / f"oac-native-{catalog['version']}-{platform}.tar.gz"
+        os.link(source, path.parent / (platform + ".tar.gz"))
+
+
 def package_artifacts(bundle, stage, revision):
     """Move optional payload out of Core; the manifest owns every asset digest."""
     assets = stage / "artifacts"
@@ -295,9 +332,11 @@ def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline
 
 def checksums(bundle):
     bundle = pathlib.Path(bundle)
-    # Optional payload hashes are already authenticated by manifest.json.
+    # Optional payload hashes are authenticated by manifest.json and the native
+    # catalog. Thin/offline metadata stays identical for same-version repair.
     members = sorted(path for path in bundle.rglob("*") if path.is_file()
                      and path.relative_to(bundle).parts[0] != "artifacts"
+                     and not (path.parent == bundle / "native-installers" and path.name.endswith(".tar.gz"))
                      and path.name != "SHA256SUMS")
     (bundle / "SHA256SUMS").write_text("".join(sha256(path) + "  " + path.relative_to(bundle).as_posix() + "\n" for path in members))
 
@@ -513,7 +552,7 @@ def check_docs(bundle, names=BUNDLED_DOCS, files=BUNDLED_FILES):
 if __name__ == "__main__":
     commands = {"extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image,
                 "built-image": built_image, "manifest": manifest, "archive": archive, "bootstraps": bootstraps,
-                "release-base": release_base, "docs": docs}
+                "release-base": release_base, "docs": docs, "native-catalog": native_catalog, "native-offline": native_offline}
     try:
         commands[sys.argv[1]](*sys.argv[2:])
     except (KeyError, TypeError):

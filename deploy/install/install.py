@@ -27,6 +27,7 @@ import config_model
 import configuration
 from configuration import valid_core_origin
 import rename
+import native_installers
 import native_service
 import oac_cli
 import sandbox_setup
@@ -528,6 +529,7 @@ def finish(root, bundle, manifest, fresh=False, selection=None):
     step("Preparing service files")
     prepare_node_payload(root, state, bundle)
     native_service.prepare(root, state, bundle)
+    native_installers.prepare(root, state, bundle)
     install_oac(root, bundle)
     retry = f"rerun ./install.sh --install-dir {root}"
     try:

@@ -50,6 +50,39 @@ def image_archive(path, name, *, nested=False, architecture="amd64", corrupt=Non
 
 
 class DistributionTests(unittest.TestCase):
+    def test_native_payload_is_independent_and_offline_has_one_copy(self):
+        source = self.stage / "qualified-native"
+        source.mkdir()
+        catalog = {"version": REVISION, "protocol_version": "fixture", "artifacts": {}}
+        for platform in ("linux-amd64", "darwin-arm64", "windows-amd64"):
+            raw = ("native:" + platform).encode()
+            (source / (platform + ".tar.gz")).write_bytes(raw)
+            catalog["artifacts"][platform] = {"sha256": hashlib.sha256(raw).hexdigest()}
+        (source / "catalog.json").write_text(json.dumps(catalog))
+        distribution.native_catalog(self.bundle, self.stage, REVISION, source, RELEASE_BASE)
+        self.assertEqual([p.name for p in (self.stage / "core/native-installers").iterdir()], ["catalog.json"])
+        self.assertEqual([p.name for p in (self.bundle / "native-installers").iterdir()], ["catalog.json"])
+        distribution.archive(self.bundle, "1")
+        with tarfile.open(self.bundle.with_name(self.bundle.name + ".tar.gz")) as archive:
+            self.assertFalse(any("native-installers/" in p.name and p.name.endswith(".tar.gz") for p in archive.getmembers()))
+        distribution.checksums(self.bundle)
+        sums = (self.bundle / "SHA256SUMS").read_bytes()
+        distribution.native_offline(self.bundle, self.stage)
+        distribution.checksums(self.bundle)
+        self.assertEqual((self.bundle / "SHA256SUMS").read_bytes(), sums)
+        distribution.archive(self.bundle, "1", "offline")
+        with tarfile.open(self.bundle.with_name(self.bundle.name + "-offline.tar.gz")) as archive:
+            native = [p for p in archive.getmembers() if "native-installers/" in p.name and p.name.endswith(".tar.gz")]
+            self.assertEqual(len(native), 3)
+            for member in native:
+                platform = pathlib.Path(member.name).name.removesuffix(".tar.gz")
+                self.assertEqual(archive.extractfile(member).read(), (source / (platform + ".tar.gz")).read_bytes())
+        metadata = json.loads((self.bundle / "native-installers/catalog.json").read_text())
+        for platform, entry in metadata["artifacts"].items():
+            filename = f"oac-native-{REVISION}-{platform}.tar.gz"
+            self.assertEqual(entry["url"], RELEASE_BASE + "/" + filename)
+            self.assertEqual(distribution.sha256(self.stage / "native-artifacts" / filename), entry["sha256"])
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

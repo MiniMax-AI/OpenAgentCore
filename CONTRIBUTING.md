@@ -3804,7 +3804,18 @@ Existing, rotated or revoked credentials are never replaced by onboarding. Machi
 bootstrap routes use this grant, not an Environment ID as authentication. Public
 artifact routes contain no credentials. Native bundles must match the Core source
 revision and Runtime wire version. Core release qualification consumes the same
-three-platform native CI artifacts and includes them in its distribution.
+three-platform native CI artifacts and publishes them as independent, source-qualified
+Release assets. Core images and default control-service archives carry only their
+small catalog (build, protocol, platform, checksum and versioned HTTPS URL), never
+native execution archives. The public artifact route redirects a requested platform
+to its catalog URL without proxying or caching it; clients verify the Core-provided
+checksum before extraction. Installation grants are sent only to Core, never to
+artifact hosts. Explicit offline distributions include one copy of each native
+archive outside the Core image. The Core installer retains this directory privately
+and mounts it read-only for container Core, or points native Core at the same files.
+Core verifies local archives before serving; missing online archives redirect, while
+corrupt local content fails closed. Neither installation nor repair downloads native
+execution payloads; Session bootstrap requests only the current machine's platform.
 `make check-distribution` exercises catalog assembly with manifests larger than
 Node's default subprocess output buffer; catalog reads allow up to 64 MiB.
 Bootstrap scripts own platform download/extraction only; installation, startup,

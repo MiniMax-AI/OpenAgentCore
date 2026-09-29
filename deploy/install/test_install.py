@@ -56,6 +56,39 @@ class InstallerTests(unittest.TestCase):
         path.chmod(mode)
         return path
 
+    def test_catalog_installed_for_container_and_native_core(self):
+        import hashlib
+        native = self.bundle / "native-installers"
+        native.mkdir()
+        raw = b"offline native archive"
+        catalog = {"version": self.manifest["source_commit"], "artifacts": {
+            "linux-amd64": {"sha256": hashlib.sha256(raw).hexdigest()}}}
+        (native / "catalog.json").write_text(json.dumps(catalog))
+        # The installer checks the outer checksum inventory before copying.
+        with (self.bundle / "SHA256SUMS").open("a") as sums:
+            for path in native.iterdir():
+                sums.write(distribution.digest(path) + "  " + str(path.relative_to(self.bundle)) + "\n")
+        self.install()
+        first = self.document("generated/compose.json")["services"]["core"]["labels"]
+        (native / "linux-amd64.tar.gz").write_bytes(raw)
+        self.install()
+        second = self.document("generated/compose.json")["services"]["core"]["labels"]
+        self.assertNotEqual(first, second)
+        (native / "linux-amd64.tar.gz").unlink()
+        self.install()
+        self.assertEqual(second, self.document("generated/compose.json")["services"]["core"]["labels"])
+        installed = self.root / "native-installers"
+        self.assertEqual((installed / "linux-amd64.tar.gz").read_bytes(), raw)
+        compose = self.document("generated/compose.json")
+        mount = next(m for m in compose["services"]["core"]["volumes"] if m["target"] == "/opt/oac/native-installers")
+        self.assertTrue(mount["read_only"])
+        self.assertEqual(mount["source"], str(installed))
+        config = self.document("config.json")
+        config["native_core"] = True
+        config["ports"]["database"] = 5432
+        environment = install.configuration.core_environment(self.root, config, self.document("state.json"))
+        self.assertEqual(environment["OAC_NATIVE_INSTALLER_DIR"], str(installed))
+
     def test_host_check_accepts_current_account_including_root(self):
         for uid in (0, 1000):
             with self.subTest(uid=uid), mock.patch.object(install.os, "getuid", return_value=uid), \

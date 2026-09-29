@@ -53,8 +53,14 @@ class PromotionTests(unittest.TestCase):
     def archives(self):
         for offline in (False, True):
             data = {"manifest.json": json.dumps(self.metadata).encode(), "source.tar.gz": b"source fixture"}
+            if hasattr(self, "native"):
+                data["native-installers/catalog.json"] = json.dumps(self.native).encode()
+                if offline:
+                    for platform in self.native["artifacts"]:
+                        data["native-installers/" + platform + ".tar.gz"] = b"native"
             data["SHA256SUMS"] = "".join(
-                hashlib.sha256(value).hexdigest() + "  " + key + "\n" for key, value in data.items()).encode()
+                hashlib.sha256(value).hexdigest() + "  " + key + "\n" for key, value in data.items()
+                if not (key.startswith("native-installers/") and key.endswith(".tar.gz"))).encode()
             if offline:
                 data.update({"artifacts/" + entry["filename"]: (self.assets / entry["filename"]).read_bytes()
                              for entry in self.metadata["artifacts"].values()})
@@ -66,6 +72,20 @@ class PromotionTests(unittest.TestCase):
                     archive.addfile(entry, io.BytesIO(value))
             checksum = promotion.file_identity(self.assets / name)["sha256"]
             (self.assets / (name + ".sha256")).write_text(checksum + "  " + name + "\n")
+
+    def test_independent_native_assets_remain_in_qualification_inventory(self):
+        name = f"oac-native-{promotion.SOURCE}-linux-amd64.tar.gz"
+        digest = hashlib.sha256(b"native").hexdigest()
+        (self.assets / name).write_bytes(b"native")
+        (self.assets / (name + ".sha256")).write_text(digest + "  " + name + "\n")
+        self.native = {"version": promotion.SOURCE, "artifacts": {"linux-amd64": {
+            "sha256": digest, "url": promotion.BASE + "/" + name}}}
+        self.archives()
+        _, inventory = promotion.inspect_candidate(self.assets)
+        self.assertIn(name, inventory)
+        (self.assets / name).unlink()
+        with self.assertRaisesRegex(ValueError, "Native asset"):
+            promotion.inspect_candidate(self.assets)
 
     def test_full_asset_inventory_and_archive_contents(self):
         metadata, inventory = promotion.inspect_candidate(self.assets)

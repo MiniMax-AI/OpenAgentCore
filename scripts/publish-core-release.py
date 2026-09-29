@@ -8,6 +8,7 @@ import os
 import pathlib
 import re
 import subprocess
+import tarfile
 from urllib.parse import quote
 
 spec = importlib.util.spec_from_file_location(
@@ -80,6 +81,19 @@ def publish(assets, repository, revision, tag, mode):
         checksum = archive.with_name(archive.name + ".sha256")
         if checksum.read_text() != distribution.sha256(archive) + "  " + archive.name + "\n":
             raise ValueError("Distribution archive checksum mismatch")
+
+    # Native archives are independent assets, authenticated by the catalog in
+    # the checked control archive. Refuse incomplete transfers before creating a draft.
+    with tarfile.open(assets / (stem + ".tar.gz"), "r:gz") as archive:
+        catalog = json.load(archive.extractfile(stem + "/native-installers/catalog.json"))
+    if catalog["version"] != revision or not catalog["artifacts"]:
+        raise ValueError("Native installer catalog does not match the release")
+    for platform, entry in catalog["artifacts"].items():
+        if not re.fullmatch(r"(linux|darwin|windows)-(amd64|arm64)", platform):
+            raise ValueError("Invalid native installer platform")
+        path = assets / f"oac-native-{revision}-{platform}.tar.gz"
+        if distribution.sha256(path) != entry["sha256"]:
+            raise ValueError("Native installer checksum mismatch")
 
     refuse_existing(repository, tag)
     if mode == "publish":

@@ -82,9 +82,10 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
-def verify_archive(path, offline):
+def verify_archive(path, offline, native=None):
     """Read without extraction; verify every ordinary member and optional payload."""
     hashes, metadata, sums = {}, None, None
+    catalog = {}
     with tarfile.open(path, "r|gz") as archive:
         for member in archive:
             parts = pathlib.PurePosixPath(member.name).parts
@@ -93,15 +94,19 @@ def verify_archive(path, offline):
                 raise ValueError("Invalid archive member")
             relative = "/".join(parts[1:])
             stream = archive.extractfile(member)
-            if relative in ("manifest.json", "SHA256SUMS"):
+            if relative in ("manifest.json", "SHA256SUMS", "native-installers/catalog.json"):
                 if member.size > 1024 * 1024:
                     raise ValueError("Oversized archive metadata")
                 raw = stream.read()
                 hashes[member.name] = hashlib.sha256(raw).hexdigest()
                 if relative == "manifest.json":
                     metadata = json.loads(raw)
-                else:
+                elif relative == "SHA256SUMS":
                     sums = raw.decode()
+                else:
+                    catalog = json.loads(raw)
+                    if native is not None:
+                        native.update(catalog)
             else:
                 hashes[member.name] = digest(stream)
     if metadata is None or sums is None:
@@ -135,6 +140,9 @@ def verify_archive(path, offline):
             raise ValueError("Invalid Runtime asset name")
         if offline:
             expected["artifacts/" + name] = entry["sha256"]
+    if offline:
+        for platform, entry in catalog.get("artifacts", {}).items():
+            expected["native-installers/" + platform + ".tar.gz"] = entry["sha256"]
     actual = {name[len(STEM) + 1:]: value for name, value in hashes.items()
               if name != STEM + "/SHA256SUMS"}
     if actual != expected:
@@ -144,8 +152,9 @@ def verify_archive(path, offline):
 
 def inspect_candidate(directory):
     files = {p.name: file_identity(p) for p in directory.iterdir()}
-    metadata = verify_archive(directory / (STEM + "-offline.tar.gz"), True)
-    if verify_archive(directory / (STEM + ".tar.gz"), False) != metadata:
+    native, online_native = {}, {}
+    metadata = verify_archive(directory / (STEM + "-offline.tar.gz"), True, native)
+    if verify_archive(directory / (STEM + ".tar.gz"), False, online_native) != metadata or native != online_native:
         raise ValueError("Thin and offline manifests differ")
     expected = set()
     for suffix in (".tar.gz", "-offline.tar.gz"):
@@ -158,6 +167,17 @@ def inspect_candidate(directory):
         expected.add(name)
         if files.get(name) != {key: entry[key] for key in ("sha256", "size")}:
             raise ValueError("Runtime asset checksum/size mismatch")
+    if native:
+        if native["version"] != SOURCE:
+            raise ValueError("Native catalog source mismatch")
+        for platform, entry in native["artifacts"].items():
+            if not re.fullmatch(r"(linux|darwin|windows)-(amd64|arm64)", platform):
+                raise ValueError("Invalid native platform")
+            name = f"oac-native-{SOURCE}-{platform}.tar.gz"
+            expected.update((name, name + ".sha256"))
+            if (entry.get("url") != BASE + "/" + name or files.get(name, {}).get("sha256") != entry["sha256"]
+                    or (directory / (name + ".sha256")).read_text() != entry["sha256"] + "  " + name + "\n"):
+                raise ValueError("Native asset URL/checksum mismatch")
     if set(files) != expected:
         raise ValueError("Candidate asset set mismatch; provide only generated flat files")
     return metadata, files

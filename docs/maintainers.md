@@ -29,6 +29,16 @@ release base must select offline mode. Nodes obtain bootstrap metadata from the
 console that generated their command. The console serves local artifacts or redirects
 missing ones to the pinned HTTPS release URL. Published assets download anonymously.
 
+Native daemon/Harness installers are separate `oac-native-<source>-<platform>.tar.gz`
+Release assets with checksum files. The default Core archive and image carry only
+`native-installers/catalog.json`; Session bootstrap downloads the machine's platform
+on demand. The explicit offline archive includes these installers once, outside the
+Core image. Core installation retains them locally for the same bootstrap endpoint.
+The tag workflow assembles the catalog from matching native CI outputs. For a local
+build with native onboarding, first run `scripts/build-native-catalog.mjs INPUT OUTPUT`
+and set `OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT`; missing or foreign native assets
+prevent release publication. No Release or registry download occurs when Core starts.
+
 A bundle carries a fixed set of docs (the build lists them). Links between them stay
 relative; every other relative link is rewritten to the same file on GitHub at the
 bundle's commit, and the build fails if a link or anchor does not resolve.

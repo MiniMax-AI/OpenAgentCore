@@ -10,7 +10,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 echo 'Downloading the installer matched to Core...'
 curl -fsS "$base/$os-$arch.sha256" -o "$work/checksum" || { echo 'This Core has no qualified installer for this platform.' >&2; exit 1; }
-curl -fsS "$base/$os-$arch.tar.gz" -o "$work/bundle.tar.gz"
+curl -fsSL --proto-redir =https "$base/$os-$arch.tar.gz" -o "$work/bundle.tar.gz"
 if command -v sha256sum >/dev/null; then
   actual=$(sha256sum "$work/bundle.tar.gz"); actual=${actual%% *}
 else
