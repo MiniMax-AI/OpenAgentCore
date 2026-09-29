@@ -75,7 +75,9 @@ def caddyfile(config, state, candidate=None):
         if origin != "https://" + hostname(parsed.hostname) or parsed.port is not None:
             raise ValueError("Managed HTTPS requires https:// followed by a DNS hostname, without a port")
         result += (f"{origin} {{\n"
-                   f' respond /_oac/installation/verify "{state["installation_id"]}" 200\n'
+                   ' handle /_oac/installation/verify {\n'
+                   f'  respond "{state["installation_id"]}" 200\n'
+                   ' }\n'
                    " @api path /v1 /v1/* /api/v1 /api/v1/*\n"
                    " handle @api {\n  reverse_proxy core:8091\n }\n"
                    " handle {\n  reverse_proxy web:8080\n }\n}\n")

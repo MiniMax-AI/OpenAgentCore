@@ -44,6 +44,16 @@ Referer headers and supplies the Core key as its private upstream credential. Co
 rejects application keys on management routes and the Core key on `/v1`.
 The audit actor label is declared by the caller and is display only, never Core authorization: the console server declares `console`, and operator scripts calling Core with the Core key directly leave it empty.
 
+`GET` and `POST /console/installation/domain` are the scoped installation-management
+exception: the console authenticates the same browser session and origin, then
+calls the installer's private Unix socket with its server-held Core key. This is
+not a Core `/core/v1` route and does not use `AdminClient`. It can configure only
+the managed domain; it cannot submit shell commands or arbitrary process settings.
+The [installer rules](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/maintainers.md#managed-https-ownership) own application,
+certificates and recovery. Before a domain is configured, the console accepts
+same-origin HTTP requests at literal IP addresses; after apply, only the configured
+HTTPS origin is accepted.
+
 Node and daemon connections use `/api/v1` with their own credentials. The reverse
 proxy sends them directly to Core; the console never forwards them, and they do not
 grant a browser execution authority.
