@@ -14,12 +14,6 @@ Start from two entry points:
   execution lifecycle, optional interfaces and registration methods.
 
 
-The code entry point is
-[`agent/harness.go`](../../apps/parsar-daemon/internal/agent/harness.go). It
-declares the required lifecycle, the separate optional interfaces and the
-registration methods. The pinned public Agents API in [upstream.json](upstream.json)
-is separate from this internal adapter contract.
-
 ## Ownership
 
 ```text
@@ -69,7 +63,7 @@ model communication configuration, not Turn scheduling or native process ownersh
    process, credential/configuration and local workspace helpers.
 3. **Register the kind in the Runtime** in `apps/parsar-daemon/internal/cli`.
    See [Register the adapter](#register-the-adapter).
-4. **Add the Core engine identifier and service profile.** See
+4. **Add the service profile and one catalog entry.** See
    [Add the engine to Core](#add-the-engine-to-core).
 5. **Package native prerequisites.** Add a Runtime image under
    `services/agents-api/deploy/<kind>` and, optionally,
@@ -163,48 +157,22 @@ canonical interface entry point. Its required lifecycle is `ExecutorFactory`,
 remain separate; their result types and error values stay in the corresponding
 operation files in the same package. All use the existing neutral protocol types.
 
-The factory prepares a fixed configuration without sending model input. Executor
-owns the native process or connection, native Session, capability configuration and
-cleanup resources. If preparation fails while cleanup remains unconfirmed, return
-that non-nil Executor together with the error so Runtime retains its cleanup owner.
-`StartTurn` creates a fresh Turn wrapper and event stream;
-normal completion retains the Executor. Never reset a completed Turn object or
-restart the process merely to implement the next Turn.
+The [Core–Runtime lifecycle contract](../../docs/runtime-protocol.md#executor-and-turn-lifetimes)
+owns preparation failure, partial StartTurn results, output closure, settlement,
+reuse and cleanup. Implement those obligations through the interfaces above.
+Native callbacks and resources stay inside the adapter; Runtime owns admission,
+idle expiry and replacement.
 
-A nil Turn from `StartTurn` guarantees no input was submitted and no output writer
-was retained. Runtime closes the output channel in that case. Once input may have
-been submitted, return a non-nil Turn even with an error: that Turn owns exactly
-one output-channel close, and uncertain input must not be replayed.
-
-`Cancel` addresses that exact Turn (see
-[Cancellation ownership](#cancellation-ownership)). `AwaitSettlement` confirms that native events,
-inputs, function results, interactions, child work and output writes have settled.
-Only then may `Reusable` be true. False requires a reason and confirmed Executor
-close before replacement. An error means settlement is unconfirmed. A caller
-cancelling its wait cannot discard resource ownership or redirect a late callback
-to the next Turn. Close must retain its exact cleanup target after failure so the
-Runtime can retry serially. Successful resource close alone does not prove that a
-cancelled input was applied or that its original outcome is known.
-
-The Runtime owns admission handles, idle deadlines and resource limits. Adapters
-own native translation. For example, a Codex adapter retains its app-server and
-thread, a Claude adapter retains one streaming Query, and a MiniMax adapter retains
-its ACP connection and native Session. Core sees the same Executor and Turn
-semantics in each case.
+For example, a Codex adapter retains its app-server and thread, a Claude adapter
+retains one streaming Query, and a MiniMax adapter retains its ACP connection and
+native Session. Their implementations expose the same Executor and Turn contract.
 
 ### Cancellation ownership
 
-Cancellation is declared on the base `agent.Session` interface, which every
-`Turn` embeds. The adapter's Turn implements `Cancel` for that exact Turn and
-never retargets it to a successor; `Executor` has no `Cancel`. Runtime dispatch
-decides when to call it (for example on `prompt_cancel` or shutdown).
-
-`Cancel` alone does not transfer resource ownership. `AwaitSettlement` confirms
-the Turn settled, and `Executor.Close` retires native resources. Permission and
-user-choice responses are the optional `PermissionResponder` and
-`UserChoiceResponder` interfaces; implement them only when the adapter emits
-those interactions. Unsupported responses receive a negative receipt. The router
-keeps its interaction routing and retry ownership.
+Implement cancellation on the exact Turn through `agent.Session`. Follow the
+[lifecycle and settlement rules](../../docs/runtime-protocol.md#executor-and-turn-lifetimes);
+the adapter must supply native completion evidence to the shared Runtime.
+Permission and user-choice responses use the optional interfaces below.
 
 ## Events, inputs and optional capabilities
 
@@ -265,14 +233,25 @@ never shipped as a real engine.
 
 ## Add the engine to Core
 
-Core recognizes engine identifiers explicitly. Add the new identifier to:
+Core recognizes the [built-in Harness registrations](harness-catalog.md).
+Add one entry to `internal/harnessconfig/builtin/catalog.json` with:
 
-| File | Purpose |
-| --- | --- |
-| [`internal/engine/profile.go`](../../services/agents-api/internal/engine/profile.go) | The static service profile catalog |
-| [`contracts/agents-api/v1/core_extension.go`](v1/core_extension.go) | Accepted `x_agents_core.harness` values |
-| [`internal/api/saved_core_input.go`](../../services/agents-api/internal/api/saved_core_input.go) | Saved Agent extension validation |
-| [`internal/harnessconfig/builtin/registry.go`](../../internal/harnessconfig/builtin/registry.go) | Built-in Harness configuration |
+- the public `kind` and display `label`;
+- the model `configuration` package under `internal/harnessconfig`;
+- the `profile` constructor under `services/agents-api/internal/engine`.
+
+Implement the profile constructor, then run `make generate-harness-catalog`.
+This generates the model configuration registry, Core profile catalog, client
+identifiers/display names and registration reference. Public input validators read
+the generated registry. `make openapi` derives Harness enums from the same authored
+catalog; do not add handwritten enums to DTO tags or route annotations.
+`make check-harness-catalog` rejects stale projections.
+
+Runtime registration uses `builtin.Configuration(kind)` for public Harnesses and
+separately registers native factories, probes and installed capability evidence.
+The catalog cannot declare a machine's availability. Adapter discovery and
+packaging still require their own implementation and qualification; no dynamic
+plugin loader is introduced.
 
 The profile is pure: it declares supported placements, public configuration and
 result limits and required Runtime controls, using existing public/protocol
@@ -290,14 +269,9 @@ mutable global registration or compatibility fallback.
 
 ## Engine selection
 
-| Setting | Scope | Effect |
-| --- | --- | --- |
-| `OAC_DEFAULT_HARNESS` | Core deployment | Default engine for new Sessions; `codex` when unset |
-| `OAC_HARNESSES` | Core deployment | Comma-separated extra engines to enable, without requiring a managed Provider |
-| `agent.x_agents_core.harness` | Saved Agent or inline Session Agent | Explicitly selects an enabled engine; never falls back to another |
-
-Existing Sessions keep their engine. Do not add another selector; the
-[harness selection extension](harness-selection.md) owns the field's semantics.
+The [Harness selection contract](harness-selection.md) owns the public selector,
+deployment enablement, defaults and immutable Session binding. This guide adds no
+second selector or fallback rule.
 
 ## Required versus optional operations
 

@@ -5942,8 +5942,8 @@ components:
       properties:
         harness:
           enum:
-            - codex
             - claude_sdk
+            - codex
             - mcode
           type: string
         harness_config:
@@ -7073,8 +7073,8 @@ components:
       properties:
         harness:
           enum:
-            - codex
             - claude_sdk
+            - codex
             - mcode
           type: string
         harness_config:

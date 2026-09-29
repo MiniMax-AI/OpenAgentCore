@@ -1,3 +1,4 @@
+import type { CoreHarnessKind } from "./harness-catalog";
 export type PageOrder = "asc" | "desc";
 
 export interface ListPage<T> {
@@ -1191,7 +1192,7 @@ export interface RuntimeHistory {
   token_usage: RuntimeHistoryTokenUsagePoint[];
 }
 
-export type CoreHarnessKind = "claude_sdk" | "codex" | "mcode";
+export type { CoreHarnessKind } from "./harness-catalog";
 
 /** A complete replacement bundle. API keys are write-only. */
 export interface ModelProviderInput {

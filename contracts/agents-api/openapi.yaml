@@ -90,8 +90,8 @@ definitions:
     properties:
       harness:
         enum:
-        - codex
         - claude_sdk
+        - codex
         - mcode
         type: string
       harness_config:
@@ -1167,8 +1167,8 @@ definitions:
     properties:
       harness:
         enum:
-        - codex
         - claude_sdk
+        - codex
         - mcode
         type: string
       harness_config:
@@ -1180,8 +1180,8 @@ definitions:
     properties:
       harness:
         enum:
-        - codex
         - claude_sdk
+        - codex
         - mcode
         type: string
       harness_config:
