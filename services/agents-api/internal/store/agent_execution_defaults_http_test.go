@@ -27,7 +27,7 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	}
 	deployment := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: "deployment-canary"}
 	defaultsCalls := 0
-	handler, err := api.NewHandler(st, auth, "codex", api.WithHarnesses([]string{"codex", "claude_sdk", "mcode"}), api.WithHostedEnvironments(), api.WithExecution(st), api.WithModelProviderDefaults(func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
+	handler, err := api.NewHandler(st, auth, "codex", api.WithHarnesses([]string{"codex", "claude_sdk", "mcode"}), api.WithHostedEnvironments(), api.WithEnvironmentRemoteURL("wss://core.example/api/v1/agent-daemon/ws"), api.WithExecution(st), api.WithModelProviderDefaults(func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
 		defaultsCalls++
 		copy := *deployment
 		return &store.DeploymentModelProviderSnapshot{Model: "fixture", Provider: &copy, Revision: uuid.New()}, nil
@@ -149,4 +149,25 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	assertSnapshot(sid, "inline-model", "https://deployment.example/v1", "deployment-canary")
 	newID := id(call("POST", "/v1/agents/sessions", inline, uuid.NewString(), 201))
 	assertSnapshot(newID, "inline-model", "https://changed.example/v1", "changed-key")
+	// Preparation alone must not require resubmitting existing model credentials.
+	savedID := id(call("POST", "/v1/agents", createAgent, "", 201))
+	for _, placement := range []string{"openai_hosted", "self_hosted"} {
+		environment := `{"type":"` + placement + `"}`
+		if placement == "self_hosted" {
+			environment = `{"type":"self_hosted","workspace_directory":"/work"}`
+		}
+		prepared := `{"agent_id":"` + savedID + `","environment":` + environment + `,"x_agents_core":{"environment":{"env":{"PREPARATION_PROOF":"saved"}}}}`
+		preparedID := id(call("POST", "/v1/agents/sessions", prepared, uuid.NewString(), 201))
+		assertSnapshot(preparedID, "model-original", "https://saved.example/v1", "saved-canary")
+	}
+	preparedInline := strings.TrimSuffix(inline, "}") + `,"x_agents_core":{"environment":{"env":{"PREPARATION_PROOF":"deployment"}}}}`
+	preparedID := id(call("POST", "/v1/agents/sessions", preparedInline, uuid.NewString(), 201))
+	assertSnapshot(preparedID, "inline-model", "https://changed.example/v1", "changed-key")
+	callsBefore := defaultsCalls
+	selfHosted := strings.Replace(preparedInline, `"type":"openai_hosted"`, `"type":"self_hosted","workspace_directory":"/work"`, 1)
+	call("POST", "/v1/agents/sessions", selfHosted, uuid.NewString(), 400)
+	if defaultsCalls != callsBefore {
+		t.Fatal("preparation extension sent deployment credentials to a user machine")
+	}
+
 }
