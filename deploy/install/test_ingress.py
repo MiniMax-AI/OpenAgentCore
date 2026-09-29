@@ -83,7 +83,7 @@ class DomainTests(unittest.TestCase):
         self.host.core["rejects"] = lambda _: False
         with mock.patch.object(oac_cli, "_apply", side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
             ingress.configure(self.root, "core.example.com", out=lambda _: None)
-        self.assertEqual(ingress.status(self.root)["state"], "applying")
+        self.assertEqual(ingress.status(self.root)["state"], "failed")
         ingress.configure(self.root, "core.example.com", out=lambda _: None)
         self.assertEqual(ingress.status(self.root)["state"], "ready")
 
@@ -105,7 +105,7 @@ class DomainTests(unittest.TestCase):
         ingress_config.reload.side_effect = [None, KeyboardInterrupt]
         with self.assertRaises(KeyboardInterrupt):
             ingress.configure(self.root, "core.example.com", out=lambda _: None)
-        self.assertEqual(ingress.status(self.root)["state"], "applying")
+        self.assertEqual(ingress.status(self.root)["state"], "failed")
         self.assertIn("redir https://core.example.com", (self.root / "generated/Caddyfile").read_text())
         self.host.recreated.clear()
         ingress_config.reload.reset_mock(side_effect=True)

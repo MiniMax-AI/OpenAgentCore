@@ -40,6 +40,16 @@ def status(root):
         path = Path(root) / "ingress/status.json"
         if path.exists():
             result.update(json.loads(oac_cli.read_private(path, "domain setup status")))
+            if result["state"] in ("checking", "applying"):
+                try:
+                    with oac_cli.locked(Path(root)):
+                        # A live CLI or Web operation holds this same lock. Read
+                        # again after acquiring it in case the operation just finished.
+                        result.update(json.loads(oac_cli.read_private(path, "domain setup status")))
+                        if result["state"] in ("checking", "applying"):
+                            result.update(state="failed", message="Domain setup was interrupted. Retry the same hostname, or run oac apply and oac status on the server.")
+                except oac_cli.OacError:
+                    pass
     return result
 
 
@@ -216,14 +226,6 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(root):
     root = Path(root)
-    # A restart does not silently claim an interrupted job succeeded. Desired
-    # config and generated files remain available to the normal repair commands.
-    path = root / "ingress/status.json"
-    if path.exists():
-        job = json.loads(oac_cli.read_private(path, "domain setup status"))
-        if job.get("state") in ("checking", "applying"):
-            job.update(state="failed", message="Domain setup was interrupted. Retry the same hostname, or run oac apply and oac status on the server.")
-            save(root, job)
     socket = Path("/control/api.sock")
     socket.unlink(missing_ok=True)
     import os
