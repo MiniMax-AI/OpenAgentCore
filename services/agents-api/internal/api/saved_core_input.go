@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
 )
 
 // Validate presence before decoding: a supplied empty/null harness is invalid,
@@ -15,7 +16,7 @@ func validateSavedCoreInput(raw []byte) error {
 		return nil
 	}
 	coreShape := shape{kind: objectValue, nullable: true, members: []member{
-		{"harness", shape{kind: enumValue, values: []string{"codex", "claude_sdk", "mcode"}}},
+		{"harness", shape{kind: enumValue, values: builtin.Kinds()}},
 		{"model_provider", nullableModelProviderShape()},
 		{"harness_config", shape{kind: openObject}},
 	}}

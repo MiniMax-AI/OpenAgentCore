@@ -25,7 +25,7 @@ type DeploymentModelProviderStore interface {
 // never contains the API key, only whether one is configured.
 type HarnessModelConfiguration struct {
 	Object  string `json:"object" enums:"core.model_configuration" binding:"required"`
-	Harness string `json:"harness" enums:"claude_sdk,codex,mcode" binding:"required"`
+	Harness string `json:"harness" binding:"required"`
 	v1.ModelConfigurationView
 	LastUsedAt    *time.Time `json:"last_used_at" format:"date-time" extensions:"x-nullable" binding:"required"`
 	LastErrorCode *string    `json:"last_error_code" extensions:"x-nullable" binding:"required" enums:"authentication_error,connection_failed,rate_limit_exceeded,usage_limit_exceeded,server_overloaded,server_error,resource_not_found,request_timeout,invalid_request"`
@@ -39,7 +39,7 @@ type HarnessModelConfiguration struct {
 type CoreHarness struct {
 	ModelConfigurationSupport v1.ModelConfigurationSupport `json:"model_configuration_support" binding:"required"`
 	Object                    string                       `json:"object" enums:"core.harness" binding:"required"`
-	ID                        string                       `json:"id" enums:"claude_sdk,codex,mcode" binding:"required"`
+	ID                        string                       `json:"id" binding:"required"`
 	Enabled                   bool                         `json:"enabled" binding:"required"`
 	Default                   bool                         `json:"default" binding:"required"`
 	ModelConfiguration        *HarnessModelConfiguration   `json:"model_configuration" extensions:"x-nullable" binding:"required"`
@@ -116,7 +116,7 @@ func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request, s Deploy
 // @Tags Deployment Model Providers
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param harness path string true "Harness" Enums(claude_sdk,codex,mcode)
+// @Param harness path string true "Harness"
 // @Success 200 {object} api.HarnessModelConfiguration
 // @Failure 401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/harnesses/{harness}/model-configuration [get]
@@ -157,12 +157,12 @@ func requiredModelProviderShape() shape {
 }
 
 // @Summary Replace a harness's deployment default model provider
-// @Description Core key only. The body is the complete x_agents_core.model_configuration bundle, including the write-only api_key; there is no partial update and bundles are never merged. The provider is validated for this harness: an HTTPS base_url without credentials, query or fragment, an upstream protocol (responses, anthropic or chat_completions), automatically adapted by Runtime to the selected harness and, for mcode, positive context_window and max_output_tokens. New openai_hosted and none Sessions resolve omitted model settings from this default and freeze the resolved configuration into their encrypted snapshot; existing Sessions never change. self_hosted Sessions never use it. The key is encrypted and never returned. Each write records an administrator audit entry without the key and resets last_used_at, last_error_code and last_error_at to null, including identical writes.
+// @Description Core key only. Replaces one complete deployment model configuration, including its write-only provider key. Validates through the selected Harness declaration and freezes the resolved configuration for new Sessions; existing Sessions are unchanged. See contracts/agents-api/model-execution.md#deployment-defaults for fields, source precedence and observation rules.
 // @Tags Deployment Model Providers
 // @Accept json
 // @Produce json
 // @Security DeploymentAdminAuth
-// @Param harness path string true "Harness" Enums(claude_sdk,codex,mcode)
+// @Param harness path string true "Harness"
 // @Param body body v1.ModelConfigurationInput true "Complete model provider bundle"
 // @Success 200 {object} api.HarnessModelConfiguration
 // @Failure 400,401,404,413,500,503 {object} CoreErrorResponse
@@ -202,7 +202,7 @@ func (h *Handler) setHarnessModelConfiguration(w http.ResponseWriter, r *http.Re
 // @Description Core key only. Idempotent; each successful request is audited. Sessions that already froze the default keep it. Afterwards new openai_hosted Sessions for this harness need a Session or Agent bundle.
 // @Tags Deployment Model Providers
 // @Security DeploymentAdminAuth
-// @Param harness path string true "Harness" Enums(claude_sdk,codex,mcode)
+// @Param harness path string true "Harness"
 // @Success 204
 // @Failure 401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/harnesses/{harness}/model-configuration [delete]

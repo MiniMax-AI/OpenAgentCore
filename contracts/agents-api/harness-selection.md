@@ -8,8 +8,8 @@ Agent configuration. This is a Core extension, not an upstream field.
 {"x_agents_core":{"harness":"claude_sdk"}}
 ```
 
-Supported identifiers are `codex`, `claude_sdk` (Claude Code), and `mcode`
-(MiniMax Code). Unknown identifiers, empty objects and unknown nested fields are
+Supported identifiers come from the [generated Harness catalog](harness-catalog.md).
+Unknown identifiers, empty objects and unknown nested fields are
 rejected. Omission inherits a saved Agent value, or uses `OAC_DEFAULT_HARNESS` for
 an inline Agent. An explicit null clears the saved selection or replaces it for
 one Session, restoring deployment-default selection. Agent updates preserve omitted
@@ -40,49 +40,15 @@ adds comma-separated deployment-supported engines, for example
 remains enabled; unknown names fail startup.
 This setting does not install a harness or qualify a native deployment.
 
-Hosted placement uses one provider per deployment, saved in PostgreSQL. Web or
-`POST /core/v1/sandbox/deployment` with the Core key selects `docker`,
-`microsandbox` or `e2b`, the per-sandbox resources and one immutable Runtime
-release (an E2B template build for E2B); see the
-[deployment configuration](sandbox-deployment.md). Core needs a stable
-`OAC_INSTALLATION_ID` for this; the installer generates it. Docker
-and microsandbox sandboxes run on enrolled nodes, whose files hold only host paths
-and an installed copy of that selection. The former
-`AGENTS_API_MANAGED_RUNTIMES_FILE` is rejected at startup.
+Harness selection is independent of Environment provisioning. Provider selection,
+node generations and reset behavior are owned by
+[Sandbox deployment](sandbox-deployment.md); node wire compatibility is owned by
+[the node protocol](node-generation-protocol.md). Enabling a Harness does not
+install or qualify it on an existing Runtime.
 
-There is no engine-to-provider routing or mixed-provider configuration. Enabling
-another harness does not choose another image or backend; the selected Runtime
-image must contain and qualify each enabled harness. Capability checks still
-apply.
-
-Same-provider node resource/Runtime edits advance the target online without an
-execution drain or reenrollment. Version 2 nodes prepare independently; retained
-allocations keep their generation, and a qualified older serving generation can
-still accept new Sessions. E2B same-team changes also apply online with immutable
-per-allocation generations. Changing provider requires explicit durable reset,
-confirmed cleanup and a new setup at the resulting generation. Existing Sessions
-never move providers. See the [deployment procedure](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-reset).
-
-Each engine has at most one deployment default model provider, stored encrypted in
-PostgreSQL and managed with the Core key in Web or through
-`/core/v1/harnesses/{harness}/model-configuration`; `GET /core/v1/harnesses` lists every
-engine with its enabled and default flags and its safe provider view. No engine
-inherits another engine's credentials. New `openai_hosted` and `none` Sessions that
-resolve no Session or Agent bundle freeze their engine's default; `self_hosted`
-Sessions never use it. Saved Agent provider credentials use separately encrypted
-defaults. Public reads return only safe fields and a configured flag; credentials
-never enter metadata or ordinary effective responses. A Session may instead provide
-the [write-only model execution extension](model-execution.md); its frozen
-configuration takes precedence. See
-[model execution](model-execution.md#deployment-defaults) for precedence and where
-each source applies. The former `AGENTS_API_EXECUTION_OPTIONS_FILE` is rejected at
-startup.
-
-Model names remain explicit `agent.model` values. The selected native adapter uses
-its configured provider and rejects unsupported model settings without changing
-model identity. Core applies its existing engine/environment/tool/verbosity rules
-before creating a Session; provider model availability is checked during native
-startup/execution. There is no invented cross-provider model-name catalog.
+Model/provider defaults, source precedence and credential handling are owned by
+[Model execution](model-execution.md#saved-defaults-and-precedence). They do not
+introduce another Harness selector.
 
 Current profile limits remain in the [engine coverage table](README.md#public-engine-profiles).
 
@@ -91,13 +57,5 @@ Current profile limits remain in the [engine coverage table](README.md#public-en
 Core accepts the optional `agent.x_agents_core.harness` extension through the
 saved Agent and inline Session configuration paths. Define the extension once in
 `contracts/agents-api/v1`; never use metadata or a competing top-level selector.
-Resolve saved overrides before selecting the existing Session engine, and apply
-that engine's execution policy before persistence. Omitted selection preserves
-the deployment default; explicit unavailable selection fails without fallback.
-Effective extension reads use the persisted engine; Sessions without the extension
-retain the official Agent response shape. Null and retry behavior are described above.
-
-Hosted provider selection belongs to deployment configuration and is independent
-of the engine. Session creation fixes a node through automatic placement; retained allocations keep that node and provider identity. Runtime images must satisfy their existing qualification rules.
-Transient model options are partitioned by engine and must not expose another
-engine's credentials. Do not infer an engine from a model name or template.
+Use the catalog-derived validators for identifiers and the selection semantics
+above. Do not maintain another accepted-name list in handlers or schemas.

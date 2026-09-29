@@ -1,3 +1,4 @@
+import { coreHarnessKinds } from "./harness-catalog";
 import { projectEnvironmentInstallation } from "./installation-projection";
 import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId } from "./response-projection";
 import { projectTokenUsage } from "./usage-projection";
@@ -179,7 +180,7 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
-const harnessKinds = new Set<CoreHarnessKind>(["claude_sdk", "codex", "mcode"]);
+const harnessKinds = new Set<string>(coreHarnessKinds);
 
 function isHarnessKind(value: unknown): value is CoreHarnessKind {
   return typeof value === "string" && harnessKinds.has(value as CoreHarnessKind);

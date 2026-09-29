@@ -119,7 +119,7 @@ only helps you pick the right one.
 
 Implement the shared `ExecutorFactory`, `Executor` and `Turn` interfaces in
 [`agent/harness.go`](../apps/parsar-daemon/internal/agent/harness.go), register
-the adapter and add a service profile. Follow the numbered steps in
+the adapter and add its profile/configuration entry to the shared catalog. Follow the numbered steps in
 [Harness onboarding](../contracts/agents-api/harness-onboarding.md); qualification
 evidence belongs in [Harness integration](../contracts/agents-api/harnesses.md).
 

@@ -22,6 +22,7 @@ copy, when a contract changes.
 | Runtime messages, Executor/Turn lifetimes, receipts and failure ownership | [Core–Runtime protocol](docs/runtime-protocol.md) and `internal/agentdaemon/proto` |
 | Environment ownership and capability preparation (Skills, Plugins, MCP, `packages.system`) | [Environments](contracts/agents-api/environments.md) |
 | Adding a Harness (steps) | [Harness onboarding](contracts/agents-api/harness-onboarding.md), `apps/parsar-daemon/internal/agent/harness.go` and `internal/harnessconfig/harness.go` |
+| Built-in Harness identifiers, configuration/profile bindings and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
 | Harness qualification and acceptance | [Harness integration](contracts/agents-api/harnesses.md) |
 | Harness selection and Agent defaults | [Harness selection](contracts/agents-api/harness-selection.md) |
 | Adding a Sandbox Provider | [Sandbox Provider guide](docs/sandbox-provider.md) and `services/agents-api/internal/sandbox/sandbox_provider.go` |
@@ -46,6 +47,9 @@ copy, when a contract changes.
   are evidence, not current instructions or authority to restore a retired
   implementation. Keep task chronology and rollout reports out of contributor rules.
 - Keep current integration guidance separate from historical qualification evidence.
+- A guide may summarize a workflow but must link to the owning contract for
+  versions, accepted values, precedence and lifecycle rules. Do not maintain
+  another normative copy. Generated references are projections, not new owners.
 
 ## Repository boundary
 
@@ -326,6 +330,13 @@ its replacement when only the old name is set. Tests must not bypass the
 production provider-switch guard.
 
 ### Contract and schema rules
+
+- `internal/harnessconfig/builtin/catalog.json` is the single authored public
+  Harness registration list. `make generate-harness-catalog` generates Go
+  configuration/profile registration, client identifiers/names and the reference;
+  `make openapi` derives the matching enums. `make check-harness-catalog` verifies
+  freshness in the full gate. Native configuration rules stay in their adapter
+  declarations; Core qualification and Runtime availability stay separate.
 
 - `make sqlc-generate` owns only `services/agents-api/internal/db/sqlc`
   (sqlc v1.29.0). Do not rewrite landed migrations.

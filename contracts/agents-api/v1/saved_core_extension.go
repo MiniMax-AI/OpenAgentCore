@@ -12,14 +12,14 @@ import (
 // is replaced as a whole; its API key is write-only.
 type SavedAgentCoreInput struct {
 	HarnessConfig json.RawMessage     `json:"harness_config,omitempty" swaggertype:"object"`
-	Harness       string              `json:"harness,omitempty" enums:"codex,claude_sdk,mcode"`
+	Harness       string              `json:"harness,omitempty"`
 	ModelProvider *ModelProviderInput `json:"model_provider,omitempty" extensions:"x-nullable"`
 }
 
 // SavedAgentCore is the non-confidential representation of saved defaults.
 type SavedAgentCore struct {
 	HarnessConfig json.RawMessage    `json:"harness_config,omitempty" swaggertype:"object"`
-	Harness       string             `json:"harness,omitempty" enums:"codex,claude_sdk,mcode"`
+	Harness       string             `json:"harness,omitempty"`
 	ModelProvider *ModelProviderView `json:"model_provider,omitempty"`
 }
 

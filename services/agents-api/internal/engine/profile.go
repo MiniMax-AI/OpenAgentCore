@@ -67,9 +67,3 @@ func (c Catalog) Kinds() []string {
 	slices.Sort(kinds)
 	return kinds
 }
-
-var qualified = NewCatalog(map[string]Profile{
-	"codex":      codexProfile(),
-	"claude_sdk": claudeProfile(),
-	"mcode":      mcodeProfile(),
-})

@@ -1,6 +1,6 @@
 package cli
 
-import harnessconfiguration "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/claudesdk"
+import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
 
 import (
 	"context"
@@ -126,7 +126,7 @@ func registerClaudeSDK(registry *agent.Registry, discovery *claudeSDKDiscovery) 
 			return nil, fmt.Errorf("claude_sdk: configured runtime is unavailable")
 		}
 	}
-	registry.RegisterKind(discovery.Info, harnessconfiguration.Configuration(), factory)
+	registry.RegisterKind(discovery.Info, builtin.Configuration("claude_sdk"), factory)
 	if discovery.Info.Available {
 		registry.RegisterExecutor("claude_sdk", claudesdk.NewExecutorFactory(discovery.Config))
 	}
