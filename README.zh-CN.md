@@ -1,8 +1,16 @@
+<div align="center">
+
+![Open AgentCore 红色像素字标](docs/assets/openagentcore-banner.png)
+
 # OpenAgentCore
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+通过同一套 API，在你自己的基础设施上运行 Codex、Claude Code 和 MiniMax Code。
 
-![OpenAgentCore](docs/assets/openagentcore-banner.png)
+[快速开始](#快速开始) · [文档](#文档) · [调用 API](docs/getting-started/quickstart.md) · [参与贡献](CONTRIBUTING.md)
+
+[English](README.md) · **简体中文**
+
+</div>
 
 通过一套 Agents API 运行原生 Codex、Claude Code 和 MiniMax Code。Core 管理 Session
 和执行状态；daemon 在托管沙箱或用户连接的机器上准备能力、运行所选 Harness。
