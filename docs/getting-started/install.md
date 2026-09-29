@@ -26,7 +26,7 @@ same release; historical-version upgrades and conversion are unsupported.
   ordinary users and root are supported; the installer uses the current account
   without invoking sudo, switching accounts or changing Docker permissions.
 - Free loopback ports 8091 (Core) and 8080 (Web), or
-  [other ports](#ports-and-directory).
+  [custom listeners](install-options.md#listeners-and-access).
 - curl to fetch the installation script; no GitHub CLI or login is required.
 
 The Core host needs no KVM and no systemd user services, unless you choose
@@ -103,34 +103,14 @@ The installer:
 It creates no Project or API key, makes no model request and runs no sample task.
 It ends by printing the console address, the API base URL and the next steps.
 
-Without `--public-url`, the installation serves only this host
-(`http://127.0.0.1:8080` for Web, `http://127.0.0.1:8091/v1` for the API). Set
+Without `--public-url`, the installation uses its configured loopback addresses.
+See [listener configuration](install-options.md#listeners-and-access). Set
 `public_url` in `config.json` later and run `oac apply`; you don't reinstall. Nodes,
 E2B and self-hosted executors need the public URL.
 
-### Installer options
+### Installation choices
 
-Flags only seed `config.json` for a new installation. Afterwards you change settings in
-`config.json` with [`oac apply`](../configuration.md#process-settings-configjson),
-and rerunning `install.sh` accepts no flag except `--install-dir`.
-
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `--public-url URL` | none: local access only | Public origin of Core and Web behind your reverse proxy, such as `https://core.example`: HTTPS, no path. Plain HTTP only for a loopback host. Seeds `public_url` |
-| `--sandbox docker\|microsandbox\|e2b\|none` | `microsandbox` (`none` with `--web-only`) | [Sandbox backend](#sandbox-backend) to start with. A one-time choice saved in the database; change it later in Web |
-| `--accept-docker-risks` | | With `--sandbox docker`: accept Docker's [weaker isolation](#sandbox-backend) without the prompt; required without a terminal |
-| `--e2b-api-key-file FILE` | | With `--sandbox e2b`: absolute path of a private file (no group or other access, at most 4 KiB) holding the E2B API key |
-| `--e2b-template ID:BUILD` | | With `--sandbox e2b`: the ready template build, `template-id:build-uuid` |
-| `--core-only` | | [Mode](#modes): Core and PostgreSQL, without Web |
-| `--web-only` | | [Mode](#modes): Web only, connected to an existing Core. Needs `--core-url` and `--core-key-file` |
-| `--core-url URL` | | With `--web-only`: origin of the existing Core, HTTPS or loopback HTTP. Seeds `web.core_url` |
-| `--core-key-file FILE` | | With `--web-only`: absolute path of a private file holding that Core's Core key (at least 32 characters) |
-| `--native-core` | off | Run [Core as a systemd user service](#native-core) instead of a container |
-| `--core-port PORT` | `8091` | Loopback port of Core. Seeds `ports.core` |
-| `--web-port PORT` | `8080` | Loopback port of Web. Seeds `ports.web` |
-| `--install-dir DIR` | `~/.oac/core` | Absolute installation directory. It must be empty or missing |
-| `--config FILE` | | Seed `config.json` from a prepared file instead of the setting flags above (`--public-url`, the mode flags, `--native-core`, ports, `--core-url`) |
-
+For flags, listener addresses and custom ports, see [Installation options](install-options.md).
 
 #### Sandbox backend
 
@@ -316,14 +296,6 @@ native binaries must load on the host. PostgreSQL then listens on a loopback por
 the installer picks (`ports.database`), and Web uses the host network. Native Core
 needs no KVM and is unrelated to the sandbox backend.
 
-#### Ports and directory
-
-Core and Web listen on `127.0.0.1` only; the reverse proxy reaches them there. The
-installer refuses a port that is in use. Several installations can share a host with
-their own `--install-dir` and ports, for example
-`--install-dir "$HOME/.oac/core-2" --core-port 8092 --web-port 8081`. Each has its
-own database, Core key and nodes.
-
 ## HTTPS and the reverse proxy
 
 By default, Core and Web share one public origin; for Web on its own host, see the
@@ -459,10 +431,9 @@ at Add node.
 
 ## Sign in to Web
 
-1. Open the console address the installer printed: your public URL, or
-   `http://127.0.0.1:8080` on the Core host. Use exactly that address; Web refuses
-   other host names. For a loopback installation on a remote machine, forward the port
-   first: `ssh -L 8080:127.0.0.1:8080 <core-host>`.
+1. Open the console address the installer printed. Use exactly that address; Web
+   refuses other host names. For a loopback installation on a remote machine,
+   forward the configured address and port through SSH first.
 2. Sign in with the Core key:
 
    ```sh
@@ -520,8 +491,8 @@ Web-only installations have only `secrets/core.key` among the secrets, and no
 In Docker, the installer creates a Compose project named `oac-<10 hex digits>`
 (`project` in `state.json`) with the containers `database`, `migrate` (runs the
 migrations, then exits), `core` and `web`, and the volume `<project>_database` that
-holds all data. Core and Web publish only `127.0.0.1:8091` and `127.0.0.1:8080`. The
-database publishes no port unless Core is native.
+holds all data. Core and Web publish their configured listeners. The database
+publishes no port unless Core is native, when it remains on loopback.
 
 The database holds the sandbox backend selection, and later your Projects, keys,
 nodes, default models and all execution history. Apart from Docker's own storage,

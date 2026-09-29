@@ -2,6 +2,7 @@
 import shlex
 
 import sandbox_setup
+import configuration
 from install_display import color, heading, paragraph
 
 
@@ -53,7 +54,8 @@ def summary(root, config, addresses, fresh, selection, deployment, reachable, in
         paragraph("Create a Project and its API key on the Projects and keys page.")
     else:
         paragraph("Create a Project and its API key through the Core management API:")
-        print(f'  http://127.0.0.1:{config["ports"]["core"]}/core/v1 (local only)')
+        local = " (local only)" if configuration.loopback_listener(config["host"]) else ""
+        print(f'  {configuration.service_origin(config, "core")}/core/v1{local}')
     if fresh and mode != "web-only":
         for line in sandbox_lines(config, selection, deployment, reachable):
             paragraph(line)

@@ -5,10 +5,10 @@ description: "Runtime lifecycle, messages, receipts and recovery."
 
 This is the integration entry point for a Runtime that executes work for Core.
 The wire definitions live once in
-[`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto);
-Core's [gateway](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/gateway) and the reference Runtime's
-[dispatcher](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/parsar-daemon/internal/dispatch) both use them.
-The [machine HTTP API](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/runtime.openapi.yaml) describes
+[`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto);
+Core's [gateway](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/gateway) and the reference Runtime's
+[dispatcher](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/parsar-daemon/internal/dispatch) both use them.
+The [machine HTTP API](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/runtime.openapi.yaml) describes
 registration and connection endpoints. This document defines the meaning and
 ordering of the messages after connection; it does not replace the typed payloads.
 
@@ -46,7 +46,7 @@ preparation is not proof of containment.
 5. Dispatch ordered JSON envelopes over the connection. Heartbeats establish
    liveness only, not execution progress or a receipt for earlier messages.
 
-The wire version is [`proto.Version`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/version.go),
+The wire version is [`proto.Version`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/version.go),
 independent of the Runtime build version reported in heartbeats. Core accepts
 only an exact match, including the patch component. A mismatch returns HTTP 426
 `incompatible_version` before dispatch; the daemon treats it as permanent and
@@ -62,7 +62,7 @@ Session or Environment binding.
 ## Envelope and identity
 
 Every data frame is one JSON
-[`Envelope`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/envelope.go):
+[`Envelope`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/envelope.go):
 `type`, type-dependent `id`, typed `payload`, and optional W3C `trace`.
 Trace is diagnostic correlation only; missing or invalid trace data creates a
 local trace and never changes ownership. Do not use a trace ID as a request ID.
@@ -91,16 +91,16 @@ finite error categories. There is no parallel payload schema to keep in sync.
 
 | Core → Runtime | Runtime → Core | Definition |
 | --- | --- | --- |
-| `runtime_prepare` | `runtime_prepare_result` | [Initialization and capability transfer](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/runtime_prepare.go) |
-| `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/preparation.go) |
-| `prompt_request`, `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/inbound.go) |
-| `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/outbound.go), [interactions](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/inbound.go) |
-| `prompt_steer` | `prompt_steer_ack` | [Active input receipts](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/steering.go) |
-| `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/functions.go) |
-| `workspace_read`, `workspace_write`, `workspace_export` | Matching `*_result` | [Read](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/workspace_read.go), [write](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/workspace_write.go), [export](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/workspace_export.go) |
-| `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [Suspension fencing](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/suspend.go) |
+| `runtime_prepare` | `runtime_prepare_result` | [Initialization and capability transfer](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/runtime_prepare.go) |
+| `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/preparation.go) |
+| `prompt_request`, `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/inbound.go) |
+| `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/outbound.go), [interactions](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/inbound.go) |
+| `prompt_steer` | `prompt_steer_ack` | [Active input receipts](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/steering.go) |
+| `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/functions.go) |
+| `workspace_read`, `workspace_write`, `workspace_export` | Matching `*_result` | [Read](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/workspace_read.go), [write](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/workspace_write.go), [export](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/workspace_export.go) |
+| `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [Suspension fencing](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/suspend.go) |
 
-Initial and active input share [ordered MessageInput](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto/message_input.go).
+Initial and active input share [ordered MessageInput](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto/message_input.go).
 Adapters preserve message/content order and explicitly reject unsupported content.
 Usage frames and the final usage snapshot replace earlier cumulative snapshots;
 do not add them. An absent measurement is unknown, not zero.
@@ -177,7 +177,7 @@ truth and reconciles from confirmed facts. Runtime retains cleanup ownership
 until native work, input receipts, interactions and child work have settled.
 
 The public Turn status is a separate, existing projection:
-[`execution/delivery.go`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/internal/execution/delivery.go)
+[`execution/delivery.go`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/internal/execution/delivery.go)
 records an unsuccessful orchestration attempt as `failed`, including
 `delivery_unknown` after an unconfirmed send and `event_stream_incomplete`
 after subscription failure. A closed subscription can replace the send reason
@@ -211,8 +211,8 @@ Provider's confirmed reclamation of compute.
 
 Run `make check-runtime-contract` from the repository root. It exercises the
 shared wire validators, gateway, transport and dispatcher, plus
-[real WebSocket contract scenarios](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/parsar-daemon/internal/contracttest/wire_test.go)
-using a controlled Harness adapter, plus the [observation-result regression](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/internal/execution/runtime_protocol_test.go). It requires no model credentials or external
+[real WebSocket contract scenarios](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/parsar-daemon/internal/contracttest/wire_test.go)
+using a controlled Harness adapter, plus the [observation-result regression](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/internal/execution/runtime_protocol_test.go). It requires no model credentials or external
 sandbox. These tests are also included in `make check` through `check-go` and
 `check-agents-api`.
 
@@ -228,4 +228,4 @@ controlled-adapter test establishes the transport contract, not native Harness
 behavior, OS support, provider authentication or sandbox isolation. Update the
 shared types, this guide and the contract checks together when semantics change.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/docs/runtime-protocol.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/docs/runtime-protocol.md)

@@ -15,7 +15,7 @@ printf '\\n==> Downloading node installer...\\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://console.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
 printf '==> Verifying node installer...\\n' &&
 printf '%s  %s\\n' '${digest}' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\\n' 'secret'\\''onetime' | $s python3 "$d/node-install.pyz" --enrollment-token-stdin --source-url 'https://console.example' --core-url 'https://core.example' --provider 'docker' --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
+printf '%s\\n' 'secret'\\''onetime' | $s python3 "$d/node-install.pyz" \${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://console.example' --core-url 'https://core.example' --provider 'docker' --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
   });
   it("creates the exact no-sudo command, which differs only in never calling sudo", () => {
     expect(install("user")).toBe(` (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
@@ -23,7 +23,7 @@ printf '\\n==> Downloading node installer...\\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://console.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
 printf '==> Verifying node installer...\\n' &&
 printf '%s  %s\\n' '${digest}' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\\n' 'secret'\\''onetime' | python3 "$d/node-install.pyz" --enrollment-token-stdin --source-url 'https://console.example' --core-url 'https://core.example' --provider 'docker' --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
+printf '%s\\n' 'secret'\\''onetime' | python3 "$d/node-install.pyz" \${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://console.example' --core-url 'https://core.example' --provider 'docker' --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
   });
   it("creates the exact uninstall commands, with no token", () => {
     const uninstall = (mode: NodeInstallMode) => nodeUninstallCommand({ sourceUrl: "https://console.example", installationId: "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", scriptDigest: digest, mode });
@@ -32,10 +32,10 @@ printf '\\n==> Downloading node installer...\\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://console.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
 printf '==> Verifying node installer...\\n' &&
 printf '%s  %s\\n' '${digest}' "$d/node-install.pyz" | sha256sum -c --status &&
-$s python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
-    expect(uninstall("user").split("\n").at(-1)).toBe(`python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
+$s python3 "$d/node-install.pyz" \${NO_COLOR+--no-color} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
+    expect(uninstall("user").split("\n").at(-1)).toBe(`python3 "$d/node-install.pyz" \${NO_COLOR+--no-color} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f')`);
     expect(nodeUninstallCommand({ sourceUrl: "https://console.example", installationId: "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", scriptDigest: digest, mode: "sudo", force: true }).split("\n").at(-1))
-      .toBe(`$s python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f' --force)`);
+      .toBe(`$s python3 "$d/node-install.pyz" \${NO_COLOR+--no-color} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f' --force)`);
   });
   it("points at the node's journal in each mode", () => {
     expect(nodeLogCommand("7f3c2a90-fixture", "sudo")).toBe("sudo journalctl -u oac-node-7f3c2a90-fixture.service");
@@ -43,7 +43,7 @@ $s python3 "$d/node-install.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c
     expect(nodeLogCommand("a b", "user")).toBe("journalctl --user -u 'oac-node-a b.service'");
   });
   // "as root": a root shell runs the sudo command without sudo; "no sudo": the no-sudo command.
-  it.each(["success", "download failure", "checksum mismatch", "installer failure", "as root", "no sudo"])("executes safely, passes the token only on stdin and cleans private downloads after %s", (scenario) => {
+  it.each(["success", "download failure", "checksum mismatch", "installer failure", "as root", "no sudo", "no color"])("executes safely, passes the token only on stdin and cleans private downloads after %s", (scenario) => {
     const parent = join(homedir(), ".oac", "tests");
     mkdirSync(parent, { recursive: true });
     const root = mkdtempSync(join(parent, "node-command-"));
@@ -72,7 +72,8 @@ process.exit(actual===line.slice(0,split)?0:1);`);
     executable("printf", `require('node:fs').appendFileSync(process.env.PRINTF_REPORT,'called\\n');`);
     executable("sudo", `const fs=require('node:fs'), {spawnSync}=require('node:child_process');
 fs.writeFileSync(process.env.SUDO_REPORT,JSON.stringify({args:process.argv.slice(2),env:process.env}));
-process.exit(spawnSync(process.argv[2],process.argv.slice(3),{stdio:'inherit'}).status ?? 1);`);
+const env={...process.env}; delete env.NO_COLOR;
+process.exit(spawnSync(process.argv[2],process.argv.slice(3),{stdio:'inherit',env}).status ?? 1);`);
     executable("python3", `const fs=require('node:fs');
 const stdin=fs.readFileSync(0,'utf8');
 fs.writeFileSync(process.env.REPORT,JSON.stringify({args:process.argv.slice(2),env:process.env,stdin,mode:fs.statSync(process.argv[2]).mode&511}));
@@ -82,7 +83,7 @@ process.exit(process.env.SCENARIO==='installer failure'?7:0);`);
     const mode: NodeInstallMode = scenario === "no sudo" ? "user" : "sudo";
     try {
       const command = nodeInstallCommand({ token, coreUrl: "http://127.0.0.1:8091", sourceUrl: "http://localhost:8080", provider: "docker", installationId: "fixture-installation", scriptDigest: digest, mode });
-      const result = spawnSync("sh", ["-c", command], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TMPDIR: temporary, SCENARIO: scenario, FIXTURE: fixture, REPORT: report, SUDO_REPORT: sudoReport, PRINTF_REPORT: printfReport }, encoding: "utf8" });
+      const result = spawnSync("sh", ["-c", command], { env: { ...process.env, NO_COLOR: scenario === "no color" ? "" : undefined, PATH: `${bin}:${process.env.PATH}`, TMPDIR: temporary, SCENARIO: scenario, FIXTURE: fixture, REPORT: report, SUDO_REPORT: sudoReport, PRINTF_REPORT: printfReport }, encoding: "utf8" });
       expect(result.status).toBe(scenario === "installer failure" ? 7 : scenario === "download failure" ? 22 : scenario === "checksum mismatch" ? 1 : 0);
       expect(result.stdout).toContain("==> Downloading node installer...");
       expect(result.stdout.includes("==> Verifying node installer...")).toBe(scenario !== "download failure");
@@ -100,7 +101,7 @@ process.exit(process.env.SCENARIO==='installer failure'?7:0);`);
       expect(invocation.stdin).toBe(`${token}\n`);
       expect(invocation.args.some((arg) => arg.includes("one-time"))).toBe(false);
       expect(Object.values(invocation.env).some((value) => value.includes("one-time"))).toBe(false);
-      expect(invocation.args.slice(1)).toEqual(["--enrollment-token-stdin", "--source-url", "http://localhost:8080", "--core-url", "http://127.0.0.1:8091", "--provider", "docker", "--installation-id", "fixture-installation"]);
+      expect(invocation.args.slice(1)).toEqual([...(scenario === "no color" ? ["--no-color"] : []), "--enrollment-token-stdin", "--source-url", "http://localhost:8080", "--core-url", "http://127.0.0.1:8091", "--provider", "docker", "--installation-id", "fixture-installation"]);
       expect(invocation.mode & 0o077).toBe(0);
       if (scenario === "as root" || scenario === "no sudo") {
         expect(readdirSync(root)).not.toContain("sudo.json");

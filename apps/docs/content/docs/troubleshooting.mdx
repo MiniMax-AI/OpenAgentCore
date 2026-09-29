@@ -123,7 +123,7 @@ refuses. `rotate-core-key` refuses to run on a Web-only installation.
 ## Projects and API keys
 
 Create Projects and issue their keys in Web, on **Projects and keys**, or with the
-[Core API](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/admin-api.md) under `/core/v1/projects`. A key's
+[Core API](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/admin-api.md) under `/core/v1/projects`. A key's
 plaintext is shown once; Core stores only its digest. All keys of a Project share its
 assets and execution principal, and each write records the key that made it.
 
@@ -196,7 +196,7 @@ self-hosted executors. See
 | `Core installation requires Linux amd64 with Docker access` | Use Linux amd64 and an account with Docker access; root and ordinary users are supported |
 | `Installation failed; inspect prerequisites and private deployment files` | A prerequisite failed without its own message, most often Docker: check that `docker info` and `docker compose version` work for this user |
 | `Docker Compose 2.26.0 or newer is required …` | Update the Docker Compose plugin |
-| `Port N is already in use; select another port` | Free the port, or install with `--core-port`/`--web-port` |
+| `Port N is already in use; select another port` | Free the port, or install with `--core-port`/`--port` |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
 | `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply` |
 | `This installation version or historical conversion is not supported …` | Preserve the installation and data; [install separately](#installation-version-policy) |
@@ -244,9 +244,9 @@ Core records which key made each public resource write, for the console. Set
 `core.write_audit_retention` in `config.json` (Go duration, at least `1h`, default
 `2160h`) to control how long non-creation history is kept; creation ownership is kept
 for good. Removing keys or resources does not delete these records. See the
-[query contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/write-audit.md); administrator mutations
+[query contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/write-audit.md); administrator mutations
 have a separate
-[audit log](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/admin-api.md#monitoring-and-audit). Neither
+[audit log](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/admin-api.md#monitoring-and-audit). Neither
 logs bodies or secrets.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/docs/getting-started/operations.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/docs/getting-started/operations.md)

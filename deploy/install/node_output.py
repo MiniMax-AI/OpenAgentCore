@@ -1,4 +1,5 @@
 """Completion guidance for a connected, ready Sandbox Provider node."""
+import os
 import shlex
 
 from install_display import color, heading, paragraph
@@ -16,8 +17,9 @@ def summary(root, args, unit, account, system):
     heading("Manage")
     scope = "" if system else " --user"
     service = shlex.quote(unit)
-    print("  Status: systemctl" + scope + " status " + service)
-    print("  Logs: journalctl" + scope + " -u " + service + " -f")
+    elevate = "sudo " if system and os.environ.get("SUDO_UID", "0") != "0" else ""
+    print("  Status: " + elevate + "systemctl" + scope + " status " + service)
+    print("  Logs: " + elevate + "journalctl" + scope + " -u " + service + " -f")
     heading("Next")
     paragraph("Open Nodes in Web to manage this host. No model request was made.")
     print(flush=True)

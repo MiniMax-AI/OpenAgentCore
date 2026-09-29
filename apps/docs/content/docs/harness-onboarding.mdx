@@ -3,17 +3,17 @@ title: "Add a Harness"
 description: "Implement and validate a native Harness adapter."
 ---
 
-Start with [`agent/harness.go`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/parsar-daemon/internal/agent/harness.go).
+Start with [`agent/harness.go`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/parsar-daemon/internal/agent/harness.go).
 It defines the required lifecycle, separate optional interfaces and existing
 registration methods in one place. Implement one adapter for a native SDK or machine-readable protocol. Core and
 Runtime use the common contract; adding a harness should not add engine-name
 branches to public handlers, storage, scheduling or environment providers.
 
-The [harness contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/harnesses.md) defines observable behavior. Start with the
+The [harness contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/harnesses.md) defines observable behavior. Start with the
 [developer guide](/development) for a working checkout; the
-[contributor guide](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/CONTRIBUTING.md#harness-qualification-and-onboarding)
+[contributor guide](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/CONTRIBUTING.md#harness-qualification-and-onboarding)
 owns architecture and required checks. The pinned public Agents API in
-[upstream.json](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/upstream.json) is separate from the internal adapter protocol.
+[upstream.json](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/upstream.json) is separate from the internal adapter protocol.
 
 ## Ownership
 
@@ -57,7 +57,7 @@ model communication configuration, not Turn scheduling or native process ownersh
 
 ## Required adapter interfaces
 
-[`agent/harness.go`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/parsar-daemon/internal/agent/harness.go) is the
+[`agent/harness.go`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/parsar-daemon/internal/agent/harness.go) is the
 canonical interface entry point. Its required lifecycle is `ExecutorFactory`,
 `Executor`, `Turn` and `TurnSettlement`. Optional Turn and workspace interfaces
 remain separate; their result types and error values stay in the corresponding
@@ -93,7 +93,7 @@ semantics in each case.
 
 ## Events, inputs and optional capabilities
 
-Use [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/internal/agentdaemon/proto) for neutral
+Use [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/internal/agentdaemon/proto) for neutral
 requests, events and receipts. Each Turn emits only its own events with its Run ID,
 in order, and one terminal outcome. Native IDs and usage must be observed rather
 than invented. Capture the originating Turn before asynchronous native callbacks;
@@ -147,7 +147,7 @@ still belongs to the service profile and is not granted by Runtime registration.
 The static registration surface requires a build. Dynamic plugins are outside
 this contract. A small adapter does not remove the need for native qualification.
 The runnable test-only example is
-[`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/parsar-daemon/testdata/onboarding/main.go).
+[`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/parsar-daemon/testdata/onboarding/main.go).
 It registers a text-only synthetic harness and is never shipped as a real engine.
 
 ## Required behavior versus optional operations
@@ -166,14 +166,14 @@ explicitly and record the gap. Never advertise a capability to bypass selection.
 Structured-output adapters consume `ExecutionControls.OutputFormat` and publish
 confirmed native output through the existing Message contract. Register public
 qualification separately from the Runtime capability; see the
-[structured-output boundary](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/structured-output.md). No Core engine-name branch is required.
+[structured-output boundary](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/structured-output.md). No Core engine-name branch is required.
 
 Initial requests, `Executor.StartTurn` and steering consume the same ordered
 `proto.MessageInput`. Text-only adapters use `TextOnly()` to reject images without
 discarding content. Image adapters translate each part natively and acknowledge
 an active batch only after all its messages are applied. Register
 `MessageImages` and qualify `MessageImagePlacements` separately; see the
-[message-input contract and real acceptance](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/message-input.md).
+[message-input contract and real acceptance](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/message-input.md).
 
 Hosted workspace execution additionally requires verified preparation, workspace
 reads/output export, network behavior and credential/history isolation. Reuse the
@@ -205,7 +205,7 @@ it does not expand to match another harness's feature list.
   development, then `make check` and applicable real regressions. API changes
   require `make openapi`; query changes require `make sqlc-generate`.
 - Review: follow the repository
-  [blind review workflow](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/CONTRIBUTING.md#workflow-and-quality).
+  [blind review workflow](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/CONTRIBUTING.md#workflow-and-quality).
 
 Record exact revisions, image/package versions, commands, results and limits.
 Keep keys in private operator files; never commit them or include them in logs or
@@ -215,7 +215,7 @@ full board. Acceptance of one engine is not complete public protocol compatibili
 
 ## Minimal runnable example and native references
 
-[`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/parsar-daemon/testdata/onboarding/main.go)
+[`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/parsar-daemon/testdata/onboarding/main.go)
 is a runnable synthetic adapter. It demonstrates registration, a Session-owned
 Executor, fresh Turns, durable steering, cancellation and history binding through
 the actual gateway and Router. Run `TestThirdHarnessPublicOnboarding` against a
@@ -224,18 +224,18 @@ not shipped and is not evidence for a real SDK or sandbox.
 
 Use the native adapters as implementation references after choosing a native API:
 
-- [Codex](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/parsar-daemon/internal/agent/codex/executor.go): app-server transport.
-- [Claude](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/parsar-daemon/internal/agent/claudesdk/executor.go): Go ownership and a [TypeScript SDK bridge](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/packages/claude-sdk-adapter/README.md).
-- [MiniMax](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/parsar-daemon/internal/agent/mcode): ACP and native workspace companion.
+- [Codex](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/parsar-daemon/internal/agent/codex/executor.go): app-server transport.
+- [Claude](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/parsar-daemon/internal/agent/claudesdk/executor.go): Go ownership and a [TypeScript SDK bridge](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/packages/claude-sdk-adapter/README.md).
+- [MiniMax](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/parsar-daemon/internal/agent/mcode): ACP and native workspace companion.
 
 Start with the mandatory text lifecycle, then qualify optional operations using
-[harness coverage](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/harnesses.md) and each operation's contract. Do not copy an
+[harness coverage](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/harnesses.md) and each operation's contract. Do not copy an
 adapter's native limitations into the shared Core protocol.
 
 ## Optional Subagent observations
 
 A harness that supports the Subagent resource reads implements the existing
-[neutral observation contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/subagents.md#common-adapter-contract). It reports
+[neutral observation contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/subagents.md#common-adapter-contract). It reports
 verified child identity, lifecycle effects and owned Turn/Item history through
 the authenticated Run, then qualifies those facts with real execution. It does
 not add routes, storage branches or a harness-specific Core scheduler. Report
@@ -254,4 +254,4 @@ installation; adapters own native layout and probes. Validate installation and
 actual execution on each advertised platform. Missing or incompatible native
 content must fail, never install itself during a Turn.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/harness-onboarding.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/harness-onboarding.md)

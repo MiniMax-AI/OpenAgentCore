@@ -1980,6 +1980,15 @@ newcomer installation path and document them under
 #### Matched Core and console distribution
 
 [Configuration](docs/configuration.md) is the canonical operator parameter reference.
+[Installation options](docs/getting-started/install-options.md) owns installer usage;
+README Quick start and the installation guide link there instead of copying option
+lists. Generate its flag-to-key table and the configuration reference from the schema.
+`host` is the single Core/Web listener address; `ports.web` uses only `--port`, and
+`ports.core` uses `--core-port`. Defaults, validation and flag mappings live in the
+schema. Flags seed config.json; health checks, setup, apply and generated service
+files derive their addresses from that same config. Apply uses the last applied
+address to contact running services before changing listeners. Non-loopback binds
+require the existing HTTPS public origin; PostgreSQL remains loopback/private.
 Every process setting has one home: the installation's private `config.json`,
 described by `deploy/install/config.schema.json`. The operator edits only that
 file; `oac apply` validates it, derives `generated/` (Compose file, `core.env`,

@@ -27,7 +27,7 @@ printf '%s  %s\\n' ${quote(scriptDigest)} "$d/node-install.pyz" | sha256sum -c -
 }
 
 /** Runs the downloaded installer, as root in sudo mode. */
-const runInstaller = (mode: NodeInstallMode) => `${mode === "sudo" ? "$s " : ""}python3 "$d/node-install.pyz"`;
+const runInstaller = (mode: NodeInstallMode) => `${mode === "sudo" ? "$s " : ""}python3 "$d/node-install.pyz" \${NO_COLOR+--no-color}`;
 
 /**
  * Adds this host as a node. The one-time token reaches the installer only on

@@ -188,7 +188,7 @@ class FakeHost:
                     self.containers[name]["running"] = True
             if "web" in names:
                 web = services["web"]
-                self.web_port = int(web["ports"][0].split(":")[1]) if "ports" in web else int(
+                self.web_port = int(web["ports"][0].rsplit(":", 2)[1]) if "ports" in web else int(
                     web["environment"]["OAC_WEB_ADDR"].rsplit(":", 1)[1])
             environment = path.parent / "core.env"
             if "core" in names and (self.core["fails"] or
@@ -200,7 +200,7 @@ class FakeHost:
 
     def load_core(self, root, service):
         if "ports" in service:
-            self.core["port"] = int(service["ports"][0].split(":")[1])
+            self.core["port"] = int(service["ports"][0].rsplit(":", 2)[1])
         digests = root / "generated/core-key-digests.json"
         self.core["digests"] = json.loads(digests.read_text()) if digests.exists() else json.loads(
             (root / "admin/core-key-digests.json").read_text())

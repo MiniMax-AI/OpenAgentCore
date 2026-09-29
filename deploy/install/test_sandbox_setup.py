@@ -6,6 +6,7 @@ import unittest
 from unittest import mock
 
 import sandbox_setup
+import config_model
 
 INSTALLATION = "94be54a1-138c-4f30-bc87-b13686272dbe"
 
@@ -19,7 +20,7 @@ class SandboxSetupTests(unittest.TestCase):
         self.root = Path(temporary.name)
         (self.root / "secrets").mkdir()
         (self.root / "secrets/core.key").write_text("fixture-core-key\n")
-        self.config, self.state = {"ports": {"core": 8091}}, {"installation_id": INSTALLATION}
+        self.config, self.state = config_model.initial("all"), {"installation_id": INSTALLATION}
 
     def initialize(self, current, selection):
         requests = []

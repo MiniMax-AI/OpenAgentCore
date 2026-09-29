@@ -7,7 +7,7 @@ Status: Phase 2 and initial Core Web consumption implemented. The current-snapsh
 `packages/agents-client` projection, and generated `core.openapi.yaml` contract are
 implemented and consumed by the Dashboard through complete Session/observation
 identity joins. Durable history uses the separate optional
-[Runtime history API](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/runtime-history-api.md); lifecycle controls remain outside
+[Runtime history API](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/runtime-history-api.md); lifecycle controls remain outside
 this phase.
 
 These are administrator reads under `/core/v1`, authenticated by the Core key,
@@ -92,7 +92,7 @@ Authorization: Bearer ...
 ```
 
 This returns the same object shape as a list item's `observation`, without the
-administrator list's `disk` (see the [administrator contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/admin-api.md)). It never starts a Turn, creates
+administrator list's `disk` (see the [administrator contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/admin-api.md)). It never starts a Turn, creates
 an Environment, provisions compute, renews a lease, or changes lifecycle state.
 
 A valid `environment:none` Session returns `200` with status `unsupported`; the
@@ -193,7 +193,7 @@ Use the existing Agents API error envelope.
 | 400 | `invalid_request_error` / `invalid_request_error` | List: a repeated supported query key, or an empty or invalid limit or order, with the shared Beta list messages. Unknown list query keys are ignored. |
 | 400 | `invalid_request_error` / `unsupported_parameter` | Single-Session retrieval with any query parameter. |
 | 401 | `invalid_request_error` / `invalid_admin_key` | Missing or invalid Core key. |
-| 404 | `not_found_error` / `not_found_error` | Missing, malformed or foreign Session/cursor, indistinguishably, as for the [Session list cursor](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/list-query-semantics.md#list-cursor-errors--september-23-2026). |
+| 404 | `not_found_error` / `not_found_error` | Missing, malformed or foreign Session/cursor, indistinguishably, as for the [Session list cursor](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/list-query-semantics.md#list-cursor-errors--september-23-2026). |
 | 500 | `server_error` / `internal_error` | Integrity, ownership, or invalid provider evidence. |
 | 503 | `server_error` / `execution_unavailable` | Required Runtime observation service is not configured, or list collection exceeded its request budget. |
 
@@ -273,10 +273,10 @@ deletion makes the candidate incomplete and prevents publication.
 - Token usage: use existing Session/Turn Usage.
 - Billing and cost: product/backend concern.
 - Historical series in these routes: the optional capability uses the separate
-  [Runtime history API](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/runtime-history-api.md).
+  [Runtime history API](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/runtime-history-api.md).
 - Container logs and command output.
 - Provider credentials or native configuration.
 - Start, stop, pause, resume, restart, renew, or delete operations.
 - Idle classification and automatic shutdown.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/runtime-observability-api.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/runtime-observability-api.md)

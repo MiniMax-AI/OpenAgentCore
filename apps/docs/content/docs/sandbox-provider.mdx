@@ -3,7 +3,7 @@ title: "Add a Sandbox Provider"
 description: "Environment allocation, bootstrap and reclamation."
 ---
 
-Start at [`sandbox_provider.go`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/internal/sandbox/sandbox_provider.go).
+Start at [`sandbox_provider.go`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/internal/sandbox/sandbox_provider.go).
 It defines the required `SandboxProvider` and optional `CheckpointProvider`
 interfaces. Use the existing types; do not introduce another lifecycle protocol or
 an execution path for a particular vendor.
@@ -33,7 +33,7 @@ Do not implement an optional interface with successful no-op methods. Core uses
 interface assertions to select optional operations. Advertised support requires
 contract and native acceptance evidence; a healthy node or an available CLI does
 not establish it. Observation never renews a lease, starts compute or prepares a
-Harness. See the [observation contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/runtime-observability.md).
+Harness. See the [observation contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/runtime-observability.md).
 
 `RunCommand` is an existing administrative bootstrap/diagnostic facility, not an
 alternate route for Skills, Plugins, MCP setup, initial files, Session execution or
@@ -48,12 +48,12 @@ Registration is explicit construction, not an init-time plugin registry:
    configuration in an adapter package under `services/agents-api/internal/sandbox`.
    Assert `var _ sandbox.SandboxProvider = (*YourAdapter)(nil)` at compile time.
 2. For a node-local adapter, add its typed construction and readiness probe in
-   [`sandbox/config`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/internal/sandbox/config/config.go).
+   [`sandbox/config`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/internal/sandbox/config/config.go).
    The existing `Built` result returns the provider, probe, installation identity,
    backend fingerprint and specification digest; the factory also returns its
    close function. Construction must not create an Environment.
 3. For a direct adapter, register its construction in
-   [`managedSetup.provider`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/cmd/server/managed_setup.go).
+   [`managedSetup.provider`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/cmd/server/managed_setup.go).
    Node-local adapters are selected there through the existing node proxy. Keep
    vendor-specific deployment validation and SDK setup at this boundary.
 4. Preserve the existing `execution.RuntimeProvider` deployment binding:
@@ -143,7 +143,7 @@ Persist operation IDs and provider-returned snapshot provenance unchanged.
 another capture or restore. `ResumeCompute` only thaws the retained source; it
 must not cold-start a stopped one. Cleanup targets the exact compute incarnation
 and snapshot, not whichever instance currently has the same display name. See
-[the lifecycle implementation](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/internal/execution/runtime_compute.go)
+[the lifecycle implementation](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/internal/execution/runtime_compute.go)
 and its failure tests before advertising this capability.
 
 ## Four distinct readiness facts
@@ -164,7 +164,7 @@ A provider must not implement a competing preparation path.
 ## Validate the integration
 
 Run `make check-sandbox-provider-contract` while developing. It runs the shared
-[`contracttest`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/internal/sandbox/contracttest) suite through
+[`contracttest`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/internal/sandbox/contracttest) suite through
 real adapter boundaries using controlled native failures, plus existing adapter
 and node transport tests. The same packages are included in `make check`.
 New adapters should call the public failure runner with native-side fixtures,
@@ -185,4 +185,4 @@ SDK helper tests use `make check-e2b-provider` and
 `make check-microsandbox-provider`. Passing controlled contract tests is not a
 claim of live cloud or model acceptance.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/docs/sandbox-provider.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/docs/sandbox-provider.md)

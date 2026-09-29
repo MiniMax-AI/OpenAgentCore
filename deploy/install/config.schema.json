@@ -31,12 +31,28 @@
     "public_url": {
       "type": ["string", "null"],
       "default": null,
-      "description": "Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1.",
+      "description": "Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null uses the loopback listener origins.",
       "x-oac": {
         "check": "origin",
         "restarts": ["core", "web"],
         "derives": ["OAC_PUBLIC_URL", "OAC_WEB_ORIGIN"],
         "install_flag": "--public-url"
+      }
+    },
+    "host": {
+      "type": "string",
+      "default": "127.0.0.1",
+      "description": "IP address on which Core and Web listen. PostgreSQL stays on loopback. Non-loopback listeners require an HTTPS public_url.",
+      "x-oac": {
+        "check": "listen_host",
+        "restarts": [
+          "core",
+          "web"
+        ],
+        "derives": [
+          "Core/Web port mappings or listen addresses"
+        ],
+        "install_flag": "--host"
       }
     },
     "ports": {
@@ -48,7 +64,7 @@
           "minimum": 1024,
           "maximum": 65535,
           "default": 8091,
-          "description": "Loopback port of the Core API. With native Core, Web follows it.",
+          "description": "Host port of the Core API. With native Core, Web follows it.",
           "x-oac": {
             "modes": ["all", "core-only"],
             "restarts": ["core"],
@@ -62,12 +78,12 @@
           "minimum": 1024,
           "maximum": 65535,
           "default": 8080,
-          "description": "Loopback port of Web.",
+          "description": "Host port of Web.",
           "x-oac": {
             "modes": ["all", "web-only"],
             "restarts": ["web"],
             "derives": ["Web port mapping or OAC_WEB_ADDR"],
-            "install_flag": "--web-port"
+            "install_flag": "--port"
           }
         },
         "database": {

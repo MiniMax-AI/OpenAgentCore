@@ -175,7 +175,7 @@ class InstallerTests(unittest.TestCase):
     def test_fresh_install_writes_config_json_and_the_layout(self):
         previous = os.umask(0)
         try:
-            self.install("--public-url", "https://core.example", "--web-port", "8181")
+            self.install("--public-url", "https://core.example", "--port", "8181")
         finally:
             os.umask(previous)
         config = self.document("config.json")
@@ -245,7 +245,7 @@ class InstallerTests(unittest.TestCase):
         self.install()
         before = self.snapshot()
         with self.assertRaisesRegex(install.InstallError, "config.json. Edit it and run .*oac apply"):
-            self.install("--web-port", "8081")
+            self.install("--port", "8081")
         self.assertEqual(self.snapshot(), before)
         (self.root / "oac").unlink()
         config = self.document("config.json")

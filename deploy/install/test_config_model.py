@@ -28,7 +28,7 @@ class ConfigModelTests(unittest.TestCase):
 
     def test_new_config_lists_every_applicable_setting(self):
         expected = {
-            "all": ["mode", "native_core", "public_url", "ports.core", "ports.web", "log.level", "log.format",
+            "all": ["mode", "native_core", "public_url", "host", "ports.core", "ports.web", "log.level", "log.format",
                     "log.add_source", "core.execution_concurrency", "core.harnesses", "core.default_harness",
                     "core.write_audit_retention", "core.oauth_trusted_origins", "core.database_pool.max_conns",
                     "core.database_pool.min_conns", "core.database_pool.max_conn_lifetime",
@@ -37,7 +37,7 @@ class ConfigModelTests(unittest.TestCase):
                     "core.runtime_history.insecure", "core.runtime_history.headers",
                     "core.runtime_history.queue_capacity", "core.runtime_history.timeout_seconds",
                     "core.runtime_history.sample_interval_seconds"],
-            "web-only": ["mode", "public_url", "ports.web", "web.core_url", "log.level", "log.format", "log.add_source"],
+            "web-only": ["mode", "public_url", "host", "ports.web", "web.core_url", "log.level", "log.format", "log.add_source"],
         }
         self.assertEqual(list(config_model.values(config_model.initial("all"))), expected["all"])
         web = config_model.initial("web-only", **{"web.core_url": "https://core.example"})

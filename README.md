@@ -24,6 +24,8 @@ On a Linux amd64 host with Docker and Python 3.9+, install the latest stable rel
 curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/install.sh | bash
 ```
 
+You can customize the listen address, ports and deployment settings with these [installation options](docs/getting-started/install-options.md).
+
 1. [Install Core and Web](docs/getting-started/install.md) on a Linux host. The guide
    covers prerequisites, release download, local trials and HTTPS setup.
 2. Sign in to Web with the installer-created Core key. Configure a model provider,

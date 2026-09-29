@@ -41,7 +41,7 @@ Administrators can still inspect and delete resources in archived Projects.
 
 The Core key is managed separately, in deployment configuration. Key storage,
 authentication and audit guarantees are defined by the
-[administrator contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/admin-api.md).
+[administrator contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/admin-api.md).
 
 Parsar product identities, workspaces, business permissions and collaboration
 remain outside Core. Parsar is an ordinary API-key holder in a Project.
@@ -93,13 +93,13 @@ copy operation keep their `admin_copy` ownership, distinct from historical unkno
 ownership. No request bodies, secrets or file contents enter audit records.
 
 Do not add product users, RBAC, cross-Project shared assets, administrator execution, or old
-private-protocol compatibility to this management model. Developers should follow the [contributor rules](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/CONTRIBUTING.md) and
+private-protocol compatibility to this management model. Developers should follow the [contributor rules](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/CONTRIBUTING.md) and
 [Core–Runtime protocol](/runtime-protocol) when implementing these boundaries.
 
 Native failure classification is adapter-owned and uses finite structured native
 values. Optional Runtime error metadata is normalized once and retained through
 normal delivery and journal draining; it never replaces Core terminal authority,
 cancellation receipts, Usage or native identity. See
-[native failure classification](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/native-error-classification.md).
+[native failure classification](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/native-error-classification.md).
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/docs/design-principles.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/docs/design-principles.md)

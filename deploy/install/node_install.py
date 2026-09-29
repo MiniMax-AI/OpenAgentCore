@@ -1459,7 +1459,10 @@ def main(argv=None):
     parser.add_argument("--update", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--uninstall", action="store_true", help="Remove this host's node after it was removed on the Nodes page")
     parser.add_argument("--force", action="store_true", help="With --uninstall: skip the Core check, for a Core that no longer exists")
+    parser.add_argument("--no-color", action="store_true", help="Disable terminal colors")
     args = parser.parse_args(argv)
+    if args.no_color:
+        os.environ["NO_COLOR"] = "1"
     if RETIRED_TOKEN_VARIABLE in os.environ:
         parser.exit(2, RETIRED_TOKEN_VARIABLE + " is retired: pass the enrollment token on standard input with "
                        "--enrollment-token-stdin.\n")

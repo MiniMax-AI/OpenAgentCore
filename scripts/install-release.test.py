@@ -61,14 +61,14 @@ class BootstrapTests(unittest.TestCase):
         raise AssertionError("Unexpected URL: " + url)
 
     def test_default_latest_is_resolved_once_and_installer_arguments_forwarded(self):
-        self.assertEqual(bootstrap.main(["--public-url", "https://core.example"]), 0)
+        self.assertEqual(bootstrap.main(["--host", "127.0.0.1", "--port", "8088", "--public-url", "https://core.example"]), 0)
         urls = [c.args[0] for c in self.http.call_args_list]
         self.assertEqual(sum(url.endswith("/releases/latest") for url in urls), 1)
         self.assertTrue(urls[1].endswith("/assets/8"))
         self.assertTrue(urls[2].endswith("/assets/7"))
         command = self.invoke.call_args.args[0]
         self.assertEqual(command[0], "bash")
-        self.assertEqual(command[2:], ["--public-url", "https://core.example"])
+        self.assertEqual(command[2:], ["--host", "127.0.0.1", "--port", "8088", "--public-url", "https://core.example"])
         self.assertTrue(pathlib.Path(command[1]).is_file())
         self.assertFalse(list((self.root / ".oac/releases").glob(".download-*")))
 

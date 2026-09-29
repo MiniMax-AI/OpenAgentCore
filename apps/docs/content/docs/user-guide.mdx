@@ -13,7 +13,7 @@ Session. For exact request fields, use the [API reference](/public-api).
 | --- | --- | --- |
 | `openai_hosted` | Ready managed capacity and a configured model | Core creates the Environment and connects its daemon |
 | `self_hosted` | Your machine, workspace, daemon and model provider | [Connect the Runtime](/self-hosted-execution) to the returned Environment |
-| `none` | An existing device connection and its configured Harness | Check the qualified profile in [Harness selection](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/harness-selection.md) |
+| `none` | An existing device connection and its configured Harness | Check the qualified profile in [Harness selection](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/harness-selection.md) |
 
 Use the [Environment contract](/environments-and-files) for placement,
 expiry and supported combinations. Model selection and provider precedence are
@@ -40,7 +40,7 @@ client.beta.agents.sessions.events.create(
 Read the new Turn and Items using the same observation loop as the quickstart.
 Submitting while a Turn is active steers that Turn where supported; it does not
 create an independent parallel task. Create a new Session for a different fixed
-configuration or workspace. See [message input](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/message-input.md)
+configuration or workspace. See [message input](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/message-input.md)
 for supported content, steering and idempotency rules.
 
 ## Prepare Skills, Plugins and MCP
@@ -52,11 +52,11 @@ an existing Session.
 
 | Task | Guide |
 | --- | --- |
-| Upload a Skill source and select a version | [Source Files and Skills](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/source-files.md) |
+| Upload a Skill source and select a version | [Source Files and Skills](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/source-files.md) |
 | Use local Skill/Plugin directories | [Local capability directories](/self-hosted-execution#local-capability-directories) |
-| Provide initial files, user-directory packages or setup | [Environment Templates](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/environment-templates.md) |
+| Provide initial files, user-directory packages or setup | [Environment Templates](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/environment-templates.md) |
 | Declare tools, MCP and function callbacks | [Execution tools](/agents-and-tools) |
-| Choose a supported tool policy | [Tool policy](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/tool-policy.md) |
+| Choose a supported tool policy | [Tool policy](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/tool-policy.md) |
 
 System dependencies must already exist on the host or in its image/template.
 See the [Runtime installation guide](/self-hosted-native) for dependencies and
@@ -68,14 +68,14 @@ as a new Session to work around an unresolved preparation error.
 Turn state tells you whether execution is active, completed, failed or cancelled.
 Items hold the recorded conversation and tool results; live events describe changes
 as they happen. A disconnected stream is not a completion receipt. The
-[history and events contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/history-events-usage.md) explains
+[history and events contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/history-events-usage.md) explains
 pagination, event delivery and Usage.
 
 | Resource | Use it for | Reference |
 | --- | --- | --- |
-| Environment Files | Inspect or transfer workspace contents | [Environment Files](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/environment-files.md) |
+| Environment Files | Inspect or transfer workspace contents | [Environment Files](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/environment-files.md) |
 | Artifacts | Retrieve captured outputs associated with execution | [Artifacts and public resources](/sessions) |
-| Source Files | Upload input used by a Skill or other declared resource | [Source Files](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/source-files.md) |
+| Source Files | Upload input used by a Skill or other declared resource | [Source Files](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/source-files.md) |
 
 These resources have different lifetimes. Deleting a Session does not erase files
 from a user-owned machine. Reclaiming managed compute is a separate Environment
@@ -95,7 +95,7 @@ client.beta.agents.sessions.events.create(
 Read the Turn until its terminal state is recorded. HTTP acceptance alone does not
 prove native processes have stopped. A cancellation or delivery error must be
 interpreted using the returned state and the
-[error contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/core-errors.md).
+[error contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/core-errors.md).
 
 After a lost response or connection, first retrieve the existing Session, Turns
 and Items. Do not assume work was never submitted and send it again. For self-hosted
@@ -111,10 +111,10 @@ A new Session captures a new configuration, not the history of a deleted one.
    [supported execution](/agents-and-tools).
 4. Follow [operations and troubleshooting](/troubleshooting) for service
    logs, credentials and node readiness. Runtime observations may be stale; the
-   [diagnostics contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/session-diagnostics.md) identifies
+   [diagnostics contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/session-diagnostics.md) identifies
    which observations are available.
 
 Administrative actions use a different credential from application work. Keep the
 [API namespace reference](/public-api) at hand when diagnosing authentication errors.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/docs/user-guide.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/docs/user-guide.md)

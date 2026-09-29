@@ -650,6 +650,25 @@ class NodeInstallTests(unittest.TestCase):
             self.addCleanup(patch.stop)
         return system
 
+    def test_no_color_flag_survives_sudo_environment_reset(self):
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(installer.os, "geteuid", return_value=1000), \
+                mock.patch.object(installer, "read_token", return_value="synthetic-once-token"), \
+                mock.patch.object(installer, "install") as install:
+            installer.main(["--no-color", "--source-url", "https://core.example", "--core-url", "https://core.example",
+                            "--installation-id", self.args.installation_id, "--enrollment-token-stdin"])
+            self.assertIn("NO_COLOR", os.environ)
+            install.assert_called_once()
+
+    def test_sudo_summary_commands_retain_permissions_of_invoking_account(self):
+        for uid, prefix in (("1000", "sudo "), ("0", "")):
+            with self.subTest(uid=uid), mock.patch.dict(os.environ, {"SUDO_UID": uid}):
+                stream = io.StringIO()
+                with contextlib.redirect_stdout(stream):
+                    installer.node_output.summary(self.root, self.args, "oac-node-example.service", "oac-node", system=True)
+                self.assertIn("  Status: " + prefix + "systemctl status oac-node-example.service", stream.getvalue())
+                self.assertIn("  Logs: " + prefix + "journalctl -u oac-node-example.service -f", stream.getvalue())
+
     def test_completion_summary_follows_readiness_and_hides_enrollment_token(self):
         for system in (False, True):
             with self.subTest(system=system):

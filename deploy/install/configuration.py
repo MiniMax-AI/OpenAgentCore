@@ -110,9 +110,42 @@ def secret_digests(root, mode):
     return {name: sha256((Path(root) / "secrets" / name).read_bytes()) for name in names}
 
 
+def valid_listen_host(value):
+    try:
+        return "%" not in value and bool(ipaddress.ip_address(value))
+    except ValueError:
+        return False
+
+
+def loopback_listener(host):
+    address = ipaddress.ip_address(host)
+    mapped = getattr(address, "ipv4_mapped", None)
+    return address.is_loopback or bool(mapped and mapped.is_loopback)
+
+
+def service_address(config, service, connect=False):
+    """One derivation for listen addresses and local operator connections."""
+    host = config["host"]
+    address = ipaddress.ip_address(host)
+    host = str(address)
+    if connect and address.is_unspecified:
+        host = "::1" if address.version == 6 else "127.0.0.1"
+    if address.version == 6:
+        host = "[" + host + "]"
+    return f'{host}:{config["ports"][service]}'
+
+
+def service_origin(config, service):
+    return "http://" + service_address(config, service, connect=True)
+
+
+def web_origin(config):
+    return config["public_url"] or service_origin(config, "web")
+
+
 def local_public_url(config):
     """OAC_PUBLIC_URL: the public origin, or Core's loopback origin for local use."""
-    return config["public_url"] or f'http://127.0.0.1:{config["ports"]["core"]}'
+    return config["public_url"] or service_origin(config, "core")
 
 
 def log_environment(log):
@@ -134,7 +167,7 @@ def core_environment(root, config, state):
     query = [("sslmode", "disable")] + [(name, str(core["database_pool"][key])) for key, name in POOL
                                         if core["database_pool"][key] is not None]
     result = {
-        "OAC_ADDR": f'127.0.0.1:{ports["core"]}' if native else ":8091",
+        "OAC_ADDR": service_address(config, "core") if native else ":8091",
         "OAC_PUBLIC_URL": local_public_url(config),
         "OAC_DATABASE_URL": f"postgres://agents_api@{database}/agents_api?" + urlencode(query),
         "OAC_DATABASE_PASSWORD_FILE": secrets + "/database.password",
@@ -208,30 +241,30 @@ def compose_config(root, config, state):
                       "security_opt": ["no-new-privileges:true"]}
             services["migrate"] = dict(shared, command=["/usr/local/bin/oac-core-migrate"],
                                        depends_on={"database": {"condition": "service_healthy"}})
-            services["core"] = dict(shared, restart="unless-stopped", ports=[f'127.0.0.1:{config["ports"]["core"]}:8091'],
+            services["core"] = dict(shared, restart="unless-stopped", ports=[service_address(config, "core") + ":8091"],
                                     depends_on={"migrate": {"condition": "service_completed_successfully"}},
                                     volumes=mounts + [bind(root / "state/e2b", "/state/e2b", False)])
     if mode != "core-only":
         if mode == "web-only":
             upstream = config["web"]["core_url"]
         else:
-            upstream = f'http://127.0.0.1:{config["ports"]["core"]}' if native else "http://core:8091"
+            upstream = service_origin(config, "core") if native else "http://core:8091"
         environment = {
-            "OAC_WEB_ORIGIN": config["public_url"] or f'http://127.0.0.1:{config["ports"]["web"]}',
+            "OAC_WEB_ORIGIN": web_origin(config),
             "OAC_WEB_UPSTREAM": upstream,
             "OAC_WEB_CORE_KEY_FILE": f"{RUN}/core.key",
             "OAC_WEB_NODE_PAYLOAD_DIR": "/node-payload",
         }
         environment.update(log_environment(config["log"]))
         web = {"image": images["web"], "user": identity, "restart": "unless-stopped",
-               "ports": [f'127.0.0.1:{config["ports"]["web"]}:8080'], "read_only": True,
+               "ports": [service_address(config, "web") + ":8080"], "read_only": True,
                "security_opt": ["no-new-privileges:true"],
                "volumes": [bind(root / "secrets/core.key", f"{RUN}/core.key"), bind(root / "node-payload", "/node-payload")],
                "environment": environment}
         if mode == "web-only" or native:
             web.pop("ports")
             web["network_mode"] = "host"
-            environment["OAC_WEB_ADDR"] = f'127.0.0.1:{config["ports"]["web"]}'
+            environment["OAC_WEB_ADDR"] = service_address(config, "web")
         services["web"] = web
     return doc
 

@@ -8,7 +8,7 @@ resource inspection, Project and key management, credential issuance, audit, usa
 and sandbox operations. It never calls `/v1` or `/api/v1`, and has no Agent
 execution, copy or arbitrary asset editing operation.
 
-Core request failures use the [Core administration error envelope](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/core-errors.md),
+Core request failures use the [Core administration error envelope](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/core-errors.md),
 including optional typed safe details. Console sign-in endpoints retain their
 separate error shape described below.
 
@@ -49,9 +49,9 @@ label, but could set any value. Never use it for authorization or as proof of
 origin.
 
 Web calls Core only through the typed Core clients in `packages/agents-client`:
-[AdminClient](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/packages/agents-client/src/admin-client.ts) (`/core/v1`),
+[AdminClient](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/packages/agents-client/src/admin-client.ts) (`/core/v1`),
 `SandboxAdminClient` (`/core/v1/sandbox`) and `CoreMetricsClient`
-(`/core/v1/metrics`). See [the complete administrator reference](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/admin-api.md)
+(`/core/v1/metrics`). See [the complete administrator reference](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/admin-api.md)
 for methods, fields, filters, pagination and response shapes.
 Routes below are relative to `/core/v1`:
 
@@ -62,8 +62,8 @@ Routes below are relative to `/core/v1`:
 | Resource lists/details/deletion | `/projects/{id}/agents`, `/sessions`, `/environment-templates`, `/skills`, `/files`, `/vaults`, including the documented nested reads |
 | Asset ownership | `GET /projects/{id}/resource-owners` with batched resource IDs |
 | Key operation history | `GET /projects/{id}/write-operations` with key/resource/time filters |
-| Executor credentials | `GET/POST /projects/{id}/environments/{environment_id}/executor-credentials`, `DELETE …/executor-credentials/{key_id}` ([contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/environment-executor-credentials.md)) |
-| Deployment model providers | `GET /harnesses`, `GET/PUT/DELETE /harnesses/{harness}/model-provider`; the key is write-only ([contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/model-execution.md#deployment-defaults)) |
+| Executor credentials | `GET/POST /projects/{id}/environments/{environment_id}/executor-credentials`, `DELETE …/executor-credentials/{key_id}` ([contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/environment-executor-credentials.md)) |
+| Deployment model providers | `GET /harnesses`, `GET/PUT/DELETE /harnesses/{harness}/model-provider`; the key is write-only ([contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/model-execution.md#deployment-defaults)) |
 | Usage and health | `GET /summary`, `/sandbox/runtime-observations`, `/metrics` |
 | Administrator audit | `GET /audit-log`; deployment-wide entries have `project_id: null` |
 
@@ -76,9 +76,9 @@ it is operational attribution, not per-key billing.
 
 ## Sandbox administration
 
-The [deployment configuration contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/sandbox-deployment.md),
-[nodes and sandbox backends reference](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/HOSTED-SANDBOX-MANAGER.md)
-and [generated OpenAPI](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/core.openapi.yaml)
+The [deployment configuration contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/sandbox-deployment.md),
+[nodes and sandbox backends reference](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/HOSTED-SANDBOX-MANAGER.md)
+and [generated OpenAPI](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/core.openapi.yaml)
 define deployment and node operations:
 
 - `GET/POST/PUT /core/v1/sandbox/deployment` and
@@ -115,7 +115,7 @@ is a durable serving pin, not proof of current connectivity. Target unknown, fai
 or update-required state does not by itself invalidate confirmed old-generation
 service; consume Core's connection/provider facts separately.
 
-Administrators may [archive an individual hosted Session](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/admin-api.md#administrative-session-archive)
+Administrators may [archive an individual hosted Session](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/admin-api.md#administrative-session-archive)
 at the current generation without reset. History and persisted Files/Artifacts
 survive; unpersisted workspace is lost and the original Session cannot resume.
 Cancel reset stops further archives, not cleanup already requested. After zero
@@ -156,7 +156,7 @@ generated schema; do not interpret every empty or failed read as an absent resou
 `GET /core/v1/metrics?range=1h|6h|24h|7d` returns Core process, execution
 queue/slots, PostgreSQL and background-job measurements. It requires the Core key,
 rejects arbitrary query filters and never grants
-Agent execution access. See the [exact measurement contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/core-metrics.md)
+Agent execution access. See the [exact measurement contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/core-metrics.md)
 for complete buckets, null values, units and process-local retention. Frontend
 implementation is maintained separately; this backend change does not modify
 Agent metrics or the public Agent API.
@@ -165,7 +165,7 @@ Agent metrics or the public Agent API.
 
 The Core key reads a node and its host history through
 `GET /core/v1/sandbox/nodes/{node_id}?range=1h|6h|24h`. See the
-[node host history contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/node-host-history.md)
+[node host history contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/node-host-history.md)
 for nullable observations, freshness and aggregation. The node list is unchanged.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/docs/api/web-management.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/docs/api/web-management.md)

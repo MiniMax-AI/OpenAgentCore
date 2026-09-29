@@ -41,6 +41,7 @@ BUNDLED_DOCS = (
     "docs/configuration.md",
     "docs/getting-started/README.md",
     "docs/getting-started/install.md",
+    "docs/getting-started/install-options.md",
     "docs/getting-started/nodes.md",
     "docs/getting-started/operations.md",
     "docs/getting-started/quickstart.md",

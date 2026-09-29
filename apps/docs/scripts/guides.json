@@ -24,6 +24,12 @@
     "description": "Current distribution, host prerequisites, HTTPS, first sign-in and installation options."
   },
   {
+    "slug": "install-options",
+    "source": "docs/getting-started/install-options.md",
+    "title": "Installation options",
+    "description": "Listener addresses, ports and initial installation choices."
+  },
+  {
     "slug": "configure",
     "source": "docs/configuration.md",
     "title": "Configuration reference",

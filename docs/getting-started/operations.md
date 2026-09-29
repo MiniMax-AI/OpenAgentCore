@@ -193,7 +193,7 @@ self-hosted executors. See
 | `Core installation requires Linux amd64 with Docker access` | Use Linux amd64 and an account with Docker access; root and ordinary users are supported |
 | `Installation failed; inspect prerequisites and private deployment files` | A prerequisite failed without its own message, most often Docker: check that `docker info` and `docker compose version` work for this user |
 | `Docker Compose 2.26.0 or newer is required …` | Update the Docker Compose plugin |
-| `Port N is already in use; select another port` | Free the port, or install with `--core-port`/`--web-port` |
+| `Port N is already in use; select another port` | Free the port, or install with `--core-port`/`--port` |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
 | `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply` |
 | `This installation version or historical conversion is not supported …` | Preserve the installation and data; [install separately](#installation-version-policy) |

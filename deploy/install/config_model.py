@@ -88,7 +88,13 @@ def duration_seconds(text):
     return -total if text.startswith("-") else total
 
 
+def _listen_host(value):
+    from configuration import valid_listen_host
+    return valid_listen_host(value)
+
+
 CHECKS = {
+    "listen_host": (_listen_host, "must be an IPv4 or IPv6 address without a port or zone"),
     "origin": (_origin, "must be a canonical origin such as https://core.example: lowercase, no path or "
                         "trailing slash, and HTTP only for a loopback host"),
     "https_origin": (lambda value: _origin(value, https_only=True), "must be a canonical HTTPS origin"),
@@ -191,6 +197,9 @@ def validate(config):
         problems.append("web.core_url: required for a web-only installation")
     if len(set(ports.values())) != len(ports):
         problems.append("ports: " + ", ".join(sorted(ports)) + " need different ports")
+    from configuration import loopback_listener
+    if not loopback_listener(full["host"]) and not (full["public_url"] or "").startswith("https://"):
+        problems.append("public_url: an HTTPS origin is required when host is not loopback")
     core = full.get("core")
     if core and core["default_harness"] not in core["harnesses"]:
         problems.append("core.default_harness: must be listed in core.harnesses")

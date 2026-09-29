@@ -18,7 +18,7 @@ defines Projects or API keys.
 
 The installer writes every setting that applies to the installation's
 [mode](getting-started/install.md#modes), so the file shows each value. Installer flags
-such as `--public-url`, `--core-port` and `--web-port` only seed it. To change a
+listed in [Installation options](getting-started/install-options.md) only seed it. To change a
 setting, edit the file and apply it:
 
 ```sh
@@ -57,7 +57,7 @@ generated files edited by hand.
 `public_url` is the one origin that applications, nodes, sandboxes and self-hosted
 executors use; Core derives the daemon WebSocket URL, the self-hosted `remote_url` and
 each sandbox's connection address from it. With `null`, Core uses
-`http://127.0.0.1:<ports.core>` and only this host can reach it.
+the configured loopback listener origin and only this host can reach it.
 
 You can set or change it at any time with `oac apply`. When nodes, hosted
 sandboxes or self-hosted executors are bound to the current address, `apply` lists
@@ -82,13 +82,14 @@ output or in Core's settings snapshot. Model providers are not process settings;
 | --- | --- | --- | --- | --- | --- | --- |
 | `$schema` | string | none | all | any time | none | Editor hint that points at the installed copy of this schema. Ignored. |
 | `format` | `1` | none | all | fixed | none | Configuration format for this release. Fixed after installation. |
-| `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. Install flag: `--core-only` or `--web-only`. |
-| `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. Install flag: `--native-core`. |
-| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1. Install flag: `--public-url`. |
-| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `oac apply` | core (core, web with native Core) | Loopback port of the Core API. With native Core, Web follows it. Install flag: `--core-port`. |
-| `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `oac apply` | web | Loopback port of Web. Install flag: `--web-port`. |
+| `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. |
+| `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. |
+| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null uses the loopback listener origins. |
+| `host` | string (IPv4 or IPv6 address) | `"127.0.0.1"` | all | `oac apply` | core, web | IP address on which Core and Web listen. PostgreSQL stays on loopback. Non-loopback listeners require an HTTPS public_url. |
+| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `oac apply` | core (core, web with native Core) | Host port of the Core API. With native Core, Web follows it. |
+| `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `oac apply` | web | Host port of Web. |
 | `ports.database` | integer 1024–65535 | none | `all`, `core-only` | `oac apply` | database, core | Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port. |
-| `web.core_url` | string (canonical origin; HTTP only on loopback) | none | `web-only` | `oac apply` | web | Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host. Install flag: `--core-url`. |
+| `web.core_url` | string (canonical origin; HTTP only on loopback) | none | `web-only` | `oac apply` | web | Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host. |
 | `log.level` | `"debug"` \| `"info"` \| `"warn"` \| `"error"` | `"info"` | all | `oac apply` | core, web | Minimum log level of Core and Web. |
 | `log.format` | `"auto"` \| `"text"` \| `"json"` | `"auto"` | all | `oac apply` | core, web | Log format. auto writes text to a terminal and JSON otherwise. |
 | `log.add_source` | boolean | `false` | all | `oac apply` | core, web | Add the source file and line to each log record. |

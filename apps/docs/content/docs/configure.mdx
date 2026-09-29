@@ -21,7 +21,7 @@ defines Projects or API keys.
 
 The installer writes every setting that applies to the installation's
 [mode](/install#modes), so the file shows each value. Installer flags
-such as `--public-url`, `--core-port` and `--web-port` only seed it. To change a
+listed in [Installation options](/install-options) only seed it. To change a
 setting, edit the file and apply it:
 
 ```sh
@@ -60,7 +60,7 @@ generated files edited by hand.
 `public_url` is the one origin that applications, nodes, sandboxes and self-hosted
 executors use; Core derives the daemon WebSocket URL, the self-hosted `remote_url` and
 each sandbox's connection address from it. With `null`, Core uses
-`http://127.0.0.1:<ports.core>` and only this host can reach it.
+the configured loopback listener origin and only this host can reach it.
 
 You can set or change it at any time with `oac apply`. When nodes, hosted
 sandboxes or self-hosted executors are bound to the current address, `apply` lists
@@ -85,13 +85,14 @@ output or in Core's settings snapshot. Model providers are not process settings;
 | --- | --- | --- | --- | --- | --- | --- |
 | `$schema` | string | none | all | any time | none | Editor hint that points at the installed copy of this schema. Ignored. |
 | `format` | `1` | none | all | fixed | none | Configuration format for this release. Fixed after installation. |
-| `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. Install flag: `--core-only` or `--web-only`. |
-| `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. Install flag: `--native-core`. |
-| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null means local access only through http://127.0.0.1. Install flag: `--public-url`. |
-| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `oac apply` | core (core, web with native Core) | Loopback port of the Core API. With native Core, Web follows it. Install flag: `--core-port`. |
-| `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `oac apply` | web | Loopback port of Web. Install flag: `--web-port`. |
+| `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. |
+| `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. |
+| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null uses the loopback listener origins. |
+| `host` | string (IPv4 or IPv6 address) | `"127.0.0.1"` | all | `oac apply` | core, web | IP address on which Core and Web listen. PostgreSQL stays on loopback. Non-loopback listeners require an HTTPS public_url. |
+| `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `oac apply` | core (core, web with native Core) | Host port of the Core API. With native Core, Web follows it. |
+| `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `oac apply` | web | Host port of Web. |
 | `ports.database` | integer 1024–65535 | none | `all`, `core-only` | `oac apply` | database, core | Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port. |
-| `web.core_url` | string (canonical origin; HTTP only on loopback) | none | `web-only` | `oac apply` | web | Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host. Install flag: `--core-url`. |
+| `web.core_url` | string (canonical origin; HTTP only on loopback) | none | `web-only` | `oac apply` | web | Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host. |
 | `log.level` | `"debug"` \| `"info"` \| `"warn"` \| `"error"` | `"info"` | all | `oac apply` | core, web | Minimum log level of Core and Web. |
 | `log.format` | `"auto"` \| `"text"` \| `"json"` | `"auto"` | all | `oac apply` | core, web | Log format. auto writes text to a terminal and JSON otherwise. |
 | `log.add_source` | boolean | `false` | all | `oac apply` | core, web | Add the source file and line to each log record. |
@@ -116,7 +117,7 @@ output or in Core's settings snapshot. Model providers are not process settings;
 
 
 The schema is
-[`deploy/install/config.schema.json`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/deploy/install/config.schema.json); each
+[`deploy/install/config.schema.json`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/deploy/install/config.schema.json); each
 installation keeps a copy in `generated/config.schema.json` for editors. Core serves
 the non-secret settings snapshot, with the path of `config.json` and the apply
 command, at `GET /core/v1/installation`.
@@ -145,7 +146,7 @@ Which harnesses are enabled, and the default one, are process settings
 Exactly one provider serves the deployment: Docker, microsandbox or E2B. The
 deployment specification holds the per-sandbox resources and, for Docker and
 microsandbox, the Runtime release. Web's setup proposes the Standard size from
-[`standard-sizes.json`](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/apps/web/src/features/sandbox/standard-sizes.json) and
+[`standard-sizes.json`](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/apps/web/src/features/sandbox/standard-sizes.json) and
 derives Small and Large from it; the installer applies the bundle's copy of the same
 file. The database owns the saved values.
 
@@ -183,8 +184,8 @@ Current Runtime generation coexistence and ownership-scoped garbage collection
 remain supported. They do not upgrade the installed node program or convert an old
 installation. History stays, and existing Sessions never move between providers.
 See the [nodes guide](/hosted-providers#change-the-sandbox-backend-or-size),
-[operator reference](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-reset)
-and [deployment contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/sandbox-deployment.md).
+[operator reference](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-reset)
+and [deployment contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/sandbox-deployment.md).
 
 ### Node capacity
 
@@ -211,7 +212,7 @@ Session freezes the provider it starts with, so a later change affects only new
 Sessions. Self-hosted Sessions never use it. A hosted or self-hosted Session with no
 provider is refused with 400 `model_provider_required`. See
 [model providers](/quickstart#model-providers) and the
-[model execution contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/model-execution.md#deployment-defaults).
+[model execution contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/model-execution.md#deployment-defaults).
 
 The operator file `AGENTS_API_EXECUTION_OPTIONS_FILE` is retired; see
 [installation version policy](/troubleshooting#installation-version-policy).
@@ -231,7 +232,7 @@ A Web-only installation has only `secrets/core.key`, a copy of its Core's key.
 
 Core reads only its environment. The installer renders `generated/core.env` from
 `config.json`; if you run Core yourself (see
-[Maintainers and advanced deployments](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/docs/maintainers.md)), set these variables. Compose
+[Maintainers and advanced deployments](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/docs/maintainers.md)), set these variables. Compose
 loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose must be
 2.26.0 or newer.
 
@@ -246,7 +247,7 @@ loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose mu
 | `OAC_INSTALLATION_ID` | `state.json`; pinned to the database |
 | `OAC_SETTINGS_FILE` | `generated/settings.json`, the snapshot Core serves at `GET /core/v1/installation`; Core does not act on it |
 | `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching `core.*` settings |
-| `OAC_HISTORY_SETTINGS_FILE` | `generated/runtime-history.json` when `core.runtime_history` is set; see the [history contract](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/contracts/agents-api/runtime-history-api.md) |
+| `OAC_HISTORY_SETTINGS_FILE` | `generated/runtime-history.json` when `core.runtime_history` is set; see the [history contract](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/contracts/agents-api/runtime-history-api.md) |
 | `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
 | `OAC_E2B_STATE_DIR`, `OAC_E2B_PROVIDER_BIN` | The E2B receipt directory and, for native Core, the bundled helper. The E2B key and template live in the database |
 
@@ -268,4 +269,4 @@ paths must be canonical absolute paths without control characters, quotes, backs
 or wildcards. Keep the installation ID and the database together; Core refuses a
 missing installation ID when its database already has a deployment.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/docs/configuration.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/docs/configuration.md)

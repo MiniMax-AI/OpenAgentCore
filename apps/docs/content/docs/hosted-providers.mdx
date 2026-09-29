@@ -10,7 +10,7 @@ With E2B you need no nodes. Self-hosted executors, which applications run for th
 own Sessions, are a different thing; see [Self-hosted executors](/self-hosted-execution).
 
 You add a node by generating a command in Web and pasting it on the host. The
-[operator reference](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/HOSTED-SANDBOX-MANAGER.md) covers the
+[operator reference](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/HOSTED-SANDBOX-MANAGER.md) covers the
 node protocol, manual registration, placement and failure handling.
 
 ## Before you add a node
@@ -59,7 +59,8 @@ node then runs as a user service of a user that an administrator prepared.
 
 The command shows each installation phase as it runs. After Core confirms the
 connection and the Sandbox Provider is ready, it prints a grouped summary with
-status and log commands. Terminal colors are optional (`NO_COLOR=1` disables them);
+status and log commands. Terminal colors are optional (`export NO_COLOR=1` disables them; the generated
+command passes this preference through sudo with `--no-color`);
 redirected output stays plain. Registration tokens are never printed.
 
 This is the command Web generates, with this installation's values:
@@ -70,7 +71,7 @@ printf '\n==> Downloading node installer...\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
 printf '==> Verifying node installer...\n' &&
 printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
+printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
 ```
 
 - It downloads the installer into a private temporary directory, checks its SHA-256,
@@ -107,7 +108,7 @@ printf '\n==> Downloading node installer...\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
 printf '==> Verifying node installer...\n' &&
 printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\n' '<enrollment-token>' | python3 "$d/node-install.pyz" --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
+printf '%s\n' '<enrollment-token>' | python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
 ```
 
 Run it as the non-root user that will run the node; run by root, it installs the
@@ -198,7 +199,7 @@ The installation ID is in the command (`--installation-id`) and on the **System*
 1. In Web, open **Nodes** and choose **Remove node** on the node's page, or
    **Remove** in its list row, then **Confirm removal**. Core refuses while the node
    still holds sandboxes, snapshots or pending cleanup; let them finish, or
-   [archive their Sessions](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-reset)
+   [archive their Sessions](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-reset)
    through the Core API. Removal is permanent: the host can come back only as a new
    node.
 2. Web then shows **Clean up the host** with the uninstall command. Run it on the host:
@@ -209,7 +210,7 @@ The installation ID is in the command (`--installation-id`) and on the **System*
 curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
    printf '==> Verifying node installer...\n' &&
 printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-   $s python3 "$d/node-install.pyz" --uninstall --installation-id '<installation-id>')
+   $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --uninstall --installation-id '<installation-id>')
    ```
 
    For a node installed without sudo, **Installed without sudo?** gives the same command
@@ -303,7 +304,7 @@ files. Shared daemon images remain; a host administrator may remove them only af
 confirming no installation still needs them. Microsandbox image cleanup remains
 scoped to the installation's private native store and verified ownership receipts.
 
-The [operator reference](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-reset)
+The [operator reference](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-reset)
 describes reset and API behavior. Same-team E2B edits have a separate online Core
 API path and do not involve node installation.
 
@@ -316,4 +317,4 @@ convert or delete it. Preserve the old installation, Runtime resources and histo
 provision a fresh node separately through **Add node**. The current installer does
 not adopt historical resources or remove another installation's state.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/2652bcf6df39e411d1932ae1960242b56e9eb24f/docs/getting-started/nodes.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/e4d5a1d30520a967b3a44a257ed1b6c21e388388/docs/getting-started/nodes.md)

@@ -12,6 +12,7 @@ import urllib.error
 import urllib.request
 import uuid
 
+import configuration
 import node_spec
 
 CHOICES = ("docker", "microsandbox", "e2b", "none")
@@ -102,7 +103,7 @@ def selection(bundle, manifest, choice, e2b=None):
 
 def initialize(root, config, state, request_body):
     """Save the selection unless Core already has one; returns Core's deployment."""
-    core = f'http://127.0.0.1:{config["ports"]["core"]}'
+    core = configuration.service_origin(config, "core")
     key = (root / "secrets/core.key").read_text().strip()
     current = request(core, key, "GET", "deployment")
     if current.get("installation_id") != state["installation_id"]:

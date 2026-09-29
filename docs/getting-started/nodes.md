@@ -56,7 +56,8 @@ node then runs as a user service of a user that an administrator prepared.
 
 The command shows each installation phase as it runs. After Core confirms the
 connection and the Sandbox Provider is ready, it prints a grouped summary with
-status and log commands. Terminal colors are optional (`NO_COLOR=1` disables them);
+status and log commands. Terminal colors are optional (`export NO_COLOR=1` disables them; the generated
+command passes this preference through sudo with `--no-color`);
 redirected output stays plain. Registration tokens are never printed.
 
 This is the command Web generates, with this installation's values:
@@ -67,7 +68,7 @@ printf '\n==> Downloading node installer...\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
 printf '==> Verifying node installer...\n' &&
 printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
+printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
 ```
 
 - It downloads the installer into a private temporary directory, checks its SHA-256,
@@ -104,7 +105,7 @@ printf '\n==> Downloading node installer...\n' &&
 curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
 printf '==> Verifying node installer...\n' &&
 printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\n' '<enrollment-token>' | python3 "$d/node-install.pyz" --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
+printf '%s\n' '<enrollment-token>' | python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
 ```
 
 Run it as the non-root user that will run the node; run by root, it installs the
@@ -206,7 +207,7 @@ The installation ID is in the command (`--installation-id`) and on the **System*
 curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
    printf '==> Verifying node installer...\n' &&
 printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-   $s python3 "$d/node-install.pyz" --uninstall --installation-id '<installation-id>')
+   $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --uninstall --installation-id '<installation-id>')
    ```
 
    For a node installed without sudo, **Installed without sudo?** gives the same command
