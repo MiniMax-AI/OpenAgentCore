@@ -80,12 +80,8 @@
 .sandbox-host-requirements li { display: list-item; }
 .sandbox-host-requirements li .sandbox-copy-command { margin-top: 4px; }
 .sandbox-host-requirements-note { display: grid; gap: 4px; padding: 8px 12px 10px; }
-/* Without sudo: the same list style, inside the disclosure's own padding, with the command after it. */
-.sandbox-host-requirements + .sandbox-no-sudo { margin-top: -4px; }
-.sandbox-no-sudo-body { display: grid; gap: 8px; padding: 0 12px 12px; }
-.sandbox-no-sudo-body > p { font-size: 12.5px; }
-.sandbox-host-requirements .sandbox-no-sudo-body ul { padding: 0 0 0 18px; }
-.sandbox-no-sudo-body .sandbox-host-requirements-note { padding: 0; }
+.sandbox-cleanup-details { display: grid; gap: 8px; padding: 0 12px 12px; }
+.sandbox-cleanup-details > p { font-size: 12.5px; }
 .sandbox-add-node .sandbox-host-requirements-note p { font-size: 12px; }
 .sandbox-add-node .sandbox-cleanup-note, .sandbox-add-node .sandbox-command-note { font-size: 12px; }
 .sandbox-copy-command { display: grid; justify-items: start; gap: 2px; max-width: 100%; }

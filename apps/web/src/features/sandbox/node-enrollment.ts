@@ -12,8 +12,6 @@ export const NODE_READY_WAIT_MS = 60_000;
 
 export interface HostPrerequisite {
   label: MessageKey;
-  /** A root command that prepares the host; NODE_USER stands for the node's user (`<user>` would be shell redirection). */
-  command?: string;
 }
 
 /**
@@ -45,7 +43,7 @@ export interface HostPrerequisite {
 export function hostRequirements(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
   return [
     { label: "Linux amd64 with systemd; Python 3.9+, curl and sha256sum; root or sudo" },
-    { label: "SELinux is not enforcing (otherwise use the no-sudo command)" },
+    { label: "SELinux is not enforcing" },
     { label: "In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused." },
     provider === "docker"
       ? { label: "Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)" }
@@ -54,36 +52,6 @@ export function hostRequirements(provider: "docker" | "microsandbox", sized: boo
     { label: "Reaches {{core}}, as do its sandboxes" },
   ];
 }
-
-/**
- * What the node's own user needs besides the host requirements when the command
- * runs without sudo, so the node is that user's systemd service (node_install.py
- * `preflight` and `install`):
- * - a non-root user, with Docker's socket or read/write /dev/kvm through its group;
- * - lingering. It starts the user's systemd manager, whose services, the node's
- *   included, keep the groups it started with; so the group change comes first,
- *   or that manager is restarted after it (USER_MANAGER_RESTART). A shell open
- *   before the change lacks the group too, so the user signs in again;
- * - the user's systemd manager (`systemctl --user`): from an SSH session, or from
- *   su or sudo -iu, which leave no session bus, through the bus lingering keeps
- *   running (`user_bus`);
- * - microsandbox: a home short enough for ~/.oac/m/<12 hex> to fit in 48 bytes
- *   (`micro_home`): at most 48 - len("/.oac/m/") - 12 = 28 filesystem-encoded bytes.
- */
-export function userModePrerequisites(provider: "docker" | "microsandbox"): HostPrerequisite[] {
-  return [
-    { label: "A non-root user to run the node (NODE_USER below)" },
-    provider === "docker"
-      ? { label: "Docker at /var/run/docker.sock for that user, enforcing CPU and memory limits", command: "sudo usermod -aG docker NODE_USER" }
-      : { label: "Read and write access to /dev/kvm for that user", command: "sudo usermod -aG kvm NODE_USER" },
-    { label: "systemd lingering for that user, enabled after the group change", command: "sudo loginctl enable-linger NODE_USER" },
-    ...(provider === "microsandbox" ? [{ label: "A home directory path of 28 bytes or less after filesystem encoding, such as /home/oac" } satisfies HostPrerequisite] : []),
-    { label: "Run the command as that user: over SSH, or from a root shell with", command: "su - NODE_USER" },
-  ];
-}
-
-/** Restarts a user's systemd manager, so its services pick up a group change. */
-export const USER_MANAGER_RESTART = "sudo systemctl restart user@$(id -u NODE_USER).service";
 
 /** Time left as m:ss (h:mm:ss from an hour), rounded up so it reads 0:00 only once expired. */
 export function formatCountdown(milliseconds: number): string {

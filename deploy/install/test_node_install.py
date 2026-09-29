@@ -1,4 +1,4 @@
-"""Exercise node installation without running providers or changing user services."""
+"""Exercise node installation without running providers or changing host services."""
 import argparse
 import contextlib
 import copy
@@ -163,7 +163,7 @@ class NodeInstallTests(unittest.TestCase):
             return subprocess.CompletedProcess(arguments, 1, "", "")
 
     def install(self):
-        installer.install(self.args, "synthetic-once-token")
+        installer.prepare_service_node(self.args, "synthetic-once-token", installer.node_generations.helper_archive(self.args, installer))
 
     def install_current_program_with_retained_runtime(self, provider):
         self.args.provider = provider
@@ -435,13 +435,14 @@ class NodeInstallTests(unittest.TestCase):
         self.assertEqual(helper.read_bytes(), self.payloads[installer.MICRO[0]])
 
     def test_docker_installs_matched_payload_registers_and_starts_persistent_service(self):
-        self.install()
+        system = self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
         config = json.loads((self.root / "provider.json").read_text())
         self.assertEqual(config["docker"]["image"], self.manifest["images"]["runtime"])
         self.assertEqual(config["core_url"], self.args.core_url + "/api/v1")
         self.assertEqual(config["installation_id"], self.args.installation_id)
         self.assertFalse((self.root / installer.MICRO[0]).exists())
-        unit = (self.root / ("oac-node-" + self.args.installation_id + ".service")).read_text()
+        unit = (system / "units" / ("oac-node-" + self.args.installation_id + ".service")).read_text()
         self.assertIn(" run --config ", unit)
         self.assertIn("KillMode=process", unit)
         # Keeps retrying while Core is down; stops once Core rejects the removed node's credential.
@@ -498,13 +499,14 @@ class NodeInstallTests(unittest.TestCase):
         self.assertTrue(any("--tag" in call and self.manifest["runtime_ref"] in call for call, _ in self.calls))
 
     def test_repeat_preserves_registration_and_recovers_service_start_failure(self):
+        system = self.sudo_host()
         self.fail_service = True
         with self.assertRaisesRegex(installer.InstallError, "Cannot start"):
-            self.install()
+            installer.install_system(self.args, "synthetic-once-token")
         saved = (self.root / "registered.json").read_bytes()
         self.calls.clear()
         self.fail_service = False
-        self.install()
+        installer.install_system(self.args, "synthetic-once-token")
         self.assertEqual((self.root / "registered.json").read_bytes(), saved)
         self.assertFalse(any("register" in call for call, _ in self.calls))
         self.assertFalse(any("load" in call for call, _ in self.calls))
@@ -652,9 +654,9 @@ class NodeInstallTests(unittest.TestCase):
 
     def test_no_color_flag_survives_sudo_environment_reset(self):
         with mock.patch.dict(os.environ, {}, clear=True), \
-                mock.patch.object(installer.os, "geteuid", return_value=1000), \
+                mock.patch.object(installer.os, "geteuid", return_value=0), \
                 mock.patch.object(installer, "read_token", return_value="synthetic-once-token"), \
-                mock.patch.object(installer, "install") as install:
+                mock.patch.object(installer, "install_system") as install:
             installer.main(["--no-color", "--source-url", "https://core.example", "--core-url", "https://core.example",
                             "--installation-id", self.args.installation_id, "--enrollment-token-stdin"])
             self.assertIn("NO_COLOR", os.environ)
@@ -665,33 +667,30 @@ class NodeInstallTests(unittest.TestCase):
             with self.subTest(uid=uid), mock.patch.dict(os.environ, {"SUDO_UID": uid}):
                 stream = io.StringIO()
                 with contextlib.redirect_stdout(stream):
-                    installer.node_output.summary(self.root, self.args, "oac-node-example.service", "oac-node", system=True)
+                    installer.node_output.summary(self.root, self.args, "oac-node-example.service", "oac-node")
                 self.assertIn("  Status: " + prefix + "systemctl status oac-node-example.service", stream.getvalue())
                 self.assertIn("  Logs: " + prefix + "journalctl -u oac-node-example.service -f", stream.getvalue())
 
     def test_completion_summary_follows_readiness_and_hides_enrollment_token(self):
-        for system in (False, True):
-            with self.subTest(system=system):
-                if system:
-                    self.sudo_host()
-                stream = io.StringIO()
-                action = installer.install_system if system else installer.install
-                with contextlib.redirect_stdout(stream), mock.patch.object(installer, "wait_ready") as ready:
-                    ready.side_effect = installer.InstallError("fixture readiness timeout")
-                    with self.assertRaisesRegex(installer.InstallError, "fixture readiness timeout"):
-                        action(self.args, "synthetic-once-token")
-                    self.assertNotIn("Node installation complete.", stream.getvalue())
-                    ready.side_effect = None
-                    action(self.args, "")
-                text = stream.getvalue()
-                self.assertIn("\nStatus\n  Core connection: connected\n  Sandbox Provider: Docker (ready)\n", text)
-                self.assertIn("\nNode\n", text)
-                self.assertIn("\nManage\n", text)
-                scope = "" if system else " --user"
-                self.assertIn("  Status: systemctl" + scope + " status oac-node-", text)
-                self.assertIn("  Logs: journalctl" + scope + " -u oac-node-", text)
-                self.assertNotIn("synthetic-once-token", text)
-                self.assertNotIn("\033[", text)
+        self.sudo_host()
+        stream = io.StringIO()
+        action = installer.install_system
+        with contextlib.redirect_stdout(stream), mock.patch.object(installer, "wait_ready") as ready:
+            ready.side_effect = installer.InstallError("fixture readiness timeout")
+            with self.assertRaisesRegex(installer.InstallError, "fixture readiness timeout"):
+                action(self.args, "synthetic-once-token")
+            self.assertNotIn("Node installation complete.", stream.getvalue())
+            ready.side_effect = None
+            action(self.args, "")
+        text = stream.getvalue()
+        self.assertIn("\nStatus\n  Core connection: connected\n  Sandbox Provider: Docker (ready)\n", text)
+        self.assertIn("\nNode\n", text)
+        self.assertIn("\nManage\n", text)
+        scope = ""
+        self.assertIn("  Status: systemctl" + scope + " status oac-node-", text)
+        self.assertIn("  Logs: journalctl" + scope + " -u oac-node-", text)
+        self.assertNotIn("synthetic-once-token", text)
+        self.assertNotIn("\033[", text)
 
     def test_sudo_mode_prepares_the_host_and_reruns_without_changes(self):
         system = self.sudo_host()
@@ -745,15 +744,17 @@ class NodeInstallTests(unittest.TestCase):
         self.assertEqual((self.root / "generation-preparer.pyz").read_bytes(), b"trusted executed installer snapshot")
         self.assertTrue((self.root / "registered.json").is_file())
 
-    def test_no_sudo_installs_can_share_the_host_lock_root_created(self):
+    def test_host_lock_is_private_and_exclusive(self):
         locks = self.home / "run"
         locks.mkdir()
         previous = os.umask(0o077)  # As the Web command sets it.
         self.addCleanup(os.umask, previous)
         with mock.patch.object(installer, "SYSTEM_LOCKS", locks), mock.patch.object(installer.os, "geteuid", return_value=0):
             with installer.host_lock():
-                pass
-        self.assertEqual(stat.S_IMODE((locks / "oac-node.lock").stat().st_mode), 0o644)
+                with (locks / "oac-node.lock").open() as other:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.assertEqual(stat.S_IMODE((locks / "oac-node.lock").stat().st_mode), 0o600)
 
     def test_sudo_mode_refusals_change_nothing(self):
         foreign = SimpleNamespace(pw_name="oac-node", pw_uid=4242, pw_gid=4242, pw_dir="/home/oac-node", pw_shell="/bin/bash")
@@ -957,11 +958,33 @@ class NodeInstallTests(unittest.TestCase):
         self.assertTrue((victim / "nodes" / self.args.installation_id / "registered.json").exists())
         self.assertTrue((system / "units" / ("oac-node-" + self.args.installation_id + ".service")).exists())
 
+    def test_non_root_install_and_uninstall_refuse_before_input_or_mutation(self):
+        base = ["--installation-id", self.args.installation_id]
+        for flags in ([], ["--uninstall"], ["--uninstall", "--force"]):
+            with self.subTest(flags=flags), mock.patch.object(installer.os, "geteuid", return_value=1000), \
+                    mock.patch.object(installer, "read_token") as token, \
+                    mock.patch.object(installer, "install_system") as install, \
+                    mock.patch.object(installer, "uninstall_system") as uninstall:
+                with self.assertRaisesRegex(installer.InstallError, "require root.*sudo"):
+                    installer.main(base + flags)
+                token.assert_not_called()
+                install.assert_not_called()
+                uninstall.assert_not_called()
+                self.assertFalse(self.root.exists())
+
+    def test_retained_generation_actions_still_run_as_service_account(self):
+        for action in ("prepare", "collect"):
+            with self.subTest(action=action), mock.patch.object(installer.os, "geteuid", return_value=1000), \
+                    mock.patch.object(installer.node_generations, action) as helper:
+                installer.main(["--installation-id", self.args.installation_id, "--generation-action", action,
+                                "--generation", "1", "--specification-digest", "a" * 64])
+                helper.assert_called_once()
+
     def test_token_comes_on_standard_input_only(self):
         arguments = ["--source-url", self.args.source_url, "--core-url", self.args.core_url, "--installation-id",
                      self.args.installation_id, "--enrollment-token-stdin"]
-        with mock.patch.object(installer, "install") as install, mock.patch.object(installer.sys, "stdin", io.StringIO("synthetic-once-token\n")), \
-                mock.patch.object(installer.os, "geteuid", return_value=1000):
+        with mock.patch.object(installer, "install_system") as install, mock.patch.object(installer.sys, "stdin", io.StringIO("synthetic-once-token\n")), \
+                mock.patch.object(installer.os, "geteuid", return_value=0):
             installer.main(arguments)
         self.assertEqual(install.call_args.args[1], "synthetic-once-token")
 
@@ -973,24 +996,12 @@ class NodeInstallTests(unittest.TestCase):
                 errors = io.StringIO()
                 with mock.patch.dict(os.environ, {"PARSAR_NODE_ENROLLMENT_TOKEN": "synthetic-once-token"}), \
                         mock.patch.object(installer.os, "geteuid", return_value=euid), mock.patch.object(installer.sys, "stderr", errors), \
-                        mock.patch.multiple(installer, install=mock.DEFAULT, install_system=mock.DEFAULT, uninstall_user=mock.DEFAULT,
-                                            uninstall_system=mock.DEFAULT) as steps, self.assertRaises(SystemExit):
+                        mock.patch.multiple(installer, install_system=mock.DEFAULT, uninstall_system=mock.DEFAULT) as steps, self.assertRaises(SystemExit):
                     installer.main(arguments)
                 self.assertEqual(errors.getvalue().splitlines(), ["PARSAR_NODE_ENROLLMENT_TOKEN is retired: pass the enrollment "
                                                                   "token on standard input with --enrollment-token-stdin."])
                 self.assertFalse(any(step.called for step in steps.values()))
 
-    def test_user_manager_bus_is_found_without_a_login_session(self):
-        runtime = self.home / "run-user"
-        (runtime / str(os.getuid())).mkdir(parents=True)
-        with mock.patch.object(installer, "USER_RUNTIME", runtime), mock.patch.dict(os.environ, {}, clear=True):
-            with self.assertRaisesRegex(installer.InstallError, "enable-linger"):
-                installer.user_bus()
-            bus = socket.socket(socket.AF_UNIX)
-            self.addCleanup(bus.close)
-            bus.bind(str(runtime / str(os.getuid()) / "bus"))
-            installer.user_bus()
-            self.assertEqual(os.environ["DBUS_SESSION_BUS_ADDRESS"], "unix:path=" + str(runtime / str(os.getuid()) / "bus"))
 
     def test_offline_bundle_uses_same_bootstrap_and_verified_artifacts(self):
         bundle = self.home / "bundle"
@@ -1034,18 +1045,15 @@ class NodeInstallTests(unittest.TestCase):
 
 
 class NodePrerequisiteTests(unittest.TestCase):
-    def test_preflight_rejects_missing_linger_or_kvm_before_downloads(self):
+    def test_preflight_rejects_missing_kvm_before_downloads(self):
         with mock.patch.object(installer.platform, "system", return_value="Linux"), \
-             mock.patch.object(installer.platform, "machine", return_value="x86_64"), \
-             mock.patch.object(installer.os, "getuid", return_value=1000), \
-             mock.patch.object(installer, "checked", return_value="no"), \
-             mock.patch.object(installer, "fetch") as fetch:
-            with self.assertRaisesRegex(installer.InstallError, "lingering"):
-                installer.preflight("docker")
+                mock.patch.object(installer.platform, "machine", return_value="x86_64"), \
+                mock.patch.object(installer.os, "getuid", return_value=1000), \
+                mock.patch.object(installer.os, "access", return_value=False), \
+                mock.patch.object(installer, "fetch") as fetch:
+            with self.assertRaisesRegex(installer.InstallError, "/dev/kvm"):
+                installer.preflight("microsandbox")
             fetch.assert_not_called()
-            with mock.patch.object(installer, "checked", return_value="yes"), mock.patch.object(installer.os, "access", return_value=False):
-                with self.assertRaisesRegex(installer.InstallError, "/dev/kvm"):
-                    installer.preflight("microsandbox")
 
     def test_microsandbox_short_home_is_stable_and_rejects_long_user_home(self):
         with mock.patch.object(installer.Path, "home", return_value=Path("/home/node")):

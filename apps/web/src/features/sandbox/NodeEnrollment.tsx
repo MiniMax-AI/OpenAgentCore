@@ -15,8 +15,8 @@ import { checklistOpenFor, modelStep, nextStepAfterNode } from "../overview/gett
 import { harnessesQuery } from "../system/harness-queries";
 import { nodeSourceUrl } from "./core-origin";
 import { nodeFilesAvailable, type SandboxConsoleConfig } from "./console-config";
-import { nodeInstallCommand, nodeLogCommand, type NodeInstallMode } from "./enrollment-command";
-import { CommandBlock, CopyCommand, HostRequirements, NoSudoGuide } from "./node-commands";
+import { nodeInstallCommand, nodeLogCommand } from "./enrollment-command";
+import { CommandBlock, CopyCommand, HostRequirements } from "./node-commands";
 import { enrolledNode, enrollmentProgress, formatCountdown, progressSteps, type StepState } from "./node-enrollment";
 import { sandboxConsoleConfigQuery } from "./sandbox-queries";
 
@@ -40,9 +40,8 @@ const DEFAULT_RETAINED = "8";
  * sandboxes, so only it asks for a retained limit; Docker retains exactly the
  * sandboxes it runs at once. The command downloads the installer from the
  * installation's public URL, never the browser's address, and runs it with
- * sudo, which installs the node as a system service; a disclosure offers the
- * same command without sudo, which installs a user service, and the log hint
- * follows the command last copied. No command is issued until the installation
+ * sudo (or directly as root), which installs the node as a system service.
+ * The log hint names that system service. No command is issued until the installation
  * is read: one whose public URL other machines can't use (loopback, as
  * `local_only` says, or not HTTPS), an unreadable one, or a console that
  * reports no node files for the deployment's provider (`node_artifacts`) says
@@ -80,9 +79,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const [error, setError] = useState<unknown>(null);
   const [now, setNow] = useState(Date.now);
   const [requirementsOpen, setRequirementsOpen] = useState(() => !requirementsSeen());
-  const [noSudoOpen, setNoSudoOpen] = useState(false);
   // The command last copied, so the log hint names that one's service.
-  const [copiedMode, setCopiedMode] = useState<NodeInstallMode>("sudo");
   const queryClient = useQueryClient();
   const installation = useQuery(installationQuery);
   // Keep the completed read's start time paired with its data: query notifications can render later.
@@ -138,9 +135,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const lapsed = Boolean(enrollment && expiresAt <= now);
   // Expired only once a read begun after the expiry found no node for the command.
   const expired = lapsed && fresh && checked !== null && checked.startedAt >= expiresAt && checked.nodes === nodes;
-  const commandFor = (mode: NodeInstallMode) => enrollment && provider && available && publicUrl && (registered || !expired) && !ready
-    ? nodeInstallCommand({ token: enrollment.token, coreUrl: publicUrl, sourceUrl: publicUrl, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256, mode }) : "";
-  const command = commandFor("sudo");
+  const command = enrollment && provider && available && publicUrl && (registered || !expired) && !ready
+    ? nodeInstallCommand({ token: enrollment.token, coreUrl: publicUrl, sourceUrl: publicUrl, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256 }) : "";
   const nodeId = node?.id ?? null;
   const polling = open && enrollment !== null && !ready && (registered || !expired);
   const check = useCallback(async () => {
@@ -193,7 +189,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     // A connected node ends the command; otherwise it waits here for the next opening.
     if (ready) { setEnrollment(null); setAppeared(null); }
     // The limits, and which command was copied, stay only with an unfinished flow: a command still waiting for its node.
-    if (!enrollment || ready) { setActive(DEFAULT_ACTIVE); setRetained(DEFAULT_RETAINED); forgetMode(); }
+    if (!enrollment || ready) { setActive(DEFAULT_ACTIVE); setRetained(DEFAULT_RETAINED); }
     onClose();
   }
   /**
@@ -203,11 +199,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
    */
   function changeLimits() {
     generation.current++;
-    setEnrollment(null); setAppeared(null); setError(null); forgetMode();
-  }
-  /** A flow that ends or starts over forgets which command was copied, and folds the no-sudo command away. */
-  function forgetMode() {
-    setCopiedMode("sudo"); setNoSudoOpen(false);
+    setEnrollment(null); setAppeared(null); setError(null);
   }
   async function generate() {
     if (request.current || !fresh || !available || blocker || !limitsReady || activeLimit === null || retainedLimit === null) return;
@@ -228,7 +220,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       }
       const result = await client.createEnrollment({ signal: controller.signal }, capacity);
       if (!controller.signal.aborted) {
-        setEnrollment({ token: result.token, expires_at: result.expires_at, enrollment_id: result.enrollment_id }); setAppeared(null); setNow(Date.now()); forgetMode();
+        setEnrollment({ token: result.token, expires_at: result.expires_at, enrollment_id: result.enrollment_id }); setAppeared(null); setNow(Date.now());
         // Seen with the limits; the command comes first now.
         setRequirementsOpen(false);
       }
@@ -245,7 +237,6 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   };
   const requirements = provider ? <>
     <HostRequirements provider={provider} sized={Boolean(size)} values={values} open={requirementsOpen} onToggle={setRequirementsOpen} />
-    <NoSudoGuide provider={provider} values={values} command={commandFor("user")} open={noSudoOpen} onToggle={setNoSudoOpen} onCopy={() => setCopiedMode("user")} />
   </> : null;
   const limitsForm = `${id}-limits`;
   const footer = !available || (!enrollment && blocker) ? undefined
@@ -299,7 +290,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       ) : <>
         {/* Once used, the command only recovers its own node: running it on another host fails. */}
         {command ? <p>{registered && node ? t("Rerun only on {{name}} if asked", { name: node.name }) : t("Run on the host you want to add.")}</p> : null}
-        {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command")} autoFocus onCopy={() => setCopiedMode("sudo")}
+        {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command")} autoFocus
           extra={!registered ? <span className="sandbox-command-expiry" role="timer" title={new Date(enrollment.expires_at).toLocaleString(locale)}>{t("Expires in {{time}}", { time: formatCountdown(Date.parse(enrollment.expires_at) - now) })}</span> : null} /> : null}
         {/* The installer keeps partial downloads and exits 130 on Ctrl-C; the token lasts until the countdown ends. */}
         {command ? <p className="sandbox-command-note">{t("If the command is interrupted or the download stalls, run the same command again: the download resumes.")}</p> : null}
@@ -320,9 +311,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         {problem && !ready ? <div className="sandbox-enrollment-problem" role="alert">
           <p><strong>{problem.label}</strong> {problem.advice}{problem.help ? <HelpTip>{problem.help}</HelpTip> : null}</p>
           <div className="sandbox-log-hint">
-            <span>{t("Check the log on the host:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id, copiedMode)} />
-            {/* Run by root, the no-sudo command installs the system service after all. */}
-            {copiedMode === "user" ? <><span>{t("If root ran it, it is a system service:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id, "sudo")} /></> : null}
+            <span>{t("Check the log on the host:")}</span><CopyCommand value={nodeLogCommand(deployment.installation_id)} />
           </div>
         </div> : null}
         {deployment.reset ? <p role="status">{t("Node enrollment is paused while reset is in progress.")}</p> : !fresh ? <p>{t("Connection status unavailable. Refresh to check your node.")}</p> : null}

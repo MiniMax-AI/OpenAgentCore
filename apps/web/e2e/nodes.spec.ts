@@ -4,7 +4,7 @@ import { expectManagementBoundary, failNext, openConsole, resetFixture, setNode,
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
-test("adds a node: host requirements, a sudo command and one without, a countdown, the same command after closing, a new one after expiry, then its own node's registration", async ({ page, request }) => {
+test("adds a node: host requirements, a root/sudo command, a countdown, the same command after closing, a new one after expiry, then its own node's registration", async ({ page, request }) => {
   await page.clock.install();
   // Core counts a token's ten minutes on its own clock; the page's clock stands in for it, so fast-forwarding expires a command.
   await page.route("**/core/v1/sandbox/enrollment-tokens", async (route) => {
@@ -17,14 +17,15 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   const add = page.getByRole("dialog", { name: "Add node" });
   // What a Docker host needs for the default command, which installs the node with sudo.
   await expect(add.getByText("Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)")).toBeVisible();
-  await expect(add.getByText("SELinux is not enforcing (otherwise use the no-sudo command)")).toBeVisible();
+  await expect(add.getByText("SELinux is not enforcing")).toBeVisible();
   await expect(add.getByText("In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused.")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
   await expect(add.getByText("Reaches https://core.example.com, as do its sandboxes")).toBeVisible();
   await expect(add.getByText("oac-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
   await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
-  // Preparing a user instead of using sudo waits behind its disclosure.
-  await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeHidden();
+  // Node installation only offers a system service; there is no user-mode alternative.
+  await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
+  await expect(add.getByLabel("One-time enrollment command without sudo", { exact: true })).toHaveCount(0);
   await add.getByLabel("Sandboxes at once").fill("3");
   const tokenRequest = () => page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
   const issued = tokenRequest();
@@ -35,7 +36,7 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   await expect(field).toHaveValue(/enroll_fixture_/);
   // The token goes on stdin to the checked installer, run with sudo unless the shell is root.
   await expect(field).toHaveValue(/^ \(umask 077;.*\|\| s=sudo\n/);
-  await expect(field).toHaveValue(/\| \$s python3 "\$d\/node-install\.pyz" --enrollment-token-stdin /);
+  await expect(field).toHaveValue(/\| \$s python3 "\$d\/node-install\.pyz" \$\{NO_COLOR\+--no-color\} --enrollment-token-stdin /);
   // It downloads from, and names as its source, the public URL, not the loopback address this browser uses.
   await expect(field).toHaveValue(/curl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' /);
   await expect(field).toHaveValue(/ --source-url 'https:\/\/core\.example\.com' --core-url 'https:\/\/core\.example\.com' /);
@@ -91,17 +92,7 @@ test("adds a node: host requirements, a sudo command and one without, a countdow
   const problem = add.getByRole("alert").filter({ hasText: "Check the log on the host:" });
   await expect(problem).toContainText("Not connected yet");
   await expect(problem).toContainText("sudo journalctl -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
-  // Without sudo: what that user needs and the same command without sudo. Once that one is copied, the log
-  // hint names its user service, and the system service in case root ran it.
-  await add.getByText("No sudo on this host?").click();
-  await expect(add.getByText("sudo usermod -aG docker NODE_USER")).toBeVisible();
-  const userCommand = add.getByLabel("One-time enrollment command without sudo", { exact: true });
-  await expect(userCommand).toHaveValue(/EXIT\ncurl/);
-  await expect(userCommand).toHaveValue(/\| python3 "\$d\/node-install\.pyz" --enrollment-token-stdin /);
-  await expect(problem).not.toContainText("journalctl --user");
-  await add.getByRole("button", { name: "Copy command without sudo" }).click();
-  await expect(problem).toContainText("journalctl --user -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
-  await expect(problem).toContainText("If root ran it, it is a system service:sudo journalctl -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
+  await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
   // Connected, it reports why Docker isn't ready; once ready, the node is connected.
   await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
   await expect(problem).toContainText("Docker limits unsupported");
@@ -162,11 +153,11 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await confirm.getByRole("button", { name: "Confirm removal" }).click();
   await expect(confirm).toBeHidden();
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("edge-03");
-  // The host still runs the node until it is uninstalled there: with sudo, or as the user that installed it.
+  // Removing the Core record leaves the system service for root/sudo to uninstall on its host.
   const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
-  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\ncurl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' [^]*\n\$s python3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
-  await cleanup.getByText("Installed without sudo?").click();
-  await expect(cleanup.getByLabel("Uninstall command without sudo", { exact: true })).toHaveValue(/\npython3 "\$d\/node-install\.pyz" --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\nprintf '\\n==> Downloading node installer\.\.\.\\n' &&\ncurl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' [^]*\n\$s python3 "\$d\/node-install\.pyz" \$\{NO_COLOR\+--no-color\} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  await expect(cleanup.getByText("Installed without sudo?")).toHaveCount(0);
+  await expect(cleanup.getByLabel("Uninstall command without sudo", { exact: true })).toHaveCount(0);
   // Nothing to force for a node on the current address; closing leaves focus on the page, as the row is gone.
   await expect(cleanup.getByText("Old Core address gone?")).toHaveCount(0);
   await cleanup.getByRole("button", { name: "Done" }).click();
@@ -208,8 +199,7 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   // Own machines continue straight to adding the first node, at its limits: no command is issued yet.
   await expect(page.getByRole("dialog", { name: "Add node" }).getByLabel("Sandboxes at once")).toBeVisible();
   const add = page.getByRole("dialog", { name: "Add node" });
-  await add.getByText("No sudo on this host?").click();
-  await expect(add.getByText("A home directory path of 28 bytes or less after filesystem encoding, such as /home/oac")).toBeVisible();
+  await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
   // None is requested within a second of opening, and Core saw only the deployment write.
   const tokenRequested = await page.waitForRequest((sent) => sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"), { timeout: 1000 }).then(() => true, () => false);
   expect(tokenRequested).toBe(false);

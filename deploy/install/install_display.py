@@ -26,5 +26,3 @@ def error(message):
 def paragraph(message):
     print(textwrap.fill(message, width=88, initial_indent="  ", subsequent_indent="  ",
                         break_long_words=False, break_on_hyphens=False))
-
-

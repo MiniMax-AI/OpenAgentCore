@@ -29,6 +29,7 @@ class LegacyNodeTests(unittest.TestCase):
                                 SYSTEM_RECORDS=self.root / "new-records", SYSTEM_UNITS=self.root / "units",
                                 DOCKER_SOCKET=self.root / "docker.sock"),
             mock.patch.object(installer.Path, "home", return_value=self.home),
+            mock.patch.object(installer, "host_checks"),
             mock.patch.object(installer.os, "geteuid", return_value=1000),
             mock.patch.object(installer.shutil, "which", side_effect=lambda tool: "/usr/bin/" + tool),
             mock.patch.object(installer.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "not-found\n", "")),
@@ -40,7 +41,7 @@ class LegacyNodeTests(unittest.TestCase):
     def assert_refusal(self):
         with mock.patch.object(installer, "open_node") as opened, mock.patch.object(installer, "host_lock") as lock:
             with self.assertRaisesRegex(installer.InstallError, "before the OpenAgentCore rename.*Nothing was changed") as failure:
-                installer.install(self.args, "private-token")
+                installer.install_system(self.args, "private-token")
             self.assertIn(self.args.installation_id, str(failure.exception))
             self.assertNotIn("private-token", str(failure.exception))
             opened.assert_not_called()
@@ -74,7 +75,7 @@ class LegacyNodeTests(unittest.TestCase):
         (self.home / ".parsar").symlink_to(target, target_is_directory=True)
         with mock.patch.object(installer, "open_node") as opened:
             with self.assertRaisesRegex(installer.InstallError, "Cannot inspect possible legacy node state.*Nothing was changed"):
-                installer.install(self.args, "private-token")
+                installer.install_system(self.args, "private-token")
             opened.assert_not_called()
         self.assertEqual(list(target.iterdir()), [])
 

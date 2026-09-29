@@ -47,10 +47,12 @@ image, registers the node, starts its service and waits until Core reports the n
 connected and ready. It never installs software, and it stops with a one-line hint
 before changing anything when a prerequisite is missing.
 
-Web's command runs the installer with sudo: it prepares the host itself, creating a
-`oac-node` service user and a system service. On a host where you have no sudo, the
-dialog's **No sudo on this host?** section gives the same command without sudo; the
-node then runs as a user service of a user that an administrator prepared.
+Node installation and removal require root. Web's command uses `sudo` unless the
+shell is already root. The installer creates an `oac-node` service user and a
+system service; the node runs as that service user, not as root. Direct execution
+as an ordinary user is rejected before reading the enrollment token or changing
+the host. This requirement applies to Sandbox Provider nodes, not the native
+self-hosted daemon installer.
 
 ### The command
 
@@ -83,8 +85,7 @@ printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" ${NO_COLOR
 The host needs:
 
 - Linux amd64 with systemd; Python 3.9+, `curl` and `sha256sum`; root or sudo.
-- SELinux not enforcing. Sudo mode refuses an enforcing host; use the no-sudo command
-  with a prepared user there.
+- SELinux not enforcing. Hosts with enforcing SELinux are unsupported by this installer.
 - One Core per host: a host already running a sudo-mode node for another Core is
   refused.
 - Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the
@@ -95,39 +96,7 @@ The host needs:
   disk for the Runtime image.
 - HTTPS access to the console and Core at the public URL; sandboxes reach Core too.
 
-### Without sudo
-
-The no-sudo command is the same without `sudo`:
-
-```sh
- (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT
-printf '\n==> Downloading node installer...\n' &&
-curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
-printf '==> Verifying node installer...\n' &&
-printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\n' '<enrollment-token>' | python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
-```
-
-Run it as the non-root user that will run the node; run by root, it installs the
-sudo-mode service instead. An administrator prepares that user once:
-
-- Docker: `sudo usermod -aG docker NODE_USER`, with Docker enforcing CPU and memory
-  limits. microsandbox: `sudo usermod -aG kvm NODE_USER` for read and write access to
-  `/dev/kvm`.
-- Lingering, after the group change: `sudo loginctl enable-linger NODE_USER`. After a
-  group change, sign in again as that user; if the user's systemd manager was already
-  running, restart it (`sudo systemctl restart user@$(id -u NODE_USER).service`) or
-  reboot.
-- microsandbox only: a home directory of at most 28 bytes, such as `/home/oac`,
-  because microsandbox's socket paths are short.
-- The host requirements above, except root, SELinux and one Core per host.
-
-`NODE_USER` stands for that user, as in the dialog's commands. Run the command as that
-user over SSH, or from a root shell with `su - NODE_USER`. The
-node's state then lives in `~/.oac/nodes/<installation-id>/` of that user. The
-Docker group makes this user root-equivalent on the host too.
-
-## What sudo mode sets up
+## What the installer sets up
 
 | Item | Detail |
 | --- | --- |
@@ -146,13 +115,12 @@ accounts.
 
 **Docker mode is root-equivalent.** Membership in the `docker` group lets
 `oac-node`, and so anything that controls the node, act as root on the host. This
-is inherent to running sandboxes on Docker and equally true without sudo. Add Docker
+is inherent to running sandboxes on Docker. Add Docker
 nodes only on hosts dedicated to sandboxes. microsandbox nodes need only the `kvm`
 group.
 
-**One Core per host.** All sudo-mode nodes share the `oac-node` account, so a host
-serves one Core in sudo mode; a command from a second Core is refused. A host also
-can't run the same installation's node both with and without sudo.
+**One Core per host.** Nodes share the `oac-node` account, so a host serves one
+Core; a command from a second Core is refused.
 
 **The token.** It is single-use, expires after 10 minutes and only registers the node.
 The installer takes it only on standard input and refuses it in the environment,
@@ -184,10 +152,8 @@ The installer prints the node's log command (`Logs: …`) when it finishes. The 
 dialog shows it too when something needs attention: when the node reports a problem, or
 when it hasn't become connected and ready about a minute after registering.
 
-| Node installed | Command |
-| --- | --- |
-| With sudo, or by root | `sudo journalctl -u oac-node-<installation-id>.service` |
-| Without sudo, as the node's user | `journalctl --user -u oac-node-<installation-id>.service` |
+Run `sudo journalctl -u oac-node-<installation-id>.service`. In a root shell, omit
+`sudo`; the installer's summary already does this.
 
 The installation ID is in the command (`--installation-id`) and on the **System** page.
 
@@ -204,14 +170,11 @@ The installation ID is in the command (`--installation-id`) and on the **System*
    ```sh
     (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
    printf '\n==> Downloading node installer...\n' &&
-curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
+   curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
    printf '==> Verifying node installer...\n' &&
-printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
+   printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
    $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --uninstall --installation-id '<installation-id>')
    ```
-
-   For a node installed without sudo, **Installed without sudo?** gives the same command
-   without `sudo`; run it as that user.
 
 Uninstall first asks Core, at the address the node enrolled with, whether the node was
 removed, and refuses while Core still lists it. When the node enrolled with an address
@@ -252,10 +215,8 @@ the local error behind the code.
 | `capacity_insufficient` | Host too small | The host has fewer CPUs or less memory than one sandbox | Use a larger host, or change the sandbox size |
 | `provider_unavailable` | Sandbox provider unavailable | Any other failure, and every failure an older node reports | Read the node's log |
 
-A new group membership applies only to a new process. In sudo mode, restart the node
-service: `sudo systemctl restart oac-node-<installation-id>.service`. Without sudo,
-the user's systemd manager keeps the groups it started with, so restart that manager:
-`sudo systemctl restart user@$(id -u NODE_USER).service`. A node that is registered
+A new group membership applies only to a new process. Restart the node service:
+`sudo systemctl restart oac-node-<installation-id>.service`. A node that is registered
 but never connects usually can't reach Core at the public URL, or its `/api/v1`
 WebSocket doesn't pass the reverse proxy.
 
@@ -270,9 +231,9 @@ WebSocket doesn't pass the reverse proxy.
 | Docker on this host does not enforce CPU and memory limits | Use cgroup v2, then rerun |
 | KVM is unavailable, or `/dev/kvm` must be group-accessible | Enable virtualization; your distribution's KVM package sets `root:kvm 0660` |
 | This host has N CPUs and M MiB of memory; each sandbox needs … | Use a larger host, or change the sandbox size |
-| SELinux is enforcing on this host | Use the no-sudo command as a prepared user |
+| SELinux is enforcing on this host | Use a host supported by the installer; it does not change SELinux settings |
 | This host already runs a sudo-mode node for another Core | One host serves one Core in sudo mode. Remove that node and uninstall it first |
-| Ask the host administrator to enable user lingering, or No systemd user manager is running | No-sudo mode: `sudo loginctl enable-linger NODE_USER`, or use sudo |
+| Node installation and removal require root | Run Web's command with sudo, or from a root shell |
 | Core still lists this node | Remove it on the Nodes page first |
 
 ## Change the sandbox backend or size

@@ -1062,10 +1062,13 @@ registered nodes can read their matching configuration during reset. Validate
 installation, generation, specification digest and release before writing node files,
 registering or reconnecting. Reject drift rather than overwriting retained identity
 or using local resource defaults. Registration consumes a token only after these
-checks. The installer verifies downloaded files and starts the ordinary node process
-as a user service, or, run as root, as a root-owned system service for the dedicated
-`oac-node` user it prepares; it performs no SSH installation, Session creation or
-model call.
+checks. The node installer requires root or sudo, verifies downloaded files and
+starts a root-owned system service for the dedicated `oac-node` user it prepares.
+It performs no SSH installation, Session creation or model call. Ordinary-user
+installation and removal are rejected before reading credentials or mutating state.
+Internal generation preparation and collection still run as the service account.
+Web exposes one root/sudo command; do not retain a user-service alternative. This
+boundary is specific to Sandbox Provider nodes, not native self-hosted daemons.
 
 Node management (Web's **Nodes** page; see the
 [operator reference](services/agents-api/HOSTED-SANDBOX-MANAGER.md)) is a
@@ -2282,9 +2285,8 @@ and a private loopback database port. Native Core needs no KVM or node assets. C
 Docker socket or node identity mount in either mode. The ordinary standalone node
 service owns its provider processes outside the Core container. Its `KillMode=process`
 preserves resident microVM/helper processes across a node-service restart. User KVM
-access and the Linux runtime libraries are prerequisites for microsandbox. The node
-installed by a normal user runs as a systemd user service and needs linger. Run as
-root (sudo mode), the installer instead prepares the host: it creates or adopts the
+access and the Linux runtime libraries are prerequisites for microsandbox. The
+installer runs as root and prepares the host: it creates or adopts the
 `oac-node` system user, adds it to the `docker` or `kvm` device group (no other
 group), and installs one root-owned system service per installation that runs the
 same node program with `User=oac-node`. Sudo mode serves one Core per host,

@@ -537,16 +537,12 @@ request runs.
 - **Add node**: the sandbox limits first, then the one-time command in a Terminal
   block (expiry countdown and Copy command in its header), the three progress
   steps, and, once the installer's minute passes, an amber card with the reason
-  and a copyable log command. Below, two folded Hairline disclosures: Host
-  requirements for the default command, which uses sudo (open until this browser
-  has shown it once, with notes that it creates the `oac-node` system service
-  and, for Docker, that the docker group is root-equivalent), and "No sudo on this
-  host?", with what the node's own user needs and the command without sudo.
-  Sudo mode allows one Core per host because nodes share the service account.
-  For microsandbox without sudo, the home path must be at most 28 bytes after
-  filesystem encoding, so `~/.oac/m/<12 hex>` fits the 48-byte Runtime home limit.
-  The log command follows the command last copied; after the no-sudo one it adds the
-  system service's, for a root shell. The command downloads from the
+  and a copyable system-service log command. Below, the Host requirements
+  Hairline disclosure is open until this browser has shown it once. Installation
+  requires root or sudo, creates the `oac-node` system service, and serves one Core
+  per host because nodes share the service account. For Docker, explain that
+  membership in the docker group is root-equivalent. Do not expose an ordinary-user
+  installation command or user-service prerequisites. The command downloads from the
   installation's public URL, never the browser's address, so it works as shown on
   any host. Until the installation is read, a line says it is being checked; a
   failed read, a public URL other machines can't use (loopback or not HTTPS), or a
@@ -558,7 +554,7 @@ request runs.
 - **Clean up the host**: after a node is removed, a dialog gives the host's
   uninstall command in the same Terminal block, a Graphite line that it deletes no
   sandboxes, volumes or images (and, for microsandbox, keeps its image store and
-  data), and the no-sudo form behind an "Installed without sudo?" disclosure. A
+  data). The command requires root or sudo; there is no user-service alternative. A
   node enrolled with an earlier Core address adds an "Old Core address gone?"
   disclosure with the `--force` form. The command, too, downloads from the public
   URL, which the dialog reads again if it is not at hand: until then one line says

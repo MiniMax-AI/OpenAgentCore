@@ -131,8 +131,8 @@ setting does not transfer resource ownership or authorize data deletion. See the
 ## Register a host
 
 Web's **Add node** command is the supported way to register a host; the
-[nodes guide](../../docs/getting-started/nodes.md) describes its sudo and no-sudo
-modes, what they create, uninstalling and troubleshooting. The command downloads only a
+[nodes guide](../../docs/getting-started/nodes.md) describes its required root/sudo
+installation, the `oac-node` service account, removal and troubleshooting. The command downloads only a
 matched bootstrap from `/node-install/`, then checksum-verified prebuilt assets from
 the same console's payload, never from a release URL the build recorded. The console
 must hold them: install from the offline bundle, or place the release assets in the
@@ -379,8 +379,7 @@ fix, the next heartbeat (about ten seconds) checks again and clears or replaces
 the code. Repaired Runtime artifacts, a pulled image or a started Docker daemon
 recover this way. A new Docker or KVM group membership applies only to a new
 process: restart the node service (`sudo systemctl restart
-oac-node-<installation_id>.service` in sudo mode, `systemctl --user restart …`
-without sudo). The service journal's warning includes the local error behind the code;
+oac-node-<installation_id>.service`; omit sudo in a root shell). The service journal's warning includes the local error behind the code;
 that text never leaves the host.
 
 Only the code crosses the node connection. Probe errors can name host paths or

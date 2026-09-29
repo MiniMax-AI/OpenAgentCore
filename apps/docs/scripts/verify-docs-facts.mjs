@@ -16,7 +16,7 @@ for (const [root, entries] of [[repo, record.sources], [app, record.outputs]]) {
 const source = slug => fs.readFileSync(path.join(app, 'content/docs', slug + '.mdx'), 'utf8')
 for (const token of ['/v1', '/core/v1', '/api/v1', 'Project API key', 'Core key', 'executor']) assert.ok(source('public-api').includes(token), 'Credential matrix omits ' + token)
 for (const token of ['config.json', 'oac apply']) assert.ok(source('configure').includes(token), 'Configuration guide omits ' + token)
-for (const token of ['oac-node', '~/.oac/nodes']) assert.ok(source('hosted-providers').includes(token), 'Node guide omits ' + token)
+for (const token of ['oac-node', '/var/lib/oac-node/.oac/nodes', 'Node installation and removal require root.']) assert.ok(source('hosted-providers').includes(token), 'Node guide omits ' + token)
 for (const token of ['oac-daemon install', 'OAC_RUNTIME_HOME', 'Linux, macOS and Windows']) assert.ok(source('self-hosted-execution').includes(token), 'Executor guide omits ' + token)
 // Keep the installation policy visible in the operator guides.
 for (const [slug, tokens] of [
