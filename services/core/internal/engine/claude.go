@@ -13,14 +13,21 @@ import (
 // providers reject text without non-whitespace characters.
 func claudeProfile() Profile {
 	return Profile{
-		ProgrammaticToolCallingDisable: true,
+		ProgrammaticToolCallingDisable: proto.CapabilitySupported,
 		MCPOrigins:                     []string{"service", "environment"},
-		StructuredOutput:               true,
-		ToolSearch:                     true,
-		MessageImages:                  true,
-		Placements:                     []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
-		ValidateConfiguration: validateClaudeConfiguration,
-		ValidateTools:         validateClaudeTools,
+		Placements:                     []string{"none", "openai_hosted", "self_hosted"},
+		StructuredOutput:               proto.CapabilitySupported,
+		ToolSearch:                     proto.CapabilitySupported,
+		MessageImages:                  proto.CapabilitySupported,
+		WhitespaceOnlyText:             proto.CapabilityUnsupported,
+		WebSearchControl:               proto.CapabilityUnsupported,
+		TextVerbosity:                  proto.CapabilityUnsupported,
+		MCPBearer:                      proto.CapabilitySupported,
+		ConfigurationValidation:        AdditionalValidation,
+		ToolsValidation:                AdditionalValidation,
+		FunctionResultValidation:       AdditionalValidation,
+		ValidateConfiguration:          validateClaudeConfiguration,
+		ValidateTools:                  validateClaudeTools,
 		ValidateFunctionResult: func(_ string, result proto.FunctionResultPayload) error {
 			for _, part := range result.Content {
 				if part.Type == "input_image" && !result.Success {

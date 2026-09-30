@@ -1,14 +1,17 @@
-package engine
+package engine_test
 
 import (
+	"testing"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"testing"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 )
 
 func TestMCPOriginQualification(t *testing.T) {
 	for _, kind := range []string{"codex", "claude_sdk", "mcode"} {
-		profile, ok := (Catalog{}).Lookup(kind)
+		profile, ok := (engine.Catalog{}).Lookup(kind)
 		if !ok {
 			t.Fatal(kind)
 		}
@@ -27,7 +30,7 @@ func TestMCPOriginQualification(t *testing.T) {
 	}
 }
 func TestMiniMaxMCPPoliciesRejectInsteadOfDropping(t *testing.T) {
-	p, _ := (Catalog{}).Lookup("mcode")
+	p, _ := (engine.Catalog{}).Lookup("mcode")
 	empty := []string{}
 	named := []string{"proof"}
 	for _, allowed := range []*[]string{nil, &empty, &named} {
@@ -41,8 +44,11 @@ func TestMiniMaxMCPPoliciesRejectInsteadOfDropping(t *testing.T) {
 	}
 }
 func TestMCPOriginCatalogIsImmutable(t *testing.T) {
-	p := Profile{MCPOrigins: []string{"environment"}}
-	c := NewCatalog(map[string]Profile{"fixture": p})
+	p := enginetest.Profile(func(p *engine.Profile) {
+		p.MCPOrigins = []string{"environment"}
+		p.Placements = []string{"self_hosted"}
+	})
+	c := engine.NewCatalog(map[string]engine.Profile{"fixture": p})
 	p.MCPOrigins[0] = "service"
 	first, _ := c.Lookup("fixture")
 	if first.MCPOrigins[0] != "environment" {

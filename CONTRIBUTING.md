@@ -18,6 +18,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Built-in Harness identifiers, configuration/profile bindings and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
 | Effective MCP bindings and credential authority | [Environment MCP](contracts/agents-api/environments.md#skills-plugins-and-environment-mcp) and `apps/daemon/internal/agent/mcp_binding.go` |
 | Harness qualification and acceptance | [Harness integration](contracts/agents-api/harnesses.md) |
+| Harness service qualification declarations and registration | [Explicit service qualification](contracts/agents-api/harness-onboarding.md#explicit-service-qualification) and `services/core/internal/engine/profile.go` |
 | Harness selection and Agent defaults | [Harness selection](contracts/agents-api/harness-selection.md) |
 | Provider selection, sandbox deployment and E2B setup | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
 | Hosted sandbox nodes | [Nodes guide](docs/getting-started/nodes.md) and [sandbox deployment contract](contracts/agents-api/sandbox-deployment.md) |

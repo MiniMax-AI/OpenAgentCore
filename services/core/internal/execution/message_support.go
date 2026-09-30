@@ -17,7 +17,7 @@ var ErrWhitespaceOnlyText = errors.New("whitespace-only message text is not supp
 // validateMessageTextProfile rejects a message without an image or any
 // non-whitespace text when the harness has not qualified such input.
 func validateMessageTextProfile(profile engine.Profile, input proto.MessageInput) error {
-	if profile.WhitespaceOnlyText {
+	if profile.WhitespaceOnlyText.IsSupported() {
 		return nil
 	}
 	for _, message := range input {
@@ -50,7 +50,7 @@ func validateMessageImageProfile(profile engine.Profile, _ string, input proto.M
 	if !input.HasImages() {
 		return nil
 	}
-	if !profile.MessageImages || input.ValidateInlineImages() != nil {
+	if !profile.MessageImages.IsSupported() || input.ValidateInlineImages() != nil {
 		return store.ErrInvalidInput
 	}
 	return nil

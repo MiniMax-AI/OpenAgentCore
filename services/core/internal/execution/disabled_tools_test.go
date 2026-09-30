@@ -6,7 +6,9 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -18,7 +20,7 @@ func TestDisabledToolsUseCommonOperationQualification(t *testing.T) {
 		}
 	}
 	for _, qualified := range []bool{false, true} {
-		policy := Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"new_harness": {Placements: []string{"none"}, ProgrammaticToolCallingDisable: qualified}})}
+		policy := Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"new_harness": enginetest.Profile(func(p *engine.Profile) { p.ProgrammaticToolCallingDisable = proto.CapabilityFromBool(qualified) })})}
 		if err := policy.ValidateSessionConfiguration("new_harness", raw); (err == nil) != qualified {
 			t.Fatal("qualification differs", qualified, err)
 		}

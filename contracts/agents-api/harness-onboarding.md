@@ -319,6 +319,21 @@ actual Runtime capabilities remain separate checks; Runtime advertisements alone
 never enable public operations. Shared dispatch checks capability combinations,
 not a whitelist of engine names.
 
+### Explicit service qualification
+
+`engine.Profile` is the service's qualification declaration, separate from the Runtime's `AgentKindCapabilities`. Its capability fields reuse the small `proto.CapabilitySupport` value type: every field must explicitly select `CapabilitySupported` or `CapabilityUnsupported`. `CapabilityUnspecified`, including an omitted field, is rejected. Sharing this value type does not let a Runtime advertisement grant service authorization.
+
+Each of `ConfigurationValidation`, `ToolsValidation` and `FunctionResultValidation` chooses one of two strategies:
+
+- `CommonValidationOnly`: common schema and admission checks are sufficient. The corresponding callback must be nil; no successful placeholder callback is needed.
+- `AdditionalValidation`: the matching `ValidateConfiguration`, `ValidateTools` or `ValidateFunctionResult` callback is mandatory and adds pure Harness restrictions.
+
+An omitted or unknown policy, missing required callback, or callback paired with common-only policy is invalid. Admission follows the declared policy, never method presence. Preserve existing error precedence: configuration restrictions run first; when additional configuration validation is selected, tool-decoding errors precede tool restrictions. With common-only configuration validation, additional tool restrictions retain their existing precedence over a decoding error. Common-only function-result validation adds no native result restriction.
+
+`engine.NewCatalog` validates every entry before publishing its immutable snapshot and panics with `engine.ErrInvalidDeclaration` for invalid static registrations. Kinds must be nonempty without surrounding whitespace. Placements must explicitly list at least one supported placement; MCP origins must be a non-nil list (an empty list qualifies none). Unknown or duplicate choices, origins without a corresponding placement and bearer support without an MCP origin are rejected. Errors identify authored fields without echoing declaration values. Future profile fields must be classified by the completeness validator and explicitly decided by every profile; there is no production default-filling constructor.
+
+Run the `engine` and `execution` tests for omission, policy, combination and error precedence coverage, and the public onboarding/store tests for admission and Runtime dispatch. Test fixtures use `engine/enginetest`, whose exhaustive literal also requires a decision when a field is added; it is not a production profile.
+
 `execution.Policy` supplies immutable service qualification to HTTP admission,
 Worker device selection and final dispatch. Custom composition gives the same
 Policy to `api.WithExecutionPolicy` and `Dispatcher.Policy`. The zero value uses

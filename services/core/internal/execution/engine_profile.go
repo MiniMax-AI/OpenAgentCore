@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -18,32 +17,32 @@ func profileError(err error) error {
 }
 
 func validateProfileConfiguration(profile engine.Profile, snapshot Snapshot) error {
-	if snapshot.Agent.Text.Format.Type == "json_schema" && !profile.StructuredOutput {
+	if snapshot.Agent.Text.Format.Type == "json_schema" && !profile.StructuredOutput.IsSupported() {
 		return errors.New("Structured output is not qualified for this engine.")
 	}
-	if profile.ValidateConfiguration != nil {
+	if profile.ConfigurationValidation == engine.AdditionalValidation {
 		if err := profile.ValidateConfiguration(snapshot.Agent, snapshot.Environment, snapshot.Daemon != nil); err != nil {
 			return profileError(err)
 		}
 	}
 	tools, err := executionTools(snapshot.Agent.Tools)
 	// Preserve each profile's admission error precedence when tool decoding fails.
-	if profile.ValidateConfiguration != nil && err != nil {
+	if profile.ConfigurationValidation == engine.AdditionalValidation && err != nil {
 		return err
 	}
 	if err == nil {
 		if err := profile.ValidateMCPOrigins(snapshot.Environment, snapshot.Daemon != nil, tools.MCP); err != nil {
 			return err
 		}
-		if tools.DisableProgrammatic && !profile.ProgrammaticToolCallingDisable {
+		if tools.DisableProgrammatic && !profile.ProgrammaticToolCallingDisable.IsSupported() {
 			return errors.New("Disabling programmatic tool calling is not qualified for this engine.")
 		}
 		request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}
-		if err := request.ValidateToolSearch(profile.ToolSearch); err != nil {
+		if err := request.ValidateToolSearch(profile.ToolSearch.IsSupported()); err != nil {
 			return err
 		}
 	}
-	if profile.ValidateTools != nil {
+	if profile.ToolsValidation == engine.AdditionalValidation {
 		if validationErr := profile.ValidateTools(snapshot.Environment, snapshot.Daemon != nil, tools.Functions, tools.MCP); validationErr != nil {
 			return profileError(validationErr)
 		}
@@ -66,7 +65,7 @@ func validateProfileInputs(profile engine.Profile, placement string, inputs []st
 			}
 			continue
 		}
-		if input.Kind != "tool_result" || profile.ValidateFunctionResult == nil {
+		if input.Kind != "tool_result" || profile.FunctionResultValidation == engine.CommonValidationOnly {
 			continue
 		}
 		var value store.FunctionResultInput
