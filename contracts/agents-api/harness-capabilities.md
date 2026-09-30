@@ -16,12 +16,12 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | --- | --- | --- | --- |
 | Text Turns, active input, cancellation, restart and continuation | Verified on all placements | Verified on all placements | Verified on all placements |
 | [Files and Artifacts](environment-files.md) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted |
-| [Whitespace-only message text](message-input.md) | Admitted; delivered unchanged | Rejected | Rejected |
-| [Inline PNG and JPEG message images](message-input.md) | Verified on all placements | Verified on all placements | Rejected |
+| [Whitespace-only message text](message-content.md) | Admitted; delivered unchanged | Rejected | Rejected |
+| [Inline PNG and JPEG message images](message-content.md) | Verified on all placements | Verified on all placements | Rejected |
 | Remote image URLs | Rejected | Rejected | Rejected |
 | Explicit `reasoning`; `service_tier` other than `auto` | Rejected | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
-| [Public token usage](history-events-usage.md) | Measured counters | Null | Null |
+| [Public token usage](sessions-events.md) | Measured counters | Null | Null |
 
 Native model parameters and provider protocols per Harness are in [model execution](model-execution.md).
 
@@ -30,7 +30,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 | Operation | Codex | Claude SDK | MiniMax Code |
 | --- | --- | --- | --- |
 | [Public functions](execution-tools.md#functions) with text results | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; object-root schemas only | Rejected |
-| [Function results with images](function-result-images.md) | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; successful inline PNG or JPEG results only | Rejected |
+| [Function results with images](message-content.md#function-results) | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; successful inline PNG or JPEG results only | Rejected |
 | [Structured output](execution-tools.md#structured-output) | Rejected | Verified on all placements | Rejected |
 | [Deferred function discovery](execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |
 | [Disabled web search and programmatic tool calling](execution-tools.md#web-search-and-programmatic-tool-calling) | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted |

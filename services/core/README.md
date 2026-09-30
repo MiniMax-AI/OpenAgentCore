@@ -176,7 +176,7 @@ node transport contracts are unchanged.
 `OAC_ADDR` defaults to `127.0.0.1:8091`; use a TLS reverse proxy for remote
 access. `OAC_DEFAULT_HARNESS` defaults to `codex`; use `claude_sdk` for Claude Code
 or `mcode` for MiniMax Code. Configure the corresponding qualified Runtime through
-its [deployment guide](../../contracts/agents-api/execution-tools.md).
+its deployment guide: [Codex](deploy/codex/README.md), [Claude Code](deploy/claude/README.md) or [MiniMax Code](deploy/mcode/README.md).
 It selects new Sessions independently of the requested
 model. Existing Sessions retain their stored engine. Set
 `OAC_HARNESSES=codex,claude_sdk,mcode` to explicitly enable installed profiles
@@ -207,7 +207,7 @@ resources); general Files routes do not. Supported operations include:
   [authenticated HTTPS MCP](../../contracts/agents-api/vaults.md#credential-selection-in-a-session).
 
 Execution uses the selected
-[engine profile](../../contracts/agents-api/execution-tools.md),
+[engine profile](../../contracts/agents-api/harness-capabilities.md),
 including `none` and the colocated self-hosted profile described below.
 Ordinary JSON requests have a 1 MiB body limit; file transfers use the separate
 bounds in the Files contracts. Session lists support `after`, `limit` (0 is treated
@@ -249,7 +249,7 @@ it executable. Unsupported requests fail explicitly. `/healthz` reports liveness
 
 The basic `openai_hosted` profiles for Codex, Claude Code and MiniMax Code require
 explicit operator configuration. Select the qualified native image using the
-[engine profile guides](../../contracts/agents-api/execution-tools.md),
+[Codex](deploy/codex/README.md), [Claude Code](deploy/claude/README.md) or [MiniMax Code](deploy/mcode/README.md) guides,
 then follow the [Docker setup](deploy/codex/README.md#standalone-operator-configuration).
 Core-managed hosting supports deployment-selected E2B, Docker or microsandbox;
 see the [nodes guide](../../docs/getting-started/nodes.md). For the separate
@@ -431,7 +431,7 @@ output with Session/Turn/Items queries; reconnecting SSE does not replay history
 See [creation streaming](../../contracts/agents-api/sessions-events.md#creation-streaming)
 for retry behavior and unverified hosted timing.
 
-The [accepted workflows](../../contracts/agents-api/README.md#known-gaps)
+The [accepted workflows](../../contracts/agents-api/harness-capabilities.md)
 include real MiniMax execution through built API/daemon/Codex and Claude SDK,
 function success/error, cancellation and native continuation. Controlled fixtures
 remain useful but do not replace real-provider acceptance for execution changes.

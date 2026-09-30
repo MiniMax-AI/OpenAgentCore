@@ -324,7 +324,7 @@ template = client.beta.agents.environments.templates.create(
 )
 ```
 
-The pinned `/v1/skills` resource, version and content routes use the Project API key without the Agents beta header. ZIP uploads use `files` and directory uploads repeated `files[]`. The pinned SDK 3.13.0 drops a single file tuple during multipart extraction, so upload a single ZIP with raw HTTP. An upload holds at most 500 regular files and exactly one `SKILL.md`, 5 MiB compressed and 20 MiB expanded. [File resource semantics](file-resource-semantics.md) owns default-version and deletion rules.
+The pinned `/v1/skills` resource, version and content routes use the Project API key without the Agents beta header. ZIP uploads use `files` and directory uploads repeated `files[]`. The pinned SDK 3.13.0 drops a single file tuple during multipart extraction, so upload a single ZIP with raw HTTP. An upload holds at most 500 regular files and exactly one `SKILL.md`, 5 MiB compressed and 20 MiB expanded. [File resource semantics](source-files.md#versions-and-metadata) owns default-version and deletion rules.
 
 A reference with an omitted or null version selects the default at Session creation, `"latest"` the latest version, and a positive version string that version. Template responses keep the unresolved selector (`version: null` for the default); Session metadata shows `{type, skill_id, version, name, description}` with a concrete version. A Session freezes the selected version's bytes and metadata in its creation transaction; later default changes, source deletion or Template updates cannot change it.
 

@@ -66,3 +66,5 @@ The Core–Runtime wire carries messages as `MessageInput` for initial input, pr
 
 - **Codex** flattens a batch into its native input list with a blank-line separator between public messages. Public message boundaries stay in Core's storage; the native history does not keep them.
 - **Claude Code** sends native image blocks and a UUID per native user message. One public input is applied only after every message in its batch is consumed. Within one native Turn the bridge accepts at most 64 user messages, including the opening prompt; it rejects a steering batch that would exceed the bound before submitting any part of it, which ends the running Turn. The daemon requires bridge protocol 3.
+
+Native message and function-result image checks are listed under [qualify the adapter](harness-onboarding.md#qualify-the-adapter).

@@ -29,13 +29,13 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | Partial: read-only child work; no live child progress or optional native operations | [Subagents](subagents.md) |
 | Environments | retrieve | Implemented | [Environments](environments.md) |
 | Environment files | create, list | Implemented; the list is not recursive | [Environment files and Artifacts](environment-files.md) |
-| Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](environment-templates.md) |
+| Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](environments.md#templates) |
 | Vaults | create, retrieve, list, delete | Implemented; no archive operation | [Vaults and Credentials](vaults.md) |
 | Vault Credentials | create, retrieve, update, list, delete | Implemented for `static_bearer` and `mcp_oauth` | [Vaults and Credentials](vaults.md) |
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](source-files.md) |
 
-Which operation each Harness supports on each placement is in the [execution and tools matrix](execution-tools.md). [Core wire behavior](wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
+Which operation each Harness supports on each placement is in the [Harness capabilities](harness-capabilities.md). [Core wire behavior](wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
 
 Core's own fields sit inside `x_agents_core` ([Core extensions](../../docs/api/public-agent-api.md#core-extensions-x_agents_core)). The Core administration API (`/core/v1`) and the machine API (`/api/v1`) are not part of the Agents API.
 
@@ -99,7 +99,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Configuration and tools**
 
 - Explicit reasoning effort or summary, service tiers other than `auto`, enabled `web_search` and enabled programmatic tool calling are saved but rejected at Session admission.
-- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [execution and tools matrix](execution-tools.md). MiniMax Code has no public functions, no service-origin MCP and no image input.
+- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](harness-capabilities.md). MiniMax Code has no public functions, no service-origin MCP and no image input.
 - Model-derived reasoning defaults are not resolved.
 
 **Execution and history**
@@ -114,7 +114,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Environments and Templates**
 
-- Runtimes do not enforce `disabled` or `restricted` networks, so Sessions that need them are rejected ([restricted network policy](environment-templates.md#restricted-network-policy)).
+- Runtimes do not enforce `disabled` or `restricted` networks, so Sessions that need them are rejected ([restricted network policy](environments.md#restricted-network)).
 - `packages.system` is rejected; system packages must be preinstalled.
 
 **Files and Environment files**

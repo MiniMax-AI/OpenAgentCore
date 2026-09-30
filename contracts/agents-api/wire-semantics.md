@@ -153,7 +153,7 @@ Agent create requires `model`. Core saves and returns these values for omitted f
 | `multi_agent` | Disabled. When enabled without `max_concurrent_subagents`, 6 |
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
-| `web_search` | Every pinned mode is saved; see [tool policy](tool-policy.md) |
+| `web_search` | Every pinned mode is saved; see [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
 | HTTP MCP transport | Saved with `headers: {}`; nonempty headers are rejected. Origin and allowlist defaults are in [public MCP connection origin](environments.md#public-mcp-connection-origin) |
 
 Saving a value does not make it executable. Session creation admits a smaller set; see [Session admission](#session-admission).
@@ -185,7 +185,7 @@ A Session's effective configuration must also pass execution admission, which ap
 | --- | --- |
 | Explicit `reasoning.effort` or `reasoning.summary` | "Explicit reasoning execution options are not supported by this service yet." |
 | `service_tier` other than `auto` | "Execution currently supports service_tier=auto only." |
-| Enabled or omitted-mode `web_search`, enabled `programmatic_tool_calling` | See [tool policy](tool-policy.md) |
+| Enabled or omitted-mode `web_search`, enabled `programmatic_tool_calling` | See [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
 | More than 64 functions, or a function name that is blank or longer than 512 bytes | "This service supports at most 64 function tools." or "Function names must be nonempty, unique and at most 512 bytes." |
 | Two `programmatic_tool_calling` declarations, two MCP servers with one label | "Execution requires distinct tool controls.", "Execution requires distinct MCP server labels." |
 

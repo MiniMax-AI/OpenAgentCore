@@ -147,15 +147,6 @@ When an Environment fails to initialize, whether an `openai_hosted` sandbox or a
 
 Session reads and lists return the same Session, and input that was waiting for the Environment settles as failed in the same snapshot. The GET stream and the creation stream end after `agent.session.failed`. New input returns 409 ([input errors](#input-errors)); the Session can be deleted.
 
-The reason names a fixed step and never contains command output, environment values, package names or paths:
-
-| Failed step | Reason |
-| --- | --- |
-| Setup command `i` exits with status N | `Failed to provision environment: script "setup_commands[i]" failed with exit code N` |
-| Python or npm package installation exits with status N | `Failed to provision environment: script "Python package installation" failed with exit code N` (or `"npm package installation"`) |
-| Initial file installation | `Failed to provision environment: initial file installation failed` |
-| Skill installation | `Failed to provision environment: Skill installation failed` |
-| The selected Harness is missing on the Runtime | `Failed to prepare environment: the selected Harness is unavailable. Install the supported Harness version on the Runtime and create a new Session.` |
-| Anything else, or a step without an exit status | `Failed to provision environment: initialization did not complete` |
+The [Environment initialization contract](environments.md#initialization-state-and-failure) defines the fixed failure reasons.
 
 Core's own `stream_interrupted` error event carries `type`, `code` and `message` without `param`; `error` events shaped like the official ones carry `param: null`.
