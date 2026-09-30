@@ -77,8 +77,7 @@ Node, Docker, the product service or frontend. An isolated source context enforc
 that boundary on every build. [Contributor rules](../../docs/maintainers.md#standalone-core-builds)
 define the allowed shared packages and required checks. Runtime database/key
 configuration and a separately installed execution daemon are still required;
-these binaries do not establish full protocol coverage. For a standalone Linux
-container, see [Run Core without the installer](../../docs/maintainers.md#run-core-without-the-installer).
+these binaries do not establish full protocol coverage.
 
 ## Database ownership
 

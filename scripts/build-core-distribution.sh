@@ -112,7 +112,7 @@ mkdir -p "$bundle/runtime"
 cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"
 
-OAC_DEV_BUILD_REVISION="$revision" OAC_DEV_CORE_BUILD_DIR="$stage/core/bin" scripts/build-core.sh
+OAC_DEV_BUILD_REVISION="$revision" E2B_SOURCE_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
 (
   cd services/core/tools/microsandbox-provider
   GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath \
@@ -130,18 +130,11 @@ else
   python3 scripts/core-distribution-manifest.py extract-runtime "$msb_archive" "$stage/core/microsandbox"
 fi
 mkdir -p "$bundle/native"
-cp -R "$stage/core/bin" "$stage/core/microsandbox" "$bundle/native/"
-E2B_SOURCE_REVISION="$revision" E2B_PROVIDER_BUILD_DIR="$stage/e2b-build" scripts/build-e2b-provider.sh
-mkdir -p "$stage/core/e2b"
-tar -xzf "$stage/e2b-build/oac-e2b-provider-linux-amd64.tar.gz" \
-  --strip-components=1 -C "$stage/core/e2b"
-cp -R "$stage/core/e2b" "$bundle/native/e2b"
-mkdir -p "$stage/core/native-installers"
+cp -R "$stage/core/bin" "$stage/core/microsandbox" "$stage/core/e2b" "$bundle/native/"
 if [[ -n "${OAC_NATIVE_INSTALLER_BUILD_DIR:-}" ]]; then
   python3 scripts/core-distribution-manifest.py native-catalog "$bundle" "$stage" "$revision" \
     "$OAC_NATIVE_INSTALLER_BUILD_DIR" "$release_base_url"
 fi
-cp deploy/distribution/Dockerfile "$stage/core/Dockerfile"
 build_image core "$stage/core"
 core_image="$(cat "$stage/core.id")"
 # Fail at packaging time if the helper or runtime requires unavailable host libraries.

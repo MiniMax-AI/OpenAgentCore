@@ -73,8 +73,13 @@ check-core: build-core
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s services/core/tests -p 'official_diagnostics_test.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 services/core/deploy/e2b/managed_init_test.py
 
+# The distribution's Core image, without the native installer catalog.
 docker-build-core:
-	./scripts/build-core-image.sh
+	@set -e; root="$${OAC_DEV_HOME:-$$HOME/.oac}"; \
+	mkdir -p "$$root/cache/oac-core-builds"; \
+	context=$$(mktemp -d "$$root/cache/oac-core-builds/image.XXXXXX"); trap 'rm -rf "$$context"' EXIT; \
+	./scripts/build-core-image-context.sh "$$context"; \
+	docker build --platform linux/amd64 --tag "$${OAC_DEV_CORE_IMAGE:-oac-core:dev}" "$$context"
 
 check-core-container: docker-build-core
 	OAC_DEV_CORE_IMAGE="$${OAC_DEV_CORE_IMAGE:-oac-core:dev}" OAC_TEST_SERVER_BIN="$(CURDIR)/services/core/tests/container_server.py" $${OAC_TEST_OFFICIAL_SDK_PYTHON:-python3} services/core/tests/official_client.py
@@ -153,7 +158,7 @@ check-distribution:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/publish-core-release.test.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/install-release.test.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/config-reference.py --check
-	bash -n deploy/install/install.sh deploy/install-release.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/prepare-release-runtimes.sh
+	bash -n deploy/install/install.sh deploy/install-release.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/build-core-image-context.sh scripts/prepare-release-runtimes.sh
 	./scripts/build-web.sh
 
 build-core-distribution:

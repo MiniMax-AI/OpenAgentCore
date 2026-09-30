@@ -147,7 +147,7 @@ With `draft_release=true` the result is an unpublished `build-<full SHA>` draft 
 | Workflow | Runs on | Covers |
 | --- | --- | --- |
 | `core-check` (`check.yml`) | Pushes to `main`, every pull request, releases | All `make check` checks in concurrent partitions, plus a daemon build; see the partitions below |
-| `api-acceptance` | Pushes to `main` and pull requests that touch Core, its contracts, clients, shared Go code or build scripts | Standalone commands and migration, the pinned official client over HTTP, and the standalone container |
+| `api-acceptance` | Pushes to `main` and pull requests that touch Core, its contracts, clients, shared Go code or build scripts | Standalone commands and migration, the pinned official client over HTTP, and the distribution's Core image |
 | `native-check` (`native.yml`) | Pull requests that touch native sources, shared dependencies or packaging inputs; manual runs; releases | Daemon, process lifecycle, Harness protocols and the installer bundle on Linux, macOS and Windows; uploads the native installers |
 | `actionlint` | Changes to workflows | Workflow syntax |
 | `core-release` | Version tags and manual runs | See [Publish a version](#publish-a-version) |
@@ -160,7 +160,7 @@ The full gate starts these partitions concurrently:
 | --- | --- |
 | `backend` | Dedicated PostgreSQL guard, sqlc freshness, Runtime/shared Go tests, Linux microsandbox helper, standalone Core build and service/client tests, daemon build |
 | `tooling` | Harness catalog, name guard, distribution/installer, Claude SDK packaging, optional example including browser acceptance, MiniMax companion scripts |
-| `web` | TypeScript checks, doctor and Web/client tests, Web build |
+| `web` | TypeScript checks and Web/client tests, Web build |
 | `web-acceptance` (two shards) | The complete Web Playwright suite, split by test files between two isolated runners |
 
 Each check has its own named step. Only the backend job needs a database. Each browser job starts its own fixture and Web server, retaining one Playwright worker per runner so tests never share mutable fixtures across concurrent jobs. Failed Web shards upload their reports and traces for seven days. The final `check` job runs after every partition and succeeds only when all results are `success`; failed, cancelled or skipped jobs cannot produce a green required gate. Releases use this same workflow. Local `make check` still runs every check and the unsharded Web suite; `make check-web-unit` and `make check-web-acceptance` expose its Web parts. `OAC_WEB_TEST_SHARD=1/2` selects a shard for focused CI validation.
@@ -176,29 +176,3 @@ gh variable set OAC_USE_GITHUB_RUNNERS --body true --repo MiniMax-AI/OpenAgentCo
 ```
 
 This is an explicit operator switch, not an automatic billing balance probe. Runner selection applies to newly scheduled runs. Check current allowance and platform conversion rates in [Blacksmith's runner documentation](https://docs.blacksmith.sh/blacksmith-runners/overview) before treating 2-vCPU usage as free; Windows minutes consume more allowance than Linux minutes. Standard GitHub runner usage follows the repository's visibility and GitHub plan. These workflows request no Blacksmith runner larger than 2 vCPU and no paid cache add-on.
-## Run Core without the installer
-
-The standalone container gives you Core alone: no Web, no `oac` command and no `config.json`. It suits development, testing and operators who supervise Core themselves. Core reads only its environment; the [configuration appendix](configuration.md#appendix-core-environment-without-the-installer) lists the variables. `OAC_DATABASE_URL` and `OAC_CORE_KEY_DIGESTS_FILE` are required; set `OAC_PUBLIC_URL` to the origin machines use to reach Core, or Core runs without the daemon transport.
-
-- The [service guide](../services/core/README.md) covers building and running Core from source.
-
-To run the container, create a private directory (mode 0700) with `api.env` (`OAC_DATABASE_URL` for a dedicated database, reachable from the container, `OAC_CORE_KEY_DIGESTS_FILE=/run/core-key-digests.json`, and `OAC_PUBLIC_URL`) and `core-key-digests.json`, a JSON array with the lowercase hex SHA-256 digest of your Core key. Keep both files mode 0600 and the Core key itself elsewhere. Run the migrations, then start Core:
-
-```sh
-config_dir="$HOME/.oac/oac-core-deployment"
-docker run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges \
-  --env-file "$config_dir/api.env" \
-  oac-core:dev /usr/local/bin/oac-core-migrate
-docker run --name oac-core --detach --read-only \
-  --cap-drop=ALL --security-opt=no-new-privileges \
-  --user "$(id -u):$(id -g)" \
-  --publish 127.0.0.1:8091:8091 \
-  --env-file "$config_dir/api.env" \
-  --mount "type=bind,source=$config_dir/core-key-digests.json,target=/run/core-key-digests.json,readonly" \
-  oac-core:dev
-curl --fail http://127.0.0.1:8091/healthz
-```
-
-`--user` lets the container read the key digest file as your non-root host user; alternatively grant UID 65532 read access and omit it. Put a TLS reverse proxy in front for remote clients. `/healthz` reports liveness only. Keep credentials out of the image. All state is in PostgreSQL, so the container needs no writable volume; stop and start it with `docker stop` and `docker start`, and never remove the database to replace it. One Core process serves each database; replicas add no availability. After startup, use the Core key with the [administrator API](../contracts/agents-api/admin-api.md) to create Projects and issue application keys.
-
-The image also contains `oac-core-device` for an [internal execution device](../services/core/README.md#internal-execution-device-connection) and `oac-core-environment-key`, the [break-glass credential command](../contracts/agents-api/environment-executor-credentials.md#break-glass-command).

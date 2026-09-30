@@ -134,7 +134,7 @@ In Docker, the Compose project is named `oac-<10 hex digits>` (`project` in `sta
 
 ## Appendix: Core environment without the installer
 
-Core reads only its environment. The installer renders `generated/core.env` from `config.json`; if you run Core yourself (see [Maintainers and advanced deployments](maintainers.md)), set these variables. Compose loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose must be 2.26.0 or newer.
+Core reads only its environment. The installer renders `generated/core.env` from `config.json`; if you run Core yourself (see the [service guide](../services/core/README.md)), set these variables. Compose loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose must be 2.26.0 or newer.
 
 | Variable | Set from |
 | --- | --- |
