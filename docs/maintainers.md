@@ -6,7 +6,7 @@ This guide is for maintainers who build and publish OpenAgentCore. To install Co
 
 A distribution is the matched set of Linux amd64 release assets built from one commit: the control archive (the installer, the `oac` command, and the Core, Web, gateway and PostgreSQL images), the Runtime image and node artifacts as separate files, and the native installers.
 
-Build on Linux x86_64 with a glibc compatible with Debian 12, Docker, the Go version in `go.mod`, Node, pnpm, Python 3.9 or newer, curl and tar. The source must be clean and committed. First prepare the pinned Codex package and MiniMax Code companion, then build:
+Build on Linux x86_64 with a glibc compatible with Debian 12, Docker, the Go version in `go.mod`, a C compiler (the microsandbox helper is a CGO build), Node, pnpm, Python 3.9 or newer, curl, tar and sha256sum. The source must be clean and committed. First prepare the pinned Codex package and MiniMax Code companion, then build:
 
 ```sh
 bash scripts/prepare-release-runtimes.sh
@@ -17,36 +17,36 @@ export CORE_DISTRIBUTION_RELEASE_BASE_URL=https://github.com/MiniMax-AI/parsar-c
 make build-core-distribution
 ```
 
-`prepare-release-runtimes.sh` refuses an existing `~/.oac/build/release-inputs`; use a fresh build host or directory.
+`prepare-release-runtimes.sh` refuses an existing `~/.oac/build/release-inputs`; use a fresh build host.
 
 | Variable | Effect |
 | --- | --- |
 | `CORE_DISTRIBUTION_RELEASE_BASE_URL` | Versioned HTTPS directory that will serve the generated asset file names (never `latest`). Required unless `CORE_DISTRIBUTION_OFFLINE=1` |
 | `CORE_DISTRIBUTION_OFFLINE` | `1` also builds the offline archive |
 | `AGENTS_RUNTIME_CODEX_PACKAGE`, `MCODE_HARNESS_BUILD_DIR` | Pinned Runtime inputs from `prepare-release-runtimes.sh` |
-| `CORE_DISTRIBUTION_CODEX_IMAGE`, `CORE_DISTRIBUTION_CLAUDE_IMAGE`, `CORE_DISTRIBUTION_MCODE_IMAGE` | Use existing Harness images instead of building them; set all three or none. Each must contain the daemon built from this commit |
+| `CORE_DISTRIBUTION_CODEX_IMAGE`, `CORE_DISTRIBUTION_CLAUDE_IMAGE`, `CORE_DISTRIBUTION_MCODE_IMAGE` | Use existing Harness images, given as immutable `sha256:` image IDs, instead of building them; set all three or none. Each must contain the daemon built from this commit |
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | Native installer catalog directory; see [Native installers](#native-installers) |
 | `CORE_DISTRIBUTION_BUILD_DIR` | Output directory under `~/.oac`. Default: `~/.oac/build/core-distribution` |
 | `CORE_DISTRIBUTION_BUILD_NETWORK` | Docker build network: `default`, `host` or `none` |
 | `CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE` | Cached microsandbox release archive. Default: `~/.oac/cache/microsandbox-v0.7.2-linux-x86_64.tar.gz`, downloaded when missing |
 | `CORE_DISTRIBUTION_DATABASE_IMAGE` | PostgreSQL 16 image; the default is pinned by its linux/amd64 manifest digest |
 
-The build reuses the Core, Web, Runtime, SDK and helper builders. The manifest records the commit and source tree, image config and OCI manifest digests, the Runtime OCI manifest digest, the microsandbox runtime and firmware hashes, and the size and hash of every downloadable artifact. Output is the control archive and its `.sha256`, the optional offline archive, and the versioned Runtime, node and native installer assets. Nothing is published. Rebuilding into a directory that already holds this commit's distribution is refused.
+The build reuses the Core, Web, Runtime, SDK and helper builders. The manifest records the commit and source tree, image config and OCI manifest digests, the Runtime OCI manifest digest, the microsandbox runtime and firmware hashes, and the size and SHA-256 of every Runtime and node artifact; native installers carry only their SHA-256 in the [catalog](#native-installers). Output is the control archive and its `.sha256`, the optional offline archive, and the versioned Runtime, node and native installer assets. Nothing is published. Rebuilding into a directory that already holds this commit's distribution is refused.
 
-The control archive carries no Runtime image or node execution artifacts. Nodes fetch them from the Web that generated their command, which serves a local copy or redirects to the release base; the offline archive carries them instead. The [download contract](../deploy/install/README.md#download-contract) owns these rules.
+The control archive carries no Runtime image or node execution artifacts; the offline archive carries them. The [download contract](../deploy/install/README.md#download-contract) describes how nodes obtain them.
 
 A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distribution-manifest.py`. Links between bundled docs stay relative; every other relative link is rewritten to the same file on GitHub at the bundle's commit. The build fails when a link or anchor does not resolve, and `make check-distribution` runs the same check on the repository. Update the list when you add or move a doc that the installer or its output refers to.
 
 ### Native installers
 
-Self-hosted machines install `oac-daemon` from per-platform native installers: Linux amd64, macOS arm64 and Windows amd64. Each is built on its own OS by the `native-check` workflow (`scripts/build-native-installer.mjs`, whose `pins` object fixes the Node.js and Harness versions) and uploaded as `oac-native-installer-<OS>-<ARCH>.tar.gz`. For a local distribution, download the three artifacts from the native run for the same commit, then assemble the catalog from that checkout:
+Self-hosted machines install `oac-daemon` from per-platform native installers: Linux amd64, macOS arm64 and Windows amd64. Each is built on its own OS by the `native-check` workflow (`scripts/build-native-installer.mjs`, whose `pins` object fixes the Node.js and Harness versions) and uploaded as `oac-native-installer-<OS>-<ARCH>.tar.gz`. For a local distribution, download the three artifacts from a `native-check` run on that exact commit (a manual run or the release run; pull-request runs build the merge commit and do not match), then assemble the catalog from that checkout:
 
 ```sh
 node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-The catalog records the commit, the Runtime protocol version and each archive's checksum. The control archive and Core image carry only `native-installers/catalog.json`; the archives become separate `oac-native-<commit>-<platform>.tar.gz` release assets, and the offline archive holds one copy of each outside the Core image. Without a catalog, Sessions report the install command as unavailable, and the release workflow refuses to publish.
+The catalog records the commit, the Runtime protocol version, each archive's SHA-256 and, with a release base, its versioned URL. The control archive and Core image carry only `native-installers/catalog.json`; the archives become separate `oac-native-<commit>-<platform>.tar.gz` release assets, and the offline archive holds one copy of each outside the Core image. Without a catalog, Sessions report the install command as unavailable, and the release workflow refuses to publish.
 
 ### Runtime images and helpers
 
@@ -70,9 +70,9 @@ make build-claude-runtime
 docker build --platform linux/amd64 -t oac-runtime:claude "${OAC_DEV_HOME:-$HOME/.oac}/build/claude-runtime"
 ```
 
-The first step exports the adapter with the pinned Claude Agent SDK (`packages/claude-sdk-adapter/package.json`) as a checksummed archive; the second verifies it and adds the daemon. Keep the exported archive unchanged.
+The first step exports the adapter with the pinned Claude Agent SDK (`packages/claude-sdk-adapter/package.json`) as a checksummed archive for the host platform; the second verifies it and adds the daemon. The image step needs the `linux-x64-glibc` archive, so build both on Linux x86_64 with glibc. Keep the exported archive unchanged.
 
-**MiniMax Code Runtime image.** Build the companion from a checkout of the revision pinned in `packages/mcode-harness/source.json`, with the `@minimax-ai/code` npm package of the same version for native dependencies. It builds on Linux x86_64 or macOS arm64 into a new directory:
+**MiniMax Code Runtime image.** Build the companion from a checkout of the revision pinned in `packages/mcode-harness/source.json`, with the `@minimax-ai/code` npm package of the same version for native dependencies. The companion build runs on Linux x86_64 or macOS arm64 into a new directory; for the Linux Runtime image, build it on Linux x86_64 (macOS arm64 serves only the native installer):
 
 ```sh
 MCODE_NATIVE_SOURCE=/absolute/minimax-code \
@@ -84,7 +84,7 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 
 `scripts/prepare-release-runtimes.sh` runs the companion build from the pins.
 
-The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`) that contains the daemon, the shared helpers and the three native Harness packages. It verifies that each image carries the daemon built from the same commit.
+The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`): the MiniMax Code image, which carries the daemon, with the Codex executable and resources and the Claude SDK bundle copied in. It verifies that each image carries the daemon built from the same commit.
 
 **E2B helper.**
 
@@ -109,9 +109,9 @@ The helper is written to `~/.oac/build/microsandbox-provider/oac-microsandbox-pr
 
 `make build-agents-api` builds `oac-core`, `oac-core-migrate`, `oac-core-device`, `oac-core-environment-key` and `oac-node` into `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core` (`OAC_DEV_CORE_BUILD_DIR` selects another absolute directory). The build copies only the source set listed in `scripts/build-agents-api.sh` (the Core service, its contracts, the shared packages it needs and the root Go module files) into a temporary context and builds with CGO disabled, read-only modules and trimmed paths. It needs no Node, Docker or other application. When Core gains a shared dependency, add that package to the list; never copy the whole repository to make it compile.
 
-`make docker-build-agents-api` builds the image `oac-core:dev` (`OAC_DEV_CORE_IMAGE` selects another name) from those five commands and the E2B helper. The base is the digest-pinned `debian:bookworm-slim` with CA certificates and the glibc runtime the helper needs; the default user is UID/GID 65532 and Core listens on `:8091`. The image is Linux amd64 only and is not pushed to a registry. Changes to the image or its build need `make check-agents-api-container` in addition to `make check`: it runs the official-client suite against the image with a read-only root filesystem and needs Linux Docker, a non-root user, `OAC_TEST_OFFICIAL_SDK_PYTHON` and a dedicated `OAC_TEST_DATABASE_URL`.
+`make docker-build-agents-api` builds the image `oac-core:dev` (`OAC_DEV_CORE_IMAGE` selects another name) from those five commands and the E2B helper. The base is the digest-pinned `debian:bookworm-slim` with CA certificates and the glibc runtime the helper needs; the default user is UID/GID 65532 and Core listens on `:8091`. The image is Linux amd64 only and is not pushed to a registry. Changes to the image or its build need `make check-agents-api-container` in addition to `make check`: it runs the official-client suite against the image with a read-only root filesystem and needs Linux Docker, a non-root user, and the [test database and pinned SDK](../services/agents-api/README.md#official-client-verification) of the service checks (`OAC_TEST_DATABASE_URL` naming an `oac_*_tests` database with the migrations applied, and `OAC_TEST_OFFICIAL_SDK_PYTHON`).
 
-`make build-agents-api-release` packages the same five commands into `oac-core-<commit>-linux-amd64.tar.gz` and its `.sha256` under `~/.oac/build/oac-core-release` (`OAC_DEV_RELEASE_DIR`). The archive holds the [archive README](../services/agents-api/RELEASE.md), the license, `manifest.json` (commit, tree, platform, Go version, upstream protocol and binary hashes) and `SHA256SUMS`. The build needs clean committed source and Python 3.9 or newer, and packages deterministically. It carries no configuration, credentials, Web or Runtime. Test archive changes by extracting a fresh copy and running its commands.
+`make build-agents-api-release` packages the same five commands into `oac-core-<commit>-linux-amd64.tar.gz` and its `.sha256` under `~/.oac/build/oac-core-release` (`OAC_DEV_RELEASE_DIR`). Beside `bin/`, the archive holds the [archive README](../services/agents-api/RELEASE.md), the license, `manifest.json` (commit, tree, platform, Go version, upstream protocol and binary hashes) and `SHA256SUMS`, which lists every packaged file. The build needs clean committed source and Python 3.9 or newer, and packages deterministically. It carries no configuration, credentials, Web or Runtime. Test archive changes by extracting a fresh copy and running its commands.
 
 ## Publish a version
 
@@ -128,9 +128,9 @@ The workflow runs three jobs on the tagged commit: `check` (the full `make check
 
 `install.sh` resolves the latest stable release once, or the release named by `--version`, verifies the control archive and runs that bundle's installer; the [installation guide](getting-started/install.md#install) covers its use.
 
-The jobs share Go module and build caches under `~/.oac/cache/`, keyed by runner OS and architecture, the Go module files and the commit. An older cache only seeds downloads and compilation; every check still runs. New keys are saved only after a successful job.
+The `check` and `build` jobs share Go module and build caches under `~/.oac/cache/`, keyed by runner OS and architecture, the Go module files and the commit. An older cache only seeds downloads and compilation; every check still runs. New keys are saved only after a successful job.
 
-Never move a release tag or overwrite published assets. If the `release` job fails, inspect the Release first: publication may have completed despite a lost response. Leave a complete published Release as it is. For an incomplete draft, fix or delete only that draft, then rerun the failed `release` job, which reuses the original Actions artifact. Do not rerun the build or recreate the tag to recover a failed upload.
+Never move a release tag or overwrite published assets. If the `release` job fails, inspect the Release first: publication may have completed despite a lost response. Leave a complete published Release as it is. For an incomplete draft, delete that draft (the job refuses any existing Release or draft for the tag), then rerun the failed `release` job, which reuses the original Actions artifact. Do not rerun the build or recreate the tag to recover a failed upload.
 
 ### Build a candidate without publishing
 
@@ -144,7 +144,9 @@ gh workflow run core-release --repo MiniMax-AI/parsar-core --ref main \
 
 With `draft_release=true` the result is an unpublished `build-<full SHA>` draft Release; with `draft_release=false` the files stay in the Actions artifact. Use the exact matched asset set; never mix builds or resolve components through `latest`.
 
-`scripts/promote-qualified-release.py` qualifies such a draft on a supervised host and publishes it; its module docstring states the rules.
+### Promote a qualified candidate
+
+`scripts/promote-qualified-release.py` qualifies a candidate on a supervised host and publishes it once main reaches the reviewed promotion commit. Pass the candidate's flat files, built for the `build-<full SHA>` release base: the thin and offline archives and the native installers, each with its `.sha256`, and the Runtime and node assets. Take them from a local build with that release base and `CORE_DISTRIBUTION_OFFLINE=1`, or from the Actions artifact of a manual `core-release` run with `draft_release=false` after removing `install.sh` and `install.sh.sha256`. The command creates the draft Release itself and refuses any other file, so a draft created by `draft_release=true` cannot be promoted. Its module docstring lists the inputs, the qualification stages and the publication checks.
 
 ## Continuous integration
 
@@ -156,7 +158,7 @@ With `draft_release=true` the result is an unpublished `build-<full SHA>` draft 
 | `actionlint` | Changes to workflows | Workflow syntax |
 | `core-release` | Version tags and manual runs | See [Publish a version](#publish-a-version) |
 
-Documentation-only and unrelated Web changes do not start `native-check`. A newer `core-check`, `api-acceptance` or `native-check` run on the same branch or pull request cancels the older one.
+Changes limited to Web or to documentation outside `contracts/agents-api` do not start `native-check`. A newer `core-check`, `api-acceptance` or `native-check` run on the same branch or pull request cancels the older one.
 
 ## Run Core without the installer
 
@@ -182,6 +184,6 @@ docker run --name oac-core --detach --read-only \
 curl --fail http://127.0.0.1:8091/healthz
 ```
 
-`--user` lets the container read the key digest file as your non-root host user; alternatively grant UID 65532 read access and omit it. Put a TLS reverse proxy in front for remote clients. `/healthz` reports liveness only. All state is in PostgreSQL, so the container needs no writable volume; stop and start it with `docker stop` and `docker start`, and never remove the database to replace it. One Core process serves each database; replicas add no availability. After startup, use the Core key with the [administrator API](../contracts/agents-api/admin-api.md) to create Projects and issue application keys.
+`--user` lets the container read the key digest file as your non-root host user; alternatively grant UID 65532 read access and omit it. Put a TLS reverse proxy in front for remote clients. `/healthz` reports liveness only. Keep credentials out of the image. All state is in PostgreSQL, so the container needs no writable volume; stop and start it with `docker stop` and `docker start`, and never remove the database to replace it. One Core process serves each database; replicas add no availability. After startup, use the Core key with the [administrator API](../contracts/agents-api/admin-api.md) to create Projects and issue application keys.
 
 The image also contains `oac-core-device` for an [internal execution device](../services/agents-api/README.md#internal-execution-device-connection) and `oac-core-environment-key`, the [break-glass credential command](../contracts/agents-api/environment-executor-credentials.md#break-glass-command).

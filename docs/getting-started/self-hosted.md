@@ -57,7 +57,7 @@ No administrator privileges or Docker are needed.
 
 In Web, open the Session and copy the command under **Connect a host**.
 
-The command expires after 30 minutes. Read the Session again, or reload its page in Web, for a fresh one. Treat the command as a temporary secret: it can claim the machine's credential but cannot run work or read files. The [credential contract](../../contracts/agents-api/environment-executor-credentials.md#installation-grant) describes what invalidates it.
+Keep the command private: it carries a short-lived [installation grant](../../contracts/agents-api/environment-executor-credentials.md#installation-grant) that claims the machine's credential. When it has expired, read the Session again or copy a fresh command from Web.
 
 The installer reports three results:
 
@@ -67,7 +67,7 @@ The installer reports three results:
 | **Daemon connection** | Core confirmed the daemon's authenticated connection |
 | **Model configuration** | Not checked; the first Turn uses the Session's model provider |
 
-If the connection is not confirmed within 45 seconds, the installer prints the path of the daemon's log. The daemon keeps reconnecting. Fix the cause and run the same command again with the same installation directory: completed components and the credential are kept and a running daemon is reused. Do not remove the workspace or the Session to retry.
+If the connection is not confirmed within 45 seconds, the installer prints the path of the daemon's log. The daemon keeps reconnecting. Fix the cause and run the install command again with the same installation directory, copying a fresh one from Web if it has expired: completed components and the credential are kept and a running daemon is reused. Do not remove the workspace or the Session to retry.
 
 ### Options for automation
 
@@ -127,7 +127,7 @@ The installation's `bin/oac-daemon` finds its own installation. Use it for:
 
 If you set `OAC_RUNTIME_HOME`, use the same value for every command. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](../../contracts/agents-api/environment-executor-credentials.md#connection-status).
 
-To add a Harness, run the original install command again with the same connection options and the Harness to add. The installer checks the existing contents, adds only missing components and keeps the Harnesses already installed. Restart a running daemon afterwards so it discovers the new Harness.
+To add a Harness, run the install command again (a fresh copy from Web if it has expired) with the same installation directory and the Harness to add. The installer checks the existing contents, adds only missing components and keeps the Harnesses already installed. Restart a running daemon afterwards so it discovers the new Harness.
 
 Stopping the daemon, cancelling a Turn or deleting the Session never removes the machine's workspace, native history or capability snapshot. An installation from another daemon version, or one whose files were changed, is refused. The installer never upgrades, repairs or migrates it; install into a separate directory.
 
@@ -140,7 +140,7 @@ In Web, the Session's **Executor credentials** list the machine's credential:
 | **Rotate** | The credential gets a new secret; the old secret stops working at once. On a revoked credential the action is **Restore** |
 | **Revoke** | The credential stops working at once |
 
-To reconnect after a rotation, stop the daemon with `oac-daemon stop`, replace the JSON at its configured credential-file path with the new credential, and run `oac-daemon start`. Do not run `install` again over the existing installation, and do not issue a second credential: the Environment stays bound to the credential it first connected with.
+To reconnect after a rotation, stop the daemon with `oac-daemon stop`, replace the JSON at its configured credential-file path with the new credential, and run `oac-daemon start`. Do not run `install` again over the existing installation, and rotate the existing credential rather than issuing a second one, which [cannot connect](../../contracts/agents-api/environment-executor-credentials.md#revoked-or-rotated-credential).
 
 In an archived Project, credentials cannot be issued or rotated; revocation remains available. Operators can manage credentials with the Core key; see the [credential contract](../../contracts/agents-api/environment-executor-credentials.md#core-key-routes).
 

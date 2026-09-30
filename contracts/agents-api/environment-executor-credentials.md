@@ -20,7 +20,7 @@ Session create, retrieve and update responses of a `self_hosted` Session carry `
 | `expires_at` | Unix time when the grant expires, 30 minutes after the response |
 | `commands.posix`, `commands.powershell` | The install command for Linux/macOS and for Windows PowerShell |
 
-The grant is bound to the Environment, the Session creator's principal and the Core build. It stops working when it expires, when the Session is deleted, when the Project is archived or when Core runs a different build. Reading the Session again returns a fresh grant. Treat the command as a temporary secret: it can claim the credential, but it cannot run work or read files.
+The grant is bound to the Environment, the Session creator's principal and the Core build. It stops working when it expires, when the Session is deleted, when the Project is archived or when Core runs a different build. Reading the Session again returns a fresh grant. Core stores no grant: each response signs a new one, and stored events never carry it. Treat the command as a temporary secret: it can claim the credential, but it cannot run work or read files.
 
 The installer generates the secret and saves it privately as `daemon/executor-credential.json` in the installation directory before it claims the key. Core stores the digest under the key ID equal to the Environment ID. A lost response is safe to retry: the retry must present the same secret. A grant never replaces or restores a credential. If the Environment already has a different, rotated or revoked credential, the claim fails with 409 `executor_credential_exists`.
 
@@ -67,7 +67,7 @@ Issue, rotate and revoke each record an administrator audit entry (`resource_typ
 
 ### Break-glass command
 
-`oac-core-environment-key` issues, rotates or revokes a credential directly in the database when the Core API is unavailable. It needs the private database configuration and the Project's execution principal: `--tenant` (the Project's tenant UUID in the `projects` table), `--organization core`, `--project proj_<Project UUID>`, `--subject-kind service_account`, `--subject-id project:<Project UUID>` and `--key-id`. `--environment` restricts a new credential to one Environment. The command bypasses the Core API: it skips the archived-Project check and writes no audit entry, so use the Core-key routes whenever Core is running. A credential issued without an Environment restriction cannot be managed through the routes above.
+`oac-core-environment-key` issues, rotates or revokes a credential directly in the database when the Core API is unavailable. It reads Core's database settings (`OAC_DATABASE_URL`, and `OAC_DATABASE_PASSWORD_FILE` when set) and needs the Project's execution principal: `--tenant` (the Project's tenant UUID in the `projects` table), `--organization core`, `--project proj_<Project UUID>`, `--subject-kind service_account`, `--subject-id project:<Project UUID>` and `--key-id`. Without another flag it issues a new credential, and `--environment` restricts it to one Environment. `--rotate` replaces the secret of an existing credential, including a revoked one; `--revoke` revokes it without printing a secret. Rotation and revocation keep the stored restriction and refuse `--environment`, and the two flags are mutually exclusive. Issuance and rotation print the credential file once on standard output; redirect it to a new mode-0600 file. The command bypasses the Core API: it skips the archived-Project check and writes no audit entry, so use the Core-key routes whenever Core is running. A credential issued without an Environment restriction cannot be managed through the routes above.
 
 ## Connection status
 
@@ -89,7 +89,7 @@ The installer derives this route from the returned `remote_url` and does not fol
 
 When Core permanently rejects the daemon (enrollment 401 or 409, a permanent WebSocket rejection, or a daemon version from another Core distribution), the daemon prints the reason once and makes no further requests until it is stopped; it then exits successfully, so a supervisor that restarts on exit does not loop. When started again, it tries enrollment once and parks again. Transient failures keep the normal reconnect behavior and never replay execution.
 
-To reconnect, rotate the same `key_id` (**Rotate**, or **Restore** for a revoked credential, in the Session's **Executor credentials**), stop the daemon, replace the credential file at its configured path, and start the daemon again. A new `key_id` cannot reconnect an Environment that is already bound: issuing it succeeds, but enrollment with it returns 409. Rotation does not reinstall Harnesses, change the workspace or replace native history; never create a new Session history to recover a credential.
+A machine reconnects only with its bound `key_id`, rotated to a new secret that replaces the credential file at its configured path; the [self-hosted guide](../../docs/getting-started/self-hosted.md#rotate-or-revoke) gives the steps. A new `key_id` cannot reconnect an Environment that is already bound: issuing it succeeds, but enrollment with it returns 409. Rotation does not reinstall Harnesses, change the workspace or replace native history; never create a new Session history to recover a credential.
 
 ## Model provider
 
