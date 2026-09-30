@@ -295,7 +295,7 @@ Initial requests, `Executor.StartTurn` and steering consume the same ordered
 `proto.MessageInput`. Text-only adapters use `TextOnly()` to reject images without
 discarding content. Image adapters translate each part natively and acknowledge
 an active batch only after all its messages are applied. Register
-`MessageImages` and qualify `MessageImagePlacements` separately; see the
+Runtime `MessageImages` and qualify the engine profile’s `MessageImages` separately; see the
 [message-input contract and real acceptance](message-input.md).
 
 Hosted workspace execution additionally requires verified preparation, workspace

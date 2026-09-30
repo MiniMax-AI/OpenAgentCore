@@ -52,7 +52,7 @@ text ([Web architecture](../../docs/web/architecture.md)). Other clients' text i
 never trimmed.
 
 Harness profiles declare whether whitespace-only text is qualified, through the
-same engine profile that declares image placements. Only Codex is qualified; it
+same engine profile that declares image support. Only Codex is qualified; it
 delivers such text unchanged and completed whitespace-only Turns in live
 acceptance. Claude SDK is not qualified: the bridge and Anthropic-compatible
 providers reject text without a non-whitespace character. MiniMax Code is not
@@ -89,7 +89,7 @@ only after every message in its batch is consumed. Its native 64-message bound i
 checked before any part of a batch enters the iterator.
 
 Public profile qualification and Runtime advertisement are separate. Admission
-checks the registered image profile for this placement; device selection and
+checks the registered operation-specific image profile; device selection and
 delivery check actual image support. Text-only operations retain existing offline
 admission. Adding an adapter must implement the shared contract and qualify the
 public operation, without adding engine-name branches to Core.
@@ -168,7 +168,7 @@ native receipt qualification.
 
 ## Remaining gaps
 
-Self-hosted/user-managed image workflows, MiniMax Code image input, remote HTTP(S) image URLs,
+MiniMax Code image input, remote HTTP(S) image URLs,
 other media types and full upstream error/default semantics remain unqualified.
 MiniMax's fixed ACP advertises `image:false`; its adapter rejects images. These are
 implementation gaps, not changes to the official protocol. JPEG parsing/conversion
@@ -178,3 +178,8 @@ parts beside text (SES-08), local payload limits and native batch-size parity ne
 upstream evidence.
 Function-result image support has its own [coverage record](function-result-images.md). No full protocol
 compatibility or support for arbitrary vision-model/provider combinations is claimed.
+
+User-managed Linux image execution follows the same native workspace path. See
+[current qualification](environment-capabilities-qualification.md) for the tested
+Harnesses, formats, continuation and remaining boundaries. Historical evidence
+above retains its original deployment scope.

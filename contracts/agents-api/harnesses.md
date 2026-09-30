@@ -70,7 +70,7 @@ contracts.
 | V1 `self_hosted` daemon enrollment at `/workspace` | [Qualified deployment scope](user-managed-runtime-v1.md) | [Qualified deployment scope](user-managed-runtime-v1.md) | [Qualified deployment scope](user-managed-runtime-v1.md) |
 | Deferred function discovery | Unqualified; explicit rejection | [Single-agent text/function profile](tool-search.md) | Gap; see [tool search](tool-search.md) |
 | Structured output | Unqualified; explicit rejection | [Qualified single-agent function profile](structured-output.md) | Gap; see [structured output](structured-output.md) |
-| Message images | Inline PNG/JPEG on `none` and Docker `openai_hosted` | Inline PNG/JPEG on `none` and Docker `openai_hosted` | Unsupported; see [message input](message-input.md) |
+| Message images | Inline PNG/JPEG on `none`, Docker `openai_hosted` and `self_hosted` | Inline PNG/JPEG on `none`, Docker `openai_hosted` and `self_hosted` | Unsupported; see [message input](message-input.md) |
 | Explicit reasoning | Shared service gap | Shared service gap | Shared service gap |
 | Six Subagent reads | [Qualified scope](subagents.md) | [Qualified scope](subagents.md) | [Qualified scope](subagents.md) |
 

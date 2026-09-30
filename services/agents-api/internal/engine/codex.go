@@ -11,7 +11,7 @@ func codexProfile() Profile {
 	return Profile{
 		ProgrammaticToolCallingDisable: true,
 		Placements:                     []string{"none", "self_hosted", "openai_hosted"},
-		MessageImagePlacements:         []string{"none", "openai_hosted"},
+		MessageImages:                  true,
 		WhitespaceOnlyText:             true,
 		WebSearchControl:               true, TextVerbosity: true, MCPBearer: true,
 		ValidateConfiguration: func(agent v1.Agent, _ *v1.Environment, _ bool) error {

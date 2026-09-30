@@ -737,8 +737,8 @@ adds type-only `tool_search` for its qualified profile. Other discovery combinat
 the native 64-definition cap and nonblank names of at most 512 bytes remain
 compatibility gaps; repeated names and explicit non-object root types reject as
 officially. Claude SDK additionally requires an explicit object root. It accepts text and
-successful inline PNG/JPEG function results on `none` and Docker `openai_hosted`;
-failed images, unqualified placements and remote references
+successful inline PNG/JPEG function results on `none`, Docker `openai_hosted` and `self_hosted`;
+failed images and remote references
 remain gaps. See [function image coverage](function-result-images.md). Codex internal Goal/Skills/user-input/discovery semantics need
 upstream evidence; their presence alone does not prove a tool-set mismatch.
 

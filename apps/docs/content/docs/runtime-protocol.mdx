@@ -243,13 +243,13 @@ input list and uses blank-line separators between messages; this does not preser
 independent native user-message boundaries.
 The independently packaged Claude bridge uses protocol 3 for a prepared Executor
 and separately identified Turns; readiness rejects other protocol versions.
-Image-bearing messages require a qualified profile/placement before persistence
+Image-bearing messages require a qualified operation profile before persistence
 and image support from the selected Runtime before native delivery. These checks
 apply to that operation only; ordinary text retains offline queueing. Initial,
 prepared and active paths use the same content and preserve receipt ownership.
 The qualified public profile is inline PNG/JPEG on Codex/Claude `none` and
-Core-managed Docker `openai_hosted`. Self-hosted/user-managed images, MiniMax
-images and remote URLs remain explicit implementation gaps. Hosted images reuse
+Core-managed Docker `openai_hosted` and user-managed `self_hosted`. MiniMax
+images and remote URLs remain explicit implementation gaps. Workspace images reuse
 the existing preparation, active-input and workspace authority; they do not add
 a downloader, a mount or a separate execution lifecycle. Core
 does not fetch or transform media. See [message input coverage](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/message-input.md).

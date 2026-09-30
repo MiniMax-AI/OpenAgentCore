@@ -10,7 +10,7 @@
     "docs/web/core-connection.md": "861c75c32676fd17b84eb356b263096703af5750c1ceb71bb339e84607fffc56",
     "docs/getting-started/quickstart.md": "b989682ac2e58d59a794118fd371b37d1ea64c957d3512ff53739458a95d0f9a",
     "docs/api/README.md": "dbe3f172a997ee2fd3d2e5765d382b4fb7cf7c50f1dd17212ab9646f6959d63e",
-    "contracts/agents-api/execution-tools.md": "e0b61f6c0c236c362186c5f6d0ad69a16dd8a8d9afabe1329a1fe22e5f4a71e9",
+    "contracts/agents-api/execution-tools.md": "2badf8c179fa6da5aa4c022b3e800b3b84cc787cca9464049cb28a315dd55bc5",
     "docs/api/public-agent-api.md": "00979732412a971013e8f01b4c74820ff51aafdded6b0f105d25a78af86a6627",
     "docs/examples.md": "0e1bdaeff51c9c36779f817be31ea9816b7d8cb2290cf8350d3c4801f436f4f9",
     "contracts/agents-api/environments.md": "a000ca89f5d7611f52c963467dd72f2ab5195d2e3dc48a0aeefb89fd9bcfc7a6",
@@ -25,9 +25,9 @@
     "docs/user-guide.md": "190bea5bfe23b71db3d9437065ee270e07226a89a6e98c668853e5c7f7555529",
     "docs/assets/development-architecture.png": "24e6d0145d4f16ad70b07b6bc643808a6455aaf6398434d199cf74def200fca6",
     "docs/development.md": "f5c340253036a2cabc43e22aecdf70522d90280d6511e7649278ae93712ab8b6",
-    "contracts/agents-api/harness-onboarding.md": "234906652d381f4920d2245a795ad7f12f2f66577018db4dd5d545697d4f111b",
+    "contracts/agents-api/harness-onboarding.md": "874a80dc1ffc5e97b2783bea3f6b217893f997b38bb8180a29f09c6dbf75e622",
     "docs/runtime-bootstrap.md": "0d49aed73b298039e04453e6f465b0e925fb2227fa35d4206820bb3acbd8df39",
-    "docs/runtime-protocol.md": "79f6bf1597eb0c82b41074fd21a6617225ffb7d11572c156e1d56c4e8741f322",
+    "docs/runtime-protocol.md": "e8aa4cf862b5f63a4138cfeb25196a6bdb5c40a2e389e828b464585415dc6c45",
     "docs/sandbox-provider.md": "4d47b234a457f874f3ff7e61a7f5da6fc8b75b0c6df0ce0ce9ead1c07afdfb3e",
     "apps/docs/scripts/guides.json": "3c3768fb94fd3d42464d4ce8c55724b9ba8360133c7cc19d513d8ec83a8e034f"
   },
@@ -41,7 +41,7 @@
     "content/docs/bootstrap-projects-keys.mdx": "91a6f62cbe41737adfce9e8ec56e6dc3e2fb0ec8f6b677576f941cdfb378dc47",
     "content/docs/quickstart.mdx": "d0ab9537ab68f6dd3109353e937a29c5d58ec3894b56a52873c9a1d79dfa60a6",
     "content/docs/public-api.mdx": "cd59f4a661f897d1a9dc6ff08a09f7b7504c355288bbf022eff9b70500a9865c",
-    "content/docs/agents-and-tools.mdx": "b8a85fe92e19a71b7ad7c9357ce7ad0595d50c9190edb748ca834df615b056cb",
+    "content/docs/agents-and-tools.mdx": "bc67b34e88f1395a3071a251a5721f8601e333f45dc018d5f2014204eacf37d5",
     "content/docs/sessions.mdx": "bb63d799ed90038836d652f3f866d0309822425114c6b2aa36654b8a991947f6",
     "content/docs/examples.mdx": "587061e65ab2e841d14980539ba94e2216d4e8135c948a852b9a8bb0359c85d7",
     "content/docs/environments-and-files.mdx": "a35d35841740e6f9092506e019bf23675a0946b1e9f1ff61dc561cd11b64d152",
@@ -56,9 +56,9 @@
     "content/docs/user-guide.mdx": "7c099b2d787ce3d7876889c7cefd621840ec083f267eadf278214a83f11ba274",
     "public/images/source/docs/assets/development-architecture.png": "24e6d0145d4f16ad70b07b6bc643808a6455aaf6398434d199cf74def200fca6",
     "content/docs/development.mdx": "2e5249ddfca571d264e93fd1e0e390a4bd5b0b623bda100cd02f2982929850bb",
-    "content/docs/harness-onboarding.mdx": "d9c9dcbd339ba9b278b133816c1d905bdbd849f44e2ff27882090cd39002e1c8",
+    "content/docs/harness-onboarding.mdx": "17626e9f6256ddfffc95fd81dfa8d9c712d9ff16792ea5ef54bfe8c3ce1a2a9f",
     "content/docs/runtime-bootstrap.mdx": "58982955811c9ad46a9fc04d8d2aef5a762fc9d25d5833f88aa75ee3fc46523f",
-    "content/docs/runtime-protocol.mdx": "fed94a899e953c486d8560a21a2eb15a8c41c173d020e21b57cd207c08c272b7",
+    "content/docs/runtime-protocol.mdx": "d6b818edf2a0e0c4f2d3878f75805043c6dba3b09c6563f80faa4cecd05d40c7",
     "content/docs/sandbox-provider.mdx": "9db833fe9ff3f30a65451f80d7251348695a08e7830f9e95871739a710529818"
   }
 }

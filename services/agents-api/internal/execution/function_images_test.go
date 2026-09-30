@@ -35,8 +35,8 @@ func TestFunctionImageAdmission(t *testing.T) {
 	}
 	for _, placement := range []string{"self_hosted"} {
 		url := image
-		if err := profile.ValidateFunctionResult(placement, proto.FunctionResultPayload{Success: true, Content: []proto.InputContent{{Type: "input_image", ImageURL: &url}}}); !errors.Is(err, engine.ErrInvalidInput) {
-			t.Fatal("unqualified image placement", placement, err)
+		if err := profile.ValidateFunctionResult(placement, proto.FunctionResultPayload{Success: true, Content: []proto.InputContent{{Type: "input_image", ImageURL: &url}}}); err != nil {
+			t.Fatal("qualified image rejected", placement, err)
 		}
 		if err := profile.ValidateFunctionResult(placement, proto.FunctionResultPayload{Success: true, Content: proto.TextInput("text")[0].Content}); err != nil {
 			t.Fatal("workspace text regressed", err)

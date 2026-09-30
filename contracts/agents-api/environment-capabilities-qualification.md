@@ -8,7 +8,7 @@ in [Environments](environments.md), [structured output](structured-output.md) an
 ## Verified public workflows
 
 Real requests used the pinned official Python SDK against a dedicated Core and
-PostgreSQL, the official native daemon installer, and MiniMax-M2.7. No test model
+PostgreSQL, the official native daemon installer, and MiniMax-M2.7 or Kimi K3. No test model
 or replacement model/tool loop was used. Remote evidence is under
 `zju_a100_2:~/.oac/acceptance/environment-capabilities-20260930`.
 
@@ -31,6 +31,25 @@ are retained separately. They are not presented as clean end-to-end SSE evidence
 The recovered results and native history verify the actual completed work; inputs
 were not replayed to obtain those results.
 
+## Funded visual-model validation
+
+After restoring Kimi K3 credit, real pinned official-client requests used the
+same Core/Runtime and native adapters on Linux user-managed machines:
+
+| Workflow | Evidence | Verified behavior |
+| --- | --- | --- |
+| Claude image messages | `claude-image-funded`, Session `be8c8251-5c07-4c39-b71c-3ac74139bbb7` | Randomized PNG colors, a second PNG after daemon restart, and JPEG on the rebuilt final Core. |
+| Codex image messages | `codex-image-funded`, Session `eed03095-b3e9-4c97-8e23-3343287c797d` | Randomized PNG colors, a second PNG after daemon restart, and JPEG on the rebuilt final Core. |
+| Claude function image results | `claude-function-image-funded`, Session `fc0f373d-d5a2-41bb-9061-7c0da3997387` | PNG supplied only in the callback; remote/failed image rejection leaves the call pending; identical result retry succeeds, conflicting retry rejects, and Items retain submitted content. Cold continuation recalls the prior image, pending-call cancellation settles, and final-Core JPEG succeeds. |
+
+The image follow-up changes operation admission, not native encoding, credential
+selection, preparation or execution ownership. It removes the Environment-source
+image gate for Codex and Claude; Runtime image support is still checked before
+delivery. MiniMax image input remains rejected. This record adds no new managed
+provider run, macOS/Windows live model run, or Codex function-result image
+qualification. No production deployment was updated; only the owned acceptance
+Core was restarted, preserving its database and Sessions.
+
 ## Runtime boundaries
 
 All three adapters consume the same transient effective MCP binding resolver.
@@ -49,9 +68,9 @@ cancellation. Genuine timeout still fails and retains process ownership records.
 
 ## Limits and retained failures
 
-- The available Kimi visual-model account returned HTTP 429/quota. The image
-  Turn was cancelled, and self-hosted image admission remains unchanged. No
-  image qualification is inferred from text or schema tests.
+- The first Kimi attempt returned HTTP 429/quota and was cancelled. After the
+  account was funded, separate image workflows below used real visual requests;
+  the failed quota attempt remains separate evidence.
 - An earlier ToolSearch bundle did not advertise workspace discovery. Its input
   remained pending without a Turn; public cancellation returned 409. That Runtime
   was stopped and the records retained. The corrected bundle advertises discovery
@@ -64,5 +83,5 @@ cancellation. Genuine timeout still fails and retains process ownership records.
 - No Claude installation was performed on the Mac. Native platform CI, including
   Windows, is required for the final PR. Windows manual acceptance remains absent.
 - Public MiniMax MCP, Plugin tool allowlists/required flags, custom HTTP headers,
-  workspace discovery combined with Skills/Plugins/MCP, and self-hosted image
+  workspace discovery combined with Skills/Plugins/MCP, and MiniMax image
   execution are not qualified by this work.

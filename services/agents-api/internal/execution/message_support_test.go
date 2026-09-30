@@ -13,12 +13,12 @@ import (
 func TestMessageImageQualificationIsOperationSpecific(t *testing.T) {
 	url := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII="
 	input := proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image", ImageURL: &url}}}}
-	profile := engine.Profile{MessageImagePlacements: []string{"none"}}
+	profile := engine.Profile{MessageImages: true}
 	if err := validateMessageImageProfile(profile, "none", input); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateMessageImageProfile(profile, "self_hosted", input); !errors.Is(err, store.ErrInvalidInput) {
-		t.Fatal("unqualified placement accepted", err)
+	if err := validateMessageImageProfile(profile, "self_hosted", input); err != nil {
+		t.Fatal("qualified user machine rejected", err)
 	}
 	if err := validateMessageImageProfile(engine.Profile{}, "none", input); !errors.Is(err, store.ErrInvalidInput) {
 		t.Fatal("unqualified profile accepted", err)
