@@ -21,6 +21,8 @@ type fakeExecutionStorage struct {
 
 	tx     *fakeTx
 	locked LockedSession
+	// environment is the Environment WithFileWriteReservation reads.
+	environment Environment
 	// pages are the pages ListEnvironmentConnections reads, one per call.
 	pages [][]EnvironmentKey
 	// connections is the error each WithConnection call returns in place of

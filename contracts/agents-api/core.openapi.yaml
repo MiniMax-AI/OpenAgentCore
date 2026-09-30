@@ -4258,6 +4258,14 @@ paths:
           description: Conflict
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Get a self_hosted Session's installation commands

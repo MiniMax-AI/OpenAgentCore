@@ -9,10 +9,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
-// fakeDeviceStorage is strict pooled Session storage for the device use
-// cases. Each method records its call, with the arguments that identify it,
-// then runs its func; a method whose func is unset fails the test.
-type fakeDeviceStorage struct {
+// fakeStorage is strict pooled Session storage for the device and executor
+// credential use cases. Each method records its call, with the arguments that
+// identify it, then runs its func; a method whose func is unset fails the
+// test.
+type fakeStorage struct {
 	t     *testing.T
 	calls []string
 
@@ -25,9 +26,23 @@ type fakeDeviceStorage struct {
 	enrollment  *fakeTx
 	environment Environment
 	locked      LockedSession
+
+	getEnvironment      func() (Environment, error)
+	loadProjectArchived func() (bool, error)
+	projectExists       func() (bool, error)
+	loadRestriction     func() (string, error)
+	// installationKey signs installation authorizations; empty fails the
+	// test.
+	installationKey string
+	// verifyInstallation, when set, is what VerifyInstallation returns in
+	// place of checking the signature.
+	verifyInstallation error
+	// credentials is the transaction the executor credential With methods
+	// apply in, with locked.
+	credentials *fakeTx
 }
 
-func (s *fakeDeviceStorage) record(name string, set bool, detail ...string) {
+func (s *fakeStorage) record(name string, set bool, detail ...string) {
 	s.t.Helper()
 	if !set {
 		s.t.Fatalf("unexpected call to %s", name)
@@ -35,42 +50,42 @@ func (s *fakeDeviceStorage) record(name string, set bool, detail ...string) {
 	s.calls = append(s.calls, strings.Join(append([]string{name}, detail...), " "))
 }
 
-func (s *fakeDeviceStorage) CreateDevice(_ context.Context, tenant string, registration DeviceRegistration) (ExecutionDevice, error) {
+func (s *fakeStorage) CreateDevice(_ context.Context, tenant string, registration DeviceRegistration) (ExecutionDevice, error) {
 	s.record("CreateDevice", s.createDevice != nil, tenant, registration.Name, registration.CredentialHash)
 	return s.createDevice(registration)
 }
 
-func (s *fakeDeviceStorage) RevokeDevice(_ context.Context, tenant, device string) error {
+func (s *fakeStorage) RevokeDevice(_ context.Context, tenant, device string) error {
 	s.record("RevokeDevice", s.revokeDevice != nil, tenant, device)
 	return s.revokeDevice()
 }
 
-func (s *fakeDeviceStorage) TouchDevice(_ context.Context, device string) (bool, error) {
+func (s *fakeStorage) TouchDevice(_ context.Context, device string) (bool, error) {
 	s.record("TouchDevice", s.touchDevice != nil, device)
 	return s.touchDevice()
 }
 
-func (s *fakeDeviceStorage) TouchAuthenticatedDevice(_ context.Context, device, credentialHash string) (bool, error) {
+func (s *fakeStorage) TouchAuthenticatedDevice(_ context.Context, device, credentialHash string) (bool, error) {
 	s.record("TouchAuthenticatedDevice", s.touchAuthenticatedDevice != nil, device, credentialHash)
 	return s.touchAuthenticatedDevice()
 }
 
-func (s *fakeDeviceStorage) WithEnrollment(ctx context.Context, environment, credentialHash string, apply func(context.Context, EnrollmentTx, Environment, LockedSession) error) error {
+func (s *fakeStorage) WithEnrollment(ctx context.Context, environment, credentialHash string, apply func(context.Context, EnrollmentTx, Environment, LockedSession) error) error {
 	s.record("WithEnrollment", s.enrollment != nil, environment, credentialHash)
 	return apply(ctx, s.enrollment, s.environment, s.locked)
 }
 
-func (s *fakeDeviceStorage) WithArtifactStaging(context.Context, ArtifactStagingKey, func(context.Context, ArtifactStagingTx) error) error {
+func (s *fakeStorage) WithArtifactStaging(context.Context, ArtifactStagingKey, func(context.Context, ArtifactStagingTx) error) error {
 	s.t.Fatal("unexpected call to WithArtifactStaging")
 	return nil
 }
 
-func (s *fakeDeviceStorage) DeleteSessionArtifact(context.Context, string, string, string) error {
+func (s *fakeStorage) DeleteSessionArtifact(context.Context, string, string, string) error {
 	s.t.Fatal("unexpected call to DeleteSessionArtifact")
 	return nil
 }
 
-func deviceService(t *testing.T, storage *fakeDeviceStorage) *Service {
+func deviceService(t *testing.T, storage *fakeStorage) *Service {
 	t.Helper()
 	service, err := NewService(storage)
 	if err != nil {
@@ -106,7 +121,7 @@ func TestNewDeviceRegistration(t *testing.T) {
 }
 
 func TestDeviceUseCases(t *testing.T) {
-	storage := &fakeDeviceStorage{t: t}
+	storage := &fakeStorage{t: t}
 	if _, err := deviceService(t, storage).CreateDevice(t.Context(), "tenant", "runtime", "secret"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("invalid registration: %v", err)
 	}
@@ -127,7 +142,7 @@ func TestDeviceUseCases(t *testing.T) {
 	// A heartbeat reports whether the device, or the credential it was
 	// authenticated with, still has authority.
 	for _, current := range []bool{true, false} {
-		storage := &fakeDeviceStorage{t: t, touchDevice: returns(current), touchAuthenticatedDevice: returns(current)}
+		storage := &fakeStorage{t: t, touchDevice: returns(current), touchAuthenticatedDevice: returns(current)}
 		service := deviceService(t, storage)
 		runtime, err := service.TouchRuntimeHeartbeat(t.Context(), "device")
 		if err != nil || runtime != (runtimedevice.HeartbeatStatus{Liveness: "online", Deleted: !current}) {
@@ -142,7 +157,7 @@ func TestDeviceUseCases(t *testing.T) {
 		}
 	}
 	failing := func() (bool, error) { return true, errStorage }
-	storage = &fakeDeviceStorage{t: t, touchDevice: failing, touchAuthenticatedDevice: failing}
+	storage = &fakeStorage{t: t, touchDevice: failing, touchAuthenticatedDevice: failing}
 	if status, err := deviceService(t, storage).TouchRuntimeHeartbeat(t.Context(), "device"); !errors.Is(err, errStorage) || status != (runtimedevice.HeartbeatStatus{}) {
 		t.Fatalf("failed runtime heartbeat %+v, %v", status, err)
 	}
@@ -174,7 +189,7 @@ func TestEnrollRuntimeBindsUnderTheSessionLock(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			tx := test.tx
 			tx.t = t
-			storage := &fakeDeviceStorage{t: t, enrollment: &tx, environment: environment, locked: test.locked}
+			storage := &fakeStorage{t: t, enrollment: &tx, environment: environment, locked: test.locked}
 			enrolled, err := deviceService(t, storage).EnrollRuntime(t.Context(), "environment", credentialDigest)
 			if test.want == nil && err != nil || test.want != nil && !errors.Is(err, test.want) {
 				t.Fatalf("got %v, want %v", err, test.want)

@@ -12,9 +12,11 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// EnvironmentsReader reads Environments.
+// EnvironmentsReader reads Environments and the executor credentials of a
+// Project's self_hosted Environments.
 type EnvironmentsReader interface {
 	GetEnvironment(context.Context, string, string) (sessions.Environment, error)
+	ProjectExecutorCredentialState(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
 }
 
 // Environments grants and claims native installations, and manages the
@@ -25,7 +27,6 @@ type Environments interface {
 	AuthorizeEnvironmentInstallation(context.Context, identity.Principal, string, string) (string, int64, error)
 	ValidateEnvironmentInstallation(context.Context, string, string) (sessions.InstallationAuthorization, error)
 	ClaimEnvironmentInstallation(context.Context, string, string, string) error
-	ProjectExecutorCredentialState(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
 	IssueProjectExecutorCredential(context.Context, identity.Principal, string, string, bool) (sessions.IssuedExecutorCredential, error)
 	RevokeProjectExecutorCredential(context.Context, identity.Principal, string, string) error
 }

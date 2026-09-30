@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -104,6 +105,24 @@ func FixtureFunctionCall(ctx context.Context, pool *pgxpool.Pool, tenantID, sess
 		return sessions.FunctionCall{}, err
 	}
 	return sessions.FunctionCall{CallID: row.CallID, ExecutorCallID: row.ExecutorCallID, Name: row.Name, Arguments: row.Arguments, Result: row.Result, Applied: row.Applied}, nil
+}
+
+// FixtureFileWrite reads a file write to the tenant's Environment from the
+// test's database for assertions, including one whose Session was publicly
+// deleted. An unknown write is sessions.ErrNotFound.
+func FixtureFileWrite(ctx context.Context, pool *pgxpool.Pool, tenantID, environmentID, writeID string) (sessions.EnvironmentFileWrite, error) {
+	row, err := sqlc.New(pool).GetEnvironmentFileWrite(ctx, sqlc.GetEnvironmentFileWriteParams{TenantID: pgunit.PathID(tenantID), EnvironmentID: pgunit.PathID(environmentID), ID: pgunit.PathID(writeID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.EnvironmentFileWrite{}, sessions.ErrNotFound
+	}
+	if err != nil {
+		return sessions.EnvironmentFileWrite{}, err
+	}
+	write := row.EnvironmentFileWrite
+	return sessions.EnvironmentFileWrite{
+		Identity:      sessions.FileWriteIdentity{ID: uuid.UUID(write.ID.Bytes).String(), DeviceID: uuid.UUID(write.DeviceID.Bytes).String(), RequestSHA256: write.RequestSha256},
+		EnvironmentID: uuid.UUID(write.EnvironmentID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), State: write.State, CreatedAt: write.CreatedAt.Time,
+	}, nil
 }
 
 // SubmitFixtureFunctionResult submits result for the Turn's call as a public

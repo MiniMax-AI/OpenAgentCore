@@ -6,30 +6,33 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 type fileWriteFixture struct {
-	s, writer *Store
-	tenant    string
-	session   sessions.Session
-	env       sessions.Environment
-	key       sessions.FileWriteIdentity
+	s       *Store
+	lease   *pgunit.Lease                 // the execution lease
+	writer  *sessions.ExecutionOperations // runs the file writes on lease
+	tenant  string
+	session sessions.Session
+	env     sessions.Environment
+	key     sessions.FileWriteIdentity
 }
 
 func newFileWriteFixture(t *testing.T) fileWriteFixture {
 	t.Helper()
 	s, pool := testStore(t)
-	writer := executionWriter(t, s)
+	lease := executionWriter(t, s).lease
 	tenant := uuid.NewString()
 	session, env := localEnvironment(t, s, tenant)
 	host, err := FixtureEnvironmentDevice(t.Context(), pool, tenant, env.ID, "file owner", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fileWriteFixture{s: s, writer: writer, tenant: tenant, session: session, env: env,
+	return fileWriteFixture{s: s, lease: lease, writer: sessionExecution(t, lease), tenant: tenant, session: session, env: env,
 		key: sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: host.ID, RequestSHA256: strings.Repeat("a", 64)}}
 }
 
@@ -48,7 +51,7 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 		t.Fatal("lost writer settled an upload")
 	}
 	reopened, _ := testStore(t)
-	next := executionWriter(t, reopened)
+	next := sessionExecution(t, executionWriter(t, reopened).lease)
 	got, err := next.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key)
 	if err != nil || !got.Replayed || got.State != "pending" || !got.CreatedAt.Equal(first.CreatedAt) || got.Identity != f.key {
 		t.Fatal("restart lost unknown write identity", got, err)
@@ -73,7 +76,7 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 	if receipt, err := reopened.RequestCancel(ctx, f.tenant, f.session.ID, "idle-cancel"); err != nil || receipt.TurnID != "" {
 		t.Fatal("write gate imposed mutation admission on idle cancellation", receipt, err)
 	}
-	if got, err := reopened.GetEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key.ID); err != nil || got.State != "pending" {
+	if got, err := FixtureFileWrite(ctx, reopened.pool, f.tenant, f.env.ID, f.key.ID); err != nil || got.State != "pending" {
 		t.Fatal("idle cancellation cleared unknown write", got, err)
 	}
 	settled, err := next.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, "committed")
@@ -86,9 +89,6 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 func TestEnvironmentFileWriteMatchesReceiptAndRetainsDeletedOwner(t *testing.T) {
 	f := newFileWriteFixture(t)
 	ctx := t.Context()
-	if _, err := f.s.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key); err == nil {
-		t.Fatal("pooled Store admitted a file write")
-	}
 	if _, err := f.writer.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key); err != nil {
 		t.Fatal(err)
 	}
@@ -108,9 +108,6 @@ func TestEnvironmentFileWriteMatchesReceiptAndRetainsDeletedOwner(t *testing.T) 
 	if _, err := f.writer.SettleEnvironmentFileWrite(ctx, uuid.NewString(), f.env.ID, f.key, "committed"); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("cross-tenant settlement", err)
 	}
-	if _, err := f.s.GetEnvironmentFileWrite(ctx, uuid.NewString(), f.env.ID, f.key.ID); !errors.Is(err, sessions.ErrNotFound) {
-		t.Fatal("cross-tenant read", err)
-	}
 	for _, state := range []string{"pending", "unknown", "cancelled", "retired"} {
 		if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, state); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatal("non-receipt settled write", state, err)
@@ -119,7 +116,7 @@ func TestEnvironmentFileWriteMatchesReceiptAndRetainsDeletedOwner(t *testing.T) 
 	if err := f.s.DeleteSession(ctx, f.tenant, f.session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := f.s.GetEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key.ID); err != nil || got.State != "pending" {
+	if got, err := FixtureFileWrite(ctx, f.s.pool, f.tenant, f.env.ID, f.key.ID); err != nil || got.State != "pending" {
 		t.Fatal("deletion discarded unresolved write", got, err)
 	}
 	if _, err := f.writer.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key); !errors.Is(err, sessions.ErrNotFound) {
@@ -206,7 +203,7 @@ func TestEnvironmentFileWriteSerializesWithInputAndRetry(t *testing.T) {
 	if got, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, original, "committed"); err != nil || !got.Replayed {
 		t.Fatal("old receipt retry changed", got, err)
 	}
-	if got, err := f.s.GetEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key.ID); err != nil || got.State != "pending" {
+	if got, err := FixtureFileWrite(ctx, f.s.pool, f.tenant, f.env.ID, f.key.ID); err != nil || got.State != "pending" {
 		t.Fatal("old receipt cleared successor", got, err)
 	}
 }

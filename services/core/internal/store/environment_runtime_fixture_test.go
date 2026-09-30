@@ -21,7 +21,7 @@ func enrollFixtureSession(t *testing.T, s *store.Store, db fixtureDB, tenant str
 		t.Fatal(err)
 	}
 	principal := store.FixtureExecutorPrincipal(t, s, tenant)
-	key, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+	key, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

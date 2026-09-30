@@ -70,7 +70,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			key, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+			key, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -187,7 +187,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		key, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+		key, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
 		if err != nil {
 			t.Fatal(err)
 		}

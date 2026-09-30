@@ -26,11 +26,10 @@ func LoadEnvironment(ctx context.Context, q *sqlc.Queries, tenant, environment s
 	return EnvironmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
 }
 
-// LoadSessionEnvironment reads, on q, the Environment of the tenant's Session
+// loadSessionEnvironment reads, on q, the Environment of the tenant's Session
 // that was not publicly deleted, or sessions.ErrNotFound. A malformed ID is
-// sessions.ErrInvalidInput. Other adapters read the Environment of their
-// operation with it.
-func LoadSessionEnvironment(ctx context.Context, q *sqlc.Queries, tenant, session string) (sessions.Environment, error) {
+// sessions.ErrInvalidInput.
+func loadSessionEnvironment(ctx context.Context, q *sqlc.Queries, tenant, session string) (sessions.Environment, error) {
 	tenantID, err := parseID(tenant)
 	if err != nil {
 		return sessions.Environment{}, err
@@ -56,7 +55,7 @@ func (s *Store) GetEnvironment(ctx context.Context, tenant, environment string) 
 }
 
 func (s *Store) GetSessionEnvironment(ctx context.Context, tenant, session string) (sessions.Environment, error) {
-	return LoadSessionEnvironment(ctx, s.units.Queries(), tenant, session)
+	return loadSessionEnvironment(ctx, s.units.Queries(), tenant, session)
 }
 
 func (s *Store) ListEnvironmentInitializations(ctx context.Context, after string) ([]sessions.EnvironmentInitialization, error) {

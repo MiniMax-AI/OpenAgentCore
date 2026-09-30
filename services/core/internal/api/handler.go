@@ -298,7 +298,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.Session
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id} [get]
 func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))

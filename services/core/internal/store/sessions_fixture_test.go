@@ -30,7 +30,7 @@ func fixtureSessionStore(db fixtureDB) *sessionpg.Store {
 }
 
 // fixtureSessionService is the Session service on fixtureSessionStore(db). It
-// runs the device, heartbeat and enrollment use cases.
+// runs the device, heartbeat, enrollment and executor credential use cases.
 func fixtureSessionService(t testing.TB, db fixtureDB) *sessions.Service {
 	t.Helper()
 	service, err := sessions.NewService(fixtureSessionStore(db))

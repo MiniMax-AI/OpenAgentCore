@@ -10,6 +10,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
 
@@ -51,6 +52,20 @@ type fakeTx struct {
 	bindDevice               func() error
 	authorizeEnrollment      func() (EnrollmentAuthority, error)
 	enrollDevice             func() (string, error)
+	loadFileWrite            func() (EnvironmentFileWrite, bool, error)
+	loadPendingInput         func() (bool, error)
+	createFileWrite          func() (EnvironmentFileWrite, error)
+	settleFileWrite          func() (EnvironmentFileWrite, error)
+	recordFileWriteAudit     func() error
+
+	lockProject                   func() (bool, error)
+	listExecutorCredentials       func() ([]ExecutorCredential, error)
+	authenticateExecutor          func() (bool, error)
+	issueExecutorCredential       func(ExecutorCredentialGrant) (IssuedExecutorCredential, error)
+	rotateExecutorCredential      func(digest string) (IssuedExecutorCredential, error)
+	revokeExecutorCredential      func() error
+	recordExecutorCredentialAudit func() error
+	loadSessionCreator            func() (identity.Subject, bool, error)
 
 	loadJournalTurn        func() (JournalTurn, bool, error)
 	matchEvents            func() (bool, error)
@@ -88,6 +103,10 @@ var (
 	_ ConnectionTx             = (*fakeTx)(nil)
 	_ DeviceBindingTx          = (*fakeTx)(nil)
 	_ EnrollmentTx             = (*fakeTx)(nil)
+	_ FileWriteReservationTx   = (*fakeTx)(nil)
+	_ FileWriteSettlementTx    = (*fakeTx)(nil)
+
+	_ EnvironmentExecutorCredentialTx = (*fakeTx)(nil)
 )
 
 func (f *fakeTx) record(name string, set bool, detail ...string) {

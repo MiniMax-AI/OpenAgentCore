@@ -82,7 +82,7 @@ func TestDeviceCredentialWithoutManagedNodeRetainsPublicRouteIdentity(t *testing
 			t.Fatalf("non-node credential acquired allocation route: found=%v node=%s error=%v", found, credential.RuntimeNodeID, err)
 		}
 	}
-	if err := s.RevokeExecutorCredential(t.Context(), principal, key.KeyID); err != nil {
+	if err := sessionService(t, s).RevokeExecutorCredential(t.Context(), principal, key.KeyID); err != nil {
 		t.Fatal(err)
 	}
 	if _, found, err := sessionAdapter(s).GetDeviceCredential(t.Context(), enrolled.DeviceID); err != nil || found {

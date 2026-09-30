@@ -32,6 +32,16 @@ type EnvironmentExecution interface {
 	// WithDeviceBinding runs apply in the transaction of the tenant's Session,
 	// with what the Session lock shows.
 	WithDeviceBinding(ctx context.Context, tenant, session string, apply func(context.Context, DeviceBindingTx, LockedSession) error) error
+	// WithFileWriteReservation reads the tenant's Environment, then runs apply
+	// in the transaction of its Session, with the Environment and what the
+	// Session lock shows. An Environment of a publicly deleted Session, or a
+	// missing one, is ErrNotFound.
+	WithFileWriteReservation(ctx context.Context, tenant, environment string, apply func(context.Context, FileWriteReservationTx, Environment, LockedSession) error) error
+	// WithFileWriteSettlement reads the file write to the tenant's
+	// Environment, including one whose Session was publicly deleted, then runs
+	// apply in the transaction of its Session. A malformed ID is
+	// ErrInvalidInput and an unknown write ErrNotFound.
+	WithFileWriteSettlement(ctx context.Context, tenant, environment, write string, apply func(context.Context, FileWriteSettlementTx) error) error
 	// ListEnvironmentConnections lists, in Environment order after the given
 	// Environment, or from the first one when after is empty, a page of the
 	// Environments of Sessions that were not publicly deleted and that are

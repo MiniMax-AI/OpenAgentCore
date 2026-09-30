@@ -90,12 +90,12 @@ func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Reque
 	}
 	parts := strings.Fields(r.Header.Get("Authorization"))
 	if len(r.Header.Values("Authorization")) != 1 || len(parts) != 2 || parts[0] != "Bearer" {
-		writeStoreError(w, r, sessions.ErrInstallationAuthorization)
+		writeSessionsError(w, r, sessions.ErrInstallationAuthorization)
 		return sessions.InstallationAuthorization{}, "", false
 	}
 	claim, err := h.Environments.ValidateEnvironmentInstallation(r.Context(), parts[1], h.Execution.NativeInstaller.Version)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return claim, "", false
 	}
 	return claim, parts[1], true
@@ -115,7 +115,7 @@ func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Reque
 	}
 	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), claim.Principal.TenantID, claim.Environment)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	session, err := h.Sessions.GetSession(r.Context(), claim.Principal.TenantID, environment.SessionID)
@@ -154,11 +154,11 @@ func (h *Handler) claimNativeInstallation(w http.ResponseWriter, r *http.Request
 	}
 	var input NativeInstallationClaim
 	if decodeInputObject(raw, &input, "executor_token") != nil {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	if err := h.Environments.ClaimEnvironmentInstallation(r.Context(), token, h.Execution.NativeInstaller.Version, input.ExecutorToken); err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -171,7 +171,7 @@ func (h *Handler) claimNativeInstallation(w http.ResponseWriter, r *http.Request
 // @Param project_id path string true "Project UUID"
 // @Param environment_id path string true "Environment UUID"
 // @Success 200 {object} v1.EnvironmentInstallation
-// @Failure 401,404,409 {object} CoreErrorResponse
+// @Failure 401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/environments/{environment_id}/installation [get]
 func (h *Handler) getEnvironmentInstallation(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
@@ -179,13 +179,13 @@ func (h *Handler) getEnvironmentInstallation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	environment := chi.URLParam(r, "environment_id")
-	if _, err := h.Environments.ProjectExecutorCredentialState(r.Context(), binding.Principal, environment); err != nil {
-		writeStoreError(w, r, err)
+	if _, err := h.EnvironmentsReader.ProjectExecutorCredentialState(r.Context(), binding.Principal, environment); err != nil {
+		writeSessionsError(w, r, err)
 		return
 	}
 	result, err := h.installationFor(r.Context(), binding.Principal, environment)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")

@@ -33,7 +33,7 @@ The installer calls these machine routes on Core:
 | `POST /api/v1/agent-daemon/installation` | Grant | The frozen binding: `version`, `protocol_version`, `environment_id`, `remote_url`, `workspace_directory`, `harness` |
 | `POST /api/v1/agent-daemon/installation/claim` | Grant | `{"executor_token":"SECRET"}`; 204 |
 
-An invalid or expired grant returns 401 `installation_authorization_invalid`. Without matching installers the grant routes return 503 `installation_unavailable`. A malformed secret returns 400. Artifact routes carry no credential, and the grant is sent only to Core, never to an artifact host.
+An invalid or expired grant returns 401 `installation_authorization_invalid`. Without matching installers the grant routes return 503 `installation_unavailable`. Core signs each grant with the installation's [`secrets/credential.key`](../../docs/configuration.md#installation-directory); without a configured key, the Session responses and Core-key read above and the grant routes return 503 `credential_storage_unavailable`. A malformed secret returns 400. Artifact routes carry no credential, and the grant is sent only to Core, never to an artifact host.
 
 ## Core-key routes
 

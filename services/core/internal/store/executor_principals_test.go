@@ -13,8 +13,9 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := t.Context()
 	p := FixtureExecutorPrincipal(t, s, uuid.NewString())
+	credentials := sessionService(t, s)
 	keyID := uuid.NewString()
-	issued, err := s.IssueExecutorCredential(ctx, p, keyID, "")
+	issued, err := credentials.IssueExecutorCredential(ctx, p, keyID, "")
 	if err != nil || issued.KeyID != keyID || issued.EnvironmentID != "" || len(issued.Token) != 43 {
 		t.Fatal("pre-Session principal issuance failed", err)
 	}
@@ -55,13 +56,13 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 	for _, different := range []identity.Principal{otherKind, otherID, foreign} {
 		_, target := create(different)
 		check(s, target.ID, issued, false)
-		if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), target.ID); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := credentials.IssueExecutorCredential(ctx, p, uuid.NewString(), target.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("restricted key accepted another creator/project", err)
 		}
-		if _, err := s.RotateExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := credentials.RotateExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("foreign rotation", err)
 		}
-		if err := s.RevokeExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
+		if err := credentials.RevokeExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("foreign revocation", err)
 		}
 	}
@@ -69,17 +70,17 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 		{ProjectScope: identity.ProjectScope{TenantID: p.TenantID, OrganizationID: "other-org", ProjectID: p.ProjectID}, SubjectKind: p.SubjectKind, SubjectID: p.SubjectID},
 		{ProjectScope: identity.ProjectScope{TenantID: p.TenantID, OrganizationID: p.OrganizationID, ProjectID: "other-project"}, SubjectKind: p.SubjectKind, SubjectID: p.SubjectID},
 	} {
-		if _, err := s.IssueExecutorCredential(ctx, different, uuid.NewString(), ""); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := credentials.IssueExecutorCredential(ctx, different, uuid.NewString(), ""); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unverified scope issuance", err)
 		}
-		if _, err := s.RotateExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := credentials.RotateExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unverified scope rotation", err)
 		}
-		if err := s.RevokeExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
+		if err := credentials.RevokeExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unverified scope revocation", err)
 		}
 	}
-	restricted, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), one.ID)
+	restricted, err := credentials.IssueExecutorCredential(ctx, p, uuid.NewString(), one.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,6 +89,7 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 	// Reopening the database preserves both key identity and multi-Session authority.
 	pool.Close()
 	restarted, newPool := testStore(t)
+	credentials = sessionService(t, restarted)
 	check(restarted, one.ID, issued, true)
 	check(restarted, two.ID, issued, true)
 	if err := restarted.DeleteSession(ctx, p.TenantID, first.ID); err != nil {
@@ -95,10 +97,10 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 	}
 	check(restarted, one.ID, issued, false)
 	check(restarted, two.ID, issued, true)
-	if err := restarted.RevokeExecutorCredential(ctx, p, restricted.KeyID); err != nil {
+	if err := credentials.RevokeExecutorCredential(ctx, p, restricted.KeyID); err != nil {
 		t.Fatal("revoke deleted restriction", err)
 	}
-	rotated, err := restarted.RotateExecutorCredential(ctx, p, keyID)
+	rotated, err := credentials.RotateExecutorCredential(ctx, p, keyID)
 	if err != nil || rotated.KeyID != keyID || rotated.EnvironmentID != "" || rotated.Token == issued.Token {
 		t.Fatal("principal rotation", err)
 	}
@@ -110,14 +112,14 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 		FROM environment_executor_credentials WHERE key_id=$1`, keyID, p.TenantID, p.SubjectKind, p.SubjectID).Scan(&retained); err != nil || !retained {
 		t.Fatal("rotation changed principal or creation identity", err)
 	}
-	if err := restarted.RevokeExecutorCredential(ctx, p, keyID); err != nil {
+	if err := credentials.RevokeExecutorCredential(ctx, p, keyID); err != nil {
 		t.Fatal(err)
 	}
 	check(restarted, two.ID, rotated, false)
-	if _, err := restarted.IssueExecutorCredential(ctx, p, keyID, ""); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
+	if _, err := credentials.IssueExecutorCredential(ctx, p, keyID, ""); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("issue restored revoked authority", err)
 	}
-	restored, err := restarted.RotateExecutorCredential(ctx, p, keyID)
+	restored, err := credentials.RotateExecutorCredential(ctx, p, keyID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,14 +130,15 @@ func TestExecutorPrincipalRequiresVerifiedScopeAndRecordedCreator(t *testing.T) 
 	s, pool := testStore(t)
 	ctx := t.Context()
 	p := identity.Principal{ProjectScope: identity.ProjectScope{TenantID: uuid.NewString(), OrganizationID: "org", ProjectID: uuid.NewString()}, SubjectKind: "user", SubjectID: "owner"}
-	if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), ""); !errors.Is(err, sessions.ErrNotFound) {
+	credentials := sessionService(t, s)
+	if _, err := credentials.IssueExecutorCredential(ctx, p, uuid.NewString(), ""); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("issuer manufactured a project mapping", err)
 	}
 	if err := s.EnsureProjectScopes(ctx, []identity.ProjectScope{p.ProjectScope}); err != nil {
 		t.Fatal(err)
 	}
 	for _, invalid := range []identity.Principal{{}, {ProjectScope: p.ProjectScope}, {ProjectScope: p.ProjectScope, SubjectKind: "workspace", SubjectID: "owner"}} {
-		if _, err := s.IssueExecutorCredential(ctx, invalid, uuid.NewString(), ""); !errors.Is(err, sessions.ErrInvalidInput) {
+		if _, err := credentials.IssueExecutorCredential(ctx, invalid, uuid.NewString(), ""); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatal("invalid principal", err)
 		}
 	}
@@ -149,7 +152,7 @@ func TestExecutorPrincipalRequiresVerifiedScopeAndRecordedCreator(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), "")
+	key, err := credentials.IssueExecutorCredential(ctx, p, uuid.NewString(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +165,7 @@ func TestExecutorPrincipalRequiresVerifiedScopeAndRecordedCreator(t *testing.T) 
 	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, target.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("unknown creator accepted", err)
 	}
-	if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), target.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := credentials.IssueExecutorCredential(ctx, p, uuid.NewString(), target.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("unknown creator claimed", err)
 	}
 }

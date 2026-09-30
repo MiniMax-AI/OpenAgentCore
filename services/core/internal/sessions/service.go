@@ -18,4 +18,5 @@ func NewService(storage Storage) (*Service, error) {
 type Storage interface {
 	ArtifactStorage
 	DeviceStorage
+	ExecutorCredentialStorage
 }

@@ -22,6 +22,7 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := NewWithCredentialCipher(pool, cipher)
+	installations := sessionService(t, s)
 	ctx := t.Context()
 	p := createTestProject(t, pool).Principal
 	input := environmentInput(uuid.NewString(), "self_hosted", "/workspace")
@@ -34,12 +35,12 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	token, expires, err := s.AuthorizeEnvironmentInstallation(ctx, p, environment.ID, "build")
+	token, expires, err := installations.AuthorizeEnvironmentInstallation(ctx, p, environment.ID, "build")
 	if err != nil || expires <= time.Now().Unix() || expires > time.Now().Add(31*time.Minute).Unix() {
 		t.Fatal("authorization", err)
 	}
 	for _, pair := range [][2]string{{token + "x", "build"}, {token, "other-build"}, {"", "build"}} {
-		if _, err := s.ValidateEnvironmentInstallation(ctx, pair[0], pair[1]); !errors.Is(err, sessions.ErrInstallationAuthorization) {
+		if _, err := installations.ValidateEnvironmentInstallation(ctx, pair[0], pair[1]); !errors.Is(err, sessions.ErrInstallationAuthorization) {
 			t.Fatal("accepted invalid authorization", err)
 		}
 	}
@@ -51,7 +52,7 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	raw, _ = json.Marshal(expired)
 	payload = base64.RawURLEncoding.EncodeToString(raw)
 	signature, _ := cipher.Fingerprint("environment-installation", payload)
-	if _, err := s.ValidateEnvironmentInstallation(ctx, payload+"."+signature, "build"); !errors.Is(err, sessions.ErrInstallationAuthorization) {
+	if _, err := installations.ValidateEnvironmentInstallation(ctx, payload+"."+signature, "build"); !errors.Is(err, sessions.ErrInstallationAuthorization) {
 		t.Fatal("accepted expired grant", err)
 	}
 	one, _, _ := newExecutorSecret()
@@ -61,7 +62,10 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range secrets {
 		wg.Add(1)
-		go func() { defer wg.Done(); results[i] = s.ClaimEnvironmentInstallation(ctx, token, "build", secrets[i]) }()
+		go func() {
+			defer wg.Done()
+			results[i] = installations.ClaimEnvironmentInstallation(ctx, token, "build", secrets[i])
+		}()
 	}
 	wg.Wait()
 	winner := -1
@@ -78,22 +82,22 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	if winner < 0 {
 		t.Fatal("no claim succeeded")
 	}
-	if err := s.ClaimEnvironmentInstallation(ctx, token, "build", secrets[winner]); err != nil {
+	if err := installations.ClaimEnvironmentInstallation(ctx, token, "build", secrets[winner]); err != nil {
 		t.Fatal("lost-response retry", err)
 	}
 	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(secrets[winner])); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RevokeExecutorCredential(ctx, p, environment.ID); err != nil {
+	if err := installations.RevokeExecutorCredential(ctx, p, environment.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ClaimEnvironmentInstallation(ctx, token, "build", secrets[winner]); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
+	if err := installations.ClaimEnvironmentInstallation(ctx, token, "build", secrets[winner]); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("revoked key resurrected", err)
 	}
 	if err := s.DeleteSession(ctx, p.TenantID, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ValidateEnvironmentInstallation(ctx, token, "build"); !errors.Is(err, sessions.ErrInstallationAuthorization) {
+	if _, err := installations.ValidateEnvironmentInstallation(ctx, token, "build"); !errors.Is(err, sessions.ErrInstallationAuthorization) {
 		t.Fatal("deleted Session grant accepted", err)
 	}
 }

@@ -392,7 +392,7 @@ func run() error {
 		Artifacts:       sessionService,
 		ArtifactsReader: sessionStore,
 		SessionAdmin:    executionStore,
-		Environments:    executionStore, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, registry: registry},
+		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, registry: registry},
 		Admin: executionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
 	}

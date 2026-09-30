@@ -7,15 +7,16 @@ import (
 )
 
 // Store is the pooled Session adapter: the storage of the Session use cases
-// and the Session reads. cipher opens the Session data frozen at creation; it
-// is nil on a service without a credential key.
+// and the Session reads. cipher opens the Session data frozen at creation and
+// signs installation authorizations; it is nil on a service without a
+// credential key.
 type Store struct {
 	units  *pgunit.Pool
 	cipher *credentialcrypto.Cipher
 }
 
 // New builds the pooled Session adapter on units, opening frozen Session data
-// with cipher.
+// and signing installation authorizations with cipher.
 func New(units *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{units: units, cipher: cipher}
 }

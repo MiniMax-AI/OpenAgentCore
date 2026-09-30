@@ -24,7 +24,7 @@ func runtimeEnrollmentFixture(t *testing.T, s *Store, p identity.Principal) (ses
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := s.IssueExecutorCredential(t.Context(), p, uuid.NewString(), environment.ID)
+	key, err := sessionService(t, s).IssueExecutorCredential(t.Context(), p, uuid.NewString(), environment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,14 +60,14 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 	if _, err := auth.AuthenticateBearer(ctx, bound.DeviceID, key.Token); err != nil {
 		t.Fatal(err)
 	}
-	otherKey, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), environment.ID)
+	otherKey, err := sessionService(t, s).IssueExecutorCredential(ctx, p, uuid.NewString(), environment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(otherKey.Token)); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 		t.Fatalf("another key replaced binding: %v", err)
 	}
-	rotated, err := s.RotateExecutorCredential(ctx, p, key.KeyID)
+	rotated, err := sessionService(t, s).RotateExecutorCredential(ctx, p, key.KeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 	if again, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(rotated.Token)); err != nil || again != bound {
 		t.Fatalf("rotation replaced identity: %+v %v", again, err)
 	}
-	if err := s.RevokeExecutorCredential(ctx, p, key.KeyID); err != nil {
+	if err := sessionService(t, s).RevokeExecutorCredential(ctx, p, key.KeyID); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, err := sessionAdapter(s).GetDeviceCredential(ctx, bound.DeviceID); err != nil || ok {

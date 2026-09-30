@@ -1,7 +1,9 @@
 package store
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"sync"
@@ -17,11 +19,22 @@ func executorDigest(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// newExecutorSecret returns a secret an installer generates and its digest.
+func newExecutorSecret() (string, string, error) {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return "", "", err
+	}
+	token := base64.RawURLEncoding.EncodeToString(secret)
+	return token, executorDigest(token), nil
+}
+
 func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	ctx := t.Context()
 	principal := FixtureExecutorPrincipal(t, s, tenant)
+	credentials := sessionService(t, s)
 	session, err := s.CreateSession(ctx, tenant, environmentInput("credential", "self_hosted", "/workspace"))
 	if err != nil {
 		t.Fatal(err)
@@ -30,13 +43,13 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.IssueExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := credentials.IssueExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign issue", err)
 	}
-	if _, err := s.RotateExecutorCredential(ctx, principal, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := credentials.RotateExecutorCredential(ctx, principal, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("rotate manufactured a credential", err)
 	}
-	issued, err := s.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID)
+	issued, err := credentials.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID)
 	token := issued.Token
 	if err != nil || len(token) != 43 {
 		t.Fatal("issue failed", err)
@@ -57,13 +70,13 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, uuid.NewString(), executorDigest(token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Environment accepted", err)
 	}
-	if _, err := s.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
+	if _, err := credentials.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("issue silently replaced credential", err)
 	}
-	if err := s.RevokeExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if err := credentials.RevokeExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign revoke", err)
 	}
-	if _, err := s.RotateExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := credentials.RotateExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign rotate", err)
 	}
 	var stored string
@@ -76,22 +89,22 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 	}
 	restarted, _ := testStore(t)
 	check(restarted, token, true)
-	next, err := restarted.RotateExecutorCredential(ctx, principal, environment.ID)
+	next, err := sessionService(t, restarted).RotateExecutorCredential(ctx, principal, environment.ID)
 	if err != nil || next.Token == token {
 		t.Fatal("rotation failed", err)
 	}
 	check(s, token, false)
 	check(s, next.Token, true)
 	for range 2 {
-		if err := s.RevokeExecutorCredential(ctx, principal, environment.ID); err != nil {
+		if err := credentials.RevokeExecutorCredential(ctx, principal, environment.ID); err != nil {
 			t.Fatal(err)
 		}
 	}
 	check(restarted, next.Token, false)
-	if _, err := s.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
+	if _, err := credentials.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("ordinary issue resurrected revoked authority", err)
 	}
-	restored, err := s.RotateExecutorCredential(ctx, principal, environment.ID)
+	restored, err := credentials.RotateExecutorCredential(ctx, principal, environment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +114,7 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(restarted, restored.Token, false)
-	if _, err := s.RotateExecutorCredential(ctx, principal, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := credentials.RotateExecutorCredential(ctx, principal, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted Session authority resurrected", err)
 	}
 	if err := pool.QueryRow(ctx, "SELECT token_sha256 FROM environment_executor_credentials WHERE environment_id=$1", environment.ID).Scan(&stored); err != nil || stored != executorDigest(restored.Token) {
@@ -125,6 +138,7 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 	}
 	// Provisioning remains control-plane work while the execution owner is active.
 	executionWriter(t, s)
+	services := []*sessions.Service{sessionService(t, s), sessionService(t, other)}
 	const attempts = 8
 	var wg sync.WaitGroup
 	tokens := make(chan string, attempts)
@@ -132,11 +146,8 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			st := s
-			if i%2 != 0 {
-				st = other
-			}
-			token, err := st.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID)
+			service := services[i%2]
+			token, err := service.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID)
 			if err == nil {
 				tokens <- token.Token
 			} else if !errors.Is(err, sessions.ErrExecutorCredentialExists) {
@@ -154,7 +165,7 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		token, err := other.RotateExecutorCredential(ctx, principal, environment.ID)
+		token, err := services[1].RotateExecutorCredential(ctx, principal, environment.ID)
 		if err == nil {
 			rotated <- token.Token
 		} else if !errors.Is(err, sessions.ErrNotFound) {

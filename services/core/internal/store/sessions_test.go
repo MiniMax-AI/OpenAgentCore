@@ -27,7 +27,8 @@ func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 func sessionAdapter(s *Store) *sessionpg.Store { return sessionpg.New(s.pooled, s.credentialCipher) }
 
 // sessionService is the Session service on s's Session adapter. It runs the
-// device, heartbeat and enrollment use cases.
+// device, heartbeat, enrollment, executor credential and installation use
+// cases.
 func sessionService(t testing.TB, s *Store) *sessions.Service {
 	t.Helper()
 	service, err := sessions.NewService(sessionAdapter(s))

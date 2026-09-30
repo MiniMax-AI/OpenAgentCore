@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 )
 
 // exportFile is one entry of a test export.
@@ -212,6 +214,46 @@ func (s *fakeArtifactStorage) TouchAuthenticatedDevice(context.Context, string, 
 
 func (s *fakeArtifactStorage) WithEnrollment(context.Context, string, string, func(context.Context, EnrollmentTx, Environment, LockedSession) error) error {
 	s.t.Fatal("unexpected call to WithEnrollment")
+	return nil
+}
+
+func (s *fakeArtifactStorage) GetEnvironment(context.Context, string, string) (Environment, error) {
+	s.t.Fatal("unexpected call to GetEnvironment")
+	return Environment{}, nil
+}
+
+func (s *fakeArtifactStorage) LoadProjectArchived(context.Context, string) (bool, error) {
+	s.t.Fatal("unexpected call to LoadProjectArchived")
+	return false, nil
+}
+
+func (s *fakeArtifactStorage) ExecutorProjectExists(context.Context, identity.ProjectScope) (bool, error) {
+	s.t.Fatal("unexpected call to ExecutorProjectExists")
+	return false, nil
+}
+
+func (s *fakeArtifactStorage) LoadExecutorCredentialRestriction(context.Context, identity.Principal, string) (string, error) {
+	s.t.Fatal("unexpected call to LoadExecutorCredentialRestriction")
+	return "", nil
+}
+
+func (s *fakeArtifactStorage) SignInstallation(context.Context, string) (string, error) {
+	s.t.Fatal("unexpected call to SignInstallation")
+	return "", nil
+}
+
+func (s *fakeArtifactStorage) VerifyInstallation(context.Context, string, string) error {
+	s.t.Fatal("unexpected call to VerifyInstallation")
+	return nil
+}
+
+func (s *fakeArtifactStorage) WithExecutorCredentials(context.Context, string, func(context.Context, ExecutorCredentialTx) error) error {
+	s.t.Fatal("unexpected call to WithExecutorCredentials")
+	return nil
+}
+
+func (s *fakeArtifactStorage) WithEnvironmentExecutorCredentials(context.Context, string, string, func(context.Context, EnvironmentExecutorCredentialTx, LockedSession) error) error {
+	s.t.Fatal("unexpected call to WithEnvironmentExecutorCredentials")
 	return nil
 }
 
