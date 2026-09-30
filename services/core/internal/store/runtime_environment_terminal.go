@@ -7,6 +7,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -129,16 +130,16 @@ func failEnvironment(ctx context.Context, q *sqlc.Queries, row sqlc.GetSessionEn
 	if err != nil {
 		return err
 	}
-	usage, err := q.SessionTokenUsage(ctx, session)
+	usage, err := sessionpg.LoadUsage(ctx, q, session)
 	if err != nil {
 		return err
 	}
-	if err := recordSessionChange(ctx, q, session, sessions.SessionChange{Event: v1.SessionEvent{
+	if err := sessionpg.AppendChanges(ctx, q, session, sessions.SessionChange{Event: v1.SessionEvent{
 		Type: "error", Error: &v1.StreamError{Type: "environment_error", Code: "sandbox_error", Message: reason},
 	}}); err != nil {
 		return err
 	}
-	return recordSessionChange(ctx, q, session, sessions.SessionChange{
+	return sessionpg.AppendChanges(ctx, q, session, sessions.SessionChange{
 		Event:                    v1.SessionEvent{Type: "agent.session.failed"},
 		EnvironmentInputActivity: activity, EnvironmentFailure: &sessions.EnvironmentFailure{Reason: reason, FailedAt: failedAt.Time},
 		SessionUsage: usage, Settled: !pending,

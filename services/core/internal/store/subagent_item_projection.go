@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -76,7 +77,7 @@ func putChildItem(ctx context.Context, q *sqlc.Queries, session, childID pgtype.
 			return ErrIdempotencyConflict
 		}
 	}
-	if terminalStatus(turn.Status) {
+	if sessions.TerminalStatus(turn.Status) {
 		return ErrTurnConflict
 	}
 	// Child Items publish no Session events: the Session stream carries root work,

@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
@@ -143,7 +144,7 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 				}
 			}
 		}
-		if err := q.PruneSessionEvents(ctx, row.ID); err != nil {
+		if err := sessionpg.PruneChanges(ctx, q, row.ID); err != nil {
 			return err
 		}
 		return audit()

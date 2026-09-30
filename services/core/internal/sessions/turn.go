@@ -30,3 +30,9 @@ type Turn struct {
 	// ArtifactCaptureStarted is private Runtime coordination, never a wire field.
 	ArtifactCaptureStarted bool `json:"-"`
 }
+
+// TerminalStatus reports whether a Turn status has ended the Turn. A terminal
+// Turn is never reopened and its outcome is never overwritten.
+func TerminalStatus(status string) bool {
+	return status == TurnCompleted || status == TurnFailed || status == TurnCancelled
+}

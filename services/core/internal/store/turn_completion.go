@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -22,7 +23,7 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 	if err != nil {
 		return sessions.Turn{}, err
 	}
-	if !terminalStatus(status) || len(outcome) > 512*1024 || len(nativeID) > 512 || appliedThrough < 0 {
+	if !sessions.TerminalStatus(status) || len(outcome) > 512*1024 || len(nativeID) > 512 || appliedThrough < 0 {
 		return sessions.Turn{}, ErrInvalidInput
 	}
 	outcome, err = jsonobject.Normalize(outcome)
@@ -92,7 +93,11 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 		if err != nil {
 			return err
 		}
-		return recordTurnChange(ctx, q, row, false)
+		ending, err := sessionpg.LoadEnding(ctx, q, session, row.ID)
+		if err != nil {
+			return err
+		}
+		return sessionpg.ApplyTurnEnd(ctx, q, session, row.ID, sessions.EndTurn(turnFromRow(row), ending))
 	})
 	if err != nil {
 		return sessions.Turn{}, err

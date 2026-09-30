@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5/pgtype"
-	"math"
-	"strings"
 )
 
 // MeasuredSessionUsage returns Core-internal measured usage for Runtime
@@ -47,65 +47,10 @@ func projectSource(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UU
 	case proto.TypeSubagentCoordination:
 		return projectRootCoordination(ctx, q, session, turn, raw, created)
 	}
-	if usage := measuredUsage(kind, raw); usage != nil {
-		payload, err := json.Marshal(usage)
-		if err != nil {
-			return err
-		}
-		if err = q.PutTurnUsage(ctx, sqlc.PutTurnUsageParams{SessionID: session, ID: turn, TokenUsage: payload}); err != nil {
+	if usage := sessions.MeasuredUsage(kind, raw); usage != nil {
+		if err := sessionpg.PutTurnUsage(ctx, q, session, turn, *usage); err != nil {
 			return err
 		}
 	}
 	return projectItemSource(ctx, q, session, turn, kind, sequence, raw, created)
-}
-
-func measuredUsage(kind string, raw json.RawMessage) *v1.TokenUsage {
-	var object map[string]json.RawMessage
-	if json.Unmarshal(raw, &object) != nil {
-		return nil
-	}
-	if kind == "cancel_receipt" {
-		var applied bool
-		if json.Unmarshal(object["applied"], &applied) != nil || !applied {
-			return nil
-		}
-		raw = object["outcome"]
-		object = nil
-		if json.Unmarshal(raw, &object) != nil {
-			return nil
-		}
-		kind = "done"
-	}
-	if strings.HasPrefix(kind, "execution_") {
-		raw = object["done"]
-		object = nil
-		if json.Unmarshal(raw, &object) != nil {
-			return nil
-		}
-		kind = "done"
-	}
-	if kind == "done" {
-		raw = object["usage"]
-		object = nil
-		if json.Unmarshal(raw, &object) != nil {
-			return nil
-		}
-	} else if kind != "usage" {
-		return nil
-	}
-
-	var tokens map[string]*int64
-	if json.Unmarshal(object["tokens"], &tokens) != nil {
-		return nil
-	}
-	for _, key := range []string{"input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens", "total_tokens"} {
-		if tokens[key] == nil || *tokens[key] < 0 {
-			return nil
-		}
-	}
-	input, output, cached, reasoning, total := *tokens["input_tokens"], *tokens["output_tokens"], *tokens["cached_input_tokens"], *tokens["reasoning_output_tokens"], *tokens["total_tokens"]
-	if cached > input || reasoning > output || input > math.MaxInt64-output || total != input+output {
-		return nil
-	}
-	return &v1.TokenUsage{InputTokens: input, OutputTokens: output, TotalTokens: total, InputTokensDetails: v1.InputTokenDetails{CachedTokens: cached}, OutputTokensDetails: v1.OutputTokenDetails{ReasoningTokens: reasoning}}
 }

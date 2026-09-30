@@ -9,6 +9,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -83,28 +85,18 @@ func projectRootCoordination(ctx context.Context, q *sqlc.Queries, session, turn
 	if err != nil {
 		return err
 	}
-	id, _ := parseID(value.ID)
-	old, err := q.GetSessionItem(ctx, sqlc.GetSessionItemParams{SessionID: session, ID: id})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	var previous v1.Item
-	if err == nil {
-		if err = json.Unmarshal(old.Payload, &previous); err != nil {
-			return err
-		}
-	}
-	merged, err := items.Merge(items.Update{Item: value}, previous)
+	update := items.Update{Item: value}
+	stored, err := sessionpg.LoadItem(ctx, q, session, turn, update)
 	if err != nil {
 		return err
 	}
-	payload, err := merged.MarshalStored()
+	change, ok, err := items.Observe(proto.TypeSubagentCoordination, update, stored)
+	if err != nil || !ok {
+		return err
+	}
+	index, err := sessionpg.PutItem(ctx, q, session, turn, created, change)
 	if err != nil {
 		return err
 	}
-	row, err := q.PutSessionItem(ctx, sqlc.PutSessionItemParams{ID: id, SessionID: session, TurnID: turn, CreatedAt: created, Payload: payload, IsOutput: true})
-	if err != nil {
-		return err
-	}
-	return recordItemChange(ctx, q, session, row.OutputIndex, previous, merged, nil)
+	return sessionpg.AppendChanges(ctx, q, session, sessions.ItemChanges(change, index)...)
 }

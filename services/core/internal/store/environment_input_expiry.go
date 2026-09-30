@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -27,7 +28,7 @@ func (s *Store) ExpireEnvironmentInputs(ctx context.Context) (int64, error) {
 			if err != nil {
 				return err
 			}
-			if err := q.PruneSessionEvents(ctx, row.SessionID); err != nil {
+			if err := sessionpg.PruneChanges(ctx, q, row.SessionID); err != nil {
 				return err
 			}
 			expired++

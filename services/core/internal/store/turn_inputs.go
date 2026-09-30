@@ -16,6 +16,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type InputReceipt struct {
@@ -162,7 +164,7 @@ func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session p
 			turn, err = q.CreateTurn(ctx, sqlc.CreateTurnParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: session})
 			if err == nil {
 				created = true
-				err = recordTurnChange(ctx, q, turn, true)
+				err = sessionpg.AppendChanges(ctx, q, session, sessions.TurnChanges(turnFromRow(turn), true)...)
 			}
 		} else {
 			err = nil // Retain even an idle cancellation's retry identity.
@@ -188,7 +190,11 @@ func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session p
 	if created {
 		// A new Turn publishes turn.created, then its user input Items, then the
 		// Session activity, within this transaction.
-		if err := recordSessionActivity(ctx, q, turn, nil); err != nil {
+		usage, err := sessionpg.LoadUsage(ctx, q, session)
+		if err != nil {
+			return InputReceipt{}, err
+		}
+		if err := sessionpg.AppendChanges(ctx, q, session, sessions.ActivityChange(turnFromRow(turn), usage, nil)); err != nil {
 			return InputReceipt{}, err
 		}
 	}

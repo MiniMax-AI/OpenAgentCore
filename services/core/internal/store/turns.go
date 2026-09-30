@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -56,7 +57,7 @@ func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID 
 	if err != nil {
 		return sessions.Turn{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
-	if !terminalStatus(input.Status) && string(outcome) != "{}" {
+	if !sessions.TerminalStatus(input.Status) && string(outcome) != "{}" {
 		return sessions.Turn{}, fmt.Errorf("%w: outcome requires a terminal status", ErrInvalidInput)
 	}
 	input.Outcome = outcome
@@ -90,16 +91,26 @@ func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnPar
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sqlc.Turn{}, ErrTurnConflict
 	}
-	if err == nil && terminalStatus(row.Status) {
-		if err = projectSource(ctx, q, row.SessionID, row.ID, "execution_"+row.Status, 0, row.Outcome, row.CompletedAt); err != nil {
-			return sqlc.Turn{}, err
-		}
-		row, err = q.GetTurn(ctx, params)
-	}
 	if err != nil {
 		return sqlc.Turn{}, err
 	}
-	if err := recordTurnChange(ctx, q, row, false); err != nil {
+	if !sessions.TerminalStatus(row.Status) {
+		if err := sessionpg.AppendChanges(ctx, q, row.SessionID, sessions.TurnChanges(turnFromRow(row), false)...); err != nil {
+			return sqlc.Turn{}, err
+		}
+		return row, nil
+	}
+	if err = projectSource(ctx, q, row.SessionID, row.ID, "execution_"+row.Status, 0, row.Outcome, row.CompletedAt); err != nil {
+		return sqlc.Turn{}, err
+	}
+	if row, err = q.GetTurn(ctx, params); err != nil {
+		return sqlc.Turn{}, err
+	}
+	ending, err := sessionpg.LoadEnding(ctx, q, row.SessionID, row.ID)
+	if err != nil {
+		return sqlc.Turn{}, err
+	}
+	if err := sessionpg.ApplyTurnEnd(ctx, q, row.SessionID, row.ID, sessions.EndTurn(turnFromRow(row), ending)); err != nil {
 		return sqlc.Turn{}, err
 	}
 	return row, nil
@@ -110,16 +121,12 @@ func validTransition(from, to string) bool {
 	case sessions.TurnQueued:
 		return to == sessions.TurnInProgress || to == sessions.TurnFailed || to == sessions.TurnCancelled
 	case sessions.TurnInProgress:
-		return to == sessions.TurnWaiting || terminalStatus(to)
+		return to == sessions.TurnWaiting || sessions.TerminalStatus(to)
 	case sessions.TurnWaiting:
-		return to == sessions.TurnInProgress || terminalStatus(to)
+		return to == sessions.TurnInProgress || sessions.TerminalStatus(to)
 	default:
 		return false
 	}
-}
-
-func terminalStatus(status string) bool {
-	return status == sessions.TurnCompleted || status == sessions.TurnFailed || status == sessions.TurnCancelled
 }
 
 func turnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) {
