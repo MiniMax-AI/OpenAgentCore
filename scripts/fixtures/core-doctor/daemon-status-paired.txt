@@ -1,7 +1,0 @@
-profile      : fixture
-state dir    : /synthetic/private/daemon-state
-paired       : yes
-server_url   : https://core.fixture.invalid
-runtime_id   : synthetic-runtime
-hostname     : synthetic-host
-background   : pidfile present at /synthetic/private/connect.pid

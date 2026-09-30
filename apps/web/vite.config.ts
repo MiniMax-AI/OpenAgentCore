@@ -9,11 +9,10 @@ import {
   loadLocalDockerBackendGuideProfile,
   loadLocalDockerGuideProfile,
 } from "./src/lib/docker-guide-config.ts";
-import { loadProxyBearerAuth } from "./vite-auth.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repositoryRoot, "");
   const target = env.OAC_WEB_DEV_PROXY_TARGET ?? "http://127.0.0.1:8091";
   const selfHostedSessionsEnabled = env.OAC_WEB_SELF_HOSTED_SESSIONS === "1";
@@ -21,17 +20,9 @@ export default defineConfig(({ command, mode }) => {
   const environmentFilesEnabled = env.OAC_WEB_ENVIRONMENT_FILES === "1";
   const localDockerGuide = loadLocalDockerGuideProfile(env);
   const localDockerBackendGuide = loadLocalDockerBackendGuideProfile(env);
-  const proxyAuth = command === "serve" && mode !== "test"
-    ? loadProxyBearerAuth({
-        token: env.OAC_WEB_DEV_PROXY_TOKEN,
-        tokenFile: env.OAC_WEB_DEV_PROXY_TOKEN_FILE,
-        rootDir: repositoryRoot,
-      })
-    : undefined;
 
   return {
     define: {
-      __OAC_WEB_DEV_PROXY_AUTH__: JSON.stringify(Boolean(proxyAuth)),
       __OAC_WEB_SELF_HOSTED_SESSIONS__: JSON.stringify(selfHostedSessionsEnabled),
       __OAC_WEB_OPENAI_HOSTED_SESSIONS__: JSON.stringify(openAIHostedSessionsEnabled),
       __OAC_WEB_ENVIRONMENT_FILES__: JSON.stringify(environmentFilesEnabled),
@@ -54,16 +45,6 @@ export default defineConfig(({ command, mode }) => {
         "/console": { target, changeOrigin: true },
         "/node-install": { target, changeOrigin: true },
         "/core/v1": { target, changeOrigin: true },
-        "/v1": {
-          target,
-          changeOrigin: true,
-          configure(proxy) {
-            if (!proxyAuth) return;
-            proxy.on("proxyReq", (proxyRequest) => {
-              proxyRequest.setHeader("authorization", `Bearer ${proxyAuth.token}`);
-            });
-          },
-        },
       },
     },
   };

@@ -6,8 +6,7 @@
     "dev:web": "pnpm --filter @oac/web dev",
     "build:web": "pnpm --filter @oac/web build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm --filter @oac/claude-sdk-adapter test && pnpm test:core-doctor && pnpm test:web",
-    "test:core-doctor": "node --test scripts/core-doctor.test.mjs",
+    "test": "pnpm --filter @oac/claude-sdk-adapter test && pnpm test:web",
     "test:web": "pnpm --filter @oac/agents-client test && pnpm --filter @oac/web test",
     "test:web:acceptance": "playwright test"
   },

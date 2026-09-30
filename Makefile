@@ -95,7 +95,6 @@ check-web: check-web-unit check-web-acceptance
 
 check-web-unit: node-deps
 	pnpm typecheck
-	pnpm test:core-doctor
 	pnpm test:web
 	pnpm --filter @oac/web build
 

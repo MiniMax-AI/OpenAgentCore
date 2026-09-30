@@ -1,9 +1,8 @@
 // Browser acceptance fixture: the console service's routes (/console/**) and the
 // Core management tree it forwards (/core/v1/**: installation, projects, summary,
 // audit log, metrics, harness default models and /core/v1/sandbox/**), with synthetic, deterministic data and
-// in-memory writes. It never serves /v1; any /v1 request, and any
-// browser-supplied Authorization header, is recorded so a test can assert that
-// the console stays on its management boundary.
+// in-memory writes. Any browser-supplied Authorization header is recorded so a
+// test can assert that the console stays on its management boundary.
 import http from "node:http";
 
 import { domainState, domainRoute } from "./data/domain.mjs";
@@ -644,10 +643,6 @@ http.createServer(async (request, response) => {
     if (url.pathname.startsWith("/__fixture/")) return await fixtureRoute(request, response, url);
     // The console service serves its distribution manifest to anyone, as nodes download it.
     if (url.pathname === "/node-install/manifest.json") return send(response, 200, manifest);
-    if (url.pathname === "/v1" || url.pathname.startsWith("/v1/")) {
-      state.violations.push(`${request.method} ${url.pathname}`);
-      return error(response, 404, "The console does not serve /v1.");
-    }
     if (request.headers.authorization) state.violations.push(`Authorization header on ${request.method} ${url.pathname}`);
     if (url.pathname.startsWith("/console/")) return await consoleRoute(request, response, url);
     const signedIn = state.auth.mode === "authenticated" && request.headers.cookie?.includes(SESSION_COOKIE);

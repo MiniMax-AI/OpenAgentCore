@@ -1,4 +1,0 @@
-profile      : fixture
-state dir    : /synthetic/private/daemon-state
-paired       : no legacy profile (use the connect command)
-background   : not started (no connect.pid)

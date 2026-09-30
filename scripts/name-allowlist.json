@@ -260,31 +260,6 @@
     "reason": "The legacy field documents the originating product wire identifier; its JSON contract is unchanged."
   },
   {
-    "path": "scripts/core-doctor.mjs",
-    "regex": "parsarPath|validateParsarCheckout|--parsar|private-parsar-checkout|fixture\\.invalid/parsar|Parsar (?:protocol baseline|protocol compatibility|Agents API contract)",
-    "reason": "The optional --parsar argument names an OpenAgentCore checkout whose daemon status command the doctor runs; the installed daemon is oac-daemon. The protocol baseline names the pinned Parsar protocol revision."
-  },
-  {
-    "path": "scripts/core-doctor.test.mjs",
-    "regex": "parsarPath|validateParsarCheckout|--parsar|private-parsar-checkout|fixture\\.invalid/parsar|Parsar (?:protocol baseline|protocol compatibility|Agents API contract)",
-    "reason": "The optional --parsar argument names an OpenAgentCore checkout whose daemon status command the doctor runs; the installed daemon is oac-daemon. The protocol baseline names the pinned Parsar protocol revision."
-  },
-  {
-    "path": "scripts/core-doctor.mjs",
-    "regex": "(?:AGENTS_API_|AGENTS_CORE_WEB_)[A-Z0-9_]*\\*?",
-    "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
-  },
-  {
-    "path": "scripts/core-doctor.test.mjs",
-    "regex": "(?:AGENTS_API_|AGENTS_CORE_WEB_)[A-Z0-9_]*\\*?",
-    "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
-  },
-  {
-    "path": "scripts/core-doctor.test.mjs",
-    "regex": "\"\\.parsar\"|\"agents-api\"",
-    "reason": "These fixtures prove the old development credential directory is ignored."
-  },
-  {
     "path": "apps/web/src/features/sandbox/deployment-specification.test.ts",
     "regex": "parsar-core-runtime@sha256:",
     "reason": "The literal is a rejected legacy Runtime prefix fixture, not an accepted deployment reference."

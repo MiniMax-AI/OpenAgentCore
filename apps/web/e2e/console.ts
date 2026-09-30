@@ -25,9 +25,20 @@ export async function resetFixture(request: APIRequestContext, auth: "login" | "
   await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}&installation=${options.installation ?? "public"}${options.credentials ? `&credentials=${options.credentials}` : ""}${options.installers ? `&installers=${options.installers}` : ""}${options.nodeArtifacts ? `&artifacts=${options.nodeArtifacts.join(",")}` : ""}`);
 }
 
+const v1Requests: string[] = [];
+
+/** Records and aborts every browser request to the application API (/v1), which the console never calls. */
+export async function recordV1Requests(page: Page) {
+  await page.route((url) => url.pathname === "/v1" || url.pathname.startsWith("/v1/"), (route) => {
+    v1Requests.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+    return route.abort();
+  });
+}
+
 /** Opens the console already signed in, in English. */
 export async function openConsole(page: Page, request: APIRequestContext, hash = "overview", options: FixtureOptions = {}) {
   await resetFixture(request, "authenticated", options);
+  await recordV1Requests(page);
   await page.context().addCookies([{ name: "core_console", value: "fixture-session", url: web }]);
   await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));
   await page.goto(`/#${hash}`);
@@ -75,5 +86,5 @@ export async function writes(request: APIRequestContext): Promise<string[]> {
 /** The console never calls /v1 and never sends its own Authorization header. */
 export async function expectManagementBoundary(request: APIRequestContext) {
   const { violations } = await (await request.get(`${fixture}/__fixture/requests`)).json();
-  expect(violations).toEqual([]);
+  expect([...v1Requests.splice(0), ...violations]).toEqual([]);
 }
