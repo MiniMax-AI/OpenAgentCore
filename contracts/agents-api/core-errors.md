@@ -36,7 +36,7 @@ These have null `param` and no `details`. A Core `401 invalid_admin_key` therefo
 
 ## Sandbox provider verification
 
-A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](sandbox-deployment.md#initialization-same-provider-changes-and-reset)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
+A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](sandbox-deployment.md#reset)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
 
 | HTTP | Code | Meaning | `param` |
 | --- | --- | --- | --- |
@@ -103,4 +103,4 @@ The [Session and Turn diagnostics reads](session-diagnostics.md) return these ca
 
 When the diagnostics reader is not configured, the reads return 503 `diagnostics_unavailable` without details. A database failure is an error, never an empty or healthy snapshot. Provisioning reasons and native messages are never parsed for categories or parameters.
 
-Native categories apply only to a failed Turn whose outcome has `error_code: engine_failed`. Core accepts only the listed `engine_error_code` values; an unknown, malformed or absent value stays `harness_error`. Only `connection_failed` uses `engine_http_status`. Nested metadata and provider text never classify a failure. Core storage, incomplete-stream and cancellation failures take precedence, and cancelled or completed Turns have no failure. [Native error classification](native-error-classification.md) lists which adapters report each category.
+Native categories apply only to a failed Turn whose outcome has `error_code: engine_failed`. Core accepts only the listed `engine_error_code` values; an unknown, malformed or absent value stays `harness_error`. Only `connection_failed` uses `engine_http_status`. Nested metadata and provider text never classify a failure. Core storage, incomplete-stream and cancellation failures take precedence, and cancelled or completed Turns have no failure. [Native error classification](../../docs/runtime-protocol.md#native-failure-classification) lists which adapters report each category.

@@ -26,13 +26,13 @@ Paths are relative to `/core/v1`.
 | `projects/{project_id}/sessions/{session_id}/execution-configuration` | The Session's frozen model, Harness and provider selection | [Execution configuration](#execution-configuration) |
 | `projects/{project_id}/sessions/{session_id}/diagnostics`, `…/turns/{turn_id}/diagnostics` | Failure categories and Item receipt timing | [Session diagnostics](session-diagnostics.md) |
 | `projects/{project_id}/sessions/{session_id}/runtime-observation`, `sandbox/runtime-observations` | Current Runtime observations | [Runtime observations](runtime-observability-api.md), [the list's disk field](#runtime-observations) |
-| `projects/{project_id}/sessions/{session_id}/runtime-history` | Stored Runtime history | [Runtime history](runtime-history-api.md) |
+| `projects/{project_id}/sessions/{session_id}/runtime-history` | Stored Runtime history | [Runtime history](runtime-observability-api.md#session-runtime-history) |
 | `projects/{project_id}/environments/{environment_id}/installation` | Install commands of a `self_hosted` Environment | [Installation grant](environment-executor-credentials.md#installation-grant) |
 | `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | Executor credentials of a `self_hosted` Environment | [Executor credentials](environment-executor-credentials.md#core-key-routes) |
 | `projects/{project_id}/resource-owners`, `projects/{project_id}/write-operations` | Which API key created a resource and each key's writes | [Write provenance](#write-provenance) |
 | `harnesses`, `harnesses/{harness}/model-configuration` | Enabled Harnesses and each Harness's deployment default model | [Deployment defaults](model-execution.md#deployment-defaults) |
-| `sandbox/deployment`, `sandbox/deployment/reset`, `sandbox/providers/{provider}/discovery` | The sandbox provider, resources and Runtime, reset, and provider configuration discovery such as E2B templates | [Sandbox deployment](sandbox-deployment.md#authority-and-routes) |
-| `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Node enrollment tokens, nodes and their allocations and host history | [Nodes guide](../../docs/getting-started/nodes.md), [sandbox deployment](sandbox-deployment.md), [node host history](node-host-history.md) |
+| `sandbox/deployment`, `sandbox/deployment/reset`, `sandbox/providers/{provider}/discovery` | The sandbox provider, resources and Runtime, reset, and provider configuration discovery such as E2B templates | [Sandbox deployment](sandbox-deployment.md#routes) |
+| `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Node enrollment tokens, nodes and their allocations and host history | [Nodes guide](../../docs/getting-started/nodes.md), [sandbox deployment](sandbox-deployment.md), [node host history](runtime-observability-api.md#node-host-observations-and-history) |
 | `summary` | Session counts and usage by Project, Agent or key | [Summary](#summary) |
 | `metrics` | Core's own process, execution, database and job metrics | [Core metrics](core-metrics.md) |
 | `audit-log` | Administrator writes | [Audit log](#audit-log) |
@@ -91,7 +91,7 @@ One transaction marks the Environment expired (a failed Environment stays failed
 
 `POST` and `GET /projects/{project_id}/sessions/{session_id}/archive` return `{session_id, environment_id, state}`. `GET` is read-only and needs no generation. `state` is the resource's current disposition: `active`, `cleanup_pending` or `released`, whatever released it. `released` does not mean an active Turn has finished cancelling; read the Turn for that.
 
-After an uncertain `POST` response, `GET` the archive before writing again. Repeating the `POST` has the same effect and records one audit entry per accepted request. To clear every hosted Session before changing the deployment, use the [deployment reset](sandbox-deployment.md#initialization-same-provider-changes-and-reset).
+After an uncertain `POST` response, `GET` the archive before writing again. Repeating the `POST` has the same effect and records one audit entry per accepted request. To clear every hosted Session before changing the deployment, use the [deployment reset](sandbox-deployment.md#reset).
 
 ## Execution configuration
 
@@ -214,7 +214,7 @@ The response is `{data, has_more, next_cursor}`. Each row has `project_id`, null
 
 ## Runtime observations
 
-`GET /sandbox/runtime-observations` lists the current Runtime observation of every Session in every Project, as `{object: "list", data: [{project_id, observation}], has_more, first_id, last_id}` ([Runtime observations](runtime-observability-api.md)). It samples read-only and never provisions compute; a provider with a batch metrics read, such as E2B, samples the page in one bounded request. Each list `observation` adds `disk: {usage_bytes, limit_bytes}`, with the null rules of `memory`: E2B reports its sandbox disk usage and capacity, and Docker and microsandbox return null. The per-Session read has no `disk`.
+The [Runtime telemetry API](runtime-observability-api.md) owns current observations, the [list-only disk field](runtime-observability-api.md#disk), Session history and node host observations and history.
 
 ## Audit log
 

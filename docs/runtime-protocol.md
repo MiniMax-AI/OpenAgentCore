@@ -101,7 +101,7 @@ The linked source files define the required fields, validators, limits and finit
 | `workspace_read`, `workspace_write`, `workspace_export` | Matching `*_result` | [Read](../internal/agentdaemon/proto/workspace_read.go), [write](../internal/agentdaemon/proto/workspace_write.go), [export](../internal/agentdaemon/proto/workspace_export.go) |
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [Suspension fencing](../internal/agentdaemon/proto/suspend.go) |
 
-Initial, prepared and active input use the same [ordered MessageInput](../internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-input.md) owns the public image profile, whitespace rules and each Harness's native conversion.
+Initial, prepared and active input use the same [ordered MessageInput](../internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-content.md) owns the public image profile, whitespace rules and each Harness's native conversion.
 
 Usage frames and the final usage snapshot each carry the cumulative measurement of the current execution and replace the previous snapshot; never add them. An absent measurement is unknown, not zero.
 

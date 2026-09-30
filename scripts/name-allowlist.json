@@ -60,11 +60,6 @@
     "reason": "Official upstream documentation URLs are external protocol references."
   },
   {
-    "path": "*",
-    "regex": "~?/\\.parsar/remediation/",
-    "reason": "Historical remediation evidence paths are retained."
-  },
-  {
     "path": ".gitignore",
     "regex": "(?m)^/\\.parsar/$",
     "reason": "Ignore legacy private state; it is not a supported installed command."
@@ -242,16 +237,6 @@
   {
     "path": "apps/web/PRODUCT.md",
     "regex": "and Parsar itself",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "services/core/README.md",
-    "regex": "Parsar's product|Parsar\\sworkspace|Parsar Skill/SP",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "services/core/deploy/claude/README.md",
-    "regex": "Parsar is not a dependency",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {

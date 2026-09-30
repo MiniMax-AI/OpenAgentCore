@@ -220,7 +220,7 @@ Disk is not kept in history.
 
 ### Token usage
 
-`token_usage` belongs to the Session, not to an allocation. Each point holds the last cumulative measured Session usage sampled in its bucket: `start`, `end`, `sampled_at`, `input_tokens` and `output_tokens`. Measured Session usage is a Core extension that sums every recorded root Turn snapshot, active Turns included. It differs from [public Session usage](history-events-usage.md), which is null while a root Turn runs or after one ends unmeasured. These counters are measured model tokens, not prices or billing records.
+`token_usage` belongs to the Session, not to an allocation. Each point holds the last cumulative measured Session usage sampled in its bucket: `start`, `end`, `sampled_at`, `input_tokens` and `output_tokens`. Measured Session usage is a Core extension that sums every recorded root Turn snapshot, active Turns included. It differs from [public Session usage](sessions-events.md#usage), which is null while a root Turn runs or after one ends unmeasured. These counters are measured model tokens, not prices or billing records.
 
 ### Errors and bounds
 
