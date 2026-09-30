@@ -1,8 +1,7 @@
 # OpenAgentCore development
 
-This file holds the design rules every change follows. [CONTRIBUTING.md](CONTRIBUTING.md)
-holds workflow, review, checks and naming; [docs/development.md](docs/development.md)
-holds setup and the repository map.
+This file holds the design rules every change follows.
+[Working in this repository](#working-in-this-repository) links to everything else.
 
 ## Design principles
 
@@ -10,9 +9,6 @@ OpenAgentCore is protocol-first and modular. Core orchestrates operations that
 protocols define. Sandbox Providers, Runtimes, Harnesses and model providers are
 replaceable implementations of those protocols; user-owned machines, E2B, Docker
 and microsandbox expose the same execution protocol.
-
-Existing code that breaks a rule below is a gap, not a precedent. Do not copy or
-extend it.
 
 ### Protocols at every boundary
 
@@ -28,49 +24,68 @@ extend it.
 
 | Boundary | Protocol code | Protocol doc |
 | --- | --- | --- |
-| Application–Core (`/v1`) | `contracts/agents-api/openapi.yaml` | [Agents API guide](docs/api/public-agent-api.md) |
-| Web and operators–Core (`/core/v1`) | `contracts/agents-api/core.openapi.yaml` | [Web management API](docs/api/web-management.md) |
-| Nodes and daemons–Core (`/api/v1`) | `contracts/agents-api/runtime.openapi.yaml` | [Machine connection API](docs/api/README.md#machine-connection-api) |
-| Core–Sandbox Provider | `services/agents-api/internal/sandbox/sandbox_provider.go`, `services/agents-api/internal/sandbox/operations.go`, `services/agents-api/internal/providercontract/operations.go` | [Sandbox Provider guide](docs/sandbox-provider.md) |
-| Core–sandbox node | `services/agents-api/internal/sandbox/node/wire.go`, `services/agents-api/internal/sandbox/node/generation_wire.go` | [Node generation protocol](contracts/agents-api/node-generation-protocol.md) |
+| Application–Core (`/v1`) | `contracts/agents-api/openapi.yaml`, generated from `contracts/agents-api/v1/*.go` | [Agents API guide](docs/api/public-agent-api.md) |
+| Web and operators–Core (`/core/v1`) | `contracts/agents-api/core.openapi.yaml`, generated from `contracts/agents-api/v1/*.go` | [Web management API](docs/api/web-management.md) |
+| Nodes and daemons–Core (`/api/v1`) | `contracts/agents-api/runtime.openapi.yaml`, generated from `contracts/agents-api/v1/*.go` | [Machine connection API](docs/api/README.md#machine-connection-api) |
+| Core–Sandbox Provider | `sandbox_provider.go`, `suspension.go`, `selection.go` and `operations.go` in `services/agents-api/internal/sandbox/`; `services/agents-api/internal/providercontract/operations.go`; `services/agents-api/internal/runtimeobs/source.go` | [Sandbox Provider guide](docs/sandbox-provider.md) |
+| Core–sandbox node | `wire.go`, `generation_wire.go`, `generation_json.go` and `operations.go` in `services/agents-api/internal/sandbox/node/` | [Node generation protocol](contracts/agents-api/node-generation-protocol.md) |
 | Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |
 | Core–Runtime wire | `internal/agentdaemon/proto/*.go` | [Core–Runtime protocol](docs/runtime-protocol.md) |
-| Runtime–Harness | `apps/parsar-daemon/internal/agent/harness.go`, `internal/harnessconfig/harness.go` | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
-| Harness–Model provider | `internal/modelprovider/config.go` | [Model execution](contracts/agents-api/model-execution.md) |
+| Runtime–Harness | `apps/parsar-daemon/internal/agent/harness.go`, with result types and errors in `apps/parsar-daemon/internal/agent/*.go`; `internal/harnessconfig/harness.go` | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
+| Harness–Model provider | `internal/modelprovider/config.go`, `internal/harnessconfig/provider.go` | [Model execution](contracts/agents-api/model-execution.md) |
 
-A boundary listed with more than one code file does not meet this rule yet; do not
-add files to it.
+`make openapi` generates the three OpenAPI files from the Go types and the handler
+annotations in `services/agents-api/`; never edit them by hand. Rows that list more
+than one file, a glob or a directory do not meet the single-file rule yet; do not
+add files to them.
 
 ### Complexity stays in the adapter
 
-New complexity lives in the adapter that needs it and never spreads outward.
+New complexity lives in the adapter that needs it and never spreads outward. A new
+implementation adds or changes only these files. Directory names differ per
+Harness: Claude uses `claude_sdk`, `claudesdk` and `claude`.
 
-| Component | Adapter |
-| --- | --- |
-| Sandbox Provider | `services/agents-api/internal/sandbox/<kind>/` and its entry in `services/agents-api/internal/sandbox/providers/registry.go`; when present, its helper in `services/agents-api/tools/<kind>-provider/` and its operator material in `services/agents-api/deploy/<kind>/` |
-| Harness | `apps/parsar-daemon/internal/agent/<harness>/`, its native configuration in `internal/harnessconfig/<harness>/`, its entry in `internal/harnessconfig/builtin/catalog.json` and its Runtime image in `services/agents-api/deploy/<harness>/` |
-| Model provider | The Harness adapters that declare its model protocol; a new model protocol is a change to `internal/modelprovider` |
+- **Sandbox Provider:** its package `services/agents-api/internal/sandbox/<kind>/`,
+  its construction in `services/agents-api/internal/sandbox/providers/<kind>.go`
+  and its entry in `services/agents-api/internal/sandbox/providers/registry.go`;
+  when present, its helper in `services/agents-api/tools/<kind>-provider/` and its
+  operator material in `services/agents-api/deploy/<kind>/`.
+- **Harness:** its adapter in `apps/parsar-daemon/internal/agent/<harness>/`, its
+  native configuration in `internal/harnessconfig/<harness>/`, its entry in
+  `internal/harnessconfig/builtin/catalog.json`, its discovery and registration in
+  `apps/parsar-daemon/internal/cli/` (`agent_discovery.go`, `agent_registration.go`
+  and `native_harness.go`, plus per-Harness files such as `claude_sdk.go`), its
+  Runtime image in `services/agents-api/deploy/<harness>/` and, when present, its
+  native package (`packages/claude-sdk-adapter/`, `packages/mcode-harness/`).
+- **Model provider:** nothing while it speaks a model protocol that
+  `internal/modelprovider` defines and a Harness declares; a new model protocol is a
+  protocol change.
 
-- A new Sandbox Provider, Harness, model provider or vendor feature changes only its
-  adapter. It adds no Core execution path, store table or column, migration,
-  deployment or configuration field, API field or Web UI specific to that vendor or
-  Harness.
+Rules for every adapter:
+
+- A new Sandbox Provider, Harness, model provider or vendor feature adds no Core
+  execution path, store table or column, migration, deployment or configuration
+  field, API field or Web UI specific to that vendor or Harness.
 - When the protocol cannot express what an adapter needs, change the protocol as a
   change of its own: edit its code and document, update every implementation, and
   have it reviewed on its own. Never add an optional side interface for one
   implementation.
-- Example: making one sandbox vendor pause idle compute is that vendor's Provider's
-  job, done behind the existing lifecycle operations. A vendor-specific pause
-  interface, a new Core resume path, pause receipts in the store and a vendor idle
-  setting in the deployment go beyond an adapter change.
+- Example: a vendor that can pause idle compute implements the declared `Suspend`
+  and `Resume` operations of `CheckpointProvider` in its own Provider; that is an
+  adapter change. A vendor-only pause interface, a Core path for that vendor,
+  vendor receipts in the store or a vendor idle setting in the deployment is not.
+- Each Harness runs its own native model and tool loop through a maintained
+  upstream SDK or native protocol. Never build a second executor, a hand-written
+  model/tool loop or a general-purpose compatibility framework to fabricate parity.
+  The public API and persistence never depend on one engine's native item types.
 
 Each component owns one part of execution:
 
 | Component | Owns |
 | --- | --- |
-| Core | Durable Session and Turn state, admission and scheduling |
-| Sandbox Provider | Compute selection, creation, bootstrap, renewal and reclamation |
-| Runtime | Preparation inside the Environment (files, tool configuration, packages, capabilities) and execution |
+| Core | Durable Session, Turn, Environment and allocation state; admission, placement and scheduling |
+| Sandbox Provider | Compute creation, bootstrap, renewal and reclamation |
+| Runtime | Preparation, execution and recovery inside the Environment |
 | Harness adapter | Translation of the common execution contract into native operations |
 
 - Executor and compute lifetimes are separate; see
@@ -101,17 +116,22 @@ Each component owns one part of execution:
 
 | Category | Home | Written by |
 | --- | --- | --- |
-| Process settings | `<install>/config.json`; the installer defaults `<install>` to `~/.oac/core` | The operator, applied with `oac apply` |
+| Process settings | `<install>/config.json`; the installer defaults `<install>` to `~/.oac/core` | The operator, Web domain setup or `oac domain`; `oac apply` applies them |
 | Derived process files | `<install>/generated/` | `oac apply` only |
-| Secrets | `<install>/secrets/`, one file per secret | The installer and `oac` commands |
-| Installation identity and local provider receipts | `<install>/state.json` and `<install>/state/` | The installer tools and Core's provider helpers |
-| Runtime settings | Core's PostgreSQL | Web or `/core/v1` |
-| Execution data | Core's PostgreSQL | Core, through its APIs |
-| Node configuration and identity | `~/.oac/nodes/<installation-id>/` in the node account's home | The node installer and node |
-| Self-hosted executor | `~/.oac/environments/<environment-id>/` | The native installer and daemon |
-| Runtime daemon state | `~/.oac/daemon/<profile>/`; `OAC_RUNTIME_HOME` replaces `~/.oac` | The daemon |
-| Build output | `~/.oac/build/`; `OAC_DEV_HOME` replaces `~/.oac` | `make` targets |
+| Secrets and installation identity | `<install>/secrets/`, one file per secret; `<install>/state.json` | The installer and `oac` commands |
+| Provider helper state | `<install>/state/` | Core's provider helpers |
+| Managed HTTPS | `<install>/ingress/`: domain status, certificates and control sockets | `oac` and the managed ingress |
+| Installed release files | `<install>/oac`, `<install>/native/`, `<install>/node-payload/`; verified bundles in `~/.oac/releases/` | The installer |
+| Runtime settings and execution data | Core's PostgreSQL | Web or `/core/v1` for settings; Core, through its APIs, for execution data |
+| Node identity, configuration and storage | `~/.oac/nodes/<installation-id>/` and microsandbox storage in `~/.oac/m/<hash>/`, in the node account's home | The node installer and node |
+| Daemon settings | `OAC_RUNTIME_*` in the daemon's process environment | The Runtime image, the Sandbox Provider at launch, or `oac-daemon start` from `daemon/installation.json` on a self-hosted machine |
+| Runtime state | `~/.oac/daemon/` (Environment binding, installation, executor credential, sessions, scratch and capability installations; connection state per profile in `daemon/<profile>/`) and adapter state in `~/.oac/runtime/<kind>/` | The daemon and its adapters |
+| Self-hosted executors | `~/.oac/environments/<environment-id>/`, each its own Runtime home | The native installer and daemon |
+| Build output and caches | `~/.oac/build/`; CI caches in `~/.oac/cache/` | `make` targets; CI |
 | Test artifacts | Under `~/.oac/` | Tests and acceptance runs |
+
+`OAC_RUNTIME_HOME` replaces `~/.oac` for Runtime state and self-hosted executors;
+`OAC_DEV_HOME` replaces it for build output.
 
 ### Pre-release: no compatibility layers
 
@@ -120,6 +140,25 @@ and documents outright. Keep no version fallback, compatibility shim, alias or
 migration for retired behavior unless an explicit upgrade contract requires it.
 Keep the pinned official public protocol, valid data and still-used, verified
 infrastructure; do not rewrite working infrastructure only to rename it.
+
+### Known gaps
+
+Existing code that breaks these rules is a gap, not a precedent. Do not copy these
+patterns; a change that touches one of them moves it toward the rule.
+
+- Multi-file protocols: every row of the boundary table that lists more than one
+  file, a glob or a directory.
+- Harness support by type assertion: `apps/parsar-daemon/internal/dispatch/workspace_read.go`
+  selects workspace file reads and directory listings by asserting `WorkspaceReader`
+  and `WorkspaceDirectoryLister` instead of reading a declaration; `dispatch/steering.go`
+  reports a declared but missing `Steerer` as unsupported.
+- Per-Harness profiles inside Core: `services/agents-api/internal/engine/<harness>.go`
+  (`claude.go`, `codex.go`, `mcode.go`).
+- Vendor configuration outside the adapter: `sandbox.Selection` has an `E2B` field
+  (`services/agents-api/internal/sandbox/selection.go`) with matching store
+  columns, API fields and operator-client types, as
+  [Register the provider kind](docs/sandbox-provider.md#register-the-provider-kind)
+  directs for new Provider fields.
 
 ## Documentation
 
@@ -133,6 +172,7 @@ infrastructure; do not rewrite working infrastructure only to rename it.
   numbers, "retired", "former", "this candidate") and task chronology.
 - Delete obsolete, historical and duplicate documentation outright. Qualification
   evidence stays only while it qualifies current behavior.
+- Do not hard-wrap prose. Write each paragraph, list item and blockquote on one line; editors wrap it for display.
 - Write documentation and code comments in English. The root README also has a
   Chinese version; user-facing product copy may be bilingual.
 - Markdown in `docs/`, component guides and `contracts/` is the authored source.
@@ -145,9 +185,6 @@ infrastructure; do not rewrite working infrastructure only to rename it.
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): workflow, independent review, required checks
   and naming.
-- [docs/development.md](docs/development.md): setup, the repository map and
-  [the guide for each extension boundary](docs/development.md#choose-an-extension-boundary).
+- [Develop OpenAgentCore](docs/development.md): setup, the repository map, focused
+  checks and [the guide for each extension boundary](docs/development.md#choose-an-extension-boundary).
 - [API index](docs/api/README.md): each route's caller and credential.
-- Run `make sqlc-generate` after query changes and `make openapi` after handler
-  changes. Review and commit the generated contracts with their source.
-- Run `make check` before reporting completion.

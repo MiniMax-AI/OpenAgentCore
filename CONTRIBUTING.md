@@ -12,22 +12,19 @@ Every other subject has one canonical owner, listed below.
 
 | Subject | Canonical source |
 | --- | --- |
-| Design principles, protocol boundaries, storage layout and documentation rules | [AGENTS.md](AGENTS.md) |
-| User concepts and authority | [Design principles](docs/design-principles.md) |
+| Design principles, storage layout and documentation rules | [AGENTS.md](AGENTS.md) |
+| Protocol boundaries: each boundary's protocol code and document | [AGENTS.md](AGENTS.md#protocols-at-every-boundary) |
+| User concepts and authority | [Concepts and ownership](docs/design-principles.md) |
 | Architecture overview and diagrams (a map that links to the owners below) | [Architecture](docs/architecture.md) |
-| Developer setup, repository map and extension boundaries | [Develop OpenAgentCore](docs/development.md) |
+| Developer setup, repository map and focused checks | [Develop OpenAgentCore](docs/development.md) |
 | API callers, credentials and route inventory | [API index](docs/api/README.md) |
 | Public wire types and qualified behavior | [Agents API contracts](contracts/agents-api/README.md), [pinned upstream](contracts/agents-api/upstream.json), and linked operation contracts |
 | Core service implementation constraints | [Agents API implementation constraints](services/agents-api/IMPLEMENTATION.md) and [service README](services/agents-api/README.md) |
-| Provider-to-Runtime startup input | [Runtime bootstrap](docs/runtime-bootstrap.md) |
-| Runtime messages, Executor/Turn lifetimes, receipts and failure ownership | [Core–Runtime protocol](docs/runtime-protocol.md) |
 | Environment ownership and capability preparation (Skills, Plugins, MCP, `packages.system`) | [Environments](contracts/agents-api/environments.md) |
-| Adding a Harness (steps) | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
 | Built-in Harness identifiers, configuration/profile bindings and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
 | Effective MCP bindings and credential authority | [Environment MCP](contracts/agents-api/environments.md#skills-plugins-and-environment-mcp) and `apps/parsar-daemon/internal/agent/mcp_binding.go` |
 | Harness qualification and acceptance | [Harness integration](contracts/agents-api/harnesses.md) |
 | Harness selection and Agent defaults | [Harness selection](contracts/agents-api/harness-selection.md) |
-| Adding a Sandbox Provider | [Sandbox Provider guide](docs/sandbox-provider.md) |
 | Provider selection, sandbox deployment and E2B setup | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
 | Hosted sandbox nodes | [Hosted sandbox manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md) |
 | Claude private bridge and Runtime artifact | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |
@@ -75,9 +72,8 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   the user before changing its semantics. Explicit unsupported enablement rejects;
   ordinary requests retain native behavior with any official default discrepancy
   recorded in the coverage ledger. In particular, native programmatic tool calling
-  is not currently qualified as the official default-on behavior. Do not build
-  a separate executor or model loop to fabricate parity. This does not relax
-  authentication, isolation, credential protection or data consistency.
+  is not currently qualified as the official default-on behavior. This does not
+  relax authentication, isolation, credential protection or data consistency.
 - Pin upstream source and SDK versions in `contracts/agents-api/upstream.json`.
   Use official SDKs for clients and reuse upstream types or schemas where suitable.
   SDK deserialization alone is not server validation or proof of compatibility:
@@ -95,16 +91,13 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   coverage in `contracts/agents-api/README.md` until the complete target is verified.
   Reconcile current coverage summaries with merged routes and recorded acceptance;
   distinguish accepted profiles, partial implementation, missing operations and
-  unverified semantics. Keep each evidence record at its original scope. Handler
-  counts are not compatibility percentages, and an active provider probe is not
-  deployment qualification.
+  unverified semantics. Handler counts are not compatibility percentages, and an
+  active provider probe is not deployment qualification.
 - Qualify public workflows through the common Runtime contract and Harness
   adapter; direct native probes establish feasibility only.
 - Native workspace execution must use the declared Environment directory; a
   separate native history/configuration directory is not a workspace. The public
   API and persistence/application core must not interpret Parsar product payloads.
-  Prefer maintained upstream SDKs and native execution protocols over a second
-  hand-written model/tool loop or a general-purpose compatibility framework.
 - Verify an independent official-client workflow before a Parsar integration.
   Parsar uses the same public contract as any other client, with no privileged
   endpoint or direct execution-table access. An OpenAI endpoint is a possible
@@ -159,7 +152,7 @@ databases, credentials and migrations. The product uses Core exclusively; it has
 3. Make only the changes that scope needs; keep unrelated refactors separate.
 
 When documents conflict, apply the latest explicit user decision and update the
-affected current guidance. Historical evidence does not override it.
+affected current guidance. Recorded evidence does not override it.
 
 If requirements are unresolved, object ownership is unclear, or a design would
 need parallel compatibility paths, raise the issue with a concrete
@@ -284,8 +277,8 @@ allocations or accepts node deployments without a valid specification. Keep the
 original Core responsible for unresolved resources; see the
 [operator boundary](services/agents-api/HOSTED-SANDBOX-MANAGER.md#historical-installations).
 Use this release's template builder for
-new E2B templates. Landed migrations and historical evidence stay as repository
-history; ordinary current-version database initialization uses the migration runner.
+new E2B templates. Ordinary current-version database initialization uses the
+migration runner.
 
 The dormant Pi adapter keeps its `parsar` provider slug because the separate
 Parsar product pins model selections to that identity. This is a product
@@ -321,6 +314,6 @@ These identities stay unchanged:
 - persisted credential encryption domains and native-session resume keys, so
   existing data can be decrypted and Sessions can resume.
 
-Conversion inputs, retirement diagnostics and historical evidence must still
-name the identifiers they reject. Historical migration files keep their original
-identifiers; current examples use the new names.
+Conversion inputs, retirement diagnostics and evidence records must still name
+the identifiers they reject. Landed migrations keep their original identifiers;
+current examples use the new names.

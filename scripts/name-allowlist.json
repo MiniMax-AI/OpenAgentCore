@@ -525,11 +525,6 @@
     "reason": "The literal is a rejected legacy Runtime prefix fixture, not an accepted deployment reference."
   },
   {
-    "path": "AGENTS.md",
-    "regex": "behind Parsar",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
     "path": "CONTRIBUTING.md",
     "regex": "copied from Parsar at|in Parsar\\.|apps/parsar/|Parsar is an ordinary client|Parsar integration|Parsar uses|Parsar owns|Parsar marketplace|belong to Parsar|Parsar retains|Parsar Agents|`parsar` provider slug",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
