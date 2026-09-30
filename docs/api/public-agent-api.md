@@ -246,7 +246,7 @@ oac "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
 Returns 201 with the Session:
 
 ```json
-{"id": "sess_...", "object": "agent.session", "status": "in_progress",
+{"id": "sess_...", "object": "agent.session", "status": "idle",
  "agent": {"model": "...", ...}, "environment": {"id": "env_...", "type": "openai_hosted", ...},
  "metadata": {"ticket": "T-123"}, "required_actions": [], "vault_ids": [],
  "created_at": 1790000000, "last_active_at": 1790000000}
@@ -256,7 +256,7 @@ Returns 201 with the Session:
 | --- | --- |
 | `environment` | Required. Where the agent works; see the table below |
 | `agent_id` or `agent` | A saved Agent, or an inline Agent object (same fields as create). An inline Agent on `openai_hosted` or `none` may omit `model` to use the installation default |
-| `input` | The first message: a string or a message array. Optional for `openai_hosted` and `self_hosted` |
+| `input` | The first message: a string or a message array. Required on `none`, and with `stream: true` except on `self_hosted` ([initial input](../../contracts/agents-api/sessions-events.md#initial-input-at-session-creation)) |
 | `metadata` | Your own string key-value pairs |
 | `vault_ids` | [Vaults](#vaults) whose credentials MCP servers may use |
 | `stream` | `true` returns [server-sent events](#stream-events) instead of JSON |
@@ -268,16 +268,18 @@ Returns 201 with the Session:
 | `self_hosted` | Your own Linux, macOS or Windows machine | Requires an absolute `workspace_directory`. Skills, packages, files or a template go in `x_agents_core.environment`. The response carries install commands in `x_agents_core.installation`; see [self-hosted execution](../getting-started/self-hosted.md). The Session brings its own `model_provider` |
 | `none` | A device connection an operator registered, with no workspace | `input` required. The model comes from the installation default, or from the device when no default is configured |
 
-The [Environment contract](../../contracts/agents-api/environments.md) owns placement, expiry and preparation.
+A new `openai_hosted` Session reads `idle` while Core prepares its sandbox; its first Turn starts when the Environment is ready. The [Environment contract](../../contracts/agents-api/environments.md) owns placement, expiry and preparation.
 
 ### Session status
 
 | `status` | Meaning |
 | --- | --- |
-| `in_progress` | A Turn is running |
-| `idle` | Waiting for input |
+| `in_progress` | A Turn is queued or running |
+| `idle` | Waiting for input, or a hosted Environment is still being prepared |
 | `requires_action` | Waiting for you: a [function result](#function-tools) or a self-hosted machine to connect |
-| `failed` | The Environment could not be prepared. See `error` |
+| `failed` | The latest Turn failed, input waiting for the Environment failed, or the Environment could not be prepared. See `error`. After a failed Turn, new input starts a new Turn; an Environment failure is final |
+
+[Session status](../../contracts/agents-api/sessions-events.md#session-status) gives the exact rules.
 
 ### Update, list and delete
 
@@ -405,8 +407,7 @@ oac "/agents/sessions/$SESSION_ID/items?order=asc"
 | `waiting` | Waiting for a function result |
 | `completed`, `failed`, `cancelled` | Finished |
 
-- **Usage** (`input_tokens`, `output_tokens`, `total_tokens`, …) may arrive after the
-  Turn ends. Treat `null` as "not yet known", not zero.
+- **Usage** (`input_tokens`, `output_tokens`, `total_tokens`, …) is null when unknown, never zero. A Session's usage stays null while a Turn runs; Claude Code and MiniMax Code report none ([usage rules](../../contracts/agents-api/sessions-events.md#usage)).
 - Turn lists contain top-level Turns only. Read child work under `/subagents`.
 
 ## Function tools
@@ -571,13 +572,13 @@ The HTTP path is `/vaults`, with the Beta header. A Session uses a credential fr
 
 ## Diagnose a failure
 
-1. Read the Session's `status` and `error`, and the latest Turn's `error`.
+1. Read the Session's `status` and `error`, and the latest Turn's `error`. A failed Turn reports only a generic `internal_error`.
 2. Check that the Environment is connected and its harness is available.
 3. Check the harness, model and tool combination in [execution tools](../../contracts/agents-api/execution-tools.md).
-4. Ask the administrator to check [troubleshooting](../getting-started/operations.md#troubleshooting) for service logs, credentials and node readiness.
+4. Ask the administrator for the Session's [diagnostics](../../contracts/agents-api/session-diagnostics.md), which name the failure category, and to check [troubleshooting](../getting-started/operations.md#troubleshooting) for service logs, credentials and node readiness.
 
 A 401 usually means a key from another namespace; see [API namespaces and credentials](README.md).
 
 ## Differences from OpenAI
 
-Core differs from the OpenAI service in a few places, for example Session creation idempotency, live-only streams and harness-specific tool support. The [coverage ledger](../../contracts/agents-api/README.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.
+Core differs from the OpenAI service in some behavior, such as Session creation idempotency and harness-specific tool support. The [coverage ledger](../../contracts/agents-api/README.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.
