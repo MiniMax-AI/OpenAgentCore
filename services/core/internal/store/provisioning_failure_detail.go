@@ -9,10 +9,10 @@ type ProvisioningFailureDetail struct {
 }
 
 func (f ProvisioningFailure) detail() *ProvisioningFailureDetail {
-	return (ProvisioningFailureDetail{Step: &f.Step, Index: &f.Index, ExitCode: &f.ExitCode}).sanitized()
+	return sanitizedProvisioningDetail(ProvisioningFailureDetail{Step: &f.Step, Index: &f.Index, ExitCode: &f.ExitCode})
 }
 
-func (f ProvisioningFailureDetail) sanitized() *ProvisioningFailureDetail {
+func sanitizedProvisioningDetail(f ProvisioningFailureDetail) *ProvisioningFailureDetail {
 	if f.Step == nil {
 		return nil
 	}

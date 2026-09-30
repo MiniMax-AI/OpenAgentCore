@@ -75,7 +75,7 @@ func environmentFailure(row sqlc.Environment) *EnvironmentFailure {
 	failure := &EnvironmentFailure{Reason: row.FailureReason.String, FailedAt: row.FailedAt.Time}
 	var detail ProvisioningFailureDetail
 	if json.Unmarshal(row.FailureDetail, &detail) == nil {
-		failure.Detail = detail.sanitized()
+		failure.Detail = sanitizedProvisioningDetail(detail)
 	}
 	return failure
 }
