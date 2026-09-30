@@ -12,7 +12,11 @@ import (
 func main() {
 	write := flag.Bool("write", false, "update deploy/install/node_spec.py from the repository root")
 	flag.Parse()
-	projection := providers.PythonDeploymentContract()
+	projection, err := providers.PythonDeploymentContract()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if !*write {
 		fmt.Println(projection)
 		return

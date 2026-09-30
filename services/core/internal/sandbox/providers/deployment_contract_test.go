@@ -14,7 +14,10 @@ func TestInstallerDeploymentProjectionIsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := PythonDeploymentContract()
+	expected, err := PythonDeploymentContract()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(raw), expected) {
 		t.Fatal("node_spec.py contract is stale; regenerate with go run ./services/core/cmd/specification-contract -write")
 	}

@@ -20,6 +20,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Harness qualification and acceptance | [Harness integration](contracts/agents-api/harnesses.md) |
 | Harness service qualification declarations and registration | [Explicit service qualification](contracts/agents-api/harness-onboarding.md#explicit-service-qualification) and `services/core/internal/engine/profile.go` |
 | Harness selection and Agent defaults | [Harness selection](contracts/agents-api/harness-selection.md) |
+| Provider registration validation | [Sandbox Provider guide](docs/sandbox-provider.md#registration-validation) |
 | Provider selection, sandbox deployment and E2B setup | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
 | Hosted sandbox nodes | [Nodes guide](docs/getting-started/nodes.md) and [sandbox deployment contract](contracts/agents-api/sandbox-deployment.md) |
 | Claude private bridge and Runtime artifact | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |

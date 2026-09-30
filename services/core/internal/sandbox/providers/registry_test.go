@@ -2,14 +2,10 @@ package providers
 
 import (
 	"errors"
-	"testing"
-
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/google/uuid"
+	"testing"
 )
 
 func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
@@ -67,9 +63,9 @@ func TestSelectionNormalizationAndCredentialInheritance(t *testing.T) {
 func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 	const kind = "contract-test-provider"
 	// Registration is test-local: production registrations are fixed, never plugins.
-	adapters[kind] = Adapter{Mode: "nodes", Operations: docker.Operations, ValidateSpecification: func(sandbox.DeploymentSpec) error { return nil }, Configuration: nodeConfigurationAdapter{validate: func(sandbox.DeploymentSpec) error { return nil }}}
+	adapters[kind] = adapters["docker"]
 	defer delete(adapters, kind)
-	s, err := Normalize(sandbox.Selection{Provider: kind})
+	s, err := Normalize(sandbox.Selection{Provider: kind, DeploymentSpec: validRegistrationSpec()})
 	if err != nil || s.Provider != kind || !IsNode(kind) || SupportsCheckpoint(kind) {
 		t.Fatal("new entry did not follow shared boundary", err)
 	}
@@ -86,11 +82,11 @@ func TestRetainedLimitUsesRegisteredCapabilities(t *testing.T) {
 	const kind = "capacity-test-provider"
 	defer delete(adapters, kind)
 	for _, checkpoint := range []bool{false, true} {
-		operations := docker.Operations
+		adapter := adapters["docker"]
 		if checkpoint {
-			operations = microsandbox.Operations
+			adapter = adapters["microsandbox"]
 		}
-		adapters[kind] = Adapter{Mode: "nodes", Operations: operations}
+		adapters[kind] = adapter
 		for _, retained := range []int{0, 20} {
 			want := 10
 			if checkpoint {

@@ -50,10 +50,10 @@ var adapters = map[string]Adapter{
 
 func Lookup(kind string) (Adapter, error) {
 	a, ok := adapters[kind]
-	if !ok || a.Operations == nil {
+	if !ok {
 		return Adapter{}, fmt.Errorf("%w: unsupported sandbox provider", sandbox.ErrInvalid)
 	}
-	if err := sandbox.ValidateOperations(a.Operations()); err != nil {
+	if err := ValidateRegistration(a); err != nil {
 		return Adapter{}, err
 	}
 	return a, nil
@@ -110,10 +110,14 @@ func Describe(kind, installation string) (Description, error) {
 
 // PythonDeploymentContract projects the same registered adapter policies into
 // the node installer; no second provider list exists in another language.
-func PythonDeploymentContract() string {
+func PythonDeploymentContract() (string, error) {
 	policies := make(map[string]sandbox.DeploymentPolicy, len(adapters))
-	for kind, a := range adapters {
+	for kind := range adapters {
+		a, err := Lookup(kind)
+		if err != nil {
+			return "", err
+		}
 		policies[kind] = a.Policy
 	}
-	return sandbox.PythonDeploymentContract(policies)
+	return sandbox.PythonDeploymentContract(policies), nil
 }

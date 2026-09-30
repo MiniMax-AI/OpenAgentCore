@@ -8,6 +8,9 @@ import (
 
 // ValidateBinding catches construction that disagrees with its registration.
 func ValidateBinding(adapter Adapter, provider sandbox.SandboxProvider) error {
+	if err := ValidateRegistration(adapter); err != nil {
+		return err
+	}
 	if err := sandbox.ValidateProvider(provider); err != nil {
 		return err
 	}
