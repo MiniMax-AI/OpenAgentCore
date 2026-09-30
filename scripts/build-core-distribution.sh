@@ -111,7 +111,6 @@ python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
 mkdir -p "$bundle/runtime"
 cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"
-cp -R site "$bundle/site"
 
 OAC_DEV_BUILD_REVISION="$revision" OAC_DEV_CORE_BUILD_DIR="$stage/core/bin" scripts/build-core.sh
 (

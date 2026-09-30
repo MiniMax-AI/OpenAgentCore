@@ -580,21 +580,6 @@
     "reason": "This comment identifies the recognized product-origin patch extension, matching the intentionally retained parser symbol."
   },
   {
-    "path": "apps/docs/content/docs/concepts.mdx",
-    "regex": "Parsar is an ordinary API-key holder",
-    "reason": "Generated copy of docs/design-principles.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "apps/docs/content/docs/troubleshooting.mdx",
-    "regex": "~/\\.parsar/core",
-    "reason": "Generated copy of docs/getting-started/operations.md: A default install refuses while this path holds an installation of an earlier release; the troubleshooting row names it."
-  },
-  {
-    "path": "apps/docs/lib/legacy-redirects.ts",
-    "regex": "\"agents-api(?:-sessions|-errors)?\"",
-    "reason": "Retired documentation URL keys redirect to the current public API guide; these are not current commands or API namespaces."
-  },
-  {
     "path": "example/*",
     "regex": "(?i)parsar",
     "reason": "The explicitly named Parsar application example retains product branding; it does not rename the Core runtime."
@@ -608,11 +593,6 @@
     "path": "docs/examples.md",
     "regex": "(?i)parsar",
     "reason": "The examples guide describes the explicitly named Parsar application example; it does not rename the Core runtime."
-  },
-  {
-    "path": "apps/docs/content/docs/examples.mdx",
-    "regex": "(?i)parsar",
-    "reason": "Generated copy of docs/examples.md: The examples guide describes the explicitly named Parsar application example; it does not rename the Core runtime."
   },
   {
     "path": "pnpm-lock.yaml",

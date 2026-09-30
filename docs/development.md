@@ -74,7 +74,7 @@ separate contributor workflow.
 The [Web package guide](../apps/web/README.md) describes console development and
 its management-only integration. `pnpm dev:web` starts the frontend development
 server; it does not install Core, issue keys or start native execution. The
-[docs app guide](../apps/docs/README.md) describes the independent documentation
+docs app guide describes the independent documentation
 site; `pnpm dev:docs` starts its development server.
 
 ## Repository map
@@ -94,7 +94,7 @@ site; `pnpm dev:docs` starts its development server.
 | `apps/web` and `packages/agents-client` | Console UI and typed clients | [Web guide](../apps/web/README.md) |
 | `deploy/install` and `scripts` | Distribution, installation and validation tools | [Maintainers](maintainers.md) |
 | `contracts/agents-api` | Pinned schema, local semantic contracts and qualification evidence | [Coverage ledger](../contracts/agents-api/README.md) |
-| `apps/docs` | Generated guide and API-reference website | [Generation workflow](../apps/docs/README.md) |
+| `apps/docs` | Generated guide and API-reference website | Generation workflow |
 
 Core owns durable execution facts. Runtime owns local execution and cleanup.
 Adapters translate native operations. Providers own outer compute. These boundaries
@@ -180,7 +180,7 @@ implementation gaps and evidence. Avoid copying the same rule into all three.
 Update authored sources before regenerating the docs site. Adding a site page
 also requires a source entry and navigation entry; source/output hashes verify
 freshness. API references render the namespace-specific generated schemas. Follow
-[the docs app workflow](../apps/docs/README.md) for link, type, build and browser
+the docs app workflow for link, type, build and browser
 checks. The release bundle has a separate explicit documentation list in
 `scripts/core-distribution-manifest.py`; changing a bundled path or heading must
 also pass its relative-link and anchor checks.

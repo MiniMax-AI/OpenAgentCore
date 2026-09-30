@@ -27,7 +27,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Operator installation, installation layout and configuration | [Installation](docs/getting-started/install.md), [installation options](docs/getting-started/install-options.md), [configuration](docs/configuration.md), [operations](docs/getting-started/operations.md) |
 | Core Web console server and sign-in | [Console server](docs/web/console-server.md) |
 | Web components, interaction and visual rules | [Web design](apps/web/DESIGN.md) and [Web product](apps/web/PRODUCT.md) |
-| Documentation website generation | [Docs app](apps/docs/README.md) |
+| Documentation website generation | Docs app |
 
 ## Repository boundary
 
