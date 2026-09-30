@@ -798,3 +798,5 @@ if __name__ == "__main__":
         if getattr(error, "removal", None):
             print(error.removal, file=sys.stderr)
         sys.exit(1)
+
+# CI impact validation only.
