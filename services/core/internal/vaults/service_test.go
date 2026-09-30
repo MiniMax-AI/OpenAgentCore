@@ -395,7 +395,9 @@ func newOAuthScenario(t *testing.T, expiresAt time.Time, refresher oauthrefresh.
 			t.Fatalf("unexpected key %+v", key)
 		}
 		err := apply(&fakeOAuthTx{t: t,
-			load: func(context.Context) (Credential, []byte, error) { return scenario.credential, scenario.ciphertext, nil },
+			load: func(context.Context) (Credential, []byte, error) {
+				return scenario.credential, scenario.ciphertext, nil
+			},
 			refresh: func(_ context.Context, sealed SealedOAuth) error {
 				scenario.refreshes = append(scenario.refreshes, sealed)
 				return nil

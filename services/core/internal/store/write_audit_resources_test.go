@@ -11,7 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type resourceAuditMutation struct {
@@ -48,19 +47,14 @@ func TestWriteAuditStandaloneResourceTransactions(t *testing.T) {
 	for _, name := range []string{
 		"template_create", "template_update", "template_delete",
 		"skill_create", "skill_upload_version", "skill_update_default", "skill_delete", "version_delete", "version_delete_last",
-		"vault_create", "vault_delete", "credential_create", "credential_update", "credential_delete",
-		"oauth_create", "oauth_update", "oauth_delete",
 	} {
 		t.Run(name, func(t *testing.T) {
 			tenant := uuid.NewString()
 			mutation := prepareResourceAuditMutation(t, s, tenant, name, archive)
 			snapshot := func() map[string]string {
 				result := make(map[string]string)
-				for _, table := range []string{"agents", "environment_templates", "skills", "skill_versions", "vaults", "vault_credentials", "write_audit_operations", "write_audit_owners"} {
+				for _, table := range []string{"agents", "environment_templates", "skills", "skill_versions", "write_audit_operations", "write_audit_owners"} {
 					query := "SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text)::text, '[]') FROM " + pgx.Identifier{table}.Sanitize() + " r WHERE tenant_id=$1"
-					if table == "vault_credentials" {
-						query = "SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY r.id)::text, '[]') FROM vault_credentials r JOIN vaults v ON v.id=r.vault_id WHERE v.tenant_id=$1"
-					}
 					var value string
 					if err := pool.QueryRow(ctx, query, tenant).Scan(&value); err != nil {
 						t.Fatalf("snapshot %s: %v", table, err)
@@ -170,64 +164,6 @@ func prepareResourceAuditMutation(t *testing.T, s *Store, tenant, name string, a
 			return v.ID, e
 		}}
 	}
-	if name == "vault_create" {
-		return resourceAuditMutation{action: "create", kind: "vault", owners: 1, run: func(ctx context.Context) (string, error) {
-			v, e := s.CreateVault(ctx, tenant, CreateVaultInput{})
-			return v.ID, e
-		}}
-	}
-	vault, err := s.CreateVault(ctx, tenant, CreateVaultInput{})
-	must(err)
-	static := CreateStaticCredentialInput{Name: "fixture", MCPServerURL: "https://mcp.example/", Token: "audit-private-token"}
-	if name == "credential_create" {
-		return resourceAuditMutation{action: "create", kind: "credential", parent: vault.ID, owners: 1, run: func(ctx context.Context) (string, error) {
-			v, e := s.CreateStaticCredential(ctx, tenant, vault.ID, static)
-			return v.ID, e
-		}}
-	}
-	if strings.HasPrefix(name, "oauth_") {
-		input := CreateOAuthCredentialInput{Name: "fixture", MCPServerURL: static.MCPServerURL, AccessToken: static.Token}
-		if name == "oauth_create" {
-			return resourceAuditMutation{action: "create", kind: "credential", parent: vault.ID, owners: 1, run: func(ctx context.Context) (string, error) {
-				v, e := s.CreateOAuthCredential(ctx, tenant, vault.ID, input)
-				return v.ID, e
-			}}
-		}
-		v, err := s.CreateOAuthCredential(ctx, tenant, vault.ID, input)
-		must(err)
-		if name == "oauth_update" {
-			return resourceAuditMutation{action: "update", kind: "credential", parent: vault.ID, run: func(ctx context.Context) (string, error) {
-				token := "audit-private-replacement"
-				v, e := s.UpdateOAuthCredential(ctx, tenant, vault.ID, v.ID, UpdateOAuthCredentialInput{AccessToken: &token})
-				return v.ID, e
-			}}
-		}
-		return resourceAuditMutation{action: "delete", kind: "credential", parent: vault.ID, run: func(ctx context.Context) (string, error) { return s.DeleteCredential(ctx, tenant, vault.ID, v.ID) }}
-	}
-	v, err := s.CreateStaticCredential(ctx, tenant, vault.ID, static)
-	must(err)
-	if name == "vault_delete" {
-		return resourceAuditMutation{action: "delete", kind: "vault", run: func(ctx context.Context) (string, error) { return s.DeleteVault(ctx, tenant, vault.ID) }}
-	}
-	if name == "credential_update" {
-		return resourceAuditMutation{action: "update", kind: "credential", parent: vault.ID, run: func(ctx context.Context) (string, error) {
-			v, e := s.UpdateStaticCredential(ctx, tenant, vault.ID, v.ID, UpdateStaticCredentialInput{Token: "audit-private-replacement"})
-			return v.ID, e
-		}}
-	}
-	return resourceAuditMutation{action: "delete", kind: "credential", parent: vault.ID, run: func(ctx context.Context) (string, error) { return s.DeleteCredential(ctx, tenant, vault.ID, v.ID) }}
-}
-
-// A public mutation owns its transaction, so inject database failures through
-// the connection configuration rather than replacing a Store query wrapper.
-func readOnlyResourceStore(t *testing.T, pool *pgxpool.Pool) *Store {
-	t.Helper()
-	config := pool.Config().Copy()
-	config.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
-	readOnly, err := pgxpool.NewWithConfig(t.Context(), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(readOnly.Close)
-	return New(readOnly)
+	t.Fatal("unknown resource audit mutation", name)
+	return resourceAuditMutation{}
 }

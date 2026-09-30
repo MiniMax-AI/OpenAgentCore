@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -35,7 +35,7 @@ func (h *Handler) updateCredential(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "auth with a supported type is required.")
 		return
 	}
-	var credential store.Credential
+	var credential vaults.Credential
 	var err error
 	switch credentialAuthType(request.Auth) {
 	case "static_bearer":
@@ -44,20 +44,21 @@ func (h *Handler) updateCredential(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid_request", "static_bearer auth requires a nonempty string token.")
 			return
 		}
-		credential, err = h.Vaults.UpdateStaticCredential(r.Context(), tenantID(r), vaultID, id, store.UpdateStaticCredentialInput{Token: *auth.Token})
+		credential, err = h.Vaults.UpdateStaticCredential(r.Context(), vaults.UpdateStaticCredential{TenantID: tenantID(r), VaultID: vaultID, CredentialID: id, Token: *auth.Token})
 	case "mcp_oauth":
-		input, parseErr := oauthCredentialUpdate(request.Auth)
+		command, parseErr := oauthCredentialUpdate(request.Auth)
 		if parseErr != nil {
-			writeStoreError(w, r, parseErr)
+			writeVaultsError(w, r, parseErr)
 			return
 		}
-		credential, err = h.Vaults.UpdateOAuthCredential(r.Context(), tenantID(r), vaultID, id, input)
+		command.TenantID, command.VaultID, command.CredentialID = tenantID(r), vaultID, id
+		credential, err = h.Vaults.UpdateOAuthCredential(r.Context(), command)
 	default:
 		writeError(w, http.StatusBadRequest, "invalid_request", "auth requires type static_bearer or mcp_oauth.")
 		return
 	}
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeVaultsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, credentialResponse(credential))

@@ -68,6 +68,10 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 			return err
 		},
 		"missing Store": func(t *testing.T, lease *closeCountingLease) error {
+			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}}, Owner{Lease: lease})
+			return err
+		},
+		"missing Credentials": func(t *testing.T, lease *closeCountingLease) error {
 			_, err := StartWorker(canceled, &Dispatcher{}, Owner{Lease: lease})
 			return err
 		},
@@ -75,7 +79,7 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 			s, owner := resetManagerStore(t)
 			lease.inner = owner.Lease
 			id := uuid.NewString()
-			dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+			dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
 			_, err := StartWorker(canceled, dispatcher, Owner{Lease: lease, Store: owner.Store})
 			if ping := owner.Lease.CheckOwnership(t.Context()); !errors.Is(ping, pgunit.ErrLeaseClosed) {
 				t.Error("failed start kept the database lease", ping)
@@ -100,7 +104,7 @@ func TestWorkerRunClosesLeaseAfterDrain(t *testing.T) {
 	s, owner := resetManagerStore(t)
 	lease := &closeCountingLease{t: t, inner: owner.Lease}
 	id := uuid.NewString()
-	dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+	dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
 	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Store: owner.Store})
 	if err != nil {
 		t.Fatal(err)

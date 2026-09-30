@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -72,7 +73,7 @@ func TestSelfHostedServiceMCPRejectedWithoutWrites(t *testing.T) {
 	}
 }
 
-func selfHostedMCPAdmissionFixture(t *testing.T) (*store.Store, fixtureDB, string, store.Vault, store.Credential) {
+func selfHostedMCPAdmissionFixture(t *testing.T) (*store.Store, fixtureDB, string, vaults.Vault, vaults.Credential) {
 	t.Helper()
 	_, pool := store.NewTestStore(t)
 	cipher, err := credentialcrypto.New([]byte(strings.Repeat("k", 32)))
@@ -80,12 +81,16 @@ func selfHostedMCPAdmissionFixture(t *testing.T) (*store.Store, fixtureDB, strin
 		t.Fatal(err)
 	}
 	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	tenant := uuid.NewString()
-	vault, err := s.CreateVault(t.Context(), tenant, store.CreateVaultInput{})
+	_, service, err := fixtureVaults(db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	credential, err := s.CreateStaticCredential(t.Context(), tenant, vault.ID, store.CreateStaticCredentialInput{Name: "test", MCPServerURL: "https://tools.example/mcp", Token: "synthetic-token"})
+	tenant := uuid.NewString()
+	vault, err := service.CreateVault(t.Context(), vaults.CreateVault{TenantID: tenant})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := service.CreateStaticCredential(t.Context(), vaults.CreateStaticCredential{TenantID: tenant, VaultID: vault.ID, Name: "test", MCPServerURL: "https://tools.example/mcp", Token: "synthetic-token"})
 	if err != nil {
 		t.Fatal(err)
 	}

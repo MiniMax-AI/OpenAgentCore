@@ -226,8 +226,8 @@ func TestVaultDeletionCascadeBindingAndRestart(t *testing.T) {
 		}
 	}
 	_, deletionErr := newService(t, readOnlyStore(t, pool), nil, nil).DeleteVault(t.Context(), vaults.DeleteVault{TenantID: tenant, VaultID: vault.ID})
-	if deletionErr == nil || deletionErr.Error() != "vault deletion failed" {
-		t.Fatal("failed mutation was accepted or exposed", deletionErr)
+	if !isReadOnlyFailure(deletionErr) {
+		t.Fatal("failed mutation was accepted or translated", deletionErr)
 	}
 	tx, err := pool.Begin(t.Context())
 	if err != nil {
@@ -308,7 +308,9 @@ func TestVaultDeletionConcurrentChildMutations(t *testing.T) {
 	tenant := uuid.NewString()
 	service := newService(t, store, newCipher(t, bytes.Repeat([]byte{44}, 32)), nil)
 	// Each operation runs on its own Store, so only PostgreSQL orders them.
-	other := func() *vaults.Service { return newService(t, vaultpg.New(pgunit.NewPool(pool)), newCipher(t, bytes.Repeat([]byte{44}, 32)), nil) }
+	other := func() *vaults.Service {
+		return newService(t, vaultpg.New(pgunit.NewPool(pool)), newCipher(t, bytes.Repeat([]byte{44}, 32)), nil)
+	}
 	for range 8 {
 		vault := createVault(t, service, tenant)
 		value := createStatic(t, service, tenant, vault.ID, "competing", "https://mcp.example/tools", "before")

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
 // @Summary Delete a Vault Credential
@@ -35,9 +36,9 @@ func (h *Handler) deleteCredential(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	deleted, err := h.Vaults.DeleteCredential(r.Context(), tenantID(r), vaultID, id)
+	deleted, err := h.Vaults.DeleteCredential(r.Context(), vaults.DeleteCredential{TenantID: tenantID(r), VaultID: vaultID, CredentialID: id})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeVaultsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, v1.CredentialDeleted{ID: deleted, Deleted: true, Object: "vault.credential.deleted"})

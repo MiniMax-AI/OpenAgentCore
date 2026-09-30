@@ -13,6 +13,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -33,9 +34,9 @@ func (s *validationStore) UpdateAgent(_ context.Context, command agents.UpdateCo
 	return agents.Agent{ID: command.AgentID, TenantID: command.TenantID, Configuration: json.RawMessage(`{"model":"validation-model"}`), Metadata: map[string]string{}}, nil
 }
 
-func (s *validationStore) CreateVault(_ context.Context, tenant string, input store.CreateVaultInput) (store.Vault, error) {
+func (s *validationStore) CreateVault(_ context.Context, input vaults.CreateVault) (vaults.Vault, error) {
 	s.writes++
-	return store.Vault{ID: uuid.NewString(), TenantID: tenant, Name: input.Name, Metadata: input.Metadata}, nil
+	return vaults.Vault{ID: uuid.NewString(), TenantID: input.TenantID, Name: input.Name, Metadata: input.Metadata}, nil
 }
 
 func (s *validationStore) UpdateSessionMetadata(_ context.Context, tenant, id string, metadata map[string]string) (store.Session, error) {

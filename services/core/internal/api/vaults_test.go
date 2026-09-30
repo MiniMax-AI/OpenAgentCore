@@ -13,27 +13,26 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
 type vaultResourceFixture struct {
-	vault      store.Vault
+	vault      vaults.Vault
 	err        error
 	tenant, id string
 	calls      int
-	page       store.VaultPage
-	options    pageOptions
-	statuses   []string
+	page       vaults.VaultPage
+	query      vaults.PageQuery
 }
 
-func (f *vaultResourceFixture) CreateVault(_ context.Context, tenant string, input store.CreateVaultInput) (store.Vault, error) {
-	f.tenant, f.calls = tenant, f.calls+1
+func (f *vaultResourceFixture) CreateVault(_ context.Context, input vaults.CreateVault) (vaults.Vault, error) {
+	f.tenant, f.calls = input.TenantID, f.calls+1
 	f.vault.Name, f.vault.Metadata = input.Name, input.Metadata
 	return f.vault, f.err
 }
 
-func (f *vaultResourceFixture) GetVault(_ context.Context, tenant, id string) (store.Vault, error) {
+func (f *vaultResourceFixture) GetVault(_ context.Context, tenant, id string) (vaults.Vault, error) {
 	f.tenant, f.id, f.calls = tenant, id, f.calls+1
 	return f.vault, f.err
 }
@@ -46,11 +45,12 @@ func (f *vaultResourceFixture) UpdateAgent(context.Context, agents.UpdateCommand
 
 func vaultResourceHandler(t *testing.T) (http.Handler, *vaultResourceFixture) {
 	t.Helper()
-	f := &vaultResourceFixture{vault: store.Vault{ID: uuid.NewString(), TenantID: uuid.NewString(), Metadata: map[string]string{}, CreatedAt: time.Unix(1700000000, 0)}}
+	f := &vaultResourceFixture{vault: vaults.Vault{ID: uuid.NewString(), TenantID: uuid.NewString(), Metadata: map[string]string{}, CreatedAt: time.Unix(1700000000, 0)}}
 	deps, fakes := testDependencies(t)
 	deps.Engine = "fake_alpha"
 	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "vault-org", ProjectID: "vault-project", SubjectKind: "user", SubjectID: "vault-owner", TokenSHA256: runtimedevice.HashCredential("vault-key"), TenantID: f.vault.TenantID}).ResolveProjectAPIKey
-	fakes.vaults.createVault, fakes.vaults.getVault, fakes.vaults.listVaults, fakes.vaults.deleteVault = f.CreateVault, f.GetVault, f.ListVaults, f.DeleteVault
+	fakes.vaults.createVault, fakes.vaults.deleteVault = f.CreateVault, f.DeleteVault
+	fakes.vaultsReader.getVault, fakes.vaultsReader.listVaults = f.GetVault, f.ListVaults
 	fakes.agents.update = f.UpdateAgent
 	return newTestHandler(t, deps), f
 }
@@ -141,7 +141,7 @@ func TestVaultResourceIgnoresUnknownQueryKeys(t *testing.T) {
 			t.Fatal(test.method, w.Code, f.calls, f.tenant)
 		}
 		// A missing or foreign Vault stays indistinguishable with the same query.
-		f.err = store.ErrNotFound
+		f.err = vaults.ErrNotFound
 		missing := vaultRequest(h, "GET", "/v1/vaults/"+uuid.NewString()+"?tenant_id=foreign", "")
 		plain := vaultRequest(h, "GET", "/v1/vaults/"+uuid.NewString(), "")
 		if missing.Code != 404 || missing.Body.String() != plain.Body.String() || f.tenant != f.vault.TenantID {
@@ -174,7 +174,7 @@ func TestVaultResourceUsesSharedAuthenticationAndErrors(t *testing.T) {
 	for _, test := range []struct {
 		err    error
 		status int
-	}{{store.ErrNotFound, 404}, {errors.New("private-vault-backend"), 500}} {
+	}{{vaults.ErrNotFound, 404}, {errors.New("private-vault-backend"), 500}} {
 		h, f := vaultResourceHandler(t)
 		f.err = test.err
 		w := vaultRequest(h, "GET", "/v1/vaults/"+f.vault.ID, "")

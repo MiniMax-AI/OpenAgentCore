@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -41,7 +41,7 @@ func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	var credential store.Credential
+	var credential vaults.Credential
 	switch credentialAuthType(request.Auth) {
 	case "static_bearer":
 		var auth v1.CredentialAuthInput
@@ -49,20 +49,21 @@ func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid_request", "static_bearer requires a nonempty string token and an absolute HTTPS mcp_server_url without userinfo or a fragment.")
 			return
 		}
-		credential, err = h.Vaults.CreateStaticCredential(r.Context(), tenantID(r), vaultID, store.CreateStaticCredentialInput{Name: name, MCPServerURL: *auth.MCPServerURL, Token: *auth.Token})
+		credential, err = h.Vaults.CreateStaticCredential(r.Context(), vaults.CreateStaticCredential{TenantID: tenantID(r), VaultID: vaultID, Name: name, MCPServerURL: *auth.MCPServerURL, Token: *auth.Token})
 	case "mcp_oauth":
-		input, parseErr := oauthCredentialCreate(request.Auth, name)
+		command, parseErr := oauthCredentialCreate(request.Auth, name)
 		if parseErr != nil {
-			writeStoreError(w, r, parseErr)
+			writeVaultsError(w, r, parseErr)
 			return
 		}
-		credential, err = h.Vaults.CreateOAuthCredential(r.Context(), tenantID(r), vaultID, input)
+		command.TenantID, command.VaultID = tenantID(r), vaultID
+		credential, err = h.Vaults.CreateOAuthCredential(r.Context(), command)
 	default:
 		writeError(w, http.StatusBadRequest, "invalid_request", "auth requires type static_bearer or mcp_oauth.")
 		return
 	}
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeVaultsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, credentialResponse(credential))
@@ -88,9 +89,9 @@ func (h *Handler) getCredential(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	credential, err := h.Vaults.GetCredential(r.Context(), tenantID(r), vaultID, id)
+	credential, err := h.VaultsReader.GetCredential(r.Context(), tenantID(r), vaultID, id)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeVaultsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, credentialResponse(credential))
@@ -101,13 +102,13 @@ func (h *Handler) getCredential(w http.ResponseWriter, r *http.Request) {
 func credentialResourceID(w http.ResponseWriter, r *http.Request, param string) (string, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, param))
 	if err != nil || id == uuid.Nil {
-		writeStoreError(w, r, store.ErrNotFound)
+		writeVaultsError(w, r, vaults.ErrNotFound)
 		return "", false
 	}
 	return id.String(), true
 }
 
-func credentialResponse(c store.Credential) v1.Credential {
+func credentialResponse(c vaults.Credential) v1.Credential {
 	auth := v1.CredentialAuth{Type: c.AuthType, MCPServerURL: c.MCPServerURL}
 	if c.OAuth != nil {
 		auth.ExpiresAt = c.OAuth.ExpiresAt

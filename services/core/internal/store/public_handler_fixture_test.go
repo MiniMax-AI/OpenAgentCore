@@ -29,7 +29,7 @@ const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 
 // publicHandler serves s through api.NewHandler. s backs every area the Store
 // implements, and db is the database and credential key that built s; the
-// audit reads, Agents and Files come from db. keys authenticate as Project
+// audit reads, Agents, Files and Vaults come from db. keys authenticate as Project
 // keys and "admin" as the Core key. Metrics, Runtime observation and history,
 // and executor connections are strict stand-ins. Execution and Sandboxes stay
 // disabled unless configure sets them.
@@ -43,9 +43,14 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 	audit := auditpg.New(pgunit.NewPool(db.pool))
 	agentStore, agentService := fixtureAgents(t, db)
 	fileStore, fileService := fixtureFiles(t, db)
+	vaultStore, vaultService, err := fixtureVaults(db)
+	if err != nil {
+		return nil, err
+	}
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: s,
-		Projects: fixtureProjects{Store: s, keys: keys}, Vaults: s, ModelProviders: s, Skills: s,
+		Projects: fixtureProjects{Store: s, keys: keys}, ModelProviders: s, Skills: s,
+		Vaults: vaultService, VaultsReader: vaultStore,
 		Files: fileService, FilesReader: fileStore,
 		Agents: agentService, AgentsReader: agentStore,
 		EnvironmentTemplates: s, Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s,

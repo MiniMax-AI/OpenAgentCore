@@ -2,10 +2,8 @@ package vaultpg
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
@@ -16,7 +14,7 @@ import (
 func (s *Store) CountOwnedVaults(ctx context.Context, tenantID string, vaultIDs []string) (int, error) {
 	owned, err := s.pool.Queries().GetAttachedVaultIDs(ctx, sqlc.GetAttachedVaultIDsParams{TenantID: pgunit.PathID(tenantID), VaultIds: pathIDs(vaultIDs)})
 	if err != nil {
-		return 0, errors.New("cannot resolve attached Vaults")
+		return 0, translate(err)
 	}
 	return len(owned), nil
 }
@@ -29,7 +27,7 @@ func (s *Store) FindMCPCredentials(ctx context.Context, query vaults.MCPCredenti
 	rows, err := s.pool.Queries().FindMCPCredentials(ctx, sqlc.FindMCPCredentialsParams{TenantID: pgunit.PathID(query.TenantID),
 		VaultIds: pathIDs(query.VaultIDs), McpServerUrl: query.ServerURL, CredentialID: credential})
 	if err != nil {
-		return nil, errors.New("cannot resolve MCP credential")
+		return nil, translate(err)
 	}
 	matches := make([]vaults.MCPCredentialMatch, 0, len(rows))
 	for _, row := range rows {
@@ -46,11 +44,8 @@ func (s *Store) StaticTokenCiphertext(ctx context.Context, query vaults.StaticTo
 		TenantID: pgunit.PathID(query.TenantID), VaultIds: pathIDs(query.VaultIDs), VaultID: pgunit.PathID(query.VaultID),
 		CredentialID: pgunit.PathID(query.CredentialID), McpServerUrl: query.MCPServerURL,
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, vaults.ErrNotFound
-	}
 	if err != nil {
-		return nil, errors.New("cannot read MCP credential")
+		return nil, translate(err)
 	}
 	return ciphertext, nil
 }

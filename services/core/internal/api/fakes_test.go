@@ -19,6 +19,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
@@ -1012,102 +1013,106 @@ func (f *fakeSubagents) ListSubagentTurnItems(a0 context.Context, a1 string, a2 
 
 type fakeVaults struct {
 	t                      testing.TB
-	createVault            func(context.Context, string, store.CreateVaultInput) (store.Vault, error)
-	getVault               func(context.Context, string, string) (store.Vault, error)
-	deleteVault            func(context.Context, string, string) (string, error)
-	listVaults             func(context.Context, string, string, int, bool, []string) (store.VaultPage, error)
-	createOAuthCredential  func(context.Context, string, string, store.CreateOAuthCredentialInput) (store.Credential, error)
-	updateOAuthCredential  func(context.Context, string, string, string, store.UpdateOAuthCredentialInput) (store.Credential, error)
-	createStaticCredential func(context.Context, string, string, store.CreateStaticCredentialInput) (store.Credential, error)
-	updateStaticCredential func(context.Context, string, string, string, store.UpdateStaticCredentialInput) (store.Credential, error)
-	getCredential          func(context.Context, string, string, string) (store.Credential, error)
-	deleteCredential       func(context.Context, string, string, string) (string, error)
-	listCredentials        func(context.Context, string, string, string, int, bool, []string) (store.CredentialPage, error)
-	resolveMCPCredentials  func(context.Context, string, []string, []store.MCPCredentialRequest) ([]store.MCPCredentialBinding, error)
+	createVault            func(context.Context, vaults.CreateVault) (vaults.Vault, error)
+	deleteVault            func(context.Context, vaults.DeleteVault) (string, error)
+	createStaticCredential func(context.Context, vaults.CreateStaticCredential) (vaults.Credential, error)
+	updateStaticCredential func(context.Context, vaults.UpdateStaticCredential) (vaults.Credential, error)
+	createOAuthCredential  func(context.Context, vaults.CreateOAuthCredential) (vaults.Credential, error)
+	updateOAuthCredential  func(context.Context, vaults.UpdateOAuthCredential) (vaults.Credential, error)
+	deleteCredential       func(context.Context, vaults.DeleteCredential) (string, error)
+	resolveMCPCredentials  func(context.Context, vaults.ResolveMCPCredentials) ([]vaults.MCPCredentialBinding, error)
 }
 
-func (f *fakeVaults) CreateVault(a0 context.Context, a1 string, a2 store.CreateVaultInput) (store.Vault, error) {
+func (f *fakeVaults) CreateVault(a0 context.Context, a1 vaults.CreateVault) (vaults.Vault, error) {
 	if f.createVault == nil {
 		unexpectedCall(f.t, "CreateVault")
 	}
-	return f.createVault(a0, a1, a2)
+	return f.createVault(a0, a1)
 }
 
-func (f *fakeVaults) GetVault(a0 context.Context, a1 string, a2 string) (store.Vault, error) {
+func (f *fakeVaults) DeleteVault(a0 context.Context, a1 vaults.DeleteVault) (string, error) {
+	if f.deleteVault == nil {
+		unexpectedCall(f.t, "DeleteVault")
+	}
+	return f.deleteVault(a0, a1)
+}
+
+func (f *fakeVaults) CreateStaticCredential(a0 context.Context, a1 vaults.CreateStaticCredential) (vaults.Credential, error) {
+	if f.createStaticCredential == nil {
+		unexpectedCall(f.t, "CreateStaticCredential")
+	}
+	return f.createStaticCredential(a0, a1)
+}
+
+func (f *fakeVaults) UpdateStaticCredential(a0 context.Context, a1 vaults.UpdateStaticCredential) (vaults.Credential, error) {
+	if f.updateStaticCredential == nil {
+		unexpectedCall(f.t, "UpdateStaticCredential")
+	}
+	return f.updateStaticCredential(a0, a1)
+}
+
+func (f *fakeVaults) CreateOAuthCredential(a0 context.Context, a1 vaults.CreateOAuthCredential) (vaults.Credential, error) {
+	if f.createOAuthCredential == nil {
+		unexpectedCall(f.t, "CreateOAuthCredential")
+	}
+	return f.createOAuthCredential(a0, a1)
+}
+
+func (f *fakeVaults) UpdateOAuthCredential(a0 context.Context, a1 vaults.UpdateOAuthCredential) (vaults.Credential, error) {
+	if f.updateOAuthCredential == nil {
+		unexpectedCall(f.t, "UpdateOAuthCredential")
+	}
+	return f.updateOAuthCredential(a0, a1)
+}
+
+func (f *fakeVaults) DeleteCredential(a0 context.Context, a1 vaults.DeleteCredential) (string, error) {
+	if f.deleteCredential == nil {
+		unexpectedCall(f.t, "DeleteCredential")
+	}
+	return f.deleteCredential(a0, a1)
+}
+
+func (f *fakeVaults) ResolveMCPCredentials(a0 context.Context, a1 vaults.ResolveMCPCredentials) ([]vaults.MCPCredentialBinding, error) {
+	if f.resolveMCPCredentials == nil {
+		unexpectedCall(f.t, "ResolveMCPCredentials")
+	}
+	return f.resolveMCPCredentials(a0, a1)
+}
+
+type fakeVaultsReader struct {
+	t               testing.TB
+	getVault        func(context.Context, string, string) (vaults.Vault, error)
+	listVaults      func(context.Context, string, vaults.PageQuery) (vaults.VaultPage, error)
+	getCredential   func(context.Context, string, string, string) (vaults.Credential, error)
+	listCredentials func(context.Context, string, string, vaults.PageQuery) (vaults.CredentialPage, error)
+}
+
+func (f *fakeVaultsReader) GetVault(a0 context.Context, a1 string, a2 string) (vaults.Vault, error) {
 	if f.getVault == nil {
 		unexpectedCall(f.t, "GetVault")
 	}
 	return f.getVault(a0, a1, a2)
 }
 
-func (f *fakeVaults) DeleteVault(a0 context.Context, a1 string, a2 string) (string, error) {
-	if f.deleteVault == nil {
-		unexpectedCall(f.t, "DeleteVault")
-	}
-	return f.deleteVault(a0, a1, a2)
-}
-
-func (f *fakeVaults) ListVaults(a0 context.Context, a1 string, a2 string, a3 int, a4 bool, a5 []string) (store.VaultPage, error) {
+func (f *fakeVaultsReader) ListVaults(a0 context.Context, a1 string, a2 vaults.PageQuery) (vaults.VaultPage, error) {
 	if f.listVaults == nil {
 		unexpectedCall(f.t, "ListVaults")
 	}
-	return f.listVaults(a0, a1, a2, a3, a4, a5)
+	return f.listVaults(a0, a1, a2)
 }
 
-func (f *fakeVaults) CreateOAuthCredential(a0 context.Context, a1 string, a2 string, a3 store.CreateOAuthCredentialInput) (store.Credential, error) {
-	if f.createOAuthCredential == nil {
-		unexpectedCall(f.t, "CreateOAuthCredential")
-	}
-	return f.createOAuthCredential(a0, a1, a2, a3)
-}
-
-func (f *fakeVaults) UpdateOAuthCredential(a0 context.Context, a1 string, a2 string, a3 string, a4 store.UpdateOAuthCredentialInput) (store.Credential, error) {
-	if f.updateOAuthCredential == nil {
-		unexpectedCall(f.t, "UpdateOAuthCredential")
-	}
-	return f.updateOAuthCredential(a0, a1, a2, a3, a4)
-}
-
-func (f *fakeVaults) CreateStaticCredential(a0 context.Context, a1 string, a2 string, a3 store.CreateStaticCredentialInput) (store.Credential, error) {
-	if f.createStaticCredential == nil {
-		unexpectedCall(f.t, "CreateStaticCredential")
-	}
-	return f.createStaticCredential(a0, a1, a2, a3)
-}
-
-func (f *fakeVaults) UpdateStaticCredential(a0 context.Context, a1 string, a2 string, a3 string, a4 store.UpdateStaticCredentialInput) (store.Credential, error) {
-	if f.updateStaticCredential == nil {
-		unexpectedCall(f.t, "UpdateStaticCredential")
-	}
-	return f.updateStaticCredential(a0, a1, a2, a3, a4)
-}
-
-func (f *fakeVaults) GetCredential(a0 context.Context, a1 string, a2 string, a3 string) (store.Credential, error) {
+func (f *fakeVaultsReader) GetCredential(a0 context.Context, a1 string, a2 string, a3 string) (vaults.Credential, error) {
 	if f.getCredential == nil {
 		unexpectedCall(f.t, "GetCredential")
 	}
 	return f.getCredential(a0, a1, a2, a3)
 }
 
-func (f *fakeVaults) DeleteCredential(a0 context.Context, a1 string, a2 string, a3 string) (string, error) {
-	if f.deleteCredential == nil {
-		unexpectedCall(f.t, "DeleteCredential")
-	}
-	return f.deleteCredential(a0, a1, a2, a3)
-}
-
-func (f *fakeVaults) ListCredentials(a0 context.Context, a1 string, a2 string, a3 string, a4 int, a5 bool, a6 []string) (store.CredentialPage, error) {
+func (f *fakeVaultsReader) ListCredentials(a0 context.Context, a1 string, a2 string, a3 vaults.PageQuery) (vaults.CredentialPage, error) {
 	if f.listCredentials == nil {
 		unexpectedCall(f.t, "ListCredentials")
 	}
-	return f.listCredentials(a0, a1, a2, a3, a4, a5, a6)
-}
-
-func (f *fakeVaults) ResolveMCPCredentials(a0 context.Context, a1 string, a2 []string, a3 []store.MCPCredentialRequest) ([]store.MCPCredentialBinding, error) {
-	if f.resolveMCPCredentials == nil {
-		unexpectedCall(f.t, "ResolveMCPCredentials")
-	}
-	return f.resolveMCPCredentials(a0, a1, a2, a3)
+	return f.listCredentials(a0, a1, a2, a3)
 }
 
 type fakeWriteAudit struct {

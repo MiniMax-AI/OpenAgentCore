@@ -49,6 +49,9 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if dispatcher.MaxConcurrentExecutions < 0 || dispatcher.MaxConcurrentExecutions > 1024 {
 		return nil, errors.New("execution concurrency must be between 1 and 1024, or zero for the default")
 	}
+	if dispatcher.Credentials == nil {
+		return nil, errors.New("execution worker requires MCP Credentials")
+	}
 	if owner.Store == nil {
 		return nil, errors.New("execution worker requires the execution Store")
 	}

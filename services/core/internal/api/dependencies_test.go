@@ -17,6 +17,7 @@ const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 type testFakes struct {
 	projects               *fakeProjects
 	vaults                 *fakeVaults
+	vaultsReader           *fakeVaultsReader
 	modelProviders         *fakeModelProviders
 	files                  *fakeFiles
 	filesReader            *fakeFilesReader
@@ -55,7 +56,8 @@ type testFakes struct {
 func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	t.Helper()
 	f := &testFakes{
-		projects: &fakeProjects{t: t}, vaults: &fakeVaults{t: t}, modelProviders: &fakeModelProviders{t: t},
+		projects: &fakeProjects{t: t}, modelProviders: &fakeModelProviders{t: t},
+		vaults: &fakeVaults{t: t}, vaultsReader: &fakeVaultsReader{t: t},
 		skills: &fakeSkills{t: t}, environmentTemplates: &fakeEnvironmentTemplates{t: t},
 		files: &fakeFiles{t: t}, filesReader: &fakeFilesReader{t: t},
 		agents: &fakeAgents{t: t}, agentsReader: &fakeAgentsReader{t: t},
@@ -69,7 +71,8 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	}
 	return Dependencies{
 		Engine: "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
-		Projects: f.projects, Vaults: f.vaults, ModelProviders: f.modelProviders, Skills: f.skills,
+		Projects: f.projects, ModelProviders: f.modelProviders, Skills: f.skills,
+		Vaults: f.vaults, VaultsReader: f.vaultsReader,
 		Files: f.files, FilesReader: f.filesReader,
 		Agents: f.agents, AgentsReader: f.agentsReader,
 		EnvironmentTemplates: f.environmentTemplates, Sessions: f.sessions, SessionEvents: f.sessionEvents,

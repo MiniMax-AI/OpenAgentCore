@@ -9,17 +9,17 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func (f *credentialFixture) CreateOAuthCredential(_ context.Context, tenant, vault string, input store.CreateOAuthCredentialInput) (store.Credential, error) {
-	f.tenant, f.vault, f.oauthInput, f.calls = tenant, vault, input, f.calls+1
+func (f *credentialFixture) CreateOAuthCredential(_ context.Context, input vaults.CreateOAuthCredential) (vaults.Credential, error) {
+	f.tenant, f.vault, f.oauthInput, f.calls = input.TenantID, input.VaultID, input, f.calls+1
 	f.credential.Name, f.credential.MCPServerURL, f.credential.AuthType, f.credential.OAuth = input.Name, input.MCPServerURL, "mcp_oauth", &input.OAuth
 	return f.credential, f.err
 }
 
-func (f *credentialFixture) UpdateOAuthCredential(_ context.Context, tenant, vault, id string, input store.UpdateOAuthCredentialInput) (store.Credential, error) {
-	f.tenant, f.vault, f.id, f.oauthUpdate, f.calls = tenant, vault, id, input, f.calls+1
+func (f *credentialFixture) UpdateOAuthCredential(_ context.Context, input vaults.UpdateOAuthCredential) (vaults.Credential, error) {
+	f.tenant, f.vault, f.id, f.oauthUpdate, f.calls = input.TenantID, input.VaultID, input.CredentialID, input, f.calls+1
 	return f.credential, f.err
 }
 
@@ -65,7 +65,7 @@ func TestOAuthCredentialVariantsAndSafeResourceReads(t *testing.T) {
 			if read.Code != 200 || read.Body.String() != w.Body.String() {
 				t.Fatal("OAuth retrieval changed safe metadata")
 			}
-			f.page = store.CredentialPage{Credentials: []store.Credential{f.credential}}
+			f.page = vaults.CredentialPage{Credentials: []vaults.Credential{f.credential}}
 			list := credentialRequest(h, "GET", path, "")
 			var page struct {
 				Data []map[string]any `json:"data"`
@@ -107,18 +107,19 @@ func TestOAuthUpdateRetainsPresenceAndSecretPointers(t *testing.T) {
 	text := func(s string) *string { return &s }
 	for _, tc := range []struct {
 		auth string
-		want store.UpdateOAuthCredentialInput
+		want vaults.UpdateOAuthCredential
 	}{
-		{`{"type":"mcp_oauth","access_token":" \t"}`, store.UpdateOAuthCredentialInput{AccessToken: text(" \t")}},
-		{`{"type":"mcp_oauth","expires_at":null}`, store.UpdateOAuthCredentialInput{ExpiresAtSet: true}},
-		{`{"type":"mcp_oauth","expires_at":"2026-09-22T12:30:00.123+08:00"}`, store.UpdateOAuthCredentialInput{ExpiresAtSet: true, ExpiresAt: text("2026-09-22T12:30:00.123+08:00")}},
-		{`{"type":"mcp_oauth","refresh":{"scope":null}}`, store.UpdateOAuthCredentialInput{Refresh: &store.OAuthRefreshUpdate{ScopeSet: true}}},
-		{`{"type":"mcp_oauth","refresh":{"scope":"","refresh_token":"refresh-canary","token_endpoint_auth":{"type":"client_secret_post","client_secret":"client-canary"}}}`, store.UpdateOAuthCredentialInput{Refresh: &store.OAuthRefreshUpdate{Scope: text(""), ScopeSet: true, RefreshToken: text("refresh-canary"), TokenEndpointAuthType: "client_secret_post", ClientSecret: text("client-canary")}}},
+		{`{"type":"mcp_oauth","access_token":" \t"}`, vaults.UpdateOAuthCredential{AccessToken: text(" \t")}},
+		{`{"type":"mcp_oauth","expires_at":null}`, vaults.UpdateOAuthCredential{ExpiresAtSet: true}},
+		{`{"type":"mcp_oauth","expires_at":"2026-09-22T12:30:00.123+08:00"}`, vaults.UpdateOAuthCredential{ExpiresAtSet: true, ExpiresAt: text("2026-09-22T12:30:00.123+08:00")}},
+		{`{"type":"mcp_oauth","refresh":{"scope":null}}`, vaults.UpdateOAuthCredential{Refresh: &vaults.OAuthRefreshUpdate{ScopeSet: true}}},
+		{`{"type":"mcp_oauth","refresh":{"scope":"","refresh_token":"refresh-canary","token_endpoint_auth":{"type":"client_secret_post","client_secret":"client-canary"}}}`, vaults.UpdateOAuthCredential{Refresh: &vaults.OAuthRefreshUpdate{Scope: text(""), ScopeSet: true, RefreshToken: text("refresh-canary"), TokenEndpointAuthType: "client_secret_post", ClientSecret: text("client-canary")}}},
 	} {
 		h, f, tenant := credentialHandler(t)
-		f.credential.AuthType, f.credential.OAuth = "mcp_oauth", &store.OAuthMetadata{}
+		f.credential.AuthType, f.credential.OAuth = "mcp_oauth", &vaults.OAuthMetadata{}
 		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID, `{"auth":`+tc.auth+`}`)
-		if w.Code != 200 || f.tenant != tenant || f.vault != f.credential.VaultID || f.id != f.credential.ID || !reflect.DeepEqual(f.oauthUpdate, tc.want) || strings.Contains(w.Body.String(), "canary") {
+		tc.want.TenantID, tc.want.VaultID, tc.want.CredentialID = tenant, f.credential.VaultID, f.credential.ID
+		if w.Code != 200 || !reflect.DeepEqual(f.oauthUpdate, tc.want) || strings.Contains(w.Body.String(), "canary") {
 			t.Fatal("OAuth update lost scope or nullable field intent", tc.auth, w.Code)
 		}
 	}
@@ -148,7 +149,7 @@ func TestOAuthCredentialStoreFailuresUseSafeExistingErrors(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
 		code int
-	}{{store.ErrNotFound, 404}, {store.ErrInvalidInput, 400}, {credentialcrypto.ErrUnavailable, 503}, {errors.New("access-canary"), 500}} {
+	}{{vaults.ErrNotFound, 404}, {vaults.ErrInvalidInput, 400}, {credentialcrypto.ErrUnavailable, 503}, {errors.New("access-canary"), 500}} {
 		for _, update := range []bool{false, true} {
 			h, f, _ := credentialHandler(t)
 			f.err = tc.err

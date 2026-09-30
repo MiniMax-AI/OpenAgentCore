@@ -24,13 +24,13 @@ import (
 // @Router /vaults/{vault_id}/credentials [get]
 func (h *Handler) listCredentials(w http.ResponseWriter, r *http.Request) {
 	vaultID := chi.URLParam(r, "vault_id")
-	options, statuses, ok := readVaultPage(w, r)
+	query, ok := readVaultPage(w, r)
 	if !ok {
 		return
 	}
-	page, err := h.Vaults.ListCredentials(r.Context(), tenantID(r), vaultID, options.after, options.limit, options.ascending, statuses)
+	page, err := h.VaultsReader.ListCredentials(r.Context(), tenantID(r), vaultID, query)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeVaultsError(w, r, err)
 		return
 	}
 	response := v1.CredentialList{Object: "list", Data: make([]v1.Credential, 0, len(page.Credentials)), HasMore: page.NextCursor != ""}

@@ -344,8 +344,8 @@ func TestStaticCredentialUpdatePreservesBindingsAndReplacesCurrentSecret(t *test
 	}
 	// A real PostgreSQL mutation failure must preserve both ciphertext and time.
 	_, updateErr := update(newService(t, readOnlyStore(t, pool), cipher, nil), tenant, original.VaultID, original.ID, "rejected")
-	if updateErr == nil || updateErr.Error() != "credential update failed" {
-		t.Fatal("database write failure was accepted or exposed", updateErr)
+	if !isReadOnlyFailure(updateErr) {
+		t.Fatal("database write failure was accepted or translated", updateErr)
 	}
 	assertUnchanged()
 	// A stale destination from a prior metadata read cannot authorize the write.
@@ -423,8 +423,8 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 	}
 	// An actual database write failure must leave the resource and token intact.
 	_, deletionErr := remove(newService(t, readOnlyStore(t, pool), nil, nil), tenant, vault.ID, original.ID)
-	if deletionErr == nil || deletionErr.Error() != "credential deletion failed" {
-		t.Fatal("failed mutation was accepted or exposed")
+	if !isReadOnlyFailure(deletionErr) {
+		t.Fatal("failed mutation was accepted or translated", deletionErr)
 	}
 	if value, err := store.GetCredential(t.Context(), tenant, vault.ID, original.ID); err != nil || !reflect.DeepEqual(value, original) {
 		t.Fatal("rejected deletion changed the resource", err)

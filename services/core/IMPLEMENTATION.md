@@ -24,6 +24,7 @@ Domain owners, each with its PostgreSQL adapter under `internal/persistence/post
 
 - `agents` (`agentpg`): saved Agents, their configuration merge and bounds, and the encrypted model-provider bundle bound to each Agent.
 - `files` (`filepg`): source Files.
+- `vaults` (`vaultpg`): Vaults and Credentials, the encryption of Credential secrets, OAuth access-token refresh, and the MCP credential selection that Session creation freezes and the Dispatcher's `Credentials` resolves into a bearer token.
 
 ## Request handling
 
@@ -113,7 +114,7 @@ Provider input validation uses the adapter rules in `internal/harnessconfig`: on
 
 ## Vaults and credentials
 
-[Vaults and credentials](../../contracts/agents-api/vaults.md) describes the resources, selection rules, refresh and deletion. The store implements them under these rules:
+[Vaults and credentials](../../contracts/agents-api/vaults.md) describes the resources, selection rules, refresh and deletion. `vaults` implements them, with `vaultpg` as its storage, under these rules:
 
 - Credentials are children of tenant-owned Vaults. Creation admits the owner in the same SQL statement as the insert; retrieval joins the owning Vault; listing enforces Project and Vault ownership on the parent, cursor and row query. Metadata queries never select ciphertext and need no encryption key.
 - Secret values are encrypted before they reach SQL, with Core's separately configured random 32-byte key and the standard library's random-nonce AES-GCM. The versioned authenticated binding covers tenant, Vault, Credential, authentication purpose and exact destination. Never reuse daemon transport encryption for this storage. A missing key disables credential writes with `credentialcrypto.ErrUnavailable`; a malformed configured key fails startup.
@@ -124,7 +125,7 @@ Provider input validation uses the adapter rules in `internal/harnessconfig`: on
 
 - `credentialcrypto` ciphertext is a format version byte followed by the standard AEAD nonce, ciphertext and tag. The authenticated data holds a fixed domain and version plus the binding (tenant, Vault, Credential, auth type, exact destination). Keep the domain string unchanged: existing rows must still decrypt.
 - Random-nonce GCM allows at most 2^32 encryptions per key. `secrets/credential.key` also seals model providers, the E2B key, Skills, initial files and environment setup, so every sealed write counts toward that bound; there is no rotation or re-encryption path.
-- OAuth dispatch refresh holds the Credential row lock and the external exchange under one 20-second context (`store.oauthRefreshTimeout`). The refresh HTTP client has a 10-second overall timeout and 5-second TLS handshake and response-header timeouts, uses no proxy and treats any redirect as failure.
+- OAuth dispatch refresh holds the Credential row lock and the external exchange under one 20-second context (`vaults.oauthRefreshTimeout`). The refresh HTTP client has a 10-second overall timeout and 5-second TLS handshake and response-header timeouts, uses no proxy and treats any redirect as failure.
 
 ## MCP
 

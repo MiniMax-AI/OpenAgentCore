@@ -7,12 +7,11 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func (f *credentialFixture) ListCredentials(_ context.Context, tenant, vault, after string, limit int, ascending bool, statuses []string) (store.CredentialPage, error) {
-	f.tenant, f.vault, f.calls = tenant, vault, f.calls+1
-	f.options, f.statuses = pageOptions{after: after, limit: limit, ascending: ascending}, statuses
+func (f *credentialFixture) ListCredentials(_ context.Context, tenant, vault string, query vaults.PageQuery) (vaults.CredentialPage, error) {
+	f.tenant, f.vault, f.query, f.calls = tenant, vault, query, f.calls+1
 	return f.page, f.err
 }
 
@@ -29,13 +28,13 @@ func TestCredentialListScopeProjectionAndParameters(t *testing.T) {
 		{"?limit=-3&tenant_id=foreign&unknown=1", 1, nil},
 	} {
 		h, f, tenant := credentialHandler(t)
-		f.page = store.CredentialPage{Credentials: []store.Credential{f.credential}, NextCursor: f.credential.ID}
+		f.page = vaults.CredentialPage{Credentials: []vaults.Credential{f.credential}, NextCursor: f.credential.ID}
 		w := credentialRequest(h, "GET", "/v1/vaults/"+f.credential.VaultID+"/credentials"+tc.query, "")
 		var body v1.CredentialList
 		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &body) != nil {
 			t.Fatal(w.Code, w.Body.String())
 		}
-		if f.calls != 1 || f.tenant != tenant || f.vault != f.credential.VaultID || f.options.limit != tc.limit || !reflect.DeepEqual(f.statuses, tc.statuses) {
+		if f.calls != 1 || f.tenant != tenant || f.vault != f.credential.VaultID || f.query.Limit != tc.limit || !reflect.DeepEqual(f.query.Statuses, tc.statuses) {
 			t.Fatal("list scope or parameters changed")
 		}
 		if !reflect.DeepEqual(body.Data, []v1.Credential{credentialResponse(f.credential)}) || !body.HasMore || body.FirstID == nil || *body.FirstID != f.credential.ID || body.LastID == nil || *body.LastID != f.credential.ID {
@@ -46,10 +45,10 @@ func TestCredentialListScopeProjectionAndParameters(t *testing.T) {
 	path := "/v1/vaults/" + f.credential.VaultID + "/credentials"
 	w := credentialRequest(h, "GET", path+"?order=asc&after="+f.credential.ID, "")
 	var empty map[string]any
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &empty) != nil || !reflect.DeepEqual(empty, map[string]any{"object": "list", "data": []any{}, "has_more": false, "first_id": nil, "last_id": nil}) || !f.options.ascending || f.options.after != f.credential.ID {
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &empty) != nil || !reflect.DeepEqual(empty, map[string]any{"object": "list", "data": []any{}, "has_more": false, "first_id": nil, "last_id": nil}) || !f.query.Ascending || f.query.After != f.credential.ID {
 		t.Fatal("empty page or cursor parsing changed")
 	}
-	f.err = store.ErrNotFound
+	f.err = vaults.ErrNotFound
 	if w = credentialRequest(h, "GET", path, ""); w.Code != 404 {
 		t.Fatal("missing parent must not be an empty collection")
 	}
@@ -66,7 +65,7 @@ func TestCredentialListRejectsInvalidInputBeforeStorage(t *testing.T) {
 	// A malformed parent reaches storage unchanged after query validation, and
 	// storage reports it as a missing Vault.
 	h, f, _ := credentialHandler(t)
-	f.err = store.ErrNotFound
+	f.err = vaults.ErrNotFound
 	if w := credentialRequest(h, "GET", "/v1/vaults/invalid/credentials", ""); w.Code != 404 || f.vault != "invalid" {
 		t.Fatal("invalid parent was not resolved as a missing Vault", w.Code, f.vault)
 	}

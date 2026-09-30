@@ -87,7 +87,8 @@ func daemonComposition(t testing.TB) http.Handler {
 	}
 	apiHandler, err := api.NewHandler(api.Dependencies{
 		Engine: "codex", CoreKeys: admin, InstallationBindings: struct{ api.InstallationBindings }{},
-		Projects: trapProjects{keys: keys}, Vaults: struct{ api.Vaults }{}, ModelProviders: struct{ api.ModelProviders }{},
+		Projects: trapProjects{keys: keys}, ModelProviders: struct{ api.ModelProviders }{},
+		Vaults: struct{ api.Vaults }{}, VaultsReader: struct{ api.VaultsReader }{},
 		Files: struct{ api.Files }{}, FilesReader: struct{ api.FilesReader }{}, Skills: struct{ api.Skills }{}, EnvironmentTemplates: struct{ api.EnvironmentTemplates }{},
 		Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{}, Sessions: struct{ api.Sessions }{}, SessionEvents: struct{ api.SessionEvents }{},
 		SessionHistory: struct{ api.SessionHistory }{}, Subagents: struct{ api.Subagents }{}, Artifacts: struct{ api.Artifacts }{},

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
@@ -34,6 +35,13 @@ func readOnlyStore(t *testing.T, pool *pgxpool.Pool) *vaultpg.Store {
 	}
 	t.Cleanup(readOnly.Close)
 	return vaultpg.New(pgunit.NewPool(readOnly))
+}
+
+// isReadOnlyFailure reports the unexpected failure of a write on a
+// readOnlyStore, which the Store returns as is.
+func isReadOnlyFailure(err error) bool {
+	var failure *pgconn.PgError
+	return errors.As(err, &failure) && failure.Code == "25006"
 }
 
 func newCipher(t *testing.T, key []byte) *credentialcrypto.Cipher {

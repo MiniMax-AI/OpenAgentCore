@@ -12,31 +12,30 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
 type credentialFixture struct {
-	credential        store.Credential
-	input             store.CreateStaticCredentialInput
-	replacement       store.UpdateStaticCredentialInput
-	oauthInput        store.CreateOAuthCredentialInput
-	oauthUpdate       store.UpdateOAuthCredentialInput
+	credential        vaults.Credential
+	input             vaults.CreateStaticCredential
+	replacement       vaults.UpdateStaticCredential
+	oauthInput        vaults.CreateOAuthCredential
+	oauthUpdate       vaults.UpdateOAuthCredential
 	tenant, vault, id string
 	calls             int
 	err               error
-	page              store.CredentialPage
-	options           pageOptions
-	statuses          []string
+	page              vaults.CredentialPage
+	query             vaults.PageQuery
 }
 
-func (f *credentialFixture) CreateStaticCredential(_ context.Context, tenant, vault string, input store.CreateStaticCredentialInput) (store.Credential, error) {
-	f.tenant, f.vault, f.input, f.calls = tenant, vault, input, f.calls+1
+func (f *credentialFixture) CreateStaticCredential(_ context.Context, input vaults.CreateStaticCredential) (vaults.Credential, error) {
+	f.tenant, f.vault, f.input, f.calls = input.TenantID, input.VaultID, input, f.calls+1
 	f.credential.Name, f.credential.MCPServerURL = input.Name, input.MCPServerURL
 	return f.credential, f.err
 }
 
-func (f *credentialFixture) GetCredential(_ context.Context, tenant, vault, id string) (store.Credential, error) {
+func (f *credentialFixture) GetCredential(_ context.Context, tenant, vault, id string) (vaults.Credential, error) {
 	f.tenant, f.vault, f.id, f.calls = tenant, vault, id, f.calls+1
 	return f.credential, f.err
 }
@@ -44,13 +43,14 @@ func (f *credentialFixture) GetCredential(_ context.Context, tenant, vault, id s
 // serve answers the Vault credential operations from f.
 func (f *credentialFixture) serve(_ *Dependencies, fakes *testFakes) {
 	v := fakes.vaults
-	v.createStaticCredential, v.updateStaticCredential, v.getCredential, v.listCredentials, v.deleteCredential = f.CreateStaticCredential, f.UpdateStaticCredential, f.GetCredential, f.ListCredentials, f.DeleteCredential
+	v.createStaticCredential, v.updateStaticCredential, v.deleteCredential = f.CreateStaticCredential, f.UpdateStaticCredential, f.DeleteCredential
 	v.createOAuthCredential, v.updateOAuthCredential = f.CreateOAuthCredential, f.UpdateOAuthCredential
+	fakes.vaultsReader.getCredential, fakes.vaultsReader.listCredentials = f.GetCredential, f.ListCredentials
 }
 
 func credentialHandler(t *testing.T) (http.Handler, *credentialFixture, string) {
 	t.Helper()
-	f := &credentialFixture{credential: store.Credential{ID: uuid.NewString(), VaultID: uuid.NewString(), AuthType: "static_bearer", CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}}
+	f := &credentialFixture{credential: vaults.Credential{ID: uuid.NewString(), VaultID: uuid.NewString(), AuthType: "static_bearer", CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}}
 	h, _, tenant := testHandler(t, f.serve)
 	return h, f, tenant
 }
@@ -113,7 +113,7 @@ func TestCredentialStorageErrorsStaySafe(t *testing.T) {
 	for _, test := range []struct {
 		err    error
 		status int
-	}{{store.ErrNotFound, 404}, {credentialcrypto.ErrUnavailable, 503}, {errors.New("credential-canary"), 500}} {
+	}{{vaults.ErrNotFound, 404}, {credentialcrypto.ErrUnavailable, 503}, {errors.New("credential-canary"), 500}} {
 		h, f, _ := credentialHandler(t)
 		f.err = test.err
 		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials", `{"name":"n","auth":{"type":"static_bearer","mcp_server_url":"https://example.invalid","token":"credential-canary"}}`)

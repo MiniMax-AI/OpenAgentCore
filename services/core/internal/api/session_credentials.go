@@ -6,31 +6,31 @@ import (
 	"encoding/json"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
 func (h *Handler) bindSessionCredentials(ctx context.Context, tenant string, raw json.RawMessage) (json.RawMessage, error) {
 	var cfg configuration
 	if json.Unmarshal(raw, &cfg) != nil {
-		return nil, store.ErrInvalidInput
+		return nil, vaults.ErrInvalidInput
 	}
-	var requests []store.MCPCredentialRequest
+	var requests []vaults.MCPCredentialRequest
 	required := len(cfg.VaultIDs) > 0
 	for _, rawTool := range cfg.Agent.Tools {
 		var tool v1.MCPTool
 		if json.Unmarshal(rawTool, &tool) != nil {
-			return nil, store.ErrInvalidInput
+			return nil, vaults.ErrInvalidInput
 		}
 		if tool.Type == "mcp" {
-			requests = append(requests, store.MCPCredentialRequest{ServerLabel: tool.ServerLabel, ServerURL: tool.Transport.ServerURL, CredentialID: tool.CredentialID})
+			requests = append(requests, vaults.MCPCredentialRequest{ServerLabel: tool.ServerLabel, ServerURL: tool.Transport.ServerURL, CredentialID: tool.CredentialID})
 			required = required || tool.CredentialID != nil
 		}
 	}
 	if !required {
 		return raw, nil
 	}
-	bindings, err := h.Vaults.ResolveMCPCredentials(ctx, tenant, cfg.VaultIDs, requests)
+	bindings, err := h.Vaults.ResolveMCPCredentials(ctx, vaults.ResolveMCPCredentials{TenantID: tenant, VaultIDs: cfg.VaultIDs, Requests: requests})
 	if err != nil {
 		return nil, err
 	}

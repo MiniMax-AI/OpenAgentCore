@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
 func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session, snapshot Snapshot, caps runtimedevice.KindCapabilities, bound store.SessionExecutionBinding) (proto.PromptRequestPayload, error) {
@@ -60,12 +61,9 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 		if err != nil {
 			return proto.PromptRequestPayload{}, err
 		}
-		if len(selected) > 0 && d.Store == nil {
-			return proto.PromptRequestPayload{}, errors.New("authenticated MCP execution is unavailable")
-		}
 		for i := range tools.MCP {
 			if binding, ok := selected[tools.MCP[i].ServerLabel]; ok {
-				token, err := d.Store.MCPBearerToken(ctx, session.TenantID, snapshot.VaultIDs, binding)
+				token, err := d.Credentials.MCPBearerToken(ctx, vaults.MCPBearerToken{TenantID: session.TenantID, VaultIDs: snapshot.VaultIDs, Binding: binding})
 				if err != nil {
 					return proto.PromptRequestPayload{}, err
 				}

@@ -6,15 +6,15 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
 type configuration struct {
-	Agent          v1.Agent                     `json:"agent"`
-	Environment    v1.Environment               `json:"environment"`
-	VaultIDs       []string                     `json:"vault_ids,omitempty"`
-	MCPCredentials []store.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
+	Agent          v1.Agent                      `json:"agent"`
+	Environment    v1.Environment                `json:"environment"`
+	VaultIDs       []string                      `json:"vault_ids,omitempty"`
+	MCPCredentials []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
 }
 
 func resolve(input sessionRequest, tenant, key string, saved *v1.SavedAgent) (json.RawMessage, error) {

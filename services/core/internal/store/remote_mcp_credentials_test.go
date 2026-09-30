@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
 func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *testing.T) {
@@ -18,7 +19,11 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 			case "missing key":
 				s, db = store.New(db.pool), fixtureDB{pool: db.pool}
 			case "deleted":
-				if _, err := s.DeleteCredential(t.Context(), tenant, vault.ID, credential.ID); err != nil {
+				_, service, err := fixtureVaults(db)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := service.DeleteCredential(t.Context(), vaults.DeleteCredential{TenantID: tenant, VaultID: vault.ID, CredentialID: credential.ID}); err != nil {
 					t.Fatal(err)
 				}
 			case "tampered":

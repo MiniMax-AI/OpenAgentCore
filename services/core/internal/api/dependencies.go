@@ -31,6 +31,7 @@ type Dependencies struct {
 
 	Projects             Projects
 	Vaults               Vaults
+	VaultsReader         VaultsReader
 	ModelProviders       ModelProviders
 	Files                Files
 	FilesReader          FilesReader
@@ -111,7 +112,8 @@ func (d Dependencies) validate() error {
 		return errors.New("api: CoreKeys is required")
 	}
 	if err := required(
-		field{"InstallationBindings", d.InstallationBindings}, field{"Projects", d.Projects}, field{"Vaults", d.Vaults},
+		field{"InstallationBindings", d.InstallationBindings}, field{"Projects", d.Projects},
+		field{"Vaults", d.Vaults}, field{"VaultsReader", d.VaultsReader},
 		field{"ModelProviders", d.ModelProviders}, field{"Skills", d.Skills},
 		field{"Files", d.Files}, field{"FilesReader", d.FilesReader},
 		field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},

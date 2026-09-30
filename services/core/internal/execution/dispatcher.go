@@ -13,15 +13,16 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
 // Snapshot is the Session configuration frozen at creation.
 type Snapshot struct {
-	ModelProviderConfigured bool                         `json:"model_provider_configured,omitempty"`
-	Agent                   v1.Agent                     `json:"agent"`
-	Environment             *v1.Environment              `json:"environment"`
-	VaultIDs                []string                     `json:"vault_ids,omitempty"`
-	MCPCredentials          []store.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
+	ModelProviderConfigured bool                          `json:"model_provider_configured,omitempty"`
+	Agent                   v1.Agent                      `json:"agent"`
+	Environment             *v1.Environment               `json:"environment"`
+	VaultIDs                []string                      `json:"vault_ids,omitempty"`
+	MCPCredentials          []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
 }
 
 type Dispatcher struct {
@@ -29,11 +30,19 @@ type Dispatcher struct {
 	Policy
 	Store    *store.Store
 	Registry *runtimegateway.Registry
+	// Credentials opens the bearer tokens of authenticated MCP servers.
+	Credentials Credentials
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
 	ManagedRuntimes *RuntimeProvider
 	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.
 	// Zero uses DefaultExecutionConcurrency. It is independent of sandbox capacity.
 	MaxConcurrentExecutions int
+}
+
+// Credentials opens the bearer token of a Session's frozen MCP credential
+// binding.
+type Credentials interface {
+	MCPBearerToken(context.Context, vaults.MCPBearerToken) (string, error)
 }
 
 type Result struct {

@@ -24,7 +24,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -95,7 +94,6 @@ type Store struct {
 	writer           transactor
 	lease            *pgunit.Lease
 	credentialCipher *credentialcrypto.Cipher
-	oauthRefresher   oauthrefresh.Refresher
 	// publicURL is OAC_PUBLIC_URL. Core derives every address it gives
 	// nodes, sandboxes and administrators from it.
 	publicURL string
@@ -292,10 +290,6 @@ func parseID(value string) (pgtype.UUID, error) {
 	}
 	return id, nil
 }
-
-// pathID resolves a caller-supplied path identifier with pgunit.PathID for an
-// operation that passes it on as a string.
-func pathID(value string) string { return uuid.UUID(pgunit.PathID(value).Bytes).String() }
 
 func sessionFromRow(row sqlc.Session) (Session, error) {
 	session := Session{ID: uuid.UUID(row.ID.Bytes).String(), TenantID: uuid.UUID(row.TenantID.Bytes).String(), Engine: row.Engine, CreatedAt: row.CreatedAt.Time, RequiredActions: []v1.FunctionCallAction{}}

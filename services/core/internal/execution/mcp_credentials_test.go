@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
@@ -15,7 +15,7 @@ func TestMCPFrozenCredentialAdmission(t *testing.T) {
 	for _, mode := range []string{"implicit", "explicit", "oauth implicit", "oauth explicit", "anonymous", "missing", "unattached", "wrong URL", "wrong auth", "changed selection", "HTTP", "self-hosted explicit", "self-hosted implicit", "self-hosted anonymous"} {
 		t.Run(mode, func(t *testing.T) {
 			tool := v1.MCPTool{Type: "mcp", ServerLabel: "tools", ConnectionOrigin: "service", Transport: v1.MCPHTTPTransport{Type: "http", ServerURL: "https://mcp.example/tools"}}
-			binding := store.MCPCredentialBinding{ServerLabel: "tools", ServerURL: tool.Transport.ServerURL, VaultID: vault, CredentialID: credential, AuthType: "static_bearer"}
+			binding := vaults.MCPCredentialBinding{ServerLabel: "tools", ServerURL: tool.Transport.ServerURL, VaultID: vault, CredentialID: credential, AuthType: "static_bearer"}
 			snapshot := Snapshot{Agent: v1.Agent{Model: "model"}, Environment: &v1.Environment{Type: "none"}, VaultIDs: []string{vault}}
 			switch mode {
 			case "explicit", "oauth explicit", "missing", "changed selection", "self-hosted explicit":
@@ -40,7 +40,7 @@ func TestMCPFrozenCredentialAdmission(t *testing.T) {
 			if mode == "changed selection" {
 				binding.CredentialID = uuid.NewString()
 			}
-			snapshot.MCPCredentials = []store.MCPCredentialBinding{binding}
+			snapshot.MCPCredentials = []vaults.MCPCredentialBinding{binding}
 			if mode == "missing" {
 				snapshot.MCPCredentials = nil
 			}

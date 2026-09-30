@@ -105,8 +105,8 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 	s := NewWithCredentialCipher(pool, cipher)
 	rejectAdminAuditInsert(t, s)
 	archive := skillArchive(t, "admin-private-archive")
-	tables := []string{"agents", "agent_model_execution", "environment_templates", "skills", "skill_versions", "vaults", "vault_credentials", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
-	for _, name := range []string{"template_delete", "skill_delete", "version_delete", "version_delete_last", "vault_delete", "credential_delete", "oauth_delete", "session_delete", "artifact_delete"} {
+	tables := []string{"agents", "agent_model_execution", "environment_templates", "skills", "skill_versions", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
+	for _, name := range []string{"template_delete", "skill_delete", "version_delete", "version_delete_last", "session_delete", "artifact_delete"} {
 		t.Run(name, func(t *testing.T) {
 			tenant := uuid.NewString()
 			var mutation resourceAuditMutation
@@ -216,10 +216,6 @@ func assertAdminDeletedResource(t *testing.T, s *Store, tenant string, mutation 
 			t.Fatal("skill version survived deletion", queryErr)
 		}
 		return
-	case "vault":
-		_, err = s.GetVault(t.Context(), tenant, id)
-	case "credential":
-		_, err = s.GetCredential(t.Context(), tenant, mutation.parent, id)
 	case "session":
 		_, err = s.GetSession(t.Context(), tenant, id)
 	case "artifact":

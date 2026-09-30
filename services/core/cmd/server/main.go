@@ -42,6 +42,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -50,6 +51,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	observationstoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -109,12 +111,17 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	executionStore := store.NewWithCredentialCipherAndOAuthRefresh(pool, credentialKey, oauthClient)
+	executionStore := store.NewWithCredentialCipher(pool, credentialKey)
 	executionStore.SetPublicURL(public)
 	units := pgunit.NewPool(pool)
 	auditStore := auditpg.New(units)
 	agentStore := agentpg.New(units, credentialKey)
 	agentService, err := agents.NewService(agentStore)
+	if err != nil {
+		return err
+	}
+	vaultStore := vaultpg.New(units)
+	vaultService, err := vaults.NewService(vaultStore, credentialKey, oauthClient)
 	if err != nil {
 		return err
 	}
@@ -237,7 +244,7 @@ func run() error {
 		}
 	}
 	if registry != nil {
-		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
+		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry, Credentials: vaultService,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
 		lease, err := pgunit.AcquireLease(ctx, pool)
 		if err != nil {
@@ -309,7 +316,8 @@ func run() error {
 	deps := api.Dependencies{
 		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
 		Installation: installation, InstallationBindings: executionStore,
-		Projects: executionStore, Vaults: executionStore, ModelProviders: executionStore,
+		Projects: executionStore, ModelProviders: executionStore,
+		Vaults: vaultService, VaultsReader: vaultStore,
 		Skills: executionStore, EnvironmentTemplates: executionStore,
 		Files: fileService, FilesReader: fileStore,
 		Agents: agentService, AgentsReader: agentStore,

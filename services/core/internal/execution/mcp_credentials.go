@@ -6,13 +6,13 @@ import (
 	"net/url"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
 // Resolve only the frozen decision. Never search current Vault contents during
 // dispatch: a later credential must not change an anonymous or selected server.
-func selectedMCPCredentials(snapshot Snapshot) (map[string]store.MCPCredentialBinding, error) {
+func selectedMCPCredentials(snapshot Snapshot) (map[string]vaults.MCPCredentialBinding, error) {
 	invalid := errors.New("invalid frozen MCP credential binding")
 	tools := map[string]v1.MCPTool{}
 	for _, raw := range snapshot.Agent.Tools {
@@ -33,7 +33,7 @@ func selectedMCPCredentials(snapshot Snapshot) (map[string]store.MCPCredentialBi
 		attached[id] = true
 	}
 	seen := map[string]bool{}
-	selected := map[string]store.MCPCredentialBinding{}
+	selected := map[string]vaults.MCPCredentialBinding{}
 	for _, binding := range snapshot.MCPCredentials {
 		tool, exists := tools[binding.ServerLabel]
 		if !exists || seen[binding.ServerLabel] || tool.Transport.ServerURL != binding.ServerURL {

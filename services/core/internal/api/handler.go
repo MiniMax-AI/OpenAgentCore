@@ -196,7 +196,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		configuration, err = h.bindSessionCredentials(r.Context(), tenantID(r), configuration)
 		if err != nil {
 			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-				writeStoreError(w, r, err)
+				writeVaultsError(w, r, err)
 			}
 			return
 		}

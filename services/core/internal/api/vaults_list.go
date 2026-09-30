@@ -21,13 +21,13 @@ import (
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /vaults [get]
 func (h *Handler) listVaults(w http.ResponseWriter, r *http.Request) {
-	options, statuses, ok := readVaultPage(w, r)
+	query, ok := readVaultPage(w, r)
 	if !ok {
 		return
 	}
-	page, err := h.Vaults.ListVaults(r.Context(), tenantID(r), options.after, options.limit, options.ascending, statuses)
+	page, err := h.VaultsReader.ListVaults(r.Context(), tenantID(r), query)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeVaultsError(w, r, err)
 		return
 	}
 	response := v1.VaultList{Object: "list", Data: make([]v1.Vault, 0, len(page.Vaults)), HasMore: page.NextCursor != ""}

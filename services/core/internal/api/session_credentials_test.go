@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
@@ -74,8 +75,8 @@ func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
 		encoded, _ := json.Marshal(value)
 		return encoded
 	}
-	binding := func(label, credentialID string) store.MCPCredentialBinding {
-		b := store.MCPCredentialBinding{ServerLabel: label, ServerURL: "https://mcp.example.test/" + label}
+	binding := func(label, credentialID string) vaults.MCPCredentialBinding {
+		b := vaults.MCPCredentialBinding{ServerLabel: label, ServerURL: "https://mcp.example.test/" + label}
 		if credentialID != "" {
 			b.VaultID, b.CredentialID, b.AuthType = vault, credentialID, "static_bearer"
 		}
@@ -85,7 +86,7 @@ func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
 	explicit := uuid.NewString()
 	cfg := configuration{Agent: v1.Agent{ID: "agent", Model: "model", Tools: []json.RawMessage{tool("implicit", ""), tool("anonymous", ""), tool("explicit", strings.ToUpper(explicit)), function}},
 		Environment: v1.Environment{Type: "none"}, VaultIDs: []string{strings.ToUpper(vault)},
-		MCPCredentials: []store.MCPCredentialBinding{binding("implicit", credential), binding("anonymous", ""), binding("explicit", explicit)}}
+		MCPCredentials: []vaults.MCPCredentialBinding{binding("implicit", credential), binding("anonymous", ""), binding("explicit", explicit)}}
 	// The stored caller intent is checked against PostgreSQL by the storedNull
 	// guard in TestMCPCredentialSelectionPublicPostgres.
 	raw, _ := json.Marshal(cfg)
@@ -128,7 +129,7 @@ func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
 		func(c *configuration) { c.MCPCredentials[0].ServerLabel = "other" },
 	} {
 		changed := cfg
-		changed.MCPCredentials = append([]store.MCPCredentialBinding(nil), cfg.MCPCredentials...)
+		changed.MCPCredentials = append([]vaults.MCPCredentialBinding(nil), cfg.MCPCredentials...)
 		change(&changed)
 		raw, _ := json.Marshal(changed)
 		response, err := sessionResponse(store.Session{Configuration: raw}, "")

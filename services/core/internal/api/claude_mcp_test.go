@@ -6,25 +6,25 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
 type claudeCredentialStore struct {
-	binding store.MCPCredentialBinding
+	binding vaults.MCPCredentialBinding
 	calls   int
 }
 
-func (s *claudeCredentialStore) ResolveMCPCredentials(_ context.Context, _ string, _ []string, _ []store.MCPCredentialRequest) ([]store.MCPCredentialBinding, error) {
+func (s *claudeCredentialStore) ResolveMCPCredentials(context.Context, vaults.ResolveMCPCredentials) ([]vaults.MCPCredentialBinding, error) {
 	s.calls++
-	return []store.MCPCredentialBinding{s.binding}, nil
+	return []vaults.MCPCredentialBinding{s.binding}, nil
 }
 
 func TestClaudeMCPAdmitsResolvedCredentials(t *testing.T) {
 	for _, selection := range []string{"implicit", "explicit", "unmatched"} {
 		t.Run(selection, func(t *testing.T) {
 			vault, credential := uuid.NewString(), uuid.NewString()
-			s := &claudeCredentialStore{binding: store.MCPCredentialBinding{ServerLabel: "records", ServerURL: "https://mcp.example.test/tools", VaultID: vault, CredentialID: credential, AuthType: "static_bearer"}}
+			s := &claudeCredentialStore{binding: vaults.MCPCredentialBinding{ServerLabel: "records", ServerURL: "https://mcp.example.test/tools", VaultID: vault, CredentialID: credential, AuthType: "static_bearer"}}
 			tool := publicMCP
 			if selection == "explicit" {
 				tool = strings.TrimSuffix(tool, "}") + `,"credential_id":"` + credential + `"}`

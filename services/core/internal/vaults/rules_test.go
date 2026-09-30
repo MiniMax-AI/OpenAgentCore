@@ -59,7 +59,9 @@ func TestMCPCredentialSelectionRules(t *testing.T) {
 		t.Fatal("a malformed attached Vault named one", err)
 	}
 	url := "https://mcp.example/tools"
-	named := func(id string) MCPCredentialRequest { return MCPCredentialRequest{ServerLabel: "tools", ServerURL: url, CredentialID: &id} }
+	named := func(id string) MCPCredentialRequest {
+		return MCPCredentialRequest{ServerLabel: "tools", ServerURL: url, CredentialID: &id}
+	}
 	for _, tc := range []struct {
 		request  MCPCredentialRequest
 		attached []string
@@ -160,7 +162,9 @@ func TestOAuthCreationRules(t *testing.T) {
 	}{
 		{func(*CreateOAuthCredential) {}, true},
 		{func(c *CreateOAuthCredential) { c.OAuth.ExpiresAt = ptr("2030-01-02T03:04:05.123456789Z") }, true},
-		{func(c *CreateOAuthCredential) { c.OAuth.Refresh, c.RefreshToken, c.ClientSecret = refresh("client_secret_post"), "r", "s" }, true},
+		{func(c *CreateOAuthCredential) {
+			c.OAuth.Refresh, c.RefreshToken, c.ClientSecret = refresh("client_secret_post"), "r", "s"
+		}, true},
 		{func(c *CreateOAuthCredential) { c.OAuth.Refresh, c.RefreshToken = refresh("none"), "r" }, true},
 		{func(c *CreateOAuthCredential) { c.Name = "" }, false},
 		{func(c *CreateOAuthCredential) { c.MCPServerURL = "" }, false},

@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -26,7 +25,7 @@ func (s *Store) CreateCredential(ctx context.Context, credential vaults.NewCrede
 		return vaults.Credential{}, vaults.ErrInvalidInput
 	}
 	var created vaults.Credential
-	err := s.write(ctx, "credential creation failed", func(ctx context.Context, q *sqlc.Queries) error {
+	err := s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
 		row, err := insertCredential(ctx, q, credential)
 		// A foreign-key violation means the Vault was deleted after the insert read it.
 		var constraint *pgconn.PgError
@@ -81,11 +80,8 @@ func (s *Store) GetCredential(ctx context.Context, tenantID, vaultID, credential
 
 func getCredential(ctx context.Context, q *sqlc.Queries, tenant, vault, id pgtype.UUID) (vaults.Credential, error) {
 	row, err := q.GetCredential(ctx, sqlc.GetCredentialParams{TenantID: tenant, VaultID: vault, ID: id})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return vaults.Credential{}, vaults.ErrNotFound
-	}
 	if err != nil {
-		return vaults.Credential{}, errors.New("credential lookup failed")
+		return vaults.Credential{}, translate(err)
 	}
 	return credentialFromRow(row)
 }
@@ -99,7 +95,7 @@ func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID string, q
 	}
 	vault := pgunit.PathID(vaultID)
 	var page vaults.CredentialPage
-	err = s.read(ctx, "credential list failed", func(ctx context.Context, q *sqlc.Queries) error {
+	err = s.read(ctx, func(ctx context.Context, q *sqlc.Queries) error {
 		// An inaccessible parent is not an authorized empty collection.
 		if _, err := getVault(ctx, q, tenant, vault); err != nil {
 			return err
@@ -121,7 +117,7 @@ func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID string, q
 		}
 		rows, err := q.ListCredentials(ctx, params)
 		if err != nil {
-			return errors.New("credential list failed")
+			return err
 		}
 		page = vaults.CredentialPage{Credentials: make([]vaults.Credential, 0, min(query.Limit, len(rows)))}
 		if len(rows) > query.Limit {
@@ -147,7 +143,7 @@ func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID string, q
 // concurrent change of scope stores nothing.
 func (s *Store) ReplaceStaticToken(ctx context.Context, replacement vaults.StaticTokenReplacement) (vaults.Credential, error) {
 	var updated vaults.Credential
-	err := s.write(ctx, "credential update failed", func(ctx context.Context, q *sqlc.Queries) error {
+	err := s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
 		row, err := q.UpdateStaticCredential(ctx, sqlc.UpdateStaticCredentialParams{
 			TenantID: pgunit.PathID(replacement.TenantID), VaultID: pgunit.PathID(replacement.VaultID), ID: pgunit.PathID(replacement.CredentialID),
 			McpServerUrl: replacement.MCPServerURL, TokenCiphertext: replacement.Ciphertext,
@@ -171,7 +167,7 @@ func (s *Store) ReplaceStaticToken(ctx context.Context, replacement vaults.Stati
 func (s *Store) DeleteCredential(ctx context.Context, key vaults.CredentialKey) (string, error) {
 	vault := pgunit.PathID(key.VaultID)
 	var deleted string
-	err := s.write(ctx, "credential deletion failed", func(ctx context.Context, q *sqlc.Queries) error {
+	err := s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
 		id, err := q.DeleteCredential(ctx, sqlc.DeleteCredentialParams{TenantID: pgunit.PathID(key.TenantID), VaultID: vault, ID: pgunit.PathID(key.CredentialID)})
 		if err != nil {
 			return err

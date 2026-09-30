@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
@@ -127,12 +128,16 @@ func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, str
 	}
 	h.s, h.db = store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	h.d.Store = h.s
-	vault, err := h.s.CreateVault(t.Context(), h.tenant, store.CreateVaultInput{})
+	_, service, err := fixtureVaults(h.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault, err := service.CreateVault(t.Context(), vaults.CreateVault{TenantID: h.tenant})
 	if err != nil {
 		t.Fatal(err)
 	}
 	token, endpoint := uuid.NewString(), "https://mcp.example/tools"
-	_, err = h.s.CreateStaticCredential(t.Context(), h.tenant, vault.ID, store.CreateStaticCredentialInput{Name: "worker", MCPServerURL: endpoint, Token: token})
+	_, err = service.CreateStaticCredential(t.Context(), vaults.CreateStaticCredential{TenantID: h.tenant, VaultID: vault.ID, Name: "worker", MCPServerURL: endpoint, Token: token})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +146,8 @@ func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, str
 		t.Fatal("invalid worker fixture")
 	}
 	snapshot.VaultIDs = []string{vault.ID}
-	snapshot.MCPCredentials, err = h.s.ResolveMCPCredentials(t.Context(), h.tenant, snapshot.VaultIDs, []store.MCPCredentialRequest{{ServerLabel: "tickets", ServerURL: endpoint}})
+	snapshot.MCPCredentials, err = service.ResolveMCPCredentials(t.Context(), vaults.ResolveMCPCredentials{TenantID: h.tenant, VaultIDs: snapshot.VaultIDs,
+		Requests: []vaults.MCPCredentialRequest{{ServerLabel: "tickets", ServerURL: endpoint}}})
 	if err != nil {
 		t.Fatal(err)
 	}
