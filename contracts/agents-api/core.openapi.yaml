@@ -3618,7 +3618,7 @@ paths:
           name: harness
           required: true
           type: string
-        - description: Complete model provider bundle
+        - description: Complete model configuration
           in: body
           name: body
           required: true
@@ -3792,6 +3792,10 @@ paths:
           description: Conflict
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -3838,6 +3842,10 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
         "500":
@@ -4247,6 +4255,10 @@ paths:
           description: Conflict
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4324,6 +4336,10 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
       security:
@@ -4570,6 +4586,10 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
         "500":
@@ -5356,6 +5376,10 @@ paths:
           description: Conflict
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
@@ -5579,10 +5603,10 @@ paths:
           name: after
           type: string
         - default: 20
-          description: Page size; 0 returns an empty page
+          description: Page size, 1–100
           in: query
           maximum: 100
-          minimum: 0
+          minimum: 1
           name: limit
           type: integer
         - description: Creation order; omit for descending, explicit empty values are invalid
@@ -5604,6 +5628,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List Skills in a Project
@@ -5630,6 +5674,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete a Skill and its versions in a Project
@@ -5655,6 +5719,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.Skill'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve Skill metadata in a Project
@@ -5681,6 +5765,26 @@ paths:
           description: OK
           schema:
             type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Download Skill content in a Project
@@ -5700,10 +5804,10 @@ paths:
           name: after
           type: string
         - default: 20
-          description: Page size; 0 returns an empty page
+          description: Page size, 1–100
           in: query
           maximum: 100
-          minimum: 0
+          minimum: 1
           name: limit
           type: integer
         - description: Version order; omit for descending, explicit empty values are invalid
@@ -5725,6 +5829,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillVersionList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List Skill versions in a Project
@@ -5756,6 +5880,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillVersionDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete a Skill version in a Project
@@ -5786,6 +5930,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillVersion'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve Skill version metadata in a Project
@@ -5817,6 +5981,26 @@ paths:
           description: OK
           schema:
             type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Download immutable Skill version content in a Project
@@ -6287,6 +6471,10 @@ paths:
           description: Conflict
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -6328,6 +6516,10 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
         "500":
@@ -6414,6 +6606,10 @@ paths:
           description: Conflict
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -6452,6 +6648,10 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
         "503":
@@ -6493,6 +6693,10 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
         "503":
@@ -6537,6 +6741,10 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
         "500":
@@ -6721,6 +6929,10 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
         "500":

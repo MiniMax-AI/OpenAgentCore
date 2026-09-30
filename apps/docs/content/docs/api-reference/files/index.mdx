@@ -1,0 +1,14 @@
+---
+title: "Files"
+description: "Files. Application API: Project API key."
+---
+
+Public schema constrained by the pinned OpenAI Agents API baseline; documented x_agents_core fields remain Core extensions.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [List source files](/api-reference/files/list-source-files) | `GET` | `/v1/files` |
+| [Upload a source file](/api-reference/files/upload-a-source-file) | `POST` | `/v1/files` |
+| [Retrieve source file metadata](/api-reference/files/retrieve-source-file-metadata) | `GET` | `/v1/files/{file_id}` |
+| [Delete a source file](/api-reference/files/delete-a-source-file) | `DELETE` | `/v1/files/{file_id}` |
+| [Download source file bytes](/api-reference/files/download-source-file-bytes) | `GET` | `/v1/files/{file_id}/content` |

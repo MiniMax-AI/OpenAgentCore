@@ -1,0 +1,13 @@
+{
+  "title": "Skills",
+  "pages": [
+    "list-skills-in-a-project",
+    "retrieve-skill-metadata-in-a-project",
+    "delete-a-skill-and-its-versions-in-a-project",
+    "download-skill-content-in-a-project",
+    "list-skill-versions-in-a-project",
+    "retrieve-skill-version-metadata-in-a-project",
+    "delete-a-skill-version-in-a-project",
+    "download-immutable-skill-version-content-in-a-project"
+  ]
+}

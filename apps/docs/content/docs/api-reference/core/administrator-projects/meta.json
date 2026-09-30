@@ -1,0 +1,12 @@
+{
+  "title": "Administrator Projects",
+  "pages": [
+    "list-projects-and-active-key-counts",
+    "create-an-empty-independent-project",
+    "rename-a-project",
+    "archive-a-project-and-revoke-all-its-keys-while-retaining-assets",
+    "list-safe-key-metadata-for-a-project",
+    "issue-an-independent-secret-in-an-existing-project",
+    "revoke-one-project-key-while-retaining-shared-assets"
+  ]
+}

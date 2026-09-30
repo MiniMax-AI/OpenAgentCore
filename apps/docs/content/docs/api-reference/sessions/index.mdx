@@ -1,0 +1,15 @@
+---
+title: "Sessions"
+description: "Sessions. Application API: Project API key."
+---
+
+Public schema constrained by the pinned OpenAI Agents API baseline; documented x_agents_core fields remain Core extensions.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [List execution Sessions](/api-reference/sessions/list-execution-sessions) | `GET` | `/v1/agents/sessions` |
+| [Create an execution Session](/api-reference/sessions/create-an-execution-session) | `POST` | `/v1/agents/sessions` |
+| [Retrieve an execution Session](/api-reference/sessions/retrieve-an-execution-session) | `GET` | `/v1/agents/sessions/{session_id}` |
+| [Update execution Session metadata](/api-reference/sessions/update-execution-session-metadata) | `POST` | `/v1/agents/sessions/{session_id}` |
+| [Delete an execution Session](/api-reference/sessions/delete-an-execution-session) | `DELETE` | `/v1/agents/sessions/{session_id}` |
+| [Submit Session input events](/api-reference/sessions/submit-session-input-events) | `POST` | `/v1/agents/sessions/{session_id}/events` |

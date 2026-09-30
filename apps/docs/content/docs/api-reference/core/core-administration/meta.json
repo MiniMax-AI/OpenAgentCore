@@ -1,0 +1,12 @@
+{
+  "title": "Core Administration",
+  "pages": [
+    "query-committed-administrator-mutations",
+    "retrieve-installation-facts-and-process-settings",
+    "retrieve-core-operational-metrics",
+    "retrieve-a-managed-session-s-resource-cleanup-state",
+    "release-a-managed-session-s-execution-resources-while-retaining-history",
+    "list-runtime-observations-across-managed-projects",
+    "summarize-resource-counts-and-session-usage-by-project-agent-or-creator-key"
+  ]
+}

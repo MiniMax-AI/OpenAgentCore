@@ -1,0 +1,16 @@
+---
+title: "Administrator Projects"
+description: "Administrator Projects. Core administration API: Core key held by Web’s server or an operator script."
+---
+
+Generated local management contract. This is not part of the public OpenAI API.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [List Projects and active key counts](/api-reference/core/administrator-projects/list-projects-and-active-key-counts) | `GET` | `/core/v1/projects` |
+| [Create an empty independent Project](/api-reference/core/administrator-projects/create-an-empty-independent-project) | `POST` | `/core/v1/projects` |
+| [Rename a Project](/api-reference/core/administrator-projects/rename-a-project) | `POST` | `/core/v1/projects/{project_id}` |
+| [Archive a Project and revoke all its keys while retaining assets](/api-reference/core/administrator-projects/archive-a-project-and-revoke-all-its-keys-while-retaining-assets) | `POST` | `/core/v1/projects/{project_id}/archive` |
+| [List safe key metadata for a Project](/api-reference/core/administrator-projects/list-safe-key-metadata-for-a-project) | `GET` | `/core/v1/projects/{project_id}/keys` |
+| [Issue an independent secret in an existing Project](/api-reference/core/administrator-projects/issue-an-independent-secret-in-an-existing-project) | `POST` | `/core/v1/projects/{project_id}/keys` |
+| [Revoke one Project key while retaining shared assets](/api-reference/core/administrator-projects/revoke-one-project-key-while-retaining-shared-assets) | `DELETE` | `/core/v1/projects/{project_id}/keys/{key_id}` |

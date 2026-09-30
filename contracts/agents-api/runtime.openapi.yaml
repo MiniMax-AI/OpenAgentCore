@@ -209,6 +209,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
         "503":
           description: Service Unavailable
           schema:
@@ -241,6 +245,14 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
         "503":
@@ -327,6 +339,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":

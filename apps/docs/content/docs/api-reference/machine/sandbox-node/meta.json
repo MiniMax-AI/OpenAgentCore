@@ -1,0 +1,8 @@
+{
+  "title": "Sandbox Node",
+  "pages": [
+    "read-the-active-configuration-for-node-installation",
+    "enroll-a-sandbox-node",
+    "recover-an-enrolled-sandbox-node-identity-and-observe-its-readiness"
+  ]
+}

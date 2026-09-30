@@ -1,0 +1,12 @@
+---
+title: "Executor Credentials"
+description: "Executor Credentials. Core administration API: Core key held by Web’s server or an operator script."
+---
+
+Generated local management contract. This is not part of the public OpenAI API.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [List a self_hosted Environment's executor credentials](/api-reference/core/executor-credentials/list-a-self-hosted-environment-s-executor-credentials) | `GET` | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` |
+| [Issue or explicitly rotate a self_hosted Environment executor credential](/api-reference/core/executor-credentials/issue-or-explicitly-rotate-a-self-hosted-environment-executor-credential) | `POST` | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` |
+| [Revoke a self_hosted Environment executor credential](/api-reference/core/executor-credentials/revoke-a-self-hosted-environment-executor-credential) | `DELETE` | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials/{key_id}` |

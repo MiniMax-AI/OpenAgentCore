@@ -1,0 +1,9 @@
+{
+  "title": "Artifacts",
+  "pages": [
+    "list-immutable-session-artifacts-in-a-project",
+    "retrieve-immutable-artifact-metadata-in-a-project",
+    "delete-a-published-artifact-in-a-project",
+    "download-immutable-artifact-bytes-in-a-project"
+  ]
+}

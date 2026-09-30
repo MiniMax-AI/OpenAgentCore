@@ -1,0 +1,9 @@
+{
+  "title": "Vaults",
+  "pages": [
+    "list-vaults",
+    "create-a-vault",
+    "retrieve-a-vault",
+    "delete-a-vault-and-all-its-credentials"
+  ]
+}

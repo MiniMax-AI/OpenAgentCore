@@ -1,0 +1,15 @@
+---
+title: "Subagents"
+description: "Subagents. Application API: Project API key."
+---
+
+Public schema constrained by the pinned OpenAI Agents API baseline; documented x_agents_core fields remain Core extensions.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [List Session Subagents](/api-reference/subagents/list-session-subagents) | `GET` | `/v1/agents/sessions/{session_id}/subagents` |
+| [Retrieve a Session Subagent](/api-reference/subagents/retrieve-a-session-subagent) | `GET` | `/v1/agents/sessions/{session_id}/subagents/{subagent_id}` |
+| [List a Subagent's Items](/api-reference/subagents/list-a-subagent-s-items) | `GET` | `/v1/agents/sessions/{session_id}/subagents/{subagent_id}/items` |
+| [List a Subagent's Turns](/api-reference/subagents/list-a-subagent-s-turns) | `GET` | `/v1/agents/sessions/{session_id}/subagents/{subagent_id}/turns` |
+| [Retrieve a Subagent Turn](/api-reference/subagents/retrieve-a-subagent-turn) | `GET` | `/v1/agents/sessions/{session_id}/subagents/{subagent_id}/turns/{turn_id}` |
+| [List a Subagent Turn's Items](/api-reference/subagents/list-a-subagent-turn-s-items) | `GET` | `/v1/agents/sessions/{session_id}/subagents/{subagent_id}/turns/{turn_id}/items` |

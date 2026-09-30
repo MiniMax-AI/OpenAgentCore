@@ -1,0 +1,16 @@
+---
+title: "Core Administration"
+description: "Core Administration. Core administration API: Core key held by Web’s server or an operator script."
+---
+
+Generated local management contract. This is not part of the public OpenAI API.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [Query committed administrator mutations](/api-reference/core/core-administration/query-committed-administrator-mutations) | `GET` | `/core/v1/audit-log` |
+| [Retrieve installation facts and process settings](/api-reference/core/core-administration/retrieve-installation-facts-and-process-settings) | `GET` | `/core/v1/installation` |
+| [Retrieve Core operational metrics](/api-reference/core/core-administration/retrieve-core-operational-metrics) | `GET` | `/core/v1/metrics` |
+| [Retrieve a managed Session's resource cleanup state](/api-reference/core/core-administration/retrieve-a-managed-session-s-resource-cleanup-state) | `GET` | `/core/v1/projects/{project_id}/sessions/{session_id}/archive` |
+| [Release a managed Session's execution resources while retaining history](/api-reference/core/core-administration/release-a-managed-session-s-execution-resources-while-retaining-history) | `POST` | `/core/v1/projects/{project_id}/sessions/{session_id}/archive` |
+| [List Runtime observations across managed Projects](/api-reference/core/core-administration/list-runtime-observations-across-managed-projects) | `GET` | `/core/v1/sandbox/runtime-observations` |
+| [Summarize resource counts and Session usage by Project, Agent or creator key](/api-reference/core/core-administration/summarize-resource-counts-and-session-usage-by-project-agent-or-creator-key) | `GET` | `/core/v1/summary` |

@@ -1,0 +1,16 @@
+{
+  "title": "Skills",
+  "pages": [
+    "list-skills",
+    "upload-a-skill",
+    "retrieve-skill-metadata",
+    "update-the-default-skill-version",
+    "delete-a-skill-and-its-versions",
+    "download-skill-content",
+    "list-skill-versions",
+    "upload-an-immutable-skill-version",
+    "retrieve-skill-version-metadata",
+    "delete-a-skill-version",
+    "download-immutable-skill-version-content"
+  ]
+}

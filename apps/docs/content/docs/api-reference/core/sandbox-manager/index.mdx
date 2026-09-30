@@ -1,0 +1,22 @@
+---
+title: "Sandbox Manager"
+description: "Sandbox Manager. Core administration API: Core key held by Web’s server or an operator script."
+---
+
+Generated local management contract. This is not part of the public OpenAI API.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [Retrieve sandbox deployment](/api-reference/core/sandbox-manager/retrieve-sandbox-deployment) | `GET` | `/core/v1/sandbox/deployment` |
+| [Initialize the deployment sandbox provider](/api-reference/core/sandbox-manager/initialize-the-deployment-sandbox-provider) | `POST` | `/core/v1/sandbox/deployment` |
+| [Change the sandbox deployment configuration](/api-reference/core/sandbox-manager/change-the-sandbox-deployment-configuration) | `PUT` | `/core/v1/sandbox/deployment` |
+| [Start or escalate a durable sandbox deployment reset](/api-reference/core/sandbox-manager/start-or-escalate-a-durable-sandbox-deployment-reset) | `POST` | `/core/v1/sandbox/deployment/reset` |
+| [Cancel a sandbox deployment reset](/api-reference/core/sandbox-manager/cancel-a-sandbox-deployment-reset) | `DELETE` | `/core/v1/sandbox/deployment/reset` |
+| [List templates visible to an E2B credential](/api-reference/core/sandbox-manager/list-templates-visible-to-an-e2b-credential) | `POST` | `/core/v1/sandbox/e2b/templates` |
+| [List ready builds for an E2B template](/api-reference/core/sandbox-manager/list-ready-builds-for-an-e2b-template) | `POST` | `/core/v1/sandbox/e2b/templates/{template_id}/builds` |
+| [Create a ten-minute one-use node enrollment token](/api-reference/core/sandbox-manager/create-a-ten-minute-one-use-node-enrollment-token) | `POST` | `/core/v1/sandbox/enrollment-tokens` |
+| [List deployment sandbox nodes](/api-reference/core/sandbox-manager/list-deployment-sandbox-nodes) | `GET` | `/core/v1/sandbox/nodes` |
+| [Retrieve sandbox node and host history](/api-reference/core/sandbox-manager/retrieve-sandbox-node-and-host-history) | `GET` | `/core/v1/sandbox/nodes/{node_id}` |
+| [Update sandbox node name and capacity](/api-reference/core/sandbox-manager/update-sandbox-node-name-and-capacity) | `PATCH` | `/core/v1/sandbox/nodes/{node_id}` |
+| [Remove a sandbox node with no retained resources](/api-reference/core/sandbox-manager/remove-a-sandbox-node-with-no-retained-resources) | `DELETE` | `/core/v1/sandbox/nodes/{node_id}` |
+| [List retained allocations on a sandbox node](/api-reference/core/sandbox-manager/list-retained-allocations-on-a-sandbox-node) | `GET` | `/core/v1/sandbox/nodes/{node_id}/allocations` |

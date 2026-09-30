@@ -30,6 +30,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
         '503':
           description: Service Unavailable
           content:
@@ -59,6 +65,18 @@ paths:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
         '409':
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
           content:
             application/json:
               schema:
@@ -165,6 +183,12 @@ paths:
                 $ref: '#/components/schemas/v1.ErrorResponse'
         '409':
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/v1.ErrorResponse'
+        '413':
+          description: Request Entity Too Large
           content:
             application/json:
               schema:

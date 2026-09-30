@@ -1,0 +1,9 @@
+{
+  "title": "Sessions",
+  "pages": [
+    "list-execution-sessions-in-a-project",
+    "retrieve-an-execution-session-in-a-project",
+    "delete-an-execution-session-in-a-project",
+    "retrieve-root-session-diagnostics"
+  ]
+}

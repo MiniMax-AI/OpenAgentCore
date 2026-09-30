@@ -1,7 +1,6 @@
 {
   "title": "Machine connection API",
   "pages": [
-    "index",
     "native-installation",
     "sandbox-node"
   ]

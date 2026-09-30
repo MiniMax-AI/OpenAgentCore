@@ -1,0 +1,13 @@
+---
+title: "Artifacts"
+description: "Artifacts. Core administration API: Core key held by Web’s server or an operator script."
+---
+
+Generated local management contract. This is not part of the public OpenAI API.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [List immutable Session artifacts in a Project](/api-reference/core/artifacts/list-immutable-session-artifacts-in-a-project) | `GET` | `/core/v1/projects/{project_id}/sessions/{session_id}/artifacts` |
+| [Retrieve immutable artifact metadata in a Project](/api-reference/core/artifacts/retrieve-immutable-artifact-metadata-in-a-project) | `GET` | `/core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}` |
+| [Delete a published artifact in a Project](/api-reference/core/artifacts/delete-a-published-artifact-in-a-project) | `DELETE` | `/core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}` |
+| [Download immutable artifact bytes in a Project](/api-reference/core/artifacts/download-immutable-artifact-bytes-in-a-project) | `GET` | `/core/v1/projects/{project_id}/sessions/{session_id}/artifacts/{artifact_id}/content` |

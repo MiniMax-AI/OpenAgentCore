@@ -1,0 +1,13 @@
+---
+title: "Artifacts"
+description: "Artifacts. Application API: Project API key."
+---
+
+Public schema constrained by the pinned OpenAI Agents API baseline; documented x_agents_core fields remain Core extensions.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [List immutable Session artifacts](/api-reference/artifacts/list-immutable-session-artifacts) | `GET` | `/v1/agents/sessions/{session_id}/artifacts` |
+| [Retrieve immutable artifact metadata](/api-reference/artifacts/retrieve-immutable-artifact-metadata) | `GET` | `/v1/agents/sessions/{session_id}/artifacts/{artifact_id}` |
+| [Delete a published artifact](/api-reference/artifacts/delete-a-published-artifact) | `DELETE` | `/v1/agents/sessions/{session_id}/artifacts/{artifact_id}` |
+| [Download immutable artifact bytes](/api-reference/artifacts/download-immutable-artifact-bytes) | `GET` | `/v1/agents/sessions/{session_id}/artifacts/{artifact_id}/content` |

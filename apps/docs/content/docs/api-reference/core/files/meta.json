@@ -1,0 +1,8 @@
+{
+  "title": "Files",
+  "pages": [
+    "list-source-files-in-a-project",
+    "retrieve-source-file-metadata-in-a-project",
+    "delete-a-source-file-in-a-project"
+  ]
+}

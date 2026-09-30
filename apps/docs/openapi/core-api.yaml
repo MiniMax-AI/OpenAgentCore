@@ -260,7 +260,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/v1.ModelConfigurationInput'
-        description: Complete model provider bundle
+        description: Complete model configuration
         required: true
   /core/v1/installation:
     get:
@@ -413,6 +413,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
         '500':
           description: Internal Server Error
           content:
@@ -467,6 +473,12 @@ paths:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
         '409':
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
           content:
             application/json:
               schema:
@@ -968,6 +980,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
         '500':
           description: Internal Server Error
           content:
@@ -1071,6 +1089,12 @@ paths:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
         '409':
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
           content:
             application/json:
               schema:
@@ -1367,6 +1391,12 @@ paths:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
         '409':
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
           content:
             application/json:
               schema:
@@ -2349,6 +2379,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
         '503':
           description: Service Unavailable
           content:
@@ -2624,8 +2660,8 @@ paths:
         - schema:
             type: integer
             maximum: 100
-            minimum: 0
-          description: Page size; 0 returns an empty page
+            minimum: 1
+          description: Page size, 1–100
           in: query
           name: limit
         - schema:
@@ -2649,6 +2685,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/v1.SkillList'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List Skills in a Project
@@ -2677,6 +2743,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/v1.SkillDeleted'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete a Skill and its versions in a Project
@@ -2704,6 +2800,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/v1.Skill'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve Skill metadata in a Project
@@ -2733,6 +2859,36 @@ paths:
               schema:
                 type: string
                 format: binary
+        '400':
+          description: Bad Request
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Download Skill content in a Project
@@ -2756,8 +2912,8 @@ paths:
         - schema:
             type: integer
             maximum: 100
-            minimum: 0
-          description: Page size; 0 returns an empty page
+            minimum: 1
+          description: Page size, 1–100
           in: query
           name: limit
         - schema:
@@ -2781,6 +2937,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/v1.SkillVersionList'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: List Skill versions in a Project
@@ -2815,6 +3001,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/v1.SkillVersionDeleted'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Delete a Skill version in a Project
@@ -2848,6 +3064,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/v1.SkillVersion'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve Skill version metadata in a Project
@@ -2883,6 +3129,36 @@ paths:
               schema:
                 type: string
                 format: binary
+        '400':
+          description: Bad Request
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/octet-stream:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
       summary: Download immutable Skill version content in a Project
@@ -3451,6 +3727,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
         '500':
           description: Internal Server Error
           content:
@@ -3498,6 +3780,12 @@ paths:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
         '409':
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
           content:
             application/json:
               schema:
@@ -3605,6 +3893,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
         '500':
           description: Internal Server Error
           content:
@@ -3647,6 +3941,12 @@ paths:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
           content:
             application/json:
               schema:
@@ -3694,6 +3994,12 @@ paths:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
           content:
             application/json:
               schema:
@@ -3746,6 +4052,12 @@ paths:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
         '409':
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
           content:
             application/json:
               schema:
@@ -3979,6 +4291,12 @@ paths:
                 $ref: '#/components/schemas/api.CoreErrorResponse'
         '409':
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CoreErrorResponse'
+        '413':
+          description: Request Entity Too Large
           content:
             application/json:
               schema:

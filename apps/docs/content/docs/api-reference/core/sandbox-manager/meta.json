@@ -1,0 +1,18 @@
+{
+  "title": "Sandbox Manager",
+  "pages": [
+    "retrieve-sandbox-deployment",
+    "initialize-the-deployment-sandbox-provider",
+    "change-the-sandbox-deployment-configuration",
+    "start-or-escalate-a-durable-sandbox-deployment-reset",
+    "cancel-a-sandbox-deployment-reset",
+    "list-templates-visible-to-an-e2b-credential",
+    "list-ready-builds-for-an-e2b-template",
+    "create-a-ten-minute-one-use-node-enrollment-token",
+    "list-deployment-sandbox-nodes",
+    "retrieve-sandbox-node-and-host-history",
+    "update-sandbox-node-name-and-capacity",
+    "remove-a-sandbox-node-with-no-retained-resources",
+    "list-retained-allocations-on-a-sandbox-node"
+  ]
+}

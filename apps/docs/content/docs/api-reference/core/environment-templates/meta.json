@@ -1,0 +1,8 @@
+{
+  "title": "Environment Templates",
+  "pages": [
+    "list-environment-templates-in-a-project",
+    "retrieve-an-environment-template-in-a-project",
+    "delete-an-environment-template-in-a-project"
+  ]
+}

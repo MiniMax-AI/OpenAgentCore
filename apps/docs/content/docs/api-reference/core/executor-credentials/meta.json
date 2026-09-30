@@ -1,0 +1,8 @@
+{
+  "title": "Executor Credentials",
+  "pages": [
+    "list-a-self-hosted-environment-s-executor-credentials",
+    "issue-or-explicitly-rotate-a-self-hosted-environment-executor-credential",
+    "revoke-a-self-hosted-environment-executor-credential"
+  ]
+}

@@ -1,7 +1,6 @@
 {
   "title": "Core administration API",
   "pages": [
-    "index",
     "core-administration",
     "deployment-model-providers",
     "administrator-projects",

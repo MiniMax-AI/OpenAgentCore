@@ -1,0 +1,11 @@
+{
+  "title": "Subagents",
+  "pages": [
+    "list-session-subagents",
+    "retrieve-a-session-subagent",
+    "list-a-subagent-s-items",
+    "list-a-subagent-s-turns",
+    "retrieve-a-subagent-turn",
+    "list-a-subagent-turn-s-items"
+  ]
+}

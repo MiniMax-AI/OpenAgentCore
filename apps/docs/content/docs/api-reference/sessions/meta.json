@@ -1,0 +1,11 @@
+{
+  "title": "Sessions",
+  "pages": [
+    "list-execution-sessions",
+    "create-an-execution-session",
+    "retrieve-an-execution-session",
+    "update-execution-session-metadata",
+    "delete-an-execution-session",
+    "submit-session-input-events"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "title": "Environment Templates",
+  "pages": [
+    "list-environment-templates",
+    "create-an-environment-template",
+    "retrieve-an-environment-template",
+    "update-an-environment-template",
+    "delete-an-environment-template"
+  ]
+}

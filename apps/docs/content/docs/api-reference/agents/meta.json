@@ -1,0 +1,10 @@
+{
+  "title": "Agents",
+  "pages": [
+    "list-reusable-agents",
+    "create-a-reusable-agent",
+    "retrieve-a-reusable-agent",
+    "update-a-reusable-agent",
+    "delete-a-reusable-agent"
+  ]
+}

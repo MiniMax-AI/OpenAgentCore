@@ -1,0 +1,10 @@
+{
+  "title": "Files",
+  "pages": [
+    "list-source-files",
+    "upload-a-source-file",
+    "retrieve-source-file-metadata",
+    "delete-a-source-file",
+    "download-source-file-bytes"
+  ]
+}

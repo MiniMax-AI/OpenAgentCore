@@ -1,0 +1,20 @@
+---
+title: "Skills"
+description: "Skills. Application API: Project API key."
+---
+
+Public schema constrained by the pinned OpenAI Agents API baseline; documented x_agents_core fields remain Core extensions.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [List Skills](/api-reference/skills/list-skills) | `GET` | `/v1/skills` |
+| [Upload a Skill](/api-reference/skills/upload-a-skill) | `POST` | `/v1/skills` |
+| [Retrieve Skill metadata](/api-reference/skills/retrieve-skill-metadata) | `GET` | `/v1/skills/{skill_id}` |
+| [Update the default Skill version](/api-reference/skills/update-the-default-skill-version) | `POST` | `/v1/skills/{skill_id}` |
+| [Delete a Skill and its versions](/api-reference/skills/delete-a-skill-and-its-versions) | `DELETE` | `/v1/skills/{skill_id}` |
+| [Download Skill content](/api-reference/skills/download-skill-content) | `GET` | `/v1/skills/{skill_id}/content` |
+| [List Skill versions](/api-reference/skills/list-skill-versions) | `GET` | `/v1/skills/{skill_id}/versions` |
+| [Upload an immutable Skill version](/api-reference/skills/upload-an-immutable-skill-version) | `POST` | `/v1/skills/{skill_id}/versions` |
+| [Retrieve Skill version metadata](/api-reference/skills/retrieve-skill-version-metadata) | `GET` | `/v1/skills/{skill_id}/versions/{version}` |
+| [Delete a Skill version](/api-reference/skills/delete-a-skill-version) | `DELETE` | `/v1/skills/{skill_id}/versions/{version}` |
+| [Download immutable Skill version content](/api-reference/skills/download-immutable-skill-version-content) | `GET` | `/v1/skills/{skill_id}/versions/{version}/content` |

@@ -1,0 +1,12 @@
+---
+title: "Environments"
+description: "Environments. Application API: Project API key."
+---
+
+Public schema constrained by the pinned OpenAI Agents API baseline; documented x_agents_core fields remain Core extensions.
+
+| Operation | Method | Path |
+| --- | --- | --- |
+| [Retrieve an execution Environment](/api-reference/environments/retrieve-an-execution-environment) | `GET` | `/v1/agents/environments/{environment_id}` |
+| [List live Environment files](/api-reference/environments/list-live-environment-files) | `GET` | `/v1/agents/environments/{environment_id}/files` |
+| [Create an Environment file from inline bytes or a source file](/api-reference/environments/create-an-environment-file-from-inline-bytes-or-a-source-file) | `POST` | `/v1/agents/environments/{environment_id}/files` |

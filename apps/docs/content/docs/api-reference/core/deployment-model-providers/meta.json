@@ -1,0 +1,9 @@
+{
+  "title": "Deployment Model Providers",
+  "pages": [
+    "list-harnesses-and-their-deployment-default-model-providers",
+    "retrieve-a-harness-s-deployment-default-model-provider",
+    "replace-a-harness-s-deployment-default-model-provider",
+    "remove-a-harness-s-deployment-default-model-provider"
+  ]
+}

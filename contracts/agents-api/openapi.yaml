@@ -2223,6 +2223,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List reusable Agents
@@ -2293,6 +2297,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a reusable Agent
@@ -2342,6 +2350,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a reusable Agent
@@ -2382,6 +2394,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -2444,6 +2460,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update a reusable Agent
@@ -2492,6 +2512,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -2710,6 +2734,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List Environment Templates
@@ -2764,6 +2792,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create an Environment Template
@@ -2807,6 +2839,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete an Environment Template
@@ -2847,6 +2883,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -2913,6 +2953,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update an Environment Template
@@ -2976,6 +3020,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -3221,6 +3269,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete an execution Session
@@ -3263,6 +3315,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -3323,6 +3379,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -3766,6 +3826,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -4241,6 +4305,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List execution Turns
@@ -4288,6 +4356,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -4572,6 +4644,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List Skills
@@ -4596,6 +4688,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.Skill'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Upload a Skill
@@ -4618,6 +4730,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a Skill and its versions
@@ -4639,6 +4771,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.Skill'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Retrieve Skill metadata
@@ -4668,6 +4820,30 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.Skill'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update the default Skill version
@@ -4691,6 +4867,26 @@ paths:
           description: OK
           schema:
             type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Download Skill content
@@ -4735,6 +4931,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillVersionList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List Skill versions
@@ -4765,6 +4981,30 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillVersion'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Upload an immutable Skill version
@@ -4793,6 +5033,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillVersionDeleted'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a Skill version
@@ -4817,6 +5077,26 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/v1.SkillVersion'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Retrieve Skill version metadata
@@ -4842,6 +5122,26 @@ paths:
           description: OK
           schema:
             type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Download immutable Skill version content
@@ -4920,6 +5220,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: List Vaults
@@ -4968,6 +5272,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -5023,6 +5331,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a Vault and all its Credentials
@@ -5064,6 +5376,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -5148,6 +5464,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
@@ -5276,6 +5596,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete a Vault Credential
@@ -5323,6 +5647,10 @@ paths:
             $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/v1.ErrorResponse'
       security:
