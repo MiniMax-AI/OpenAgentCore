@@ -11,7 +11,7 @@ func TestPlanRejectsNonNativeFrozenProvider(t *testing.T) {
 	for _, protocol := range []string{"anthropic", "chat_completions"} {
 		t.Run(protocol, func(t *testing.T) {
 			provider := map[string]any{"protocol": protocol, "base_url": "https://model.invalid/v1", "api_key": "private-sentinel"}
-			plan, err := BuildSessionPlan("recovered", "frozen-state", t.TempDir(), map[string]any{"model": "frozen-model", "model_provider": provider})
+			plan, err := BuildSessionPlan("recovered", "frozen-state", map[string]any{"model": "frozen-model", "model_provider": provider})
 			if plan.Cleanup != nil {
 				plan.Cleanup()
 			}
@@ -30,7 +30,7 @@ func TestPlanRejectsIncompleteExplicitProvider(t *testing.T) {
 		{"model": "chosen", "model_provider": nil},
 		{"model_provider": map[string]any{"protocol": "responses", "base_url": "https://model.example/v1", "api_key": "fixture"}},
 	} {
-		if _, err := BuildSessionPlan("frozen", "state", "", options); err == nil {
+		if _, err := BuildSessionPlan("frozen", "state", options); err == nil {
 			t.Fatal("explicit provider fell back to native defaults")
 		}
 	}

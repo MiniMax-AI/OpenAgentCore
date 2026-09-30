@@ -15,7 +15,7 @@ func TestVerbosityConfiguration(t *testing.T) {
 				opts["model_verbosity"] = mode
 				want = [][2]string{{"model_verbosity", `"` + mode + `"`}}
 			}
-			plan, err := BuildSessionPlan("run", "state", "", opts)
+			plan, err := BuildSessionPlan("run", "state", opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -26,7 +26,7 @@ func TestVerbosityConfiguration(t *testing.T) {
 		})
 	}
 	for _, value := range []any{nil, "", "enabled", true, 1, map[string]any{}, []any{}} {
-		if _, err := BuildSessionPlan("run", "state", "", map[string]any{"model_verbosity": value}); err == nil {
+		if _, err := BuildSessionPlan("run", "state", map[string]any{"model_verbosity": value}); err == nil {
 			t.Fatalf("accepted invalid model_verbosity %T", value)
 		}
 	}

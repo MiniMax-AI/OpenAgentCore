@@ -3,12 +3,15 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/google/uuid"
 )
 
 func TestNativeSessionRecoveryRequiresPinnedNative(t *testing.T) {
@@ -141,6 +144,13 @@ func TestRequiredHistoryResolution(t *testing.T) {
 func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 	req, cfg, root := preparationFixture(t)
 	req.RequireExistingNativeSession = true
+	// Recovery searches history for the bound workspace root.
+	workspace := filepath.Join(root, "workspace")
+	if err := os.Mkdir(workspace, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	req.DisableExecutionEnvironment = false
+	req.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}, WorkspaceRoot: workspace}
 	p, err := newPreparation(t.Context(), req, cfg)
 	if err != nil {
 		t.Fatal(err)

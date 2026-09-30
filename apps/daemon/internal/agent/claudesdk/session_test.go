@@ -74,7 +74,7 @@ func TestTextFactoryCompletionAndFailures(t *testing.T) {
 }
 
 func TestTextFactoryRejectsUnsupportedInput(t *testing.T) {
-	for _, kind := range []string{"execution-controls", "tool", "option", "relative", "outside"} {
+	for _, kind := range []string{"execution-controls", "tool", "option", "outside"} {
 		t.Run(kind, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
@@ -87,8 +87,6 @@ func TestTextFactoryRejectsUnsupportedInput(t *testing.T) {
 				request.FunctionTools = []proto.FunctionTool{{}}
 			case "option":
 				request.AgentOptions["allowed_tools"] = "anything"
-			case "relative":
-				request.WorkDir = "relative"
 			case "outside":
 				config.StateDir = filepath.Dir(root)
 			}

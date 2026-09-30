@@ -18,8 +18,7 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 	r := executionRequest(t)
 	r.RunID, r.Input, r.ConversationID = "", nil, ""
 	r.DisableExecutionEnvironment = false
-	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled"}
-	r.WorkDir = t.TempDir()
+	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}
 	record := filepath.Join(t.TempDir(), "calls")
 	exe, err := os.Executable()
 	if err != nil {
@@ -31,7 +30,7 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: r.WorkDir, Network: "enabled", Scratch: t.TempDir()}, r, record
+	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: r.LocalEnvironment.WorkspaceRoot, Network: "enabled", Scratch: t.TempDir()}, r, record
 }
 
 func TestPreparedWorkspaceHasOneInputAndOutputOwner(t *testing.T) {
@@ -48,7 +47,7 @@ func TestPreparedWorkspaceHasOneInputAndOutputOwner(t *testing.T) {
 	if err != nil || strings.Contains(string(raw), "session/prompt") {
 		t.Fatalf("preparation consumed input: %q %v", raw, err)
 	}
-	if p.session.opts.Dir != r.WorkDir || p.session.opts.DataDir == r.WorkDir {
+	if p.session.opts.Dir != r.LocalEnvironment.WorkspaceRoot || p.session.opts.DataDir == r.LocalEnvironment.WorkspaceRoot {
 		t.Fatal("native cwd must use the workspace without moving Session state")
 	}
 	out := make(chan proto.Envelope)

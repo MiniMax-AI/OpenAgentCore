@@ -15,7 +15,7 @@ func TestWebSearchConfiguration(t *testing.T) {
 				opts["web_search"] = mode
 				want = [][2]string{{"web_search", `"` + mode + `"`}}
 			}
-			plan, err := BuildSessionPlan("run", "state", "", opts)
+			plan, err := BuildSessionPlan("run", "state", opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -26,7 +26,7 @@ func TestWebSearchConfiguration(t *testing.T) {
 		})
 	}
 	for _, value := range []any{nil, "", "enabled", true, 1, map[string]any{}, []any{}} {
-		if _, err := BuildSessionPlan("run", "state", "", map[string]any{"web_search": value}); err == nil {
+		if _, err := BuildSessionPlan("run", "state", map[string]any{"web_search": value}); err == nil {
 			t.Fatalf("accepted invalid web_search %T", value)
 		}
 	}

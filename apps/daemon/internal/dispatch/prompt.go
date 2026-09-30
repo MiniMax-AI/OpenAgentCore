@@ -61,7 +61,7 @@ func (r *Router) handlePromptRequest(callerCtx context.Context, env proto.Envelo
 	}
 	r.log.InfoContext(callerCtx, "handlePromptRequest: decoded",
 		"run_id", runID, "agent_kind", req.AgentKind,
-		"work_dir", req.WorkDir, "message_count", len(req.Input),
+		"message_count", len(req.Input),
 		"has_agent_options", req.AgentOptions != nil,
 		"agent_session_id", req.AgentSessionID,
 		"agent_state_key", req.AgentStateKey)

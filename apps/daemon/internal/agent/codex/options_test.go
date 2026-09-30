@@ -3,13 +3,12 @@ package codex
 import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
-	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "", nil)
+	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
@@ -26,7 +25,7 @@ func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
 }
 
 func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
-	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "", map[string]any{
+	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", map[string]any{
 		"env": map[string]any{
 			"OPENAI_API_KEY": "sk-test",
 		},
@@ -61,11 +60,11 @@ func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
 
 func TestBuildSessionPlan_StableCodexHomeByStateKey(t *testing.T) {
 	stateKey := "conv-stable/agent-stable/codex"
-	planA, err := BuildSessionPlan("run-a", stateKey, "", nil)
+	planA, err := BuildSessionPlan("run-a", stateKey, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan A: %v", err)
 	}
-	planB, err := BuildSessionPlan("run-b", stateKey, "", nil)
+	planB, err := BuildSessionPlan("run-b", stateKey, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan B: %v", err)
 	}
@@ -75,7 +74,7 @@ func TestBuildSessionPlan_StableCodexHomeByStateKey(t *testing.T) {
 }
 
 func TestBuildSessionPlan_RoutesReasoningSummary(t *testing.T) {
-	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "", map[string]any{
+	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", map[string]any{
 		"reasoning_summary": "detailed",
 	})
 	if err != nil {
@@ -104,7 +103,7 @@ func codexHomeFromEnv(env []string) string {
 }
 
 func TestBuildSessionPlan_OverrideSystemPromptReplacesAppend(t *testing.T) {
-	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "", map[string]any{
+	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", map[string]any{
 		"system_prompt":          "user base",
 		"override_system_prompt": "you are pirate",
 	})
@@ -118,7 +117,7 @@ func TestBuildSessionPlan_OverrideSystemPromptReplacesAppend(t *testing.T) {
 }
 
 func TestBuildSessionPlan_EmptyOverrideKeepsSystemPrompt(t *testing.T) {
-	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "", map[string]any{
+	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", map[string]any{
 		"system_prompt":          "user base",
 		"override_system_prompt": "",
 	})
@@ -132,7 +131,7 @@ func TestBuildSessionPlan_EmptyOverrideKeepsSystemPrompt(t *testing.T) {
 }
 
 func TestBuildSessionPlan_ParsesCollaborationMode(t *testing.T) {
-	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "", map[string]any{
+	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", map[string]any{
 		"mode": "plan",
 	})
 	if err != nil {
@@ -151,7 +150,7 @@ func TestBuildSessionPlan_OmittedModeRetainsCurrentInstructions(t *testing.T) {
 		if mode != "" {
 			opts["mode"] = mode
 		}
-		plan, err := BuildSessionPlan("run", "conv/agent/codex", "", opts)
+		plan, err := BuildSessionPlan("run", "conv/agent/codex", opts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +162,7 @@ func TestBuildSessionPlan_OmittedModeRetainsCurrentInstructions(t *testing.T) {
 }
 
 func TestBuildSessionPlan_RejectsUnknownCollaborationMode(t *testing.T) {
-	_, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "", map[string]any{
+	_, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", map[string]any{
 		"mode": "autopilot",
 	})
 	if err == nil || !strings.Contains(err.Error(), "unsupported collaboration mode") {
@@ -171,38 +170,8 @@ func TestBuildSessionPlan_RejectsUnknownCollaborationMode(t *testing.T) {
 	}
 }
 
-func TestBuildSessionPlan_RejectsRelativeWorkDir(t *testing.T) {
-	_, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "relative/dir", nil)
-	if err == nil {
-		t.Fatal("relative work_dir must error")
-	}
-}
-
-// TestBuildSessionPlan_CreatesMissingWorkDir:
-// a non-existent absolute path is mkdir -p'd so a user can pin a fresh
-// project root in the agent wizard. Without this, codex agents would
-// hard-fail the first turn instead of running.
-func TestBuildSessionPlan_CreatesMissingWorkDir(t *testing.T) {
-	target := filepath.Join(t.TempDir(), "missing", "parents", "leaf")
-	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", target, nil)
-	if err != nil {
-		t.Fatalf("BuildSessionPlan: %v", err)
-	}
-	defer plan.Cleanup()
-	if plan.Cwd != target {
-		t.Fatalf("plan.Cwd = %q, want %q", plan.Cwd, target)
-	}
-	info, err := os.Stat(target)
-	if err != nil {
-		t.Fatalf("stat target: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("target %q is not a directory", target)
-	}
-}
-
 func TestBuildSessionPlan_WritesMCPConfig(t *testing.T) {
-	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "", map[string]any{
+	plan, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", map[string]any{
 		"mcp_servers": map[string]any{
 			"docs": map[string]any{
 				"command": "docs-server",
@@ -242,7 +211,7 @@ func TestBuildSessionPlan_WritesMCPConfig(t *testing.T) {
 }
 
 func TestBuildSessionPlan_MissingMCPCommandErrors(t *testing.T) {
-	_, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", "", map[string]any{
+	_, err := BuildSessionPlan("run-1", "conv-1/agent-1/codex", map[string]any{
 		"mcp_servers": map[string]any{
 			"broken": map[string]any{
 				"args": []any{"--x"},

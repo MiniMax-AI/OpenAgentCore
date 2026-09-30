@@ -21,7 +21,7 @@ func TestExecutionControlsOverrideWithoutMutatingNativeOptions(t *testing.T) {
 			if options["model"] != "test-model" || original["web_search"] != "live" || original["model_verbosity"] != "high" {
 				t.Fatal("operator options mutated")
 			}
-			plan, err := BuildSessionPlan("run", "state", "", options)
+			plan, err := BuildSessionPlan("run", "state", options)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -49,7 +49,7 @@ func TestExecutionControlsRejectIncompleteOrInvalidValues(t *testing.T) {
 		{WebSearch: "invalid", TextVerbosity: "medium"}, {WebSearch: "disabled", TextVerbosity: "invalid"},
 	} {
 		options := executionOptions(proto.PromptRequestPayload{ExecutionControls: &controls})
-		if plan, err := BuildSessionPlan("run", "state", "", options); err == nil {
+		if plan, err := BuildSessionPlan("run", "state", options); err == nil {
 			plan.Cleanup()
 			t.Fatal("invalid controls accepted", controls)
 		}

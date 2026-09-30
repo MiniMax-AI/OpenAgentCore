@@ -19,7 +19,7 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 		return r, nil
 	}
 	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.CapabilitySources == nil ||
-		r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey || r.WorkDir != b.workspace {
+		r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey || r.LocalEnvironment.WorkspaceRoot != b.workspace {
 		return r, agentcapabilities.ErrInvalid
 	}
 	b.capabilityMu.Lock()

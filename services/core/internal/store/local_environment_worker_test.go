@@ -125,7 +125,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 		}
 	}
 	var prepare proto.ExecutionPreparePayload
-	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID || prepare.Configuration.WorkDir != "" {
+	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID {
 		t.Fatal("local preparation lost identity")
 	}
 	before, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)

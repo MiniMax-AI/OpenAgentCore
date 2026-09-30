@@ -20,7 +20,9 @@
 // Runtime registration and Core service qualification remain separate. A public
 // Harness also needs a profile in services/core/internal/engine; advertising
 // a capability cannot authorize it. Requests, events and capability descriptors
-// use the existing internal/agentdaemon/proto types.
+// use the existing internal/agentdaemon/proto types. An Environment execution
+// request carries the Runtime's bound workspace directory in
+// LocalEnvironment.WorkspaceRoot; the native Harness runs there.
 package agent
 
 import (

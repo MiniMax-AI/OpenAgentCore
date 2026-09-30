@@ -63,7 +63,6 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 		name string
 		edit func(*proto.PromptRequestPayload)
 	}{
-		{"relative workdir", func(r *proto.PromptRequestPayload) { r.WorkDir = "relative" }},
 		{"oversized instructions", func(r *proto.PromptRequestPayload) { r.AgentOptions["system_prompt"] = strings.Repeat("x", 32*1024+1) }},
 		{"attachment", func(r *proto.PromptRequestPayload) {
 			r.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}

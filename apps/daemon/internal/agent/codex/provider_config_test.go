@@ -156,7 +156,7 @@ func TestNormaliseProviderConfig_Nil(t *testing.T) {
 }
 
 func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
-	plan, err := BuildSessionPlan("run-x", "conv-1/agent-1/codex", "", map[string]any{
+	plan, err := BuildSessionPlan("run-x", "conv-1/agent-1/codex", map[string]any{
 		"model": "fixture-model",
 		"model_provider": map[string]any{"protocol": "responses",
 			"base_url": "https://x/v1",
@@ -194,7 +194,7 @@ func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
 }
 
 func TestBuildSessionPlan_NoProviderLeavesBuiltinDefault(t *testing.T) {
-	plan, err := BuildSessionPlan("run-y", "conv-1/agent-1/codex", "", nil)
+	plan, err := BuildSessionPlan("run-y", "conv-1/agent-1/codex", nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}

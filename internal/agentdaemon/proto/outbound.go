@@ -53,12 +53,6 @@ type PromptRequestPayload struct {
 	// Input preserves ordered user messages and content.
 	Input MessageInput `json:"input,omitempty"`
 
-	// WorkDir is the cwd for the agent subprocess. Local mode: user's
-	// chosen project root. Sandbox mode: empty — the daemon falls
-	// back to a per-conversation scratch dir so plugin installs and
-	// the subprocess cwd stay on the same tree.
-	WorkDir string `json:"work_dir,omitempty"`
-
 	// AgentOptions carries agent-specific overrides (model, mode,
 	// allowed_tools, system_prompt, mcp_servers, plugin_dirs, env,
 	// ...). The daemon's agent interprets these; the gateway never

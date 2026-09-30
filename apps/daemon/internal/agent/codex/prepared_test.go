@@ -32,7 +32,6 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 			// Caller-owned data cannot revise the prepared native configuration.
 			req.AgentOptions["model"] = "different-model"
 			req.AgentSessionID = "different-thread"
-			req.WorkDir = "/different-workspace"
 			copy(req.FunctionTools[0].Parameters, strings.ReplaceAll(string(req.FunctionTools[0].Parameters), "integer", "boolean"))
 			out := make(chan proto.Envelope, 8)
 			startCtx, stopStart := context.WithCancel(t.Context())

@@ -76,15 +76,16 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 }
 
 func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
-	for _, name := range []string{"none", "work-dir", "mcp", "caller-policy", "relative", "missing", "ambient-setting", "duplicate-env", "bad-env"} {
+	for _, name := range []string{"none", "workspace-root", "mcp", "caller-policy", "relative", "missing", "ambient-setting", "duplicate-env", "bad-env"} {
 		t.Run(name, func(t *testing.T) {
 			config := workspaceFixture(t)
 			req := workspaceRequest()
 			switch name {
 			case "none":
 				req.DisableExecutionEnvironment = true
-			case "work-dir":
-				req.WorkDir = config.Workspace.ScratchDir
+			case "workspace-root":
+				config.Workspace.NetworkAccess = "enabled"
+				req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: config.Workspace.ScratchDir}
 			case "mcp":
 				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
 			case "caller-policy":
@@ -142,7 +143,7 @@ func TestPublicMCPUsesWorkspaceProjectionWithoutCredentialCopy(t *testing.T) {
 	config := workspaceFixture(t)
 	config.Workspace.NetworkAccess = "enabled"
 	req := workspaceRequest()
-	req.LocalEnvironment = &proto.LocalEnvironment{NetworkAccess: "enabled"}
+	req.LocalEnvironment = &proto.LocalEnvironment{NetworkAccess: "enabled", WorkspaceRoot: config.Workspace.Directory}
 	token := "vault-selected-canary"
 	tools := []string{"prove"}
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", AllowedTools: &tools, Required: true, BearerToken: &token}}

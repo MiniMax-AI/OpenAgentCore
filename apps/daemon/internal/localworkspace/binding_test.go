@@ -28,10 +28,10 @@ func testBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, NetworkAccess: "disabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}, AgentStateKey: "agents-api-" + session, StrictResume: true, ReleaseOnCompletion: true}
 }
 
-func TestBindingRejectsScopeAndPathOverrides(t *testing.T) {
+func TestBindingRejectsScopeOverrides(t *testing.T) {
 	b, valid := testBinding(t)
 	configured, err := b.Configure(valid)
-	if err != nil || configured.WorkDir != b.workspace {
+	if err != nil || configured.LocalEnvironment.WorkspaceRoot != b.workspace {
 		t.Fatalf("frozen cwd: %+v %v", configured, err)
 	}
 	for name, mutate := range map[string]func(*proto.PromptRequestPayload){
@@ -40,7 +40,6 @@ func TestBindingRejectsScopeAndPathOverrides(t *testing.T) {
 			r.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString()}
 		},
 		"other Session":     func(r *proto.PromptRequestPayload) { r.AgentStateKey = "agents-api-" + uuid.NewString() },
-		"path override":     func(r *proto.PromptRequestPayload) { r.WorkDir = b.workspace },
 		"none":              func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
 		"product authoring": func(r *proto.PromptRequestPayload) { r.WorkspaceAuthoring = true },
 		"non-strict resume": func(r *proto.PromptRequestPayload) { r.StrictResume = false },

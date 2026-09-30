@@ -69,7 +69,7 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 		return r, nil
 	}
 	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey ||
-		r.DisableExecutionEnvironment || r.WorkDir != "" ||
+		r.DisableExecutionEnvironment ||
 		r.ConversationID != "" || r.WorkspaceAuthoring || !r.StrictResume {
 		return r, errors.New("request does not match the dedicated local Environment")
 	}
@@ -93,8 +93,8 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 			return r, agentcapabilities.ErrInvalid
 		}
 		local.Skills, local.MCP, local.CapabilityRoot = nil, nil, ""
+		local.WorkspaceRoot = b.workspace
 		r.LocalEnvironment = &local
-		r.WorkDir = b.workspace
 	}
 	return r, nil
 }

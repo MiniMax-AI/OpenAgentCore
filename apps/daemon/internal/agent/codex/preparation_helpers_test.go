@@ -41,7 +41,7 @@ func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig
 	cfg := defaultSessionConfig()
 	cfg.codexBinary = binary
 	req := proto.PromptRequestPayload{
-		AgentKind: "codex", AgentStateKey: "prepared-session", WorkDir: filepath.Join(root, "harness"),
+		AgentKind: "codex", AgentStateKey: "prepared-session",
 		ReleaseOnCompletion: true, StrictResume: true,
 		AgentOptions:                map[string]any{"model": "fixture-model", "model_verbosity": "medium"},
 		DisableExecutionEnvironment: true,

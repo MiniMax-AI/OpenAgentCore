@@ -21,7 +21,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if err != nil {
 		return SessionPlan{}, nil, err
 	}
-	plan, err := BuildSessionPlan(req.RunID, req.AgentStateKey, req.WorkDir, req.AgentOptions)
+	plan, err := BuildSessionPlan(req.RunID, req.AgentStateKey, req.AgentOptions)
 	if err != nil {
 		return SessionPlan{}, nil, fmt.Errorf("codex: build session plan: %w", err)
 	}
@@ -31,6 +31,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	}
 	disableProgrammaticTools(&plan, req.ExecutionControls)
 	if req.LocalEnvironment != nil {
+		plan.Cwd = req.LocalEnvironment.WorkspaceRoot
 		plan.Sandbox = "danger-full-access"
 		plan.Permissions = ""
 		plan.ApprovalPolicy = AskForApproval{String: "never"}
