@@ -9,9 +9,11 @@ import (
 	"os"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/cli"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 )
 
 func main() {
+	sessionview.Init()
 	if err := cli.Execute(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "oac-daemon: %v\n", err)
 		os.Exit(1)

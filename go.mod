@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/hanwen/go-fuse/v2 v2.11.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/moby/moby/api v1.56.0
 	github.com/moby/moby/client v0.6.0
