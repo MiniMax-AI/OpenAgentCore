@@ -48,6 +48,40 @@ func TestSandboxE2BEndpointPersistenceAndOnlineSwitch(t *testing.T) {
 		t.Fatal("online endpoint switch failed", changed, err)
 	}
 }
+
+func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
+	_, pool := newManagedTestStore(t)
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewWithCredentialCipher(pool, cipher)
+	w := executionLease(t, s).Store()
+	installation := uuid.NewString()
+	if err := w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
+		t.Fatal(err)
+	}
+	input := e2bSelection()
+	input.E2B.APIURL, input.E2B.Domain = "https://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai"
+	configured, err := w.InitializeSandboxDeployment(t.Context(), installation, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := SandboxResetTestContext(t.Context())
+	reset, err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: configured.Generation, Clear: "force"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty, err := w.CompleteSandboxReset(ctx, installation, configured.Generation, reset.Reset.RequestedAt)
+	if err != nil || empty.Provider != "" || empty.Reset != nil || empty.Generation != configured.Generation+1 {
+		t.Fatal("custom endpoint blocked reset completion", empty, err)
+	}
+	var apiURL, domain string
+	if err := pool.QueryRow(t.Context(), "SELECT e2b_api_url, e2b_domain FROM runtime_deployment").Scan(&apiURL, &domain); err != nil || apiURL != "" || domain != "" {
+		t.Fatal("reset retained custom endpoint", apiURL, domain, err)
+	}
+}
+
 func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{4}, 32))
