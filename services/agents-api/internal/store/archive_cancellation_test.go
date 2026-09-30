@@ -98,7 +98,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			t.Cleanup(func() { conn.Close() })
 			h := &dispatchHarness{t: t, s: s, tenant: project.TenantID, session: session, conn: conn, registry: registry, d: &execution.Dispatcher{Store: writer, Registry: registry}}
 			capabilities := workerEnvironmentCapabilities()
-			capabilities.FunctionTools = true
+			capabilities.FunctionTools = proto.CapabilitySupported
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: capabilities}}})
 			var peer *gateway.Session
 			for deadline := time.Now().Add(3 * time.Second); ; {

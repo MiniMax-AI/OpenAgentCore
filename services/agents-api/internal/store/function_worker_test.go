@@ -54,7 +54,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				for {
 					peer, _ := h.registry.LookupDevice(h.device.ID)
 					info, _, _ := peer.AgentKindStatus("codex")
-					if info.Capabilities.Preparation == caps.Preparation && info.Capabilities.DurableInputReceipts == caps.DurableInputReceipts && info.Capabilities.ExecutionControls == caps.ExecutionControls && info.Capabilities.FunctionTools == caps.FunctionTools && info.Capabilities.ToolObservations == caps.ToolObservations && info.Capabilities.MCPHTTPTools == caps.MCPHTTPTools && info.Capabilities.MCPHTTPBearerAuth == caps.MCPHTTPBearerAuth && info.Capabilities.MCPHTTPRequired == caps.MCPHTTPRequired {
+					if info.Capabilities.Preparation == caps.Preparation.IsSupported() && info.Capabilities.DurableInputReceipts == caps.DurableInputReceipts.IsSupported() && info.Capabilities.ExecutionControls == caps.ExecutionControls.IsSupported() && info.Capabilities.FunctionTools == caps.FunctionTools.IsSupported() && info.Capabilities.ToolObservations == caps.ToolObservations.IsSupported() && info.Capabilities.MCPHTTPTools == caps.MCPHTTPTools.IsSupported() && info.Capabilities.MCPHTTPBearerAuth == caps.MCPHTTPBearerAuth.IsSupported() && info.Capabilities.MCPHTTPRequired == caps.MCPHTTPRequired.IsSupported() {
 						break
 					}
 					if time.Now().After(deadline) {
@@ -89,8 +89,8 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 						t.Fatal("bound an incapable device", err)
 					}
 				}
-				caps.Preparation, caps.DurableInputReceipts, caps.ExecutionControls, caps.ToolObservations, caps.MCPHTTPTools = true, true, true, true, true
-				caps.MCPHTTPBearerAuth, caps.FunctionTools, caps.MCPHTTPRequired = true, !isMCP, true
+				caps.Preparation, caps.DurableInputReceipts, caps.ExecutionControls, caps.ToolObservations, caps.MCPHTTPTools = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
+				caps.MCPHTTPBearerAuth, caps.FunctionTools, caps.MCPHTTPRequired = proto.CapabilitySupported, proto.CapabilityFromBool(!isMCP), proto.CapabilitySupported
 				heartbeat()
 				request := h.read(testExecutionRequest)
 				var prompt proto.PromptRequestPayload

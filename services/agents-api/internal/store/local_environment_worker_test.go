@@ -27,10 +27,10 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 	}
 	caps := prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})
 	if execute {
-		caps.WorkspaceOutputExport = true
-		caps.Streaming, caps.Steering, caps.DurableTurns, caps.DurableInputReceipts = true, true, true, true
-		caps.WebSearchControl, caps.TextVerbosity, caps.ExecutionControls = true, true, true
-		caps.SubagentControl, caps.ToolObservations = true, true
+		caps.WorkspaceOutputExport = proto.CapabilitySupported
+		caps.Streaming, caps.Steering, caps.DurableTurns, caps.DurableInputReceipts = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
+		caps.WebSearchControl, caps.TextVerbosity, caps.ExecutionControls = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
+		caps.SubagentControl, caps.ToolObservations = proto.CapabilitySupported, proto.CapabilitySupported
 	} else {
 		h.d.Options = func(context.Context, store.Session) (map[string]any, error) {
 			t.Error("directory read requested model credentials")

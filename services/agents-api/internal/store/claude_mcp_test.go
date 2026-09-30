@@ -68,8 +68,8 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 						t.Fatal("bound an incapable runtime", err)
 					}
 				}
-				caps.MCPHTTPTools, caps.MCPHTTPBearerAuth = true, authenticated
-				caps.MCPHTTPRequired = required
+				caps.MCPHTTPTools, caps.MCPHTTPBearerAuth = proto.CapabilitySupported, proto.CapabilityFromBool(authenticated)
+				caps.MCPHTTPRequired = proto.CapabilityFromBool(required)
 				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
 				var prompt proto.PromptRequestPayload
 				if h.read(testExecutionRequest).DecodePayload(&prompt) != nil || prompt.AgentKind != "claude_sdk" || prompt.MCPHTTPServers == nil || len(*prompt.MCPHTTPServers) != 1 {
@@ -107,7 +107,7 @@ func TestClaudeMCPUnsupportedSnapshotRejectedBeforeClaim(t *testing.T) {
 			claudeSession(t, h, configuration, true)
 			caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
 			if profile == "missing required capability" {
-				caps.MCPHTTPRequired = false
+				caps.MCPHTTPRequired = proto.CapabilityUnsupported
 			}
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
 			deadline := time.Now().Add(3 * time.Second)
