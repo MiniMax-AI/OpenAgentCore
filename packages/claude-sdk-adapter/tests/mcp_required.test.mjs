@@ -10,10 +10,15 @@ const fixture = `
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 const mode=process.argv[1];
+const workspace=mode.startsWith("workspace-");
+const baseline=workspace?["Bash","Read","Edit"]:[];
 const sdk='export function startup(args){return globalThis.startup(args);} export function query(args){return globalThis.direct(args);} export async function getSessionInfo(){return process.argv[1]==="missing-history"?undefined:{sessionId:"native"};}';
 registerHooks({resolve(s,c,next){return s==="@anthropic-ai/claude-agent-sdk"?{url:"data:text/javascript,"+encodeURIComponent(sdk),shortCircuit:true}:next(s,c);}});
 function create(options){
- assert.deepEqual(options.tools,[]);assert.equal(options.strictMcpConfig,true);assert.equal(options.hooks.PreToolUse.length,1);
+ assert.deepEqual(options.tools,baseline);
+ assert.equal(options.agent,"oac_root");
+ assert.deepEqual(options.agents.oac_root.tools,[...baseline,...(mode==="workspace-empty"?[]:["mcp__fixture__echo"])]);
+ assert.deepEqual(options.disallowedTools,mode==="workspace-empty"?["mcp__fixture__*","mcp__optional__*"]:["mcp__optional__*"]);assert.equal(options.strictMcpConfig,true);assert.equal(options.hooks.PreToolUse.length,1);
  assert.equal(options.mcpServers.fixture.alwaysLoad,true);
  const child=options.spawnClaudeCodeProcess({command:process.execPath,args:["-e","process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"],env:options.env,signal:options.abortController.signal});
  process.send({kind:"spawn"});
@@ -37,7 +42,7 @@ function create(options){
    async *[Symbol.asyncIterator](){
     const first=await pending;if(first.done)return;
     assert.ok(readiness||mode==="optional");process.send({kind:"input",text:first.value.message.content[0].text});
-    yield {type:"system",subtype:"init",session_id:mode==="wrong-history"?"foreign":"native",tools:["mcp__fixture__echo"],mcp_servers:[]};
+    yield {type:"system",subtype:"init",session_id:mode==="wrong-history"?"foreign":"native",tools:[...baseline,...(mode==="workspace-empty"?[]:["mcp__fixture__echo"])],mcp_servers:[]};
     yield {type:"result",uuid:"result",session_id:"native",user_message_uuids:[first.value.uuid],subtype:"success",is_error:false,result:"done",usage:{input_tokens:1,output_tokens:1},modelUsage:{}};
    }
   };
@@ -49,10 +54,10 @@ await import(${JSON.stringify(new URL("../dist/main.js", import.meta.url).href)}
 process.disconnect();
 `;
 
-for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "missing-hooks", "cancelled", "resume", "wrong-history", "missing-history", "optional"]) {
+for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "missing-hooks", "cancelled", "resume", "wrong-history", "missing-history", "optional", "workspace-connected", "workspace-empty"]) {
   test(`required MCP entrypoint holds input through readiness: ${mode}`, async () => {
     const cwd = mkdtempSync(join(tmpdir(), "oac-required-"));
-    const child = spawn(process.execPath, ["--input-type=module", "-e", fixture, mode], { stdio: ["pipe", "pipe", "pipe", "ipc"] });
+    const child = spawn(process.execPath, ["--input-type=module", "-e", fixture, mode], { stdio: ["pipe", "pipe", "pipe", "ipc"], env: {...process.env,HOME:cwd,CLAUDE_CONFIG_DIR:cwd} });
     const observations = [];
     let stdout = "", stderr = "";
     child.stdout.on("data", b => { stdout += b; });
@@ -61,15 +66,16 @@ for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "m
     const closed = new Promise(resolve => child.once("close", (code, signal) => resolve({ code, signal })));
     const timer = setTimeout(() => child.kill("SIGKILL"), 8000);
     try {
+      const servers = [{ server_label: "fixture", server_url: "https://example.invalid/mcp", allowed_tools: mode === "workspace-empty" ? [] : ["echo"], required: mode !== "optional" },
+        { server_label: "optional", server_url: "https://optional.invalid/mcp", allowed_tools: [], required: false }];
       child.stdin.write(JSON.stringify({ type: "start", model: "fixed", input: [{ content: [{ type: "input_text", text: "one input" }] }], system_prompt: "", cwd,
         ...(mode.includes("history") || mode === "resume" ? { resume: "native" } : {}),
-        mcp_http_servers: [{ server_label: "fixture", server_url: "https://example.invalid/mcp", allowed_tools: ["echo"], required: mode !== "optional" },
-          { server_label: "optional", server_url: "https://optional.invalid/mcp", allowed_tools: [], required: false }] }) + "\n");
+        ...(mode.startsWith("workspace-") ? {workspace:{home:cwd,state:cwd,scratch:cwd,capability_root:cwd,env_names:[],network_access:"enabled",mcp:servers}} : {mcp_http_servers:servers}) }) + "\n");
       const exit = await closed;
       assert.equal(exit.signal, null, stderr);
       assert.equal(exit.code, 0, stderr);
       const events = stdout.trim().split("\n").map(JSON.parse);
-      const success = ["connected", "resume", "optional"].includes(mode);
+      const success = ["connected", "resume", "optional", "workspace-connected", "workspace-empty"].includes(mode);
       assert.equal(events.at(-1).type, success ? "result" : "error");
       assert.equal(observations.filter(v => v.kind === "input").length, success || mode === "wrong-history" ? 1 : 0);
       assert.equal(events.some(e => e.type === "prepared"), false);

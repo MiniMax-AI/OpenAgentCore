@@ -8,285 +8,81 @@ web
 
 ## Users
 
-The primary user is the administrator who deployed OpenAgentCore: a self-hosted,
-OpenAI Agents API compatible execution service. After signing in to the paired
-console they need to answer quickly: is the service healthy, is there enough
-sandbox capacity, how much is each project using, and where is work failing.
-They also create projects and issue their keys, enroll execution nodes, and clean
-up or redistribute assets between projects.
+The primary user is the administrator who deployed OpenAgentCore: a self-hosted, OpenAI Agents API compatible execution service. After signing in to the paired console they need to answer quickly: is the service healthy, is there enough sandbox capacity, how much is each project using, and where is work failing. They also create projects and issue their keys, enroll execution nodes, and clean up project assets.
 
-API callers (application developers, and Parsar itself) use the Agents API from
-their own code with the keys of their project, not this console. The console is
-the administrator's management tool, comparable to what the provider of a hosted
-API runs internally: it manages the service and its projects, it does not build or
-run things on a caller's behalf.
+API callers (application developers, and Parsar itself) use the Agents API from their own code with the keys of their project, not this console. The console is the administrator's management tool, comparable to what the provider of a hosted API runs internally: it manages the service and its projects, it does not build or run things on a caller's behalf.
 
 ## Product Purpose
 
-A management console for one OpenAgentCore deployment. Success: the administrator
-lands on health, capacity, usage and failures across every project; inspects any
-project's Agents, Environment templates, Skills, Files, Vaults and Session history
-together with the API key that created each of them; deletes assets (for example a
-leaked Credential); manages projects and their named keys; and administers sandbox
-nodes.
+A management console for one OpenAgentCore deployment. Success: the administrator lands on health, capacity, usage and failures across every project; inspects any project's Agents, Environment templates, Skills, Files, Vaults and Session history together with the API key that created each of them; deletes assets (for example a leaked Credential); manages projects and their named keys; and administers sandbox nodes.
 
 ## Positioning
 
-The console runs beside the administrator's own Core, with execution, files and
-credentials on infrastructure they control. It shows only evidence Core actually
-reports and never invents readiness, traffic or zero values for missing data. It
-is not a playground: there is no Agent builder, Session composer or request
-workbench.
+The console runs beside the administrator's own Core, with execution, files and credentials on infrastructure they control. It shows only evidence Core actually reports and never invents readiness, traffic or zero values for missing data. It is not a playground: there is no Agent builder, Session composer or request workbench.
 
 ## Operating Context
 
-- Paired console (`services/core-console`): the administrator signs in with the
-  deployment's Core key, the administration credential the installer writes to
-  `secrets/core.key` under the installation directory (by default
-  `~/.oac/core/secrets/core.key`; keeping and rotating it is described in
-  [Core key](../../docs/getting-started/operations.md#core-key)). There are no
-  console accounts or usernames. Sign-in shows the default file location and a
-  copyable `cat ~/.oac/core/secrets/core.key` command for the Core host, with a
-  reminder to substitute a custom installation directory. The browser sends the key only to sign in and
-  keeps only the session cookie; the console server holds the Core key and forwards
-  the Web API (`/core/v1/**`, including sandbox administration under
-  `/core/v1/sandbox/**`). The console never calls `/v1`.
-- The Core key is not an Agents API identity and cannot call `/v1`. An administrator
-  who wants to call the Agents API issues a project API key like any other caller.
-- `/console/config` reports the node installer (`node_installer`,
-  `node_installer_sha256`), offered only with a 64-hex digest. Native self-hosted
-  installation does not depend on this endpoint. It also lists the providers it has node files
-  for (`node_artifacts`); without the deployment's provider, Add node says so and
-  issues no command. Signing in grants administration, so sandbox
-  administration is available unless the console explicitly reports
-  `sandbox_admin: false`; then the Nodes page explains that it is not configured
-  and the fleet figures show as unavailable.
+- Paired console (`services/web`): the administrator signs in with the deployment's Core key, the administration credential the installer writes to `secrets/core.key` under the installation directory (by default `~/.oac/core/secrets/core.key`; keeping and rotating it is described in [Core key](../../docs/getting-started/operations.md#core-key)). There are no console accounts or usernames. Sign-in shows the default file location and a copyable `cat ~/.oac/core/secrets/core.key` command for the Core host, with a reminder to substitute a custom installation directory. The browser sends the key only to sign in and keeps only the session cookie; the console server holds the Core key and forwards the Web API (`/core/v1/**`, including sandbox administration under `/core/v1/sandbox/**`). The console never calls `/v1`.
+- The Core key is not an Agents API identity and cannot call `/v1`. An administrator who wants to call the Agents API issues a project API key like any other caller.
+- `/console/config` reports the node installer (`node_installer`, `node_installer_sha256`), offered only with a 64-hex digest. Native self-hosted installation does not depend on this endpoint. It also lists the providers it has node files for (`node_artifacts`); without the deployment's provider, Add node says so and issues no command. Signing in grants administration, sandbox administration included.
 - Chinese and English UI; light and dark themes; reduced motion honored.
 
 ## Information Architecture
 
-- **Monitor**: Overview (service status, running Sessions, sandbox slots, Sessions
-  needing attention, 24-hour Session activity, the topology of Core and its nodes
-  with a popover glance at each, the attention table, usage by project), Agent metrics (requests, errors,
-  duration, tokens, models, tools, Agents and API keys for 1 h / 6 h / 24 h / 7 d),
-  Sandbox metrics (node capacity and hosted Runtimes across projects; a node or a
-  sandbox opens in a dialog with its figures and CPU and memory charts), Session log
-  (every Session, read-only, with a failed Session's reason under its status,
-  opening one Session's history, which jumps to its failed Turns; a self-hosted
-  Session's page also has its environment's executor credentials). Agent
-  metrics' By Agent table opens an Agent's page and, from its failed Turns, its
-  Sessions in the Session log.
-- **Resources**: Agents, Environment templates, Skills, Files, Vaults. Each list
-  shows one project or all projects, with a Project column when all are shown and a
-  Creator column naming the creating key. Detail pages show the resource's facts
-  and offer Delete.
-- **Platform**: Projects and keys (projects, their assets and usage, named keys,
-  write history), Nodes (the node list, capacity, host figures, allocations and
-  individual node operations). Add node asks for limits before issuing its
-  one-time command; installers use Core's public URL and require supported node
-  artifacts. Removal offers the host's uninstall command. System owns installation
-  facts, each harness's default model configuration, startup settings, and a link to
-  the Sandbox configuration secondary page. That page owns setup, resource edits,
-  rollout details and reset. Setup selects a backend, size and Runtime, then asks
-  for a deliberate save; own-machine setup continues to Add node.
-- A node whose provider is not ready names the reason (Docker unreachable, no Docker
-  limits, missing Runtime image, no KVM, missing microsandbox components, a host too
-  small) and its fix in the help tip beside its status, wherever that status shows.
-- A node enrolled with an earlier Core address gets no new sandboxes, so on the Nodes
-  list and its page its status is Old address, with "Remove and add again", never
-  Available.
-- **Sandbox reset** is an explicit administrator operation in System → Sandbox configuration. Auto clear is
-  the default, with a one-hour deadline (5 minutes–24 hours); Force clear requires
-  destructive confirmation. Reset stops new hosted Session admission, clears idle,
-  suspended and pending hosted work, and waits for busy Turns and file writes until
-  Core forces the remaining work. It does not affect self-hosted execution.
-  Histories and persisted Files/Artifacts remain; archived Sessions cannot resume,
-  and unpersisted workspace contents may be lost. Cancel stops further clearing
-  without undoing archives. Core alone reports progress and completion, including
-  resources blocked on named offline nodes; force does not bypass their cleanup.
-  Completion clears the backend configuration and retires old nodes/enrollment
-  credentials. A new configuration is then a separate deliberate save.
-- **Online sandbox configuration** changes the same backend's resources, Runtime
-  or E2B template without retiring existing nodes or changing existing Sessions'
-  resource ownership. New placement follows Core's qualified capacity; saving a
-  target does not promise immediate placement on it. Configuration rollout shows
-  Core's target preparation and retained previous-generation sandbox count. A
-  settled rollout can still have failed, update-required or unknown nodes and old
-  resources. An offline node stays offline even when it has a recorded serving
-  generation. Node and allocation detail distinguish the serving pin, target
-  preparation and each resource's configuration generation.
-- **E2B credential replacement** uses the same configuration form. Setup requires
-  a key; leaving it blank during an update keeps the saved key. An explicit key,
-  even the same value, is verified as a replacement and advances the target generation
-  after successful verification.
-  Another backend or E2B team requires a deliberate reset. A rejected or uncertain
-  replacement never clears the committed configuration or replays the write.
-- **E2B deployments** have no machines: Nodes offers a link to System's sandbox configuration.
-  Overview and Sandbox metrics show the sandboxes Core holds in E2B's cloud
-  (running, starting, size, template build) instead of node capacity, with no node column
-  or Add node action; a sandbox's dialog adds its disk use.
-- **microsandbox** suspends idle sandboxes into snapshots, so its nodes show how
-  many sleep (Core's retained minus active) on the Nodes list, a node's page, Sandbox
-  metrics and Overview; a node's allocations show how long each has been suspended and
-  about when Core reclaims it. Docker never suspends and shows none of it.
-- **Getting started**: signing in opens the console on the Overview; nothing is
-  forced first. While a step is to do, a Getting started checklist on the Overview
-  shows four steps, in any order, each with its state and one action: sandboxes
-  ready (a saved deployment and a node online and ready, or a saved E2B deployment
-  whose template build is not reported as not ready), a default model provider on the default
-  harness (on any enabled harness when none is default),
-  a project with an active key, and a first Session, whose action opens the call
-  samples of the newest active project, preferring one with an active key.
-  Completion comes from reads the
-  console already makes. It can be hidden; Show Getting started in the sidebar
-  opens it again, and it ends with a brief "You're set". While it is open, Add node
-  ends with the next step once its node is ready: the default model provider while that is to
-  do, otherwise back to the checklist. The optional
-  three-chapter tour of the console (Monitor, Resources, Platform) opens from it,
-  on the sign-in stage.
-- Terminology: API terms stay in English in the Chinese UI (Agent, Session, Turn,
-  Skill, Vault, Credential, API key). The sign-in credential is the Core key
-  ("Core Key"); keys issued in a project for applications are project API keys
-  ("项目 API Key"). Provider readiness is "Provider not ready / 提供方未就绪";
-  revoked credentials and keys use "Revoked / 已撤销". A default model provider is
-  a service address and write-only key; the application's Agent `model` chooses
-  the provider-supported model name. A sandbox is Core-managed compute; Runtime
-  names Core's execution observations, and Environment is the Session's API
-  execution environment. These are distinct counts and resources, not synonyms.
+- **Monitor**: Overview (service status, running Sessions, sandbox slots, Sessions needing attention, 24-hour Session activity, the topology of Core and its nodes with a popover glance at each, the attention table, usage by project), Core metrics (the Core process's CPU and memory, execution slots and the Turn queue, connected daemons, the database and background jobs), Agent metrics (requests, errors, duration, tokens, models, tools, Agents and API keys for 1 h / 6 h / 24 h / 7 d), Sandbox metrics (node capacity and hosted Runtimes across projects; a node or a sandbox opens in a dialog with its figures and CPU and memory charts), Session log (every Session, read-only, with a failed Session's reason under its status, opening one Session's history, which jumps to its failed Turns; a self-hosted Session's page also has its environment's executor credentials). Agent metrics' By Agent table opens an Agent's page and, from its failed Turns, its Sessions in the Session log.
+- **Resources**: Agents, Environment templates, Skills, Files, Vaults. Each list shows one project or all projects, with a Project column when all are shown and a Creator column naming the creating key. Detail pages show the resource's facts and offer Delete.
+- **Platform**: Projects and keys (projects, their assets and usage, named keys, write history), Nodes (the node list, capacity, host figures, allocations and individual node operations). Add node asks for limits before issuing its one-time command; installers use Core's public URL and require supported node artifacts. Removal offers the host's uninstall command. System owns installation facts, the Domain and HTTPS secondary page, each harness's default model configuration, startup settings, and a link to the Sandbox configuration secondary page. That page owns setup, resource edits, rollout details and reset. Setup selects a backend, size and Runtime, then asks for a deliberate save; own-machine setup continues to Add node.
+- A node whose provider is not ready names the reason (Docker unreachable, no Docker limits, missing Runtime image, no KVM, missing microsandbox components, a host too small) and its fix in the help tip beside its status, wherever that status shows.
+- A node enrolled with an earlier Core address gets no new sandboxes, so on the Nodes list and its page its status is Old address, with "Remove and add again", never Available.
+- **Sandbox reset** is an explicit administrator operation in System → Sandbox configuration. Auto clear is the default, with a one-hour deadline (5 minutes–24 hours); Force clear requires destructive confirmation. Reset stops new hosted Session admission, clears idle, suspended and pending hosted work, and waits for busy Turns and file writes until Core forces the remaining work. It does not affect self-hosted execution. Histories and persisted Files/Artifacts remain; archived Sessions cannot resume, and unpersisted workspace contents may be lost. Cancel stops further clearing without undoing archives. Core alone reports progress and completion, including resources blocked on named offline nodes; force does not bypass their cleanup. Completion clears the backend configuration and retires old nodes/enrollment credentials. A new configuration is then a separate deliberate save.
+- **Online sandbox configuration** changes the same backend's resources, Runtime or E2B template without retiring existing nodes or changing existing Sessions' resource ownership. New placement follows Core's qualified capacity; saving a target does not promise immediate placement on it. Configuration rollout shows Core's target preparation and retained previous-generation sandbox count. A settled rollout can still have failed, update-required or unknown nodes and old resources. An offline node stays offline even when it has a recorded serving generation. Node and allocation detail distinguish the serving pin, target preparation and each resource's configuration generation.
+- **E2B credential replacement** uses the same configuration form. Setup requires a key; leaving it blank during an update keeps the saved key. An explicit key, even the same value, is verified as a replacement and advances the target generation after successful verification. Another backend or E2B team requires a deliberate reset. A rejected or uncertain replacement never clears the committed configuration or replays the write.
+- **E2B deployments** have no machines: Nodes offers a link to System's sandbox configuration. Overview and Sandbox metrics show the sandboxes Core holds in E2B's cloud (running, starting, size, template build) instead of node capacity, with no node column or Add node action; a sandbox's dialog adds its disk use.
+- **microsandbox** suspends idle sandboxes into snapshots, so its nodes show how many sleep (Core's retained minus active) on the Nodes list, a node's page, Sandbox metrics and Overview; a node's allocations show how long each has been suspended and about when Core reclaims it. Docker never suspends and shows none of it.
+- **Getting started**: signing in opens the console on the Overview; nothing is forced first. While a step is to do, a Getting started checklist on the Overview shows four steps, in any order, each with its state and one action: sandboxes ready (a saved deployment and a node online and ready, or a saved E2B deployment whose template build is not reported as not ready), a default model provider on the default harness (on any enabled harness when none is default), a project with an active key, and a first Session, whose action opens the call samples of the newest active project, preferring one with an active key. Completion comes from reads the console already makes. It can be hidden; Show Getting started in the sidebar opens it again, and it ends with a brief "You're set". While it is open, Add node ends with the next step once its node is ready: the default model provider while that is to do, otherwise back to the checklist. The optional three-chapter tour of the console (Monitor, Resources, Platform) opens from it, on the sign-in stage.
+- Terminology: API terms stay in English in the Chinese UI (Agent, Session, Turn, Skill, Vault, Credential, API key). The sign-in credential is the Core key ("Core Key"); keys issued in a project for applications are project API keys ("项目 API Key"). Provider readiness is "Provider not ready / 提供方未就绪"; revoked credentials and keys use "Revoked / 已撤销". A default model provider is a service address and write-only key; the application's Agent `model` chooses the provider-supported model name. A sandbox is Core-managed compute; Runtime names Core's execution observations, and Environment is the Session's API execution environment. These are distinct counts and resources, not synonyms.
 
 ## Capabilities and Constraints
 
-- **Projects and keys.** A project owns an isolated set of assets shared by all of
-  its named API keys; projects do not see each other's assets. Issuing or revoking
-  a key never touches assets. Archiving a project revokes every key and keeps its
-  assets viewable and deletable; it can't be undone, so its confirmation says so,
-  counts the active keys it revokes and, when there are any, asks for the
-  project's name. Key plaintext is shown once, at issuance, and never
-  stored by the console. Beside it, and without the key on an active project's
-  page, the console tells developers to set `OPENAI_BASE_URL` (the installation's
-  API base URL) and `OPENAI_API_KEY` (a key of the project), with curl and Python
-  samples that list Agents and create a Session.
-- **One home for each setting.** System owns sandbox configuration through its
-  Sandbox configuration secondary page. This is the only place to set up,
-  update, reset or inspect deployment rollout. Nodes owns the node list and
-  individual node operations. Overview and metrics link to these owners instead
-  of repeating their configuration or rollout panels. Resource editing uses a
-  dialog; rollout counts and generations appear in its details dialog.
-- **Web API only.** Every read and write goes through `/core/v1/**`. The console
-  holds no API key and sends nothing to `/v1`.
-- **No asset writes except delete.** Assets are created and changed only by
-  a project's keys through the Agents API. The console does not create or edit
-  Agents or Templates, upload Skills or Files, create or replace Credentials, start
-  Sessions, send input or cancel work. Deletion follows the public deletion rules;
-  a busy Session is not deletable and the console never cancels work to make it so.
-- **Secrets stay write-only.** Credential tokens, Template environment variables and
-  setup commands are never returned, to the administrator included. An Agent's saved
-  model provider shows its protocol, base URL, limits and whether a key is configured,
-  never the key.
-- **Creators.** Core records the key behind every write. The console shows the
-  creating key of each asset and a project's write history; an asset an
-  administrator copied in an earlier release shows as Admin copy and an asset
-  without a record as Unknown.
-- **Waiting for results.** Overview, Session log and Session details name the
-  function whose result the calling application must submit. The console cannot
-  submit that result; environment connection waits stay distinct from function waits.
-- **Session history is read-only.** A Session page reads the Session, its Items and
-  Turns and polls while work is in flight; there is no live event stream.
-- **Failure diagnostics.** Failed Session and Turn rows read Core diagnostics and
-  translate its classified reason. The console never infers a cause from raw
-  logs. Unavailable or mismatched diagnostics offer an explicit read retry;
-  refreshing does not replay execution. Trace Timing keeps each Item's Core
-  receipt interval separate from public Turn times and native tool duration.
-  Historical missing timestamps stay unknown, negative clock intervals stay
-  missing, and bounded response truncation remains visible.
-- **Executor credentials.** Only Core issues the credential file a self-hosted
-  executor needs, with the deployment's Core key. A Session page whose environment
-  is self-hosted has an Executor credentials section: issue a credential (shown
-  once as one line of JSON, to copy or download, never stored), rotate it (the
-  old one stops working immediately) or revoke it (the executor disconnects;
-  installed Runtime state and workspace contents are not deleted). The file lets one
-  executor connect for that environment only; it cannot call the Agents API.
-- **Default provider observations.** Each configured harness offers Usage details
-  for Core's last successful use and any newer classified provider error. Missing
-  records remain unknown; an error at or before the last success is no longer
-  actionable. These are best-effort observations, not readiness checks. Failed
-  refreshes qualify retained records, and replacing the provider starts a new
-  observation history.
-- **Host connection.** Core's connection observation and credential metadata
-  share one five-second read while visible. Never connected, connected,
-  disconnected, bound credential revoked, and unknown are distinct; a recent
-  heartbeat alone never proves connectivity. Only a fresh connected read marks
-  Host connected. Stale or failed reads withhold completion. Recovery rotates
-  the bound key, stops the installed daemon, replaces the host credential file
-  and starts the daemon again.
-- **Connect a host.** Native Linux/macOS and PowerShell installation instructions
-  depend on the Session's remote URL, Environment ID and workspace, not console
-  installer flags or served Python assets. Users privately save the issued JSON,
-  obtain a matching native distribution through the linked guide, and run the
-  interactive install command from its root. Installation asks for the credential
-  file path and does not automatically start the daemon. Run the installed binary
-  in the installation's bin directory with `start`. No model readiness is implied.
-  Credential rotation requires stopping the installed daemon, replacing the
-  configured file and starting that same daemon again. A disconnected daemon may
-  still be running; `start` alone does not replace it. A new key cannot reconnect an already-bound Environment.
-  Accept wss or loopback ws; withhold commands for missing or invalid facts.
-- **Typed write errors.** Known Core codes use shared bilingual copy and safe
-  typed details. Exact Core field paths attach definite refusals to the relevant
-  input. Unknown codes retain Core's fallback message; uncertain write outcomes
-  stay form-level and are never retried automatically.
-- **Read failures.** Overview and Session log distinguish unavailable reads from
-  successful empty results. Failed reads have a visible retry; retained or partial
-  data says it may be incomplete or out of date, and Session filter totals stay
-  missing while any required read has failed. Only successful empty reads show zero.
-- **Local-only address.** Overview, Nodes and System warn when Core reports
-  `local_only`, with the configuration path and apply command Core supplies as
-  copyable instructions. Without a configuration snapshot they state what is
-  missing. Add node is unavailable with a reason; Getting started keeps the first
-  step to do until the public address is fixed. An unread installation address
-  cannot complete that step, and a failed read offers Retry.
-- **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
-  tool and activity figures are still assembled in the browser from bounded reads
-  and state their coverage. Metrics that need new Core endpoints are recorded as
-  backend requirements, not simulated. Usage is cumulative per Session and is not
-  billing.
+- **Projects and keys.** A project owns an isolated set of assets shared by all of its named API keys; projects do not see each other's assets. Issuing or revoking a key never touches assets. Archiving a project revokes every key and keeps its assets viewable and deletable; it can't be undone, so its confirmation says so, counts the active keys it revokes and, when there are any, asks for the project's name. Key plaintext is shown once, at issuance, and never stored by the console. Beside it, and without the key on an active project's page, the console tells developers to set `OPENAI_BASE_URL` (the installation's API base URL) and `OPENAI_API_KEY` (a key of the project), with curl and Python samples that list Agents and create a Session.
+- **One home for each setting.** System owns sandbox configuration through its Sandbox configuration secondary page. This is the only place to set up, update, reset or inspect deployment rollout. Nodes owns the node list and individual node operations. Overview and metrics link to these owners instead of repeating their configuration or rollout panels. Resource editing uses a dialog; rollout counts and generations appear in its details dialog.
+- **Web API only.** Every read and write goes through `/core/v1/**`. The console holds no API key and sends nothing to `/v1`.
+- **No asset writes except delete.** Assets are created and changed only by a project's keys through the Agents API. The console does not create or edit Agents or Templates, upload Skills or Files, create or replace Credentials, start Sessions, send input or cancel work. Deletion follows the public deletion rules; a busy Session is not deletable and the console never cancels work to make it so.
+- **Secrets stay write-only.** Credential tokens, Template environment variables and setup commands are never returned, to the administrator included. An Agent's saved model provider shows its protocol, base URL, limits and whether a key is configured, never the key.
+- **Creators.** Core records the key behind every write. The console shows the creating key of each asset and a project's write history; an asset Core records as an administrator copy (`admin_copy`) shows as Admin copy and an asset without a record as Unknown.
+- **Waiting for results.** Overview, Session log and Session details name the function whose result the calling application must submit. The console cannot submit that result; environment connection waits stay distinct from function waits.
+- **Session history is read-only.** A Session page reads the Session, its Items and Turns and polls while work is in flight; there is no live event stream.
+- **Failure diagnostics.** Failed Session and Turn rows read Core diagnostics and translate its classified reason. The console never infers a cause from raw logs. Unavailable or mismatched diagnostics offer an explicit read retry; refreshing does not replay execution. Trace Timing keeps each Item's Core receipt interval separate from public Turn times and native tool duration. Historical missing timestamps stay unknown, negative clock intervals stay missing, and bounded response truncation remains visible.
+- **Executor credentials.** Core issues executor credentials; the console does so with the deployment's Core key. A Session page whose environment is self-hosted has an Executor credentials section: issue a credential (shown once as one line of JSON, to copy or download, never stored), rotate it (the old one stops working immediately) or revoke it (the executor disconnects; installed Runtime state and workspace contents are not deleted). The file lets one executor connect for that environment only; it cannot call the Agents API.
+- **Default provider observations.** Each configured harness offers Usage details for Core's last successful use and any newer classified provider error. Missing records remain unknown; an error at or before the last success is no longer actionable. These are best-effort observations, not readiness checks. Failed refreshes qualify retained records, and replacing the provider starts a new observation history.
+- **Host connection.** Core's connection observation and credential metadata share one five-second read while visible. Never connected, connected, disconnected, bound credential revoked, and unknown are distinct; a recent heartbeat alone never proves connectivity. Only a fresh connected read marks Host connected. Stale or failed reads withhold completion. Recovery rotates the bound key, stops the installed daemon, replaces the host credential file and starts the daemon again.
+- **Connect a host.** The Linux/macOS and PowerShell commands come from Core's installation read for the Session's environment; the console shows them as they are, with a link to the native installation guide, and never builds one itself. A command downloads the matching installer, installs the chosen Harnesses, starts the daemon and checks its connection. Its authorization expires after 30 minutes; the console reads a fresh one every 20 minutes, and says the command is unavailable when Core has none. No model readiness is implied. Rotating a credential requires stopping the installed daemon, replacing the configured file and starting that same daemon again. A disconnected daemon may still be running; `start` alone does not replace it.
+- **Typed write errors.** Known Core codes use shared bilingual copy and safe typed details. Exact Core field paths attach definite refusals to the relevant input. Unknown codes retain Core's fallback message; uncertain write outcomes stay form-level and are never retried automatically.
+- **Read failures.** Overview and Session log distinguish unavailable reads from successful empty results. Failed reads have a visible retry; retained or partial data says it may be incomplete or out of date, and Session filter totals stay missing while any required read has failed. Only successful empty reads show zero.
+- **Local-only address.** Overview, Nodes and System warn when Core reports `local_only`, with the configuration path and apply command Core supplies as copyable instructions. Without a configuration snapshot they state what is missing. Add node is unavailable with a reason; Getting started keeps the first step to do until the public address is fixed. An unread installation address cannot complete that step, and a failed read offers Retry.
+- **Figures.** Project, Agent and key usage comes from Core's summary; Agent run, tool and activity figures are still assembled in the browser from bounded reads and state their coverage. Metrics that would need new Core endpoints are not simulated. Usage is cumulative per Session and is not billing.
 - Runtime CPU and memory exist only for Core-managed hosted sandboxes.
-- Preserve workflow safety: confirmed deletion, no automatic retry of uncertain
-  writes, no secrets in browser storage.
+- Preserve workflow safety: confirmed deletion, no automatic retry of uncertain writes, no secrets in browser storage.
 
 ## Brand Commitments
 
 - Product name: OpenAgentCore. OpenAgentCore mark assets in `apps/web/public/`.
-- Keep the OpenAgentCore visual identity shared with the public landing (`site/`):
-  neutral grays and a quiet indigo accent. The console uses Inter and Geist Mono
-  on Beautiful UI's foundation tokens and structure; `DESIGN.md` records the system.
-
-Development and build settings use `OAC_WEB_*`. The Vite proxy uses the
-server-only `OAC_WEB_DEV_PROXY_TARGET`, `OAC_WEB_DEV_PROXY_TOKEN` and
-`OAC_WEB_DEV_PROXY_TOKEN_FILE`, defaulting to `~/.oac/dev/web-token` for its private
-token file. Retired `AGENTS_CORE_WEB_*` and the three `AGENTS_API_PROXY_*`
-settings stop startup or build with replacement names, without logging values
-or falling back to the old token path. Browser definitions contain only the
-existing capability flags and validated, non-secret Docker guide profiles.
+- Keep the OpenAgentCore visual identity shared with the public landing (`site/`): neutral grays and a quiet indigo accent. The console uses Inter and Geist Mono on Beautiful UI's foundation tokens and structure; `DESIGN.md` records the system.
 
 ## Evidence on Hand
 
-- Browser acceptance in `apps/web/e2e/`: one test per acceptance behavior against
-  `fixture-console.mjs`, a synthetic console service with deterministic data.
+- Browser acceptance in `apps/web/e2e/`: one test per acceptance behavior against `fixture-console.mjs`, a synthetic console service with deterministic data.
 - No customer data, benchmarks or usage claims exist; do not fabricate them.
 
 ## Product Principles
 
 1. Operations first: health, capacity, usage and failures lead.
-2. Manage, don't operate: the administrator views, deletes and manages projects
-   and keys; assets belong to the projects' keys.
+2. Manage, don't operate: the administrator views, deletes and manages projects and keys; assets belong to the projects' keys.
 3. Report evidence, not assumptions: missing data stays visibly missing.
-4. One page grammar everywhere: the same header, toolbar, tables, metrics and
-   states on every screen.
-5. Projects are the unit: every asset shows the project that owns it and the key
-   that created it.
+4. One page grammar everywhere: the same header, toolbar, tables, metrics and states on every screen.
+5. Projects are the unit: every asset shows the project that owns it and the key that created it.
 6. Deployment-level truth (nodes, configuration) is distinct from project assets.
 
 ## Accessibility & Inclusion
 
-Keyboard navigation with visible focus, reduced-motion support, and bilingual
-Chinese/English copy through the existing i18n modules.
+Keyboard navigation with visible focus, reduced-motion support, and bilingual Chinese/English copy through the existing i18n modules.

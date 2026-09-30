@@ -1,7 +1,7 @@
 package gateway
 
 import (
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"net/http"
 	"net/http/httptest"
 	"strings"

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { EnvironmentTemplate, EnvironmentTemplateResource } from "@agents-core-web/agents-client";
+import type { EnvironmentTemplate, EnvironmentTemplateResource } from "@oac/agents-client";
 import { filterTemplates } from "./template-name";
 import { TemplateDetailPage, skillVersionLabel } from "./TemplateDetail";
 import i18n from "../../i18n";

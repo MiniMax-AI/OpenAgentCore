@@ -3,7 +3,7 @@ import {
   type CoreProjectReader,
   type PageOrder,
   type SourceFileListEntry,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 
 import { appendCollectionPage } from "../../lib/collection-pagination";
 

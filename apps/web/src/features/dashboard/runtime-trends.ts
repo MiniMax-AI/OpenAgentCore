@@ -1,4 +1,4 @@
-import type { AgentSession, RuntimeObservation } from "@agents-core-web/agents-client";
+import type { AgentSession, RuntimeObservation } from "@oac/agents-client";
 
 import { holdLastReported } from "./held-usage";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";

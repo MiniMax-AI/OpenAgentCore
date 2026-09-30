@@ -36,8 +36,9 @@ returns:
 sources are independent; a model-only override can retain an Agent's harness and
 whole provider bundle. Explicit inline harness selection is `session`; a null
 inline Agent extension resets the harness to `deployment` without clearing the
-inherited provider. A null Session provider inherits normally. Model is required
-inline or inherited from a saved Agent; it has no implicit deployment default.
+inherited provider. A null Session provider inherits normally. The model may come
+from the Session, a saved Agent or the deployment default; which Sessions may omit
+it is owned by [model execution](model-execution.md#deployment-defaults).
 
 The provider's `status` describes visibility:
 

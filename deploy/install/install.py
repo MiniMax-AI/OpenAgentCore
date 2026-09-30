@@ -27,7 +27,6 @@ import config_model
 import configuration
 import ingress_config
 from configuration import valid_core_origin
-import rename
 import native_installers
 import native_service
 import oac_cli
@@ -85,7 +84,7 @@ def verify_bundle(bundle):
         if digest(path) != expected:
             raise InstallError("Distribution checksum mismatch: " + name)
     required = {"manifest.json", "install.sh", "install.py", "configuration.py", "config_model.py", "ingress_config.py", "ingress.py",
-                "config.schema.json", "oac_cli.py", "convert.py", "rename.py", "oac.pyz", "native_service.py",
+                "config.schema.json", "oac_cli.py", "oac.pyz", "native_service.py",
                 "sandbox_setup.py", "install_output.py", "install_display.py", "standard-sizes.json", "node_spec.py", "node-install.pyz",
                 "distribution.py", "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "database", "ingress"))
@@ -343,7 +342,7 @@ def image_loader(manifest, bundle):
     return load
 
 
-def prepare_node_payload(root, state, bundle, replace=False):
+def prepare_node_payload(root, state, bundle):
     if state["mode"] == "core-only":
         return
     destination = root / "node-payload"
@@ -439,7 +438,7 @@ def prepare_node_payload(root, state, bundle, replace=False):
     pointer = destination / "active.json"
     if pointer.is_symlink():
         raise InstallError("Invalid active node payload pointer")
-    if pointer.exists() and not replace:
+    if pointer.exists():
         if json.loads(pointer.read_text()) != {"source_commit": revision}:
             raise InstallError("Installed node payload differs; preserve it and inspect the distribution")
         return
@@ -506,7 +505,7 @@ def create(root, args, config, manifest, images):
     mode = config["mode"]
     token = read_core_key_file(args.core_key_file) if mode == "web-only" else secrets.token_hex(32)
     if root.parent == Path.home() / ".oac":
-        rename.private_parent(root)
+        oac_cli.private_parent(root)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(root, 0o700)
     for name in ["secrets", "generated"] + ([] if mode == "web-only" else ["state", "state/e2b"]):
@@ -520,7 +519,7 @@ def create(root, args, config, manifest, images):
              "uid": os.getuid(), "gid": os.getgid(), "mode": mode, "native_core": config.get("native_core", False),
              "source_commit": manifest["source_commit"], "images": images,
              "secrets_sha256": configuration.secret_digests(root, mode), "core_installation_id": None,
-             "converted_from": None, "generated": {}}
+             "generated": {}}
     if ingress_config.enabled(config):
         state["ingress"] = ingress_config.preflight()
         ingress_config.prepare(root)
@@ -603,7 +602,7 @@ def main(argv=None):
     # protect against another current installer finishing between these reads.
     check_release(root, manifest)
     if not args.explicit_install_dir:
-        old, _ = rename.defaults()
+        old = Path.home() / ".parsar/core"
         if (old / "state.json").exists() or (old / "installation.json").exists():
             raise InstallError(oac_cli.UNSUPPORTED_VERSION)
     step("Checking installation settings")

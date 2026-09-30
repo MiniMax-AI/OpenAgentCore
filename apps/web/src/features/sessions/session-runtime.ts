@@ -1,4 +1,4 @@
-import { AgentCoreError, type AgentSession, type CoreProjectReader } from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentSession, type CoreProjectReader } from "@oac/agents-client";
 
 import { RUNTIME_DURABLE_MAX_POINTS, RUNTIME_DURABLE_RANGES, runtimeDurableTrendSamples, type RuntimeDurableRange } from "../dashboard/runtime-history";
 import type { RuntimeTrendSample } from "../dashboard/runtime-trends";

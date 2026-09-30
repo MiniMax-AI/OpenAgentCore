@@ -30,7 +30,7 @@ const server = createServer(async (request, response) => {
   const json = (status, value) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(value)); };
   if (url.pathname.endsWith('.sha256')) { response.setHeader('Content-Type', 'text/plain; charset=utf-8'); return response.end(checksum+'\n'); }
   if (url.pathname.endsWith('.tar.gz')) return createReadStream(archive).pipe(response);
-  if (url.pathname.endsWith('bootstrap.sh') || url.pathname.endsWith('bootstrap.ps1')) return createReadStream(resolve('services/agents-api/internal/nativeinstaller/assets', url.pathname.split('/').at(-1))).pipe(response);
+  if (url.pathname.endsWith('bootstrap.sh') || url.pathname.endsWith('bootstrap.ps1')) return createReadStream(resolve('services/core/internal/nativeinstaller/assets', url.pathname.split('/').at(-1))).pipe(response);
   const body = []; for await (const chunk of request) body.push(chunk);
   if (url.pathname.endsWith('/installation') || url.pathname.endsWith('/claim')) {
     if (request.headers.authorization !== `Bearer ${authorization}`) return json(401, {});
@@ -80,7 +80,7 @@ try {
   assert.notEqual((await run(executable, [...args, '--non-interactive', '--harness', 'codex'])).code, 0, 'Lost claim response should fail safely');
   const saved = JSON.parse(await readFile(join(installation, 'daemon', 'executor-credential.json'), 'utf8'));
   assert.equal(saved.executor_token, secret, 'Secret must survive a lost response');
-  const script = resolve(`services/agents-api/internal/nativeinstaller/assets/bootstrap.${windows ? 'ps1' : 'sh'}`);
+  const script = resolve(`services/core/internal/nativeinstaller/assets/bootstrap.${windows ? 'ps1' : 'sh'}`);
   const bootstrapArgs = windows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Base', base, '-Authorization', authorization] : [script, base, authorization];
   const result = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation], '\n\n');
   assert.equal(result.code, 0, `Interactive bootstrap failed: ${result.output}`);

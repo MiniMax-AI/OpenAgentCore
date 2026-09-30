@@ -53,6 +53,20 @@ class OacTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
+    def test_default_parent_is_private_and_symlinks_are_refused(self):
+        home = self.work / "home"
+        home.mkdir()
+        parent = home / ".oac"
+        parent.mkdir(mode=0o755)
+        with mock.patch.object(Path, "home", return_value=home):
+            oac_cli.private_parent(parent / "core")
+            self.assertEqual(stat.S_IMODE(parent.stat().st_mode), 0o700)
+            linked = home / "linked"
+            linked.symlink_to(parent, target_is_directory=True)
+            with self.assertRaisesRegex(oac_cli.OacError, "canonical"):
+                oac_cli.private_parent(linked / "core")
+            self.assertFalse((parent / "core").exists())
+
     def test_old_paired_core_refuses_apply_without_state_writes(self):
         self.host.remote_core["https://core.example"] = (200, self.host.core_installation_id)
         self.install("web-only", **{"web.core_url": "https://core.example"})

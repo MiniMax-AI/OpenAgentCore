@@ -11,6 +11,12 @@ import { productAPI } from "./server/product.mjs";
 const root = fileURLToPath(new URL(".", import.meta.url));
 const routes = [
   [/^\/v1\/agents\/environments\/[a-f0-9-]{36}$/, ["GET"]],
+  [/^\/v1\/agents\/environments\/[a-f0-9-]{36}\/files$/, ["GET", "POST"]],
+  [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/artifacts$/, ["GET"]],
+  [
+    /^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/artifacts\/[a-f0-9-]{36}\/content$/,
+    ["GET"],
+  ],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}$/, ["GET"]],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/(items|turns)$/, ["GET"]],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/events$/, ["GET", "POST"]],
@@ -189,7 +195,12 @@ export function createHandler(
       const streaming =
         req.method === "GET" && url.pathname.endsWith("/events");
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 30_000);
+      const fileWrite =
+        req.method === "POST" && url.pathname.endsWith("/files");
+      const timer = setTimeout(
+        () => controller.abort(),
+        fileWrite ? 240_000 : 30_000,
+      );
       res.on("close", () => controller.abort());
       try {
         const chunks = [];
@@ -198,7 +209,8 @@ export function createHandler(
           size += chunk.length;
           if (
             size >
-            (url.pathname.startsWith("/v1/skills")
+            (url.pathname.startsWith("/v1/skills") ||
+            url.pathname.endsWith("/files")
               ? 8 * 1024 * 1024
               : 1024 * 1024)
           )
@@ -246,6 +258,18 @@ export function createHandler(
             "X-Accel-Buffering": "no",
           });
           res.flushHeaders();
+          await pipeline(Readable.fromWeb(upstream.body), res);
+          return;
+        }
+        if (url.pathname.endsWith("/content") && upstream.ok && upstream.body) {
+          // Downloads stay binary and are never rendered as active browser content.
+          clearTimeout(timer);
+          res.writeHead(upstream.status, {
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition":
+              upstream.headers.get("content-disposition") || "attachment",
+            "Cache-Control": "no-store",
+          });
           await pipeline(Readable.fromWeb(upstream.body), res);
           return;
         }

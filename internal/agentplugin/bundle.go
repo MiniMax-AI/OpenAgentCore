@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentbundle"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
 var ErrInvalid = errors.New("invalid or unsupported Plugin bundle")

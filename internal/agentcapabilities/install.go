@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentbundle"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
 func InstallSkill(root *os.Root, archive []byte, metadata agentskill.Metadata) error {

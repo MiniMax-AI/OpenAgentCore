@@ -1,4 +1,4 @@
-import type { AgentSession, SandboxNode } from "@agents-core-web/agents-client";
+import type { AgentSession, SandboxNode } from "@oac/agents-client";
 import { type OwnedRuntimeObservation, type Project, type ProjectSummary } from "../../lib/admin-view";
 
 /** Fixtures shared by the Monitor page tests. Not part of the application bundle. */

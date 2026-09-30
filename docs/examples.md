@@ -48,8 +48,9 @@ Each feature maps to one part of the API. Read the code next to the guide sectio
 
 ### Not covered
 
-Vaults and MCP authentication, OAuth, Session deletion, and MiniMax Code on your
-own machine.
+Vaults and MCP authentication, OAuth, Session deletion, MiniMax Code on your own
+machine, and managed Skills or templates on your own machine
+(`x_agents_core.environment`).
 
 ## Add an example
 

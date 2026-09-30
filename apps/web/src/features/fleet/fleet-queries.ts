@@ -1,5 +1,5 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode, type SandboxNodeHistoryRange } from "@agents-core-web/agents-client";
+import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode, type SandboxNodeHistoryRange } from "@oac/agents-client";
 
 import { sandboxDeploymentQuery } from "../sandbox/sandbox-queries";
 import { sandboxConsoleConfig } from "../sandbox/console-config";

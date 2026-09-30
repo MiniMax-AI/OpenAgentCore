@@ -1,4 +1,4 @@
-import type { UpdateSandboxDeployment } from "@agents-core-web/agents-client";
+import type { UpdateSandboxDeployment } from "@oac/agents-client";
 
 /** Omission preserves the credential; every explicit key follows Core's replacement path. */
 export function e2bUpdateSelection(template: string, apiKey: string): NonNullable<UpdateSandboxDeployment["e2b"]> {

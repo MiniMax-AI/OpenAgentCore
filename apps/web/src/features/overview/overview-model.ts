@@ -1,4 +1,4 @@
-import type { AgentSession } from "@agents-core-web/agents-client";
+import type { AgentSession } from "@oac/agents-client";
 
 import type { CapacitySummary } from "../fleet/fleet-model";
 import type { InProject } from "../metrics/project-sessions";

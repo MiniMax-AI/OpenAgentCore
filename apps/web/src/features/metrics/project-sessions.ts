@@ -1,4 +1,4 @@
-import type { AgentSession, CoreProjectReader } from "@agents-core-web/agents-client";
+import type { AgentSession, CoreProjectReader } from "@oac/agents-client";
 
 import type { Owned } from "../../lib/projects";
 import { type Project } from "../../lib/admin-view";

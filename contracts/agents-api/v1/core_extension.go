@@ -3,7 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 )
 
 // AgentsCore selects an existing Core harness independently of model identity.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { InitializeSandboxDeployment, UpdateSandboxDeployment, SandboxDeployment, StartSandboxReset } from "@agents-core-web/agents-client";
+import type { InitializeSandboxDeployment, UpdateSandboxDeployment, SandboxDeployment, StartSandboxReset } from "@oac/agents-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";

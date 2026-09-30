@@ -1,5 +1,80 @@
 #!/usr/bin/env python3
-"""Promote one landed batch through existing gh and SSH authentication."""
+"""Qualify one candidate on a supervised host, then publish it once its promotion commit lands.
+
+One invocation owns one explicit candidate and one qualification run, using the
+existing gh authentication and SSH. It never builds: pass the candidate's flat
+files, and it creates the unpublished build-<SHA> draft itself. Produce the files
+with make build-core-distribution for that commit, with
+CORE_DISTRIBUTION_RELEASE_BASE_URL set to
+https://github.com/MiniMax-AI/OpenAgentCore/releases/download/build-<SHA>,
+CORE_DISTRIBUTION_OFFLINE=1 and the native installer catalog, or take the Actions
+artifact of a manual core-release run with draft_release=false and remove
+install.sh and install.sh.sha256. A draft that core-release created holds
+install.sh and cannot be promoted.
+
+Inputs
+- --source: the full candidate commit, never inferred from latest. It binds the
+  archive manifests and the build-<SHA> release tag.
+- --assets: only the candidate's flat files: the thin and offline archives with
+  their checksums, the Runtime assets and the native installers with their
+  checksums. Any other file, including install.sh, is refused. Every archive
+  member and asset hash is verified, and the thin and offline manifests and native
+  catalogs must match.
+- --qualification-package, --qualification-manifest-sha256: a separately reviewed
+  private package and its manifest digest. The manifest fixes the complete file
+  inventory, ordered Python commands, bounded stage timeouts and private path and
+  resource configuration. It is verified before any Release change and again by
+  the remote supervisor; candidate assets cannot select or replace it. Keep
+  host-specific scripts, user names and credential paths out of this repository,
+  and never put credential values in either manifest.
+- --promotion-commit: the independently reviewed tooling commit; its tree is the
+  one main must reach. It must descend from the candidate, and the local promotion
+  scripts must equal their bytes there. It may differ from the candidate only in
+  PROMOTION_FILES, and the Makefile only by registering the promotion and
+  control-channel tests. Product changes or a different main tree block promotion.
+- --host, --remote-root: an existing SSH host alias and an isolated remote parent.
+- --state: a new private local evidence directory; a previous one is never reused.
+- --merge-wait-seconds: how long to wait for main to reach the promotion commit's
+  tree; one day by default, at most seven days.
+
+Flow
+1. Check the qualification adapter, the tooling bytes, the candidate files and
+   the source tree. Refuse a conflicting tag, a published Release or a draft for
+   another commit, and create the build-<SHA> draft with these files when none
+   exists. Download every asset and compare its bytes.
+2. Copy the assets and the package to a fresh <remote-root>/<UUID>. The reviewed
+   adapter supervises fresh-install, current-lifecycle, managed-native-smoke,
+   diagnostics-observations-smoke and node-runtime-smoke in that order: one fresh
+   container installation, one completed managed Session, read-only diagnostics
+   for it, and one current Runtime Session on one new node. The full multi-host,
+   generation and GC matrix is not rerun. Every check must pass in this run and
+   return this run's identity and its own owned resources; a supplied pass file,
+   skipped check or old report never releases the candidate. Candidate bytes are
+   verified again after the stages.
+3. In the same process, wait until main's tree equals the promotion commit's tree
+   and main contains the candidate. A main that is behind waits; a conflicting
+   main fails at once. Expiry or cancellation keeps the evidence and grants no
+   later permission to publish.
+4. Check the tag and that the same draft ID is still an unpublished draft, and
+   download every asset again. Then recheck main, the tree, the tag and the draft
+   ID, publish that Release ID (never a fresh tag lookup) as the latest release,
+   and download once more to check the published bytes.
+
+The SSH stdin channel carries the request and then heartbeats; EOF, timeout,
+SIGTERM or SIGHUP stops later work. Each stage runs in its own foreground process
+group with an owner outside it that cleans the group on success, failure, timeout
+and cancellation, including descendants orphaned by an inner timeout or SIGKILL.
+Only explicitly recorded background resources may detach. A write already issued
+may have an unknown outcome: keep its intent and resources, never replay it or
+claim a rollback. Control tests use short-lived fixture children and never count
+as live qualification.
+
+Never overwrite conflicting assets. Reconcile an interrupted run before invoking
+again; stored results are evidence, not permission to publish. The command never
+merges pull requests or decides what lands on main; it only waits for main. No
+runner, background service, GitHub secret or repository visibility change is
+needed.
+"""
 
 import argparse
 import base64
@@ -21,7 +96,7 @@ spec = importlib.util.spec_from_file_location(
 distribution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(distribution)
 
-REPO = "MiniMax-AI/parsar-core"
+REPO = "MiniMax-AI/OpenAgentCore"
 SOURCE = TAG = BASE = STEM = None
 
 
@@ -441,7 +516,7 @@ def promote(assets, state, host, remote_root, promotion_commit, *, source, packa
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source", required=True, help="Full candidate source commit; never inferred from latest")
     parser.add_argument("--qualification-package", required=True, type=pathlib.Path,
                         help="Separately reviewed private package directory, containing manifest.json")

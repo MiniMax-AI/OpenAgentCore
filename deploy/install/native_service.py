@@ -51,7 +51,7 @@ def _checked(arguments, failure):
     return result.stdout.strip()
 
 
-def _files(native, required=REQUIRED):
+def _files(native):
     if native.is_symlink() or not native.is_dir():
         raise RuntimeError("The distribution is missing its native Core payload")
     files = {}
@@ -59,9 +59,9 @@ def _files(native, required=REQUIRED):
         if path.is_symlink() or not (path.is_dir() or path.is_file()):
             raise RuntimeError("The distribution requires regular native Core executables")
         name = str(path.relative_to(native))
-        if name in required and path.is_file():
+        if name in REQUIRED and path.is_file():
             files[name] = path
-    if not set(required).issubset(files):
+    if not set(REQUIRED).issubset(files):
         raise RuntimeError("The distribution is missing a required native Core executable")
     return files
 
@@ -101,8 +101,8 @@ def _digest(path):
     return digest.digest()
 
 
-def prepare(root, state, bundle, replace=False):
-    """Install the bundle's native Core binaries. Only a conversion replaces different ones."""
+def prepare(root, state, bundle):
+    """Install or repair matching native Core binaries without replacing another version."""
     if not is_native(state):
         return
     try:
@@ -111,17 +111,10 @@ def prepare(root, state, bundle, replace=False):
         source, target = bundle / "native", root / "native"
         incoming = _files(source)
         if target.exists() or target.is_symlink():
-            # Only conversion reads the historical executable layout. The new
-            # bundle and every normal launch require the renamed commands.
-            required = REQUIRED
-            if replace and not (target / "bin/oac-core").exists():
-                required = ("bin/agents-api", "bin/agents-api-migrate", "e2b/agents-api-e2b-provider")
-            installed = _files(target, required)
-            if incoming.keys() == installed.keys() and all(_digest(path) == _digest(installed[name]) for name, path in incoming.items()):
-                replace = False
-            elif not replace:
+            installed = _files(target)
+            if incoming.keys() != installed.keys() or any(_digest(path) != _digest(installed[name]) for name, path in incoming.items()):
                 raise RuntimeError("Installed native Core files differ; preserve the installation and follow the upgrade guide")
-        if not target.exists() or replace:
+        if not target.exists():
             root.mkdir(parents=True, mode=0o700, exist_ok=True)
             with tempfile.TemporaryDirectory(prefix=".native-", dir=root) as temporary:
                 staged = Path(temporary) / "native"
@@ -129,8 +122,6 @@ def prepare(root, state, bundle, replace=False):
                     destination = staged / name
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(path, destination)
-                if target.exists():
-                    os.replace(target, Path(temporary) / "previous")
                 os.replace(staged, target)
         for path in [target, target / "bin", target / "e2b", *(target / name for name in REQUIRED)]:
             os.chmod(path, 0o700)
@@ -177,13 +168,6 @@ def stop(root, state):
     if is_native(state):
         _path(root)
         _checked(["systemctl", "--user", "stop", unit_name(state)], "Cannot stop this installation's native Core service")
-
-
-def disable(state):
-    """Stop the unit and remove its enablement link, as a conversion does before moving it."""
-    if is_native(state):
-        _checked(["systemctl", "--user", "disable", "--now", unit_name(state)],
-                 "Cannot disable this installation's native Core service")
 
 
 def _process_environment(pid):

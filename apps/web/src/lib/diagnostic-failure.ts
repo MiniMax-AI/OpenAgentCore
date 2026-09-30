@@ -1,4 +1,4 @@
-import type { DiagnosticFailure } from "@agents-core-web/agents-client";
+import type { DiagnosticFailure } from "@oac/agents-client";
 import type { TFunction } from "i18next";
 
 /** Translate the catalog, never native error text or guessed message categories. */

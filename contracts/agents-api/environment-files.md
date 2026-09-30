@@ -98,7 +98,7 @@ stored local profile, immutable exact device/Environment binding and live capabi
 It never starts a model for upload or supplies a filesystem root from the request.
 The deployment must qualify the protected sibling workspace/staging layout and
 its selected native adapter. The [engine profile guides](README.md#public-engine-profiles)
-describe accepted Docker configurations; the [E2B operator guide](../../services/agents-api/deploy/e2b/README.md)
+describe accepted Docker configurations; the [E2B operator guide](../../services/core/deploy/e2b/README.md)
 covers user-managed E2B Runtime packaging and links its separate real acceptance.
 A capability or path declaration alone
 does not establish isolation or public hosted admission.
@@ -139,7 +139,7 @@ raw HTTP and pinned SDK pagination, sizes, and two-tenant isolation. It does not
 establish unspecified recursive, symlink or snapshot behavior. Runtime availability
 and each engine's isolated placement require their own native and service checks.
 
-The opt-in `services/agents-api/tests/official_environment_files_create.py` reuses
+The opt-in `services/core/tests/official_environment_files_create.py` reuses
 the pinned SDK and raw HTTP listing assertions. Its stdin supplies the base URL,
 preconfigured Environment ID, model-input text, and two private caller token
 sources (`token_env` or `token_file`). The invoking native fixture supplies an

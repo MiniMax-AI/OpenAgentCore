@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
 
 func TestNativeModelParameters(t *testing.T) {

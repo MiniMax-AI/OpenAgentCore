@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Skill, SkillVersion, SkillVersionList } from "@agents-core-web/agents-client";
+import type { Skill, SkillVersion, SkillVersionList } from "@oac/agents-client";
 
 import { SkillDetailPage, type SkillDetailPageProps, type SkillVersionsState } from "./SkillDetail";
 

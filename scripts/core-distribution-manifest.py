@@ -46,7 +46,6 @@ BUNDLED_DOCS = (
     "docs/getting-started/operations.md",
     "docs/getting-started/quickstart.md",
     "docs/getting-started/self-hosted.md",
-    "services/agents-api/HOSTED-SANDBOX-MANAGER.md",
     "contracts/agents-api/environment-executor-credentials.md",
 )
 # Files the bundled docs show, copied as they are, so they work offline.
@@ -59,7 +58,7 @@ BUNDLED_FILES = (
     "docs/assets/console-agent-metrics-en.webp",
     "docs/assets/console-agent-metrics-zh.webp",
 )
-REPOSITORY_URL = "https://github.com/MiniMax-AI/parsar-core"
+REPOSITORY_URL = "https://github.com/MiniMax-AI/OpenAgentCore"
 MARKDOWN_LINK = re.compile(r"(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")
 FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
 HEADING = re.compile(r" {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*\Z")

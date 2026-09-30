@@ -20,7 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-REPOSITORY = "MiniMax-AI/parsar-core"
+REPOSITORY = "MiniMax-AI/OpenAgentCore"
 API = "https://api.github.com/repos/" + REPOSITORY
 ARCHIVE = re.compile(r"oac-([0-9a-f]{40})-linux-amd64\.tar\.gz")
 

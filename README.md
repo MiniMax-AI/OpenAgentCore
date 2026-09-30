@@ -36,7 +36,7 @@ OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents
 On a Linux amd64 host with Docker and Python 3.9+:
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
 ```
 
 Then:
@@ -57,8 +57,8 @@ Core exposes two APIs:
 
 | API | Path | Used by |
 | --- | --- | --- |
-| **Agents API** | `/v1` | Your applications. Same protocol as OpenAI's |
-| **Core API** | `/core/v1` | Operators, through Web |
+| **[Agents API](docs/api/public-agent-api.md)** | `/v1` | Your applications. Same protocol as [OpenAI's Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview) |
+| **[Core API](docs/api/README.md#core-api)** | `/core/v1` | Operators, through Web |
 
 Core keeps all state. The Runtime runs the chosen harness inside the Environment.
 Each connection is a defined protocol, so any part can be replaced on its own. See

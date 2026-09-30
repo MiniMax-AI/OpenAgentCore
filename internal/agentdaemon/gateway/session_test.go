@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 )
 
 // fakeConn is the WSConn implementation used by session + registry
@@ -383,25 +384,25 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 				Kind:      "opencode",
 				Available: false,
 				Version:   "missing",
-				Capabilities: proto.AgentKindCapabilities{
-					Streaming: true,
-				},
+				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+					Streaming: proto.CapabilitySupported,
+				}),
 			},
 			{
 				Kind:      "claude_code",
 				Available: true,
 				Version:   "1.2.3",
-				Capabilities: proto.AgentKindCapabilities{
-					Streaming:   true,
-					Permissions: true,
-					Usage:       true,
-					Resume:      true,
-				},
+				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+					Streaming:   proto.CapabilitySupported,
+					Permissions: proto.CapabilitySupported,
+					Usage:       proto.CapabilitySupported,
+					Resume:      proto.CapabilitySupported,
+				}),
 			},
 			{
 				Kind:         "codex",
 				Available:    true,
-				Capabilities: proto.AgentKindCapabilities{MCPHTTPTools: true, Steering: true, MessageItems: true, ToolObservations: true, EnvironmentNone: true, WebSearchControl: true, TextVerbosity: true, ExecutionControls: true, SubagentControl: true},
+				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, Steering: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported}),
 			},
 		},
 	})

@@ -46,6 +46,7 @@ class PublicationTests(unittest.TestCase):
         path.with_name(path.name + ".sha256").write_text(publisher.distribution.sha256(path) + "  " + path.name + "\n")
         self.release = None
         self.existing = []
+        self.context_repository = self.canonical_repository = "MiniMax-AI/OpenAgentCore"
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
         self.api = stack.enter_context(mock.patch.object(publisher, "api", side_effect=self.response))
@@ -63,6 +64,8 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(self.writes(), [])
 
     def response(self, repository, endpoint, *args):
+        if endpoint == "https://api.github.com/repos/" + self.context_repository:
+            return {"full_name": self.canonical_repository}
         if endpoint.startswith("git/"):
             return {"object": {"type": "commit", "sha": self.revision}}
         if endpoint.startswith("releases?"):
@@ -94,7 +97,7 @@ class PublicationTests(unittest.TestCase):
         raise subprocess.CalledProcessError(1, ["gh", "api", endpoint])
 
     def publish(self, tag="v1.2.3", mode="publish"):
-        publisher.publish(self.assets, "MiniMax-AI/parsar-core", self.revision, tag, mode)
+        publisher.publish(self.assets, self.context_repository, self.revision, tag, mode)
 
     def writes(self):
         return [c for c in self.api.call_args_list if "--method" in c.args]
@@ -106,6 +109,30 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(len(self.release["assets"]), 12)
         self.assertEqual(self.api.call_args.args[1:],
                          ("releases/7", "--method", "PATCH", "-F", "draft=false"))
+
+    def test_repository_rename_uses_current_identity_before_writes(self):
+        self.context_repository = "MiniMax-AI/previous-name"
+        self.publish()
+        calls = self.api.call_args_list
+        self.assertEqual(calls[0].args, ("MiniMax-AI/previous-name",
+                                       "https://api.github.com/repos/MiniMax-AI/previous-name"))
+        self.assertTrue(all(c.args[0] == self.canonical_repository for c in calls[1:]))
+        uploads = [c for c in calls if c.args[1].startswith("https://uploads.")]
+        self.assertEqual(len(uploads), len(self.release["assets"]))
+        self.assertTrue(all(c.args[1].startswith(
+            "https://uploads.github.com/repos/MiniMax-AI/OpenAgentCore/releases/7/assets?name=")
+            for c in uploads))
+        self.assertFalse(self.release["draft"])
+
+    def test_invalid_repository_identity_refuses_writes(self):
+        for identity in (None, 7, "", "https://example.com/repo", "owner/repo?token=x",
+                         "owner/repo/extra", "owner/repo#fragment"):
+            with self.subTest(identity=identity):
+                self.canonical_repository = identity
+                self.api.reset_mock()
+                with self.assertRaisesRegex(ValueError, "invalid repository identity"):
+                    self.publish()
+                self.assertEqual(self.writes(), [])
 
     def test_annotated_tag_and_prerelease(self):
         def response(repo, endpoint, *args):
@@ -137,8 +164,12 @@ class PublicationTests(unittest.TestCase):
                 self.assertEqual(self.writes(), [])
 
     def test_existing_release_on_later_page_is_refused(self):
-        self.api.side_effect = lambda repo, endpoint, *args: (
-            [{"tag_name": "other"}] * 100 if endpoint.endswith("page=1") else [{"tag_name": "v1.2.3"}])
+        def response(repo, endpoint, *args):
+            if endpoint.startswith("releases?"):
+                return ([{"tag_name": "other"}] * 100 if endpoint.endswith("page=1")
+                        else [{"tag_name": "v1.2.3"}])
+            return self.response(repo, endpoint, *args)
+        self.api.side_effect = response
         with self.assertRaisesRegex(ValueError, "already exists"):
             self.publish()
         self.assertEqual(self.writes(), [])
@@ -249,8 +280,8 @@ class PublicationTests(unittest.TestCase):
 
     def test_api_uses_full_upload_url_and_binary_input(self):
         with mock.patch.object(publisher.subprocess, "check_output", return_value='{"id": 7}') as command:
-            url = "https://uploads.github.com/repos/MiniMax-AI/parsar-core/releases/7/assets?name=x"
-            self.assertEqual(REAL_API("MiniMax-AI/parsar-core", url, "--method", "POST",
+            url = "https://uploads.github.com/repos/MiniMax-AI/OpenAgentCore/releases/7/assets?name=x"
+            self.assertEqual(REAL_API("MiniMax-AI/OpenAgentCore", url, "--method", "POST",
                                        "--input", "/tmp/asset"), {"id": 7})
             self.assertEqual(command.call_args.args[0],
                              ["gh", "api", url, "--method", "POST", "--input", "/tmp/asset"])

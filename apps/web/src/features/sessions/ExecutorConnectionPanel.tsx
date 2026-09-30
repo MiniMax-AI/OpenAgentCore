@@ -1,4 +1,4 @@
-import type { ExecutorCredentialList } from "@agents-core-web/agents-client";
+import type { ExecutorCredentialList } from "@oac/agents-client";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 

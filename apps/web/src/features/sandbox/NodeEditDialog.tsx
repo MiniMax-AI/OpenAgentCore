@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import type { SandboxAdminClient, SandboxNode, SandboxResources } from "@agents-core-web/agents-client";
+import type { SandboxAdminClient, SandboxNode, SandboxResources } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 

@@ -1,4 +1,4 @@
-import type { CoreHarness } from "@agents-core-web/agents-client";
+import type { CoreHarness } from "@oac/agents-client";
 
 import { type Project } from "../../lib/admin-view";
 import { nodeServingReady } from "../fleet/fleet-model";

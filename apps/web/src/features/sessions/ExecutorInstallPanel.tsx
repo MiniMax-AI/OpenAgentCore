@@ -38,7 +38,7 @@ export function ExecutorInstallPanel({ install, archived, connected = false }: {
       </span>
     </div>
     <p className="executor-install-note">{t(archived ? "executor.install.archived" : "executor.install.steps")}</p>
-    <a className="text-action" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/self-hosted-native.md" target="_blank" rel="noreferrer">{t("executor.install.guide")}</a>
+    <a className="text-action" href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/getting-started/self-hosted.md" target="_blank" rel="noreferrer">{t("executor.install.guide")}</a>
     {install.kind === "ready" ? <>
       <ConsoleSelect label={t("executor.install.platform")} value={shell} options={[{ value: "posix", label: "Linux / macOS" }, { value: "powershell", label: "Windows · PowerShell" }]} onChange={(value) => { if (value === "posix" || value === "powershell") setShell(value); }} />
       <InstallCommand value={install.commands[shell]} />

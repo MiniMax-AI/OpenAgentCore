@@ -1,0 +1,93 @@
+package store
+
+import (
+	"context"
+	"reflect"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+func recordItemChange(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, index pgtype.Int4, previous, item v1.Item, delta *string) error {
+	if reflect.DeepEqual(previous, item) {
+		return nil
+	}
+	// Function results are Session inputs, not AgentOutputItem variants.
+	if item.Type == "function_call_output" {
+		index.Valid = false
+	}
+	base := v1.SessionEvent{TurnID: item.TurnID}
+	if index.Valid {
+		base.OutputIndex = &index.Int32
+	}
+	emit := func(kind string, event v1.SessionEvent) error {
+		event.Type = "agent.session.turn." + kind
+		return recordSessionChange(ctx, q, session, SessionChange{Event: event})
+	}
+	textMessage := item.Type == "message" && item.Role == "assistant" && len(item.Content) == 1 && item.Content[0].Text != nil
+	if previous.ID == "" {
+		initial := item
+		if textMessage {
+			// Assistant text is added empty and in progress; its text arrives
+			// only through deltas, as in official streams (EVT-10).
+			initial.Status, initial.Content = "in_progress", []v1.ItemContent{}
+		}
+		event := base
+		event.Item = &initial
+		if err := emit("item.added", event); err != nil {
+			return err
+		}
+		if textMessage {
+			zero, empty := 0, ""
+			event = base
+			event.ItemID, event.ContentIndex, event.Part = item.ID, &zero, &v1.ItemContent{Type: item.Content[0].Type, Text: &empty}
+			if err := emit("content_part.added", event); err != nil {
+				return err
+			}
+			if delta == nil {
+				// A first observation without its own fragment, such as a
+				// non-streamed native final, carries its unchanged text in one
+				// delta. This frames the text; it never alters it.
+				delta = item.Content[0].Text
+			}
+		}
+	}
+	if !index.Valid {
+		return nil
+	}
+	if item.Type == "command_execution" && delta != nil {
+		event := base
+		event.Type = "agent.output.command_execution_output.delta"
+		event.ItemID, event.Delta = item.ID, delta
+		return recordSessionChange(ctx, q, session, SessionChange{Event: event})
+	}
+	if textMessage {
+		zero := 0
+		event := base
+		event.ItemID, event.ContentIndex = item.ID, &zero
+		if delta != nil && *delta != "" {
+			event.Delta = delta
+			if err := emit("output_text.delta", event); err != nil {
+				return err
+			}
+			event.Delta = nil
+		}
+		if item.Status != "in_progress" {
+			event.Text = item.Content[0].Text
+			if err := emit("output_text.done", event); err != nil {
+				return err
+			}
+			event.Text, event.Part = nil, &item.Content[0]
+			if err := emit("content_part.done", event); err != nil {
+				return err
+			}
+		}
+	}
+	if item.Status != "in_progress" {
+		event := base
+		event.Item = &item
+		return emit("item.done", event)
+	}
+	return nil
+}

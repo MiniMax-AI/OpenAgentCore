@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AgentCoreError, type AgentSession, type AgentTurn, type ListPage, type SessionItem } from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentSession, type AgentTurn, type ListPage, type SessionItem } from "@oac/agents-client";
 
 import { classifyDeleteError } from "./SessionDeleteDialog";
 import {

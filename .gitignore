@@ -17,15 +17,10 @@ __pycache__/
 /state/
 /cache/
 /target/
-# `go build ./services/core-console` in the repository root writes this binary.
-/core-console
+# `go build ./services/web` in the repository root writes this binary.
+/web
 /playwright-report/
 /test-results/
 /.agents/
 /.issue-agent/
 /ISSUE_AGENT.md
-
-# Documentation site build output.
-/apps/docs/.next/
-/apps/docs/.source/
-/apps/docs/tsconfig.tsbuildinfo

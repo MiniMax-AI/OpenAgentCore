@@ -3,7 +3,7 @@ package v1
 import (
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 )
 
 func TestRegisteredHarnessesSharePublicValidation(t *testing.T) {

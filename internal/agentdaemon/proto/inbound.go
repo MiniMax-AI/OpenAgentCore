@@ -1,7 +1,7 @@
 package proto
 
 // This package lives at the repo-root module so both the server-side
-// gateway/connector AND apps/parsar-daemon can import it. That rules out
+// gateway/connector AND apps/daemon can import it. That rules out
 // importing server/internal/... (Go's internal-package rule), so wire
 // types like Usage are declared here in full rather than imported from
 // store.UsageInput. The connector layer translates at the boundary;
@@ -216,43 +216,43 @@ const (
 )
 
 // AgentKindCapabilities describes what a daemon-side agent_kind can
-// do inside one prompt session. Runtime-level capabilities such as
-// cancellation belong to the daemon connector itself; these bits are
-// the engine-specific surface the UI uses for filtering and copy.
+// do inside one prompt session. Every field requires an explicit support
+// decision, including for unavailable engines. Runtime lifecycle requirements
+// are mandatory independently of these optional operations.
 type AgentKindCapabilities struct {
-	SubagentObservations  bool `json:"subagent_observations,omitempty"`
-	Streaming             bool `json:"streaming,omitempty"`
-	Permissions           bool `json:"permissions,omitempty"`
-	Usage                 bool `json:"usage,omitempty"`
-	Resume                bool `json:"resume,omitempty"`
-	NativeSessionRecovery bool `json:"native_session_recovery,omitempty"`
-	WorkspaceAuthoring    bool `json:"workspace_authoring,omitempty"`
-	Steering              bool `json:"steering,omitempty"`
-	MessageItems          bool `json:"message_items,omitempty"`
+	SubagentObservations  CapabilitySupport `json:"subagent_observations"`
+	Streaming             CapabilitySupport `json:"streaming"`
+	Permissions           CapabilitySupport `json:"permissions"`
+	Usage                 CapabilitySupport `json:"usage"`
+	Resume                CapabilitySupport `json:"resume"`
+	NativeSessionRecovery CapabilitySupport `json:"native_session_recovery"`
+	WorkspaceAuthoring    CapabilitySupport `json:"workspace_authoring"`
+	Steering              CapabilitySupport `json:"steering"`
+	MessageItems          CapabilitySupport `json:"message_items"`
 
-	ToolObservations               bool `json:"tool_observations,omitempty"`
-	EnvironmentNone                bool `json:"environment_none,omitempty"`
-	LocalEnvironment               bool `json:"local_environment,omitempty"`
-	Preparation                    bool `json:"preparation,omitempty"`
-	WorkspaceReadPreparation       bool `json:"workspace_read_preparation,omitempty"`
-	WorkspaceOutputExport          bool `json:"workspace_output_export,omitempty"`
-	ProgrammaticToolCallingDisable bool `json:"programmatic_tool_calling_disable,omitempty"`
-	WebSearchControl               bool `json:"web_search_control,omitempty"`
+	ToolObservations               CapabilitySupport `json:"tool_observations"`
+	EnvironmentNone                CapabilitySupport `json:"environment_none"`
+	LocalEnvironment               CapabilitySupport `json:"local_environment"`
+	Preparation                    CapabilitySupport `json:"preparation"`
+	WorkspaceReadPreparation       CapabilitySupport `json:"workspace_read_preparation"`
+	WorkspaceOutputExport          CapabilitySupport `json:"workspace_output_export"`
+	ProgrammaticToolCallingDisable CapabilitySupport `json:"programmatic_tool_calling_disable"`
+	WebSearchControl               CapabilitySupport `json:"web_search_control"`
 	// ExecutionControls supports typed search and verbosity controls.
-	ExecutionControls    bool `json:"execution_controls,omitempty"`
-	TextVerbosity        bool `json:"text_verbosity,omitempty"`
-	StructuredOutput     bool `json:"structured_output,omitempty"`
-	ToolSearch           bool `json:"tool_search,omitempty"`
-	MessageImages        bool `json:"message_images,omitempty"`
-	FunctionResultImages bool `json:"function_result_images,omitempty"`
-	SubagentControl      bool `json:"subagent_control,omitempty"`
-	DurableInputReceipts bool `json:"durable_input_receipts,omitempty"`
+	ExecutionControls    CapabilitySupport `json:"execution_controls"`
+	TextVerbosity        CapabilitySupport `json:"text_verbosity"`
+	StructuredOutput     CapabilitySupport `json:"structured_output"`
+	ToolSearch           CapabilitySupport `json:"tool_search"`
+	MessageImages        CapabilitySupport `json:"message_images"`
+	FunctionResultImages CapabilitySupport `json:"function_result_images"`
+	SubagentControl      CapabilitySupport `json:"subagent_control"`
+	DurableInputReceipts CapabilitySupport `json:"durable_input_receipts"`
 	// DurableTurns includes strict resume, completion release and cancellation snapshots.
-	DurableTurns      bool `json:"durable_turns,omitempty"`
-	FunctionTools     bool `json:"function_tools,omitempty"`
-	MCPHTTPTools      bool `json:"mcp_http_tools,omitempty"`
-	MCPHTTPRequired   bool `json:"mcp_http_required,omitempty"`
-	MCPHTTPBearerAuth bool `json:"mcp_http_bearer_auth,omitempty"`
+	DurableTurns      CapabilitySupport `json:"durable_turns"`
+	FunctionTools     CapabilitySupport `json:"function_tools"`
+	MCPHTTPTools      CapabilitySupport `json:"mcp_http_tools"`
+	MCPHTTPRequired   CapabilitySupport `json:"mcp_http_required"`
+	MCPHTTPBearerAuth CapabilitySupport `json:"mcp_http_bearer_auth"`
 }
 
 // SupportedAgentKind is one daemon-advertised agent engine. Daemons
@@ -262,7 +262,7 @@ type SupportedAgentKind struct {
 	Kind         string                `json:"kind"`
 	Available    bool                  `json:"available"`
 	Version      string                `json:"version,omitempty"`
-	Capabilities AgentKindCapabilities `json:"capabilities,omitempty"`
+	Capabilities AgentKindCapabilities `json:"capabilities"`
 }
 
 // HeartbeatPayload advertises only explicit engine descriptors. Missing

@@ -1,3 +1,4 @@
+import { sessionRestriction } from "../shared/session-profile.mjs";
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -36,9 +37,11 @@ export function NewSession({
     agent_id: agent.id,
     runtime_id: "",
   }));
-  const selfHosted =
-    runtimes.data?.find((runtime) => runtime.id === form.runtime_id)
-      ?.environment === "self_hosted";
+  const runtime = runtimes.data?.find(
+    (runtime) => runtime.id === form.runtime_id,
+  );
+  const selfHosted = runtime?.environment === "self_hosted";
+  const restriction = sessionRestriction(agent, runtime);
   const startedAt = useRef<number>(0);
   const [uncertain, setUncertain] = useState(false);
   const save = useMutation({
@@ -132,6 +135,19 @@ export function NewSession({
               />
             </Field>
           )}
+          {restriction && (
+            <p role="alert" className="text-base">
+              {restriction}
+            </p>
+          )}
+          {!restriction &&
+            runtime &&
+            (runtime.environment === "none" || agent.harness === "mcode") && (
+              <p className="text-base">
+                此组合使用 Core 部署的模型连接；这里选择的 Provider
+                仅用于模型分组。
+              </p>
+            )}
           <ErrorNotice error={save.error || runtimes.error} />
           {uncertain && (
             <p>如请求结果未确定，可关闭弹窗，在会话列表中恢复同一次创建。</p>
@@ -147,6 +163,7 @@ export function NewSession({
             form="session-form"
             type="submit"
             disabled={
+              Boolean(restriction) ||
               uncertain ||
               save.isPending ||
               !form.runtime_id ||

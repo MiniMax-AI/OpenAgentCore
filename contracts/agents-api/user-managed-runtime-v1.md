@@ -7,7 +7,7 @@ Environment ID, returned `remote_url` and scoped executor credential. This priva
 transport does not interoperate with stock Codex `exec-server` or Noise.
 
 For `openai_hosted`, Core uses the deployment-selected
-[E2B, Docker or microsandbox provider](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md).
+[E2B, Docker or microsandbox provider](sandbox-deployment.md).
 This document qualifies the separate caller-managed path: Docker and E2B use the
 same Runtime contract, but the application owns their compute. In that path, E2B
 create, information, renewal and deletion use the official E2B SDK outside Core. Public execution and

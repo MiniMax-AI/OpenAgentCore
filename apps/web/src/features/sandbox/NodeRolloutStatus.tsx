@@ -1,4 +1,4 @@
-import type { SandboxNode, SandboxNodeRollout } from "@agents-core-web/agents-client";
+import type { SandboxNode, SandboxNodeRollout } from "@oac/agents-client";
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import type { MessageKey } from "../../lib/locale-strings";

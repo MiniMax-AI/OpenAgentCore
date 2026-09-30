@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func exportReply(t *testing.T, s *Session, id string, result proto.WorkspaceExportResultPayload) {

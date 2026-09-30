@@ -3,7 +3,7 @@
 A **Sandbox Provider** supplies the outer compute (an *Environment*) that a Core
 Runtime daemon runs in, plus the bounded bootstrap that starts it. This guide is
 the single start-to-finish path for adding one. The canonical interface is
-[`SandboxProvider`](../services/agents-api/internal/sandbox/sandbox_provider.go).
+[`SandboxProvider`](../services/core/internal/sandbox/sandbox_provider.go).
 
 ## Before you start
 
@@ -39,12 +39,12 @@ connectivity; see [Runtime and outer isolation](design-principles.md#runtime-and
 
 ## Steps
 
-1. **Read the contract.** Implement the five required operations and any
-   optional interfaces in [Implement the interface](#implement-the-interface).
-2. **Write the adapter package** under `services/agents-api/internal/sandbox/<kind>`
+1. **Read the contract.** Implement the five required operations and explicitly handle all
+   extension interfaces in [Implement the interface](#implement-the-interface).
+2. **Write the adapter package** under `services/core/internal/sandbox/<kind>`
    (native SDK calls, ownership checks, identity translation, private config).
    Assert `var _ sandbox.SandboxProvider = (*YourAdapter)(nil)` at compile time.
-   Out-of-process helpers live in `services/agents-api/tools/<kind>-provider`.
+   Out-of-process helpers live in `services/core/tools/<kind>-provider`.
 3. **Register the kind** once using
    [Register the provider kind](#register-the-provider-kind). Registration is
    explicit construction, not an init-time plugin registry.
@@ -73,21 +73,54 @@ Use the existing types; do not introduce another lifecycle protocol or a
 vendor-specific execution path. A backend without a native renewable lease
 (Docker) still keeps service-owned hosted expiry and cleanup requirements.
 
-### Required and optional interfaces
+### Explicit operation contracts
+
+Keep the existing small interfaces. Every Provider must implement their methods
+and return a complete `ProviderOperations()` declaration. The interface methods
+are the operation inventory; `sandbox.ValidateOperations` checks it without a
+second hand-maintained list.
 
 | Contract | Requirement | Responsibility |
 | --- | --- | --- |
-| `sandbox.SandboxProvider` | Required | `Create`, `GetInfo`, `Renew`, `Kill`, and bounded bootstrap/diagnostic `RunCommand` |
-| `sandbox.CheckpointProvider` | Optional, separate interface | Exact compute incarnations, snapshot capture/restore, retained-source resume and cleanup |
-| `sandbox.ResidentPauseProvider` | Optional, separate interface | Memory-preserving pause and resume of the same owned compute ID |
-| `runtimeobs.Source` | Optional, separate interface | Read-only, ownership-checked resource observations |
-| `runtimeobs.BatchSource` | Optional, separate interface | Bounded observations in input order, with per-target errors; `ok=false` means no batch read occurred |
+| `sandbox.SandboxProvider` | Five operations must be supported | Allocation lifecycle and bounded administrative commands |
+| `sandbox.CheckpointProvider` | Explicit supported or unsupported decision for every method | Exact compute incarnations, capture/restore, retained-source resume and cleanup |
+| `runtimeobs.Source` | Explicit decision | Ownership-checked read-only observations |
+| `runtimeobs.BatchSource` | Explicit decision | Bounded observations in input order, with per-target errors |
+| `sandbox.SelectionDiscoverer` | Explicit decision | Read-only native configuration discovery before commit |
+| `sandbox.CredentialVerifier` | Explicit decision | Verify access to owned resources without mutation |
+| `sandbox.ResidentPauseProvider` | Explicit decision for both operations | Memory-preserving pause and resume of the same owned compute ID |
 
-Do not implement an optional interface with successful no-op methods. Core uses
-interface assertions to select optional operations. Advertised support requires
-contract and native acceptance evidence; a healthy node or an available CLI does
-not establish it. Observation never renews a lease, starts compute or prepares a
-Harness. See the [observation contract](../contracts/agents-api/runtime-observability.md).
+Each declaration entry has `state: supported` with no reason, or
+`state: unsupported` with an authored reason code. Missing entries, zero states,
+unknown entries, missing methods and unsafe reasons fail validation. The entire
+checkpoint lifecycle and the resident pause/resume pair must each agree on support; batch observation requires single
+observation. Adding a method to an existing interface requires an explicit
+decision and implementation in every adapter. Never supply a default base class
+or generate blanket unsupported implementations for future methods.
+
+Unsupported methods return `providercontract.UnsupportedError` before native
+I/O. The error identifies the exact operation and a safe code, not a native
+message, resource identity, endpoint or credential. Empty results, nil errors,
+`Unavailable`, and unknown mutation outcomes cannot substitute for unsupported.
+The five required methods cannot return unsupported; a backend without a native
+lease preserves the existing read-only `Renew` semantics.
+
+Each adapter owns one `Operations()` function, shared by its concrete instance
+and registration. `providers.ValidateBinding` checks both against the existing
+interfaces and against each other. Runtime admission and node generation loading
+also reject incomplete providers. Interface assertions establish method shape
+only; callers use the declaration to decide whether an operation is supported.
+
+`ObserveBatch` returns an error instead of an ambiguous boolean. Only a typed,
+safe `UnsupportedError` for `ObserveBatch` permits per-target `Observe` calls.
+An unavailable service, timeout or other failure never triggers that fallback.
+Observation never renews, starts, prepares or stops compute; see the
+[observation contract](../contracts/agents-api/runtime-observability.md).
+
+Contract tests call every declared unsupported native method with no configured
+native client, require its matching error and zero result, and reject incomplete
+or contradictory declarations. Supported behavior still requires native and
+lifecycle tests; declaration validation alone cannot prove SDK semantics.
 
 `RunCommand` is an existing administrative bootstrap/diagnostic facility, not an
 alternate route for Skills, Plugins, MCP setup, initial files, Session execution or
@@ -156,14 +189,14 @@ Persist operation IDs and provider-returned snapshot provenance unchanged.
 another capture or restore. `ResumeCompute` only thaws the retained source; it
 must not cold-start a stopped one. Cleanup targets the exact compute incarnation
 and snapshot, not whichever instance currently has the same display name. See
-[the lifecycle implementation](../services/agents-api/internal/execution/runtime_compute.go)
+[the lifecycle implementation](../services/core/internal/execution/runtime_compute.go)
 and its failure tests before advertising this capability.
 
 Resident pause retains the original provider ID and has no separate snapshot
-identity. Core quiesces the Runtime before calling `Pause`, persists the phase
-before the native call, and admits work only after `Resume` and Runtime
+identity. Core quiesces the Runtime before calling `PauseResident`, persists the phase
+before the native call, and admits work only after `ResumeResident` and Runtime
 reconnection. An unknown pause result must be observed without replaying a
-late mutation. See [the resident lifecycle](../services/agents-api/internal/execution/runtime_compute_resident.go).
+late mutation. See [the resident lifecycle](../services/core/internal/execution/runtime_compute_resident.go).
 
 ### Four distinct readiness facts
 
@@ -184,24 +217,24 @@ A provider must not implement a competing preparation path.
 
 `sandbox/providers/registry.go` is the sole registration table. Each entry binds
 an adapter's specification/resource validators, selection normalization, deployment
-mode, defaults, optional checkpoint capability, and local or direct constructor.
+mode, defaults, the adapter-owned operation declaration, and local or direct constructor.
 `providers.Build` constructs node-local adapters; `providers.BuildDirect` constructs
 direct adapters. Neither allocates compute. There is no init-time registration or
 runtime plugin loading.
 
 For a new implementation:
 
-1. Implement `SandboxProvider` in its adapter package and add native contract tests.
+1. Implement the operation contracts above in the adapter package and add native contract tests.
 2. Add its configuration validators and optional read-only `SelectionDiscoverer`
    for native resource discovery. Normalization must copy input before changing it.
    `RestoreSelection` must retain access to owned resources without requiring new
    template validation. Put native credential verification behind
    `CredentialVerifier` when needed.
-3. Register its constructor, policies and defaults in `providers/registry.go`.
+3. Register its constructor, policies, operation declaration and defaults in `providers/registry.go`.
    Node proxy identity and checkpoint advertisement consume this same entry.
    The installer projection uses those registered policies and the common field
    bounds in `sandbox/deployment_contract.go`; regenerate it with
-   `go run ./services/agents-api/cmd/specification-contract -write`.
+   `go run ./services/core/cmd/specification-contract -write`.
 4. If new configuration fields are necessary, extend the typed `sandbox.Selection`
    envelope and its dedicated encrypted persistence fields, API DTO and operator
    client. Do not replace typed configuration with unrestricted JSON. Field codecs
@@ -232,7 +265,7 @@ fingerprint and specification digest; the factory also returns its close functio
 Preserve the `execution.RuntimeProvider` deployment binding: `ProviderKind`,
 installation ID, backend fingerprint, generation, mode and node ownership
 identify the backend. The database owns the selection; the in-memory selection
-is not an alternate authority. Register optional interfaces consistently on
+is not an alternate authority. Declare operation support consistently on
 direct adapters and their transport wrappers. A new public capability needs its
 own protocol change.
 
@@ -263,7 +296,7 @@ cleanup can verify the `Reference` and installation.
 ## Validate the integration
 
 Run `make check-sandbox-provider-contract` while developing. It runs the shared
-[`contracttest`](../services/agents-api/internal/sandbox/contracttest) suite through
+[`contracttest`](../services/core/internal/sandbox/contracttest) suite through
 real adapter boundaries using controlled native failures, plus existing adapter
 and node transport tests. The same packages are included in `make check`.
 New adapters should call the public failure runner with native-side fixtures,
@@ -295,9 +328,9 @@ Environment provides isolation.
 
 | Kind | Adapter | Helper | Operator guide |
 | --- | --- | --- | --- |
-| Docker (node) | [`sandbox/docker`](../services/agents-api/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/agents-api/internal/sandbox/node) | [Hosted sandbox manager](../services/agents-api/HOSTED-SANDBOX-MANAGER.md) |
-| microsandbox (node) | [`sandbox/microsandbox`](../services/agents-api/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](../services/agents-api/tools/microsandbox-provider) | [`deploy/microsandbox`](../services/agents-api/deploy/microsandbox/README.md) |
-| E2B (direct) | [`sandbox/e2b`](../services/agents-api/internal/sandbox/e2b) | [`tools/e2b-provider`](../services/agents-api/tools/e2b-provider/README.md) | [`deploy/e2b`](../services/agents-api/deploy/e2b/README.md) |
+| Docker (node) | [`sandbox/docker`](../services/core/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/core/internal/sandbox/node) | [Nodes](getting-started/nodes.md) |
+| microsandbox (node) | [`sandbox/microsandbox`](../services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](../services/core/tools/microsandbox-provider) | [`deploy/microsandbox`](../services/core/deploy/microsandbox/README.md) |
+| E2B (direct) | [`sandbox/e2b`](../services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](../services/core/tools/e2b-provider/README.md) | [`deploy/e2b`](../services/core/deploy/e2b/README.md) |
 
 Provider selection and E2B setup are owned by
 [Sandbox deployment](../contracts/agents-api/sandbox-deployment.md).

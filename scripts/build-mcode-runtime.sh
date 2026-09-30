@@ -20,9 +20,9 @@ cp -RL "$companion/." "$context/mcode-harness/"
 (
   cd "$repo_root"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
-    -o "$context/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+    -o "$context/oac-daemon" ./apps/daemon/cmd/oac-daemon
 )
-cp "$repo_root/services/agents-api/deploy/mcode/Dockerfile" "$context/Dockerfile"
+cp "$repo_root/services/core/deploy/mcode/Dockerfile" "$context/Dockerfile"
 mkdir -p "$output"
 cp -R "$context/." "$output/"
 printf 'MiniMax Code Runtime image context: %s\n' "$output"

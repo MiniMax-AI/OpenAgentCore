@@ -113,7 +113,7 @@ class SpecificationTests(unittest.TestCase):
 
 class SharedDeploymentContractTests(unittest.TestCase):
     def test_shared_acceptance_and_canonical_bytes(self):
-        path = Path(__file__).resolve().parents[2] / "services/agents-api/internal/sandbox/testdata/deployment-contract.json"
+        path = Path(__file__).resolve().parents[2] / "services/core/internal/sandbox/testdata/deployment-contract.json"
         for fixture in json.loads(path.read_text()):
             with self.subTest(name=fixture["name"]):
                 if not fixture["valid"]:

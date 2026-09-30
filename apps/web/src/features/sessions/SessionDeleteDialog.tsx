@@ -1,4 +1,4 @@
-import { AgentCoreError, isSessionDeletionConflict } from "@agents-core-web/agents-client";
+import { AgentCoreError, isSessionDeletionConflict } from "@oac/agents-client";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 

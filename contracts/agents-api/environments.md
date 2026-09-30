@@ -8,9 +8,9 @@ Session may instead select its exact canonical physical directory. The
 [recorded deployment qualification](user-managed-runtime-v1.md) retains its historical
 source, paths and tested capability scope.
 For hosted compute, the deployment selects E2B, Docker or microsandbox through
-[Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md).
+[sandbox deployment](sandbox-deployment.md).
 For the separate caller-managed E2B path, the user owns allocation, renewal and
-cleanup through the official SDK and [Runtime packaging](../../services/agents-api/deploy/e2b/README.md).
+cleanup through the official SDK and [Runtime packaging](../../services/core/deploy/e2b/README.md).
 [Templates](environment-templates.md) provide reusable preparation; the Core extension also applies their execution configuration to user-managed machines;
 [Files](environment-files.md) reuse the exact authorized local workspace.
 
@@ -30,7 +30,7 @@ readiness. Rotation/revocation, Session deletion and ownership loss deny further
 access without promising immediate cessation of native effects. Native history
 remains local to the bound Runtime and cannot be replaced on retry. There is no
 registry/Noise relay or transient service-side harness credential.
-See the [enrollment guide](../../services/agents-api/README.md#user-managed-runtime-enrollment).
+See the [enrollment guide](../../services/core/README.md#user-managed-runtime-enrollment).
 
 ## Basic public Docker-hosted profile
 
@@ -39,7 +39,7 @@ for the qualified Codex, Claude Code and MiniMax Code profiles. Each uses the sa
 Runtime lifecycle and workspace interfaces with its native adapter. The outer
 Environment provides managed isolation; the daemon adds no inner sandbox.
 See the [engine profile guides](README.md#public-engine-profiles) for setup and limits.
-The standalone [operator configuration](../../services/agents-api/deploy/codex/README.md#standalone-operator-configuration)
+The standalone [operator configuration](../../services/core/deploy/codex/README.md#standalone-operator-configuration)
 selects the qualified immutable Runtime image; advertised capabilities alone do
 not enable admission. An idle or initial-text creation commits Session, Environment
 and retry identity before the existing leased Worker provisions its allocation.
@@ -80,7 +80,7 @@ semantics; this profile does not establish complete Environment compatibility.
 The application creates, renews and destroys its E2B sandbox through the official
 SDK. It deploys the shared Runtime, then enrolls that Runtime into a `self_hosted`
 Session. Core neither keeps an E2B allocation nor issues Provider renew/kill calls.
-The [E2B guide](../../services/agents-api/deploy/e2b/README.md) owns packaging and
+The [E2B guide](../../services/core/deploy/e2b/README.md) owns packaging and
 user-side lifecycle instructions. Expiry or lost workspace/history must not trigger
 transparent replacement or replay. The [new enrollment qualification](user-managed-runtime-v1.md)
 records its own real deployment evidence.
@@ -236,7 +236,10 @@ affect a later reservation or Turn. Evaluate deadlines after acquiring the Sessi
 lock, and return terminal storage outcomes without rolling their transaction back.
 
 A validated Runtime `failed` response with `preparation_failed` and no Run settles
-the pending input immediately with `runtime_preparation_failed`. It records a
+the pending input immediately with `runtime_preparation_failed`. Before admission,
+a rejection of the current `execution_prepare` request with no Run and code
+`invalid_configuration`, `unsupported_configuration` or `unsupported_preparation`
+settles through that same failure path. It records a
 safe Session failure before any Turn exists and releases the input gate; fixing
 the local cause allows new input. Transport loss, capacity rejection and
 unconfirmed cleanup remain retryable within the original deadline. Core uses
@@ -520,8 +523,12 @@ tools, files or network access. Outer Environments own managed isolation, and
 unsupported network restrictions reject instead of silently running unrestricted.
 
 Native installation and validation limits are in the
-[native guide](../../docs/self-hosted-native.md). Historical acceptance evidence
+[self-hosted guide](../../docs/getting-started/self-hosted.md#platforms). Historical acceptance evidence
 stays limited to its recorded binaries and inputs.
+
+On Windows, npm package installation and stdio MCP commands named `npm` or `npx`
+(including their `.cmd` shims) run through the resolved npm installation's
+JavaScript entrypoint with Node, without an extra shell.
 
 ### Environment initialization and compute wake
 
@@ -646,9 +653,49 @@ Runtime resolves public HTTP declarations and installed Plugin MCP through
 retains its connection origin, transport, nullable tool allowlist, required flag,
 credential authority and installed stdio identity. Bindings are never persisted
 or logged. Duplicate identities and unavailable selected credentials reject.
-A service-origin request cannot silently become an Environment-origin connection;
-the existing public HTTP MCP profile remains service-origin `environment:none`.
-This internal consolidation does not qualify public `connection_origin=environment`.
+Public HTTP MCP uses the same binding path as installed Plugin MCP. Its explicit
+`connection_origin` is retained from saved configuration through the Session
+snapshot and private Runtime request; the exact Runtime wire version is required.
+A service-origin request cannot silently become an Environment-origin connection.
+
+### Public MCP connection origin
+
+Core's Harness profile declares `MCPOrigins`; shared admission and dispatch check
+the origin against the Environment and Runtime's advertised HTTP/bearer/required
+capabilities. Runtime validates the same origin before invoking an adapter. No
+Harness-name or Sandbox Provider branch selects a different connection path.
+
+| Harness | `service` origin | `environment` origin | Optional policy |
+| --- | --- | --- | --- |
+| Codex | Service execution host, `environment:none` | Managed or self-hosted workspace | Nullable tool allowlist and required initialization |
+| Claude SDK | Service execution host, `environment:none` | Managed or self-hosted workspace; packaged `workspace_mcp_http` feature required | Nullable tool allowlist and required initialization |
+| MiniMax Code | Unsupported | Managed or self-hosted workspace | `allowed_tools` must be null/omitted; `required` must be false |
+
+Both origins support the declared Harness's anonymous HTTP and selected HTTPS
+bearer path. The existing attached-Vault selection freezes credential identity,
+including a unique implicit URL match or an anonymous selection. Only that
+Project-authorized credential may enter the transient Runtime request; Core
+defaults and unrelated Vaults are not searched. Decryption failure or a missing
+credential fails execution without an anonymous fallback. Public Environment
+MCP retains `project_vault` authority; Plugin credentials retain
+`environment_configuration` authority. Neither source overrides duplicate
+server labels. Bearers never enter persisted native configuration or argv.
+
+Omitted/null origin still means `service`, including on self-hosted requests;
+it does not select the local network automatically. Service-origin requests with
+a workspace remain rejected because they require separate service-side connection
+forwarding. This implementation adds no proxy. Environment origin requires an
+initialized workspace with enabled network access and is invalid on `none`.
+
+Null/omitted `allowed_tools` permits all server tools; an empty list permits none.
+MiniMax rejects every non-null allowlist, including an empty list, rather than
+silently expanding it. Codex and Claude preserve native allowlists and initialize
+required servers before releasing native input, including cold recovery.
+Public MCP with native Subagents remains unqualified. Nonempty literal HTTP
+headers, request metadata and public stdio declarations remain unsupported.
+See [public MCP qualification](https://github.com/MiniMax-AI/OpenAgentCore/blob/e974a7f880a2eb799f0dd39e6ba0870462854a53/contracts/agents-api/public-mcp-qualification.md) for actual model,
+platform and infrastructure coverage; admission support is not a claim of
+complete cross-platform/provider qualification.
 
 Environment-origin literal HTTP headers remain rejected for the pinned Claude
 and MiniMax clients because their cross-origin forwarding cannot preserve header
@@ -656,7 +703,8 @@ authority. MiniMax supports installed stdio and HTTP servers with anonymous or
 explicit user-selected HTTPS bearer authentication. ACP HTTP declarations remain
 Session-local native memory; tokens do not enter native configuration files or
 process arguments. Required initialization and tool allowlists are not exposed
-through the Plugin manifest, and public MiniMax MCP remains unqualified.
+through the Plugin manifest. Public MiniMax HTTP uses the same transient ACP map
+with the stricter admission limits above.
 MiniMax reads the existing Session-private native runtime-name registry for exact
 first-frame identities and cross-checks completed native results for both transports.
 Reuse existing observation and cancellation settlement; never fabricate a delayed

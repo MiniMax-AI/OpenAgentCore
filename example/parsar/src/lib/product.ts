@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { CoreHarnessKind } from "@agents-core-web/agents-client";
+import type { CoreHarnessKind } from "@oac/agents-client";
 export interface NamedResource {
   id: string;
   name: string;

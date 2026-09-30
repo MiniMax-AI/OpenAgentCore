@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Plus, Upload, Trash2 } from "lucide-react";
-import type { Skill } from "@agents-core-web/agents-client";
+import type { Skill } from "@oac/agents-client";
 import { api, readHistory } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";

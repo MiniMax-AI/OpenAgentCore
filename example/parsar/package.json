@@ -13,7 +13,7 @@
     "test:live": "node tests/live.mjs"
   },
   "dependencies": {
-    "@agents-core-web/agents-client": "workspace:*",
+    "@oac/agents-client": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.18",
     "@radix-ui/react-select": "2.3.2",
     "@radix-ui/react-slot": "^1.3.0",

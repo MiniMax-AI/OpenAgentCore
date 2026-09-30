@@ -64,6 +64,6 @@ credential document above.
 
 ## Verification
 
-`go test ./internal/runtimebootstrap ./apps/parsar-daemon/internal/cli` covers the
+`go test ./internal/runtimebootstrap ./apps/daemon/internal/cli` covers the
 input contract, credential-source exclusivity and restart behavior. Provider tests
 verify delivery and permissions without relying on private Runtime storage.

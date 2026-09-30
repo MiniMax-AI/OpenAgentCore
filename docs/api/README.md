@@ -8,14 +8,14 @@ public release content.
 | --- | --- | --- | --- | --- |
 | `/v1` | Applications (business systems, SDKs) | Project API key | Exactly the pinned official Agents API routes. Core-only fields live only in `x_agents_core` (`harness`, `model_provider`, `harness_config`, Session `installation`) | [Agents API guide](public-agent-api.md) |
 | `/core/v1` | Core Web's server and operator scripts | [Core key](../getting-started/operations.md#core-key) | Installation facts, Projects and keys, resource reads and deletion, Session archive, credential issuance, metrics, audit, sandbox deployment and nodes, deployment model providers | [Core API](#core-api), [Web API](web-management.md), [Core OpenAPI](../../contracts/agents-api/core.openapi.yaml) |
-| `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials: short-lived Session installation grants, node enrollment tokens and executor credentials issued through `/core/v1` or claimed by installation, node credentials registered with an enrollment token, and daemon credentials Core issues for hosted sandboxes | Machine bootstrap and connections: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets; each credential works only on its own routes | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [executor credentials](../../contracts/agents-api/environment-executor-credentials.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
+| `/api/v1` | Nodes, Runtime daemons, self-hosted executors | Machine credentials: short-lived Session installation grants, node enrollment tokens and executor credentials issued through `/core/v1` or claimed by installation, node credentials registered with an enrollment token, and daemon credentials Core issues for hosted sandboxes | Machine bootstrap and connections: `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets; each credential works only on its own routes | [Node routes](../../contracts/agents-api/sandbox-deployment.md#authority-and-routes), [executor credentials](../../contracts/agents-api/environment-executor-credentials.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
 
 A credential used in another namespace gets 401: a Project API key on `/core/v1` or
 `/api/v1`, the Core key on `/v1` or `/api/v1`. How Projects and keys behave is in
 [Projects own assets](../design-principles.md#projects-own-assets).
 
 **Routing.** The reverse proxy sends `/v1` and `/api/v1` to Core and everything else
-to Web ([proxy setup](../getting-started/install.md#https-and-the-reverse-proxy)).
+to Web ([proxy setup](../getting-started/install-options.md#https-and-the-reverse-proxy)).
 Browsers reach `/core/v1` only through Web's server, which adds the Core key after
 sign-in; Web returns 404 for `/v1` and `/api/v1`. Operator scripts call `/core/v1`
 on Core's loopback port. Details: [Web and Core](web-management.md).
@@ -55,7 +55,7 @@ core() {  # core METHOD PATH [JSON body]
 | Archive a Project (revokes all keys) | `core POST /projects/$PROJECT_ID/archive` |
 | See harnesses and their default models | `core GET /harnesses` |
 | Set Codex's default model | `core PUT /harnesses/codex/model-configuration '{"model": "your-model-id", "model_provider": {"protocol": "responses", "base_url": "https://provider.example/v1", "api_key": "sk-..."}}'` |
-| Issue an executor credential | See [self-hosted execution](../getting-started/self-hosted.md#operator-credential-management) |
+| Issue an executor credential | See [executor credentials](../../contracts/agents-api/environment-executor-credentials.md#core-key-routes) |
 | Installation facts, including the API base URL | `core GET /installation` |
 
 Errors use the [Core error envelope](../../contracts/agents-api/core-errors.md).
@@ -74,7 +74,7 @@ Errors use the [Core error envelope](../../contracts/agents-api/core-errors.md).
 | `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | Executor credentials for a self-hosted Environment | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) |
 | `installation` | Public URL, API base URL, source commit, the installer's process settings and what is bound to the public URL; available before any deployment | [Installation](../../contracts/agents-api/installation.md) |
 | `metrics` | Core's own process metrics | [Core metrics](../../contracts/agents-api/core-metrics.md) |
-| `sandbox/deployment[/reset]`, `sandbox/e2b/templates[/{template_id}/builds]`, `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Sandbox deployment, read-only E2B template discovery, node enrollment tokens and nodes | [Sandbox deployment](../../contracts/agents-api/sandbox-deployment.md), [node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md), [node host history](../../contracts/agents-api/node-host-history.md) |
+| `sandbox/deployment[/reset]`, `sandbox/e2b/templates[/{template_id}/builds]`, `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Sandbox deployment, read-only E2B template discovery, node enrollment tokens and nodes | [Sandbox deployment](../../contracts/agents-api/sandbox-deployment.md), [nodes guide](../getting-started/nodes.md), [node host history](../../contracts/agents-api/node-host-history.md) |
 | `harnesses`, `harnesses/{harness}/model-configuration` | Supported harnesses and each harness's deployment default model configuration (write-only provider key) | [Model execution](../../contracts/agents-api/model-execution.md#deployment-defaults) |
 
 ## Machine connection API
@@ -84,11 +84,11 @@ the Core key or a Project API key.
 
 | Routes | Caller | Credential | Contract |
 | --- | --- | --- | --- |
-| `POST sandbox-node/enroll` | Node installer | One-use enrollment token from `POST /core/v1/sandbox/enrollment-tokens` | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
+| `POST sandbox-node/enroll` | Node installer | One-use enrollment token from `POST /core/v1/sandbox/enrollment-tokens` | [Node routes](../../contracts/agents-api/sandbox-deployment.md#authority-and-routes), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
 | `GET sandbox-node/configuration` | Node installer and node | Enrollment token, or node credential with `X-OAC-Node-ID` | [Sandbox deployment](../../contracts/agents-api/sandbox-deployment.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
-| `GET sandbox-node/identity`, WebSocket `GET sandbox-node/connect` | Node | Node credential registered at enrollment | [Node operations](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#register-a-host) |
+| `GET sandbox-node/identity`, WebSocket `GET sandbox-node/connect` | Node | Node credential registered at enrollment | [Node routes](../../contracts/agents-api/sandbox-deployment.md#authority-and-routes) |
 | `POST agent-daemon/enroll`, `GET agent-daemon/connection` | Self-hosted executor and its installer | Executor credential from `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) |
-| WebSocket `GET agent-daemon/ws`, `POST agent-daemon/bootstrap`, `GET agent-daemon/device-status` | Runtime daemons | Daemon credential: Core writes one into each hosted sandbox it prepares; a self-hosted executor uses its executor credential | [Runtime enrollment](../../services/agents-api/README.md#user-managed-runtime-enrollment) |
+| WebSocket `GET agent-daemon/ws`, `POST agent-daemon/bootstrap`, `GET agent-daemon/device-status` | Runtime daemons | Daemon credential: Core writes one into each hosted sandbox it prepares; a self-hosted executor uses its executor credential | [Runtime enrollment](../../services/core/README.md#user-managed-runtime-enrollment) |
 
 ## Contract sources
 
@@ -125,11 +125,12 @@ Creating or reading a `self_hosted` Session returns short-lived install commands
 `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation`.
 Machine installers use `POST /api/v1/agent-daemon/installation` and its `/claim`
 subroute with the installation Bearer authorization. Qualified artifacts under
-`/api/v1/agent-daemon/install/{version}/` are public, immutable release content. See
-the [native Runtime guide](../self-hosted-native.md) for expiry, retry, credential
-ownership and platform rules.
+`/api/v1/agent-daemon/install/{version}/` are public, immutable release content. The
+[installation grant](../../contracts/agents-api/environment-executor-credentials.md#installation-grant)
+owns expiry, retry and credential ownership; the
+[self-hosted guide](../getting-started/self-hosted.md#platforms) lists platforms.
 
 The console-local `GET`/`POST /console/installation/domain` surface uses the signed-in
 browser session and same-origin checks. It delegates only domain setup to the
 installer, with the server-held Core key over a private Unix socket; it is not part
-of the Agents API or Core management API. See [Web request boundaries](../web/architecture.md#request-boundaries).
+of the Agents API or Core management API. See [console domain setup](../web/console-server.md#domain-setup).

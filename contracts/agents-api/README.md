@@ -23,7 +23,7 @@ Parsar owns product Agents and Teams. This service owns upstream execution
 resources, including reusable Agents and protocol subagents. The OpenAI Agents
 Python **SDK** is a separate future dependency for business Team orchestration in
 Parsar, not the HTTP contract. Design rules live in
-[CONTRIBUTING.md](../../CONTRIBUTING.md#design-and-compatibility-requirements).
+[AGENTS.md](../../AGENTS.md#public-api).
 
 The [resource selector and error qualification](resource-selector-semantics.md)
 records nullable Skill references and source Files not-found parameter fields,
@@ -31,15 +31,8 @@ with official observations separated from Core acceptance.
 
 ## Implementation direction
 
-Keep the independent service, authentication, PostgreSQL/sqlc persistence,
-transactional admission and official-client test harness. Shared Runtime contracts
-define execution semantics; native representations stay inside adapters.
-
-Concentrate native configuration, structured input/output and Item translation
-in an execution adapter. The application core owns execution state and persistence;
-engine-specific shapes stay at the adapter boundary. Codex uses its native
-app-server; Claude uses the maintained Agent SDK. Reuse native protocols and SDKs
-for further harnesses rather than adding another model/tool loop.
+Adapter and persistence design follows the
+[design rules](../../AGENTS.md#complexity-stays-in-the-adapter).
 The [harness contract and parity baseline](harnesses.md) describes equal-engine
 registration, qualification and shared acceptance.
 Verify configuration against actual execution: response defaults must not merely
@@ -72,7 +65,7 @@ still differ. See the [accepted scope and evidence](#accepted-milestone-and-evid
 The same three harnesses passed historical Core-managed E2B V1 qualification in
 PR #705. That original route is historical evidence; it does not qualify the later
 user-managed enrollment or current deployment-level E2B configuration. See the
-[current hosted provider contract](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md). The [user-managed V1 qualification](user-managed-runtime-v1.md)
+[current hosted provider contract](sandbox-deployment.md). The [user-managed V1 qualification](user-managed-runtime-v1.md)
 records separate real deployment acceptance and its exact scope.
 Select further work only within current user authorization. Parsar cutover and
 business Team orchestration are separate from protocol coverage.
@@ -175,7 +168,7 @@ new model-issued command after a recovery prompt, not automatic API replay.
 
 This is historical evidence for the original Core-managed E2B route. Current
 deployment-level E2B configuration is documented in the
-[Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md).
+[sandbox deployment contract](sandbox-deployment.md).
 This older run does not qualify later enrollment/configuration changes or transfer
 caller-owned compute to Core.
 
@@ -230,8 +223,8 @@ upgrade the protocol.
   without the encryption key. Missing encryption configuration locally rejects
   creation/replacement with 503. Attached Sessions can use static credentials for
   exact-URL HTTPS MCP. OAuth grants use the same binding plus
-  [scoped refresh and replacement](../../services/agents-api/oauth-credentials.md);
-  storage-key rotation, archive behavior and key scopes remain gaps. See the [credential storage guide](../../services/agents-api/credentials.md)
+  [scoped refresh and replacement](../../services/core/oauth-credentials.md);
+  storage-key rotation, archive behavior and key scopes remain gaps. See the [credential storage guide](../../services/core/credentials.md)
   for encryption and operational limits; this does not establish complete Credential
   or hosted error/retry compatibility.
 - `GET /vaults/{vault_id}/credentials` lists only safe metadata, with parent and
@@ -329,8 +322,8 @@ upgrade the protocol.
   reads, live streams, metadata updates and new input exclude the resource.
   Existing streams close on observing removal without an invented deletion event.
   Creation keys remain reserved (local 409); the owner's repeated deletion returns
-  the same confirmation and missing or foreign deletion returns 404 ([batch
-  record](official-semantics-alignment.md#session-deletion-lifecycle--september-23)).
+  the same confirmation and missing or foreign deletion returns 404
+  ([batch record](official-semantics-alignment.md#session-deletion-lifecycle--september-23)).
   Qualified managed Docker deletion also reclaims its owned Runtime;
   broader physical SQL/native history cleanup, immediate native quiescence and
   exact hosted error/retry/overlapping-stream semantics remain unverified or
@@ -480,23 +473,25 @@ operation and placement; native support is not public admission by itself.
 
 | Engine | Qualified placements and limits |
 | --- | --- |
-| `codex` (default) | Qualified `none` and Docker `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none` only; verbosity follows native policy |
-| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text or successful inline PNG/JPEG results; qualified anonymous/static-bearer service-origin HTTP MCP on `none` |
-| `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
+| `codex` (default) | Qualified `none` and Docker `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none` only; Environment-origin HTTP uses the common workspace path; verbosity follows native policy |
+| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text or successful inline PNG/JPEG results; anonymous/static-bearer HTTP MCP on `none` (service origin) or a workspace (Environment origin), subject to qualification |
+| `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; Environment-origin HTTP MCP with null/omitted allowlist and optional initialization; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
 
 All three profiles implement user-managed `self_hosted` enrollment at `/workspace`
 through our private daemon transport; [separate real acceptance](user-managed-runtime-v1.md)
 records qualified deployments and limits. A `self_hosted` Session supplies its own
 model provider in the request or through a saved Agent; deployment defaults apply
 to `openai_hosted` and `none`, never to `self_hosted` ([model execution](model-execution.md)). Service-origin HTTP MCP is rejected on `self_hosted` and hosted local
-placements. This does not remove separately qualified Environment Plugin MCP.
+placements. Explicit Environment-origin HTTP declarations use the same Runtime
+binding path as Plugin MCP; see the [origin matrix](environments.md#public-mcp-connection-origin)
+and [public qualification](public-mcp-qualification.md).
 The [Docker lifecycle](environments.md#basic-public-docker-hosted-profile) retains
 workspace Files/Artifacts, cancellation and recovery. Managed isolation belongs to
 the outer Environment; native tools use the starting account's permissions.
-Configure immutable Runtime images explicitly: [Codex](../../services/agents-api/deploy/codex/README.md),
-[Claude](../../services/agents-api/deploy/claude/README.md),
-[MiniMax](../../services/agents-api/deploy/mcode/README.md).
-[E2B packaging](../../services/agents-api/deploy/e2b/README.md) reuses the Runtime
+Configure immutable Runtime images explicitly: [Codex](../../services/core/deploy/codex/README.md),
+[Claude](../../services/core/deploy/claude/README.md),
+[MiniMax](../../services/core/deploy/mcode/README.md).
+[E2B packaging](../../services/core/deploy/e2b/README.md) reuses the Runtime
 with the official SDK; the user owns provisioning, renewal and destruction.
 
 The shared initialization path supports env/setup and user-directory npm/Python packages;
@@ -506,7 +501,7 @@ unsupported startup installations, unqualified restricted hostname forms and hos
 service-origin HTTP MCP remain outside these accepted profiles. Environment-origin
 MCP Plugins have a separate [Docker qualification and transport matrix](environment-templates.md#environment-origin-mcp-plugins):
 stdio on all three harnesses, Codex HTTP with literal headers or HTTPS bearer,
-and Claude anonymous HTTP or HTTPS bearer without literal headers. This batch
+and Claude/MiniMax anonymous HTTP or HTTPS bearer without literal headers. This batch
 does not qualify those new Plugin paths on E2B. MiniMax's private workspace MCP
 bridge remains internal transport, distinct from installed Environment MCP servers.
 
@@ -517,7 +512,7 @@ Unsupported configurations fail before Session creation; unsupported results fai
 before a batch write. Native capability claims cannot replace service profile
 qualification, tenant authority or exact binding checks. An existing Session
 never silently changes engine/device. See the
-[HTTP MCP limits](../../services/agents-api/README.md#http-mcp-execution).
+[HTTP MCP limits](../../services/core/README.md#http-mcp-execution).
 
 The Store's internal DTO is not the upstream response model. The API layer must
 validate and resolve the upstream schema before persistence, and report only
@@ -591,7 +586,7 @@ authenticated tenant and may include the command's or tool's own diagnostic text
 Reads use the durable index without reconstructing native journals. Existing
 indexed history is preserved. Migration 15 refuses unindexed historical Turns.
 Historical database conversion is unsupported; preserve the old data and install
-separately. See [historical Item storage](../../services/agents-api/README.md#historical-item-storage).
+separately. See [historical Item storage](../../services/core/README.md#historical-item-storage).
 The retired archive format could not recover unrecorded message boundaries or
 outcomes; those limitations remain in already indexed historical Items.
 Other native variants, full reasoning coverage and Items mutation remain gaps.
@@ -917,7 +912,7 @@ creation; rotation/revocation and current authorization reuse the durable ledger
 and exact Runtime enrollment/gateway binding. Historical keys remain revoked and unclaimed. This
 executor-specific prerequisite does not open public Environment admission or
 establish complete ownership, hosted key lifecycle or error compatibility. See the
-[standalone configuration](../../services/agents-api/README.md#standalone-http-service).
+[standalone configuration](../../services/core/README.md#standalone-http-service).
 
 Core documents its optional [harness selection extension](harness-selection.md) separately from the pinned upstream contract.
 

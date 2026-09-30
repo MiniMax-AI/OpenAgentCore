@@ -4,7 +4,7 @@ This is the integration entry point for a Runtime that executes work for Core.
 The wire definitions live once in
 [`internal/agentdaemon/proto`](../internal/agentdaemon/proto);
 Core's [gateway](../internal/agentdaemon/gateway) and the reference Runtime's
-[dispatcher](../apps/parsar-daemon/internal/dispatch) both use them.
+[dispatcher](../apps/daemon/internal/dispatch) both use them.
 The [machine HTTP API](../contracts/agents-api/runtime.openapi.yaml) describes
 registration and connection endpoints. This document defines the meaning and
 ordering of the messages after connection; it does not replace the typed payloads.
@@ -55,6 +55,37 @@ A newer connection replaces the previous device connection. Core fences owner
 leases and evicts old Run/interaction routes; the new connection does not inherit
 them. A valid credential and connection are not authority to choose another
 Session or Environment binding.
+
+### Explicit capability declarations
+
+`AgentKindCapabilities` describes the composed Runtime and Harness, independently
+of `Available` and the Core model profile. Every field uses `CapabilitySupport`:
+`CapabilitySupported` or `CapabilityUnsupported`. Zero means unspecified and is
+invalid even for an unavailable Harness. Registration validates the complete
+struct before changing the registry; there is no implicit basic descriptor.
+
+The wire still uses JSON booleans and includes every field, including `false`.
+Encoding incomplete declarations fails; decoding rejects omitted, null, invalid
+or unknown capability fields, including a missing capability object. An invalid
+heartbeat clears the connection's admission snapshot and closes its transport.
+That establishes no native completion or cancellation result. Both peers use the
+same exact wire version; no historical declaration format is accepted.
+
+Each admitted Executor and Turn retains its declaration. Rediscovery cannot add
+operations to an existing owner. Optional operations check this snapshot before
+native calls; interface presence alone never grants support. A declared operation
+returning `agent.ErrUnsupportedOperation` is a contract violation, distinct from
+unavailability, a failed native call or an uncertain write. Uncertain operations
+keep their existing receipts and ownership; they are never automatically replayed.
+Workspace support includes the common Runtime workspace implementation, so a
+native adapter's unsupported workspace method does not disable that composition.
+
+New fields require an explicit decision in each production declaration. Contract
+tests enumerate every field for registration, wire round trips and the persisted
+boolean projection. The shared test fixture lists current fields individually;
+it does not supply defaults for future fields. The Harness interface inventory
+also requires a role decision and compile assertions for every public adapter;
+see [Harness onboarding](../contracts/agents-api/harness-onboarding.md).
 
 ### Executor and Turn lifetimes
 
@@ -394,7 +425,7 @@ truth and reconciles from confirmed facts. Runtime retains cleanup ownership
 until native work, input receipts, interactions and child work have settled.
 
 The public Turn status is a separate, existing projection:
-[`execution/delivery.go`](../services/agents-api/internal/execution/delivery.go)
+[`execution/delivery.go`](../services/core/internal/execution/delivery.go)
 records an unsuccessful orchestration attempt as `failed`, including
 `delivery_unknown` after an unconfirmed send and `event_stream_incomplete`
 after subscription failure. A closed subscription can replace the send reason
@@ -486,10 +517,10 @@ observations cannot establish a current connection.
 
 Run `make check-runtime-contract` from the repository root. It exercises the
 shared wire validators, gateway, transport and dispatcher, plus
-[real WebSocket contract scenarios](../apps/parsar-daemon/internal/contracttest/wire_test.go)
-using a controlled Harness adapter, plus the [observation-result regression](../services/agents-api/internal/execution/runtime_protocol_test.go). It requires no model credentials or external
+[real WebSocket contract scenarios](../apps/daemon/internal/contracttest/wire_test.go)
+using a controlled Harness adapter, plus the [observation-result regression](../services/core/internal/execution/runtime_protocol_test.go). It requires no model credentials or external
 sandbox. These tests are also included in `make check` through `check-go` and
-`check-agents-api`.
+`check-core`.
 
 The suite checks incompatible versions, preparation failure, cancellation
 settlement, connection loss without invented terminal events, reconnect without
@@ -503,7 +534,7 @@ controlled-adapter test establishes the transport contract, not native Harness
 behavior, OS support, provider authentication or sandbox isolation. Update the
 shared types, this guide and the contract checks together when semantics change.
 
-The reusable [Harness text assertions](../apps/parsar-daemon/internal/agent/contracttest/text.go)
+The reusable [Harness text assertions](../apps/daemon/internal/agent/contracttest/text.go)
 accept any prepared Executor and a small fixture supplying deterministic normal,
 active and steering inputs. They check independent Turn streams, native owner and
 history continuity, durable write/application receipts, stale cancellation and
@@ -522,3 +553,14 @@ failure settles Environment input without destroying the machine or workspace.
 The public `connected` state describes transport; initialization completion and
 native executor readiness remain separate prerequisites for execution. Input
 sources and frozen metadata follow the [Environment contract](../contracts/agents-api/environments.md#runtime-capability-preparation).
+
+
+### MCP connection authority
+
+Public `MCPHTTPServer` messages carry an explicit `connection_origin`; missing or
+unknown values reject rather than selecting a default. Core freezes the public
+default before dispatch. Both peers require the exact wire version. Runtime uses
+the common origin validator before selecting a factory and resolves public and
+installed MCP into transient effective bindings. See the
+[origin and credential contract](../contracts/agents-api/environments.md#public-mcp-connection-origin)
+for supported combinations, native limits and failure ownership.

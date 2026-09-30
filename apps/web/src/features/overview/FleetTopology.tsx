@@ -1,4 +1,4 @@
-import type { SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxNode } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { Cloud, Network } from "lucide-react";
 import type { ReactNode } from "react";

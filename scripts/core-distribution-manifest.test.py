@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -293,7 +294,7 @@ class BundledDocsTests(unittest.TestCase):
                          "[Install](docs/install.md#sign-in-to-web), [API](contracts/api.md#routes), [web](docs/web), "
                          "`[kept](missing.md)`, [`schema.json`](contracts/schema.json), "
                          "[![Chart](docs/chart.png)](contracts/api.md), "
-                         "[main](https://github.com/MiniMax-AI/parsar-core/blob/main/LICENSE)\n"
+                         "[main](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/LICENSE)\n"
                          "```sh\n[not a link](missing.md)\n```\n\n    [indented code](missing.md)\n",
             "docs/install.md": "# Install\n## Sign in to Web\n## C#\n## _Emphasis_ and snake_case\n"
                                "[Back](../README.md#title) [Here](#sign-in-to-web) [C](#c) [E](#emphasis-and-snake_case)\n"
@@ -312,7 +313,7 @@ class BundledDocsTests(unittest.TestCase):
 
     def test_links_leaving_the_bundle_point_at_the_revision(self):
         self.bundle_docs()
-        versioned = "https://github.com/MiniMax-AI/parsar-core/{}/" + REVISION + "/"
+        versioned = "https://github.com/MiniMax-AI/OpenAgentCore/{}/" + REVISION + "/"
         self.assertEqual((self.bundle / "README.md").read_text(), (
             "# Title\n\n![Banner](docs/banner.png) ![Chart](" + versioned.format("raw") + "docs/chart.png)\n"
             "[Install](docs/install.md#sign-in-to-web), [API](" + versioned.format("blob") + "contracts/api.md#routes), "
@@ -350,6 +351,13 @@ class BundledDocsTests(unittest.TestCase):
         for name in distribution.BUNDLED_DOCS:
             self.assertNotIn("@SOURCE_REVISION@", (self.bundle / name).read_text())
             self.assertNotIn("/blob/main/", (self.bundle / name).read_text())
+
+    def test_repository_markdown_links_resolve(self):
+        repository = pathlib.Path(__file__).resolve().parent.parent
+        names = subprocess.run(["git", "ls-files", "-z", "--", "*.md", ":(exclude)example", ":(exclude)provenance"],
+                               cwd=repository, check=True, capture_output=True, text=True).stdout.split("\0")
+        self.assertIn("README.md", names)
+        distribution.docs(repository, self.bundle, REVISION, names=[name for name in names if name], files=())
 
 
 if __name__ == "__main__":

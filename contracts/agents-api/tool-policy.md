@@ -54,7 +54,7 @@ does not require the new capability. Search uses the existing disabled control.
 ## Acceptance
 
 The opt-in `TestNativeToolPolicyPublicExecution` fixture and
-`services/agents-api/tests/official_tool_policy.py` exercise a real PostgreSQL
+`services/core/tests/official_tool_policy.py` exercise a real PostgreSQL
 database, independent API, Docker daemon and native harness using the pinned
 official SDK with strict response validation and raw HTTP. Supply the existing
 native-test environment variables plus `OAC_TEST_TOOL_POLICY_ENGINE` and a private

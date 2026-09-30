@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy, Terminal, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import type { SessionItem } from "@agents-core-web/agents-client";
+import type { SessionItem } from "@oac/agents-client";
 import { Button } from "./ui/button";
 
 export function Thinking() {

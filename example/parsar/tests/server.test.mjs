@@ -160,3 +160,52 @@ test("SSE forwards chunks before completion and aborts upstream when the browser
   abort.abort();
   await disconnected;
 });
+
+
+test("workspace uploads allow bounded inline files and artifact downloads preserve binary bytes", async (t) => {
+  const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const binary = new Uint8Array([0, 255, 128, 13, 10]);
+  let writes = 0;
+  const url = await serve(t, (target, init) => {
+    assert.equal(init.headers.Authorization, "Bearer server-only-secret");
+    if (target.endsWith("/files")) {
+      writes++;
+      assert.ok(init.body.length > 1024 * 1024);
+      return Response.json({ ok: true }, { status: 201 });
+    }
+    return new Response(binary, { headers: { "Content-Type": "text/html", "Content-Disposition": 'attachment; filename="report.bin"' } });
+  });
+  const uploaded = await fetch(`${url}/v1/agents/environments/${id}/files`, {
+    method: "POST", headers: { origin: url, "content-type": "application/json" },
+    body: JSON.stringify({ type: "inline", path: "/workspace/inputs/a", data: Buffer.alloc(1024 * 1024).toString("base64") }),
+  });
+  assert.equal(uploaded.status, 201);
+  const tooLarge = await fetch(`${url}/v1/agents/environments/${id}/files`, {
+    method: "POST", headers: { origin: url }, body: "x".repeat(8 * 1024 * 1024 + 1),
+  });
+  assert.equal(tooLarge.status, 413);
+  assert.equal(writes, 1);
+  const download = await fetch(`${url}/v1/agents/sessions/${id}/artifacts/${id}/content`);
+  assert.equal(download.headers.get("content-type"), "application/octet-stream");
+  assert.match(download.headers.get("content-disposition"), /^attachment/);
+  assert.deepEqual(new Uint8Array(await download.arrayBuffer()), binary);
+  const denied = await fetch(`${url}/v1/agents/sessions/${id}/artifacts/${id}/content`, { headers: { origin: "https://other.example" } });
+  assert.equal(denied.status, 403);
+});
+
+test("file writes can finish beyond the ordinary proxy timeout", async (t) => {
+  const url = await serve(t, async (_target, init) => {
+    await new Promise((resolve) => setTimeout(resolve, 31_000));
+    assert.equal(init.signal.aborted, false);
+    return Response.json({ path: "/workspace/inputs/file.txt" });
+  });
+  const response = await fetch(
+    `${url}/v1/agents/environments/00000000-0000-4000-8000-000000000001/files`,
+    {
+      method: "POST",
+      headers: { origin: url },
+      body: "{}",
+    },
+  );
+  assert.equal(response.status, 200);
+});

@@ -1,4 +1,4 @@
-import type { HarnessModelConfiguration } from "@agents-core-web/agents-client";
+import type { HarnessModelConfiguration } from "@oac/agents-client";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot } from "../../components/console-ui";
