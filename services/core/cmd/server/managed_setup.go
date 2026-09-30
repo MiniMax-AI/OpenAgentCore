@@ -83,11 +83,11 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 
 func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
 	// Adapters declare whether their guests require a public Core origin.
-	adapter, err := providers.Lookup(setup.Provider)
+	requiresPublicOrigin, err := providers.RequiresPublicOrigin(setup.Provider)
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
 	}
-	if adapter.Configuration.Requirements().PublicOrigin == sandbox.Required && store.LoopbackOrigin(s.publicURL) {
+	if requiresPublicOrigin && store.LoopbackOrigin(s.publicURL) {
 		return execution.PreparedRuntimeDeployment{}, store.ErrSandboxPublicURLUnreachable
 	}
 	candidate, err := s.configuration(setup)

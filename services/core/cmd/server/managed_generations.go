@@ -112,6 +112,10 @@ func (p *observedGenerationRouter) Observe(ctx context.Context, t runtimeobs.Tar
 }
 
 func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeployment, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+	usesCredential, err := providers.UsesCredential(setup.Provider)
+	if err != nil {
+		return execution.PreparedRuntimeDeployment{}, err
+	}
 	adapter, err := providers.Lookup(setup.Provider)
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
@@ -131,7 +135,7 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 	if err := sandbox.ValidateProvider(candidate.Config.Provider); err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
 	}
-	if adapter.Configuration.Requirements().Credential != sandbox.Required {
+	if !usesCredential {
 		return candidate, nil
 	}
 	candidate.FenceCredential = func(ctx context.Context) (func(), error) {
