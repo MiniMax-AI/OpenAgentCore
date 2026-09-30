@@ -60,7 +60,7 @@ func NewGenerationManager(ctx context.Context, options GenerationManagerOptions)
 	owned, cancel := context.WithCancel(ctx)
 	m := &GenerationManager{values: map[uint64]*localGeneration{}, options: options, ctx: owned, cancel: cancel, wake: make(chan struct{}, 1)}
 	for _, v := range options.Initial {
-		if !validGeneration(v.Generation) || !validSpecificationDigest(v.SpecificationDigest) || v.Provider == nil || v.Probe == nil || m.values[v.Generation] != nil {
+		if !validGeneration(v.Generation) || !validSpecificationDigest(v.SpecificationDigest) || sandbox.ValidateProvider(v.Provider) != nil || v.Probe == nil || m.values[v.Generation] != nil {
 			cancel()
 			return nil, sandbox.ErrInvalid
 		}
@@ -291,7 +291,7 @@ func (m *GenerationManager) prepareLoop() {
 		m.preparingCancel = nil
 		g.preparing = false
 		g.refs--
-		if err == nil && (value.Generation != generation || value.SpecificationDigest != digest || value.Provider == nil || value.Probe == nil) {
+		if err == nil && (value.Generation != generation || value.SpecificationDigest != digest || sandbox.ValidateProvider(value.Provider) != nil || value.Probe == nil) {
 			err = sandbox.ErrOwnership
 		}
 		if err == nil {

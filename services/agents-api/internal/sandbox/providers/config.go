@@ -83,6 +83,10 @@ func Build(config Config) (*Built, func(), error) {
 	if err != nil {
 		return nil, closeProvider, err
 	}
+	if err := ValidateBinding(adapter, result.Provider); err != nil {
+		closeProvider()
+		return nil, func() {}, err
+	}
 	return result, closeProvider, nil
 }
 

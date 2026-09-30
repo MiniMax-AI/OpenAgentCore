@@ -624,7 +624,7 @@ func (s *batchSource) Observe(context.Context, Target) (Sample, error) {
 	return Sample{}, errors.New("per-target read used for a batch source")
 }
 
-func (s *batchSource) ObserveBatch(ctx context.Context, targets []Target) ([]BatchResult, bool) {
+func (s *batchSource) ObserveBatch(ctx context.Context, targets []Target) ([]BatchResult, error) {
 	time.Sleep(time.Millisecond)
 	s.mu.Lock()
 	s.batches = append(s.batches, len(targets))
@@ -636,7 +636,7 @@ func (s *batchSource) ObserveBatch(ctx context.Context, targets []Target) ([]Bat
 			results[index].Err = ErrNotRunning
 		}
 	}
-	return results, true
+	return results, nil
 }
 
 func TestServiceBatchesPageReadsWithinProviderLimit(t *testing.T) {

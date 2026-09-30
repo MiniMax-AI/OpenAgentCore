@@ -302,7 +302,6 @@ export const sessions = {
     supportedTextParts: "User message {{number}} must contain supported text parts.",
     nonblankTextParts: "User message {{number}} needs nonblank text across its parts.",
     atLeastOneTextPart: "User message {{number}} needs at least one text part.",
-    inlineModelRequired: "Enter a model ID for the inline Agent.",
     selectSavedAgent: "Select a saved Agent before configuring Session-only overrides.",
     nonemptyModelOverride: "Enter a non-empty Session model override.",
     inlineMustNotSendId: "Inline Session creation must not send agent_id.",

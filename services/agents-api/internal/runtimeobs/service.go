@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
+	"reflect"
 	"regexp"
 	"sync"
 	"time"
@@ -52,6 +54,9 @@ func NewService(resolver TargetResolver, sources map[string]Source, options ...S
 	for key, source := range sources {
 		if key == "" || source == nil {
 			return nil, errors.New("invalid Runtime observation source")
+		}
+		if err := providercontract.Validate(source, reflect.TypeFor[Source](), reflect.TypeFor[BatchSource]()); err != nil {
+			return nil, err
 		}
 		copySources[key] = source
 	}
@@ -108,7 +113,7 @@ type PageOptions struct {
 }
 
 // ObserveSessions observes one page of Sessions. Running targets of a source
-// that implements BatchSource share one provider read per MaxBatchTargets;
+// that explicitly supports BatchSource share one provider read per MaxBatchTargets;
 // other sources are read per target, exactly as ObserveSession reads them.
 // Results and errors are aligned with sessions.
 func (s *Service) ObserveSessions(ctx context.Context, sessions []SessionIdentity, options PageOptions) ([]Observation, []error) {
@@ -179,7 +184,11 @@ func (s *Service) observeSessions(ctx context.Context, sessions []SessionIdentit
 				read := chunk[index]
 				sourceCtx, stop := sourceContext(ctx, options.SourceTimeout)
 				started := time.Now()
-				sample, err := read.source.Observe(sourceCtx, read.target)
+				var sample Sample
+				err := providercontract.Require(read.source, "Observe")
+				if err == nil {
+					sample, err = read.source.Observe(sourceCtx, read.target)
+				}
 				stop()
 				observations[read.index], errs[read.index] = s.complete(ctx, read, sample, err, time.Since(started), collectionSource, owner)
 			})
@@ -192,8 +201,20 @@ func (s *Service) observeSessions(ctx context.Context, sessions []SessionIdentit
 // for its current provider.
 func (s *Service) readBatch(ctx context.Context, chunk []*sourceRead, observations []Observation, errs []error, collectionSource CollectionSource, owner OwnershipChecker, sourceTimeout time.Duration) bool {
 	batch, ok := chunk[0].source.(BatchSource)
-	if !ok {
-		return false
+	if !ok { // NewService rejects this; never treat malformed registration as unsupported.
+		for _, read := range chunk {
+			errs[read.index] = providercontract.ErrContract
+		}
+		return true
+	}
+	if err := providercontract.Require(chunk[0].source, "ObserveBatch"); err != nil {
+		if errors.Is(err, providercontract.ErrUnsupported) {
+			return false
+		}
+		for _, read := range chunk {
+			errs[read.index] = err
+		}
+		return true
 	}
 	targets := make([]Target, len(chunk))
 	for index, read := range chunk {
@@ -206,10 +227,19 @@ func (s *Service) readBatch(ctx context.Context, chunk []*sourceRead, observatio
 	}
 	sourceCtx, stop := sourceContext(ctx, sourceTimeout)
 	started := time.Now()
-	results, ok := batch.ObserveBatch(sourceCtx, targets)
+	results, batchErr := batch.ObserveBatch(sourceCtx, targets)
 	stop()
-	if !ok {
+	if _, unsupported := providercontract.UnsupportedReason(batchErr, "ObserveBatch"); unsupported {
 		return false
+	}
+	if errors.Is(batchErr, providercontract.ErrUnsupported) {
+		batchErr = providercontract.ErrContract
+	}
+	if batchErr != nil {
+		for _, read := range chunk {
+			observations[read.index], errs[read.index] = s.complete(ctx, read, Sample{}, batchErr, 0, collectionSource, owner)
+		}
+		return true
 	}
 	duration := time.Since(started)
 	for index, read := range chunk {
@@ -288,6 +318,12 @@ func (s *Service) resolve(ctx context.Context, tenantID, sessionID string, owner
 func (s *Service) complete(ctx context.Context, read *sourceRead, sample Sample, err error, sourceDuration time.Duration, collectionSource CollectionSource, owner OwnershipChecker) (Observation, error) {
 	observation := Observation{Target: read.target, Status: StatusUnavailable, ProviderType: read.providerType, SourceDuration: sourceDuration}
 	switch {
+	case errors.Is(err, providercontract.ErrUnsupported):
+		reason, valid := providercontract.UnsupportedReason(err, "Observe")
+		if !valid {
+			return Observation{}, providercontract.ErrContract
+		}
+		observation.Status, observation.Reason = StatusUnsupported, reason
 	case errors.Is(err, context.DeadlineExceeded):
 		observation.Reason = "sample_timeout"
 	case errors.Is(err, ErrNotRunning):

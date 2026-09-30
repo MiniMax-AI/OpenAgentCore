@@ -4,10 +4,11 @@
 // SandboxProvider owns compute and bootstrap, Runtime owns capability preparation,
 // and Harness adapters own native execution. Compute running is not execution ready.
 //
-// Required operations are on SandboxProvider. CheckpointProvider is an independent
-// optional capability; runtimeobs.Source and runtimeobs.BatchSource define optional
-// read-only observation. Implementing an interface is a capability claim, not proof
-// of qualification: run the common contract tests and adapter-specific acceptance.
+// Required operations are on SandboxProvider. CheckpointProvider and runtimeobs
+// observation remain separate small interfaces. Every registered adapter explicitly
+// declares and implements each operation, including safe Unsupported rejections.
+// Method-set presence never means an extension is supported. ValidateProvider and
+// the common contract tests check declaration completeness and implementation.
 //
 // Registration is explicit construction, not a global init-time registry. Node-local
 // adapters register in sandbox/providers; Core's managed setup
@@ -20,6 +21,7 @@ package sandbox
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 )
 
 var (
@@ -76,6 +78,7 @@ type CommandResult struct {
 // Implementations verify installation plus Reference ownership before mutation.
 // See docs/sandbox-provider.md for settlement, cleanup and retry requirements.
 type SandboxProvider interface {
+	providercontract.Declared
 	// Create performs the original attempt once; no credential overwrite on conflict.
 	Create(context.Context, Bootstrap) (Info, error)
 	// GetInfo observes compute without creating, starting, renewing or preparing it.
@@ -89,7 +92,7 @@ type SandboxProvider interface {
 	RunCommand(context.Context, Reference, Command) (CommandResult, error)
 }
 
-// CheckpointProvider is optional. It supplements the existing provider with
+// CheckpointProvider is an explicitly declared extension. It supplies
 // exact-incarnation operations; Worker and Store remain the lifecycle owner.
 type CheckpointProvider interface {
 	SandboxProvider

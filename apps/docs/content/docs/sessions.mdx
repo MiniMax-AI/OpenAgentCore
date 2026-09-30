@@ -146,6 +146,7 @@ only additions to the OpenAI shapes, and they sit inside `x_agents_core`:
 | `harness` | Agent, or a Session's inline `agent` | `codex`, `claude_sdk` or `mcode` |
 | `model_provider` | Agent, or Session creation (top level) | `protocol`, `base_url`, `api_key`, and for `mcode` also `context_window` and `max_output_tokens`. The protocol must be one the harness supports: Codex `responses`, Claude Code `anthropic`, MiniMax Code any of `anthropic`, `responses`, `chat_completions` |
 | `harness_config` | Agent, inline `agent`, or Session creation (top level, wins) | The harness's native model parameters, such as Codex's `model_reasoning_effort` |
+| `environment` | Session creation (top level), any placement | Portable preparation: `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins`, `capability_directories`. A field may not also appear in `environment`; see [Environments](/environments-and-files#preparation-order) |
 | `installation` | Read-only, on `self_hosted` Sessions | Short-lived install commands for your machine; see [self-hosted execution](/self-hosted-execution) |
 
 Any other member is rejected with 400. `api_key` is write-only: reads return
@@ -245,7 +246,7 @@ Returns 201 with the Session:
 | `environment.type` | Runs on | Notes |
 | --- | --- | --- |
 | `openai_hosted` | A sandbox Core creates (node or E2B) | Optional `network`, `packages`, `files`, `skills`, `plugins`, `setup_commands`, or a template |
-| `self_hosted` | Your machine | Requires an absolute `workspace_directory`. The response carries install commands in `x_agents_core.installation`; see [self-hosted execution](/self-hosted-execution) |
+| `self_hosted` | Your machine | Requires an absolute `workspace_directory`. Skills, packages, files or a template go in `x_agents_core.environment`. The response carries install commands in `x_agents_core.installation`; see [self-hosted execution](/self-hosted-execution) |
 | `none` | An existing device connection | `input` required; uses the default model only |
 
 ### Session status
@@ -301,7 +302,8 @@ oac "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
 - **When idle,** a message starts a new Turn. **While a Turn runs,** it joins that
   Turn (steering); it does not start a parallel task.
 - **Content** is `input_text`, plus `input_image` as an inline PNG or JPEG data URI.
-  Images work with Codex and Claude Code, on `none` and Docker sandboxes only. The
+  Images work with Codex and Claude Code wherever the Runtime supports them;
+  MiniMax Code rejects them. The
   whole request is limited to 1 MiB.
 - Full rules: [message input](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/message-input.md).
 
@@ -520,12 +522,12 @@ Details: [Source Files and Skills](https://github.com/MiniMax-AI/parsar-core/blo
 
 ## Environment Templates
 
-A template saves workspace setup for reuse by `openai_hosted` Sessions:
+A template saves workspace setup for reuse. `openai_hosted` Sessions reference it in
+`environment`; `self_hosted` Sessions in `x_agents_core.environment`:
 
 ```python
 template = client.beta.agents.environments.templates.create(
     name="python-data",
-    network={"access": "restricted", "allowed_domains": ["pypi.org", "files.pythonhosted.org"]},
     packages={"python": ["pandas"]},
     setup_commands=[{"command": "mkdir -p /workspace/outputs"}],
 )
@@ -533,8 +535,8 @@ template = client.beta.agents.environments.templates.create(
 
 | Field | Meaning |
 | --- | --- |
-| `network` | `access`: `enabled`, `disabled`, or `restricted` to 1–100 exact hosts in `allowed_domains`. A Session can only narrow it |
-| `packages` | `npm` and `python` packages. `system` packages are rejected: bake them into the image |
+| `network` | `access`: `enabled` (default), `disabled`, or `restricted` to 1–100 exact hosts in `allowed_domains`. A Session can only narrow it. Current Runtimes don't enforce `disabled` or `restricted`, so a Session that needs them is rejected; see [restricted network policy](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-templates.md#restricted-network-policy) |
+| `packages` | `npm` and `python` packages. `system` packages are rejected: preinstall them in the image or on the machine |
 | `setup_commands`, `env` | Run and set at preparation. Never returned by reads |
 | `files`, `skills`, `plugins` | Initial content. Up to 50 files, 10 MiB inline in total |
 
@@ -557,8 +559,16 @@ session = client.beta.agents.sessions.create(environment={"type": "none"}, input
 
 The HTTP path is `/vaults`, with the Beta header. A credential is used when an MCP
 server's URL matches its `mcp_server_url` exactly, or when the tool names its
-`credential_id`. Service-origin MCP works with Codex and Claude Code on `none`
-Sessions only.
+`credential_id`.
+
+An MCP tool's `connection_origin` decides who connects:
+
+| `connection_origin` | Connects from | Works with |
+| --- | --- | --- |
+| `service` (default) | Core's side, for `none` Sessions | Codex and Claude Code |
+| `environment` | Inside the workspace (managed or your own machine) | Codex, Claude Code and MiniMax Code. MiniMax Code needs a null allowlist and `required: false` |
+
+Current rules: [public MCP connection origin](/environments-and-files#public-mcp-connection-origin).
 
 ## Limits and differences from OpenAI
 
@@ -569,7 +579,7 @@ Sessions only.
 | Session create idempotency | Same key returns the original Session |
 | Event stream | Live only; no replay, `Last-Event-ID` ignored |
 | Tools | No enabled `web_search`; no multi-agent with functions; MiniMax Code has no public functions |
-| Images | Inline PNG/JPEG only; Codex and Claude Code; `none` and Docker sandboxes |
+| Images | Inline PNG/JPEG only; Codex and Claude Code; MiniMax Code rejects them |
 | Packages | `packages.system` rejected |
 
 Per-operation status and harness differences are in the

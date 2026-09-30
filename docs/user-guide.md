@@ -105,7 +105,7 @@ snapshot; editing the source later doesn't change a running Session.
 | To | Use |
 | --- | --- |
 | Upload a Skill and pick a version | [Skills](api/public-agent-api.md#skills) |
-| Reuse packages, files, setup and network rules | [Environment Templates](api/public-agent-api.md#environment-templates) |
+| Reuse packages, files and setup commands | [Environment Templates](api/public-agent-api.md#environment-templates) |
 | Call your own code from the agent | [Function tools](api/public-agent-api.md#function-tools) |
 | Connect an MCP server, with credentials | [Execution tools](../contracts/agents-api/execution-tools.md) and [Vaults](api/public-agent-api.md#vaults) |
 | Use Skill or Plugin directories on your machine | [Local capability directories](getting-started/self-hosted.md#local-capability-directories) |

@@ -27,10 +27,10 @@ func TestObserveBatchMapsMetricsAndKeepsUnmeasuredValuesNull(t *testing.T) {
 		targets = append(targets, runtimeobs.Target{TenantID: reference.TenantID, EnvironmentID: reference.EnvironmentID, Mode: runtimeobs.ModeManaged,
 			Instance: runtimeobs.Instance{AllocationID: reference.AllocationID, ProviderKey: p.config.InstallationID}})
 	}
-	results, ok := p.ObserveBatch(bounded(t), targets)
-	if !ok || len(caller.requests) != 1 || caller.requests[0].Operation != "observe" || len(caller.requests[0].References) != 2 ||
+	results, err := p.ObserveBatch(bounded(t), targets)
+	if err != nil || len(caller.requests) != 1 || caller.requests[0].Operation != "observe" || len(caller.requests[0].References) != 2 ||
 		caller.requests[0].References[1] != stopped || caller.requests[0].Deadline.IsZero() {
-		t.Fatalf("batch was not one bounded helper request: ok=%v %+v", ok, caller.requests)
+		t.Fatalf("batch was not one bounded helper request: err=%v %+v", err, caller.requests)
 	}
 	sample := results[0].Sample
 	if results[0].Err != nil || !sample.ObservedAt.Equal(now) || !sample.StartedAt.Equal(started) ||

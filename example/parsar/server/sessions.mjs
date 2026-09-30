@@ -19,7 +19,7 @@ function requestFor(store, id, body) {
     if (agent.skill_ids.length)
       throw new AppError(
         400,
-        "用户机器使用本地能力目录，当前 Core 不接受托管 Skill 引用。请使用未绑定托管 Skill 的 Agent，并在运行时填写本地能力目录。",
+        "此示例的用户机器只使用本地能力目录，暂不传递托管 Skill。请使用未绑定托管 Skill 的 Agent，并在运行时填写本地能力目录。",
       );
     if (mcps.length)
       throw new AppError(

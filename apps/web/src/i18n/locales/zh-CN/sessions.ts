@@ -303,7 +303,6 @@ export const sessions = {
     supportedTextParts: "用户消息 {{number}} 必须包含受支持的文本片段。",
     nonblankTextParts: "用户消息 {{number}} 的文本片段中必须包含非空文本。",
     atLeastOneTextPart: "用户消息 {{number}} 至少需要一个文本片段。",
-    inlineModelRequired: "请输入内联 Agent 的模型 ID。",
     selectSavedAgent: "配置 Session 专用覆盖项前，请先选择已保存的 Agent。",
     nonemptyModelOverride: "请输入非空的 Session 模型覆盖值。",
     inlineMustNotSendId: "创建内联 Agent Session 时不得发送 agent_id。",

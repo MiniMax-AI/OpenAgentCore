@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
+	"maps"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
@@ -23,8 +25,9 @@ type generationStore interface {
 // immutable specification and current credential. There is no mutable provider
 // map to unload and no current-generation fallback for a missing historical row.
 type generationRouter struct {
-	setup *managedSetup
-	store generationStore
+	setup      *managedSetup
+	store      generationStore
+	operations providercontract.Operations
 }
 
 func (p *generationRouter) route(ctx context.Context, r sandbox.Reference) (sandbox.SandboxProvider, func(), error) {
@@ -87,15 +90,22 @@ func (p *generationRouter) RunCommand(ctx context.Context, r sandbox.Reference, 
 
 type observedGenerationRouter struct{ *generationRouter }
 
+func (p *generationRouter) ProviderOperations() providercontract.Operations {
+	return maps.Clone(p.operations)
+}
+
 func (p *observedGenerationRouter) Observe(ctx context.Context, t runtimeobs.Target) (runtimeobs.Sample, error) {
 	v, done, err := p.route(ctx, sandbox.Reference{TenantID: t.TenantID, EnvironmentID: t.EnvironmentID, AllocationID: t.Instance.AllocationID})
 	if err != nil {
 		return runtimeobs.Sample{}, err
 	}
 	defer done()
+	if err := providercontract.Require(v, "Observe"); err != nil {
+		return runtimeobs.Sample{}, err
+	}
 	source, ok := v.(runtimeobs.Source)
 	if !ok {
-		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
+		return runtimeobs.Sample{}, providercontract.ErrContract
 	}
 	return source.Observe(ctx, t)
 }
@@ -112,11 +122,13 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 	if !ok {
 		return execution.PreparedRuntimeDeployment{}, errors.New("sandbox generation store is unavailable")
 	}
-	router := &generationRouter{setup: s, store: db}
-	if _, ok := candidate.Config.Provider.(runtimeobs.Source); ok {
-		candidate.Config.Provider = &observedGenerationRouter{router}
-	} else {
-		candidate.Config.Provider = router
+	router := &generationRouter{setup: s, store: db, operations: candidate.Config.Provider.ProviderOperations()}
+	router.operations["ObserveBatch"] = providercontract.Support{State: providercontract.Unsupported, Reason: "allocations_require_individual_generation_routing"}
+	router.operations["DiscoverSelection"] = providercontract.Support{State: providercontract.Unsupported, Reason: "generation_router_does_not_discover_configuration"}
+	router.operations["VerifyCredential"] = providercontract.Support{State: providercontract.Unsupported, Reason: "generation_router_does_not_verify_configuration"}
+	candidate.Config.Provider = &observedGenerationRouter{router}
+	if err := sandbox.ValidateProvider(candidate.Config.Provider); err != nil {
+		return execution.PreparedRuntimeDeployment{}, err
 	}
 	if !adapter.Credential {
 		return candidate, nil
@@ -137,6 +149,9 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 			value.InstallationID = setup.InstallationID
 			provider, err := s.provider(value)
 			if err != nil {
+				return err
+			}
+			if err := providercontract.Require(provider, "VerifyCredential"); err != nil {
 				return err
 			}
 			verifier, ok := provider.(sandbox.CredentialVerifier)
@@ -221,6 +236,6 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 
 // A batch can contain allocations from different endpoint generations. Let the
 // observation worker route each allocation through its immutable generation.
-func (p *observedGenerationRouter) ObserveBatch(_ context.Context, _ []runtimeobs.Target) ([]runtimeobs.BatchResult, bool) {
-	return nil, false
+func (p *observedGenerationRouter) ObserveBatch(_ context.Context, _ []runtimeobs.Target) ([]runtimeobs.BatchResult, error) {
+	return nil, &providercontract.UnsupportedError{Operation: "ObserveBatch", Reason: "allocations_require_individual_generation_routing"}
 }
