@@ -645,6 +645,7 @@ class NodeInstallTests(unittest.TestCase):
                                           service_account=lambda: self.account),
                       mock.patch.object(installer.shutil, "which", side_effect=lambda tool: None if tool == "docker" and not self.docker_installed else "/usr/bin/" + tool),
                       mock.patch.object(installer.grp, "getgrnam", side_effect=lambda name: SimpleNamespace(gr_mem=["oac-node"] if self.joined else [])),
+                      mock.patch.object(installer.os, "getgrouplist", side_effect=lambda name, gid: [gid]),
                       mock.patch.object(installer.grp, "getgrgid", side_effect=lambda gid: SimpleNamespace(gr_name=self.device_group))):
             patch.start()
             self.addCleanup(patch.stop)
