@@ -301,16 +301,18 @@ func TestRuntimeSuspensionCountsUncertainCapacityUntilReleased(t *testing.T) {
 }
 
 func TestRuntimeSuspensionIdleStartsAfterLastCompletion(t *testing.T) {
-	_, w, pool, owner := runtimeSuspensionFixture(t)
-	turn := runtimeSuspensionCompleted(t, pool, owner)
+	s, w, pool, owner := runtimeSuspensionFixture(t)
+	runtimeSuspensionCompleted(t, pool, owner)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 hours' WHERE id=$1`, owner.ID)
-	var completed time.Time
-	if err := pool.QueryRow(t.Context(), `SELECT completed_at FROM turns WHERE id=$1`, turn).Scan(&completed); err != nil {
+	before := runtimeDatabaseTime(t, s)
+	id, _ := parseConnectionGeneration(owner.SessionID)
+	if err := s.queries.RecordRuntimeTerminalActivity(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
+	after := runtimeDatabaseTime(t, s)
 	activity, err := w.RuntimeActivity(t.Context(), owner)
-	if err != nil || !activity.LastActivity.Equal(completed) {
-		t.Fatal("long Turn completion did not restart idle interval", activity, completed, err)
+	if err != nil || activity.LastActivity.Before(before) || activity.LastActivity.After(after) || activity.ReadyToSuspend(time.Minute) {
+		t.Fatal("long Turn completion did not restart the ingestion idle interval", activity, before, after, err)
 	}
 }
 
@@ -421,6 +423,11 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 			}
 			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 0); !errors.Is(err, ErrInvalidInput) {
 				t.Fatal("missing idle timeout accepted", err)
+			}
+			// Re-observe the allocation after terminal ingestion advanced its activity fence.
+			owner, err = s.GetRuntimeAllocation(t.Context(), owner.TenantID, owner.EnvironmentID)
+			if err != nil {
+				t.Fatal(err)
 			}
 			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); err != nil {
 				t.Fatal("elapsed idle timeout rejected", err)
