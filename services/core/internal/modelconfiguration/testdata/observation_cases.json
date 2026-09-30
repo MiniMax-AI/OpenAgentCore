@@ -1,0 +1,20 @@
+[
+  {"status": "completed", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "authentication_error", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "connection_failed", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "rate_limit_exceeded", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "usage_limit_exceeded", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "server_overloaded", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "server_error", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "resource_not_found", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "request_timeout", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "invalid_request", "observed": true},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "context_length_exceeded", "observed": false},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "cyber_policy", "observed": false},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "harness_error", "observed": false},
+  {"status": "failed", "error_code": "engine_failed", "engine_error_code": "untrusted raw text", "observed": false},
+  {"status": "failed", "error_code": "engine_failed", "observed": false},
+  {"status": "failed", "error_code": "input_not_applied", "engine_error_code": "authentication_error", "observed": false},
+  {"status": "failed", "error_code": "device_disconnected", "engine_error_code": "authentication_error", "observed": false},
+  {"status": "cancelled", "error_code": "engine_failed", "engine_error_code": "authentication_error", "observed": false}
+]
