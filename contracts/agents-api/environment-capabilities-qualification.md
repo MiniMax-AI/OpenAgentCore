@@ -16,7 +16,7 @@ or replacement model/tool loop was used. Remote evidence is under
 | --- | --- | --- |
 | Self-hosted Claude structured output | `claude-structured`, Session `2a70e3ca-b67c-4222-9c3a-2fa9b7db2b9d` | Native file read followed by schema-constrained proof; another completed Turn after a fresh daemon process resumed the same Session. |
 | Self-hosted Claude deferred function discovery | `claude-discovery-qualified`, Session `7801d632-697f-419d-8531-848a60d9f1a8` | Native history records `ToolSearch` and the declared deferred callback. The callback used the random schema argument and the answer contained a fresh result supplied only by the client. Cold continuation completed another callback; cancellation during a third pending callback cancelled the Turn and settled the function call. |
-| MiniMax installed HTTP MCP | `minimax-http-common` | Anonymous and explicit HTTPS bearer servers both returned fresh proofs, including after daemon restart. Cancelling an actual waiting HTTP tool call cancelled its Turn. Native configuration files contained no bearer token. |
+| MiniMax installed HTTP MCP | `minimax-http-common` | Anonymous and explicit HTTPS bearer servers both returned fresh proofs, including after daemon restart. Cancelling an actual waiting HTTP tool call cancelled its Turn. The original scan covered only `config.yaml` and `mcp.json`; later review found an extra tool-environment copy in `workspace-profile.json`, so that scan did not establish secret-free native state. |
 
 The HTTP fixture implements MCP, not model responses. It verifies that the
 anonymous server does not receive the other server's Authorization header and
@@ -30,6 +30,23 @@ initial SSE snapshot or optional assistant phase, so their failed script records
 are retained separately. They are not presented as clean end-to-end SSE evidence.
 The recovered results and native history verify the actual completed work; inputs
 were not replayed to obtain those results.
+
+## MCP credential persistence follow-up
+
+Independent review found that MiniMax's workspace profile copied the complete
+tool environment, including selected bearer values. The adapter now persists only
+the validated Runtime-owned snapshot path; the tool launcher reads it when starting
+tools. Missing or malformed snapshots fail explicitly without parser contents in
+errors. No historical profile or credential migration is provided.
+
+A newly built daemon and MiniMax companion passed `minimax-http-private-env`:
+anonymous and selected HTTPS bearer calls, cold continuation and cancellation of
+an active HTTP call. After each Turn, the test scanned every native MiniMax state
+file for the fresh token. A final check confirmed a real workspace profile with
+no inline `toolEnv`, a snapshot reference outside native state, and no token in
+any native state file. The earlier narrower scan above is not reused as evidence
+for this guarantee. The Runtime's authorized private snapshot intentionally
+retains the environment values required by tools.
 
 ## Funded visual-model validation
 

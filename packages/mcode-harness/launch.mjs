@@ -14,9 +14,21 @@ if (!Array.isArray(domains) || (profile.network==='restricted'
  ? domains.length<1 || domains.length>100 || domains.some(host=>typeof host!=='string'||!hostname.test(host)||host.trim()!==host||isIP(host)!==0)
  : domains.length!==0)) throw new Error('Invalid network domains');
 const baseEnv = {...process.env};
-if (profile.toolEnv !== undefined) {
- if (!profile.toolEnv || typeof profile.toolEnv !== 'object' || Array.isArray(profile.toolEnv) || Object.values(profile.toolEnv).some(value=>typeof value!=='string')) throw new Error('Invalid tool environment');
- Object.assign(baseEnv,profile.toolEnv);
+if (Object.hasOwn(profile, 'toolEnv')) throw new Error('Inline tool environment is unsupported');
+if (profile.toolEnvFile !== undefined) {
+ // Resolve values only at tool launch, from the Runtime-owned frozen snapshot.
+ // Never include parser diagnostics: malformed input can contain credentials.
+ let values;
+ try {
+  const path = profile.toolEnvFile;
+  if (typeof path !== 'string' || !isAbsolute(path) || normalize(path) !== path) throw new Error();
+  const raw = readFileSync(path);
+  if (raw.length > 1024 * 1024) throw new Error();
+  values = JSON.parse(raw.toString('utf8'));
+  if (!values || typeof values !== 'object' || Array.isArray(values) ||
+      Object.entries(values).some(([key, value]) => !key || /[=\x00\r\n]/.test(key) || typeof value !== 'string' || value.includes('\0'))) throw new Error();
+ } catch { throw new Error('Runtime tool environment unavailable'); }
+ Object.assign(baseEnv, values);
 }
 if (profile.capabilityRoot && (typeof profile.capabilityRoot !== 'string' || !isAbsolute(profile.capabilityRoot) || normalize(profile.capabilityRoot) !== profile.capabilityRoot || profile.capabilityRoot === '/' || /[\\\x00-\x1f\x7f]/.test(profile.capabilityRoot))) throw new Error('Invalid capability root');
 if (profile.skills && !profile.capabilityRoot) throw new Error('Missing capability root');

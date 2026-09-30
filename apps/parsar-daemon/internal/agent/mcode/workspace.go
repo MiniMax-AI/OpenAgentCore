@@ -122,11 +122,13 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 
 	profile["workspace"] = c.Directory
 	{
-		values, err := localworkspace.ReadOptionalToolEnvironment()
+		file, err := localworkspace.ToolEnvironmentFile()
 		if err != nil {
 			return opts, err
 		}
-		profile["toolEnv"] = values
+		if file != "" {
+			profile["toolEnvFile"] = file
+		}
 	}
 
 	raw, err = json.Marshal(profile)

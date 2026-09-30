@@ -70,14 +70,30 @@ func validToolEnvironment(values map[string]string) bool {
 
 // ReadOptionalToolEnvironment permits a Runtime without explicit user variables.
 func ReadOptionalToolEnvironment() (map[string]string, error) {
+	values, _, err := readOptionalToolEnvironment()
+	return values, err
+}
+
+// ToolEnvironmentFile returns the validated Runtime-owned source without copying
+// its values into a Harness profile. An unconfigured environment has no file.
+func ToolEnvironmentFile() (string, error) {
+	_, path, err := readOptionalToolEnvironment()
+	return path, err
+}
+
+func readOptionalToolEnvironment() (map[string]string, string, error) {
 	path, err := toolEnvironmentPath()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if _, err = os.Stat(path); errors.Is(err, os.ErrNotExist) && os.Getenv("OAC_RUNTIME_TOOL_ENV_FILE") == "" {
-		return map[string]string{}, nil
+		return map[string]string{}, "", nil
 	}
-	return ReadToolEnvironment()
+	values, err := readToolEnvironmentFile(path)
+	if err != nil {
+		return nil, "", err
+	}
+	return values, path, nil
 }
 
 // The prepared snapshot takes precedence over the operator's source file.

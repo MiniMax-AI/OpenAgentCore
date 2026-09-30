@@ -796,5 +796,6 @@ explicit Session `env` keys override the base. Runtime does not rewrite the sour
 file or inherit unrelated ambient credentials. Setup, capability resolution and
 Harness execution read the same prepared snapshot. Reconnect preserves that
 snapshot even if the operator edits the source; a new installation for a new
-Session reads the current source. A missing or invalid explicitly configured file
+Session reads the current source. Harness profiles may reference the Runtime-owned
+environment file, but must not persist copies of its values. A missing or invalid explicitly configured file
 fails preparation.

@@ -274,6 +274,8 @@ broader compatibility target is complete from one merged batch.
 - Split growing files at an existing ownership boundary instead of adding
   unrelated responsibilities.
 - Use `internal/obs/log` for logs. Keep credentials out of source and logs.
+  Harness profiles must not copy Runtime tool environment values; see the
+  [environment contract](contracts/agents-api/environments.md#explicit-local-tool-environment).
 - Require absolute user-supplied working directories.
 - Keep test artifacts under `~/.oac/` and build output under
   `${OAC_DEV_HOME:-$HOME/.oac}`. Runtime state uses `${OAC_RUNTIME_HOME:-$HOME/.oac}`.
