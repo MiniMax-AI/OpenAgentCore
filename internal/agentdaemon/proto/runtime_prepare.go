@@ -7,9 +7,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/google/uuid"
 )
 

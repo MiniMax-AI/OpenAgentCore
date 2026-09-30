@@ -1,4 +1,4 @@
-import type { HarnessModelConfiguration } from "@agents-core-web/agents-client";
+import type { HarnessModelConfiguration } from "@oac/agents-client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import i18n from "../../i18n";

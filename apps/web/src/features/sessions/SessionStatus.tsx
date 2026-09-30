@@ -1,4 +1,4 @@
-import type { AgentSession } from "@agents-core-web/agents-client";
+import type { AgentSession } from "@oac/agents-client";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";

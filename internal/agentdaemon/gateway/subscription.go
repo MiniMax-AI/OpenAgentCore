@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 var ErrSubscriberOverflow = errors.New("execution subscriber buffer overflow")

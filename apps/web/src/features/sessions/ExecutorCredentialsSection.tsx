@@ -1,4 +1,4 @@
-import { AgentCoreError, type ExecutorCredential, type IssuedExecutorCredential } from "@agents-core-web/agents-client";
+import { AgentCoreError, type ExecutorCredential, type IssuedExecutorCredential } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";

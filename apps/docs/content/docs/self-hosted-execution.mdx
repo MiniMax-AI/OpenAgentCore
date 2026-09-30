@@ -17,7 +17,7 @@ The Session brings its own model provider; the installation default never applie
 | macOS arm64 | Supported | Supported | Supported |
 | Windows amd64 | Supported | Supported | Not supported |
 
-The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
+The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
 
 The machine needs:
 
@@ -60,7 +60,7 @@ No administrator privileges or Docker are needed.
 
 In Web, open the Session and copy the command under **Connect a host**.
 
-Keep the command private: it carries a short-lived [installation grant](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-executor-credentials.md#installation-grant) that claims the machine's credential. When it has expired, read the Session again or copy a fresh command from Web.
+Keep the command private: it carries a short-lived [installation grant](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-executor-credentials.md#installation-grant) that claims the machine's credential. When it has expired, read the Session again or copy a fresh command from Web.
 
 The installer reports three results:
 
@@ -128,7 +128,7 @@ The installation's `bin/oac-daemon` finds its own installation. Use it for:
 | `oac-daemon logs -n 100`, `oac-daemon logs -f` | Print or follow the daemon log |
 | `oac-daemon stop` | Stop the daemon |
 
-If you set `OAC_RUNTIME_HOME`, use the same value for every command. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-executor-credentials.md#connection-status).
+If you set `OAC_RUNTIME_HOME`, use the same value for every command. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-executor-credentials.md#connection-status).
 
 To add a Harness, run the install command again (a fresh copy from Web if it has expired) with the same installation directory and the Harness to add. The installer checks the existing contents, adds only missing components and keeps the Harnesses already installed. Restart a running daemon afterwards so it discovers the new Harness.
 
@@ -143,9 +143,9 @@ In Web, the Session's **Executor credentials** list the machine's credential:
 | **Rotate** | The credential gets a new secret; the old secret stops working at once. On a revoked credential the action is **Restore** |
 | **Revoke** | The credential stops working at once |
 
-To reconnect after a rotation, stop the daemon with `oac-daemon stop`, replace the JSON at its configured credential-file path with the new credential, and run `oac-daemon start`. Do not run `install` again over the existing installation, and rotate the existing credential rather than issuing a second one, which [cannot connect](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-executor-credentials.md#revoked-or-rotated-credential).
+To reconnect after a rotation, stop the daemon with `oac-daemon stop`, replace the JSON at its configured credential-file path with the new credential, and run `oac-daemon start`. Do not run `install` again over the existing installation, and rotate the existing credential rather than issuing a second one, which [cannot connect](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-executor-credentials.md#revoked-or-rotated-credential).
 
-In an archived Project, credentials cannot be issued or rotated; revocation remains available. Operators can manage credentials with the Core key; see the [credential contract](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-executor-credentials.md#core-key-routes).
+In an archived Project, credentials cannot be issued or rotated; revocation remains available. Operators can manage credentials with the Core key; see the [credential contract](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-executor-credentials.md#core-key-routes).
 
 ## Install from an extracted distribution
 
@@ -163,4 +163,4 @@ The same installer accepts an already extracted distribution and a credential fi
 
 Use the Session's `remote_url` and Environment ID. In PowerShell, run `.\oac-daemon.exe` with native absolute paths. This mode needs an existing workspace and does not start the daemon until you run `start`.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/self-hosted.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/self-hosted.md)

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { UpdateSandboxDeployment, SandboxDeployment, StartSandboxReset } from "@agents-core-web/agents-client";
+import type { UpdateSandboxDeployment, SandboxDeployment, StartSandboxReset } from "@oac/agents-client";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../../components/Modal";
 import { HelpTip, RefreshButton } from "../../components/console-ui";

@@ -12,9 +12,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
-	obslog "github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 // Tunables. Package-level so tests can override via small helpers

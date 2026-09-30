@@ -3,19 +3,19 @@ title: "Environments and files"
 description: "Execution placement, Environment resources and workspace ownership."
 ---
 
-This assessment covers the fixed [Python SDK contract](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/upstream.json), with partial
+This assessment covers the fixed [Python SDK contract](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/upstream.json), with partial
 coverage. Core-managed Docker runs the three qualified native harnesses. V1
 user-managed `self_hosted` enrollment uses the same colocated Runtime for Codex,
 Claude SDK and MiniMax. `/workspace` names the packaged workspace; a self-hosted
 Session may instead select its exact canonical physical directory. The
-[recorded deployment qualification](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/user-managed-runtime-v1.md) retains its historical
+[recorded deployment qualification](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/user-managed-runtime-v1.md) retains its historical
 source, paths and tested capability scope.
 For hosted compute, the deployment selects E2B, Docker or microsandbox through
-[sandbox deployment](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md).
+[sandbox deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md).
 For the separate caller-managed E2B path, the user owns allocation, renewal and
-cleanup through the official SDK and [Runtime packaging](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/deploy/e2b/README.md).
-[Templates](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-templates.md) provide reusable preparation; the Core extension also applies their execution configuration to user-managed machines;
-[Files](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-files.md) reuse the exact authorized local workspace.
+cleanup through the official SDK and [Runtime packaging](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/deploy/e2b/README.md).
+[Templates](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-templates.md) provide reusable preparation; the Core extension also applies their execution configuration to user-managed machines;
+[Files](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-files.md) reuse the exact authorized local workspace.
 
 The internal Store now owns a durable Environment association for newly created
 `self_hosted` and `openai_hosted` snapshots, atomically with Session creation.
@@ -33,7 +33,7 @@ readiness. Rotation/revocation, Session deletion and ownership loss deny further
 access without promising immediate cessation of native effects. Native history
 remains local to the bound Runtime and cannot be replaced on retry. There is no
 registry/Noise relay or transient service-side harness credential.
-See the [enrollment guide](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/README.md#user-managed-runtime-enrollment).
+See the [enrollment guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/README.md#user-managed-runtime-enrollment).
 
 ## Basic public Docker-hosted profile
 
@@ -41,8 +41,8 @@ An explicitly configured default managed Docker provider enables `type=openai_ho
 for the qualified Codex, Claude Code and MiniMax Code profiles. Each uses the same
 Runtime lifecycle and workspace interfaces with its native adapter. The outer
 Environment provides managed isolation; the daemon adds no inner sandbox.
-See the [engine profile guides](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md#public-engine-profiles) for setup and limits.
-The standalone [operator configuration](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/deploy/codex/README.md#standalone-operator-configuration)
+See the [engine profile guides](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md#public-engine-profiles) for setup and limits.
+The standalone [operator configuration](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/deploy/codex/README.md#standalone-operator-configuration)
 selects the qualified immutable Runtime image; advertised capabilities alone do
 not enable admission. An idle or initial-text creation commits Session, Environment
 and retry identity before the existing leased Worker provisions its allocation.
@@ -63,7 +63,7 @@ rejects explicitly, including null and empty lists, and never invokes apt, sudo
 or elevated execution. Package responses include the official required
 `system: []` field as empty metadata; it does not enable installation.
 Unsupported hostname forms and installation combinations reject explicitly; see
-the [Template coverage and limits](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-templates.md). Empty/null installation
+the [Template coverage and limits](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-templates.md). Empty/null installation
 defaults produce safe empty metadata, not a live workspace inventory. Service-origin
 hosted MCP remains unsupported; Environment Plugin MCP has its
 own qualified transport matrix.
@@ -83,11 +83,11 @@ semantics; this profile does not establish complete Environment compatibility.
 The application creates, renews and destroys its E2B sandbox through the official
 SDK. It deploys the shared Runtime, then enrolls that Runtime into a `self_hosted`
 Session. Core neither keeps an E2B allocation nor issues Provider renew/kill calls.
-The [E2B guide](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/deploy/e2b/README.md) owns packaging and
+The [E2B guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/deploy/e2b/README.md) owns packaging and
 user-side lifecycle instructions. Expiry or lost workspace/history must not trigger
-transparent replacement or replay. The [new enrollment qualification](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/user-managed-runtime-v1.md)
+transparent replacement or replay. The [new enrollment qualification](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/user-managed-runtime-v1.md)
 records its own real deployment evidence.
-The [prior E2B qualification](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md#e2b-v1-qualification) records a historical
+The [prior E2B qualification](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md#e2b-v1-qualification) records a historical
 Core-managed route; it does not establish this caller-managed enrollment result.
 Current deployment-managed E2B is a separate hosted configuration in the manager guide.
 
@@ -188,7 +188,7 @@ compute replacement; never silently move a bound Session or replay unknown work.
 Self-hosted compute/files remain caller-owned, with explicit cleanup separate from
 Session deletion. The full Environment implementation remains pending; follow the
 [pinned contract and acceptance sequence](/environments-and-files)
-and the [workspace placement map](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/workspace-placement.md).
+and the [workspace placement map](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/workspace-placement.md).
 For co-location, qualify the outer deployment boundary and the shared Runtime
 lifecycle. Native tools use the starting account's permissions; do not claim a
 daemon or harness sandbox. Host operators choose their own outer isolation.
@@ -696,7 +696,7 @@ silently expanding it. Codex and Claude preserve native allowlists and initializ
 required servers before releasing native input, including cold recovery.
 Public MCP with native Subagents remains unqualified. Nonempty literal HTTP
 headers, request metadata and public stdio declarations remain unsupported.
-See [public MCP qualification](https://github.com/MiniMax-AI/parsar-core/blob/e974a7f880a2eb799f0dd39e6ba0870462854a53/contracts/agents-api/public-mcp-qualification.md) for actual model,
+See [public MCP qualification](https://github.com/MiniMax-AI/OpenAgentCore/blob/e974a7f880a2eb799f0dd39e6ba0870462854a53/contracts/agents-api/public-mcp-qualification.md) for actual model,
 platform and infrastructure coverage; admission support is not a claim of
 complete cross-platform/provider qualification.
 
@@ -713,7 +713,7 @@ first-frame identities and cross-checks completed native results for both transp
 Reuse existing observation and cancellation settlement; never fabricate a delayed
 start event, guess normalized identities or add a registry of our own.
 
-See [capability qualification](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-capabilities-qualification.md) for
+See [capability qualification](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-capabilities-qualification.md) for
 real model evidence and the remaining public-origin and image gaps.
 
 ## Contract inventory
@@ -851,4 +851,4 @@ Session reads the current source. Harness profiles may reference the Runtime-own
 environment file, but must not persist copies of its values. A missing or invalid explicitly configured file
 fails preparation.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environments.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environments.md)

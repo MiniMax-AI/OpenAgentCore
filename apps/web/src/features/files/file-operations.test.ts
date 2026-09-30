@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentCoreError, type SourceFile, type SourceFileListEntry } from "@agents-core-web/agents-client";
+import { AgentCoreError, type SourceFile, type SourceFileListEntry } from "@oac/agents-client";
 
 import i18n from "../../i18n";
 import {

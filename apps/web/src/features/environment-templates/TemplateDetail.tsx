@@ -7,7 +7,7 @@ import type {
   EnvironmentTemplateResource,
   EnvironmentTemplateSection,
   EnvironmentTemplateSkill,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 
 import { PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { formatBytes, formatDateTime, MISSING } from "../../lib/format";

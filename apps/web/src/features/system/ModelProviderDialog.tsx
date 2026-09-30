@@ -1,4 +1,4 @@
-import { AgentCoreError, type CoreHarness, type CoreHarnessKind, type ModelProviderInput } from "@agents-core-web/agents-client";
+import { AgentCoreError, type CoreHarness, type CoreHarnessKind, type ModelProviderInput } from "@oac/agents-client";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConsoleSelect } from "../../components/console-select";

@@ -1,5 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
-import type { SandboxReset } from "@agents-core-web/agents-client";
+import type { SandboxReset } from "@oac/agents-client";
 
 import { expectManagementBoundary, FIXTURE_CORE_KEY, openConsole, setDeployment, writes } from "./console";
 

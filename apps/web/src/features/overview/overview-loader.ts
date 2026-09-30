@@ -1,4 +1,4 @@
-import type { AgentSession } from "@agents-core-web/agents-client";
+import type { AgentSession } from "@oac/agents-client";
 
 import { readProjectsSessions, type InProject, type ProjectReadFailure, type SessionLister } from "../metrics/project-sessions";
 import { activityStart, attentionCount, overviewReadDone, projectRows } from "./overview-model";

@@ -1,6 +1,6 @@
 import "./receipt-timing.css";
 
-import type { AgentTurn, SessionItem } from "@agents-core-web/agents-client";
+import type { AgentTurn, SessionItem } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";

@@ -1,4 +1,4 @@
-import type { TokenUsage } from "@agents-core-web/agents-client";
+import type { TokenUsage } from "@oac/agents-client";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)

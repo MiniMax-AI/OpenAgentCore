@@ -1,4 +1,4 @@
-import type { CoreProjectReader } from "@agents-core-web/agents-client";
+import type { CoreProjectReader } from "@oac/agents-client";
 import { QueryClientProvider, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";

@@ -1,5 +1,5 @@
 {
-  "name": "parsar-mcode-harness",
+  "name": "@oac/mcode-harness",
   "private": true,
   "type": "module",
   "devDependencies": {

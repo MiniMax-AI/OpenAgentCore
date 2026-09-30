@@ -6,7 +6,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // ErrHarnessConfig deliberately excludes caller-controlled keys and values.

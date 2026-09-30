@@ -155,4 +155,4 @@ Core reads only its environment. The installer renders `generated/core.env` from
 
 Core logs the file paths it loads, never environment values or file contents.
 
-A Web you run without the installer reads the variables in [Connecting the administrator console to Core](web/core-connection.md#server-configuration-and-login), plus `OAC_WEB_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's node payload (the installer's `node-payload/`). Without it, Add node is unavailable.
+A Web you run without the installer reads the variables in [Console server settings](web/console-server.md#settings), plus `OAC_WEB_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's node payload (the installer's `node-payload/`). Without it, Add node is unavailable.

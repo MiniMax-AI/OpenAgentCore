@@ -246,7 +246,7 @@ passed, including dedicated real PostgreSQL checks and native packaging.
 Evidence is under `~/.parsar/remediation/20260921/template-plugins/`:
 `acceptance-summary.json`, `native-final-{codex,claude,mcode}.json`,
 `runtime-builds.json` and `full-check-attempt2-result.json`. The shared reproducible
-fixture is `services/agents-api/tests/official_environment_plugins.py`; operator
+fixture is `services/core/tests/official_environment_plugins.py`; operator
 runners reuse existing standalone acceptance and private model configuration.
 A user-authorized reused-context GPT-6 Astra high independent review of all 60
 changed files found no material actionable findings. Those historical results do
@@ -330,13 +330,13 @@ Per-run records retain exact Runtime image IDs and cleanup results. The final
 `make-check-final.log` passed; OpenAPI regeneration and focused Go/Claude tests
 also passed. Real Linux process checks cover idle creator-thread exit, native and
 wrapper exit, active-call cleanup and the reproduced pre-exec orphan window.
-`services/agents-api/deploy/runtime/initialize_stdio_test.py` retains that OS
+`services/core/deploy/runtime/initialize_stdio_test.py` retains that OS
 regression; it requires a disposable Linux packaged Runtime, not a model fixture.
 The Codex environment hook additionally passed 30 actual sh/Bash cases after its
 Bash-specific `eval --` failed under native `/bin/sh`.
 
 The reusable public fixture is
-`services/agents-api/tests/official_environment_plugin_mcp.py`. Mechanism probes
+`services/core/tests/official_environment_plugin_mcp.py`. Mechanism probes
 and failed attempts remain separate evidence. This batch does not qualify new
 Plugin MCP paths on E2B, service-origin hosted MCP, OAuth, unlisted transports or
 complete upstream protocol compatibility.
@@ -347,7 +347,7 @@ This section records the historical September 21 fixture and binaries. Its
 system-package and inner-isolation checks are not current support requirements;
 `packages.system` now rejects and tools run with the starting user's permissions.
 
-`services/agents-api/tests/official_environment_composition.py` combines the
+`services/core/tests/official_environment_composition.py` combines the
 existing public fixtures in one enabled-network configuration: inline/referenced
 files, caller env, system/npm/Python packages, ordered setup, an uploaded Skill
 reference, Skill/MCP Plugins and exact capability-directory roots. Pass the same

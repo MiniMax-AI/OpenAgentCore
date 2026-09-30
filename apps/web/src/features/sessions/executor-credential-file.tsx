@@ -1,4 +1,4 @@
-import type { IssuedExecutorCredential } from "@agents-core-web/agents-client";
+import type { IssuedExecutorCredential } from "@oac/agents-client";
 import { Check, Copy, Download } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Trans, useTranslation } from "react-i18next";

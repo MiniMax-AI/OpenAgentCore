@@ -103,7 +103,7 @@ cancellation uses a protected immutable effect receipt because native abort can
 leave no terminal record. The receipt preserves the confirmed effect time across
 reads without rewriting native history. This profile has no qualified close
 operation, and completed or cancelled children remain active. See the
-[adapter contract](../../packages/claude-sdk-adapter/SUBAGENTS.md) for restrictions.
+[adapter contract](../../packages/claude-sdk-adapter/README.md#subagents) for restrictions.
 
 MiniMax's fixed ACP supplies native delegation operations. Its Session-private
 SQLite records supply original child identity, accepted inputs, terminal times
@@ -144,7 +144,7 @@ Evidence root on `zju_a100_2`:
 `~/.parsar/remediation/20260922/subagent-contract/`. Public proofs are in
 `public-codex-kimi1`, `public-claude_sdk-2` and `public-mcode-1`; native mechanism
 proofs are in `native-proof`, `claude-native` and `mcode-native`. The shared script
-`scripts/agents-api-subagents-acceptance.py --phase spawn-direct` validates common
+`scripts/core-subagents-acceptance.py --phase spawn-direct` validates common
 reads; its `resources_passed` and `requested_phase_passed` fields qualify that
 phase. Since the visibility batch, `resources_passed` also requires every named
 check recorded under `visibility`. Its aggregate `passed` field additionally
@@ -217,7 +217,7 @@ history ownership, cancellation, cold continuation and tenant isolation.
 Go store and API tests cover each row, including tenant isolation. A real-PostgreSQL
 HTTP test also checks creation-stream settlement with Subagent facts. TypeScript
 client and Core Web unit tests cover the official child Turn shape and the
-root-only timeline. `scripts/agents-api-subagents-acceptance.py` records A1–A5
+root-only timeline. `scripts/core-subagents-acceptance.py` records A1–A5
 as named `visibility` checks per phase, including the observed stream. Its
 inspect phase, run against a controlled local fixture without a model or stream,
 reported all six read differences on baseline main and passed on this branch. Live model acceptance and the server gate are recorded with the

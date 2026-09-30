@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession } from "@agents-core-web/agents-client";
+import type { AgentSession } from "@oac/agents-client";
 
 import { loadOverview, needsSessionRead } from "./overview-loader";
 import { activityStart } from "./overview-model";

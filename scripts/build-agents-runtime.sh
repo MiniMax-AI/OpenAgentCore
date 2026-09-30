@@ -28,11 +28,11 @@ trap 'rm -rf "$context"' EXIT
 (
   cd "$repo_root"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
-    -o "$context/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+    -o "$context/oac-daemon" ./apps/daemon/cmd/oac-daemon
 )
 cp "$native_dir/bin/codex" "$context/codex"
 cp -R "$native_dir/codex-resources" "$context/codex-resources"
-cp "$repo_root/services/agents-api/deploy/codex/Dockerfile" "$context/Dockerfile"
+cp "$repo_root/services/core/deploy/codex/Dockerfile" "$context/Dockerfile"
 # Preserve the previous bundle if compilation or validation failed.
 mkdir -p "$output_dir"
 cp -R "$context/." "$output_dir/"

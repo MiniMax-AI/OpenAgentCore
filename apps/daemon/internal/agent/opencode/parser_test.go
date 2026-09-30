@@ -1,0 +1,169 @@
+package opencode_test
+
+import (
+	"encoding/json"
+	"errors"
+	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/opencode"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+)
+
+func TestTranslatePartDeltaEmitsDeltaAndDone(t *testing.T) {
+	tr := opencode.NewTranslatorForTest("run-1")
+	tx, err := tr.Translate([]byte(`{"type":"message.part.delta","properties":{"field":"text","delta":"hello"}}`))
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	if len(tx.Envelopes) != 1 || tx.Envelopes[0].Type != proto.TypeDelta {
+		t.Fatalf("delta envelopes = %#v", tx.Envelopes)
+	}
+	delta := decodePayload[proto.DeltaPayload](t, tx.Envelopes[0])
+	if delta.Delta != "hello" || delta.Sequence == 0 {
+		t.Fatalf("delta payload = %#v", delta)
+	}
+	envs := tr.TerminalEnvelopes(nil, "", false)
+	last := envs[len(envs)-1]
+	if last.Type != proto.TypeDone {
+		t.Fatalf("last env type = %q, want done", last.Type)
+	}
+	done := decodePayload[proto.DonePayload](t, last)
+	if done.Content != "hello" || done.Metadata["connector_path"] != "opencode_run" {
+		t.Fatalf("done payload = %#v", done)
+	}
+}
+
+func TestTranslateTextEventsEmitDeltasAndDone(t *testing.T) {
+	tr := opencode.NewTranslatorForTest("run-text")
+	tx, err := tr.Translate([]byte(`{"type":"text","timestamp":1785838824775,"sessionID":"ses_1","part":{"id":"prt_1","messageID":"msg_1","sessionID":"ses_1","type":"text","text":"OK"}}`))
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	if len(tx.Envelopes) != 1 || tx.Envelopes[0].Type != proto.TypeDelta {
+		t.Fatalf("delta envelopes = %#v", tx.Envelopes)
+	}
+	delta := decodePayload[proto.DeltaPayload](t, tx.Envelopes[0])
+	if delta.Delta != "OK" || delta.Sequence == 0 {
+		t.Fatalf("delta payload = %#v", delta)
+	}
+	if _, err = tr.Translate([]byte(`{"type":"step_finish","part":{"id":"prt_2","type":"step-finish"}}`)); err != nil {
+		t.Fatalf("Translate step finish: %v", err)
+	}
+	tx, err = tr.Translate([]byte(`{"type":"text","timestamp":1785838824776,"sessionID":"ses_1","part":{"id":"prt_3","messageID":"msg_1","sessionID":"ses_1","type":"text","text":" again"}}`))
+	if err != nil {
+		t.Fatalf("Translate second text: %v", err)
+	}
+	if len(tx.Envelopes) != 1 || tx.Envelopes[0].Type != proto.TypeDelta {
+		t.Fatalf("second delta envelopes = %#v", tx.Envelopes)
+	}
+	second := decodePayload[proto.DeltaPayload](t, tx.Envelopes[0])
+	if second.Delta != " again" || second.Sequence <= delta.Sequence {
+		t.Fatalf("second delta payload = %#v", second)
+	}
+	if _, err = tr.Translate([]byte(`{"type":"step_finish","part":{"id":"prt_4","type":"step-finish"}}`)); err != nil {
+		t.Fatalf("Translate second step finish: %v", err)
+	}
+
+	envs := tr.TerminalEnvelopes(nil, "", false)
+	done := decodePayload[proto.DonePayload](t, envs[len(envs)-1])
+	if done.Content != "OK again" {
+		t.Fatalf("done content = %q", done.Content)
+	}
+}
+
+func TestTranslateCapturesUsage(t *testing.T) {
+	tr := opencode.NewTranslatorForTest("run-u")
+	_, err := tr.Translate([]byte(`{"type":"message.updated","properties":{"info":{"cost":0.25,"tokens":{"input":10,"output":7,"reasoning":3,"cacheRead":2,"cacheWrite":1,"total":23}}}}`))
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	envs := tr.TerminalEnvelopes(nil, "", false)
+	var got *proto.UsagePayload
+	for _, env := range envs {
+		if env.Type == proto.TypeUsage {
+			payload := decodePayload[proto.UsagePayload](t, env)
+			got = &payload
+		}
+	}
+	if got == nil {
+		t.Fatalf("usage env missing: %#v", envs)
+	}
+	if got.Provider != "opencode" || got.InputTokens != 10 || got.OutputTokens != 7 || got.CostUSD != 0.25 {
+		t.Fatalf("usage = %#v", got)
+	}
+	if got.Raw["total_tokens"] != float64(23) {
+		t.Fatalf("usage raw = %#v", got.Raw)
+	}
+}
+
+func TestTranslateStepFinishCapturesUsage(t *testing.T) {
+	tr := opencode.NewTranslatorForTest("run-step-finish")
+	_, err := tr.Translate([]byte(`{"type":"step_finish","part":{"type":"step-finish","tokens":{"total":12576,"input":11803,"output":645,"reasoning":0,"cache":{"write":4,"read":128}},"cost":0.00432258}}`))
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	_, err = tr.Translate([]byte(`{"type":"step_finish","part":{"type":"step-finish","tokens":{"total":25,"input":20,"output":3,"reasoning":2,"cache":{"write":1,"read":4}},"cost":0.001}}`))
+	if err != nil {
+		t.Fatalf("Translate second step: %v", err)
+	}
+	envs := tr.TerminalEnvelopes(nil, "", false)
+	var got *proto.UsagePayload
+	for _, env := range envs {
+		if env.Type == proto.TypeUsage {
+			payload := decodePayload[proto.UsagePayload](t, env)
+			got = &payload
+		}
+	}
+	if got == nil {
+		t.Fatalf("usage env missing: %#v", envs)
+	}
+	if got.InputTokens != 11823 || got.OutputTokens != 648 || got.CostUSD != 0.00532258 {
+		t.Fatalf("usage = %#v", got)
+	}
+	if got.Raw["total_tokens"] != float64(12601) || got.Raw["reasoning_tokens"] != float64(2) || got.Raw["cache_read_tokens"] != float64(132) || got.Raw["cache_write_tokens"] != float64(5) {
+		t.Fatalf("usage raw = %#v", got.Raw)
+	}
+}
+
+func TestPlainOutputFallsBackToDelta(t *testing.T) {
+	tr := opencode.NewTranslatorForTest("run-p")
+	_, _ = tr.Translate([]byte("plain output"))
+	envs := tr.TerminalEnvelopes(nil, "", false)
+	if len(envs) < 2 || envs[0].Type != proto.TypeDelta || envs[len(envs)-1].Type != proto.TypeDone {
+		t.Fatalf("plain terminal envs = %#v", envs)
+	}
+	done := decodePayload[proto.DonePayload](t, envs[len(envs)-1])
+	if done.Content != "plain output" {
+		t.Fatalf("done content = %q", done.Content)
+	}
+}
+
+func TestTerminalErrorIncludesStderr(t *testing.T) {
+	tr := opencode.NewTranslatorForTest("run-e")
+	envs := tr.TerminalEnvelopes(errors.New("exit status 2"), "bad auth", false)
+	if len(envs) < 2 || envs[0].Type != proto.TypeError || envs[len(envs)-1].Type != proto.TypeDone {
+		t.Fatalf("error terminal envs = %#v", envs)
+	}
+	errPayload := decodePayload[proto.ErrorPayload](t, envs[0])
+	if errPayload.Error == "" || !contains(errPayload.Error, "bad auth") {
+		t.Fatalf("error payload = %#v", errPayload)
+	}
+}
+
+func decodePayload[T any](t *testing.T, env proto.Envelope) T {
+	t.Helper()
+	var out T
+	if err := json.Unmarshal(env.Payload, &out); err != nil {
+		t.Fatalf("decode %s payload: %v", env.Type, err)
+	}
+	return out
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return sub == ""
+}

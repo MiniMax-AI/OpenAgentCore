@@ -1,4 +1,4 @@
-import { AgentCoreError, type SandboxNode, type SandboxProvider } from "@agents-core-web/agents-client";
+import { AgentCoreError, type SandboxNode, type SandboxProvider } from "@oac/agents-client";
 import i18n from "../i18n";
 import { knownCoreError } from "./core-error";
 import { translate, type Locale } from "./locale";

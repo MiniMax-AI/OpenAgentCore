@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { CoreMetricsClient, type CoreMetricsRange } from "@agents-core-web/agents-client";
+import { CoreMetricsClient, type CoreMetricsRange } from "@oac/agents-client";
 
 import { listRuntimeObservations, loadSummary, type Project } from "../../lib/admin-view";
 import { projectClient } from "../../lib/projects";

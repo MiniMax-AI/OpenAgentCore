@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestWorkspaceDirectorySharesReadCorrelationAndFrameBound(t *testing.T) {

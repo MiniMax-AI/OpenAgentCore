@@ -1,7 +1,7 @@
 package proto
 
 // This package lives at the repo-root module so both the server-side
-// gateway/connector AND apps/parsar-daemon can import it. That rules out
+// gateway/connector AND apps/daemon can import it. That rules out
 // importing server/internal/... (Go's internal-package rule), so wire
 // types like Usage are declared here in full rather than imported from
 // store.UsageInput. The connector layer translates at the boundary;

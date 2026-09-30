@@ -1,4 +1,4 @@
-module github.com/MiniMax-AI-Dev/parsar
+module github.com/MiniMax-AI/OpenAgentCore
 
 go 1.26.8
 

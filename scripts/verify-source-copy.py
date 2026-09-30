@@ -16,10 +16,25 @@ adaptations = {
     "services/agents-api/RELEASE.md": "Resolve new release revisions in parsar-core.",
     "services/agents-api/HOSTED-RELEASE.md": "Resolve new release revisions in parsar-core.",
 }
+# Records keep their upstream paths; these copied roots now live under new names.
+moved = {
+    "apps/parsar-daemon/cmd/parsar-daemon/": "apps/daemon/cmd/oac-daemon/",
+    "apps/parsar-daemon/": "apps/daemon/",
+    "services/agents-api/": "services/core/",
+}
+
+
+def destination(name):
+    for source, target in moved.items():
+        if name.startswith(source):
+            return target + name[len(source):]
+    return name
+
+
 errors = []
 unchanged = 0
 for name, expected in manifest["files"].items():
-    path = root / name
+    path = root / destination(name)
     if not path.is_file():
         errors.append("missing: " + name)
     elif hashlib.sha256(path.read_bytes()).hexdigest() == expected:

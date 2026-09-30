@@ -1,4 +1,4 @@
-import type { SandboxRuntimeRelease } from "@agents-core-web/agents-client";
+import type { SandboxRuntimeRelease } from "@oac/agents-client";
 
 /** Core owns the Runtime image name, so the Web checks only the `<name>@sha256:<digest>` shape. */
 export const RUNTIME_REF_PATTERN = /^[a-z0-9][a-z0-9._-]*@sha256:[0-9a-f]{64}$/;

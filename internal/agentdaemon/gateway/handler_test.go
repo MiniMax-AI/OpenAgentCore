@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/gorilla/websocket"
 )
 

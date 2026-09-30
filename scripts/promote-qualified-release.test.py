@@ -127,7 +127,7 @@ class PromotionTests(unittest.TestCase):
 
     def test_unlanded_and_unrelated_main_changes_rejected(self):
         for comparison in ({"status": "diverged", "files": []},
-                           {"status": "ahead", "files": [{"filename": "services/agents-api/main.go"}]},
+                           {"status": "ahead", "files": [{"filename": "services/core/main.go"}]},
                            {"status": "ahead", "files": [{"filename": "Makefile", "previous_filename": "go.mod"}]}):
             with self.subTest(comparison=comparison), mock.patch.object(
                     promotion, "api", side_effect=[{"commit": {"tree": {"sha": self.tree}}}, comparison]):

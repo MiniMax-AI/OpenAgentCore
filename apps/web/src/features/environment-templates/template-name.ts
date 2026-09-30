@@ -1,4 +1,4 @@
-import type { EnvironmentTemplateResource } from "@agents-core-web/agents-client";
+import type { EnvironmentTemplateResource } from "@oac/agents-client";
 
 import i18n from "../../i18n";
 

@@ -62,11 +62,11 @@ An installation runs its sandboxes on exactly one backend:
 | `e2b` | E2B's cloud, sized by your template build | Nothing: E2B needs no nodes |
 | `none` | Nothing yet | Choose in Web under **System** → **Manage sandbox configuration** |
 
-Docker and microsandbox start at the Standard size in Web's [`standard-sizes.json`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/web/src/features/sandbox/standard-sizes.json). If Core refuses the choice, for example because E2B rejects the key, the installer prints Core's message and exits; the services keep running and you choose the backend in Web. To change the backend or size later, see [change the sandbox configuration](/hosted-providers#change-the-sandbox-configuration).
+Docker and microsandbox start at the Standard size in Web's [`standard-sizes.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/web/src/features/sandbox/standard-sizes.json). If Core refuses the choice, for example because E2B rejects the key, the installer prints Core's message and exits; the services keep running and you choose the backend in Web. To change the backend or size later, see [change the sandbox configuration](/hosted-providers#change-the-sandbox-configuration).
 
 **Docker** shares each node's kernel with its sandboxes, and its node service account is [root-equivalent](/hosted-providers#what-the-installer-sets-up). Choose it only for trusted workloads or hosts without KVM. The installer asks for confirmation (default No); without a terminal, pass `--accept-docker-risks`.
 
-**E2B** needs a public HTTPS URL that is not loopback, because E2B's sandboxes call Core from E2B's cloud, so pass `--public-url`. Prepare the template build with the [E2B guide](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/deploy/e2b/README.md), then:
+**E2B** needs a public HTTPS URL that is not loopback, because E2B's sandboxes call Core from E2B's cloud, so pass `--public-url`. Prepare the template build with the [E2B guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/deploy/e2b/README.md), then:
 
 ```sh
 ./install.sh --public-url https://core.example --sandbox e2b \
@@ -306,4 +306,4 @@ Copy `secrets/core.key` from the Core host with mode `0600`, then delete `$HOME/
 
 Transfer the release's `*-linux-amd64-offline.tar.gz` and its `.sha256` file, verify and extract them, then run the bundled `./install.sh`. The offline bundle also carries the node and Runtime files, so Web serves them to nodes without release access.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/install-options.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/install-options.md)

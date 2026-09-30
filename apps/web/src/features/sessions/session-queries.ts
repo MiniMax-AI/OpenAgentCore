@@ -1,4 +1,4 @@
-import { AgentCoreError, type AgentSession, type RuntimeObservation } from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentSession, type RuntimeObservation } from "@oac/agents-client";
 import { queryOptions } from "@tanstack/react-query";
 
 import { projectClient } from "../../lib/projects";

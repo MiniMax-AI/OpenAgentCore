@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { SandboxAdminClient, SandboxDeployment, SandboxEnrollment, SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxAdminClient, SandboxDeployment, SandboxEnrollment, SandboxNode } from "@oac/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";

@@ -1,4 +1,4 @@
-import type { SandboxDeployment } from "@agents-core-web/agents-client";
+import type { SandboxDeployment } from "@oac/agents-client";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";

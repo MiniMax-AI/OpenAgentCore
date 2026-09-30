@@ -4,7 +4,7 @@ import type {
   ListPage,
   CoreProjectReader,
   SessionItem,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 
 /**
  * Read-only Session history for the administrator. The Web API offers no event

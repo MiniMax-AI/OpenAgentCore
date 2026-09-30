@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 )
 
 func TestPreparationSubscriptionHasNoRunIdentityAndOrdersRevisions(t *testing.T) {

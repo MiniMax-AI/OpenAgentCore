@@ -4,7 +4,7 @@ description: "Provider delivery of Runtime-owned connection input."
 ---
 
 This document owns the Provider-to-Runtime startup boundary. The input type and
-validator live in [runtimebootstrap](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/internal/runtimebootstrap/bootstrap.go).
+validator live in [runtimebootstrap](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/internal/runtimebootstrap/bootstrap.go).
 Providers must not read or write Runtime's private authentication store.
 
 ## Launch input
@@ -54,8 +54,8 @@ bootstrap-file fallback. Both paths enter the same Runtime execution loop.
 
 ## Verification
 
-`go test ./internal/runtimebootstrap ./apps/parsar-daemon/internal/cli` covers the
+`go test ./internal/runtimebootstrap ./apps/daemon/internal/cli` covers the
 input contract, credential-source exclusivity and restart behavior. Provider tests
 verify delivery and permissions without relying on private Runtime storage.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/runtime-bootstrap.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/runtime-bootstrap.md)

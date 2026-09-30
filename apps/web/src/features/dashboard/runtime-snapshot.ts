@@ -1,4 +1,4 @@
-import type { AgentSession, RuntimeObservation } from "@agents-core-web/agents-client";
+import type { AgentSession, RuntimeObservation } from "@oac/agents-client";
 
 export const RUNTIME_SNAPSHOT_REFRESH_MS = 30_000;
 

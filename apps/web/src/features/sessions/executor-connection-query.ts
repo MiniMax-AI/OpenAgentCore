@@ -1,4 +1,4 @@
-import type { ExecutorCredentialList } from "@agents-core-web/agents-client";
+import type { ExecutorCredentialList } from "@oac/agents-client";
 import { queryOptions } from "@tanstack/react-query";
 
 import { admin } from "../../lib/projects";

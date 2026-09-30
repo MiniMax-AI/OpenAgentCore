@@ -1,4 +1,4 @@
-import { AgentCoreError, type CoreProjectReader, type Skill, type SkillVersion } from "@agents-core-web/agents-client";
+import { AgentCoreError, type CoreProjectReader, type Skill, type SkillVersion } from "@oac/agents-client";
 
 import { appendCollectionPage } from "../../lib/collection-pagination";
 

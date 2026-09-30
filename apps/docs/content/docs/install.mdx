@@ -28,13 +28,13 @@ The Core host needs no KVM; nodes that run microsandbox do.
 ## Install
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
 ```
 
 If DNS already points to this host, pass the address to set up HTTPS during installation instead of in step 4:
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/install.sh | bash -s -- --public-url https://core.example
+curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --public-url https://core.example
 ```
 
 The script picks the latest stable release, verifies its checksum and runs the bundled installer, which:
@@ -92,4 +92,4 @@ Sessions need somewhere to run:
 
 Day-to-day operation, backups and upgrades are in [Operations](/troubleshooting).
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/install.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/install.md)

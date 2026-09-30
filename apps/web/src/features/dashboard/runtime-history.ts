@@ -1,4 +1,4 @@
-import { AgentCoreError, type AgentSession, type CoreProjectReader, type RuntimeHistory } from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentSession, type CoreProjectReader, type RuntimeHistory } from "@oac/agents-client";
 
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import { deriveTokenThroughput, type RuntimeTrendSample, type RuntimeTrendTarget } from "./runtime-trends";

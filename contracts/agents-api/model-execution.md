@@ -100,7 +100,7 @@ historical rows keep their documented retry limitations; this change does not
 rewrite them. Omitted and explicit fields retain the existing local intent-hash
 semantics rather than promising upstream equivalence.
 
-See the [TypeScript client example](../../packages/agents-client/saved-agent-defaults.md).
+See the [TypeScript client example](../../packages/agents-client/README.md#saved-agent-and-deployment-defaults).
 
 ## Session override example
 

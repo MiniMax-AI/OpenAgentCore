@@ -15,14 +15,14 @@ OpenAgentCore is protocol-first and modular. Core orchestrates operations that p
 
 | Boundary | Protocol code | Protocol doc |
 | --- | --- | --- |
-| Application–Core (`/v1`) | Types in `contracts/agents-api/v1/` and route annotations in `services/agents-api/internal/api/`; `make openapi` generates `contracts/agents-api/openapi.yaml` | [Agents API guide](docs/api/public-agent-api.md) |
-| Web and operators–Core (`/core/v1`) | Route annotations in `services/agents-api/internal/api/`; `make openapi` generates `contracts/agents-api/core.openapi.yaml` | [Core API](docs/api/README.md#core-api) |
-| Nodes and daemons–Core (`/api/v1` HTTP routes; the node and daemon wire protocols are separate rows) | Route annotations in `services/agents-api/internal/api/`; `make openapi` generates `contracts/agents-api/runtime.openapi.yaml` | [Machine connection API](docs/api/README.md#machine-connection-api) |
-| Core–Sandbox Provider | `services/agents-api/internal/sandbox/sandbox_provider.go` | [Sandbox Provider guide](docs/sandbox-provider.md) |
-| Core–sandbox node | `services/agents-api/internal/sandbox/node/wire.go` | [Node generation protocol](contracts/agents-api/node-generation-protocol.md) |
+| Application–Core (`/v1`) | Types in `contracts/agents-api/v1/` and route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/openapi.yaml` | [Agents API guide](docs/api/public-agent-api.md) |
+| Web and operators–Core (`/core/v1`) | Route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/core.openapi.yaml` | [Core API](docs/api/README.md#core-api) |
+| Nodes and daemons–Core (`/api/v1` HTTP routes; the node and daemon wire protocols are separate rows) | Route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/runtime.openapi.yaml` | [Machine connection API](docs/api/README.md#machine-connection-api) |
+| Core–Sandbox Provider | `services/core/internal/sandbox/sandbox_provider.go` | [Sandbox Provider guide](docs/sandbox-provider.md) |
+| Core–sandbox node | `services/core/internal/sandbox/node/wire.go` | [Node generation protocol](contracts/agents-api/node-generation-protocol.md) |
 | Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |
 | Core–Runtime wire | `internal/agentdaemon/proto/` | [Core–Runtime protocol](docs/runtime-protocol.md) |
-| Runtime–Harness | `apps/parsar-daemon/internal/agent/harness.go` | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
+| Runtime–Harness | `apps/daemon/internal/agent/harness.go` | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
 | Harness–Model provider | `internal/modelprovider/config.go` | [Model execution](contracts/agents-api/model-execution.md) |
 
 Most boundaries still span several files; the listed file or directory is the entry point. Do not add files to a boundary; this is a [known gap](#known-gaps).
@@ -57,10 +57,10 @@ OpenAgentCore is pre-release. Replace superseded interfaces, execution paths and
 
 Existing code still breaks these rules in places. The bullets below are examples, not a complete list. Do not copy these patterns. Until a gap is closed, follow the extension guide; a change that touches a gap moves it toward the rule.
 
-- Protocol definitions spread over several files, such as the Sandbox Provider contract across `services/agents-api/internal/sandbox/` and `services/agents-api/internal/providercontract/`.
-- Support discovered by type assertion, such as daemon workspace reads in `apps/parsar-daemon/internal/dispatch/workspace_read.go` and Core's observation source selection in `services/agents-api/cmd/server/main.go`.
-- Harness-specific code in shared places, such as Core engine profiles in `services/agents-api/internal/engine/<harness>.go`, daemon discovery and registration, the installer's Harness list and default in `deploy/install/config.schema.json`, and Core's own default Harness when `OAC_DEFAULT_HARNESS` is unset.
-- Vendor-specific configuration, routes and UI outside the adapter, such as the E2B selection and store fields (`services/agents-api/internal/sandbox/selection.go`), the `/core/v1/sandbox/e2b/*` routes, E2B credential hooks in `providers.Adapter` and the E2B Web views.
+- Protocol definitions spread over several files, such as the Sandbox Provider contract across `services/core/internal/sandbox/` and `services/core/internal/providercontract/`.
+- Support discovered by type assertion, such as daemon workspace reads in `apps/daemon/internal/dispatch/workspace_read.go` and Core's observation source selection in `services/core/cmd/server/main.go`.
+- Harness-specific code in shared places, such as Core engine profiles in `services/core/internal/engine/<harness>.go`, daemon discovery and registration, the installer's Harness list and default in `deploy/install/config.schema.json`, and Core's own default Harness when `OAC_DEFAULT_HARNESS` is unset.
+- Vendor-specific configuration, routes and UI outside the adapter, such as the E2B selection and store fields (`services/core/internal/sandbox/selection.go`), the `/core/v1/sandbox/e2b/*` routes, E2B credential hooks in `providers.Adapter` and the E2B Web views.
 - Host-local state spread over several `~/.oac/` directories, such as the Runtime's `~/.oac/daemon/`, `~/.oac/runtime/<kind>/` and `~/.oac/environments/<environment-id>/`.
 - Persistence and vendor types in the Core and machine OpenAPI documents, such as the `store.*` and `e2b.*` definitions in `contracts/agents-api/core.openapi.yaml`.
 

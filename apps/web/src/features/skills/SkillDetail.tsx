@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AgentCoreError, type Skill, type SkillVersion } from "@agents-core-web/agents-client";
+import { AgentCoreError, type Skill, type SkillVersion } from "@oac/agents-client";
 
 import type { ProjectClient } from "../../lib/projects";
 import { collections } from "../../lib/queries";

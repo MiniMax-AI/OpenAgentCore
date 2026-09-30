@@ -1,4 +1,4 @@
-import type { Vault, VaultCredential } from "@agents-core-web/agents-client";
+import type { Vault, VaultCredential } from "@oac/agents-client";
 import { ArrowLeft, Trash2, Vault as VaultIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

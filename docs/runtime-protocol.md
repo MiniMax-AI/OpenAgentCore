@@ -4,7 +4,7 @@ This is the integration entry point for a Runtime that executes work for Core.
 The wire definitions live once in
 [`internal/agentdaemon/proto`](../internal/agentdaemon/proto);
 Core's [gateway](../internal/agentdaemon/gateway) and the reference Runtime's
-[dispatcher](../apps/parsar-daemon/internal/dispatch) both use them.
+[dispatcher](../apps/daemon/internal/dispatch) both use them.
 The [machine HTTP API](../contracts/agents-api/runtime.openapi.yaml) describes
 registration and connection endpoints. This document defines the meaning and
 ordering of the messages after connection; it does not replace the typed payloads.
@@ -425,7 +425,7 @@ truth and reconciles from confirmed facts. Runtime retains cleanup ownership
 until native work, input receipts, interactions and child work have settled.
 
 The public Turn status is a separate, existing projection:
-[`execution/delivery.go`](../services/agents-api/internal/execution/delivery.go)
+[`execution/delivery.go`](../services/core/internal/execution/delivery.go)
 records an unsuccessful orchestration attempt as `failed`, including
 `delivery_unknown` after an unconfirmed send and `event_stream_incomplete`
 after subscription failure. A closed subscription can replace the send reason
@@ -517,10 +517,10 @@ observations cannot establish a current connection.
 
 Run `make check-runtime-contract` from the repository root. It exercises the
 shared wire validators, gateway, transport and dispatcher, plus
-[real WebSocket contract scenarios](../apps/parsar-daemon/internal/contracttest/wire_test.go)
-using a controlled Harness adapter, plus the [observation-result regression](../services/agents-api/internal/execution/runtime_protocol_test.go). It requires no model credentials or external
+[real WebSocket contract scenarios](../apps/daemon/internal/contracttest/wire_test.go)
+using a controlled Harness adapter, plus the [observation-result regression](../services/core/internal/execution/runtime_protocol_test.go). It requires no model credentials or external
 sandbox. These tests are also included in `make check` through `check-go` and
-`check-agents-api`.
+`check-core`.
 
 The suite checks incompatible versions, preparation failure, cancellation
 settlement, connection loss without invented terminal events, reconnect without
@@ -534,7 +534,7 @@ controlled-adapter test establishes the transport contract, not native Harness
 behavior, OS support, provider authentication or sandbox isolation. Update the
 shared types, this guide and the contract checks together when semantics change.
 
-The reusable [Harness text assertions](../apps/parsar-daemon/internal/agent/contracttest/text.go)
+The reusable [Harness text assertions](../apps/daemon/internal/agent/contracttest/text.go)
 accept any prepared Executor and a small fixture supplying deterministic normal,
 active and steering inputs. They check independent Turn streams, native owner and
 history continuity, durable write/application receipts, stale cancellation and

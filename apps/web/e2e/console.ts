@@ -1,4 +1,4 @@
-import type { SandboxDeployment, SandboxNodeRollout } from "@agents-core-web/agents-client";
+import type { SandboxDeployment, SandboxNodeRollout } from "@oac/agents-client";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 const fixture = `http://127.0.0.1:${process.env.AGENTS_FIXTURE_PORT ?? 18092}`;

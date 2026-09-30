@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AgentCoreError, type AgentSession, type RuntimeHistory, type RuntimeObservation } from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentSession, type RuntimeHistory, type RuntimeObservation } from "@oac/agents-client";
 
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import {

@@ -89,25 +89,32 @@ class NameGuardTests(unittest.TestCase):
     def test_persisted_domain_exception_does_not_allow_other_settings_or_paths(self):
         rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))
         content = '"parsar.agents-api.credential"; "PARSAR_HOME"'
-        found = names.violations("services/agents-api/internal/credentialcrypto/cipher.go", content, rules)
+        found = names.violations("services/core/internal/credentialcrypto/cipher.go", content, rules)
         self.assertEqual([item[2] for item in found], ["PARSAR"])
         self.assertTrue(names.violations("README.md", content, rules))
 
     def test_retirement_table_exception_does_not_hide_runtime_setting(self):
         rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))
         content = '{"AGENTS_API_ADDR", "OAC_ADDR"}; os.Getenv("PARSAR_HOME")'
-        found = names.violations("services/agents-api/cmd/server/process_configuration.go", content, rules)
+        found = names.violations("services/core/cmd/server/process_configuration.go", content, rules)
         self.assertEqual([item[2] for item in found], ["PARSAR"])
 
     def test_checked_in_exceptions_do_not_hide_unrelated_retired_setting(self):
         rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))
-        for content in ('"services/agents-api/cmd/server" PARSAR_HOME',
-                        '"contracts/agents-api/README.md" PARSAR_HOME',
-                        '"github.com/MiniMax-AI/parsar-core" PARSAR_HOME',
-                        '"@parsar/adapter" PARSAR_HOME',
+        for content in ('"contracts/agents-api/README.md" PARSAR_HOME',
                         '"Parsar product" PARSAR_HOME'):
             with self.subTest(content=content):
                 self.assertEqual(len(names.violations("README.md", content, rules)), 1)
+
+    def test_former_repository_identities_are_rejected(self):
+        rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))
+        for content in ("https://github.com/MiniMax-AI/parsar-core", '"github.com/MiniMax-AI-Dev/parsar/internal/foo"',
+                        "services/agents-api/cmd/server", "services/core-console", "apps/parsar-daemon/cmd/parsar-daemon",
+                        "scripts/build-agents-api-image.sh", "scripts/build-core-console.sh",
+                        "scripts/agents-api-subagents-acceptance.py", "make check-agents-api", '"name": "parsar-core"',
+                        "@agents-core-web/web", "@parsar/claude-sdk-adapter", "parsar-mcode-harness"):
+            with self.subTest(content=content):
+                self.assertTrue(names.violations("README.md", content, rules))
 
 
 if __name__ == "__main__":

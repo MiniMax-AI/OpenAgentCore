@@ -1,4 +1,4 @@
-import type { SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxNode } from "@oac/agents-client";
 import { translate, type Locale } from "./locale";
 import type { MessageKey } from "./locale-strings";
 export interface SandboxDiagnosticMessage { label: string; advice: string }

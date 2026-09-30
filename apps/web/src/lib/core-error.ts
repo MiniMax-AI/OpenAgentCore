@@ -1,4 +1,4 @@
-import { AgentCoreError } from "@agents-core-web/agents-client";
+import { AgentCoreError } from "@oac/agents-client";
 import type { TFunction } from "i18next";
 import type { coreErrors } from "../i18n/locales/en/core-errors";
 

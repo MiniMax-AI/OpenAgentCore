@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/internal/runtimefs"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 	"io/fs"
 	"os"
 	"strings"
@@ -14,8 +14,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
 const Directory = "/environment/initialization/capabilities"

@@ -1,4 +1,4 @@
-import type { SandboxDeployment, SandboxE2BTemplateBuild, SandboxProvider, SandboxResources, SandboxRuntimeRelease, SandboxSpecification } from "@agents-core-web/agents-client";
+import type { SandboxDeployment, SandboxE2BTemplateBuild, SandboxProvider, SandboxResources, SandboxRuntimeRelease, SandboxSpecification } from "@oac/agents-client";
 import { RUNTIME_REF_PATTERN } from "./runtime-release";
 import standardSizes from "./standard-sizes.json";
 

@@ -1,4 +1,4 @@
-import { AgentCoreError, type EnvironmentTemplateResource, type SavedAgent, type Skill, type Vault, type VaultCredential } from "@agents-core-web/agents-client";
+import { AgentCoreError, type EnvironmentTemplateResource, type SavedAgent, type Skill, type Vault, type VaultCredential } from "@oac/agents-client";
 import { queryOptions, useQuery, useQueryClient, type QueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
 import { useCallback } from "react";
 
