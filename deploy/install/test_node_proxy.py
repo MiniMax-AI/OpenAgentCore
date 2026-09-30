@@ -10,6 +10,7 @@ import select
 import socket
 import ssl
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -90,6 +91,7 @@ class Proxy(http.server.BaseHTTPRequestHandler):
         pass
 
 
+@unittest.skipUnless(sys.platform == "linux", "node service-user downloads require Linux")
 class NodeProxyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
