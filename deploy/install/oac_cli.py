@@ -1,4 +1,4 @@
-"""oac: status, start, stop, apply and rotate-core-key for one installation.
+"""oac: status, start, stop, apply, rotate-core-key and uninstall for one installation.
 
 The installation directory is the directory that holds the command. The bundle it
 was installed from is never needed. config.json is the only file an operator edits;
@@ -40,8 +40,8 @@ import native_service
 SOURCE_COMMIT = None  # Set by the packaged entrypoint from its build revision.
 UNSUPPORTED_VERSION = ("This installation version or historical conversion is not supported; "
                        "preserve its data and reinstall into a new empty directory. Nothing was changed.")
-INCOMPLETE = ("This installation did not finish installing. Rerun the installer command; it removes what is left "
-              "and installs again.")
+INCOMPLETE = ("This installation did not finish installing. Rerun the installer command, which removes what is "
+              "left and installs again, or remove it with oac uninstall.")
 
 
 class OacError(Exception):
@@ -800,14 +800,16 @@ def _remove_last_files(root, state, keep_root):
             signal.signal(signum, handler)
 
 
-def remove(root, state, keep_root=False):
+def remove(root, state, keep_root=False, images=False):
     """Remove one installation: native Core's unit, its Compose project with its volumes, then its files.
 
     state is the loaded state.json. Only this installation's own project and unit are
-    touched; loaded images are kept. keep_root keeps the directory and its .oac.lock, which
-    the caller holds, and removes everything else in it. The files stay while a service is
-    left, so state.json still names it. Nothing is printed, so a closed terminal can't stop
-    the removal. Raises OacError naming what is left and the commands that remove it.
+    touched. Loaded images are kept unless images is set; see remove_images. keep_root keeps
+    the directory and its .oac.lock, which the caller holds, and removes everything else in
+    it. The files stay while a service is left or an image removal fails, so state.json still
+    names them. Nothing is printed, so a closed terminal can't stop the removal. Returns a
+    note for each image kept; raises OacError naming what is left and the commands that
+    remove it.
     """
     root = Path(root)
     if not root.is_absolute() or root.is_symlink() or root.resolve() != root:
@@ -815,7 +817,7 @@ def remove(root, state, keep_root=False):
     project = state.get("project")
     if not isinstance(project, str) or not re.fullmatch(r"oac-[0-9a-f]{10}", project):
         raise OacError("state.json names no Compose project of this installation; nothing was removed")
-    left = []
+    left, kept = [], []
     if native_service.is_native(state):
         unit = native_service.unit_name(state)
         try:
@@ -833,6 +835,11 @@ def remove(root, state, keep_root=False):
     except (subprocess.CalledProcessError, OSError, KeyboardInterrupt):
         manual = shlex.join(["env", *(arg for name in compose_names for arg in ("-u", name)), *down])
         left.append((f"Compose project {project} and its volumes", f"(cd / && {manual})"))
+    if images and not left:
+        try:
+            kept = remove_images(state, environment)
+        except (subprocess.CalledProcessError, OSError, ValueError, KeyboardInterrupt):
+            left.append(("the images of this installation", f"{shlex.quote(str(root / 'oac'))} uninstall"))
     target = shlex.quote(str(root))
     files = (f"the files in {root}", f"find {target} -mindepth 1 -delete" if keep_root else f"rm -rf {target}")
     if left:
@@ -854,6 +861,32 @@ def remove(root, state, keep_root=False):
     if left:
         raise OacError("Removal did not finish. Left: " + "; ".join(what for what, _ in left) + ". Remove them with:\n"
                        + "\n".join("  " + command for _, command in left))
+    return kept
+
+
+def remove_images(state, environment):
+    """Remove the images state.json records; returns a note for each one kept.
+
+    The installer loads images untagged, so a tag, or a container of any project, means
+    something outside this installation uses the image, and it stays. Docker runs as remove
+    runs Compose, and prints nothing.
+    """
+    kept = []
+    quiet = {"cwd": "/", "env": environment, "stdin": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    for name, image in sorted(state["images"].items()):
+        found = run(["docker", "image", "inspect", image, "--format", "{{json .RepoTags}}"], check=False,
+                    stdout=subprocess.PIPE, text=True, **quiet)
+        if found.returncode:
+            continue  # already removed
+        tags = json.loads(found.stdout) or []
+        users = run(["docker", "ps", "-aq", "--filter", "ancestor=" + image], stdout=subprocess.PIPE, text=True,
+                    **quiet).stdout.split()
+        if users or tags:
+            kept.append(f"Kept the {name} image {image}: " + ("another container uses it." if users else
+                        f"it is tagged {', '.join(tags)}."))
+        else:
+            run(["docker", "image", "rm", image], stdout=subprocess.DEVNULL, **quiet)
+    return kept
 
 
 # Commands --------------------------------------------------------------------
@@ -1048,6 +1081,83 @@ def rotate_core_key(root, yes=False, interactive=None, out=print):
     out("A separate Web-only installation keeps its own copy: copy secrets/core.key to that host and run its oac apply.")
 
 
+def core_sandboxes(root, state):
+    """Core's (nodes, sandbox deployment), or None when Core does not answer. Any part of the installation may be missing."""
+    try:
+        try:
+            config = load_config(root)
+        except (OacError, config_model.ConfigError):
+            config = None
+        # The address the running Core was started with.
+        base, key = core_base(written_view(root, state, config)), bearer(configuration.read_core_key(root))
+        answers = [http(base + "/core/v1/sandbox/" + name, key) for name in ("nodes", "deployment")]
+        if any(status != 200 for status, _ in answers):
+            return None
+        return json.loads(answers[0][1])["data"], json.loads(answers[1][1])
+    except (OacError, RuntimeError, OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def uninstall(root, yes=False, interactive=None, out=print):
+    """Remove this installation and all its data from this host, finished or not. Nodes and sandboxes are only listed."""
+    interactive = sys.stdin.isatty() if interactive is None else interactive
+    if not (root / "state.json").exists():
+        # Without state.json nothing here is known to be the installation's, so nothing is removed.
+        out(f"No installation is left in {root}: it has no state.json. Nothing was removed.")
+        return
+    with locked(root):
+        state = load_state(root)
+        project, core = state["project"], state["mode"] != "web-only"
+        out(f"This removes the installation in {root} from this host:")
+        out(f"  Compose project {project}: its containers and networks"
+            + (f", and the database volume {project}_database" if core else ""))
+        if native_service.is_native(state):
+            out(f"  Native Core service {native_service.unit_name(state)}")
+        for name, image in sorted(state["images"].items()):
+            out(f"  The {name} image {image}, unless another container or a tag uses it")
+        out(f"  The directory {root}")
+        nodes = []
+        if not core:
+            out("The paired Core and its data are not touched.")
+        else:
+            out("All data is deleted: the database with every Project, API key, Session and stored credential, and "
+                "the Core key. To keep it, back it up first: docs/getting-started/operations.md#back-up")
+            found = core_sandboxes(root, state)
+            release = ("While Core is still up, archive their Sessions, or choose Reset deployment in Web "
+                       "(System → Manage sandbox configuration) and let it complete.")
+            if found is None:
+                nodes = None
+                out("Core did not answer, so its nodes and sandboxes can't be listed. Nodes stay on their hosts.")
+                out("Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B keeps running, "
+                    "and billing for, its sandboxes. " + release)
+            else:
+                nodes, deployment = found
+                if nodes:
+                    out("Nodes registered with this Core, which stay on their hosts: " + ", ".join(
+                        f'{node.get("name")} ({"online" if node.get("online") else "offline"})' for node in nodes))
+                count = (deployment.get("resources") or {}).get("allocations") or 0
+                if count:
+                    where = ("E2B keeps running them, and billing for them" if deployment.get("provider") == "e2b"
+                             else "they keep running on their nodes")
+                    out(f"Core has {count} sandbox(es) in use. Uninstall does not stop them: {where}. {release}")
+        if not yes:
+            if not interactive:
+                raise OacError("Confirm the uninstall with --yes, or run it in a terminal; nothing was removed")
+            if input(f"Type the installation directory, {root}, to remove it: ").strip() != str(root):
+                raise OacError("The uninstall was not confirmed; nothing was removed")
+        kept = remove(root, state, images=True)
+    for note in kept:
+        out(note)
+    out(f"Removed the installation in {root}.")
+    if nodes != []:
+        hosts = (f'each node host ({", ".join(str(node.get("name")) for node in nodes)})' if nodes else
+                 "each node host that served this installation")
+        out(f"This Core is gone, so on {hosts}, uninstall the node with --force using node-install.pyz from this "
+            "release's bundle:")
+        out(f'  sudo python3 node-install.pyz --uninstall --installation-id {state["installation_id"]} --force')
+        out("See docs/getting-started/nodes.md#remove-a-node")
+
+
 def main(argv=None, root=None, out=print):
     root = Path(root) if root else Path(sys.argv[0]).resolve().parent
     if Path(sys.argv[0]).name == "parsar":
@@ -1070,7 +1180,11 @@ def main(argv=None, root=None, out=print):
     commands.add_parser("domain-server", help=argparse.SUPPRESS)
     rotate = commands.add_parser("rotate-core-key", help="Replace the Core key; the old key stops working")
     rotate.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
+    remove_parser = commands.add_parser("uninstall", help="Remove this installation and all its data from this host")
+    remove_parser.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
     args = parser.parse_args(argv)
+    if args.command == "uninstall":
+        return uninstall(root, yes=args.yes, out=out)
     if not (root / "state.json").exists():
         raise OacError(f"{root} is not an installation directory; run the oac command inside it")
     state = load_state(root)

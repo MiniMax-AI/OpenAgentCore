@@ -11,7 +11,7 @@ Operators install Core and Web, add sandbox capacity and issue Project API keys.
 | [Install Core and Web](install.md) | The default installation, from an empty host to the first Project API key |
 | [Installation options](install-options.md) | Installer flags, existing reverse proxies, split and native deployments, offline hosts |
 | [Nodes](nodes.md) | Adding, changing, removing and troubleshooting sandbox nodes |
-| [Operations](operations.md) | The `oac` command, the Core key, backups, upgrades and troubleshooting |
+| [Operations](operations.md) | The `oac` command, the Core key, backups, uninstall, upgrades and troubleshooting |
 | [Configuration reference](../configuration.md) | Every setting, file and environment variable |
 | [Web console](../web/README.md) | What the console shows and manages |
 

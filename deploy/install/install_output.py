@@ -69,6 +69,6 @@ def summary(root, config, addresses, fresh, selection, deployment, reachable, in
     heading("Manage")
     print(f"  Settings: {root / 'config.json'}")
     command = shlex.quote(str(root / "oac"))
-    for label, action in (("Apply settings", "apply"), ("Status", "status"), ("Start", "start"), ("Stop", "stop")):
+    for label, action in (("Apply settings", "apply"), ("Status", "status"), ("Start", "start"), ("Stop", "stop"), ("Uninstall", "uninstall")):
         print(f"  {label}: {command} {action}")
     print("\nNo model request was made. Quickstart: docs/getting-started/quickstart.md", flush=True)

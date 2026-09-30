@@ -41,6 +41,7 @@ class FakeHost:
         self.web_port = None
         self.native_root = None  # the installation whose native unit systemctl manages
         self.missing_images = set()
+        self.other_containers = {}  # image ID -> containers of other installations that use it
         self.core_installation_id = "11111111-2222-4333-8444-555555555555"
         self.bindings = {"nodes": 0, "nodes_on_other_address": 0, "hosted_sandboxes": 0, "self_hosted_executors": 0}
         self.nodes = []
@@ -99,7 +100,11 @@ class FakeHost:
             stdout = "2.30.0"
         elif args[:3] == ["docker", "image", "inspect"]:
             code = 1 if args[3] in self.missing_images else 0
-            stdout = "" if code else args[3] + " linux/amd64"
+            stdout = "" if code else "[]" if "{{json .RepoTags}}" in args else args[3] + " linux/amd64"
+        elif args[:3] == ["docker", "image", "rm"]:
+            self.missing_images.add(args[3])
+        elif args[:2] == ["docker", "ps"] and args[-1].startswith("ancestor="):
+            stdout = "\n".join(self.other_containers.get(args[-1].removeprefix("ancestor="), []))
         elif args[:2] == ["docker", "ps"]:
             stdout = "\n".join(name for name, item in self.containers.items() if item["running"]) if "--format" in args else "\n".join("id-" + name for name in self.containers)
         elif args[:2] == ["docker", "inspect"]:

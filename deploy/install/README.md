@@ -5,7 +5,7 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 | Module | Role |
 | --- | --- |
 | `install.sh`, `install.py` | Core/Web installer: host checks, fresh installation and same-bundle repair |
-| `oac_cli.py` | The `oac` command (`status`, `start`, `stop`, `apply`, `domain`, `rotate-core-key`), packaged as `oac.pyz` |
+| `oac_cli.py` | The `oac` command (`status`, `start`, `stop`, `apply`, `domain`, `rotate-core-key`, `uninstall`), packaged as `oac.pyz` |
 | `config.schema.json`, `config_model.py` | The `config.json` schema, its defaults and the subset validator |
 | `configuration.py` | Everything under `generated/` and the service input digests |
 | `ingress.py`, `ingress_config.py` | Managed HTTPS gateway and the domain operation |
@@ -24,7 +24,7 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 - The Core/Web installer never adds its own host as a node, imports no Runtime image and gives Core neither the Docker socket nor host devices. Nodes are added afterwards from Web, this host included.
 - Ingress is an installation concern, independent of Runtime and Sandbox Provider selection.
 - A repeated installation or repair never changes provider identity, the backend namespace or native history. The database, Projects and their keys, provider identity and the credential encryption key survive repair.
-- Recovery never deletes data and never prunes containers, volumes or images. The one removal is a [new installation's own cleanup](#new-installations).
+- Recovery never deletes data and never prunes containers, volumes or images. Only a [new installation's own cleanup](#new-installations) and [`oac uninstall`](#uninstall) remove anything.
 - Do not add another launcher, scheduler, supervisor or recovery path.
 
 ## Configuration and apply
@@ -42,16 +42,22 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 
 - Install only into an empty directory or over an [incomplete installation](#new-installations), or repair a complete installation of the same source revision. Refuse older formats and different revisions before changing anything; keep their data and direct the operator to install separately. Distributions carry only current installation code: no conversion, migration or binary replacement. Keep the refusal checks and their tests.
 - The packaged `oac.pyz` embeds its build revision and refuses a `state.json` whose `source_commit` differs.
-- The installer and every mutating `oac` command share `.oac.lock`. The installer holds it across creation, payload, native service and launcher repair, and apply, calling the already-locked apply implementation without locking again. Never replace the lock file; its inode must stay stable. Only the cleanup of a new installation unlinks it, with the directory the installer created, while holding it, and `locked` refuses a lock whose path no longer names the file it locked.
+- The installer and every mutating `oac` command share `.oac.lock`. The installer holds it across creation, payload, native service and launcher repair, and apply, calling the already-locked apply implementation without locking again. Never replace the lock file; its inode must stay stable. Only the cleanup of a new installation, with the directory the installer created, and `oac uninstall` unlink it, last and while holding it. `locked` refuses a lock whose path no longer names the file it locked.
 
 ## New installations
 
 - An installation is complete after its first start: apply converged, the services are healthy and, for Web-only, its Core accepts the Core key. `create()` writes `state.json` before anything else, atomically, with the project name and `"complete": false`, and the installer sets it to `true` at that moment. A later failure, such as a refused sandbox selection, keeps the installation.
-- Until then, `oac apply`, `start`, `domain` and `rotate-core-key` and Web's domain setup refuse the installation and point to the installer; `oac status` reports it. Only the installer starts or removes an incomplete installation.
+- Until then, `oac apply`, `start`, `domain` and `rotate-core-key` and Web's domain setup refuse the installation and point to the installer and `oac uninstall`; `oac status` reports it. Only the installer starts an incomplete installation; the installer or `oac uninstall` removes it.
 - Any failure or interrupt (Ctrl-C, SIGTERM, SIGHUP) of an installation that is not complete runs `oac_cli.remove` before anything is printed, so a closed terminal can't stop it. The original error then goes on, and the installer prints it followed by `Nothing was kept; fix the problem and rerun the same command.` `remove` disables native Core's unit, runs `docker compose -p <project> down --volumes --remove-orphans` from `/` without `COMPOSE_*` variables and with its output discarded, and deletes every file in the installation directory. The directory goes too when the installer created it; otherwise it stays with its lock. Loaded images stay.
 - The release downloader execs the installer, so the installer itself receives Ctrl-C, SIGTERM and SIGHUP and nothing stops it while it removes a failed installation.
 - `remove` touches only the `oac-<10 hex digits>` project and its `<project>-core.service` named in `state.json`, and never follows a link. `state.json`, then the `oac` command, then `.oac.lock` are removed last, and the files stay when a service can't be removed, so the next run still recognizes the installation and no other command locks it afresh mid-removal. Those final unlinks ignore SIGINT, SIGTERM and SIGHUP; if the command cannot be unlinked, cleanup restores `state.json` for a retry. SIGKILL or power loss during those final unlinks can leave files that need manual removal. The error lists what is left and the commands that remove it; the printed Compose command uses the same directory and environment isolation as automatic cleanup.
 - A rerun over an incomplete installation, a `state.json` without `"complete": true`, removes it the same way under the lock and then checks the settings and ports and installs with the flags given now. Only that explicit marker proves completion. A directory without `state.json` is refused whatever it holds, and nothing in it is removed.
+
+## Uninstall
+
+- `oac uninstall` is the only uninstall entry point; only the installed `oac` matches its release's layout, so there is no uninstall script. It needs only `state.json`, accepts complete and incomplete installations alike, and calls `remove` with image removal and without `keep_root`. Without `state.json` it removes nothing and says so. The operator guide is [Uninstall](../../docs/getting-started/operations.md#uninstall).
+- It removes each image `state.json` records unless a tag names it or a container of any project uses it, and reports those it keeps. The installer loads images untagged, so either means something outside the installation uses the image. It never forces an image removal, and runs Docker as `remove` runs Compose.
+- Before confirmation it prints what it removes and, when Core answers, the nodes and the number of sandboxes in use that Core lists, with a warning that uninstall stops no sandbox; E2B sandboxes keep running and billing. It then needs the typed directory or `--yes`; without a terminal only `--yes` confirms. It never contacts a node or a sandbox provider; afterwards it prints the nodes' `--force` uninstall command with the installation ID.
 
 ## Install-time sandbox selection
 

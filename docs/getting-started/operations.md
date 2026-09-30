@@ -22,6 +22,7 @@ Each installation has its own management command in its directory. It needs neit
 | `oac apply --yes` | Web-only: pairs Web with a different Core without asking |
 | `oac domain HOSTNAME [--confirm-public-url-change URL]` | Managed ingress: sets the public URL to `https://HOSTNAME`, as **Configure domain and HTTPS** in Web does; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
 | `oac rotate-core-key [--yes]` | Replaces the Core key; see [Rotate the Core key](#rotate-the-core-key) |
+| `oac uninstall [--yes]` | Removes the installation and all its data from this host; see [Uninstall](#uninstall) |
 
 For a second installation, use its own command, such as `~/.oac/web/oac status`.
 
@@ -136,6 +137,22 @@ Back up these together; a restore needs all of them:
 
 Never prune Docker volumes or delete native harness history to make a retry pass. A deleted Session does not prove that all provider resources were reclaimed.
 
+## Uninstall
+
+```sh
+~/.oac/core/oac uninstall
+```
+
+It removes the installation from this host: its Compose project with the containers, networks and database volume, native Core's service, the images the installer loaded, and the installation directory, including `secrets/` and the `oac` command itself. It keeps an image that has a tag or that another container uses, such as one of another installation of the same release, and says so.
+
+All data goes with it: Projects and API keys, Session history, stored credentials and the Core key. The database volume is useless without `secrets/`, so it is never kept on its own. To keep the data, stop the installation with `oac stop` instead, or [back it up](#back-up) first.
+
+The command lists what it removes and, when Core answers, the registered nodes. Confirm by typing the installation directory, or pass `--yes`, which a run without a terminal requires. It holds the installation lock and needs only `state.json`, so it also removes an installation that did not finish installing or lost `config.json`. It removes the directory last; if it stops part way, run it again.
+
+Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B sandboxes keep running, and billing, at E2B. While Core is still up, archive their Sessions or [reset the deployment](nodes.md#change-the-sandbox-configuration) and let it complete; the command shows how many sandboxes Core has in use.
+
+Nodes on other hosts keep running. To uninstall them the usual way, remove them in Web first, as in [Remove a node](nodes.md#remove-a-node). After `oac uninstall` their Core is gone: on each node host, run the node uninstall command with `--force`, using `node-install.pyz` from the [bundle you installed from](#installation-version-policy). `oac uninstall` prints that command with the installation ID. A Web-only installation removes only Web; its Core keeps its data and nodes.
+
 ## Installation version policy
 
 An installation runs one release for its whole life. In-place version upgrades, downgrades and historical conversions are not supported. Nothing migrates data between releases.
@@ -157,15 +174,15 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `ADDRESS (…) is not an address of this machine …` | Set `--host`, or `host` in `config.json`, to one of the machine's IP addresses or a wildcard such as `0.0.0.0` |
 | `Automatic HTTPS needs ports 80 and 443 …` | Free the port the message names, install without `--public-url` and set up the domain later, or install with `--ingress external` and use your own [reverse proxy](install-options.md#https-and-the-reverse-proxy) |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
-| `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply` |
+| `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply`. To start over with other flags, [uninstall](#uninstall) it first |
 | `This installation version or historical conversion is not supported …` | The target directory holds an installation of another release, or a default install found one at `~/.parsar/core`. Keep it, and install into another empty `--install-dir` ([version policy](#installation-version-policy)) |
 | `generated/<file> was edited by hand` | Put the change in `config.json`, then `oac apply --discard-edits` |
 | `config.json has changes that are not applied` | Run `oac apply` |
 | `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
 | `config.json not applied: …` | `oac apply` printed Core's startup error above; fix `config.json` and apply again |
 | `The services did not start: …` | A new installation's first start failed, and the installer [removed what it created](install.md#install). Compose's or Core's error is printed above it; fix the cause and run the same command again |
-| `Removal did not finish. Left: …` | The installer could not remove everything a failed new installation created. Run the printed commands to remove what is left, then run the same command again |
-| `This installation did not finish installing …` | The installer stopped before reporting that the services were running. Rerun the installer command, which [removes what is left](install.md#install) and installs again |
+| `Removal did not finish. Left: …` | The installer, cleaning up a failed new installation, or `oac uninstall` could not remove everything. Run the printed commands to remove what is left, or fix the cause and run the same command again |
+| `This installation did not finish installing …` | The installer stopped before reporting that the services were running. Rerun the installer command, which [removes what is left](install.md#install) and installs again, or [uninstall](#uninstall) it |
 | `… already in use on this server. Automatic HTTPS cannot run beside another program …` during domain setup | Another program holds port 80 or 443. Stop it, using the printed `ss` command to find it, and retry; automatic HTTPS cannot share [these ports](install-options.md#ports) |
 | `HTTPS verification failed …` during domain setup | DNS points elsewhere, a firewall or NAT blocks inbound ports 80 and 443, or the certificate request failed; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
 | Web answers 403 `Forbidden` | Open exactly the console address `oac status` prints; a reverse proxy must pass the original Host |

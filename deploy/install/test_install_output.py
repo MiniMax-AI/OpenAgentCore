@@ -51,6 +51,7 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertIn("  Core key file: /tmp/install with spaces/secrets/core.key\n", text)
         self.assertIn("  Apply settings: '/tmp/install with spaces/oac' apply\n", text)
+        self.assertIn("  Uninstall: '/tmp/install with spaces/oac' uninstall\n", text)
         self.assertNotIn("\033[", text)
 
 
