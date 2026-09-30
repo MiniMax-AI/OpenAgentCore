@@ -15,7 +15,7 @@ import (
 
 func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
-	h, _, tenant := adminTestHandler(t, func(h *Handler) { h.store = s })
+	h, _, tenant := adminTestHandler(t, databaseSessionReads(s))
 	for _, code := range []string{"authentication_error", "connection_failed", "secret-canary"} {
 		t.Run(code, func(t *testing.T) {
 			session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: identity.Subject{Kind: "service_account", ID: "native-classification"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})

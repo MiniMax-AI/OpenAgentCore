@@ -194,7 +194,7 @@ An omitted or unknown policy, missing required callback, or callback paired with
 
 Run the `engine` and `execution` tests for omission, policy, combination and error precedence coverage, and the public onboarding/store tests for admission and Runtime dispatch. Test fixtures use `engine/enginetest`, whose exhaustive literal also requires a decision when a field is added; it is not a production profile.
 
-`execution.Policy` supplies immutable service qualification to HTTP admission, Worker device selection and final dispatch. Custom composition gives the same Policy to `api.WithExecutionPolicy` and the Core dispatcher's `Policy`. The zero value uses the built-in profiles; an explicitly empty catalog authorizes none. There is no mutable global registration.
+`execution.Policy` supplies immutable service qualification to HTTP admission, Worker device selection and final dispatch. Custom composition gives the same Policy to `api.Dependencies.Policy` and the Core dispatcher's `Policy`. The zero value uses the built-in profiles; an explicitly empty catalog authorizes none. There is no mutable global registration.
 
 ## Native model configuration
 

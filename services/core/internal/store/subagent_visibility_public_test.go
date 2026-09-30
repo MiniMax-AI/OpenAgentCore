@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -79,7 +78,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(s, auth, "codex", api.WithExecution(storeAdmission{s}), api.WithSubagents(s))
+	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,11 +13,21 @@ import (
 	"github.com/google/uuid"
 )
 
-type VaultStore interface {
+// Vaults manages Vaults and their Credentials, and selects the Credentials a
+// Session's MCP servers use at creation.
+type Vaults interface {
 	CreateVault(context.Context, string, store.CreateVaultInput) (store.Vault, error)
 	GetVault(context.Context, string, string) (store.Vault, error)
 	DeleteVault(context.Context, string, string) (string, error)
 	ListVaults(context.Context, string, string, int, bool, []string) (store.VaultPage, error)
+	CreateOAuthCredential(context.Context, string, string, store.CreateOAuthCredentialInput) (store.Credential, error)
+	UpdateOAuthCredential(context.Context, string, string, string, store.UpdateOAuthCredentialInput) (store.Credential, error)
+	CreateStaticCredential(context.Context, string, string, store.CreateStaticCredentialInput) (store.Credential, error)
+	UpdateStaticCredential(context.Context, string, string, string, store.UpdateStaticCredentialInput) (store.Credential, error)
+	GetCredential(context.Context, string, string, string) (store.Credential, error)
+	DeleteCredential(context.Context, string, string, string) (string, error)
+	ListCredentials(context.Context, string, string, string, int, bool, []string) (store.CredentialPage, error)
+	ResolveMCPCredentials(context.Context, string, []string, []store.MCPCredentialRequest) ([]store.MCPCredentialBinding, error)
 }
 
 // @Summary Create a Vault
@@ -73,7 +83,7 @@ func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	vault, err := h.store.CreateVault(r.Context(), tenantID(r), input)
+	vault, err := h.Vaults.CreateVault(r.Context(), tenantID(r), input)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -97,7 +107,7 @@ func (h *Handler) getVault(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrNotFound)
 		return
 	}
-	vault, err := h.store.GetVault(r.Context(), tenantID(r), id)
+	vault, err := h.Vaults.GetVault(r.Context(), tenantID(r), id)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

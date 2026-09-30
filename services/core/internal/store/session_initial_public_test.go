@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -37,13 +36,13 @@ func TestInitialSessionInputOfficialClient(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := api.NewHandler(s, auth, "codex", api.WithExecution(worker))
+	handler, err := publicHandler(t, s, auth, "codex", workerExecution(worker))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	unsupported, err := api.NewHandler(s, auth, "fake_alpha", api.WithExecution(worker))
+	unsupported, err := publicHandler(t, s, auth, "fake_alpha", workerExecution(worker))
 	if err != nil {
 		t.Fatal(err)
 	}

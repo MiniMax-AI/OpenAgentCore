@@ -1,15 +1,15 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestClaudeSessionConfigurationAdmission(t *testing.T) {
@@ -42,16 +42,17 @@ func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 				{"MCP empty fragment", `,"tools":[` + strings.Replace(publicMCP, `/tools"`, `/tools#"`, 1) + `]`, false},
 			} {
 				t.Run(fmt.Sprintf("%s/stream=%t/input=%s", test.name, stream, input), func(t *testing.T) {
-					digest := sha256.Sum256([]byte("test-api-key"))
-					auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: hex.EncodeToString(digest[:]), TenantID: uuid.NewString()}})
-					if err != nil {
-						t.Fatal(err)
-					}
-					saved := &recordingStore{}
-					handler, err := NewHandler(saved, auth, "claude_sdk", WithExecution(&inputRecorder{ResourceStore: saved}))
-					if err != nil {
-						t.Fatal(err)
-					}
+					streamed := ""
+					handler, saved, _ := testHandler(t, func(d *Dependencies, f *testFakes) {
+						d.Engine = "claude_sdk"
+						admitSessions(d, f)
+						// The Worker's stream admission reports that it cannot execute.
+						f.admission.createSessionStream = func(_ context.Context, _ string, input store.CreateSessionInput) (store.SessionCreation, error) {
+							streamed = input.Engine
+							return store.SessionCreation{}, execution.ErrExecutionUnavailable
+						}
+						f.metrics.recordUnavailable = func() {}
+					})
 					body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"%s},"environment":{"type":"none"},"stream":%t,"input":%s}`, test.fields, stream, input)
 					request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 					request.Header.Set("Authorization", "Bearer test-api-key")
@@ -74,6 +75,9 @@ func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 					}
 					if want == http.StatusCreated && saved.input.Engine != "claude_sdk" {
 						t.Fatal("wrong engine persisted")
+					}
+					if (want == http.StatusServiceUnavailable) != (streamed == "claude_sdk") {
+						t.Fatalf("stream admission engine = %q", streamed)
 					}
 				})
 			}

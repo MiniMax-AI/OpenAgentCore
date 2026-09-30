@@ -12,8 +12,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// sandboxCreationRecorder is the Worker's hosted admission; it counts
+// creations.
 type sandboxCreationRecorder struct {
-	inputRecorder
 	calls int
 }
 
@@ -31,7 +32,10 @@ func TestSessionCreationRejectsSandboxNodeSelector(t *testing.T) {
 		fmt.Sprintf(`{"agent":{"model":"model","x_agents_core":{"sandbox_node_id":%q}},"environment":{"type":"openai_hosted"}}`, node),
 	} {
 		recorder := &sandboxCreationRecorder{}
-		handler, _ := environmentCreationHandler(t, "codex", WithHostedEnvironments(), WithExecution(recorder))
+		handler, _ := environmentCreationHandler(t, "codex", func(d *Dependencies, f *testFakes) {
+			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
+			f.admission.createSession = recorder.CreateSession
+		})
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer key")
 		request.Header.Set("OpenAI-Beta", "agents=v1")

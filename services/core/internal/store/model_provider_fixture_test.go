@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
@@ -14,8 +15,8 @@ import (
 // key (store.NewModelTestStore).
 
 // fixtureDeploymentProvider configures a deployment default for every harness.
-func fixtureDeploymentProvider() api.Option {
-	return api.WithModelProviderDefaults(func(_ context.Context, harness string) (*store.DeploymentModelProviderSnapshot, error) {
+func fixtureDeploymentProvider(s *store.Store) func(*api.Dependencies) {
+	return modelProviderDefaults(s, func(_ context.Context, harness string) (*store.DeploymentModelProviderSnapshot, error) {
 		return &store.DeploymentModelProviderSnapshot{Model: "fixture", Provider: store.FixtureModelProvider(harness), Revision: uuid.New()}, nil
 	})
 }

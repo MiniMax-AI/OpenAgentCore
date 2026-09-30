@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -31,14 +32,25 @@ type SandboxEnrollmentTokenRequest struct {
 	MaxRetained *int `json:"max_retained,omitempty"`
 }
 
-func WithSandboxManager(s *store.Store, auth *DeploymentAuthenticator) Option {
-	return func(h *Handler) { h.sandboxStore = s; h.deploymentAuth = auth }
+// Deployment reads the sandbox deployment and manages its nodes: enrollment,
+// identity, generation configuration, capacity and removal.
+type Deployment interface {
+	GetRuntimeDeployment(context.Context) (store.RuntimeDeploymentView, error)
+	ListRuntimeNodes(context.Context) ([]store.RuntimeNode, error)
+	GetRuntimeNodeDetail(context.Context, string, string) (store.RuntimeNodeDetail, error)
+	UpdateRuntimeNode(context.Context, string, store.RuntimeNodeUpdate) error
+	RemoveRuntimeNode(context.Context, string) error
+	ListNodeRuntimeAllocations(context.Context, string) ([]store.RuntimeNodeAllocation, error)
+	CreateRuntimeEnrollment(context.Context, store.RuntimeNodeCapacity) (store.RuntimeNodeEnrollmentToken, error)
+	EnrollRuntimeNode(context.Context, string, store.RuntimeNodeEnrollment) (store.RuntimeNodeIdentity, error)
+	RuntimeNodeGenerationConfiguration(context.Context, string, string, uint64) (store.RuntimeNodeConfiguration, error)
+	RuntimeNodeStatus(context.Context, string, string) (store.RuntimeNodeStatus, error)
 }
 
 // registerSandboxNodeRoutes serves node machine connections. They authenticate
 // with an enrollment token or node credential, never the Core key.
 func (h *Handler) registerSandboxNodeRoutes(r chi.Router) {
-	if h.sandboxStore == nil {
+	if h.Sandboxes == nil {
 		return
 	}
 	r.Post("/api/v1/sandbox-node/enroll", h.enrollSandboxNode)
@@ -49,7 +61,7 @@ func (h *Handler) registerSandboxNodeRoutes(r chi.Router) {
 // registerSandboxManagerRoutes adds sandbox deployment and node administration
 // to the Core-key-authenticated /core/v1 router.
 func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
-	if h.sandboxStore == nil {
+	if h.Sandboxes == nil {
 		return
 	}
 	r.Get("/sandbox/deployment", h.sandboxDeployment)
@@ -75,7 +87,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 // @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/deployment [get]
 func (h *Handler) sandboxDeployment(w http.ResponseWriter, r *http.Request) {
-	value, err := h.sandboxStore.GetRuntimeDeployment(r.Context())
+	value, err := h.Sandboxes.Deployment.GetRuntimeDeployment(r.Context())
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -92,7 +104,7 @@ func (h *Handler) sandboxDeployment(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes [get]
 func (h *Handler) sandboxNodes(w http.ResponseWriter, r *http.Request) {
-	value, err := h.sandboxStore.ListRuntimeNodes(r.Context())
+	value, err := h.Sandboxes.Deployment.ListRuntimeNodes(r.Context())
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -122,7 +134,7 @@ func (h *Handler) updateSandboxNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "node_id")
-	if err := h.sandboxStore.UpdateRuntimeNode(r.Context(), id, input); err != nil {
+	if err := h.Sandboxes.Deployment.UpdateRuntimeNode(r.Context(), id, input); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
@@ -140,7 +152,7 @@ func (h *Handler) updateSandboxNode(w http.ResponseWriter, r *http.Request) {
 // @Router /core/v1/sandbox/nodes/{node_id} [delete]
 func (h *Handler) removeSandboxNode(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "node_id")
-	if err := h.sandboxStore.RemoveRuntimeNode(r.Context(), id); err != nil {
+	if err := h.Sandboxes.Deployment.RemoveRuntimeNode(r.Context(), id); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
@@ -157,7 +169,7 @@ func (h *Handler) removeSandboxNode(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes/{node_id}/allocations [get]
 func (h *Handler) sandboxAllocations(w http.ResponseWriter, r *http.Request) {
-	value, err := h.sandboxStore.ListNodeRuntimeAllocations(r.Context(), chi.URLParam(r, "node_id"))
+	value, err := h.Sandboxes.Deployment.ListNodeRuntimeAllocations(r.Context(), chi.URLParam(r, "node_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -192,7 +204,7 @@ func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request
 	if input.MaxRetained != nil {
 		capacity.MaxRetained = *input.MaxRetained
 	}
-	enrollment, err := h.sandboxStore.CreateRuntimeEnrollment(r.Context(), capacity)
+	enrollment, err := h.Sandboxes.Deployment.CreateRuntimeEnrollment(r.Context(), capacity)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -229,7 +241,7 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "Enrollment requires core_url, the Core origin this node uses. Install the node with this Core's node installer.", "core_url")
 		return
 	}
-	value, err := h.sandboxStore.EnrollRuntimeNode(r.Context(), token, input)
+	value, err := h.Sandboxes.Deployment.EnrollRuntimeNode(r.Context(), token, input)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -257,7 +269,7 @@ func (h *Handler) sandboxNodeIdentity(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	value, err := h.sandboxStore.RuntimeNodeStatus(r.Context(), ids[0], token)
+	value, err := h.Sandboxes.Deployment.RuntimeNodeStatus(r.Context(), ids[0], token)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

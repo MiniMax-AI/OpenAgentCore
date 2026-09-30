@@ -13,12 +13,15 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// DeploymentModelProviderStore holds one deployment default model provider per
-// harness. Keys are write-only and encrypted.
-type DeploymentModelProviderStore interface {
+// ModelProviders holds one deployment default model provider per harness. Keys
+// are write-only and encrypted. DeploymentModelProvider decrypts a harness's
+// default at Session creation, before the encrypted Session snapshot is
+// committed; it returns nil when the harness has no default.
+type ModelProviders interface {
 	ListDeploymentModelProviders(context.Context) ([]store.DeploymentModelProvider, error)
 	SetDeploymentModelProvider(context.Context, string, v1.ModelConfigurationInput) (store.DeploymentModelProvider, error)
 	DeleteDeploymentModelProvider(context.Context, string) error
+	DeploymentModelProvider(context.Context, string) (*store.DeploymentModelProviderSnapshot, error)
 }
 
 // HarnessModelConfiguration is a harness's deployment default model provider. It
@@ -58,14 +61,10 @@ func harnessModelConfiguration(value store.DeploymentModelProvider) *HarnessMode
 // registerHarnessRoutes adds harness and deployment model provider management
 // to the Core-key-authenticated /core/v1 router.
 func (h *Handler) registerHarnessRoutes(r chi.Router) {
-	s, ok := h.store.(DeploymentModelProviderStore)
-	if !ok {
-		return
-	}
-	r.Get("/harnesses", func(w http.ResponseWriter, r *http.Request) { h.listHarnesses(w, r, s) })
-	r.Get("/harnesses/{harness}/model-configuration", func(w http.ResponseWriter, r *http.Request) { h.getHarnessModelConfiguration(w, r, s) })
-	r.Put("/harnesses/{harness}/model-configuration", func(w http.ResponseWriter, r *http.Request) { h.setHarnessModelConfiguration(w, r, s) })
-	r.Delete("/harnesses/{harness}/model-configuration", func(w http.ResponseWriter, r *http.Request) { h.deleteHarnessModelConfiguration(w, r, s) })
+	r.Get("/harnesses", h.listHarnesses)
+	r.Get("/harnesses/{harness}/model-configuration", h.getHarnessModelConfiguration)
+	r.Put("/harnesses/{harness}/model-configuration", h.setHarnessModelConfiguration)
+	r.Delete("/harnesses/{harness}/model-configuration", h.deleteHarnessModelConfiguration)
 }
 
 // knownHarness reports the path harness, writing 404 for one this build lacks.
@@ -86,8 +85,8 @@ func knownHarness(w http.ResponseWriter, r *http.Request) (string, bool) {
 // @Success 200 {object} api.CoreHarnessList
 // @Failure 401,500 {object} CoreErrorResponse
 // @Router /core/v1/harnesses [get]
-func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request, s DeploymentModelProviderStore) {
-	providers, err := s.ListDeploymentModelProviders(r.Context())
+func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request) {
+	providers, err := h.ModelProviders.ListDeploymentModelProviders(r.Context())
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -100,7 +99,7 @@ func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request, s Deploy
 			support.Protocols = append(support.Protocols, provider.Protocol)
 			support.TokenLimitsRequired = support.TokenLimitsRequired || provider.RequiresTokenLimits
 		}
-		harness := CoreHarness{ModelConfigurationSupport: support, Object: "core.harness", ID: kind, Enabled: kind == h.engine || h.harnesses[kind], Default: kind == h.engine}
+		harness := CoreHarness{ModelConfigurationSupport: support, Object: "core.harness", ID: kind, Enabled: kind == h.Engine || h.harnesses[kind], Default: kind == h.Engine}
 		for _, provider := range providers {
 			if provider.Harness == kind {
 				harness.ModelConfiguration = harnessModelConfiguration(provider)
@@ -120,12 +119,12 @@ func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request, s Deploy
 // @Success 200 {object} api.HarnessModelConfiguration
 // @Failure 401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/harnesses/{harness}/model-configuration [get]
-func (h *Handler) getHarnessModelConfiguration(w http.ResponseWriter, r *http.Request, s DeploymentModelProviderStore) {
+func (h *Handler) getHarnessModelConfiguration(w http.ResponseWriter, r *http.Request) {
 	harness, ok := knownHarness(w, r)
 	if !ok {
 		return
 	}
-	providers, err := s.ListDeploymentModelProviders(r.Context())
+	providers, err := h.ModelProviders.ListDeploymentModelProviders(r.Context())
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -167,7 +166,7 @@ func requiredModelProviderShape() shape {
 // @Success 200 {object} api.HarnessModelConfiguration
 // @Failure 400,401,404,413,500,503 {object} CoreErrorResponse
 // @Router /core/v1/harnesses/{harness}/model-configuration [put]
-func (h *Handler) setHarnessModelConfiguration(w http.ResponseWriter, r *http.Request, s DeploymentModelProviderStore) {
+func (h *Handler) setHarnessModelConfiguration(w http.ResponseWriter, r *http.Request) {
 	harness, ok := knownHarness(w, r)
 	if !ok {
 		return
@@ -190,7 +189,7 @@ func (h *Handler) setHarnessModelConfiguration(w http.ResponseWriter, r *http.Re
 		return
 	}
 	setAdminAuditSource(r, "")
-	provider, err := s.SetDeploymentModelProvider(r.Context(), harness, input)
+	provider, err := h.ModelProviders.SetDeploymentModelProvider(r.Context(), harness, input)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -206,13 +205,13 @@ func (h *Handler) setHarnessModelConfiguration(w http.ResponseWriter, r *http.Re
 // @Success 204
 // @Failure 401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/harnesses/{harness}/model-configuration [delete]
-func (h *Handler) deleteHarnessModelConfiguration(w http.ResponseWriter, r *http.Request, s DeploymentModelProviderStore) {
+func (h *Handler) deleteHarnessModelConfiguration(w http.ResponseWriter, r *http.Request) {
 	harness, ok := knownHarness(w, r)
 	if !ok {
 		return
 	}
 	setAdminAuditSource(r, "")
-	if err := s.DeleteDeploymentModelProvider(r.Context(), harness); err != nil {
+	if err := h.ModelProviders.DeleteDeploymentModelProvider(r.Context(), harness); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}

@@ -52,7 +52,6 @@ func TestExecutionConfigurationSources(t *testing.T) {
 }
 
 type executionConfigurationReader struct {
-	ResourceStore
 	calls      int
 	tenant, id string
 	value      v1.SessionExecutionConfiguration
@@ -67,7 +66,9 @@ func (s *executionConfigurationReader) GetSessionExecutionConfiguration(_ contex
 
 func TestExecutionConfigurationReadBoundary(t *testing.T) {
 	s := &executionConfigurationReader{value: v1.SessionExecutionConfiguration{Object: "agent.session.execution_configuration", SchemaVersion: 1, SessionID: "frozen"}}
-	h, _, tenant := adminTestHandler(t, func(h *Handler) { h.store = s })
+	h, _, tenant := adminTestHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.sessionAdmin.getSessionExecutionConfiguration = s.GetSessionExecutionConfiguration
+	})
 	for _, tc := range []struct {
 		auth   string
 		err    error

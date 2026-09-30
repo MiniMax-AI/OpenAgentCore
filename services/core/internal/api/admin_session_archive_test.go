@@ -7,12 +7,10 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type archiveManagementFixture struct {
-	AdminManagementStore
 	tenant, session       string
 	generation            uint64
 	calls                 int
@@ -37,13 +35,12 @@ func (s *archiveManagementFixture) GetManagedSessionArchive(_ context.Context, t
 
 func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
 	key := callerBinding()
-	auth, _ := NewAuthenticator([]APIKey{key})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
+	deps, fakes := managementFakes(t, key)
 	fixture := &archiveManagementFixture{}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin), WithAdminManagement(fixture), WithSessionArchive(fixture.ArchiveManagedSession))
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps.Execution = fakes.execution()
+	fakes.sessionArchive.archiveManagedSession = fixture.ArchiveManagedSession
+	fakes.sessionAdmin.getManagedSessionArchive = fixture.GetManagedSessionArchive
+	h := newTestHandler(t, deps)
 	path := "/core/v1/projects/" + managementProjectID + "/sessions/11111111-1111-4111-8111-111111111111/archive"
 	for _, body := range []string{`{}`, `{"expected_generation":null}`, `{"expected_generation":0}`, `{"expected_generation":-1}`, `{"expected_generation":1.5}`, `{"expected_generation":"1"}`, `{"Expected_Generation":1}`} {
 		if w := projectKeyHTTP(h, http.MethodPost, path, "admin", body); w.Code != 400 {

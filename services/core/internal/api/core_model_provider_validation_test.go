@@ -12,25 +12,23 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
+// coreProviderValidationStore counts deployment model provider writes.
 type coreProviderValidationStore struct {
-	ResourceStore
 	writes int
 }
 
-func (s *coreProviderValidationStore) ListDeploymentModelProviders(context.Context) ([]store.DeploymentModelProvider, error) {
-	return nil, nil
-}
-func (s *coreProviderValidationStore) DeleteDeploymentModelProvider(context.Context, string) error {
-	return nil
-}
 func (s *coreProviderValidationStore) SetDeploymentModelProvider(context.Context, string, v1.ModelConfigurationInput) (store.DeploymentModelProvider, error) {
 	s.writes++
 	return store.DeploymentModelProvider{}, nil
 }
 
+func (s *coreProviderValidationStore) configure(_ *Dependencies, f *testFakes) {
+	f.modelProviders.setDeploymentModelProvider = s.SetDeploymentModelProvider
+}
+
 func TestCoreModelProviderValidationFields(t *testing.T) {
 	s := &coreProviderValidationStore{}
-	h, _, _ := adminTestHandler(t, func(h *Handler) { h.store = s })
+	h, _, _ := adminTestHandler(t, s.configure)
 	for _, tc := range []struct {
 		name, harness, body, code, param string
 		details                          map[string]any

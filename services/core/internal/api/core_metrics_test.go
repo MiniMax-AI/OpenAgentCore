@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
 type metricsFixture struct {
@@ -25,14 +24,10 @@ func (f *metricsFixture) Read(_ context.Context, name string) (coremetrics.View,
 }
 func (f *metricsFixture) RecordUnavailable() { f.refusals++ }
 func TestCoreMetricsAdministratorContract(t *testing.T) {
-	key := callerBinding()
-	auth, _ := NewAuthenticator([]APIKey{key})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
+	deps, fakes := managementFakes(t, callerBinding())
 	f := &metricsFixture{}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin), WithCoreMetrics(f))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fakes.metrics.read = f.Read
+	h := newTestHandler(t, deps)
 	path := "/core/v1/metrics"
 	for _, token := range []string{"", "unknown", "caller"} {
 		w := projectKeyHTTP(h, "GET", path, token, "")
@@ -68,7 +63,9 @@ func TestCoreMetricsAdministratorContract(t *testing.T) {
 func TestCoreRejectionObservationPreservesResponsesAndFlush(t *testing.T) {
 	for _, code := range []string{"execution_unavailable", "environment_unavailable", "invalid_api_key"} {
 		f := &metricsFixture{}
-		h := &Handler{coreMetrics: f}
+		deps, fakes := testDependencies(t)
+		fakes.metrics.recordUnavailable = f.RecordUnavailable
+		h := &Handler{Dependencies: deps}
 		out := httptest.NewRecorder()
 		handler := h.responseHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 503, code, "not recorded")
@@ -84,7 +81,9 @@ func TestCoreRejectionObservationPreservesResponsesAndFlush(t *testing.T) {
 		}
 	}
 	f := &metricsFixture{}
-	h := &Handler{coreMetrics: f}
+	deps, fakes := testDependencies(t)
+	fakes.metrics.recordUnavailable = f.RecordUnavailable
+	h := &Handler{Dependencies: deps}
 	out := httptest.NewRecorder()
 	h.responseHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := http.NewResponseController(w).Flush(); err != nil {

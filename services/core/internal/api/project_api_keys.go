@@ -13,7 +13,9 @@ import (
 	"github.com/google/uuid"
 )
 
-type ProjectAPIKeyStore interface {
+// Projects manages Projects and their API keys, and resolves a Project API key
+// digest to its current binding for authentication.
+type Projects interface {
 	CreateProject(context.Context, string, string) (store.Project, error)
 	GetProject(context.Context, string) (store.ProjectBinding, error)
 	ListProjects(context.Context, string, int, bool) (store.ProjectPage, error)
@@ -31,18 +33,7 @@ type ProjectAPIKeyRequest struct {
 	Name string `json:"name"`
 }
 
-func WithProjectAPIKeys(s ProjectAPIKeyStore, auth *DeploymentAuthenticator) Option {
-	return func(h *Handler) {
-		h.projectKeys = s
-		if auth != nil {
-			h.deploymentAuth = auth
-		}
-	}
-}
 func (h *Handler) registerProjectAPIKeyRoutes(r chi.Router) {
-	if h.projectKeys == nil {
-		return
-	}
 	r.Get("/projects", h.listProjects)
 	r.Post("/projects", h.createProject)
 	r.Post("/projects/{project_id}", h.renameProject)
@@ -51,14 +42,8 @@ func (h *Handler) registerProjectAPIKeyRoutes(r chi.Router) {
 	r.Post("/projects/{project_id}/keys", h.createProjectAPIKey)
 	r.Delete("/projects/{project_id}/keys/{key_id}", h.revokeProjectAPIKey)
 }
-func (h *Handler) resolveAdminProject(ctx context.Context, id string) (store.ProjectBinding, error) {
-	return h.projectKeys.GetProject(ctx, id)
-}
-func (h *Handler) listAdminProjects(ctx context.Context, after string, limit int, ascending bool) (store.ProjectPage, error) {
-	return h.projectKeys.ListProjects(ctx, after, limit, ascending)
-}
 func (h *Handler) adminProjectScope(w http.ResponseWriter, r *http.Request) (store.ProjectBinding, bool) {
-	p, err := h.resolveAdminProject(r.Context(), chi.URLParam(r, "project_id"))
+	p, err := h.Projects.GetProject(r.Context(), chi.URLParam(r, "project_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return store.ProjectBinding{}, false
@@ -116,7 +101,7 @@ func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	page, err := h.listAdminProjects(r.Context(), after, limit, ascending)
+	page, err := h.Projects.ListProjects(r.Context(), after, limit, ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -145,7 +130,7 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	id := uuid.NewString()
 	setAdminAuditSource(r, id)
-	p, err := h.projectKeys.CreateProject(r.Context(), id, input.Name)
+	p, err := h.Projects.CreateProject(r.Context(), id, input.Name)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -177,7 +162,7 @@ func (h *Handler) renameProject(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	p, err := h.projectKeys.RenameProject(r.Context(), binding.Project.ID, input.Name)
+	p, err := h.Projects.RenameProject(r.Context(), binding.Project.ID, input.Name)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -198,7 +183,7 @@ func (h *Handler) archiveProject(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p, err := h.projectKeys.ArchiveProject(r.Context(), binding.Project.ID)
+	p, err := h.Projects.ArchiveProject(r.Context(), binding.Project.ID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -227,7 +212,7 @@ func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	page, err := h.projectKeys.ListProjectAPIKeys(r.Context(), binding.Project.ID, after, limit, ascending)
+	page, err := h.Projects.ListProjectAPIKeys(r.Context(), binding.Project.ID, after, limit, ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -259,7 +244,7 @@ func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	key, err := h.projectKeys.CreateProjectAPIKey(r.Context(), binding.Project.ID, uuid.NewString(), input.Name)
+	key, err := h.Projects.CreateProjectAPIKey(r.Context(), binding.Project.ID, uuid.NewString(), input.Name)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -282,7 +267,7 @@ func (h *Handler) revokeProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "key_id")
-	if err := h.projectKeys.RevokeProjectAPIKey(r.Context(), binding.Project.ID, id); err != nil {
+	if err := h.Projects.RevokeProjectAPIKey(r.Context(), binding.Project.ID, id); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}

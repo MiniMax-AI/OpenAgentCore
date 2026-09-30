@@ -99,12 +99,6 @@ func hostedSessionEnvironment(environment store.Environment) (v1.SessionEnvironm
 		Packages: func() *v1.EnvironmentPackagesResponse { value := packageMetadata(cfg.Packages); return &value }(), Files: &files, Plugins: &cfg.Plugins, Skills: &cfg.Skills}, nil
 }
 
-// WithHostedEnvironments enables admission only for an operator-composed,
-// qualified managed Runtime deployment. Native capability flags cannot enable it.
-func WithHostedEnvironments() Option {
-	return func(h *Handler) { h.hostedEnvironments = true }
-}
-
 func storedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {

@@ -15,7 +15,6 @@ import (
 const savedProviderFixture = `{"protocol":"responses","base_url":"https://example.test/v1","api_key":"saved-provider-secret","context_window":100000,"max_output_tokens":8000}`
 
 type savedProviderStore struct {
-	ResourceStore
 	saved    store.SavedAgent
 	provider *v1.ModelProviderInput
 }
@@ -40,10 +39,14 @@ func (s *savedProviderStore) ListAgents(context.Context, string, string, int, bo
 	return store.AgentPage{Agents: []store.SavedAgent{s.saved}}, nil
 }
 
+// serve answers the saved Agent operations from s.
+func (s *savedProviderStore) serve(_ *Dependencies, f *testFakes) {
+	f.agents.createAgent, f.agents.updateAgent, f.agents.getAgent, f.agents.listAgents = s.CreateAgent, s.UpdateAgent, s.GetAgent, s.ListAgents
+}
+
 func TestSavedProviderReadRedaction(t *testing.T) {
-	h, recording, _ := testHandler(t)
 	s := &savedProviderStore{}
-	recording.ResourceStore = s
+	h, _, _ := testHandler(t, s.serve)
 	body := `{"model":"fixture","x_agents_core":{"harness":"codex","model_provider":` + savedProviderFixture + `}}`
 	created := credentialRequest(h, http.MethodPost, "/v1/agents", body)
 	if created.Code != http.StatusCreated || s.provider == nil || s.provider.APIKey != "saved-provider-secret" {
@@ -75,9 +78,8 @@ func assertSavedProviderRedacted(t *testing.T, raw string) {
 }
 
 func TestSavedProviderWithoutHarnessDefersCompatibility(t *testing.T) {
-	h, recording, _ := testHandler(t)
 	s := &savedProviderStore{}
-	recording.ResourceStore = s
+	h, _, _ := testHandler(t, s.serve)
 	provider := strings.Replace(savedProviderFixture, `"responses"`, `"anthropic"`, 1)
 	response := credentialRequest(h, http.MethodPost, "/v1/agents", `{"model":"fixture","x_agents_core":{"model_provider":`+provider+`}}`)
 	if response.Code != http.StatusCreated || s.provider == nil || s.provider.Protocol != "anthropic" {
@@ -148,9 +150,8 @@ func TestSavedProviderProtocolHarnessMatrix(t *testing.T) {
 	for _, harness := range []string{"codex", "claude_sdk", "mcode"} {
 		for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
 			t.Run(harness+"/"+protocol, func(t *testing.T) {
-				h, recording, _ := testHandler(t)
 				s := &savedProviderStore{}
-				recording.ResourceStore = s
+				h, _, _ := testHandler(t, s.serve)
 				provider := strings.Replace(savedProviderFixture, `"responses"`, `"`+protocol+`"`, 1)
 				body := `{"model":"fixture","x_agents_core":{"harness":"` + harness + `","model_provider":` + provider + `}}`
 				for _, path := range []string{"/v1/agents", "/v1/agents/" + uuid.NewString()} {

@@ -13,7 +13,6 @@ import (
 )
 
 type compositionTemplateStore struct {
-	ResourceStore
 	template store.EnvironmentTemplate
 	files    []store.InitialFile
 }
@@ -86,7 +85,7 @@ func TestTemplateInlineCompositionRules(t *testing.T) {
 			}
 			beforeTemplate, _ := json.Marshal(lookup.template)
 			beforeFiles, _ := json.Marshal(lookup.files)
-			h := Handler{store: lookup}
+			h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 			if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil {
 				t.Fatal(err)
 			}
@@ -129,7 +128,7 @@ func TestTemplateCompositionDoesNotAliasChangedInputs(t *testing.T) {
 		beforeInlineFiles, _ := json.Marshal(originalFiles)
 		beforeTemplate, _ := json.Marshal(lookup.template)
 		beforeFiles, _ := json.Marshal(lookup.files)
-		h := Handler{store: lookup}
+		h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 		if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil {
 			t.Fatal(err)
 		}
@@ -160,7 +159,7 @@ func TestTemplateCompositionRevalidatesCombinedSetupLimit(t *testing.T) {
 		if lookup.template.Initialization.Validate() != nil || input.initialization.Validate() != nil {
 			t.Fatal("each side must be valid independently")
 		}
-		h := Handler{store: lookup}
+		h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 		if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err == nil {
 			t.Fatalf("combined setup limit bypassed for %s", field)
 		}
@@ -198,7 +197,7 @@ func TestTemplateFilesReplacementDoesNotCombineCounts(t *testing.T) {
 	}
 	raw, _ := json.Marshal(wire)
 	input := compositionRequest(t, `,"files":`+string(raw))
-	h := Handler{store: lookup}
+	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 	if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil || len(input.initialFiles) != 30 {
 		t.Fatalf("file lists were combined: count=%d err=%v", len(input.initialFiles), err)
 	}

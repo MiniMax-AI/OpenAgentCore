@@ -21,7 +21,6 @@ import (
 )
 
 type environmentFilesFixture struct {
-	ResourceStore
 	environment           store.Environment
 	result                proto.WorkspaceDirectoryResult
 	storeError, readError error
@@ -55,13 +54,19 @@ func (f *environmentFilesFixture) ReadEnvironmentDirectory(ctx context.Context, 
 	return f.result, f.readError
 }
 
-func environmentFilesHandler(t *testing.T, enabled bool) (http.Handler, *environmentFilesFixture) {
-	t.Helper()
-	f := &environmentFilesFixture{
+func newEnvironmentFilesFixture() *environmentFilesFixture {
+	return &environmentFilesFixture{
 		environment: store.Environment{ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "connected",
 			Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)},
 		result: proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}},
 	}
+}
+
+// environmentFilesHandler serves f's Environment. Without enabled, Core has no
+// execution Worker.
+func environmentFilesHandler(t *testing.T, enabled bool, configure ...func(*Dependencies, *testFakes)) (http.Handler, *environmentFilesFixture) {
+	t.Helper()
+	f := newEnvironmentFilesFixture()
 	keys := []APIKey{}
 	for _, key := range []struct{ token, tenant, project string }{
 		{"files-key", f.environment.TenantID, "files-project"},
@@ -71,19 +76,23 @@ func environmentFilesHandler(t *testing.T, enabled bool) (http.Handler, *environ
 		keys = append(keys, APIKey{OrganizationID: "files-org", ProjectID: key.project, SubjectKind: "user", SubjectID: key.project,
 			TokenSHA256: runtimedevice.HashCredential(key.token), TenantID: key.tenant})
 	}
-	auth, err := NewAuthenticator(keys)
-	if err != nil {
-		t.Fatal(err)
-	}
-	options := []Option{}
+	deps, fakes := testDependencies(t)
+	deps.Engine = "fake_alpha"
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, keys...).ResolveProjectAPIKey
+	fakes.environments.getEnvironment = f.GetEnvironment
 	if enabled {
-		options = append(options, WithEnvironmentDirectoryReader(f))
+		deps.Execution = fakes.execution()
+		fakes.workspaces.readEnvironmentDirectory = f.ReadEnvironmentDirectory
 	}
-	h, err := NewHandler(f, auth, "fake_alpha", options...)
-	if err != nil {
-		t.Fatal(err)
+	for _, c := range configure {
+		c(&deps, fakes)
 	}
-	return h, f
+	return newTestHandler(t, deps), f
+}
+
+// countEnvironmentFilesUnavailable counts execution_unavailable responses.
+func countEnvironmentFilesUnavailable(count *int) func(*Dependencies, *testFakes) {
+	return func(_ *Dependencies, f *testFakes) { f.metrics.recordUnavailable = func() { *count++ } }
 }
 
 func requestEnvironmentFiles(h http.Handler, id, query, key string) *httptest.ResponseRecorder {
@@ -225,7 +234,8 @@ func TestEnvironmentFilesSafeStoreAndReaderFailures(t *testing.T) {
 		}{
 			{store.ErrNotFound, 404}, {store.ErrInvalidInput, 400}, {execution.ErrExecutionUnavailable, 503}, {errors.New("private-native-secret"), 500},
 		} {
-			h, f := environmentFilesHandler(t, true)
+			unavailable := 0
+			h, f := environmentFilesHandler(t, true, countEnvironmentFilesUnavailable(&unavailable))
 			if target == "store" {
 				f.storeError = test.err
 			} else {
@@ -235,10 +245,14 @@ func TestEnvironmentFilesSafeStoreAndReaderFailures(t *testing.T) {
 			if w.Code != test.status || strings.Contains(w.Body.String(), "private-native-secret") || strings.Contains(w.Body.String(), `"data"`) || strings.Contains(w.Body.String(), `"next"`) {
 				t.Fatal("unsafe error", target, w.Code, w.Body)
 			}
+			if unavailable != 0 != (test.status == 503) {
+				t.Fatal("unavailability not counted", target, unavailable)
+			}
 		}
 	}
-	h, f := environmentFilesHandler(t, false)
-	if w := requestEnvironmentFiles(h, f.environment.ID, "", "files-key"); w.Code != 503 || f.reads != 0 {
+	unavailable := 0
+	h, f := environmentFilesHandler(t, false, countEnvironmentFilesUnavailable(&unavailable))
+	if w := requestEnvironmentFiles(h, f.environment.ID, "", "files-key"); w.Code != 503 || f.reads != 0 || unavailable != 1 {
 		t.Fatal("missing reader accepted", w.Code, f)
 	}
 }

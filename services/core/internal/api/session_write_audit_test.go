@@ -16,19 +16,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// General wire fixtures do not persist resources; dedicated audit fixtures below
-// check the no-op/replay boundary independently of business Store auditing.
-func (s *recordingStore) AuditSessionOperation(ctx context.Context, tenant, session, action string) error {
-	if auditor, ok := s.ResourceStore.(sessionWriteAuditor); ok {
-		return auditor.AuditSessionOperation(ctx, tenant, session, action)
-	}
-	return nil
-}
-
-func (f *streamFixture) AuditSessionOperation(context.Context, string, string, string) error {
-	return nil
-}
-
 type auditedSessionFixture struct {
 	streamFixture
 	err     error
@@ -58,7 +45,15 @@ func TestSessionAuditOnlyRoutesFailClosed(t *testing.T) {
 				if fail {
 					f.err = errors.New("audit unavailable")
 				}
-				h := &Handler{store: f}
+				deps, fakes := testDependencies(t)
+				fakes.sessions.auditSessionOperation = f.AuditSessionOperation
+				if route != "stream-replay" {
+					fakes.sessions.getSession = f.GetSession
+				}
+				if route != "empty-events" {
+					fakes.sessions.findSessionCreation = f.FindSessionCreation
+				}
+				h := &Handler{Dependencies: deps}
 				ctx := context.WithValue(t.Context(), principalContextKey{}, identity.Principal{ProjectScope: identity.ProjectScope{TenantID: tenant}, SubjectKind: "service_account", SubjectID: "test"})
 				ctx = writeaudit.WithSource(ctx, writeaudit.Source{TenantID: tenant, RequestID: "request", TraceID: "trace"})
 				routeContext := chi.NewRouteContext()

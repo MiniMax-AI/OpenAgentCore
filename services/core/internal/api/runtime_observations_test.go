@@ -57,6 +57,13 @@ func (r runtimeObservationPageRecorder) ObserveSessions(ctx context.Context, ses
 	return observeEach(ctx, sessions, r.runtimeObservationServiceFunc)
 }
 
+// observeWith answers runtime observations from service.
+func observeWith(service RuntimeObservations) func(*Dependencies, *testFakes) {
+	return func(_ *Dependencies, f *testFakes) {
+		f.runtimeObservations.observeSession, f.runtimeObservations.observeSessions = service.ObserveSession, service.ObserveSessions
+	}
+}
+
 func runtimeObservationRequest(handler http.Handler, path string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer admin")
@@ -71,7 +78,7 @@ func TestRuntimeObservationRoutesUseSessionIdentityAndExactNullability(t *testin
 	service := runtimeObservationFixture{values: map[string]runtimeobs.Observation{
 		sessionID: {Target: runtimeobs.Target{SessionID: sessionID, Mode: runtimeobs.ModeNone}, Status: runtimeobs.StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: now},
 	}}
-	handler, _, _ := adminTestHandler(t, WithRuntimeObservations(service))
+	handler, _, _ := adminTestHandler(t, observeWith(service))
 
 	response := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-observation")
 	if response.Code != http.StatusOK {
@@ -83,19 +90,13 @@ func TestRuntimeObservationRoutesUseSessionIdentityAndExactNullability(t *testin
 	}
 }
 
-func TestRuntimeObservationRoutesRequireConfiguredServiceAndRejectQueries(t *testing.T) {
-	handler, _, _ := adminTestHandler(t)
-	missing := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-observation")
-	if missing.Code != http.StatusServiceUnavailable {
-		t.Fatalf("unconfigured service returned %d: %s", missing.Code, missing.Body)
-	}
-
+func TestRuntimeObservationRoutesRejectQueries(t *testing.T) {
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
 	service := runtimeObservationFixture{values: map[string]runtimeobs.Observation{
 		sessionID: {Target: runtimeobs.Target{SessionID: sessionID, Mode: runtimeobs.ModeNone}, Status: runtimeobs.StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: now},
 	}}
-	handler, _, _ = adminTestHandler(t, WithRuntimeObservations(service))
+	handler, _, _ := adminTestHandler(t, observeWith(service))
 	invalid := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-observation?provider=docker")
 	if invalid.Code != http.StatusBadRequest {
 		t.Fatalf("unsupported query returned %d: %s", invalid.Code, invalid.Body)

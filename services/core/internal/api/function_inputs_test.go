@@ -15,7 +15,7 @@ import (
 func submitResultRequest(t *testing.T, body string, failure error) (*httptest.ResponseRecorder, *inputRecorder) {
 	t.Helper()
 	recorder := &inputRecorder{err: failure}
-	h, _, _ := testHandler(t, WithExecution(recorder))
+	h, _, _ := testHandler(t, recorder.admit)
 	r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session/events", strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer test-api-key")
 	r.Header.Set("OpenAI-Beta", "agents=v1")

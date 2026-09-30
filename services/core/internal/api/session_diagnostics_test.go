@@ -14,7 +14,7 @@ import (
 
 func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
-	h, _, tenant := adminTestHandler(t, func(h *Handler) { h.store = s })
+	h, _, tenant := adminTestHandler(t, databaseSessionReads(s))
 	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: identity.Subject{Kind: "service_account", ID: "diagnostic-test"}, Engine: "codex", IdempotencyKey: "diagnostics", Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +62,6 @@ func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 }
 
 type diagnosticSnapshotStore struct {
-	ResourceStore
 	session store.Session
 }
 
@@ -71,6 +70,19 @@ func (s diagnosticSnapshotStore) GetSessionDiagnosticsSnapshot(context.Context, 
 }
 func (s diagnosticSnapshotStore) GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (store.TurnDiagnosticsSnapshot, error) {
 	return store.TurnDiagnosticsSnapshot{Session: s.session, Turn: *s.session.LastTurn, Items: []store.ItemDiagnosticTiming{}}, nil
+}
+
+// diagnosticSnapshots answers Core diagnostic reads.
+type diagnosticSnapshots interface {
+	GetSessionDiagnosticsSnapshot(context.Context, string, string) (store.Session, error)
+	GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (store.TurnDiagnosticsSnapshot, error)
+}
+
+// serveDiagnostics answers Session and Turn diagnostic reads from source.
+func serveDiagnostics(source diagnosticSnapshots) func(*Dependencies, *testFakes) {
+	return func(_ *Dependencies, f *testFakes) {
+		f.sessionAdmin.getSessionDiagnosticsSnapshot, f.sessionAdmin.getTurnDiagnosticsSnapshot = source.GetSessionDiagnosticsSnapshot, source.GetTurnDiagnosticsSnapshot
+	}
 }
 
 func TestDiagnosticsFailurePrecedenceAndUnknownTime(t *testing.T) {
@@ -82,14 +94,14 @@ func TestDiagnosticsFailurePrecedenceAndUnknownTime(t *testing.T) {
 	}{{nil, "harness_error", "turn"}, {&store.EnvironmentInputActivity{Status: "failed"}, "environment_connection_timeout", "environment_input"}, {&store.EnvironmentInputActivity{Status: "failed", Failure: "model_provider_required"}, "model_provider_required", "environment_input"}, {&store.EnvironmentInputActivity{Status: "failed", Failure: "runtime_preparation_failed"}, "runtime_preparation_failed", "environment_input"}, {&store.EnvironmentInputActivity{Status: "failed", Failure: "secret-canary"}, "internal_error", "environment_input"}} {
 		value := base
 		value.EnvironmentInputActivity = tc.activity
-		h, _, _ := adminTestHandler(t, func(h *Handler) { h.store = diagnosticSnapshotStore{session: value} })
+		h, _, _ := adminTestHandler(t, serveDiagnostics(diagnosticSnapshotStore{session: value}))
 		w := diagnosticRequest(h, adminSessionsPath+id+"/diagnostics", "Bearer admin")
 		if w.Code != 200 || !strings.Contains(w.Body.String(), `"code":"`+tc.code+`"`) || !strings.Contains(w.Body.String(), `"source":"`+tc.source+`"`) || !strings.Contains(w.Body.String(), `"failed_at":null`) || strings.Contains(w.Body.String(), "canary") {
 			t.Fatal(w.Code, w.Body)
 		}
 	}
 	base.EnvironmentInputActivity = &store.EnvironmentInputActivity{Status: "idle", LastActiveAt: time.Now()}
-	h, _, _ := adminTestHandler(t, func(h *Handler) { h.store = diagnosticSnapshotStore{session: base} })
+	h, _, _ := adminTestHandler(t, serveDiagnostics(diagnosticSnapshotStore{session: base}))
 	if w := diagnosticRequest(h, adminSessionsPath+id+"/diagnostics", "Bearer admin"); w.Code != 200 || !strings.Contains(w.Body.String(), `"failure":null`) {
 		t.Fatal("public activity precedence changed", w.Code, w.Body)
 	}
@@ -102,7 +114,7 @@ func TestDiagnosticsHostedFailureOverridesInputWithoutParsingReason(t *testing.T
 	step, index, exit := "setup", 2, 7
 	for _, detail := range []*store.ProvisioningFailureDetail{nil, {Step: &step, Index: &index, ExitCode: &exit}} {
 		session.EnvironmentFailure = &store.EnvironmentFailure{Reason: "private-secret-canary setup_commands[99] exit 254", Detail: detail}
-		h, _, _ := adminTestHandler(t, func(h *Handler) { h.store = diagnosticSnapshotStore{session: session} })
+		h, _, _ := adminTestHandler(t, serveDiagnostics(diagnosticSnapshotStore{session: session}))
 		w := diagnosticRequest(h, adminSessionsPath+session.ID+"/diagnostics", "Bearer admin")
 		if w.Code != 200 || strings.Contains(w.Body.String(), "canary") || !strings.Contains(w.Body.String(), `"code":"environment_provisioning_failed"`) || !strings.Contains(w.Body.String(), `"source":"environment"`) {
 			t.Fatal(w.Code, w.Body)

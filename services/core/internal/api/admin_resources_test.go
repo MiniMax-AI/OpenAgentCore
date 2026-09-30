@@ -10,58 +10,50 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 const managementProjectID = "22222222-2222-4222-8222-222222222222"
 
-type adminProjectFixture struct {
-	ProjectAPIKeyStore
-	principal identity.Principal
-}
-
-func managementProjectStore(key APIKey) *adminProjectFixture {
-	return &adminProjectFixture{principal: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID, OrganizationID: key.OrganizationID, ProjectID: key.ProjectID}, SubjectKind: key.SubjectKind, SubjectID: key.SubjectID}}
-}
-
-func (s *adminProjectFixture) GetProject(_ context.Context, id string) (store.ProjectBinding, error) {
-	if id != managementProjectID {
-		return store.ProjectBinding{}, store.ErrNotFound
+// managementProject resolves managementProjectID to key's Project.
+func managementProject(key APIKey) func(context.Context, string) (store.ProjectBinding, error) {
+	principal := identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID, OrganizationID: key.OrganizationID, ProjectID: key.ProjectID}, SubjectKind: key.SubjectKind, SubjectID: key.SubjectID}
+	return func(_ context.Context, id string) (store.ProjectBinding, error) {
+		if id != managementProjectID {
+			return store.ProjectBinding{}, store.ErrNotFound
+		}
+		return store.ProjectBinding{Project: store.Project{ID: id, TenantID: principal.TenantID}, Principal: principal}, nil
 	}
-	return store.ProjectBinding{Project: store.Project{ID: id, TenantID: s.principal.TenantID}, Principal: s.principal}, nil
 }
 
-func (s *adminProjectFixture) ResolveProjectAPIKey(_ context.Context, _ string) (store.ProjectAPIKeyBinding, error) {
-	return store.ProjectAPIKeyBinding{}, store.ErrNotFound
+// managementFakes authenticates key as a Project key and resolves
+// managementProjectID to its Project. The Core key is "admin".
+func managementFakes(t testing.TB, key APIKey) (Dependencies, *testFakes) {
+	t.Helper()
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, key).ResolveProjectAPIKey
+	fakes.projects.getProject = managementProject(key)
+	return deps, fakes
 }
 
 // adminTestHandler serves the administrator routes, authenticated by "Bearer
 // admin", for managementProjectID over the same recording store as testHandler.
 // It returns that Project's tenant.
-func adminTestHandler(t *testing.T, options ...Option) (http.Handler, *recordingStore, string) {
+func adminTestHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (http.Handler, *recordingStore, string) {
 	t.Helper()
 	key := callerBinding()
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := managementFakes(t, key)
 	s := &recordingStore{}
-	h, err := NewHandler(s, auth, "codex", append([]Option{WithProjectAPIKeys(managementProjectStore(key), admin)}, options...)...)
-	if err != nil {
-		t.Fatal(err)
+	s.record(fakes)
+	for _, c := range configure {
+		c(&deps, fakes)
 	}
-	return h, s, key.TenantID
+	return newTestHandler(t, deps), s, key.TenantID
 }
 
 const adminSessionsPath = "/core/v1/projects/" + managementProjectID + "/sessions/"
 
 type adminReadFixture struct {
-	ResourceStore
 	seenTenant                   string
 	administrative, impersonated bool
 }
@@ -80,16 +72,10 @@ func (s *adminReadFixture) DeleteAgent(ctx context.Context, tenant, id string) (
 }
 func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T) {
 	key := callerBinding()
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
+	deps, fakes := managementFakes(t, key)
 	resources := &adminReadFixture{}
-	h, err := NewHandler(resources, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fakes.agents.listAgents, fakes.agents.deleteAgent = resources.ListAgents, resources.DeleteAgent
+	h := newTestHandler(t, deps)
 	base := "/core/v1/projects/" + managementProjectID
 	for _, test := range []struct {
 		method, path string
@@ -127,7 +113,6 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 }
 
 type summaryFixture struct {
-	AdminManagementStore
 	tenant string
 	filter store.AdminSummaryFilter
 }
@@ -147,13 +132,10 @@ func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filt
 }
 func TestAdminSummaryUsesPublicStateAndNullUsageCoverage(t *testing.T) {
 	key := callerBinding()
-	auth, _ := NewAuthenticator([]APIKey{key})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
+	deps, fakes := managementFakes(t, key)
 	fixture := &summaryFixture{}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin), WithAdminManagement(fixture))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fakes.admin.readAdminSummary = fixture.ReadAdminSummary
+	h := newTestHandler(t, deps)
 	base := "/core/v1/summary?project_id=" + managementProjectID + "&created_after=1970-01-01T00:00:00Z&created_before=2030-01-01T00:00:00Z"
 	for _, group := range []string{"project", "key", "agent"} {
 		w := projectKeyHTTP(h, http.MethodGet, base+"&group_by="+group, "admin", "")

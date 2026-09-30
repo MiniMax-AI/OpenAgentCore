@@ -47,7 +47,7 @@ func TestRestrictedNetworkPublicMetadataPreservesInput(t *testing.T) {
 
 func TestTemplateNetworkOverridesOnlyNarrowAndRetainIntent(t *testing.T) {
 	lookup := &templateLookupStore{network: "restricted", domains: []string{"Example.com", "api.example.com", "example.com"}}
-	h := Handler{store: lookup}
+	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 	for _, test := range []struct {
 		name, override string
 		want           []string

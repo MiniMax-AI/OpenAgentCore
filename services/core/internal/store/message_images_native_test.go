@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
@@ -55,7 +54,7 @@ func TestNativeMessageImagePublicExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(h.s, auth, kind, api.WithExecution(worker), api.WithExecutionPolicy(h.d.Policy), nativeDeploymentDefaults(model, provider))
+	handler, err := publicHandler(t, h.s, auth, kind, workerExecution(worker), withPolicy(h.d.Policy), nativeDeploymentDefaults(h.s, model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}

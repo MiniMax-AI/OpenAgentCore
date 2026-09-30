@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -28,7 +27,7 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Exercise HTTP parsing and durable storage without starting a Runtime.
-	handler, err := api.NewHandler(s, auth, "codex", api.WithHostedEnvironments(), api.WithExecution(s), fixtureDeploymentProvider())
+	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), managedSandboxes(t, s), fixtureDeploymentProvider(s))
 	if err != nil {
 		t.Fatal(err)
 	}

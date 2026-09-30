@@ -25,7 +25,7 @@ func (h *Handler) listVaults(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, err := h.store.ListVaults(r.Context(), tenantID(r), options.after, options.limit, options.ascending, statuses)
+	page, err := h.Vaults.ListVaults(r.Context(), tenantID(r), options.after, options.limit, options.ascending, statuses)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

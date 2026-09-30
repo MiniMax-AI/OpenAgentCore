@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -20,7 +19,10 @@ func (f fixtureKeyResolver) ResolveProjectAPIKey(_ context.Context, digest strin
 	}
 	return store.ProjectAPIKeyBinding{}, store.ErrNotFound
 }
-func newTestAuthenticator(keys []testAPIKey) (*api.Authenticator, error) {
+
+// newTestAuthenticator binds each key's digest to its Principal, as the Project
+// store does.
+func newTestAuthenticator(keys []testAPIKey) (fixtureKeyResolver, error) {
 	resolver := fixtureKeyResolver{}
 	for _, k := range keys {
 		p := identity.Principal{ProjectScope: identity.ProjectScope{TenantID: k.TenantID, OrganizationID: k.OrganizationID, ProjectID: k.ProjectID}, SubjectKind: k.SubjectKind, SubjectID: k.SubjectID}
@@ -36,5 +38,5 @@ func newTestAuthenticator(keys []testAPIKey) (*api.Authenticator, error) {
 		}
 		resolver[k.TokenSHA256] = store.ProjectAPIKeyBinding{Key: store.ProjectAPIKey{ID: uuid.NewSHA1(uuid.NameSpaceOID, []byte(k.TokenSHA256)).String(), Name: k.Name, Prefix: "pc_" + k.TokenSHA256[:8]}, Principal: p}
 	}
-	return api.NewDatabaseAuthenticator(resolver)
+	return resolver, nil
 }

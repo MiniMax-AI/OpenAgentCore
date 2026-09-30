@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -41,11 +40,7 @@ func TestLiveStreamClosesAfterKeyRevocationOrProjectArchive(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			auth, err := api.NewDatabaseAuthenticator(s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			h, err := api.NewHandler(s, auth, "codex", api.WithEnvironmentRemoteURL("wss://core.example/api/v1/agent-daemon/ws"))
+			h, err := publicHandler(t, s, nil, "codex", storeKeys(s), storeExecution(t, s))
 			if err != nil {
 				t.Fatal(err)
 			}

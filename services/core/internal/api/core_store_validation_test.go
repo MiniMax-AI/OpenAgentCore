@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -72,12 +71,14 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 }
 
 func TestCoreActiveCapacityUpperBoundNamesSubmittedField(t *testing.T) {
-	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin))
-	if err != nil {
-		t.Fatal(err)
+	deps, fakes := sandboxFakes(t)
+	fakes.deployment.createRuntimeEnrollment = func(_ context.Context, capacity store.RuntimeNodeCapacity) (store.RuntimeNodeEnrollmentToken, error) {
+		return store.RuntimeNodeEnrollmentToken{}, storeCapacity(capacity.MaxActive)
 	}
+	fakes.deployment.updateRuntimeNode = func(_ context.Context, _ string, input store.RuntimeNodeUpdate) error {
+		return storeCapacity(input.MaxActive)
+	}
+	h := newTestHandler(t, deps)
 	for _, tc := range []struct{ method, path, body string }{
 		{http.MethodPost, "/core/v1/sandbox/enrollment-tokens", `{"max_active":1000001}`},
 		{http.MethodPatch, "/core/v1/sandbox/nodes/11111111-1111-4111-8111-111111111111", `{"name":"node","max_active":1000001,"max_retained":8}`},

@@ -2,7 +2,7 @@
 
 `GET /core/v1/metrics?range=1h|6h|24h|7d` reports Core's own health: its process, execution queue and slots, PostgreSQL and background jobs. It requires the Core key ([Core administration API](admin-api.md)).
 
-`range` is the only parameter, sent at most once; it defaults to `1h`. An empty, repeated or unsupported value, or any other parameter, returns 400 `invalid_request`. When Core has no metrics service, or cannot read it, the route returns 503 `core_metrics_unavailable`. When only some measurements fail, the response is still `200` with `service.status` set to `degraded` and each missing value set to null. The response never contains database or native error text, credentials, bodies, resource IDs or tenant labels.
+`range` is the only parameter, sent at most once; it defaults to `1h`. An empty, repeated or unsupported value, or any other parameter, returns 400 `invalid_request`. When Core cannot read its metrics, the route returns 503 `core_metrics_unavailable`. When only some measurements fail, the response is still `200` with `service.status` set to `degraded` and each missing value set to null. The response never contains database or native error text, credentials, bodies, resource IDs or tenant labels.
 
 ## Time and missing data
 

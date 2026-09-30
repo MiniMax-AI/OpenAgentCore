@@ -18,14 +18,11 @@ import (
 // @Success 200 {object} v1.SkillList
 // @Router /skills [get]
 func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w) {
-		return
-	}
 	options, ok := readPage(w, r)
 	if !ok {
 		return
 	}
-	page, err := h.skills.ListSkills(r.Context(), tenantID(r), options.after, options.limit, options.ascending)
+	page, err := h.Skills.ListSkills(r.Context(), tenantID(r), options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -53,14 +50,11 @@ func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillVersionList
 // @Router /skills/{skill_id}/versions [get]
 func (h *Handler) listSkillVersions(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w) {
-		return
-	}
 	options, ok := readPage(w, r)
 	if !ok {
 		return
 	}
-	page, err := h.skills.ListSkillVersions(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), options.after, options.limit, options.ascending)
+	page, err := h.Skills.ListSkillVersions(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

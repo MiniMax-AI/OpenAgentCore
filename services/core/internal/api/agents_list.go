@@ -23,7 +23,7 @@ func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, err := h.store.ListAgents(r.Context(), tenantID(r), options.after, options.limit, options.ascending)
+	page, err := h.Agents.ListAgents(r.Context(), tenantID(r), options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

@@ -18,8 +18,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// streamFixture serves one Session and its event stream.
 type streamFixture struct {
-	ResourceStore
 	session store.Session
 	mu      sync.Mutex
 	changes []store.SessionChange
@@ -59,17 +59,19 @@ func (f *streamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor
 	return changes, nil
 }
 
+// serve answers Session reads and the event stream from f.
+func (f *streamFixture) serve(fakes *testFakes) {
+	fakes.sessions.getSession = f.GetSession
+	fakes.sessionEvents.sessionEventCursor, fakes.sessionEvents.sessionStreamSnapshot, fakes.sessionEvents.listSessionEvents = f.SessionEventCursor, f.SessionStreamSnapshot, f.ListSessionEvents
+}
+
 func TestLiveStreamAuthDisconnectRecoveryAndServerDeadline(t *testing.T) {
 	f := &streamFixture{session: store.Session{ID: uuid.NewString(), TenantID: uuid.NewString(), CreatedAt: time.Now(), Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`)}}
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("foreign"), TenantID: uuid.NewString()}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := NewHandler(f, auth, "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("foreign"), TenantID: uuid.NewString()}).ResolveProjectAPIKey
+	f.serve(fakes)
+	h := newTestHandler(t, deps)
 	done := make(chan struct{}, 8)
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() { done <- struct{}{} }()

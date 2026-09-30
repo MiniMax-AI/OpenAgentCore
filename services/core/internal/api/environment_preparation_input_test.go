@@ -82,7 +82,7 @@ func TestPreparationTemplateSharedAcrossPlacements(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		h := Handler{store: compositionFixture()}
+		h := templateHandler(t, compositionFixture().ResolveEnvironmentTemplate)
 		for _, input := range []*sessionRequest{&hosted, &own} {
 			if err := h.resolveTemplateEnvironment(t.Context(), "tenant", input); err != nil {
 				t.Fatal(err)

@@ -42,17 +42,17 @@ func TestSelfHostedSessionHTTPReadListMetadataAndLiveStream(t *testing.T) {
 		Sequence: 11, Event: v1.SessionEvent{Type: "agent.session.requires_action", EventID: "activity", SessionID: session.ID},
 		EnvironmentInputActivity: session.EnvironmentInputActivity,
 	}}}}
-	auth, err := NewAuthenticator([]APIKey{{
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: session.TenantID,
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := NewHandler(fixture, auth, "codex", WithEnvironmentRemoteURL(environmentOrigin))
-	if err != nil {
-		t.Fatal(err)
-	}
+	}).ResolveProjectAPIKey
+	fixture.serve(fakes)
+	fakes.sessions.listSessions, fakes.sessions.updateSessionMetadata = fixture.ListSessions, fixture.UpdateSessionMetadata
+	// Self-hosted Sessions report the executor URL of the enabled Execution.
+	deps.Execution = fakes.execution()
+	deps.Execution.ExecutorURL = environmentOrigin
+	handler := newTestHandler(t, deps)
 	want, err := sessionResponse(session, environmentOrigin)
 	if err != nil {
 		t.Fatal(err)

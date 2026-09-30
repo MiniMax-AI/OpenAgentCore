@@ -10,46 +10,26 @@ import (
 	"github.com/google/uuid"
 )
 
-type sessionStreamCreator interface {
-	CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error)
-}
-
 func (h *Handler) createSessionStream(w http.ResponseWriter, r *http.Request, input store.CreateSessionInput) {
-	// Check every stream capability before the creation can commit.
-	events, ok := h.store.(eventStore)
-	snapshots, snapshotted := h.store.(sessionSnapshotStore)
-	if !ok || !snapshotted {
-		writeError(w, http.StatusServiceUnavailable, "stream_unavailable", "Live events are unavailable.")
-		return
-	}
-	var source any = h.store
 	var config configuration
 	if err := json.Unmarshal(input.Configuration, &config); err != nil {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
+	create := h.Sessions.CreateSessionStream
 	if len(input.InitialInputs) > 0 || config.Environment.Type == "openai_hosted" {
-		if h.inputs == nil {
+		if h.Execution == nil {
 			writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution input is not enabled on this service.")
 			return
 		}
-		source = h.inputs
+		create = h.Execution.Admission.CreateSessionStream
 	}
-	creator, ok := source.(sessionStreamCreator)
-	if !ok {
-		writeError(w, http.StatusServiceUnavailable, "stream_unavailable", "Streaming creation is unavailable.")
-		return
-	}
-	result, err := creator.CreateSessionStream(r.Context(), tenantID(r), input)
+	result, err := create(r.Context(), tenantID(r), input)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	h.respondSessionCreationStream(w, r, events, snapshots, result)
-}
-
-type sessionSnapshotStore interface {
-	SessionStreamSnapshot(context.Context, string, string) (store.Session, int64, error)
+	h.respondSessionCreationStream(w, r, result)
 }
 
 // respondSessionCreationStream renders result.Session, the committed Session
@@ -60,12 +40,12 @@ type sessionSnapshotStore interface {
 // official same-key requests create distinct Sessions, so there is no retry
 // stream to follow. Recover with stream=false or the GET events stream. Only a
 // fresh creation uses snapshots.
-func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Request, events eventStore, snapshots sessionSnapshotStore, result store.SessionCreation) {
+func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Request, result store.SessionCreation) {
 	if !result.Created {
 		openEventStream(w, http.StatusCreated)
 		return
 	}
-	response, err := sessionResponse(result.Session, h.executorURL)
+	response, err := sessionResponse(result.Session, h.executorURL())
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -84,14 +64,14 @@ func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Re
 	}
 	tenant, id := tenantID(r), result.Session.ID
 	settlement := func(ctx context.Context) (bool, int64, error) {
-		session, cursor, err := snapshots.SessionStreamSnapshot(ctx, tenant, id)
+		session, cursor, err := h.SessionEvents.SessionStreamSnapshot(ctx, tenant, id)
 		if err != nil {
 			return false, 0, err
 		}
-		response, err := sessionResponse(session, h.executorURL)
+		response, err := sessionResponse(session, h.executorURL())
 		return err == nil && sessionSettled(session, response), cursor, err
 	}
-	h.serveSessionEvents(w, r, events, result.Session, result.Cursor, &created, http.StatusCreated, settlement)
+	h.serveSessionEvents(w, r, result.Session, result.Cursor, &created, http.StatusCreated, settlement)
 }
 
 // sessionSettled reports that a committed projection has no admitted work left:

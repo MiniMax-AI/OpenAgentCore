@@ -36,16 +36,13 @@ func (v SandboxDeploymentInput) request() (store.SandboxDeploymentSetupRequest, 
 	return store.SandboxDeploymentSetupRequest{ExpectedGeneration: *v.ExpectedGeneration, Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Runtime: v.Runtime}, Configuration: c}, nil
 }
 
-func WithSandboxDeploymentSetup(initialize func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)) Option {
-	return func(h *Handler) { h.sandboxSetup = initialize }
-}
-
-func WithSandboxDeploymentChanges(
-	update func(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error),
-	reset func(context.Context, store.SandboxResetRequest) (store.RuntimeDeploymentView, error),
-	cancel func(context.Context, uint64) (store.RuntimeDeploymentView, error),
-) Option {
-	return func(h *Handler) { h.sandboxUpdate = update; h.sandboxReset = reset; h.sandboxResetCancel = cancel }
+// DeploymentChanges sets up, updates and resets the sandbox deployment through
+// the execution owner.
+type DeploymentChanges interface {
+	InitializeSandboxDeployment(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)
+	UpdateSandboxDeployment(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error)
+	StartSandboxReset(context.Context, store.SandboxResetRequest) (store.RuntimeDeploymentView, error)
+	CancelSandboxReset(context.Context, uint64) (store.RuntimeDeploymentView, error)
 }
 
 // @Summary Initialize the deployment sandbox provider
@@ -68,16 +65,12 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	if h.sandboxSetup == nil {
-		writeStoreError(w, r, store.ErrSandboxDeploymentConflict)
-		return
-	}
 	selection, err := input.request()
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	result, err := h.sandboxSetup(r.Context(), selection)
+	result, err := h.Sandboxes.DeploymentChanges.InitializeSandboxDeployment(r.Context(), selection)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -105,16 +98,12 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	if h.sandboxUpdate == nil {
-		writeStoreError(w, r, store.ErrSandboxDeploymentConflict)
-		return
-	}
 	selection, err := input.request()
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	result, err := h.sandboxUpdate(r.Context(), store.SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: selection, ExpectedGeneration: *input.ExpectedGeneration})
+	result, err := h.Sandboxes.DeploymentChanges.UpdateSandboxDeployment(r.Context(), store.SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: selection, ExpectedGeneration: *input.ExpectedGeneration})
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -160,12 +149,8 @@ func (h *Handler) startSandboxReset(w http.ResponseWriter, r *http.Request) {
 		writeCoreError(w, http.StatusBadRequest, "invalid_request_error", "deadline_seconds applies only to auto and must be between 300 and 86400.", CoreErrorDetails{"min": CoreErrorNumber(300), "max": CoreErrorNumber(86400)}, "deadline_seconds")
 		return
 	}
-	if h.sandboxReset == nil {
-		writeStoreError(w, r, store.ErrSandboxDeploymentConflict)
-		return
-	}
 	setAdminAuditSource(r, "")
-	result, err := h.sandboxReset(r.Context(), store.SandboxResetRequest{ExpectedGeneration: *input.ExpectedGeneration, Clear: input.Clear, DeadlineSeconds: input.DeadlineSeconds})
+	result, err := h.Sandboxes.DeploymentChanges.StartSandboxReset(r.Context(), store.SandboxResetRequest{ExpectedGeneration: *input.ExpectedGeneration, Clear: input.Clear, DeadlineSeconds: input.DeadlineSeconds})
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -188,12 +173,8 @@ func (h *Handler) cancelSandboxReset(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "A single current expected_generation is required.", "expected_generation")
 		return
 	}
-	if h.sandboxResetCancel == nil {
-		writeStoreError(w, r, store.ErrSandboxDeploymentConflict)
-		return
-	}
 	setAdminAuditSource(r, "")
-	result, err := h.sandboxResetCancel(r.Context(), query)
+	result, err := h.Sandboxes.DeploymentChanges.CancelSandboxReset(r.Context(), query)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

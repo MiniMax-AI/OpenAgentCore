@@ -21,7 +21,6 @@ import (
 // missingResourceStore reports every resource as missing, recording the tenant
 // each lookup used.
 type missingResourceStore struct {
-	ResourceStore
 	tenants []string
 }
 
@@ -66,23 +65,27 @@ func (s *missingResourceStore) DeleteEnvironmentTemplate(_ context.Context, tena
 	return "", s.missing(tenant)
 }
 
+// wire serves the Agent, Session and Environment template lookups from s.
+func (s *missingResourceStore) wire(_ *Dependencies, f *testFakes) {
+	f.agents.getAgent, f.agents.deleteAgent, f.agents.updateAgent = s.GetAgent, s.DeleteAgent, s.UpdateAgent
+	f.sessions.getSession, f.sessions.deleteSession, f.sessions.updateSessionMetadata = s.GetSession, s.DeleteSession, s.UpdateSessionMetadata
+	f.environmentTemplates.getEnvironmentTemplate, f.environmentTemplates.updateEnvironmentTemplate, f.environmentTemplates.deleteEnvironmentTemplate = s.GetEnvironmentTemplate, s.UpdateEnvironmentTemplate, s.DeleteEnvironmentTemplate
+}
+
 // twoTenantHandler authenticates "test-api-key" as the owner and "foreign-key" as
 // another project.
-func twoTenantHandler(t *testing.T, s ResourceStore, options ...Option) (http.Handler, string, string) {
+func twoTenantHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (http.Handler, string, string) {
 	t.Helper()
 	owner, foreign := uuid.NewString(), uuid.NewString()
-	auth, err := NewAuthenticator([]APIKey{
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential("test-api-key"), TenantID: owner},
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential("foreign-key"), TenantID: foreign},
-	})
-	if err != nil {
-		t.Fatal(err)
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t,
+		APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential("test-api-key"), TenantID: owner},
+		APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential("foreign-key"), TenantID: foreign},
+	).ResolveProjectAPIKey
+	for _, c := range configure {
+		c(&deps, fakes)
 	}
-	h, err := NewHandler(s, auth, "codex", options...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return h, owner, foreign
+	return newTestHandler(t, deps), owner, foreign
 }
 
 // Unknown query keys on single-resource routes are ignored: a missing or foreign
@@ -102,7 +105,7 @@ func TestSingleResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 	} {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			s := &missingResourceStore{}
-			h, tenant, _ := twoTenantHandler(t, s)
+			h, tenant, _ := twoTenantHandler(t, s.wire)
 			var bodies []string
 			for _, query := range []string{"", "?tenant_id=foreign&include=files&unknown=1&unknown=2"} {
 				r := httptest.NewRequest(route.method, route.path+query, strings.NewReader(route.body))
@@ -125,7 +128,6 @@ func TestSingleResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 
 // missingSkillStore reports every Skill as missing and records list parameters.
 type missingSkillStore struct {
-	SkillStore
 	tenants []string
 	limit   int
 	hasMore bool
@@ -156,9 +158,12 @@ func (s *missingSkillStore) ListSkillVersions(_ context.Context, tenant, _, _ st
 	return store.SkillVersionPage{HasMore: s.hasMore}, nil
 }
 
-func skillQueryHandler(t *testing.T, s SkillStore) (http.Handler, string) {
+func skillQueryHandler(t *testing.T, s *missingSkillStore) (http.Handler, string) {
 	t.Helper()
-	h, tenant, _ := twoTenantHandler(t, &missingResourceStore{}, WithSkills(s))
+	h, tenant, _ := twoTenantHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.skills.getSkill, f.skills.deleteSkill, f.skills.getSkillVersion = s.GetSkill, s.DeleteSkill, s.GetSkillVersion
+		f.skills.listSkills, f.skills.listSkillVersions = s.ListSkills, s.ListSkillVersions
+	})
 	return h, tenant
 }
 
@@ -235,7 +240,6 @@ func TestEnvironmentFileCreateIgnoresUnknownQueryKeys(t *testing.T) {
 }
 
 type ownedArtifactStore struct {
-	SessionArtifactStore
 	owner   string
 	tenants []string
 	deleted int
@@ -252,7 +256,7 @@ func (s *ownedArtifactStore) DeleteSessionArtifact(_ context.Context, tenant, se
 
 func TestArtifactDeletionIgnoresUnknownQueryKeys(t *testing.T) {
 	s := &ownedArtifactStore{}
-	h, owner, foreign := twoTenantHandler(t, &missingResourceStore{}, WithSessionArtifacts(s))
+	h, owner, foreign := twoTenantHandler(t, func(_ *Dependencies, f *testFakes) { f.artifacts.deleteSessionArtifact = s.DeleteSessionArtifact })
 	s.owner = owner
 	request := func(id, key string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodDelete, "/v1/agents/sessions/session/artifacts/"+id+"?tenant_id="+owner+"&unknown=1", nil)
@@ -275,7 +279,7 @@ func TestArtifactDeletionIgnoresUnknownQueryKeys(t *testing.T) {
 
 func TestSourceFileUploadIgnoresUnknownQueryKeys(t *testing.T) {
 	f := &sourceFilesFixture{}
-	h, env := environmentFileCreateHandler(t, WithSourceFiles(f))
+	h, env := environmentFileCreateHandler(t, f.wire)
 	server := newSourceFileServer(t, h)
 	query := "?purpose=assistants&tenant_id=" + env.environment.TenantID + "&unknown=1"
 	// A query purpose is not a form field: the body purpose is still validated.
@@ -300,7 +304,6 @@ func TestSourceFileUploadIgnoresUnknownQueryKeys(t *testing.T) {
 
 // ownedSkillStore accepts uploads and knows one owned Skill.
 type ownedSkillStore struct {
-	SkillStore
 	owner    string
 	tenants  []string
 	defaults []bool
@@ -342,7 +345,9 @@ func skillUpload(t *testing.T, include bool) ([]byte, string) {
 
 func TestSkillUploadsIgnoreUnknownQueryKeys(t *testing.T) {
 	s := &ownedSkillStore{}
-	h, owner, foreign := twoTenantHandler(t, &missingResourceStore{}, WithSkills(s))
+	h, owner, foreign := twoTenantHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.skills.createSkill, f.skills.createSkillVersion = s.CreateSkill, s.CreateSkillVersion
+	})
 	s.owner = owner
 	server := newSourceFileServer(t, h)
 	query := "?tenant_id=" + owner + "&default=true&unknown=1"

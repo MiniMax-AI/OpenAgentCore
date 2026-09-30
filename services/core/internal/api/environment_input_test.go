@@ -28,7 +28,11 @@ func TestPublicEnvironmentInputFailureMappings(t *testing.T) {
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			recorder := &inputRecorder{err: fmt.Errorf("submission: %w", tc.err)}
-			handler, _, _ := testHandler(t, WithExecution(recorder))
+			handler, _, _ := testHandler(t, recorder.admit, func(_ *Dependencies, f *testFakes) {
+				if tc.code == "execution_unavailable" {
+					f.metrics.recordUnavailable = func() {}
+				}
+			})
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session/events", strings.NewReader(`{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"Start"}]}]}]}`))
 			request.Header.Set("Authorization", "Bearer test-api-key")
 			request.Header.Set("OpenAI-Beta", "agents=v1")
@@ -44,7 +48,6 @@ func TestPublicEnvironmentInputFailureMappings(t *testing.T) {
 }
 
 type waitingEnvironmentInput struct {
-	InputSubmitter
 	entered chan struct{}
 	release chan struct{}
 }
@@ -63,14 +66,15 @@ func TestPreparedEnvironmentInputWaitExtendsOnlyItsResponseDeadline(t *testing.T
 	for _, environment := range []string{"none", "self_hosted", "openai_hosted"} {
 		t.Run(environment, func(t *testing.T) {
 			waiting := &waitingEnvironmentInput{entered: make(chan struct{}), release: make(chan struct{})}
-			options := []Option{WithExecution(waiting)}
 			environmentJSON := `{"type":"none"}`
 			if environment == "self_hosted" {
 				environmentJSON = `{"type":"self_hosted","workspace_directory":"/workspace"},` + fixtureSessionProvider
-				options = append(options, WithEnvironmentRemoteURL(environmentOrigin))
 			}
-			handler, fixture := environmentCreationHandler(t, "codex", options...)
-			waiting.InputSubmitter = &inputRecorder{ResourceStore: fixture}
+			// The Worker admits the initial input into the fixture and waits on
+			// the next input.
+			handler, fixture := environmentCreationHandler(t, "codex", selfHostedExecution, func(_ *Dependencies, f *testFakes) {
+				f.admission.createSession, f.admission.submitInputs = f.sessions.createSession, waiting.SubmitInputs
+			})
 			create := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"MiniMax-M3"},"environment":`+environmentJSON+`,"input":"Prepare the response deadline fixture."}`))
 			create.Header.Set("Authorization", "Bearer key")
 			create.Header.Set("OpenAI-Beta", "agents=v1")

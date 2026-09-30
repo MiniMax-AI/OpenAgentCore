@@ -94,11 +94,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth, err := api.NewDatabaseAuthenticator(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(s, auth, "codex", api.WithProjectAPIKeys(s, admin), api.WithAdminManagement(s), api.WithExecution(worker), api.WithSessionArchive(worker.ArchiveManagedSession))
+	handler, err := publicHandler(t, s, nil, "codex", storeKeys(s), workerExecution(worker), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,11 +43,16 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	const origin = "https://offline-executor.example"
 	serve := func(s *store.Store, worker *execution.Worker) *httptest.Server {
 		t.Helper()
-		options := []api.Option{api.WithEnvironmentRemoteURL(origin)}
+		enabled := []func(*api.Dependencies){acceptUnavailable(t)}
 		if worker != nil {
-			options = append(options, api.WithExecution(worker))
+			enabled = append(enabled, workerExecution(worker), executorURL(origin))
+		} else {
+			// Without a Worker, Core keeps its executor URL but admits nothing.
+			enabled = append(enabled, func(d *api.Dependencies) {
+				d.Execution = &api.Execution{ExecutorURL: origin, Admission: unavailableAdmission{}, SessionArchive: strictStandIn{t}, Workspaces: strictStandIn{t}}
+			})
 		}
-		handler, err := api.NewHandler(s, auth, "codex", options...)
+		handler, err := publicHandler(t, s, auth, "codex", enabled...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -229,4 +234,19 @@ func publicInitialWorker(t *testing.T, s *store.Store) (*execution.Worker, func(
 	}
 	t.Cleanup(func() { stop(false) })
 	return worker, stop
+}
+
+// unavailableAdmission admits nothing, as a Core without a running Worker.
+type unavailableAdmission struct{}
+
+func (unavailableAdmission) CreateSession(context.Context, string, store.CreateSessionInput) (store.Session, error) {
+	return store.Session{}, execution.ErrExecutionUnavailable
+}
+
+func (unavailableAdmission) CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error) {
+	return store.SessionCreation{}, execution.ErrExecutionUnavailable
+}
+
+func (unavailableAdmission) SubmitInputs(context.Context, string, string, string, []store.Input) ([]store.InputReceipt, error) {
+	return nil, execution.ErrExecutionUnavailable
 }

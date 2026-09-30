@@ -10,9 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type resourceCreationStore struct {
-	ResourceStore
-}
+type resourceCreationStore struct{}
 
 func (*resourceCreationStore) CreateAgent(_ context.Context, tenant string, input store.CreateAgentInput) (store.SavedAgent, error) {
 	return store.SavedAgent{ID: uuid.NewString(), TenantID: tenant, Configuration: input.Configuration, Metadata: input.Metadata}, nil
@@ -23,8 +21,10 @@ func (*resourceCreationStore) CreateEnvironmentTemplate(context.Context, string,
 }
 
 func TestAgentAndTemplateCreationStatus(t *testing.T) {
-	h, recording, _ := testHandler(t)
-	recording.ResourceStore = &resourceCreationStore{}
+	s := &resourceCreationStore{}
+	h, _, _ := testHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.agents.createAgent, f.environmentTemplates.createEnvironmentTemplate = s.CreateAgent, s.CreateEnvironmentTemplate
+	})
 	for _, tc := range []struct{ path, body, object string }{
 		{"/v1/agents", `{"model":"resource-model"}`, "agent"},
 		{"/v1/agents/environments/templates", `{}`, "agent.environment.template"},

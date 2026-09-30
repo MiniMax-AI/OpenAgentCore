@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -27,11 +28,19 @@ func (s *savedConfigurationStore) GetAgent(_ context.Context, tenant, id string)
 	return store.SavedAgent{ID: id, TenantID: tenant, Configuration: json.RawMessage(configuration), Metadata: map[string]string{}}, nil
 }
 
+// GetAgentForSession reads the saved Agent for Session creation; these records
+// carry no model provider.
+func (s *savedConfigurationStore) GetAgentForSession(ctx context.Context, tenant, id string, _ bool) (store.SavedAgent, *v1.ModelProviderInput, error) {
+	agent, err := s.GetAgent(ctx, tenant, id)
+	return agent, nil, err
+}
+
 func configurationHandler(t *testing.T, agents map[string]string) (http.Handler, *savedConfigurationStore) {
 	t.Helper()
 	s := &savedConfigurationStore{validationStore: &validationStore{}, agents: agents}
-	h, recording, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
-	recording.ResourceStore = s
+	h, _, _ := testHandler(t, s.serve, func(_ *Dependencies, f *testFakes) {
+		f.agents.getAgent, f.agents.getAgentForSession = s.GetAgent, s.GetAgentForSession
+	})
 	return h, s
 }
 

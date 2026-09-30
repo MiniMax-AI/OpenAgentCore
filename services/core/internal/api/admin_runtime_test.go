@@ -9,23 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
-type adminRuntimeProjects struct {
-	ProjectAPIKeyStore
-	projects []store.Project
-}
-
-func (s adminRuntimeProjects) ListProjects(context.Context, string, int, bool) (store.ProjectPage, error) {
-	return store.ProjectPage{Data: s.projects}, nil
-}
-
 type adminRuntimeTargets struct {
-	AdminManagementStore
 	page      store.AdminRuntimeTargetPage
 	tenants   []string
 	after     string
@@ -42,33 +31,16 @@ const adminRuntimeObservationsPath = "/core/v1/sandbox/runtime-observations"
 
 // adminRuntimeFixture serves the administrator observation list over one
 // Project per tenant and the given Session targets.
-func adminRuntimeFixture(t *testing.T, projects []store.Project, targets []store.AdminRuntimeTarget, service RuntimeObservationService) (http.Handler, *adminRuntimeTargets) {
+func adminRuntimeFixture(t *testing.T, projects []store.Project, targets []store.AdminRuntimeTarget, service RuntimeObservations) (http.Handler, *adminRuntimeTargets) {
 	t.Helper()
-	auth, err := NewAuthenticator([]APIKey{callerBinding()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
-	if err != nil {
-		t.Fatal(err)
+	deps, fakes := managementFakes(t, callerBinding())
+	fakes.projects.listProjects = func(context.Context, string, int, bool) (store.ProjectPage, error) {
+		return store.ProjectPage{Data: projects}, nil
 	}
 	management := &adminRuntimeTargets{page: store.AdminRuntimeTargetPage{Data: targets, HasMore: true}}
-	options := []Option{WithProjectAPIKeys(adminRuntimeProjects{ProjectAPIKeyStore: managementProjectStore(callerBinding()), projects: projects}, admin), WithAdminManagement(management)}
-	if service != nil {
-		options = append(options, WithRuntimeObservations(service))
-	}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", options...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return h, management
-}
-
-func TestAdminRuntimeObservationListRequiresConfiguredService(t *testing.T) {
-	handler, _ := adminRuntimeFixture(t, nil, nil, nil)
-	if response := runtimeObservationRequest(handler, adminRuntimeObservationsPath); response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("unconfigured service returned %d: %s", response.Code, response.Body)
-	}
+	fakes.admin.listAdminRuntimeTargets = management.ListAdminRuntimeTargets
+	observeWith(service)(&deps, fakes)
+	return newTestHandler(t, deps), management
 }
 
 // HEAD never samples Runtime or queries history on the administrator routes.

@@ -39,7 +39,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		// Storage validation precedes the lookup; follow the missing-Agent path.
 		id = store.UnknownResourceID
 	}
-	updated, err := h.store.UpdateAgent(r.Context(), tenantID(r), id, input)
+	updated, err := h.Agents.UpdateAgent(r.Context(), tenantID(r), id, input)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

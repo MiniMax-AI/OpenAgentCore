@@ -13,7 +13,6 @@ import (
 )
 
 type projectKeyStoreFixture struct {
-	ProjectAPIKeyStore
 	binding store.ProjectAPIKeyBinding
 	project store.ProjectBinding
 	resolve error
@@ -48,15 +47,10 @@ func projectKeyHTTP(h http.Handler, method, path, token, body string) *httptest.
 }
 func TestAdminCredentialNeverAuthenticatesPublicAPI(t *testing.T) {
 	key := callerBinding()
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, err := NewDeploymentAuthenticator([]string{key.TokenSHA256})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := &Handler{auth: auth, deploymentAuth: admin}
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, key).ResolveProjectAPIKey
+	deps.CoreKeys = coreKeys(t, "caller")
+	h := &Handler{Dependencies: deps}
 	r := httptest.NewRequest("GET", "/v1/files", nil)
 	r.Header.Set("Authorization", "Bearer caller")
 	_, _, ok, err := h.resolveCaller(r)
@@ -66,11 +60,11 @@ func TestAdminCredentialNeverAuthenticatesPublicAPI(t *testing.T) {
 }
 func TestDatabaseResolverControlsAuthentication(t *testing.T) {
 	p := callerBinding()
-	fixture, _ := NewAuthenticator([]APIKey{p})
-	binding, _ := fixture.keys.ResolveProjectAPIKey(t.Context(), p.TokenSHA256)
+	binding, _ := projectKeys(t, p).ResolveProjectAPIKey(t.Context(), p.TokenSHA256)
 	keys := &projectKeyStoreFixture{binding: binding}
-	auth, _ := NewDatabaseAuthenticator(keys)
-	h := &Handler{auth: auth}
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = keys.ResolveProjectAPIKey
+	h := &Handler{Dependencies: deps}
 	r := httptest.NewRequest("GET", "/v1/files", nil)
 	r.Header.Set("Authorization", "Bearer issued-project-key")
 	got, _, ok, err := h.resolveCaller(r)

@@ -35,7 +35,7 @@ func TestTemplateNullSelectionRetainsInheritedCapabilitiesAndPolicy(t *testing.T
 				t.Fatal(err)
 			}
 			before, _ := json.Marshal(template.Initialization)
-			h := Handler{store: lookup}
+			h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 			if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil {
 				t.Fatal(err)
 			}
@@ -87,7 +87,7 @@ func TestTemplateNullSelectionDoesNotBypassValidation(t *testing.T) {
 			t.Fatal("invalid nonnull override accepted", fields)
 		}
 	}
-	h := Handler{store: &templateLookupStore{network: "disabled"}}
+	h := templateHandler(t, (&templateLookupStore{network: "disabled"}).ResolveEnvironmentTemplate)
 	input := compositionRequest(t, `,"network":{"access":"enabled"},"skills":null,"plugins":null,"capability_directories":null`)
 	if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err == nil {
 		t.Fatal("capability null overrides bypassed network narrowing")

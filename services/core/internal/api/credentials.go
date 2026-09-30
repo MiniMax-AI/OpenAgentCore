@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -10,16 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
-
-type CredentialStore interface {
-	CreateOAuthCredential(context.Context, string, string, store.CreateOAuthCredentialInput) (store.Credential, error)
-	UpdateOAuthCredential(context.Context, string, string, string, store.UpdateOAuthCredentialInput) (store.Credential, error)
-	CreateStaticCredential(context.Context, string, string, store.CreateStaticCredentialInput) (store.Credential, error)
-	UpdateStaticCredential(context.Context, string, string, string, store.UpdateStaticCredentialInput) (store.Credential, error)
-	GetCredential(context.Context, string, string, string) (store.Credential, error)
-	DeleteCredential(context.Context, string, string, string) (string, error)
-	ListCredentials(context.Context, string, string, string, int, bool, []string) (store.CredentialPage, error)
-}
 
 // @Summary Create a Vault Credential
 // @Description Stores static_bearer or mcp_oauth secrets as execution-owned authenticated ciphertext without contacting any endpoint. Static bearer and OAuth access tokens must be nonempty strings; their bytes are preserved. OAuth accepts a required access token, nullable RFC3339 expiry and optional refresh configuration with none, client_secret_basic or client_secret_post authentication. Required name is trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require HTTPS without userinfo or fragments. Responses contain safe metadata only, including explicit nullable OAuth expiry, refresh, resource and scope. Missing encryption configuration returns local 503. External authorization and provider revocation remain caller responsibilities; exact hosted error/default semantics remain unverified.
@@ -60,14 +49,14 @@ func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid_request", "static_bearer requires a nonempty string token and an absolute HTTPS mcp_server_url without userinfo or a fragment.")
 			return
 		}
-		credential, err = h.store.CreateStaticCredential(r.Context(), tenantID(r), vaultID, store.CreateStaticCredentialInput{Name: name, MCPServerURL: *auth.MCPServerURL, Token: *auth.Token})
+		credential, err = h.Vaults.CreateStaticCredential(r.Context(), tenantID(r), vaultID, store.CreateStaticCredentialInput{Name: name, MCPServerURL: *auth.MCPServerURL, Token: *auth.Token})
 	case "mcp_oauth":
 		input, parseErr := oauthCredentialCreate(request.Auth, name)
 		if parseErr != nil {
 			writeStoreError(w, r, parseErr)
 			return
 		}
-		credential, err = h.store.CreateOAuthCredential(r.Context(), tenantID(r), vaultID, input)
+		credential, err = h.Vaults.CreateOAuthCredential(r.Context(), tenantID(r), vaultID, input)
 	default:
 		writeError(w, http.StatusBadRequest, "invalid_request", "auth requires type static_bearer or mcp_oauth.")
 		return
@@ -99,7 +88,7 @@ func (h *Handler) getCredential(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	credential, err := h.store.GetCredential(r.Context(), tenantID(r), vaultID, id)
+	credential, err := h.Vaults.GetCredential(r.Context(), tenantID(r), vaultID, id)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

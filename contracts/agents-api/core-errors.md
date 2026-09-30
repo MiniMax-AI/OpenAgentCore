@@ -101,6 +101,6 @@ The [Session and Turn diagnostics reads](session-diagnostics.md) return these ca
 | `environment_unavailable` | Environment unavailable for initial input |
 | `environment_provisioning_failed` | Hosted provisioning failure; params contain nullable `step`, `index`, `exit_code` from a sanitized receipt |
 
-When the diagnostics reader is not configured, the reads return 503 `diagnostics_unavailable` without details. A database failure is an error, never an empty or healthy snapshot. Provisioning reasons and native messages are never parsed for categories or parameters.
+A database failure is an error, never an empty or healthy snapshot. Provisioning reasons and native messages are never parsed for categories or parameters.
 
 Native categories apply only to a failed Turn whose outcome has `error_code: engine_failed`. Core accepts only the listed `engine_error_code` values; an unknown, malformed or absent value stays `harness_error`. Only `connection_failed` uses `engine_http_status`. Nested metadata and provider text never classify a failure. Core storage, incomplete-stream and cancellation failures take precedence, and cancelled or completed Turns have no failure. [Native error classification](../../docs/runtime-protocol.md#native-failure-classification) lists which adapters report each category.

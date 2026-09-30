@@ -16,7 +16,6 @@ import (
 )
 
 type environmentResourceFixture struct {
-	ResourceStore
 	environment store.Environment
 	err         error
 	tenant, id  string
@@ -35,18 +34,14 @@ func environmentResourceHandler(t *testing.T) (http.Handler, *environmentResourc
 		ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "pending",
 		Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/private/workspace"}`),
 	}}
-	auth, err := NewAuthenticator([]APIKey{{
+	deps, fakes := testDependencies(t)
+	deps.Engine = "fake_alpha"
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{
 		OrganizationID: "resource-org", ProjectID: "resource-project", SubjectKind: "user", SubjectID: "resource-reader",
 		TokenSHA256: runtimedevice.HashCredential("resource-key"), TenantID: f.environment.TenantID,
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := NewHandler(f, auth, "fake_alpha")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return h, f
+	}).ResolveProjectAPIKey
+	fakes.environments.getEnvironment = f.GetEnvironment
+	return newTestHandler(t, deps), f
 }
 
 func TestEnvironmentResourceExactProjectionWithoutExecution(t *testing.T) {

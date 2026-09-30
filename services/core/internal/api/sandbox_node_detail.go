@@ -32,7 +32,7 @@ func (h *Handler) sandboxNodeDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	value, err := h.sandboxStore.GetRuntimeNodeDetail(ctx, chi.URLParam(r, "node_id"), name)
+	value, err := h.Sandboxes.Deployment.GetRuntimeNodeDetail(ctx, chi.URLParam(r, "node_id"), name)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

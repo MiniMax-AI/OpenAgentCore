@@ -11,24 +11,13 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type SourceFileStore interface {
+// Files manages project-owned source Files and streams their bytes.
+type Files interface {
 	CreateSourceFile(context.Context, string, func(io.Writer) (store.SourceFileUpload, error)) (store.SourceFile, error)
 	GetSourceFile(context.Context, string, string) (store.SourceFile, error)
 	ListSourceFiles(context.Context, string, string, int, bool, *string) (store.SourceFilePage, error)
 	ReadSourceFile(context.Context, string, string, func(store.SourceFile, io.Reader) error) error
 	DeleteSourceFile(context.Context, string, string) error
-}
-
-func WithSourceFiles(s SourceFileStore) Option {
-	return func(h *Handler) { h.sourceFiles = s }
-}
-
-func (h *Handler) sourceFilesAvailable(w http.ResponseWriter) bool {
-	if h.sourceFiles == nil {
-		writeError(w, http.StatusServiceUnavailable, "file_storage_unavailable", "Source file storage is unavailable.")
-		return false
-	}
-	return true
 }
 
 // @Summary Retrieve source file metadata
@@ -41,12 +30,9 @@ func (h *Handler) sourceFilesAvailable(w http.ResponseWriter) bool {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /files/{file_id} [get]
 func (h *Handler) getSourceFile(w http.ResponseWriter, r *http.Request) {
-	if !h.sourceFilesAvailable(w) {
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	file, err := h.sourceFiles.GetSourceFile(ctx, tenantID(r), chi.URLParam(r, "file_id"))
+	file, err := h.Files.GetSourceFile(ctx, tenantID(r), chi.URLParam(r, "file_id"))
 	if err != nil {
 		writeStoreError(w, r, err, "id")
 		return
@@ -64,13 +50,10 @@ func (h *Handler) getSourceFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /files/{file_id} [delete]
 func (h *Handler) deleteSourceFile(w http.ResponseWriter, r *http.Request) {
-	if !h.sourceFilesAvailable(w) {
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	id := chi.URLParam(r, "file_id")
-	if err := h.sourceFiles.DeleteSourceFile(ctx, tenantID(r), id); err != nil {
+	if err := h.Files.DeleteSourceFile(ctx, tenantID(r), id); err != nil {
 		writeStoreError(w, r, err, "id")
 		return
 	}

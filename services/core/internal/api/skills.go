@@ -10,7 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type SkillStore interface {
+// Skills manages Skills and their immutable versions.
+type Skills interface {
 	CreateSkill(context.Context, string, []byte) (store.Skill, error)
 	GetSkill(context.Context, string, string) (store.Skill, error)
 	UpdateSkillDefault(context.Context, string, string, string) (store.Skill, error)
@@ -23,8 +24,6 @@ type SkillStore interface {
 	DeleteSkillVersion(context.Context, string, string, string) (store.SkillVersion, error)
 	ListSkillVersions(context.Context, string, string, string, int, bool) (store.SkillVersionPage, error)
 }
-
-func WithSkills(s SkillStore) Option { return func(h *Handler) { h.skills = s } }
 
 func (h *Handler) registerSkillRoutes(r chi.Router) {
 	r.Post("/v1/skills", h.createSkill)
@@ -42,14 +41,6 @@ func (h *Handler) registerSkillRoutes(r chi.Router) {
 	r.Head("/v1/skills/{skill_id}/versions/{version}/content", methodNotAllowed)
 }
 
-func (h *Handler) skillsReady(w http.ResponseWriter) bool {
-	if h.skills == nil {
-		writeError(w, http.StatusServiceUnavailable, "skill_storage_unavailable", "Skill storage is unavailable.")
-		return false
-	}
-	return true
-}
-
 // @Summary Retrieve Skill metadata
 // @Description Returns tenant-owned metadata without decrypting contents or starting Runtime. No Beta header is required.
 // @Tags Skills
@@ -59,10 +50,7 @@ func (h *Handler) skillsReady(w http.ResponseWriter) bool {
 // @Success 200 {object} v1.Skill
 // @Router /skills/{skill_id} [get]
 func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w) {
-		return
-	}
-	value, err := h.skills.GetSkill(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"))
+	value, err := h.Skills.GetSkill(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -81,9 +69,6 @@ func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.Skill
 // @Router /skills/{skill_id} [post]
 func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w) {
-		return
-	}
 	body, ok := readJSONBodyLimit(w, r, 64<<10, "Request exceeds 64 KiB.")
 	if !ok {
 		return
@@ -93,7 +78,7 @@ func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	value, err := h.skills.UpdateSkillDefault(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), input.DefaultVersion)
+	value, err := h.Skills.UpdateSkillDefault(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), input.DefaultVersion)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -110,11 +95,8 @@ func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillDeleted
 // @Router /skills/{skill_id} [delete]
 func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w) {
-		return
-	}
 	id := chi.URLParam(r, "skill_id")
-	if err := h.skills.DeleteSkill(r.Context(), tenantID(r), id); err != nil {
+	if err := h.Skills.DeleteSkill(r.Context(), tenantID(r), id); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
@@ -130,10 +112,7 @@ func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillVersion
 // @Router /skills/{skill_id}/versions/{version} [get]
 func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w) {
-		return
-	}
-	value, err := h.skills.GetSkillVersion(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), chi.URLParam(r, "version"))
+	value, err := h.Skills.GetSkillVersion(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), chi.URLParam(r, "version"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -151,10 +130,7 @@ func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillVersionDeleted
 // @Router /skills/{skill_id}/versions/{version} [delete]
 func (h *Handler) deleteSkillVersion(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w) {
-		return
-	}
-	value, err := h.skills.DeleteSkillVersion(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), chi.URLParam(r, "version"))
+	value, err := h.Skills.DeleteSkillVersion(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), chi.URLParam(r, "version"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

@@ -15,21 +15,13 @@ func callerBinding() APIKey {
 		OrganizationID: "org-one", ProjectID: "project-one", SubjectKind: "user", SubjectID: "user-one"}
 }
 
-func TestAuthenticatorRequiresDatabaseResolver(t *testing.T) {
-	if _, err := NewDatabaseAuthenticator(nil); err == nil {
-		t.Fatal("missing database resolver accepted")
-	}
-}
-
 func TestCallerPrincipalHeadersAndKeyRotation(t *testing.T) {
 	key := callerBinding()
 	rotated, peer := key, key
 	rotated.TokenSHA256 = runtimedevice.HashCredential("rotated")
 	peer.TokenSHA256 = runtimedevice.HashCredential("peer")
-	auth, err := NewAuthenticator([]APIKey{key, rotated, peer})
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, key, rotated, peer).ResolveProjectAPIKey
 	for _, test := range []struct {
 		name, token, subject string
 		headers              http.Header
@@ -56,7 +48,7 @@ func TestCallerPrincipalHeadersAndKeyRotation(t *testing.T) {
 				r.Header[name] = values
 			}
 			called := false
-			h := (&Handler{auth: auth}).authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := (&Handler{Dependencies: deps}).authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				called = true
 				principal := r.Context().Value(principalContextKey{}).(identity.Principal)
 				if principal.SubjectID != test.subject || tenantID(r) != key.TenantID || principal.ProjectID != key.ProjectID {

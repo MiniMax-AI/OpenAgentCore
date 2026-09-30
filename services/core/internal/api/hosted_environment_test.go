@@ -88,7 +88,10 @@ func TestHostedEnvironmentResponseHasPinnedShapeAndNoConnectionAction(t *testing
 func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		recorder := &hostedCreationRecorder{}
-		handler, fixture := environmentCreationHandler(t, "codex", WithHostedEnvironments(), WithExecution(recorder))
+		handler, fixture := environmentCreationHandler(t, "codex", func(d *Dependencies, f *testFakes) {
+			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
+			f.admission.createSession, f.admission.createSessionStream = recorder.CreateSession, recorder.CreateSessionStream
+		})
 		input := ""
 		if stream {
 			input = `,"input":"Initialize the streamed hosted execution."`
@@ -108,8 +111,9 @@ func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 	}
 }
 
+// hostedCreationRecorder is the Worker's hosted admission; it counts
+// creations.
 type hostedCreationRecorder struct {
-	inputRecorder
 	calls int
 }
 

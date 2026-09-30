@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -27,7 +26,7 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +116,7 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 		}
 	})
 	serve := func(engine string) pathIDClient {
-		handler, err := api.NewHandler(s, auth, engine, api.WithExecution(worker), api.WithEnvironmentRemoteURL("https://offline-executor.example"))
+		handler, err := publicHandler(t, s, auth, engine, workerExecution(worker), executorURL("https://offline-executor.example"))
 		if err != nil {
 			t.Fatal(err)
 		}

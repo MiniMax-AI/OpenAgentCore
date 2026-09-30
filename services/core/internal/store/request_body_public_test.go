@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -36,7 +38,9 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s))
+	// No Runtime is connected, so a file write that passes the gate is unavailable.
+	unavailable := func(d *api.Dependencies) { d.Execution.Workspaces = unavailableWorkspaces{strictStandIn{t}} }
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), unavailable, acceptUnavailable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +179,7 @@ func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s), api.WithSkills(s), api.WithSourceFiles(s))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,4 +236,10 @@ func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
 			t.Fatalf("DELETE %s: %d %s", path, status, response)
 		}
 	}
+}
+
+type unavailableWorkspaces struct{ strictStandIn }
+
+func (unavailableWorkspaces) WriteEnvironmentFile(context.Context, store.Environment, string, []byte) (int64, error) {
+	return 0, execution.ErrExecutionUnavailable
 }

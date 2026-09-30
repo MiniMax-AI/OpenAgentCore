@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -21,11 +20,8 @@ func TestCoreErrorDetailsAreScopedByRouterNotRequestPath(t *testing.T) {
 		}, "expected_generation")
 	})
 	router := chi.NewRouter()
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	(&Handler{deploymentAuth: admin}).registerCoreRoutes(router)
+	deps, _ := testDependencies(t)
+	(&Handler{Dependencies: deps}).registerCoreRoutes(router)
 	var core chi.Router
 	for _, route := range router.Routes() {
 		if route.Pattern == "/core/v1/*" {

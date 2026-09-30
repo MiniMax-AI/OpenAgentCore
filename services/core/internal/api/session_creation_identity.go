@@ -45,7 +45,7 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 	if len(request) == 0 {
 		return false
 	}
-	result, err := h.store.FindSessionCreation(r.Context(), tenantID(r), key, request, sessionCreator(r))
+	result, err := h.Sessions.FindSessionCreation(r.Context(), tenantID(r), key, request, sessionCreator(r))
 	if errors.Is(err, store.ErrNotFound) {
 		return false
 	}
@@ -54,18 +54,13 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 		return true
 	}
 	if stream {
-		events, ok := h.store.(eventStore)
-		if !ok {
-			writeError(w, http.StatusServiceUnavailable, "stream_unavailable", "Live events are unavailable.")
-			return true
-		}
 		if !h.auditSessionOperation(w, r, result.Session.ID, "create") {
 			return true
 		}
 		// Recorded-intent lookup finds an existing creation, which sends no events.
-		h.respondSessionCreationStream(w, r, events, nil, result)
+		h.respondSessionCreationStream(w, r, result)
 	} else {
-		session, err := h.store.GetSession(r.Context(), tenantID(r), result.Session.ID)
+		session, err := h.Sessions.GetSession(r.Context(), tenantID(r), result.Session.ID)
 		if err != nil {
 			writeStoreError(w, r, err)
 		} else if h.auditSessionOperation(w, r, session.ID, "create") {

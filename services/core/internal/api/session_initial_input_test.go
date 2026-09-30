@@ -8,11 +8,20 @@ import (
 	"testing"
 )
 
+// admitInto enables Execution whose Worker admits Session creation into s,
+// apart from the store that creates Sessions without execution work. Input
+// submission stays unexpected.
+func admitInto(s *recordingStore) func(*Dependencies, *testFakes) {
+	return func(d *Dependencies, f *testFakes) {
+		d.Execution = f.execution()
+		f.admission.createSession = s.CreateSession
+	}
+}
+
 func TestInitialInputUsesExecutionAdmissionAndSharedMessageValidation(t *testing.T) {
 	for _, value := range []string{`"First"`, `[{"role":"user","content":[{"type":"input_text","text":"First"}]}]`} {
 		execution := &recordingStore{}
-		recorder := &inputRecorder{ResourceStore: execution}
-		h, idle, tenant := testHandler(t, WithExecution(recorder))
+		h, idle, tenant := testHandler(t, admitInto(execution))
 		r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"test-model"},"environment":{"type":"none"},"input":`+value+`}`))
 		r.Header.Set("Authorization", "Bearer test-api-key")
 		r.Header.Set("OpenAI-Beta", "agents=v1")
@@ -20,7 +29,7 @@ func TestInitialInputUsesExecutionAdmissionAndSharedMessageValidation(t *testing
 		r.Header.Set("Idempotency-Key", "create-key")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != 201 || idle.tenant != "" || execution.tenant != tenant || execution.input.IdempotencyKey != "create-key" || len(execution.input.InitialInputs) != 1 || recorder.inputs != nil {
+		if w.Code != 201 || idle.tenant != "" || execution.tenant != tenant || execution.input.IdempotencyKey != "create-key" || len(execution.input.InitialInputs) != 1 {
 			t.Fatal(w.Code, w.Body, execution.input)
 		}
 		expected, err := executionInputs([]json.RawMessage{json.RawMessage(`{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"First"}]}]}`)})
@@ -50,7 +59,7 @@ func TestInitialInputAdmitsWhitespaceTextVerbatim(t *testing.T) {
 		{`[{"type":"message","role":"user","content":[{"type":"input_text","text":"   "}]},{"role":"user","content":[{"type":"input_text","text":" \t\n "}]}]`, `[{"type":"message","role":"user","content":[{"type":"input_text","text":"   "}]},{"role":"user","content":[{"type":"input_text","text":" \t\n "}]}]`},
 	} {
 		execution := &recordingStore{}
-		h, _, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: execution}))
+		h, _, _ := testHandler(t, admitInto(execution))
 		w := createWithInput(h, value.input)
 		if w.Code != 201 || len(execution.input.InitialInputs) != 1 {
 			t.Fatalf("%s: %d %s", value.input, w.Code, w.Body)
@@ -65,7 +74,7 @@ func TestInitialInputAdmitsWhitespaceTextVerbatim(t *testing.T) {
 	}
 	for _, value := range []string{`""`, `[]`, `[{"role":"user","content":[]}]`, `[{"role":"user","content":[{"type":"input_text","text":""}]}]`} {
 		execution := &recordingStore{}
-		h, _, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: execution}))
+		h, _, _ := testHandler(t, admitInto(execution))
 		w := createWithInput(h, value)
 		if w.Code != 400 || w.Body.String() != emptyInputError || execution.tenant != "" {
 			t.Fatalf("%s: %d %s", value, w.Code, w.Body)

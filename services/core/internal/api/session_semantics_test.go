@@ -14,7 +14,6 @@ import (
 )
 
 type emptyEventSessionStore struct {
-	ResourceStore
 	tenant, id string
 	reads      int
 }
@@ -28,17 +27,21 @@ func (s *emptyEventSessionStore) GetSession(_ context.Context, tenant, id string
 	return store.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
 }
 
+func (s *emptyEventSessionStore) AuditSessionOperation(context.Context, string, string, string) error {
+	return nil
+}
+
 func TestEmptyEventBatchAuthorizesWithoutExecutionEffects(t *testing.T) {
 	for _, executor := range []bool{false, true} {
 		t.Run(map[bool]string{false: "without executor", true: "with executor"}[executor], func(t *testing.T) {
 			recorder := &inputRecorder{}
-			var options []Option
-			if executor {
-				options = append(options, WithExecution(recorder))
-			}
-			h, base, tenant := testHandler(t, options...)
 			sessions := &emptyEventSessionStore{}
-			base.ResourceStore = sessions
+			h, _, tenant := testHandler(t, func(d *Dependencies, f *testFakes) {
+				f.sessions.getSession, f.sessions.auditSessionOperation = sessions.GetSession, sessions.AuditSessionOperation
+				if executor {
+					recorder.admit(d, f)
+				}
+			})
 			request := func(id, token, key string) *httptest.ResponseRecorder {
 				r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/"+id+"/events", strings.NewReader(`{"events":[]}`))
 				r.Header.Set("Authorization", "Bearer "+token)

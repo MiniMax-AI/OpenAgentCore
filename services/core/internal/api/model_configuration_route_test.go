@@ -17,7 +17,7 @@ func TestModelConfigurationRouteAdmission(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &coreProviderValidationStore{}
-			h, _, _ := adminTestHandler(t, func(h *Handler) { h.store = s })
+			h, _, _ := adminTestHandler(t, s.configure)
 			body := `{"model":` + mustJSONForTest(tc.model) + `,"model_provider":{"protocol":"` + tc.protocol + `","base_url":"https://example.test","api_key":"provider-secret"},"harness_config":` + tc.native + `}`
 			out := projectKeyHTTP(h, http.MethodPut, "/core/v1/harnesses/codex/model-configuration", "admin", body)
 			var result struct {

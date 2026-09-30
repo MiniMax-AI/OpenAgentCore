@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,6 +11,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
+
+// SessionHistory reads a Session's root Turns and Items.
+type SessionHistory interface {
+	GetTurn(context.Context, string, string, string) (store.Turn, error)
+	ListTurns(context.Context, string, string, string, int, bool) (store.TurnPage, error)
+	ListItems(context.Context, string, string, string, int, bool) (store.ItemPage, error)
+}
 
 // @Summary Retrieve an execution Turn
 // @Description Returns a root Turn of this Session. A Subagent Turn ID returns the same not found error as a missing Turn; read it through the Subagent Turn routes.
@@ -24,12 +32,12 @@ import (
 // @Router /agents/sessions/{session_id}/turns/{turn_id} [get]
 func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "session_id")
-	turn, err := h.store.GetTurn(r.Context(), tenantID(r), sessionID, chi.URLParam(r, "turn_id"))
+	turn, err := h.SessionHistory.GetTurn(r.Context(), tenantID(r), sessionID, chi.URLParam(r, "turn_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	session, err := h.store.GetSession(r.Context(), tenantID(r), sessionID)
+	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -61,12 +69,12 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionID := chi.URLParam(r, "session_id")
-	session, err := h.store.GetSession(r.Context(), tenantID(r), sessionID)
+	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	page, err := h.store.ListTurns(r.Context(), tenantID(r), sessionID, options.after, options.limit, options.ascending)
+	page, err := h.SessionHistory.ListTurns(r.Context(), tenantID(r), sessionID, options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

@@ -19,14 +19,11 @@ import (
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /files [get]
 func (h *Handler) listSourceFiles(w http.ResponseWriter, r *http.Request) {
-	if !h.sourceFilesAvailable(w) {
-		return
-	}
 	options, purpose, ok := readSourceFilePage(w, r)
 	if !ok {
 		return
 	}
-	page, err := h.sourceFiles.ListSourceFiles(r.Context(), tenantID(r), options.after, options.limit, options.ascending, purpose)
+	page, err := h.Files.ListSourceFiles(r.Context(), tenantID(r), options.after, options.limit, options.ascending, purpose)
 	if err != nil {
 		writeStoreError(w, r, err, "after")
 		return

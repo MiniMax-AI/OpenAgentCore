@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,19 +11,20 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
+// sandboxFakes authenticates callerBinding() as a Project key and
+// "administrator" as the Core key, with Execution and Sandboxes enabled.
+func sandboxFakes(t testing.TB) (Dependencies, *testFakes) {
+	t.Helper()
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, callerBinding()).ResolveProjectAPIKey
+	deps.CoreKeys = coreKeys(t, "administrator")
+	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()
+	return deps, fakes
+}
+
 func TestSandboxAdministratorIsSeparateFromProject(t *testing.T) {
-	project, err := NewAuthenticator([]APIKey{callerBinding()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin))
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, _ := sandboxFakes(t)
+	h := newTestHandler(t, deps)
 	for _, path := range []string{"/core/v1/sandbox/nodes", "/core/v1/sandbox/deployment", "/core/v1/sandbox/nodes/node/allocations", "/core/v1/sandbox/enrollment-tokens"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		if strings.HasSuffix(path, "enrollment-tokens") {
@@ -43,11 +45,8 @@ func TestSandboxAdministratorIsSeparateFromProject(t *testing.T) {
 	if result.Code != http.StatusUnauthorized {
 		t.Fatal("admin key gained project authority", result.Code)
 	}
-	reused, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("caller")})
-	collided, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, reused))
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps.CoreKeys = coreKeys(t, "caller")
+	collided := newTestHandler(t, deps)
 	request.Header.Set("Authorization", "Bearer caller")
 	result = httptest.NewRecorder()
 	collided.ServeHTTP(result, request)
@@ -79,13 +78,20 @@ func TestSandboxLocalNodeRemovalExplainsDeploymentBinding(t *testing.T) {
 	}
 }
 
-func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
-	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin))
-	if err != nil {
-		t.Fatal(err)
+// storeCapacity rejects max_active outside the store's node capacity bounds.
+func storeCapacity(active int) error {
+	if active < 1 || active > 1000000 {
+		return &store.AdminValidationError{Code: "invalid_node_capacity", Param: "max_active"}
 	}
+	return nil
+}
+
+func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
+	deps, fakes := sandboxFakes(t)
+	fakes.deployment.createRuntimeEnrollment = func(_ context.Context, capacity store.RuntimeNodeCapacity) (store.RuntimeNodeEnrollmentToken, error) {
+		return store.RuntimeNodeEnrollmentToken{}, storeCapacity(capacity.MaxActive)
+	}
+	h := newTestHandler(t, deps)
 	for _, test := range []struct{ path, token, body string }{
 		{"/core/v1/sandbox/enrollment-tokens", "administrator", `{"max_active":0}`},
 		{"/api/v1/sandbox-node/enroll", "one-use", `{"max_active":100}`},
@@ -114,12 +120,8 @@ func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 // Enrollment names the Core address the node uses; without it the request fails
 // before any token is read.
 func TestSandboxNodeEnrollmentRequiresCoreURL(t *testing.T) {
-	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin))
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, _ := sandboxFakes(t)
+	h := newTestHandler(t, deps)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/sandbox-node/enroll", strings.NewReader(`{"node_id":"node","name":"node"}`))
 	request.Header.Set("Authorization", "Bearer one-use")
 	response := httptest.NewRecorder()

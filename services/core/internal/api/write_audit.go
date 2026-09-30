@@ -11,23 +11,15 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-// WriteAuditStore exposes safe read models, never request bodies or credentials.
-type WriteAuditStore interface {
+// WriteAudit reads public write provenance as safe read models, never request
+// bodies or credentials.
+type WriteAudit interface {
 	GetResourceOwners(context.Context, string, string, []string) ([]store.ResourceOwner, error)
 	ListWriteOperations(context.Context, string, store.WriteOperationFilter) (store.WriteOperationPage, error)
 }
 
 type ResourceOwnerList struct {
 	Data []store.ResourceOwner `json:"data"`
-}
-
-func WithWriteAudit(s WriteAuditStore, auth *DeploymentAuthenticator) Option {
-	return func(h *Handler) {
-		h.writeAudit = s
-		if auth != nil {
-			h.deploymentAuth = auth
-		}
-	}
 }
 
 func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowed ...string) (url.Values, string, bool) {
@@ -83,7 +75,7 @@ func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	owners, err := h.writeAudit.GetResourceOwners(r.Context(), tenant, values.Get("resource_type"), ids)
+	owners, err := h.WriteAudit.GetResourceOwners(r.Context(), tenant, values.Get("resource_type"), ids)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -152,7 +144,7 @@ func (h *Handler) listWriteOperations(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	page, err := h.writeAudit.ListWriteOperations(r.Context(), tenant, filter)
+	page, err := h.WriteAudit.ListWriteOperations(r.Context(), tenant, filter)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

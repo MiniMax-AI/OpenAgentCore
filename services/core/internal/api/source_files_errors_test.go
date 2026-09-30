@@ -24,7 +24,7 @@ func TestSourceFileMissingErrorParameters(t *testing.T) {
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
 			f := &sourceFilesFixture{listErr: fmt.Errorf("wrapped: %w", store.ErrNotFound)}
-			h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+			h, _ := environmentFileCreateHandler(t, f.wire)
 			server := newSourceFileServer(t, h)
 			status, raw := sourceRequest(t, server, tc.method, tc.path, "files-key", "", nil)
 			var body map[string]map[string]any

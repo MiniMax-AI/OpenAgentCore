@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -23,7 +22,7 @@ func TestModelExecutionHTTPWriteOnlyAndStrictAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(st, auth, "codex", api.WithHostedEnvironments(), api.WithExecution(st))
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st))
 	if err != nil {
 		t.Fatal(err)
 	}

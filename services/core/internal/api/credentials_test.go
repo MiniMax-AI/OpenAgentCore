@@ -16,7 +16,6 @@ import (
 )
 
 type credentialFixture struct {
-	ResourceStore
 	credential        store.Credential
 	input             store.CreateStaticCredentialInput
 	replacement       store.UpdateStaticCredentialInput
@@ -41,11 +40,17 @@ func (f *credentialFixture) GetCredential(_ context.Context, tenant, vault, id s
 	return f.credential, f.err
 }
 
+// serve answers the Vault credential operations from f.
+func (f *credentialFixture) serve(_ *Dependencies, fakes *testFakes) {
+	v := fakes.vaults
+	v.createStaticCredential, v.updateStaticCredential, v.getCredential, v.listCredentials, v.deleteCredential = f.CreateStaticCredential, f.UpdateStaticCredential, f.GetCredential, f.ListCredentials, f.DeleteCredential
+	v.createOAuthCredential, v.updateOAuthCredential = f.CreateOAuthCredential, f.UpdateOAuthCredential
+}
+
 func credentialHandler(t *testing.T) (http.Handler, *credentialFixture, string) {
 	t.Helper()
-	h, s, tenant := testHandler(t)
 	f := &credentialFixture{credential: store.Credential{ID: uuid.NewString(), VaultID: uuid.NewString(), AuthType: "static_bearer", CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}}
-	s.ResourceStore = f
+	h, _, tenant := testHandler(t, f.serve)
 	return h, f, tenant
 }
 

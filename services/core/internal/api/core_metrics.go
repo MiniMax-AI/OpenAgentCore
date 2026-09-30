@@ -8,13 +8,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 )
 
-type CoreMetricsService interface {
+// Metrics reads Core's process and job metrics and counts rejected execution.
+type Metrics interface {
 	Read(context.Context, string) (coremetrics.View, error)
 	RecordUnavailable()
-}
-
-func WithCoreMetrics(service CoreMetricsService) Option {
-	return func(h *Handler) { h.coreMetrics = service }
 }
 
 // @Summary Retrieve Core operational metrics
@@ -42,11 +39,7 @@ func (h *Handler) getCoreMetrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "range must be 1h, 6h, 24h or 7d.")
 		return
 	}
-	if h.coreMetrics == nil {
-		writeError(w, http.StatusServiceUnavailable, "core_metrics_unavailable", "Core metrics are not configured.")
-		return
-	}
-	value, err := h.coreMetrics.Read(r.Context(), name)
+	value, err := h.Metrics.Read(r.Context(), name)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "core_metrics_unavailable", "Core metrics could not be read.")
 		return
@@ -55,12 +48,9 @@ func (h *Handler) getCoreMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) responseHeaders(next http.Handler) http.Handler {
-	if h.coreMetrics == nil {
-		return agentsResponseHeaders(next)
-	}
 	return responseHeadersWithErrors(next, func(code string) {
 		if code == "execution_unavailable" {
-			h.coreMetrics.RecordUnavailable()
+			h.Metrics.RecordUnavailable()
 		}
 	})
 }

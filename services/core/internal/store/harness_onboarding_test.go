@@ -17,7 +17,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
@@ -69,7 +68,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(h.s, auth, "fixture_harness", api.WithExecution(worker), api.WithExecutionPolicy(policy))
+	handler, err := publicHandler(t, h.s, auth, "fixture_harness", workerExecution(worker), withPolicy(policy))
 	if err != nil {
 		t.Fatal(err)
 	}

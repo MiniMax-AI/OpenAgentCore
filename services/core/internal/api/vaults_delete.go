@@ -30,7 +30,7 @@ func (h *Handler) deleteVault(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	deleted, err := h.store.DeleteVault(r.Context(), tenantID(r), id)
+	deleted, err := h.Vaults.DeleteVault(r.Context(), tenantID(r), id)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

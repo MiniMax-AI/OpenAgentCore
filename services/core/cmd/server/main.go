@@ -23,7 +23,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -45,8 +44,6 @@ import (
 	historystoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	observationstoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/storeresolver"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -115,10 +112,6 @@ func run() error {
 	}
 	metricsSource := &coreMetricsSource{store: executionStore, pool: pool}
 	metrics := coremetrics.New(processStartedAt, buildRevision, metricsSource)
-	auth, err := api.NewDatabaseAuthenticator(executionStore)
-	if err != nil {
-		return err
-	}
 	auditRetention, err := writeAuditRetention()
 	if err != nil {
 		return err
@@ -188,13 +181,6 @@ func run() error {
 		runHistoryCleanup(cleanupCtx, history.Prune, metrics)
 	}()
 	defer func() { cancelCleanup(); <-cleanupDone }()
-	options := []api.Option{api.WithCoreMetrics(metrics), api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
-	if managedNodes != nil {
-		options = append(options, api.WithSandboxManager(executionStore, managedNodes.admin))
-		options = append(options, api.WithSandboxConfigurationDiscovery(func(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
-			return providers.DiscoverConfiguration(ctx, kind, input, managedNodes.setup.processPaths)
-		}))
-	}
 	var keyAdmin *api.DeploymentAuthenticator
 	if managedNodes != nil {
 		keyAdmin = managedNodes.admin
@@ -207,27 +193,24 @@ func run() error {
 	if err := api.ValidateCredentialSeparation(ctx, keyAdmin, executionStore); err != nil {
 		return err
 	}
-	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin), api.WithWriteAudit(executionStore, keyAdmin), api.WithAdminManagement(executionStore),
-		api.WithInstallation(installation, executionStore.AddressBindings))
-	if history.Reader != nil {
-		historyResolver, resolverErr := historystoreresolver.NewResolver(executionStore)
-		if resolverErr != nil {
-			return resolverErr
-		}
-		historyService, serviceErr := runtimehistory.NewService(historyResolver, history.Reader)
-		if serviceErr != nil {
-			return serviceErr
-		}
-		options = append(options, api.WithRuntimeHistory(historyService))
+	historyResolver, err := historystoreresolver.NewResolver(executionStore)
+	if err != nil {
+		return err
+	}
+	historyService, err := runtimehistory.NewService(historyResolver, history.Reader)
+	if err != nil {
+		return err
 	}
 	var daemonHandler http.Handler
 	var registry *runtimegateway.Registry
+	var executorURL string
+	var nativeInstaller *api.NativeInstaller
 	if public != "" {
-		wsURL, err := runtimeWebSocketURL(public)
+		executorURL, err = runtimeWebSocketURL(public)
 		if err != nil {
 			return err
 		}
-		daemonHandler, registry, err = runtime.NewGateway(executionStore, wsURL)
+		daemonHandler, registry, err = runtime.NewGateway(executionStore, executorURL)
 		if err != nil {
 			return err
 		}
@@ -245,11 +228,10 @@ func run() error {
 				return err
 			}
 		}
-		options = append(options, api.WithEnvironmentRemoteURL(wsURL), api.WithNativeInstaller(catalog, buildRevision))
+		if buildRevision != "" {
+			nativeInstaller = &api.NativeInstaller{Version: buildRevision, Catalog: catalog}
+		}
 	}
-	options = append(options, api.WithExecutorConnections(func(ctx context.Context, environment, digest string) (bool, error) {
-		return runtimeenrollment.RuntimeConnected(ctx, executionStore, registry, environment, digest)
-	}))
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
@@ -257,9 +239,6 @@ func run() error {
 		worker, err = execution.StartWorker(ctx, dispatcher)
 		if err != nil {
 			return err
-		}
-		if managedNodes != nil && managedNodes.setup != nil {
-			options = append(options, api.WithSandboxDeploymentSetup(worker.InitializeSandboxDeployment), api.WithSandboxDeploymentChanges(worker.UpdateSandboxDeployment, worker.StartSandboxReset, worker.CancelSandboxReset))
 		}
 		workerDone = make(chan error, 1)
 		go func() { workerDone <- worker.Run(ctx) }()
@@ -269,11 +248,6 @@ func run() error {
 				<-workerDone
 			}
 		}()
-		options = append(options, api.WithExecution(worker), api.WithSessionArchive(worker.ArchiveManagedSession), api.WithEnvironmentDirectoryReader(worker), api.WithEnvironmentFileWriter(worker))
-		options = append(options, api.WithHarnesses(kinds), api.WithModelProviderDefaults(executionStore.DeploymentModelProvider))
-		if managed != nil {
-			options = append(options, api.WithHostedEnvironments())
-		}
 	}
 	if history.SampleInterval == 0 {
 		metrics.StopJob("runtime_sampler")
@@ -319,7 +293,24 @@ func run() error {
 	metricsDone := make(chan struct{})
 	go func() { defer close(metricsDone); metrics.Run(metricsCtx) }()
 	defer func() { cancelMetrics(); <-metricsDone }()
-	handler, err := api.NewHandler(executionStore, auth, engine, options...)
+	deps := api.Dependencies{
+		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
+		Installation: installation, InstallationBindings: executionStore,
+		Projects: executionStore, Vaults: executionStore, ModelProviders: executionStore, Files: executionStore,
+		Skills: executionStore, EnvironmentTemplates: executionStore, Agents: executionStore,
+		Sessions: executionStore, SessionEvents: executionStore, SessionHistory: executionStore,
+		Subagents: executionStore, Artifacts: executionStore, SessionAdmin: executionStore,
+		Environments: executionStore, ExecutorConnections: executorConnections{store: executionStore, registry: registry},
+		Admin: executionStore, WriteAudit: executionStore, Metrics: metrics,
+		RuntimeObservations: observationService, RuntimeHistory: historyService,
+	}
+	if worker != nil {
+		deps.Execution = &api.Execution{ExecutorURL: executorURL, Admission: worker, SessionArchive: worker, Workspaces: worker, NativeInstaller: nativeInstaller}
+	}
+	if managedNodes != nil {
+		deps.Sandboxes = &api.Sandboxes{Deployment: executionStore, DeploymentChanges: worker, ConfigurationDiscovery: managedNodes.setup}
+	}
+	handler, err := api.NewHandler(deps)
 	if err != nil {
 		return err
 	}

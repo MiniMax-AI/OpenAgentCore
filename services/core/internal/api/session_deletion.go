@@ -35,7 +35,7 @@ func (h *Handler) deleteSession(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrNotFound)
 		return
 	}
-	if err := h.store.DeleteSession(r.Context(), tenantID(r), id); err != nil {
+	if err := h.Sessions.DeleteSession(r.Context(), tenantID(r), id); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}

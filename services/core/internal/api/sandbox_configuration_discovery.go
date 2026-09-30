@@ -11,8 +11,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func WithSandboxConfigurationDiscovery(discover func(context.Context, string, sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error)) Option {
-	return func(h *Handler) { h.sandboxConfigurationDiscover = discover }
+// ConfigurationDiscovery asks a Sandbox Provider which configuration values
+// its credential can use.
+type ConfigurationDiscovery interface {
+	DiscoverConfiguration(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error)
 }
 
 // @Summary Discover sandbox provider configuration
@@ -36,13 +38,9 @@ func (h *Handler) discoverSandboxConfiguration(w http.ResponseWriter, r *http.Re
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	if h.sandboxConfigurationDiscover == nil {
-		writeStoreError(w, r, store.ErrSandboxDeploymentConflict)
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	result, err := h.sandboxConfigurationDiscover(ctx, chi.URLParam(r, "provider"), input)
+	result, err := h.Sandboxes.ConfigurationDiscovery.DiscoverConfiguration(ctx, chi.URLParam(r, "provider"), input)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

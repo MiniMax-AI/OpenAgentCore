@@ -11,7 +11,9 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type EnvironmentTemplateStore interface {
+// EnvironmentTemplates manages Environment Templates. ResolveEnvironmentTemplate
+// reads a Template with its initial files for Session creation.
+type EnvironmentTemplates interface {
 	ResolveEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, []store.InitialFile, error)
 	CreateEnvironmentTemplate(context.Context, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error)
 	GetEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, error)
@@ -101,7 +103,7 @@ func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	value, err := h.store.CreateEnvironmentTemplate(r.Context(), tenantID(r), in)
+	value, err := h.EnvironmentTemplates.CreateEnvironmentTemplate(r.Context(), tenantID(r), in)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -120,7 +122,7 @@ func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [get]
 func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	value, err := h.store.GetEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
+	value, err := h.EnvironmentTemplates.GetEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -145,7 +147,7 @@ func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	value, err := h.store.UpdateEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"), in)
+	value, err := h.EnvironmentTemplates.UpdateEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"), in)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -164,7 +166,7 @@ func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [delete]
 func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	id, err := h.store.DeleteEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
+	id, err := h.EnvironmentTemplates.DeleteEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -189,7 +191,7 @@ func (h *Handler) listEnvironmentTemplates(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	page, err := h.store.ListEnvironmentTemplates(r.Context(), tenantID(r), options.after, options.limit, options.ascending)
+	page, err := h.EnvironmentTemplates.ListEnvironmentTemplates(r.Context(), tenantID(r), options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

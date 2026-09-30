@@ -8,14 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSandboxE2BDiscoveryAuthenticationAndCredentialPrivacy(t *testing.T) {
-	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
+	deps, fakes := sandboxFakes(t)
 	calls := 0
 	discover := func(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
 		calls++
@@ -33,10 +30,8 @@ func TestSandboxE2BDiscoveryAuthenticationAndCredentialPrivacy(t *testing.T) {
 		}
 		return json.RawMessage(`{"templates":[]}`), nil
 	}
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin), WithSandboxConfigurationDiscovery(discover))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fakes.configurationDiscovery.discoverConfiguration = discover
+	h := newTestHandler(t, deps)
 	for _, tc := range []struct {
 		token, path, body string
 		status            int

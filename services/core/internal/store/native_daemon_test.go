@@ -150,9 +150,9 @@ func nativeModelProvider(model *httptest.Server) *v1.ModelProviderInput {
 
 // nativeDeploymentDefaults makes provider the deployment default model provider,
 // which public environment:none Sessions freeze at creation.
-func nativeDeploymentDefaults(model string, provider *v1.ModelProviderInput) api.Option {
+func nativeDeploymentDefaults(s *store.Store, model string, provider *v1.ModelProviderInput) func(*api.Dependencies) {
 	revision := uuid.New()
-	return api.WithModelProviderDefaults(func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
+	return modelProviderDefaults(s, func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
 		return &store.DeploymentModelProviderSnapshot{Model: model, Provider: provider, Revision: revision}, nil
 	})
 }

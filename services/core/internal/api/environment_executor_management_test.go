@@ -4,19 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
 type executorManagementFixture struct {
-	ResourceStore
 	principal           identity.Principal
 	environment, key    string
 	rotate, audited     bool
@@ -49,21 +48,22 @@ func (f *executorManagementFixture) RevokeProjectExecutorCredential(ctx context.
 	return f.err
 }
 
+// executorManagementHandler serves f's executor credentials to the Core key
+// "admin" for managementProjectID, observing live connections with connected.
+func executorManagementHandler(t *testing.T, key APIKey, f *executorManagementFixture, connected func(context.Context, string, string) (bool, error)) http.Handler {
+	t.Helper()
+	deps, fakes := managementFakes(t, key)
+	fakes.environments.projectExecutorCredentialState = f.ProjectExecutorCredentialState
+	fakes.environments.issueProjectExecutorCredential = f.IssueProjectExecutorCredential
+	fakes.environments.revokeProjectExecutorCredential = f.RevokeProjectExecutorCredential
+	fakes.executorConnections.executorConnected = connected
+	return newTestHandler(t, deps)
+}
+
 func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 	f := &executorManagementFixture{}
 	key := callerBinding()
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := NewHandler(f, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin))
-	if err != nil {
-		t.Fatal(err)
-	}
+	h := executorManagementHandler(t, key, f, nil)
 	environment, keyID := uuid.NewString(), uuid.NewString()
 	path := "/core/v1/projects/" + managementProjectID + "/environments/" + environment + "/executor-credentials"
 	body := `{"key_id":"` + keyID + `"}`
@@ -142,36 +142,26 @@ func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 func TestExecutorConnectionListObservation(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
-		observer  bool
 		connected bool
 		err       error
 		want      string
 		status    int
 	}{
-		{"live", true, true, nil, "connected", 200}, {"closed", true, false, nil, "disconnected", 200},
-		{"no registry", false, false, nil, "disconnected", 200}, {"rotated", true, false, store.ErrDeviceBindingConflict, "disconnected", 200},
-		{"revoked", true, false, store.ErrNotFound, "disconnected", 200}, {"database failure", true, false, errors.New("private-database"), "", 500},
+		{"live", true, nil, "connected", 200}, {"closed", false, nil, "disconnected", 200},
+		{"rotated", false, store.ErrDeviceBindingConflict, "disconnected", 200},
+		{"revoked", false, store.ErrNotFound, "disconnected", 200}, {"database failure", false, errors.New("private-database"), "", 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			key := callerBinding()
 			at := time.Unix(1, 0).UTC()
 			bound := "bound-key"
 			f := &executorManagementFixture{connection: store.ExecutorConnectionState{DeviceID: "device", BoundKeyID: &bound, EnrolledAt: &at, CredentialHash: "private-digest", EnvironmentStatus: "connected"}}
-			auth, _ := NewAuthenticator([]APIKey{key})
-			admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
-			opts := []Option{WithProjectAPIKeys(managementProjectStore(key), admin)}
-			if tc.observer {
-				opts = append(opts, WithExecutorConnections(func(_ context.Context, environment, digest string) (bool, error) {
-					if environment != "environment" || digest != "private-digest" {
-						t.Fatal("wrong binding")
-					}
-					return tc.connected, tc.err
-				}))
-			}
-			h, err := NewHandler(f, auth, "codex", opts...)
-			if err != nil {
-				t.Fatal(err)
-			}
+			h := executorManagementHandler(t, key, f, func(_ context.Context, environment, digest string) (bool, error) {
+				if environment != "environment" || digest != "private-digest" {
+					t.Fatal("wrong binding")
+				}
+				return tc.connected, tc.err
+			})
 			w := projectKeyHTTP(h, "GET", "/core/v1/projects/"+managementProjectID+"/environments/environment/executor-credentials", "admin", "")
 			if w.Code != tc.status {
 				t.Fatal(w.Code, w.Body)
@@ -196,20 +186,14 @@ func TestExecutorConnectionListUsesResolvedEnvironment(t *testing.T) {
 		resolvedEnvironment: canonical,
 		connection:          store.ExecutorConnectionState{DeviceID: "device", CredentialHash: "private-digest", EnvironmentStatus: "connected"},
 	}
-	auth, _ := NewAuthenticator([]APIKey{key})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	observations := 0
-	h, err := NewHandler(f, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin),
-		WithExecutorConnections(func(_ context.Context, environment, digest string) (bool, error) {
-			observations++
-			if environment != canonical || digest != "private-digest" {
-				return false, store.ErrDeviceBindingConflict
-			}
-			return true, nil
-		}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	h := executorManagementHandler(t, key, f, func(_ context.Context, environment, digest string) (bool, error) {
+		observations++
+		if environment != canonical || digest != "private-digest" {
+			return false, store.ErrDeviceBindingConflict
+		}
+		return true, nil
+	})
 	for _, spelling := range []string{canonical, strings.ToUpper(canonical), strings.ReplaceAll(canonical, "-", "")} {
 		w := projectKeyHTTP(h, "GET", "/core/v1/projects/"+managementProjectID+"/environments/"+spelling+"/executor-credentials", "admin", "")
 		var got ExecutorCredentialList

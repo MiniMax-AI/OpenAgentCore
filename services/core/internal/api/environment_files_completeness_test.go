@@ -22,10 +22,11 @@ func TestEnvironmentFilesRejectsIncompleteOrMalformedDirectories(t *testing.T) {
 		"oversized":       {Entries: make([]proto.WorkspaceDirectoryEntry, proto.WorkspaceDirectoryMaxEntries+1)},
 	} {
 		t.Run(name, func(t *testing.T) {
-			h, f := environmentFilesHandler(t, true)
+			unavailable := 0
+			h, f := environmentFilesHandler(t, true, countEnvironmentFilesUnavailable(&unavailable))
 			f.result = result
 			w := requestEnvironmentFiles(h, f.environment.ID, "?limit=1", "files-key")
-			if w.Code != 503 || strings.Contains(w.Body.String(), `"data"`) || strings.Contains(w.Body.String(), `"next"`) || strings.Contains(w.Body.String(), "secret") {
+			if w.Code != 503 || unavailable != 1 || strings.Contains(w.Body.String(), `"data"`) || strings.Contains(w.Body.String(), `"next"`) || strings.Contains(w.Body.String(), "secret") {
 				t.Fatal("unsafe incomplete response", w.Code, w.Body)
 			}
 		})

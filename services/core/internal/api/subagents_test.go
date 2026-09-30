@@ -75,6 +75,12 @@ func (s *subagentReadStore) ListSubagentTurnItems(_ context.Context, tenant, ses
 	return s.items(), s.err
 }
 
+// wire serves the Subagents area from s.
+func (s *subagentReadStore) wire(_ *Dependencies, f *testFakes) {
+	f.subagents.getSubagent, f.subagents.listSubagents, f.subagents.listSubagentItems = s.GetSubagent, s.ListSubagents, s.ListSubagentItems
+	f.subagents.getSubagentTurn, f.subagents.listSubagentTurns, f.subagents.listSubagentTurnItems = s.GetSubagentTurn, s.ListSubagentTurns, s.ListSubagentTurnItems
+}
+
 func (s *subagentReadStore) items() v1.ItemList {
 	if s.empty {
 		return v1.ItemList{}
@@ -109,7 +115,7 @@ func requestSubagents(h http.Handler, path, auth, beta string) *httptest.Respons
 
 func TestSubagentRoutesPreserveAuthenticatedParentScope(t *testing.T) {
 	s := &subagentReadStore{}
-	h, _, tenant := testHandler(t, WithSubagents(s))
+	h, _, tenant := testHandler(t, s.wire)
 	for _, route := range subagentRoutes {
 		t.Run(route.method, func(t *testing.T) {
 			w := requestSubagents(h, route.path, "Bearer test-api-key", "agents=v1")
@@ -147,7 +153,7 @@ func TestSubagentRoutesPreserveAuthenticatedParentScope(t *testing.T) {
 
 func TestSubagentRoutesRejectInvalidQueriesBeforeStore(t *testing.T) {
 	s := &subagentReadStore{}
-	h, _, _ := testHandler(t, WithSubagents(s))
+	h, _, _ := testHandler(t, s.wire)
 	for _, route := range subagentRoutes {
 		if !route.list {
 			continue
@@ -168,7 +174,7 @@ func TestSubagentRoutesRejectInvalidQueriesBeforeStore(t *testing.T) {
 
 func TestSubagentItemListsClampLimit(t *testing.T) {
 	s := &subagentReadStore{}
-	h, _, tenant := testHandler(t, WithSubagents(s))
+	h, _, tenant := testHandler(t, s.wire)
 	for _, route := range subagentRoutes {
 		if !route.clamped {
 			continue
@@ -185,7 +191,7 @@ func TestSubagentItemListsClampLimit(t *testing.T) {
 
 func TestSubagentRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 	s := &subagentReadStore{}
-	h, _, tenant := testHandler(t, WithSubagents(s))
+	h, _, tenant := testHandler(t, s.wire)
 	for _, route := range subagentRoutes {
 		// Retrieval routes also ignore list keys, which carry no semantics there.
 		for _, query := range []string{"unknown=1", "tenant_id=foreign&unknown=1&unknown=2", "limit=1&after=a&order=asc"} {
@@ -206,7 +212,7 @@ func TestSubagentRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 
 func TestSubagentRoutesUseExistingAuthenticationAndErrors(t *testing.T) {
 	s := &subagentReadStore{}
-	h, _, _ := testHandler(t, WithSubagents(s))
+	h, _, _ := testHandler(t, s.wire)
 	for _, route := range subagentRoutes {
 		for _, tc := range []struct {
 			auth, beta string
@@ -241,17 +247,12 @@ func TestSubagentRoutesUseExistingAuthenticationAndErrors(t *testing.T) {
 	}
 }
 
-func TestSubagentRoutesDistinguishEmptyFromUnavailable(t *testing.T) {
+func TestSubagentListsReturnEmptyPages(t *testing.T) {
 	s := &subagentReadStore{empty: true}
-	h, _, _ := testHandler(t, WithSubagents(s))
-	unavailable, _, _ := testHandler(t)
+	h, _, _ := testHandler(t, s.wire)
 	for _, route := range subagentRoutes {
-		w := requestSubagents(unavailable, route.path, "Bearer test-api-key", "agents=v1")
-		if w.Code != http.StatusServiceUnavailable {
-			t.Fatalf("unwired store fabricated success: %d %s", w.Code, w.Body)
-		}
 		if route.list {
-			w = requestSubagents(h, route.path, "Bearer test-api-key", "agents=v1")
+			w := requestSubagents(h, route.path, "Bearer test-api-key", "agents=v1")
 			expected := `{"object":"list","first_id":null,"last_id":null,"data":[],"has_more":false}`
 			if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != expected {
 				t.Fatalf("empty page: %d %s", w.Code, w.Body)
@@ -262,7 +263,7 @@ func TestSubagentRoutesDistinguishEmptyFromUnavailable(t *testing.T) {
 
 func TestSubagentRoutesExposeOnlyOfficialReads(t *testing.T) {
 	s := &subagentReadStore{}
-	h, _, _ := testHandler(t, WithSubagents(s))
+	h, _, _ := testHandler(t, s.wire)
 	for _, route := range subagentRoutes {
 		for _, method := range []string{http.MethodPost, http.MethodPatch, http.MethodDelete} {
 			r := httptest.NewRequest(method, "/v1/agents/sessions/session/subagents"+route.path, nil)

@@ -39,9 +39,6 @@ func (h *Handler) createSkillVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bool) {
-	if !h.skillsReady(w) {
-		return
-	}
 	deadline := time.Now().Add(sourceTransferTimeout)
 	controller := http.NewResponseController(w)
 	if controller.SetReadDeadline(deadline) != nil || controller.SetWriteDeadline(deadline) != nil {
@@ -62,14 +59,14 @@ func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bo
 		return
 	}
 	if version {
-		result, err := h.skills.CreateSkillVersion(ctx, tenantID(r), chi.URLParam(r, "skill_id"), archive, makeDefault)
+		result, err := h.Skills.CreateSkillVersion(ctx, tenantID(r), chi.URLParam(r, "skill_id"), archive, makeDefault)
 		if err != nil {
 			writeStoreError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, skillVersionResponse(result))
 	} else {
-		result, err := h.skills.CreateSkill(ctx, tenantID(r), archive)
+		result, err := h.Skills.CreateSkill(ctx, tenantID(r), archive)
 		if err != nil {
 			writeStoreError(w, r, err)
 			return
@@ -87,17 +84,14 @@ func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bo
 // @Success 200 {file} binary
 // @Router /skills/{skill_id}/content [get]
 func (h *Handler) skillContent(w http.ResponseWriter, r *http.Request) {
-	if !h.skillsReady(w) {
-		return
-	}
 	serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
 		var value store.SkillVersion
 		var body []byte
 		var err error
 		if version := chi.URLParam(r, "version"); version != "" {
-			value, body, err = h.skills.ReadSkillVersion(ctx, tenantID(r), chi.URLParam(r, "skill_id"), version)
+			value, body, err = h.Skills.ReadSkillVersion(ctx, tenantID(r), chi.URLParam(r, "skill_id"), version)
 		} else {
-			value, body, err = h.skills.ReadDefaultSkillVersion(ctx, tenantID(r), chi.URLParam(r, "skill_id"))
+			value, body, err = h.Skills.ReadDefaultSkillVersion(ctx, tenantID(r), chi.URLParam(r, "skill_id"))
 		}
 		if err != nil {
 			return err

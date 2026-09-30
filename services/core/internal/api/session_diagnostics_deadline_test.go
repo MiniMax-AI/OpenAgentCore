@@ -33,7 +33,7 @@ func TestDiagnosticsReadDeadline(t *testing.T) {
 		for _, shorter := range []bool{false, true} {
 			t.Run(suffix+map[bool]string{false: "/server", true: "/caller"}[shorter], func(t *testing.T) {
 				source := &diagnosticDeadlineStore{diagnosticSnapshotStore: diagnosticSnapshotStore{session: session}}
-				h, _, _ := adminTestHandler(t, func(h *Handler) { h.store = source })
+				h, _, _ := adminTestHandler(t, serveDiagnostics(source))
 				ctx := t.Context()
 				var callerDeadline time.Time
 				if shorter {

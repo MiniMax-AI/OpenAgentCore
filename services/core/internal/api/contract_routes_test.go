@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 )
@@ -60,17 +58,11 @@ func contractOperations(t *testing.T, file, prefix string) map[string]bool {
 // The pinned upstream /v1 set is checked by TestEveryRouteAuthenticatesItsCanonicalPath
 // and the contract tests.
 func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) {
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(routingAdminKey)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Every option that gates a route registration, as the server passes them.
-	s := &store.Store{}
-	h := &Handler{store: s, engine: "codex"}
-	for _, option := range []Option{WithSandboxManager(s, admin), WithProjectAPIKeys(s, admin), WithWriteAudit(s, admin), WithAdminManagement(s),
-		WithInstallation(Installation{}, s.AddressBindings), WithNativeInstaller(&nativeinstaller.Catalog{}, "contract-test")} {
-		option(h)
-	}
+	// Every optional group that gates a route registration, as the server enables them.
+	deps, fakes := testDependencies(t)
+	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()
+	deps.Execution.NativeInstaller = &NativeInstaller{Version: "contract-test", Catalog: &nativeinstaller.Catalog{}}
+	h := &Handler{Dependencies: deps}
 	contracts := map[string]string{"/v1": "openapi.yaml", "/core/v1": "core.openapi.yaml", "/api/v1": "runtime.openapi.yaml"}
 	published := map[string]map[string]bool{}
 	for prefix, file := range contracts {
@@ -78,7 +70,7 @@ func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) 
 	}
 	guard := reflect.ValueOf(methodNotAllowed).Pointer()
 	registered, excluded := map[string]bool{}, map[string]bool{}
-	err = chi.Walk(h.routes(), func(method, route string, handler http.Handler, _ ...func(http.Handler) http.Handler) error {
+	err := chi.Walk(h.routes(), func(method, route string, handler http.Handler, _ ...func(http.Handler) http.Handler) error {
 		for _, key := range []string{method + " " + route, "* " + route} {
 			if _, ok := unpublishedRoutes[key]; ok {
 				excluded[key] = true

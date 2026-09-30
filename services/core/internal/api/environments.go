@@ -1,14 +1,30 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
+
+// Environments reads Environments, grants and claims native installations, and
+// manages the executor credentials of a Project's self_hosted Environments. The
+// Project's principal is an executor credential's execution principal; the
+// Core key that authorizes the request is not.
+type Environments interface {
+	GetEnvironment(context.Context, string, string) (store.Environment, error)
+	AuthorizeEnvironmentInstallation(context.Context, identity.Principal, string, string) (string, int64, error)
+	ValidateEnvironmentInstallation(context.Context, string, string) (store.InstallationAuthorization, error)
+	ClaimEnvironmentInstallation(context.Context, string, string, string) error
+	ProjectExecutorCredentialState(context.Context, identity.Principal, string) (store.ExecutorCredentialState, error)
+	IssueProjectExecutorCredential(context.Context, identity.Principal, string, string, bool) (store.IssuedExecutorCredential, error)
+	RevokeProjectExecutorCredential(context.Context, identity.Principal, string, string) error
+}
 
 // @Summary Retrieve an execution Environment
 // @Description Returns durable connection status and safe installed metadata for supported self_hosted and basic openai_hosted profiles. Initial files expose frozen safe metadata without content; Plugin/Skill entries expose only safe configured installation metadata. Capability-directory discoveries are not added to those arrays. Unsupported installation configurations remain implementation gaps. This read does not prepare execution, start compute or require an enabled execution worker. Session deletion removes the associated Environment from public reads; project-shared read authorization is unchanged. Connection status does not prove native readiness or process quiescence.
@@ -21,7 +37,7 @@ import (
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/{environment_id} [get]
 func (h *Handler) getEnvironment(w http.ResponseWriter, r *http.Request) {
-	environment, err := h.store.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
+	environment, err := h.Environments.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

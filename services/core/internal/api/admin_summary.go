@@ -108,10 +108,10 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var binding store.ProjectBinding
-		binding, err = h.resolveAdminProject(ctx, projectID)
+		binding, err = h.Projects.GetProject(ctx, projectID)
 		projects = store.ProjectPage{Data: []store.Project{binding.Project}}
 	} else {
-		projects, err = h.listAdminProjects(ctx, options.after, options.limit, options.ascending)
+		projects, err = h.Projects.ListProjects(ctx, options.after, options.limit, options.ascending)
 	}
 	if err != nil {
 		writeStoreError(w, r, err)
@@ -123,8 +123,8 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 		if group == "project" {
 			groups[""] = &AdminSummaryRow{ProjectID: project.ID}
 		}
-		counts, err := h.adminManagement.ReadAdminSummary(ctx, project.TenantID, store.AdminSummaryFilter{CreatedAfter: after, CreatedBefore: before}, func(session store.Session, creationKeyID *string) error {
-			projected, err := sessionResponse(session, h.executorURL)
+		counts, err := h.Admin.ReadAdminSummary(ctx, project.TenantID, store.AdminSummaryFilter{CreatedAfter: after, CreatedBefore: before}, func(session store.Session, creationKeyID *string) error {
+			projected, err := sessionResponse(session, h.executorURL())
 			if err != nil {
 				return err
 			}

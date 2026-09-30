@@ -11,23 +11,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type SessionArtifactStore interface {
+// Artifacts reads, streams and deletes a Session's published Artifacts.
+type Artifacts interface {
 	GetSessionArtifact(context.Context, string, string, string) (store.SessionArtifact, error)
 	ListSessionArtifacts(context.Context, string, string, string, string, int, bool) (store.ArtifactPage, error)
 	ReadSessionArtifact(context.Context, string, string, string, func(store.SessionArtifact, io.Reader) error) error
 	DeleteSessionArtifact(context.Context, string, string, string) error
-}
-
-func WithSessionArtifacts(s SessionArtifactStore) Option {
-	return func(h *Handler) { h.artifacts = s }
-}
-
-func (h *Handler) artifactsReady(w http.ResponseWriter) bool {
-	if h.artifacts == nil {
-		writeError(w, http.StatusServiceUnavailable, "artifact_storage_unavailable", "Artifact storage is unavailable.")
-		return false
-	}
-	return true
 }
 
 // @Summary List immutable Session artifacts
@@ -45,14 +34,11 @@ func (h *Handler) artifactsReady(w http.ResponseWriter) bool {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts [get]
 func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w) {
-		return
-	}
 	options, ok := readPage(w, r, "environment_id")
 	if !ok {
 		return
 	}
-	page, err := h.artifacts.ListSessionArtifacts(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), r.URL.Query().Get("environment_id"), options.after, options.limit, options.ascending)
+	page, err := h.Artifacts.ListSessionArtifacts(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), r.URL.Query().Get("environment_id"), options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -76,10 +62,7 @@ func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [get]
 func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w) {
-		return
-	}
-	artifact, err := h.artifacts.GetSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"))
+	artifact, err := h.Artifacts.GetSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -99,11 +82,8 @@ func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [delete]
 func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w) {
-		return
-	}
 	id := chi.URLParam(r, "artifact_id")
-	if err := h.artifacts.DeleteSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), id); err != nil {
+	if err := h.Artifacts.DeleteSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), id); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
@@ -122,11 +102,8 @@ func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) 
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w) {
-		return
-	}
 	serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
-		return h.artifacts.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a store.SessionArtifact, body io.Reader) error {
+		return h.Artifacts.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a store.SessionArtifact, body io.Reader) error {
 			return consume(path.Base(a.Path), a.SizeBytes, body)
 		})
 	})

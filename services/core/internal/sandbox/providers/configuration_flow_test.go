@@ -98,13 +98,16 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectAuth, err := api.NewDatabaseAuthenticator(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := api.NewHandler(s, projectAuth, "codex", api.WithSandboxManager(s, auth), api.WithSandboxDeploymentSetup(func(ctx context.Context, in store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
-		return w.InitializeSandboxDeployment(ctx, installation, in)
-	}))
+	// The flow reaches only the store areas and the deployment setup; every
+	// other dependency panics if called.
+	h, err := api.NewHandler(api.Dependencies{
+		Engine: "codex", CoreKeys: auth, InstallationBindings: s, Projects: s, Vaults: s, ModelProviders: s, Files: s, Skills: s,
+		EnvironmentTemplates: s, Agents: s, Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s, Artifacts: s,
+		SessionAdmin: s, Environments: s, Admin: s, WriteAudit: s, ExecutorConnections: struct{ api.ExecutorConnections }{},
+		Metrics: struct{ api.Metrics }{}, RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
+		Execution: &api.Execution{ExecutorURL: "wss://core.example/api/v1/agent-daemon/ws", Admission: s, SessionArchive: s, Workspaces: struct{ api.EnvironmentWorkspaces }{}},
+		Sandboxes: &api.Sandboxes{Deployment: s, DeploymentChanges: leaseSetup{t: t, store: w, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,4 +129,31 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	if err = pool.QueryRow(t.Context(), "SELECT provider_config FROM runtime_deployment").Scan(&raw); err != nil || !strings.Contains(string(raw), `"zone": "west"`) {
 		t.Fatal("native fields not persisted", err)
 	}
+}
+
+// leaseSetup initializes the deployment through the execution lease holder.
+// The flow makes no other deployment change.
+type leaseSetup struct {
+	t            *testing.T
+	store        *store.Store
+	installation string
+}
+
+func (l leaseSetup) InitializeSandboxDeployment(ctx context.Context, in store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
+	return l.store.InitializeSandboxDeployment(ctx, l.installation, in)
+}
+
+func (l leaseSetup) UpdateSandboxDeployment(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
+	l.t.Fatal("unexpected call to UpdateSandboxDeployment")
+	return store.RuntimeDeploymentView{}, nil
+}
+
+func (l leaseSetup) StartSandboxReset(context.Context, store.SandboxResetRequest) (store.RuntimeDeploymentView, error) {
+	l.t.Fatal("unexpected call to StartSandboxReset")
+	return store.RuntimeDeploymentView{}, nil
+}
+
+func (l leaseSetup) CancelSandboxReset(context.Context, uint64) (store.RuntimeDeploymentView, error) {
+	l.t.Fatal("unexpected call to CancelSandboxReset")
+	return store.RuntimeDeploymentView{}, nil
 }

@@ -101,13 +101,15 @@ func (f *creationStreamFixture) FindSessionCreation(context.Context, string, str
 	return store.SessionCreation{Session: row, Cursor: 10}, nil
 }
 
-type creationStreamAdmission struct {
-	inputRecorder
-	fixture *creationStreamFixture
+// AuditSessionOperation accepts the audit of a replayed creation.
+func (f *creationStreamFixture) AuditSessionOperation(context.Context, string, string, string) error {
+	return nil
 }
 
-func (a *creationStreamAdmission) CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error) {
-	return a.fixture.creation, nil
+// CreateSessionStream is the Worker's streamed admission: it returns the
+// prepared creation.
+func (f *creationStreamFixture) CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error) {
+	return f.creation, nil
 }
 
 type sseFrame struct {
@@ -139,17 +141,17 @@ func newCreationStreamHarness(t *testing.T) *creationStreamHarness {
 		ID: uuid.NewString(), TenantID: tenant, CreatedAt: time.Unix(1700000000, 0), Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`),
 	}}}
-	auth, err := NewAuthenticator([]APIKey{{
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: tenant,
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := NewHandler(fixture, auth, "codex", WithExecution(&creationStreamAdmission{fixture: fixture}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	}).ResolveProjectAPIKey
+	fakes.sessions.getSession, fakes.sessions.findSessionCreation, fakes.sessions.auditSessionOperation = fixture.GetSession, fixture.FindSessionCreation, fixture.AuditSessionOperation
+	fakes.sessionEvents.sessionEventCursor, fakes.sessionEvents.sessionStreamSnapshot, fakes.sessionEvents.listSessionEvents = fixture.SessionEventCursor, fixture.SessionStreamSnapshot, fixture.ListSessionEvents
+	fakes.modelProviders.deploymentModelProvider = noDeploymentModelProvider
+	deps.Execution = fakes.execution()
+	fakes.admission.createSessionStream = fixture.CreateSessionStream
+	handler := newTestHandler(t, deps)
 	h := &creationStreamHarness{t: t, fixture: fixture}
 	h.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.active.Add(1)
@@ -683,47 +685,5 @@ func TestSessionSettledProjection(t *testing.T) {
 		if sessionSettled(session, v1.Session{Status: test.status}) != test.settled {
 			t.Fatal("unexpected settlement", test)
 		}
-	}
-}
-
-// eventOnlyStore streams events but cannot read the same-snapshot projection.
-type eventOnlyStore struct{ ResourceStore }
-
-func (eventOnlyStore) SessionEventCursor(context.Context, string, string) (int64, error) {
-	return 0, nil
-}
-
-func (eventOnlyStore) ListSessionEvents(context.Context, string, string, int64) ([]store.SessionChange, error) {
-	return nil, nil
-}
-
-type countingStreamAdmission struct {
-	inputRecorder
-	calls atomic.Int32
-}
-
-func (a *countingStreamAdmission) CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error) {
-	a.calls.Add(1)
-	return store.SessionCreation{}, store.ErrInvalidInput
-}
-
-func TestCreationStreamCapabilityIsCheckedBeforeCreation(t *testing.T) {
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: uuid.NewString()}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admission := &countingStreamAdmission{}
-	handler, err := NewHandler(eventOnlyStore{}, auth, "codex", WithExecution(admission))
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(creationBody))
-	request.Header.Set("Authorization", "Bearer key")
-	request.Header.Set("OpenAI-Beta", "agents=v1")
-	request.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusServiceUnavailable || admission.calls.Load() != 0 {
-		t.Fatal("unsupported stream store reached creation", response.Code, admission.calls.Load(), response.Body.String())
 	}
 }

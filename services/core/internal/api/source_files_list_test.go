@@ -14,7 +14,7 @@ import (
 
 func TestSourceFileListParametersAndEnvelope(t *testing.T) {
 	f := &sourceFilesFixture{}
-	h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+	h, _ := environmentFileCreateHandler(t, f.wire)
 	server := newSourceFileServer(t, h)
 
 	status, raw := sourceRequest(t, server, http.MethodGet, "/v1/files", "files-key", "", nil)
@@ -63,7 +63,7 @@ func TestSourceFileListRejectsInvalidQueriesBeforeStorage(t *testing.T) {
 	} {
 		t.Run(test.query, func(t *testing.T) {
 			f := &sourceFilesFixture{}
-			h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+			h, _ := environmentFileCreateHandler(t, f.wire)
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(http.MethodGet, "/v1/files?"+test.query, nil)
 			r.Header.Set("Authorization", "Bearer files-key")
@@ -78,7 +78,7 @@ func TestSourceFileListRejectsInvalidQueriesBeforeStorage(t *testing.T) {
 
 func TestSourceFileListIgnoresUnknownKeysAndEmptyPurpose(t *testing.T) {
 	f := &sourceFilesFixture{}
-	h, env := environmentFileCreateHandler(t, WithSourceFiles(f))
+	h, env := environmentFileCreateHandler(t, f.wire)
 	server := newSourceFileServer(t, h)
 	want, wantBody := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-a&limit=2&order=asc", "files-key", "", nil)
 	for _, query := range []string{"purpose=", "unknown=1", "tenant_id=foreign", "purpose[]=batch", "unknown=1&unknown=2&purpose="} {
@@ -91,7 +91,7 @@ func TestSourceFileListIgnoresUnknownKeysAndEmptyPurpose(t *testing.T) {
 
 func TestSourceFileListMapsStorageErrors(t *testing.T) {
 	f := &sourceFilesFixture{listErr: store.ErrNotFound}
-	h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+	h, _ := environmentFileCreateHandler(t, f.wire)
 	server := newSourceFileServer(t, h)
 	status, _ := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-missing", "files-key", "", nil)
 	if status != http.StatusNotFound || f.listCalls != 1 {
@@ -103,7 +103,7 @@ func TestSourceFileListPurposeValidationBeforeCursorLookup(t *testing.T) {
 	for _, purpose := range []string{"", "user_data", "assistants", "batch", "fine-tune", "vision", "evals", "assistants_output", "batch_output", "fine-tune-results", "unknown", "USER_DATA"} {
 		t.Run("purpose="+purpose, func(t *testing.T) {
 			f := &sourceFilesFixture{listErr: store.ErrNotFound}
-			h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+			h, _ := environmentFileCreateHandler(t, f.wire)
 			server := newSourceFileServer(t, h)
 			status, raw := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-missing&purpose="+purpose, "files-key", "", nil)
 			wantStatus, wantParam, wantCalls := http.StatusNotFound, "after", 1

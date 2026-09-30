@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -31,6 +32,12 @@ type managedSetup struct {
 	publicURL     string
 	selected      atomic.Pointer[managedSelection]
 	providerCalls sandbox.CallFence
+}
+
+// DiscoverConfiguration asks a Provider which configuration values its
+// credential can use, with this installation's process paths.
+func (s *managedSetup) DiscoverConfiguration(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+	return providers.DiscoverConfiguration(ctx, provider, input, s.processPaths)
 }
 
 // Empty selections retain their generation so a delayed provider load cannot

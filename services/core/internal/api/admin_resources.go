@@ -12,15 +12,12 @@ import (
 // Only Core-key-authenticated project resource handlers receive it.
 type adminTenantContextKey struct{}
 
-type AdminManagementStore interface {
-	GetManagedSessionArchive(context.Context, string, string) (store.ManagedSessionArchive, error)
+// Admin reads the administrator's cross-Project views: the asset summary, the
+// Sessions whose Runtime is observed and the administrator audit log.
+type Admin interface {
 	ReadAdminSummary(context.Context, string, store.AdminSummaryFilter, func(store.Session, *string) error) (store.AdminAssetCounts, error)
 	ListAdminRuntimeTargets(context.Context, []string, string, int, bool) (store.AdminRuntimeTargetPage, error)
 	ListAdminAudit(context.Context, store.AdminAuditFilter) (store.AdminAuditPage, error)
-}
-
-func WithAdminManagement(s AdminManagementStore) Option {
-	return func(h *Handler) { h.adminManagement = s }
 }
 
 func (h *Handler) adminResourceScope(next http.Handler) http.Handler {
@@ -34,17 +31,12 @@ func (h *Handler) adminResourceScope(next http.Handler) http.Handler {
 }
 
 func (h *Handler) registerAdminResourceRoutes(router chi.Router) {
-	if h.projectKeys == nil {
-		return
-	}
 	router.Group(func(r chi.Router) {
 		r.Get("/metrics", h.getCoreMetrics)
-		if h.adminManagement != nil {
-			r.Get("/summary", h.adminSummary)
-			r.Get("/sandbox/runtime-observations", h.adminRuntimeObservations)
-			r.Head("/sandbox/runtime-observations", methodNotAllowed)
-			r.Get("/audit-log", h.listAdminAudit)
-		}
+		r.Get("/summary", h.adminSummary)
+		r.Get("/sandbox/runtime-observations", h.adminRuntimeObservations)
+		r.Head("/sandbox/runtime-observations", methodNotAllowed)
+		r.Get("/audit-log", h.listAdminAudit)
 		r.Group(func(r chi.Router) {
 			r.Use(h.adminResourceScope)
 			r.Get("/projects/{project_id}/agents", h.adminListAgents)
@@ -77,10 +69,8 @@ func (h *Handler) registerAdminResourceRoutes(router chi.Router) {
 			r.Get("/projects/{project_id}/sessions/{session_id}/diagnostics", h.getSessionDiagnostics)
 			r.Get("/projects/{project_id}/sessions/{session_id}/turns/{turn_id}/diagnostics", h.getTurnDiagnostics)
 			r.Delete("/projects/{project_id}/sessions/{session_id}", h.adminDeleteSession)
-			if h.adminManagement != nil {
-				r.Post("/projects/{project_id}/sessions/{session_id}/archive", h.adminArchiveSession)
-				r.Get("/projects/{project_id}/sessions/{session_id}/archive", h.adminGetSessionArchive)
-			}
+			r.Post("/projects/{project_id}/sessions/{session_id}/archive", h.adminArchiveSession)
+			r.Get("/projects/{project_id}/sessions/{session_id}/archive", h.adminGetSessionArchive)
 			r.Get("/projects/{project_id}/sessions/{session_id}/turns", h.adminListTurns)
 			r.Get("/projects/{project_id}/sessions/{session_id}/turns/{turn_id}", h.adminGetTurn)
 			r.Get("/projects/{project_id}/sessions/{session_id}/items", h.adminListItems)
@@ -94,10 +84,8 @@ func (h *Handler) registerAdminResourceRoutes(router chi.Router) {
 			r.Head("/projects/{project_id}/sessions/{session_id}/runtime-observation", methodNotAllowed)
 			r.Get("/projects/{project_id}/sessions/{session_id}/runtime-history", h.adminGetRuntimeHistory)
 			r.Head("/projects/{project_id}/sessions/{session_id}/runtime-history", methodNotAllowed)
-			if h.writeAudit != nil {
-				r.Get("/projects/{project_id}/resource-owners", h.getResourceOwners)
-				r.Get("/projects/{project_id}/write-operations", h.listWriteOperations)
-			}
+			r.Get("/projects/{project_id}/resource-owners", h.getResourceOwners)
+			r.Get("/projects/{project_id}/write-operations", h.listWriteOperations)
 		})
 	})
 }

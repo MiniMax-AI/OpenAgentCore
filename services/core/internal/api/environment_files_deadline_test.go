@@ -13,7 +13,7 @@ import (
 func TestEnvironmentFilesReadOutlivesDefaultHTTPWriteDeadline(t *testing.T) {
 	for _, status := range []int{http.StatusOK, http.StatusServiceUnavailable} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
-			handler, fixture := environmentFilesHandler(t, true)
+			handler, fixture := environmentFilesHandler(t, true, func(_ *Dependencies, f *testFakes) { f.metrics.recordUnavailable = func() {} })
 			fixture.readDelay = 100 * time.Millisecond
 			if status == http.StatusServiceUnavailable {
 				fixture.readError = execution.ErrExecutionUnavailable

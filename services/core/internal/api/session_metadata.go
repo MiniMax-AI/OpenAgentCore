@@ -59,7 +59,7 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	session, err := h.store.UpdateSessionMetadata(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), metadata)
+	session, err := h.Sessions.UpdateSessionMetadata(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), metadata)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

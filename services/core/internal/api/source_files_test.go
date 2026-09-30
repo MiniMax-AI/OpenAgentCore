@@ -87,6 +87,12 @@ func (f *sourceFilesFixture) DeleteSourceFile(ctx context.Context, tenant, id st
 	return nil
 }
 
+// wire serves the Files area from f.
+func (f *sourceFilesFixture) wire(_ *Dependencies, fakes *testFakes) {
+	fakes.files.createSourceFile, fakes.files.getSourceFile, fakes.files.listSourceFiles = f.CreateSourceFile, f.GetSourceFile, f.ListSourceFiles
+	fakes.files.readSourceFile, fakes.files.deleteSourceFile = f.ReadSourceFile, f.DeleteSourceFile
+}
+
 func sourceMultipart(t *testing.T, fields []string, data []byte) ([]byte, string) {
 	t.Helper()
 	var body bytes.Buffer
@@ -138,7 +144,7 @@ func sourceRequest(t *testing.T, server *httptest.Server, method, path, key, con
 func TestSourceFilesPublicLifecycleAndEnvironmentCopy(t *testing.T) {
 	for _, fields := range [][]string{{"file", "purpose=user_data"}, {"purpose=user_data", "file"}} {
 		f := &sourceFilesFixture{}
-		h, env := environmentFileCreateHandler(t, WithSourceFiles(f))
+		h, env := environmentFileCreateHandler(t, f.wire)
 		server := httptest.NewServer(h)
 		t.Cleanup(server.Close)
 		data := []byte{0, 1, 255, 7}
@@ -185,7 +191,7 @@ func TestSourceFilesPublicLifecycleAndEnvironmentCopy(t *testing.T) {
 func TestSourceFilesRejectIncompleteOrUnsupportedMultipart(t *testing.T) {
 	for _, fields := range [][]string{{"file"}, {"purpose=user_data"}, {"file", "file", "purpose=user_data"}, {"file", "purpose=user_data", "purpose=user_data"}, {"file", "purpose=batch"}, {"file", "purpose=user_data", "expires_after[seconds]=3600"}, {"file", "purpose=user_data", "extra=x"}} {
 		f := &sourceFilesFixture{}
-		h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+		h, _ := environmentFileCreateHandler(t, f.wire)
 		server := httptest.NewServer(h)
 		body, contentType := sourceMultipart(t, fields, []byte("discard"))
 		status, _ := sourceRequest(t, server, "POST", "/v1/files", "files-key", contentType, body)
@@ -195,7 +201,7 @@ func TestSourceFilesRejectIncompleteOrUnsupportedMultipart(t *testing.T) {
 		}
 	}
 	f := &sourceFilesFixture{}
-	h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+	h, _ := environmentFileCreateHandler(t, f.wire)
 	server := httptest.NewServer(h)
 	defer server.Close()
 	body, contentType := sourceMultipart(t, []string{"purpose=user_data", "file"}, []byte("truncated"))
@@ -209,7 +215,7 @@ func TestSourceFilesRejectIncompleteOrUnsupportedMultipart(t *testing.T) {
 
 func TestEnvironmentSourceCopyEnforcesScopeUnionAndSize(t *testing.T) {
 	f := &sourceFilesFixture{file: store.SourceFile{ID: "file-" + uuid.NewString(), SizeBytes: proto.WorkspaceWriteMaxBytes + 1}}
-	h, env := environmentFileCreateHandler(t, WithSourceFiles(f))
+	h, env := environmentFileCreateHandler(t, f.wire)
 	f.tenant = env.environment.TenantID
 	body := `{"type":"file_id","file_id":"` + f.file.ID + `","path":"/workspace/source.bin"}`
 	if got := requestCreateEnvironmentFile(h, env.environment.ID, body, "other-key"); got.Code != 404 || f.reads != 0 {

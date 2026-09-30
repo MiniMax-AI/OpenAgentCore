@@ -36,7 +36,7 @@ func (h *Handler) sandboxNodeConfiguration(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	value, err := h.sandboxStore.RuntimeNodeGenerationConfiguration(r.Context(), r.Header.Get("X-OAC-Node-ID"), token, generation)
+	value, err := h.Sandboxes.Deployment.RuntimeNodeGenerationConfiguration(r.Context(), r.Header.Get("X-OAC-Node-ID"), token, generation)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

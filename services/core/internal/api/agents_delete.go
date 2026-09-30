@@ -33,7 +33,7 @@ func (h *Handler) deleteAgent(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrNotFound)
 		return
 	}
-	deleted, err := h.store.DeleteAgent(r.Context(), tenantID(r), id)
+	deleted, err := h.Agents.DeleteAgent(r.Context(), tenantID(r), id)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

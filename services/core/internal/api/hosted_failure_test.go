@@ -107,14 +107,10 @@ func TestGetStreamEndsAfterHostedProvisioningFailure(t *testing.T) {
 			f := &streamFixture{session: hostedFailureSession()}
 			f.session.TenantID = uuid.NewString()
 			f.session.Environment.TenantID = f.session.TenantID
-			auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			h, err := NewHandler(f, auth, "codex")
-			if err != nil {
-				t.Fatal(err)
-			}
+			deps, fakes := testDependencies(t)
+			fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}).ResolveProjectAPIKey
+			f.serve(fakes)
+			h := newTestHandler(t, deps)
 			server := httptest.NewServer(h)
 			defer server.Close()
 			failed := store.SessionChange{Sequence: 13, Event: v1.SessionEvent{Type: "agent.session.failed", EventID: "failed"}}

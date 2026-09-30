@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -21,7 +20,7 @@ func TestPublicEnvironmentMCPUsesAttachedVaultSelection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			handler, err := api.NewHandler(s, auth, kind, api.WithEnvironmentRemoteURL("https://executor.example"), api.WithExecution(&execution.Worker{}))
+			handler, err := publicHandler(t, s, auth, kind, workerExecution(&execution.Worker{}), executorURL("https://executor.example"))
 			if err != nil {
 				t.Fatal(err)
 			}

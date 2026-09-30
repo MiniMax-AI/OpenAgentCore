@@ -13,33 +13,46 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type environmentInstallationStore interface {
-	AuthorizeEnvironmentInstallation(context.Context, identity.Principal, string, string) (string, int64, error)
-	ValidateEnvironmentInstallation(context.Context, string, string) (store.InstallationAuthorization, error)
-	ClaimEnvironmentInstallation(context.Context, string, string, string) error
+// NativeInstaller serves the self-hosted native installation of this build.
+type NativeInstaller struct {
+	// Version is the build revision executors install and claim.
+	Version string
+	// Catalog holds the matching installation artifacts. It is nil when the
+	// operator installed none: installations then report unavailable and the
+	// grant routes answer 503 installation_unavailable.
+	Catalog *nativeinstaller.Catalog
 }
 
-func WithNativeInstaller(catalog *nativeinstaller.Catalog, version string) Option {
-	return func(h *Handler) { h.nativeInstaller, h.nativeVersion = catalog, version }
+// nativeInstaller returns this Core's native installer, or nil when it serves
+// none.
+func (h *Handler) nativeInstaller() *NativeInstaller {
+	if h.Execution == nil {
+		return nil
+	}
+	return h.Execution.NativeInstaller
 }
 
 func (h *Handler) installationFor(ctx context.Context, principal identity.Principal, environment string) (*v1.EnvironmentInstallation, error) {
-	result := &v1.EnvironmentInstallation{Status: "unavailable", Version: h.nativeVersion, Message: "This Core has no matching native installation distribution. Ask its operator to install the qualified release artifacts."}
-	s, ok := h.store.(environmentInstallationStore)
-	if !ok || h.nativeInstaller == nil {
+	installer := h.nativeInstaller()
+	result := &v1.EnvironmentInstallation{Status: "unavailable", Message: "This Core has no matching native installation distribution. Ask its operator to install the qualified release artifacts."}
+	if installer == nil {
 		return result, nil
 	}
-	token, expires, err := s.AuthorizeEnvironmentInstallation(ctx, principal, environment, h.nativeVersion)
+	result.Version = installer.Version
+	if installer.Catalog == nil {
+		return result, nil
+	}
+	token, expires, err := h.Environments.AuthorizeEnvironmentInstallation(ctx, principal, environment, installer.Version)
 	if err != nil {
 		return nil, err
 	}
-	origin := strings.TrimSuffix(h.executorURL, "/api/v1/agent-daemon/ws")
+	origin := strings.TrimSuffix(h.Execution.ExecutorURL, "/api/v1/agent-daemon/ws")
 	origin = strings.Replace(strings.Replace(origin, "wss://", "https://", 1), "ws://", "http://", 1)
-	return &v1.EnvironmentInstallation{Status: "available", Version: h.nativeVersion, ExpiresAt: expires, Commands: h.nativeInstaller.Commands(origin, token)}, nil
+	return &v1.EnvironmentInstallation{Status: "available", Version: installer.Version, ExpiresAt: expires, Commands: installer.Catalog.Commands(origin, token)}, nil
 }
 
 func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request, response *v1.Session) error {
-	if response.Environment.Type != "self_hosted" || h.nativeVersion == "" {
+	if response.Environment.Type != "self_hosted" || h.nativeInstaller() == nil {
 		return nil
 	}
 	principal, ok := r.Context().Value(principalContextKey{}).(identity.Principal)
@@ -56,34 +69,36 @@ func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request,
 }
 
 func (h *Handler) registerNativeInstallationRoutes(r chi.Router) {
-	if h.nativeVersion == "" {
+	installer := h.nativeInstaller()
+	if installer == nil {
 		return
 	}
-	if h.nativeInstaller != nil {
-		r.Handle("/api/v1/agent-daemon/install/*", h.nativeInstaller)
+	if installer.Catalog != nil {
+		r.Handle("/api/v1/agent-daemon/install/*", installer.Catalog)
 	}
 	r.Post("/api/v1/agent-daemon/installation", h.prepareNativeInstallation)
 	r.Post("/api/v1/agent-daemon/installation/claim", h.claimNativeInstallation)
 }
 
-func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Request) (environmentInstallationStore, store.InstallationAuthorization, string, bool) {
+// installationAuthorization validates a grant route's bearer grant. The routes
+// are registered only when this Core serves a native installer.
+func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Request) (store.InstallationAuthorization, string, bool) {
 	w.Header().Set("Cache-Control", "no-store")
-	s, ok := h.store.(environmentInstallationStore)
-	if !ok || h.nativeInstaller == nil {
+	if h.Execution.NativeInstaller.Catalog == nil {
 		writeError(w, 503, "installation_unavailable", "Matching native installation artifacts are unavailable.")
-		return nil, store.InstallationAuthorization{}, "", false
+		return store.InstallationAuthorization{}, "", false
 	}
 	parts := strings.Fields(r.Header.Get("Authorization"))
 	if len(r.Header.Values("Authorization")) != 1 || len(parts) != 2 || parts[0] != "Bearer" {
 		writeStoreError(w, r, store.ErrInstallationAuthorization)
-		return nil, store.InstallationAuthorization{}, "", false
+		return store.InstallationAuthorization{}, "", false
 	}
-	claim, err := s.ValidateEnvironmentInstallation(r.Context(), parts[1], h.nativeVersion)
+	claim, err := h.Environments.ValidateEnvironmentInstallation(r.Context(), parts[1], h.Execution.NativeInstaller.Version)
 	if err != nil {
 		writeStoreError(w, r, err)
-		return nil, claim, "", false
+		return claim, "", false
 	}
-	return s, claim, parts[1], true
+	return claim, parts[1], true
 }
 
 // @Summary Resolve a native installation authorization
@@ -94,26 +109,26 @@ func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Reque
 // @Failure 401,404,503 {object} CoreErrorResponse
 // @Router /api/v1/agent-daemon/installation [post]
 func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Request) {
-	_, claim, _, ok := h.installationAuthorization(w, r)
+	claim, _, ok := h.installationAuthorization(w, r)
 	if !ok {
 		return
 	}
-	environment, err := h.store.GetEnvironment(r.Context(), claim.Principal.TenantID, claim.Environment)
+	environment, err := h.Environments.GetEnvironment(r.Context(), claim.Principal.TenantID, claim.Environment)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	session, err := h.store.GetSession(r.Context(), claim.Principal.TenantID, environment.SessionID)
+	session, err := h.Sessions.GetSession(r.Context(), claim.Principal.TenantID, environment.SessionID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	response, err := sessionResponse(session, h.executorURL)
+	response, err := sessionResponse(session, h.executorURL())
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, v1.NativeInstallationContext{Version: h.nativeVersion, ProtocolVersion: proto.Version, EnvironmentID: claim.Environment, RemoteURL: h.executorURL, Workspace: response.Environment.WorkspaceDirectory, Harness: session.Engine})
+	writeJSON(w, http.StatusOK, v1.NativeInstallationContext{Version: h.Execution.NativeInstaller.Version, ProtocolVersion: proto.Version, EnvironmentID: claim.Environment, RemoteURL: h.Execution.ExecutorURL, Workspace: response.Environment.WorkspaceDirectory, Harness: session.Engine})
 }
 
 type NativeInstallationClaim struct {
@@ -129,7 +144,7 @@ type NativeInstallationClaim struct {
 // @Failure 400,401,409,503 {object} CoreErrorResponse
 // @Router /api/v1/agent-daemon/installation/claim [post]
 func (h *Handler) claimNativeInstallation(w http.ResponseWriter, r *http.Request) {
-	s, _, token, ok := h.installationAuthorization(w, r)
+	_, token, ok := h.installationAuthorization(w, r)
 	if !ok {
 		return
 	}
@@ -142,7 +157,7 @@ func (h *Handler) claimNativeInstallation(w http.ResponseWriter, r *http.Request
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	if err := s.ClaimEnvironmentInstallation(r.Context(), token, h.nativeVersion, input.ExecutorToken); err != nil {
+	if err := h.Environments.ClaimEnvironmentInstallation(r.Context(), token, h.Execution.NativeInstaller.Version, input.ExecutorToken); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
@@ -164,12 +179,7 @@ func (h *Handler) getEnvironmentInstallation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	environment := chi.URLParam(r, "environment_id")
-	s, ok := h.store.(EnvironmentExecutorStore)
-	if !ok {
-		writeStoreError(w, r, store.ErrNotFound)
-		return
-	}
-	if _, err := s.ProjectExecutorCredentialState(r.Context(), binding.Principal, environment); err != nil {
+	if _, err := h.Environments.ProjectExecutorCredentialState(r.Context(), binding.Principal, environment); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}

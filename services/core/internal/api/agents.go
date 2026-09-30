@@ -11,12 +11,16 @@ import (
 	"github.com/google/uuid"
 )
 
-type AgentStore interface {
+// Agents manages saved Agents. GetAgentForSession reads a saved Agent for
+// Session creation together with its decrypted model provider when the
+// Session inherits it.
+type Agents interface {
 	DeleteAgent(context.Context, string, string) (string, error)
 	UpdateAgent(context.Context, string, string, store.UpdateAgentInput) (store.SavedAgent, error)
 	ListAgents(context.Context, string, string, int, bool) (store.AgentPage, error)
 	CreateAgent(context.Context, string, store.CreateAgentInput) (store.SavedAgent, error)
 	GetAgent(context.Context, string, string) (store.SavedAgent, error)
+	GetAgentForSession(context.Context, string, string, bool) (store.SavedAgent, *v1.ModelProviderInput, error)
 }
 
 // @Summary Create a reusable Agent
@@ -54,7 +58,7 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	agent, err := h.store.CreateAgent(r.Context(), tenantID(r), input)
+	agent, err := h.Agents.CreateAgent(r.Context(), tenantID(r), input)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -73,7 +77,12 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/{agent_id} [get]
 func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
-	agent, err := h.lookupAgent(r.Context(), tenantID(r), chi.URLParam(r, "agent_id"))
+	id := chi.URLParam(r, "agent_id")
+	if !validAgentID(id) {
+		writeStoreError(w, r, store.ErrNotFound)
+		return
+	}
+	agent, err := h.Agents.GetAgent(r.Context(), tenantID(r), id)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -103,13 +112,6 @@ func agentResponse(agent store.SavedAgent) (v1.SavedAgent, error) {
 	response.Metadata = agent.Metadata
 	response.CreatedAt, response.UpdatedAt = agent.CreatedAt.Unix(), agent.UpdatedAt.Unix()
 	return response, nil
-}
-
-func (h *Handler) lookupAgent(ctx context.Context, tenant, id string) (store.SavedAgent, error) {
-	if !validAgentID(id) {
-		return store.SavedAgent{}, store.ErrNotFound
-	}
-	return h.store.GetAgent(ctx, tenant, id)
 }
 
 func validAgentID(id string) bool {

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -37,12 +36,8 @@ const (
 
 var requestIDPattern = regexp.MustCompile(`^req_[0-9a-f]{32}$`)
 
-// routingStore serves one saved Agent and records Agent lookups. Every other
-// store method, including Environment executor credentials, panics through
-// the nil embedded interfaces, so a test fails if a handler reaches it.
+// routingStore serves one saved Agent and records Agent lookups.
 type routingStore struct {
-	ResourceStore
-	EnvironmentExecutorStore
 	tenant           string
 	agent            store.SavedAgent
 	lookups, updates []string
@@ -74,59 +69,34 @@ func (s *routingStore) UpdateAgent(_ context.Context, tenant, id string, input s
 	return s.agent, nil
 }
 
-// routingKeys resolves a second key for the same Project.
-// Key management methods panic, so administrator handlers are traps.
-type routingKeys struct {
-	ProjectAPIKeyStore
-	principal identity.Principal
-}
+// trapTB turns an unexpected call to a strict fake into a panic, which
+// outcome reports as "handler reached".
+type trapTB struct{ testing.TB }
 
-func (k routingKeys) ResolveProjectAPIKey(_ context.Context, digest string) (store.ProjectAPIKeyBinding, error) {
-	if digest != runtimedevice.HashCredential(routingDerivedKey) {
-		return store.ProjectAPIKeyBinding{}, store.ErrNotFound
-	}
-	return store.ProjectAPIKeyBinding{Principal: k.principal}, nil
-}
-
-// missingFiles reports every File as missing.
-type missingFiles struct{ SourceFileStore }
-
-func (missingFiles) GetSourceFile(context.Context, string, string) (store.SourceFile, error) {
-	return store.SourceFile{}, store.ErrNotFound
-}
+func (trapTB) Fatalf(format string, args ...any) { panic(fmt.Sprintf(format, args...)) }
 
 // routingFixture returns the served handler and, for route enumeration, a
-// router built from an identically configured Handler. Sandbox administration
-// uses a zero Store and project API key management a trap store, which panic
-// if a handler is ever reached; derived project keys resolve normally.
+// router built from the same Dependencies. They answer only Agent reads and
+// updates, Project key resolution, including a derived key for the same
+// Project, and File lookups, which report every File as missing. Any other
+// call, including sandbox administration and Project key management, panics
+// if a handler is ever reached.
 func routingFixture(t *testing.T) (http.Handler, *chi.Mux, *routingStore) {
 	t.Helper()
 	tenant := uuid.NewString()
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: "test-project", SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(routingKey), TenantID: tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(routingAdminKey)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	keys := projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: "test-project", SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(routingKey), TenantID: tenant})
+	keys[runtimedevice.HashCredential(routingDerivedKey)] = keys[runtimedevice.HashCredential(routingKey)]
 	s := &routingStore{tenant: tenant, agent: store.SavedAgent{ID: uuid.NewString(), TenantID: tenant, Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"model":"fixture"}`), CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}}
-	binding, err := auth.keys.ResolveProjectAPIKey(t.Context(), runtimedevice.HashCredential(routingKey))
-	if err != nil {
-		t.Fatal(err)
+	deps, fakes := testDependencies(trapTB{t})
+	fakes.projects.resolveProjectAPIKey = keys.ResolveProjectAPIKey
+	fakes.agents.getAgent, fakes.agents.listAgents, fakes.agents.updateAgent = s.GetAgent, s.ListAgents, s.UpdateAgent
+	fakes.files.getSourceFile = func(context.Context, string, string) (store.SourceFile, error) {
+		return store.SourceFile{}, store.ErrNotFound
 	}
-	auth.keys.(fixtureKeyResolver)[runtimedevice.HashCredential(routingDerivedKey)] = binding
-	options := []Option{WithSandboxManager(&store.Store{}, admin), WithProjectAPIKeys(routingKeys{principal: binding.Principal}, admin), WithSourceFiles(missingFiles{})}
-	handler, err := NewHandler(s, auth, "codex", options...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := &Handler{store: s, auth: auth, engine: "codex"}
-	for _, option := range options {
-		option(h)
-	}
-	return handler, h.routes(), s
+	deps.CoreKeys = coreKeys(t, routingAdminKey)
+	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()
+	return newTestHandler(t, deps), (&Handler{Dependencies: deps}).routes(), s
 }
 
 func routingHeaders(pairs ...string) http.Header {
@@ -646,7 +616,7 @@ func TestAgentsResponseHeaders(t *testing.T) {
 	// The ID is attached to the request log context, and a stream that flushes
 	// before writing still reports its processing time.
 	var logged string
-	stream := agentsResponseHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	stream := responseHeadersWithErrors(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logged, _ = log.RequestIDFromContext(r.Context())
 		w.Header().Set("Content-Type", "text/event-stream")
 		controller := http.NewResponseController(w)
@@ -657,7 +627,7 @@ func TestAgentsResponseHeaders(t *testing.T) {
 			t.Error(err)
 		}
 		_, _ = io.WriteString(w, ": connected\n\n")
-	}))
+	}), func(string) {})
 	server := httptest.NewServer(stream)
 	defer server.Close()
 	response, err := server.Client().Get(server.URL)

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -39,13 +38,13 @@ func TestSavedReferenceRetryOfficialClient(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := api.NewHandler(s, auth, "codex", api.WithExecution(worker))
+	handler, err := publicHandler(t, s, auth, "codex", workerExecution(worker))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	recovered, err := api.NewHandler(store.New(pool), auth, "codex")
+	recovered, err := publicHandler(t, store.New(pool), auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

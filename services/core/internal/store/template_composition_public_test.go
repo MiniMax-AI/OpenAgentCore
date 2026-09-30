@@ -13,7 +13,6 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -43,7 +42,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	serve := func(current *store.Store) *httptest.Server {
 		t.Helper()
 		// Hosted admission and freezing use the real Store; no Runtime or model runs.
-		h, err := api.NewHandler(current, auth, "codex", api.WithHostedEnvironments(), api.WithExecution(current), api.WithSourceFiles(current), fixtureDeploymentProvider())
+		h, err := publicHandler(t, current, auth, "codex", storeExecution(t, current), managedSandboxes(t, current), fixtureDeploymentProvider(current))
 		if err != nil {
 			t.Fatal(err)
 		}

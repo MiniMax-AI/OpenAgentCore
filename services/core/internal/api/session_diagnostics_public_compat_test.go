@@ -15,19 +15,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// This test also runs unchanged against the comparison base using a private
-// overlay. Fixed resource times make its public response bytes comparable.
+// Fixed resource times make the logged public response bytes comparable
+// between revisions.
 func TestDiagnosticPublicCompatibility(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
 	key := callerBinding()
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := NewHandler(s, auth, "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, key).ResolveProjectAPIKey
+	databaseSessionReads(s)(&deps, fakes)
+	h := newTestHandler(t, deps)
 	session, err := s.CreateSession(t.Context(), key.TenantID, store.CreateSessionInput{Creator: identity.Subject{Kind: "service_account", ID: "compat-test"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -61,6 +57,11 @@ func diagnosticRequest(handler http.Handler, path, token string) *httptest.Respo
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
 	return w
+}
+
+// databaseSessionReads serves Session, Turn, Item and diagnostic reads from s.
+func databaseSessionReads(s *store.Store) func(*Dependencies, *testFakes) {
+	return func(d *Dependencies, _ *testFakes) { d.Sessions, d.SessionHistory, d.SessionAdmin = s, s, s }
 }
 
 func diagnosticDatabase(t *testing.T) (*store.Store, *pgxpool.Pool) {

@@ -19,11 +19,10 @@ func fixtureModelProvider(harness string) *v1.ModelProviderInput {
 	return &v1.ModelProviderInput{Protocol: "anthropic", BaseURL: "https://model.fixture.example/anthropic", APIKey: "fixture-model-key", ContextWindow: 200000, MaxOutputTokens: 8000}
 }
 
-// withFixtureDeploymentProvider configures a deployment default for every harness.
-func withFixtureDeploymentProvider() Option {
-	return WithModelProviderDefaults(func(_ context.Context, harness string) (*store.DeploymentModelProviderSnapshot, error) {
-		return &store.DeploymentModelProviderSnapshot{Model: "fixture", Provider: fixtureModelProvider(harness), Revision: uuid.New()}, nil
-	})
+// fixtureDeploymentProvider is a deployment default for every harness, for
+// fakeModelProviders.deploymentModelProvider.
+func fixtureDeploymentProvider(_ context.Context, harness string) (*store.DeploymentModelProviderSnapshot, error) {
+	return &store.DeploymentModelProviderSnapshot{Model: "fixture", Provider: fixtureModelProvider(harness), Revision: uuid.New()}, nil
 }
 
 // fixtureSessionProvider is a top-level Session request member for Codex.

@@ -60,7 +60,7 @@ func (h *Handler) listAdminAudit(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	page, err := h.adminManagement.ListAdminAudit(r.Context(), filter)
+	page, err := h.Admin.ListAdminAudit(r.Context(), filter)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -51,7 +50,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := api.NewHandler(s, auth, "codex", api.WithEnvironmentRemoteURL("https://executor.example"))
+	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}

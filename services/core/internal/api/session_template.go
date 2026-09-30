@@ -50,7 +50,7 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	if input.templateID == "" {
 		return nil
 	}
-	template, files, err := h.store.ResolveEnvironmentTemplate(ctx, tenant, input.templateID)
+	template, files, err := h.EnvironmentTemplates.ResolveEnvironmentTemplate(ctx, tenant, input.templateID)
 	if err != nil {
 		return err
 	}

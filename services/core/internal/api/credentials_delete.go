@@ -35,7 +35,7 @@ func (h *Handler) deleteCredential(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	deleted, err := h.store.DeleteCredential(r.Context(), tenantID(r), vaultID, id)
+	deleted, err := h.Vaults.DeleteCredential(r.Context(), tenantID(r), vaultID, id)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

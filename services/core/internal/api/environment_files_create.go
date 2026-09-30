@@ -21,14 +21,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type EnvironmentFileWriter interface {
-	WriteEnvironmentFile(context.Context, store.Environment, string, []byte) (int64, error)
-}
-
-func WithEnvironmentFileWriter(writer EnvironmentFileWriter) Option {
-	return func(h *Handler) { h.fileWriter = writer }
-}
-
 // @Summary Create an Environment file from inline bytes or a source file
 // @Description Uploads standard Base64 bytes to a file beneath /workspace in a qualified local Environment and returns 201. Accepts inline bytes or a project-owned source file_id through the same write path. Unknown body fields are rejected with their name as param. Basic public hosted creation requires explicit managed Runtime configuration; an openai_hosted Environment that has not connected yet returns 400. Inline data is limited to 5 MiB decoded and a file_id copy to 50 MiB. Missing parent directories are created with mode 0700 and the file with mode 0600. An existing destination is never replaced; a directory, an existing file or a path through a symlink or non-directory returns 400. Idle writes exclude execution. Missing receipts return unavailable and retain a durable mutation gate without automatic replay. Error/timing parity with upstream remains unverified.
 // @Tags Environments
@@ -47,7 +39,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	environment, err := h.store.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
+	environment, err := h.Environments.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -107,12 +99,9 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if request.Type == "file_id" {
-		if !h.sourceFilesAvailable(w) {
-			return
-		}
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
-		err = h.sourceFiles.ReadSourceFile(ctx, tenantID(r), *request.FileID, func(file store.SourceFile, body io.Reader) error {
+		err = h.Files.ReadSourceFile(ctx, tenantID(r), *request.FileID, func(file store.SourceFile, body io.Reader) error {
 			if file.SizeBytes > proto.WorkspaceWriteMaxBytes {
 				return store.ErrSourceFileTooLarge
 			}
@@ -127,7 +116,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	if h.fileWriter == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
+	if h.Execution == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
 		writeStoreError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
@@ -135,7 +124,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		writeStoreError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
-	size, err := h.fileWriter.WriteEnvironmentFile(r.Context(), environment, strings.TrimPrefix(*request.Path, "/workspace/"), data)
+	size, err := h.Execution.Workspaces.WriteEnvironmentFile(r.Context(), environment, strings.TrimPrefix(*request.Path, "/workspace/"), data)
 	if err != nil {
 		if !writeFieldError(w, environmentFileWriteError(err)) {
 			writeStoreError(w, r, err)

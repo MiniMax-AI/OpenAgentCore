@@ -39,9 +39,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(st, auth, "codex", api.WithProjectAPIKeys(st, admin), api.WithHarnesses([]string{"codex", "mcode"}),
-		api.WithHostedEnvironments(), api.WithExecution(st), api.WithEnvironmentRemoteURL("wss://core.example/api/v1/agent-daemon/ws"),
-		api.WithModelProviderDefaults(st.DeploymentModelProvider))
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +295,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(st, auth, "codex", api.WithExecution(st), api.WithModelProviderDefaults(st.DeploymentModelProvider))
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +382,7 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 		_, err = st.SetDeploymentModelProvider(admin, harness, v1.ModelConfigurationInput{ModelProvider: replacement, Model: "fixture"})
 		return snapshot, err
 	}
-	handler, err := api.NewHandler(st, auth, "codex", api.WithExecution(st), api.WithModelProviderDefaults(resolver))
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), modelProviderDefaults(st, resolver))
 	if err != nil {
 		t.Fatal(err)
 	}

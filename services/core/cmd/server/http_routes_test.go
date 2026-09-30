@@ -65,20 +65,21 @@ func TestServerHandlerRoutesCanonicalPaths(t *testing.T) {
 	}
 }
 
-// trapStore panics on every store call, marking a request that reached a handler.
-type trapStore struct{ api.ResourceStore }
+// trapProjects resolves the fixture Project keys; every other call panics.
+type trapProjects struct {
+	api.Projects
+	keys fixtureKeyResolver
+}
 
-// trapKeys finds no derived project API key; key management calls panic.
-type trapKeys struct{ api.ProjectAPIKeyStore }
-
-func (trapKeys) ResolveProjectAPIKey(context.Context, string) (store.ProjectAPIKeyBinding, error) {
-	return store.ProjectAPIKeyBinding{}, store.ErrNotFound
+func (p trapProjects) ResolveProjectAPIKey(ctx context.Context, digest string) (store.ProjectAPIKeyBinding, error) {
+	return p.keys.ResolveProjectAPIKey(ctx, digest)
 }
 
 // daemonComposition serves the real API handler beside sentinel daemon routes.
+// Every dependency call panics, marking a request that reached a handler.
 func daemonComposition(t testing.TB) http.Handler {
 	t.Helper()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "org", ProjectID: "project", SubjectKind: "service_account",
+	keys, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "org", ProjectID: "project", SubjectKind: "service_account",
 		SubjectID: "runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}})
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +88,20 @@ func daemonComposition(t testing.TB) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	apiHandler, err := api.NewHandler(trapStore{}, auth, "codex", api.WithSandboxManager(&store.Store{}, admin), api.WithProjectAPIKeys(trapKeys{}, admin))
+	apiHandler, err := api.NewHandler(api.Dependencies{
+		Engine: "codex", CoreKeys: admin, InstallationBindings: struct{ api.InstallationBindings }{},
+		Projects: trapProjects{keys: keys}, Vaults: struct{ api.Vaults }{}, ModelProviders: struct{ api.ModelProviders }{},
+		Files: struct{ api.Files }{}, Skills: struct{ api.Skills }{}, EnvironmentTemplates: struct{ api.EnvironmentTemplates }{},
+		Agents: struct{ api.Agents }{}, Sessions: struct{ api.Sessions }{}, SessionEvents: struct{ api.SessionEvents }{},
+		SessionHistory: struct{ api.SessionHistory }{}, Subagents: struct{ api.Subagents }{}, Artifacts: struct{ api.Artifacts }{},
+		SessionAdmin: struct{ api.SessionAdmin }{}, Environments: struct{ api.Environments }{}, ExecutorConnections: struct{ api.ExecutorConnections }{},
+		Admin: struct{ api.Admin }{}, WriteAudit: struct{ api.WriteAudit }{}, Metrics: struct{ api.Metrics }{},
+		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
+		Execution: &api.Execution{ExecutorURL: "wss://core.example/api/v1/agent-daemon/ws", Admission: struct{ api.Admission }{},
+			SessionArchive: struct{ api.SessionArchive }{}, Workspaces: struct{ api.EnvironmentWorkspaces }{}},
+		Sandboxes: &api.Sandboxes{Deployment: struct{ api.Deployment }{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
+			ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

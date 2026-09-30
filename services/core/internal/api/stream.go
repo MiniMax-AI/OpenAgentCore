@@ -16,9 +16,12 @@ import (
 	"github.com/google/uuid"
 )
 
-type eventStore interface {
+// SessionEvents reads a Session's committed event journal, and the Session
+// projection with its event cursor from one snapshot.
+type SessionEvents interface {
 	SessionEventCursor(context.Context, string, string) (int64, error)
 	ListSessionEvents(context.Context, string, string, int64) ([]store.SessionChange, error)
+	SessionStreamSnapshot(context.Context, string, string) (store.Session, int64, error)
 }
 
 // @Summary Stream live Session events
@@ -33,27 +36,22 @@ type eventStore interface {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/events [get]
 func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
-	events, ok := h.store.(eventStore)
-	if !ok {
-		writeError(w, http.StatusServiceUnavailable, "stream_unavailable", "Live events are unavailable.")
-		return
-	}
 	id, tenant := chi.URLParam(r, "session_id"), tenantID(r)
-	session, err := h.store.GetSession(r.Context(), tenant, id)
+	session, err := h.Sessions.GetSession(r.Context(), tenant, id)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	if _, err = sessionResponse(session, h.executorURL); err != nil {
+	if _, err = sessionResponse(session, h.executorURL()); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	cursor, err := events.SessionEventCursor(r.Context(), tenant, id)
+	cursor, err := h.SessionEvents.SessionEventCursor(r.Context(), tenant, id)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	h.serveSessionEvents(w, r, events, session, cursor, nil, http.StatusOK, nil)
+	h.serveSessionEvents(w, r, session, cursor, nil, http.StatusOK, nil)
 }
 
 // streamSettlement reads a creation stream's committed Session projection and
@@ -72,7 +70,7 @@ type streamSettlement func(context.Context) (settled bool, cursor int64, err err
 // sends only events up to that cursor before ending. Later work drained before
 // that read can still be sent. The projection is re-read after a sent Session
 // status event and otherwise at most once a second.
-func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, events eventStore, session store.Session, cursor int64, initial *v1.SessionEvent, status int, settlement streamSettlement) {
+func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, session store.Session, cursor int64, initial *v1.SessionEvent, status int, settlement streamSettlement) {
 	id, tenant := session.ID, tenantID(r)
 	write := openEventStream(w, status)
 	if write == nil {
@@ -114,7 +112,7 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, eve
 		if !authorized() {
 			return
 		}
-		changes, err := events.ListSessionEvents(r.Context(), tenant, id, cursor)
+		changes, err := h.SessionEvents.ListSessionEvents(r.Context(), tenant, id, cursor)
 		if errors.Is(err, store.ErrNotFound) {
 			return
 		}
@@ -126,7 +124,7 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, eve
 			if limit >= 0 && change.Sequence > limit {
 				return
 			}
-			event, err := streamResponse(session, change, h.executorURL)
+			event, err := streamResponse(session, change, h.executorURL())
 			if err != nil {
 				writeStreamFailure(write, id)
 				return

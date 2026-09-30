@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"testing"
@@ -13,7 +11,6 @@ import (
 )
 
 type claudeCredentialStore struct {
-	recordingStore
 	binding store.MCPCredentialBinding
 	calls   int
 }
@@ -35,18 +32,14 @@ func TestClaudeMCPAdmitsResolvedCredentials(t *testing.T) {
 			if selection == "unmatched" {
 				s.binding.VaultID, s.binding.CredentialID, s.binding.AuthType = "", "", ""
 			}
-			digest := sha256.Sum256([]byte("test-api-key"))
-			auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: hex.EncodeToString(digest[:]), TenantID: uuid.NewString()}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			h, err := NewHandler(s, auth, "claude_sdk", WithExecution(&inputRecorder{ResourceStore: s}))
-			if err != nil {
-				t.Fatal(err)
-			}
+			h, recording, _ := testHandler(t, func(d *Dependencies, f *testFakes) {
+				d.Engine = "claude_sdk"
+				admitSessions(d, f)
+				f.vaults.resolveMCPCredentials = s.ResolveMCPCredentials
+			})
 			body := fmt.Sprintf(`{"agent":{"model":"model","tools":[%s]},"environment":{"type":"none"},"vault_ids":[%q],"input":"Use the configured records server."}`, tool, vault)
 			response := credentialRequest(h, "POST", "/v1/agents/sessions", body)
-			if response.Code != 201 || s.calls != 1 || s.tenant == "" {
+			if response.Code != 201 || s.calls != 1 || recording.tenant == "" {
 				t.Fatal("credential selection or admission failed", response.Code, response.Body, s.calls)
 			}
 		})

@@ -9,13 +9,11 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
-	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
+	deps, fakes := sandboxFakes(t)
 	updates, resets := 0, 0
 	update := func(_ context.Context, in store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
 		updates++
@@ -31,12 +29,11 @@ func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 		}
 		return store.RuntimeDeploymentView{Reset: &store.SandboxResetView{Clear: in.Clear}}, nil
 	}
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin), WithSandboxDeploymentChanges(update, maintain, func(context.Context, uint64) (store.RuntimeDeploymentView, error) {
+	fakes.deploymentChanges.updateSandboxDeployment, fakes.deploymentChanges.startSandboxReset = update, maintain
+	fakes.deploymentChanges.cancelSandboxReset = func(context.Context, uint64) (store.RuntimeDeploymentView, error) {
 		return store.RuntimeDeploymentView{}, nil
-	}))
-	if err != nil {
-		t.Fatal(err)
 	}
+	h := newTestHandler(t, deps)
 	const selection = `{"provider":"e2b","expected_generation":2,"credential":{"api_key":"synthetic-private-key"},"configuration":{"template":"qualified:build"}}`
 	for _, tc := range []struct {
 		method, path, token, body string
@@ -70,23 +67,6 @@ func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 	}
 	if updates != 1 || resets != 2 {
 		t.Fatalf("unauthorized or invalid input reached mutation: %d %d", updates, resets)
-	}
-}
-
-func TestSandboxDeploymentChangesUnavailableWithoutOwner(t *testing.T) {
-	h := &Handler{}
-	for _, tc := range []struct {
-		body    string
-		handler http.HandlerFunc
-	}{
-		{`{"provider":"docker","expected_generation":1}`, h.updateSandboxDeployment},
-		{`{"clear":"auto","expected_generation":1}`, h.startSandboxReset},
-	} {
-		w := httptest.NewRecorder()
-		tc.handler(w, httptest.NewRequest("PUT", "/", strings.NewReader(tc.body)))
-		if w.Code != http.StatusConflict {
-			t.Fatal(w.Code)
-		}
 	}
 }
 

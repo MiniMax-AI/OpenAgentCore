@@ -9,7 +9,7 @@ import (
 )
 
 func (h *Handler) setEnvironmentInputWriteDeadline(w http.ResponseWriter, r *http.Request, sessionID string) error {
-	session, err := h.store.GetSession(r.Context(), tenantID(r), sessionID)
+	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
 		return err
 	}

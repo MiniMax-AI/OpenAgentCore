@@ -43,14 +43,14 @@ func (h *Handler) updateCredential(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid_request", "static_bearer auth requires a nonempty string token.")
 			return
 		}
-		credential, err = h.store.UpdateStaticCredential(r.Context(), tenantID(r), vaultID, id, store.UpdateStaticCredentialInput{Token: *auth.Token})
+		credential, err = h.Vaults.UpdateStaticCredential(r.Context(), tenantID(r), vaultID, id, store.UpdateStaticCredentialInput{Token: *auth.Token})
 	case "mcp_oauth":
 		input, parseErr := oauthCredentialUpdate(request.Auth)
 		if parseErr != nil {
 			writeStoreError(w, r, parseErr)
 			return
 		}
-		credential, err = h.store.UpdateOAuthCredential(r.Context(), tenantID(r), vaultID, id, input)
+		credential, err = h.Vaults.UpdateOAuthCredential(r.Context(), tenantID(r), vaultID, id, input)
 	default:
 		writeError(w, http.StatusBadRequest, "invalid_request", "auth requires type static_bearer or mcp_oauth.")
 		return

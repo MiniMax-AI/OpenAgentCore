@@ -10,10 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type mcpCredentialResolver interface {
-	ResolveMCPCredentials(context.Context, string, []string, []store.MCPCredentialRequest) ([]store.MCPCredentialBinding, error)
-}
-
 func (h *Handler) bindSessionCredentials(ctx context.Context, tenant string, raw json.RawMessage) (json.RawMessage, error) {
 	var cfg configuration
 	if json.Unmarshal(raw, &cfg) != nil {
@@ -34,11 +30,7 @@ func (h *Handler) bindSessionCredentials(ctx context.Context, tenant string, raw
 	if !required {
 		return raw, nil
 	}
-	resolver, ok := h.store.(mcpCredentialResolver)
-	if !ok {
-		return nil, store.ErrCredentialStorageUnavailable
-	}
-	bindings, err := resolver.ResolveMCPCredentials(ctx, tenant, cfg.VaultIDs, requests)
+	bindings, err := h.Vaults.ResolveMCPCredentials(ctx, tenant, cfg.VaultIDs, requests)
 	if err != nil {
 		return nil, err
 	}

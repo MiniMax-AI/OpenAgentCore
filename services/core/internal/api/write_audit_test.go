@@ -11,7 +11,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
@@ -43,19 +42,13 @@ func (s *auditQueryFixture) ListWriteOperations(_ context.Context, tenant string
 }
 func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 	key := callerBinding()
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := testDependencies(t)
 	queries := &auditQueryFixture{}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithWriteAudit(queries, admin), WithProjectAPIKeys(&projectKeyStoreFixture{project: store.ProjectBinding{Project: store.Project{ID: key.ProjectID}, Principal: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID}}}}, admin))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fakes.writeAudit.getResourceOwners, fakes.writeAudit.listWriteOperations = queries.GetResourceOwners, queries.ListWriteOperations
+	projects := &projectKeyStoreFixture{project: store.ProjectBinding{Project: store.Project{ID: key.ProjectID}, Principal: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID}}}}
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, key).ResolveProjectAPIKey
+	fakes.projects.getProject = projects.GetProject
+	h := newTestHandler(t, deps)
 	owners := "/core/v1/projects/" + key.ProjectID + "/resource-owners?resource_type=agent&resource_ids=first,second"
 	for _, token := range []string{"", "caller", "foreign"} {
 		w := projectKeyHTTP(h, "GET", owners, token, "")
@@ -100,18 +93,18 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 
 func TestAuthenticatedWriteProvenance(t *testing.T) {
 	key := callerBinding()
-	fixture, _ := NewAuthenticator([]APIKey{key})
-	binding, _ := fixture.keys.ResolveProjectAPIKey(t.Context(), key.TokenSHA256)
+	binding, _ := projectKeys(t, key).ResolveProjectAPIKey(t.Context(), key.TokenSHA256)
 	binding.Key = store.ProjectAPIKey{ID: uuid.NewString(), Name: "SDK", Prefix: "pc_12345678"}
 	keys := &projectKeyStoreFixture{binding: binding}
-	auth, _ := NewDatabaseAuthenticator(keys)
-	h := &Handler{auth: auth}
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = keys.ResolveProjectAPIKey
+	h := &Handler{Dependencies: deps}
 	var source writeaudit.Source
 	var got bool
-	handler := agentsResponseHeaders(log.HTTPMiddleware(h.authenticateCaller(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := responseHeadersWithErrors(log.HTTPMiddleware(h.authenticateCaller(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		source, got = writeaudit.FromContext(r.Context())
 		w.WriteHeader(204)
-	}), true)))
+	}), true)), func(string) {})
 	for _, test := range []struct {
 		method, path string
 		present      bool

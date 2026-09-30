@@ -17,7 +17,6 @@ import (
 )
 
 type vaultResourceFixture struct {
-	ResourceStore
 	vault      store.Vault
 	err        error
 	tenant, id string
@@ -47,15 +46,12 @@ func (f *vaultResourceFixture) UpdateAgent(context.Context, string, string, stor
 func vaultResourceHandler(t *testing.T) (http.Handler, *vaultResourceFixture) {
 	t.Helper()
 	f := &vaultResourceFixture{vault: store.Vault{ID: uuid.NewString(), TenantID: uuid.NewString(), Metadata: map[string]string{}, CreatedAt: time.Unix(1700000000, 0)}}
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "vault-org", ProjectID: "vault-project", SubjectKind: "user", SubjectID: "vault-owner", TokenSHA256: runtimedevice.HashCredential("vault-key"), TenantID: f.vault.TenantID}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := NewHandler(f, auth, "fake_alpha")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return h, f
+	deps, fakes := testDependencies(t)
+	deps.Engine = "fake_alpha"
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "vault-org", ProjectID: "vault-project", SubjectKind: "user", SubjectID: "vault-owner", TokenSHA256: runtimedevice.HashCredential("vault-key"), TenantID: f.vault.TenantID}).ResolveProjectAPIKey
+	fakes.vaults.createVault, fakes.vaults.getVault, fakes.vaults.listVaults, fakes.vaults.deleteVault = f.CreateVault, f.GetVault, f.ListVaults, f.DeleteVault
+	fakes.agents.updateAgent = f.UpdateAgent
+	return newTestHandler(t, deps), f
 }
 
 func vaultRequest(h http.Handler, method, path, body string) *httptest.ResponseRecorder {

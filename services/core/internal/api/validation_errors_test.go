@@ -19,7 +19,6 @@ import (
 // validationStore counts every persistence attempt so rejected requests can
 // prove that validation ran before any write.
 type validationStore struct {
-	ResourceStore
 	writes int
 }
 
@@ -58,11 +57,21 @@ func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, _, id str
 	return store.EnvironmentTemplate{ID: id, NetworkAccess: input.NetworkAccess, AllowedDomains: input.AllowedDomains}, nil
 }
 
+// serve takes every write from the handler, and the Worker admits Sessions
+// with initial input into s. Session reads are unexpected.
+func (s *validationStore) serve(d *Dependencies, f *testFakes) {
+	d.Execution = f.execution()
+	f.admission.createSession = s.CreateSession
+	f.agents.createAgent, f.agents.updateAgent = s.CreateAgent, s.UpdateAgent
+	f.vaults.createVault = s.CreateVault
+	f.sessions.getSession, f.sessions.updateSessionMetadata = nil, s.UpdateSessionMetadata
+	f.environmentTemplates.createEnvironmentTemplate, f.environmentTemplates.updateEnvironmentTemplate = s.CreateEnvironmentTemplate, s.UpdateEnvironmentTemplate
+}
+
 func validationHandler(t *testing.T) (http.Handler, *validationStore) {
 	t.Helper()
 	s := &validationStore{}
-	h, recording, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
-	recording.ResourceStore = s
+	h, _, _ := testHandler(t, s.serve)
 	return h, s
 }
 

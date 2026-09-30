@@ -8,19 +8,17 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-// EnvironmentExecutorStore manages the executor credentials of a Project's
-// self_hosted Environments. The Project's principal is the credential's
-// execution principal; the Core key that authorizes the request is not.
-type EnvironmentExecutorStore interface {
-	ProjectExecutorCredentialState(context.Context, identity.Principal, string) (store.ExecutorCredentialState, error)
-	IssueProjectExecutorCredential(context.Context, identity.Principal, string, string, bool) (store.IssuedExecutorCredential, error)
-	RevokeProjectExecutorCredential(context.Context, identity.Principal, string, string) error
+// ExecutorConnections observes current executor authority and its actual
+// gateway peer. The observer runs after the Environments snapshot closes and
+// must recheck authority after inspecting the peer. Without a gateway peer, no
+// binding is connected.
+type ExecutorConnections interface {
+	ExecutorConnected(ctx context.Context, environmentID, credentialDigest string) (bool, error)
 }
 
 type EnvironmentExecutorCredentialRequest struct {
@@ -43,25 +41,14 @@ type ExecutorConnection struct {
 	LastSeenAt *time.Time `json:"last_seen_at" binding:"required" format:"date-time" extensions:"x-nullable"`
 }
 
-// WithExecutorConnections observes current authority and its actual gateway peer.
-// The observer runs after the store snapshot closes and must recheck authority
-// after inspecting the peer. Without an observer, no binding is called connected.
-func WithExecutorConnections(observe func(context.Context, string, string) (bool, error)) Option {
-	return func(h *Handler) { h.executorConnections = observe }
-}
-
 // registerExecutorCredentialRoutes adds executor credential issuance to the
 // Core-key-authenticated /core/v1 router.
 func (h *Handler) registerExecutorCredentialRoutes(r chi.Router) {
-	s, ok := h.store.(EnvironmentExecutorStore)
-	if !ok || h.projectKeys == nil {
-		return
-	}
 	const path = "/projects/{project_id}/environments/{environment_id}/executor-credentials"
 	r.Get("/projects/{project_id}/environments/{environment_id}/installation", h.getEnvironmentInstallation)
-	r.Get(path, func(w http.ResponseWriter, r *http.Request) { h.listExecutorCredentials(w, r, s) })
-	r.Post(path, func(w http.ResponseWriter, r *http.Request) { h.issueExecutorCredential(w, r, s) })
-	r.Delete(path+"/{key_id}", func(w http.ResponseWriter, r *http.Request) { h.revokeExecutorCredential(w, r, s) })
+	r.Get(path, h.listExecutorCredentials)
+	r.Post(path, h.issueExecutorCredential)
+	r.Delete(path+"/{key_id}", h.revokeExecutorCredential)
 }
 
 // @Summary List a self_hosted Environment's executor credentials
@@ -74,12 +61,12 @@ func (h *Handler) registerExecutorCredentialRoutes(r chi.Router) {
 // @Success 200 {object} api.ExecutorCredentialList
 // @Failure 401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials [get]
-func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request, s EnvironmentExecutorStore) {
+func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
 	if !ok {
 		return
 	}
-	state, err := s.ProjectExecutorCredentialState(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"))
+	state, err := h.Environments.ProjectExecutorCredentialState(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -88,8 +75,8 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 	observed := state.Connection
 	if observed.DeviceID != "" {
 		connection = ExecutorConnection{Status: "disconnected", BoundKeyID: observed.BoundKeyID, EnrolledAt: observed.EnrolledAt, LastSeenAt: observed.LastSeenAt}
-		if observed.EnvironmentStatus == "connected" && observed.CredentialHash != "" && h.executorConnections != nil {
-			connected, err := h.executorConnections(r.Context(), state.EnvironmentID, observed.CredentialHash)
+		if observed.EnvironmentStatus == "connected" && observed.CredentialHash != "" {
+			connected, err := h.ExecutorConnections.ExecutorConnected(r.Context(), state.EnvironmentID, observed.CredentialHash)
 			if err != nil && !errors.Is(err, store.ErrNotFound) && !errors.Is(err, store.ErrDeviceBindingConflict) {
 				writeStoreError(w, r, err)
 				return
@@ -114,7 +101,7 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 // @Success 201 {object} store.IssuedExecutorCredential
 // @Failure 400,401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials [post]
-func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request, s EnvironmentExecutorStore) {
+func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request) {
 	// Check order: request body (400), target (404), archived Project (409),
 	// then the key itself (409 exists, or 404 for rotating an unknown key).
 	raw, ok := readJSONBody(w, r)
@@ -131,7 +118,7 @@ func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	credential, err := s.IssueProjectExecutorCredential(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"), input.KeyID, input.Rotate)
+	credential, err := h.Environments.IssueProjectExecutorCredential(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"), input.KeyID, input.Rotate)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -149,7 +136,7 @@ func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request
 // @Success 204
 // @Failure 401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials/{key_id} [delete]
-func (h *Handler) revokeExecutorCredential(w http.ResponseWriter, r *http.Request, s EnvironmentExecutorStore) {
+func (h *Handler) revokeExecutorCredential(w http.ResponseWriter, r *http.Request) {
 	binding, ok := h.adminProjectScope(w, r)
 	if !ok {
 		return
@@ -159,7 +146,7 @@ func (h *Handler) revokeExecutorCredential(w http.ResponseWriter, r *http.Reques
 		writeStoreError(w, r, store.ErrNotFound)
 		return
 	}
-	if err := s.RevokeProjectExecutorCredential(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"), keyID); err != nil {
+	if err := h.Environments.RevokeProjectExecutorCredential(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"), keyID); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}

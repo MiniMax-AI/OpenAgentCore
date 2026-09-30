@@ -49,21 +49,33 @@ func (f *environmentCreationFixture) CreateSessionStream(ctx context.Context, te
 	return store.SessionCreation{Session: session, Created: true}, err
 }
 
-func environmentCreationHandler(t *testing.T, engine string, options ...Option) (http.Handler, *environmentCreationFixture) {
+// environmentCreationHandler serves Session creation and reads from a fresh
+// environmentCreationFixture, with engine as the default Harness and a
+// deployment model provider for every harness. Each configure func adjusts
+// the dependencies before the handler is built.
+func environmentCreationHandler(t *testing.T, engine string, configure ...func(*Dependencies, *testFakes)) (http.Handler, *environmentCreationFixture) {
 	t.Helper()
 	fixture := &environmentCreationFixture{}
-	auth, err := NewAuthenticator([]APIKey{{
+	deps, fakes := testDependencies(t)
+	deps.Engine = engine
+	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: uuid.NewString(),
-	}})
-	if err != nil {
-		t.Fatal(err)
+	}).ResolveProjectAPIKey
+	fixture.serve(fakes)
+	fakes.sessions.findSessionCreation, fakes.sessions.createSession, fakes.sessions.createSessionStream = fixture.FindSessionCreation, fixture.CreateSession, fixture.CreateSessionStream
+	fakes.modelProviders.deploymentModelProvider = fixtureDeploymentProvider
+	for _, c := range configure {
+		c(&deps, fakes)
 	}
-	handler, err := NewHandler(fixture, auth, engine, append([]Option{withFixtureDeploymentProvider()}, options...)...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return handler, fixture
+	return newTestHandler(t, deps), fixture
+}
+
+// selfHostedExecution enables Execution reporting environmentOrigin to
+// self-hosted Sessions.
+func selfHostedExecution(d *Dependencies, f *testFakes) {
+	d.Execution = f.execution()
+	d.Execution.ExecutorURL = environmentOrigin
 }
 
 func TestSelfHostedEmptyCreationAndStream(t *testing.T) {
@@ -72,7 +84,7 @@ func TestSelfHostedEmptyCreationAndStream(t *testing.T) {
 		for _, input := range []string{"", `,"input":null`} {
 			for _, stream := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/%s/stream=%t", capability, input, stream), func(t *testing.T) {
-					handler, fixture := environmentCreationHandler(t, "codex", WithExecution(&inputRecorder{}), WithEnvironmentRemoteURL(environmentOrigin))
+					handler, fixture := environmentCreationHandler(t, "codex", selfHostedExecution)
 					server := httptest.NewServer(handler)
 					defer server.Close()
 					ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -176,7 +188,7 @@ func TestSelfHostedCreationRejectsBeforePersistence(t *testing.T) {
 				if engine == "" {
 					engine = "codex"
 				}
-				handler, fixture := environmentCreationHandler(t, engine, WithExecution(&inputRecorder{}), WithEnvironmentRemoteURL(environmentOrigin))
+				handler, fixture := environmentCreationHandler(t, engine, selfHostedExecution)
 				environment := ""
 				if tc.environment != "" {
 					environment = `,"environment":` + tc.environment
@@ -196,28 +208,30 @@ func TestSelfHostedCreationRejectsBeforePersistence(t *testing.T) {
 	}
 }
 
+// Execution, which carries the executor URL, is required; a URL without
+// Execution cannot be configured (TestNewHandlerRejectsIncompleteDependencies).
 func TestSelfHostedCreationRequiresOperatorExecution(t *testing.T) {
-	for _, options := range [][]Option{nil, {WithExecution(&inputRecorder{})}, {WithEnvironmentRemoteURL(environmentOrigin)}} {
-		for _, stream := range []bool{false, true} {
-			handler, fixture := environmentCreationHandler(t, "codex", options...)
-			body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"stream":%t,%s}`, stream, fixtureSessionProvider)
-			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
-			request.Header.Set("Authorization", "Bearer key")
-			request.Header.Set("OpenAI-Beta", "agents=v1")
-			request.Header.Set("Content-Type", "application/json")
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, request)
-			var failure v1.ErrorResponse
-			if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
-				t.Fatal("operator prerequisites did not fail before persistence", response.Code, response.Body.String(), fixture.input)
-			}
+	for _, stream := range []bool{false, true} {
+		unavailable := 0
+		handler, fixture := environmentCreationHandler(t, "codex", func(_ *Dependencies, f *testFakes) { f.metrics.recordUnavailable = func() { unavailable++ } })
+		body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"stream":%t,%s}`, stream, fixtureSessionProvider)
+		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer key")
+		request.Header.Set("OpenAI-Beta", "agents=v1")
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		var failure v1.ErrorResponse
+		if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" || unavailable != 1 {
+			t.Fatal("operator prerequisites did not fail before persistence", response.Code, response.Body.String(), fixture.input)
 		}
 	}
 }
 
 func TestHostedCreationRequiresOperatorExecution(t *testing.T) {
 	for _, stream := range []bool{false, true} {
-		handler, fixture := environmentCreationHandler(t, "codex", WithExecution(&inputRecorder{}), WithEnvironmentRemoteURL(environmentOrigin))
+		unavailable := 0
+		handler, fixture := environmentCreationHandler(t, "codex", selfHostedExecution, func(_ *Dependencies, f *testFakes) { f.metrics.recordUnavailable = func() { unavailable++ } })
 		body := fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"stream":%t,"input":"Initialize the hosted execution."}`, stream)
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer key")
@@ -226,7 +240,7 @@ func TestHostedCreationRequiresOperatorExecution(t *testing.T) {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		var failure v1.ErrorResponse
-		if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" {
+		if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" || unavailable != 1 {
 			t.Fatal("hosted configuration bypassed operator prerequisites", response.Code, response.Body.String())
 		}
 	}

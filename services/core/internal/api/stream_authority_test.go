@@ -18,7 +18,7 @@ import (
 )
 
 type streamAuthorityResolver struct {
-	ProjectAPIKeyResolver
+	keys        fixtureKeyResolver
 	unavailable atomic.Bool
 	calls       atomic.Int32
 }
@@ -28,7 +28,7 @@ func (r *streamAuthorityResolver) ResolveProjectAPIKey(ctx context.Context, dige
 	if r.unavailable.Load() {
 		return store.ProjectAPIKeyBinding{}, errors.New("resolver unavailable")
 	}
-	return r.ProjectAPIKeyResolver.ResolveProjectAPIKey(ctx, digest)
+	return r.keys.ResolveProjectAPIKey(ctx, digest)
 }
 
 type busyAuthorityStream struct {
@@ -47,17 +47,13 @@ func (s *busyAuthorityStream) ListSessionEvents(ctx context.Context, _, _ string
 func TestBusyStreamRechecksAuthorityAndFailsClosed(t *testing.T) {
 	key := callerBinding()
 	key.TokenSHA256 = runtimedevice.HashCredential("stream")
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolver := &streamAuthorityResolver{ProjectAPIKeyResolver: auth.keys}
-	auth.keys = resolver
+	resolver := &streamAuthorityResolver{keys: projectKeys(t, key)}
 	f := &busyAuthorityStream{streamFixture: &streamFixture{session: store.Session{ID: uuid.NewString(), TenantID: key.TenantID, CreatedAt: time.Now(), Metadata: map[string]string{}, Configuration: json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[]},"environment":{"type":"none"}}`)}}}
-	h, err := NewHandler(f, auth, "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = resolver.ResolveProjectAPIKey
+	f.serve(fakes)
+	fakes.sessionEvents.listSessionEvents = f.ListSessionEvents
+	h := newTestHandler(t, deps)
 	server := httptest.NewServer(h)
 	defer server.Close()
 	ctx, cancel := context.WithCancel(t.Context())

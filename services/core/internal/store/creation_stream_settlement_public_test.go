@@ -11,15 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
-
-// storeAdmission admits creation input through the Store without a Worker, so
-// reservations stay pending until the test settles them.
-type storeAdmission struct{ *store.Store }
 
 type sseLines struct {
 	lines chan string
@@ -124,7 +119,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(s, auth, "codex", api.WithEnvironmentRemoteURL("https://offline-executor.example"), api.WithExecution(storeAdmission{s}))
+	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://offline-executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}

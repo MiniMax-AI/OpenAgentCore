@@ -33,7 +33,7 @@ func skillInput(t *testing.T, body string) json.RawMessage {
 
 func TestSkillReferenceParsingInheritanceAndReplacement(t *testing.T) {
 	lookup := &templateLookupStore{network: "enabled", skills: []store.EnvironmentSkill{{Metadata: store.EnvironmentSkillMetadata{Type: "skill_reference", SkillID: "skill-template", Version: "latest"}}}}
-	h := Handler{store: lookup}
+	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 	for _, fields := range []string{"", `,"skills":[]`, `,"skills":[{"type":"skill_reference","skill_id":"skill-override","version":"2"}]`} {
 		var decoded decodedSessionRequest
 		if err := json.Unmarshal([]byte(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"template"`+fields+`}}`), &decoded); err != nil {

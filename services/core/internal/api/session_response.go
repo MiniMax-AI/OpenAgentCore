@@ -8,11 +8,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-// WithEnvironmentRemoteURL uses the composition's validated daemon executor URL for self-hosted requests and output.
-func WithEnvironmentRemoteURL(origin string) Option {
-	return func(h *Handler) { h.executorURL = origin }
-}
-
 func sessionResponse(session store.Session, executorURL string) (v1.Session, error) {
 	var cfg configuration
 	if err := json.Unmarshal(session.Configuration, &cfg); err != nil || cfg.Agent.ID == "" || cfg.Agent.Model == "" {

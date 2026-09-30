@@ -53,13 +53,19 @@ func (f *artifactFixture) DeleteSessionArtifact(ctx context.Context, tenant, ses
 	return err
 }
 
+// wire serves the Artifacts area from f.
+func (f *artifactFixture) wire(_ *Dependencies, fakes *testFakes) {
+	fakes.artifacts.getSessionArtifact, fakes.artifacts.listSessionArtifacts = f.GetSessionArtifact, f.ListSessionArtifacts
+	fakes.artifacts.readSessionArtifact, fakes.artifacts.deleteSessionArtifact = f.ReadSessionArtifact, f.DeleteSessionArtifact
+}
+
 type artifactResponseRecorder struct{ *httptest.ResponseRecorder }
 
 func (*artifactResponseRecorder) SetWriteDeadline(time.Time) error { return nil }
 
 func TestSessionArtifactRoutesAndPublicProjection(t *testing.T) {
 	f := &artifactFixture{artifact: store.SessionArtifact{ID: "artifact", SessionID: "session", EnvironmentID: "environment", TurnID: "turn", Path: "/workspace/outputs/a.bin", SizeBytes: 3, CreatedAt: time.Unix(123, 456)}}
-	h, _, tenant := testHandler(t, WithSessionArtifacts(f))
+	h, _, tenant := testHandler(t, f.wire)
 	request := func(method, suffix, beta string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "/v1/agents/sessions/session/artifacts"+suffix, nil)
 		r.Header.Set("Authorization", "Bearer test-api-key")

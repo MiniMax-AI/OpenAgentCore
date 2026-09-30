@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -27,7 +26,7 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	}
 	deployment := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: "deployment-canary"}
 	defaultsCalls := 0
-	handler, err := api.NewHandler(st, auth, "codex", api.WithHarnesses([]string{"codex", "claude_sdk", "mcode"}), api.WithHostedEnvironments(), api.WithEnvironmentRemoteURL("wss://core.example/api/v1/agent-daemon/ws"), api.WithExecution(st), api.WithModelProviderDefaults(func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withHarnesses([]string{"codex", "claude_sdk", "mcode"}), modelProviderDefaults(st, func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
 		defaultsCalls++
 		copy := *deployment
 		return &store.DeploymentModelProviderSnapshot{Model: "fixture", Provider: &copy, Revision: uuid.New()}, nil

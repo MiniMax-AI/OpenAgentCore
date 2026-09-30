@@ -25,9 +25,6 @@ const sourceTransferTimeout = 5 * time.Minute
 // @Failure 400,401,413,500,503 {object} v1.ErrorResponse
 // @Router /files [post]
 func (h *Handler) createSourceFile(w http.ResponseWriter, r *http.Request) {
-	if !h.sourceFilesAvailable(w) {
-		return
-	}
 	deadline := time.Now().Add(sourceTransferTimeout)
 	controller := http.NewResponseController(w)
 	if controller.SetReadDeadline(deadline) != nil || controller.SetWriteDeadline(deadline) != nil {
@@ -37,7 +34,7 @@ func (h *Handler) createSourceFile(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithDeadline(r.Context(), deadline)
 	defer cancel()
 	r.Body = http.MaxBytesReader(w, r.Body, store.MaxSourceFileBytes+(64<<10))
-	file, err := h.sourceFiles.CreateSourceFile(ctx, tenantID(r), func(dst io.Writer) (store.SourceFileUpload, error) {
+	file, err := h.Files.CreateSourceFile(ctx, tenantID(r), func(dst io.Writer) (store.SourceFileUpload, error) {
 		return readSourceUpload(r, dst)
 	})
 	if err != nil {

@@ -15,15 +15,11 @@ import (
 func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {
 	st, _ := store.NewTestStore(t)
 	adminToken := uuid.NewString()
-	auth, err := api.NewDatabaseAuthenticator(st)
-	if err != nil {
-		t.Fatal(err)
-	}
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(adminToken)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := api.NewHandler(st, auth, "codex", api.WithProjectAPIKeys(st, admin))
+	h, err := publicHandler(t, st, nil, "codex", storeKeys(st), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}

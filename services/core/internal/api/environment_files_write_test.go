@@ -44,7 +44,7 @@ func TestEnvironmentFileCreateInlineDecodedLimit(t *testing.T) {
 
 func TestEnvironmentFileCreateSourceCopyKeepsDestinationBound(t *testing.T) {
 	sources := &sourceFilesFixture{}
-	h, f := environmentFileCreateHandler(t, WithSourceFiles(sources))
+	h, f := environmentFileCreateHandler(t, sources.wire)
 	data := bytes.Repeat([]byte{9}, 6<<20)
 	sources.tenant, sources.data = f.environment.TenantID, data
 	sources.file = store.SourceFile{ID: "file-" + uuid.NewString(), SizeBytes: int64(len(data)), CreatedAt: time.Unix(1, 0)}
@@ -57,7 +57,8 @@ func TestEnvironmentFileCreateSourceCopyKeepsDestinationBound(t *testing.T) {
 func TestEnvironmentFileCreateDestinationConflicts(t *testing.T) {
 	const conflict = "file path conflicts with an existing environment file"
 	const unsafe = "environment.files paths must not traverse symlinks or overwrite existing files"
-	h, f := environmentFileCreateHandler(t)
+	unavailable := 0
+	h, f := environmentFileCreateHandler(t, countEnvironmentFilesUnavailable(&unavailable))
 	body := `{"type":"inline","data":"YWJj","path":"/workspace/n1"}`
 	for _, tc := range []struct {
 		err     error
@@ -73,7 +74,7 @@ func TestEnvironmentFileCreateDestinationConflicts(t *testing.T) {
 		assertListQueryError(t, requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"), tc.code, nil, tc.message)
 	}
 	f.err = execution.ErrExecutionUnavailable
-	if w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"); w.Code != 503 {
-		t.Fatal("unknown outcome changed", w.Code, w.Body)
+	if w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"); w.Code != 503 || unavailable != 1 {
+		t.Fatal("unknown outcome changed", w.Code, w.Body, unavailable)
 	}
 }

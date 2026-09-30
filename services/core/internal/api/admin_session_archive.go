@@ -8,9 +8,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// WithSessionArchive binds the execution owner; management reads use the ordinary Store.
-func WithSessionArchive(archive func(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)) Option {
-	return func(h *Handler) { h.adminArchive = archive }
+// SessionArchive archives a managed Session through the execution owner;
+// SessionAdmin reads its archive state.
+type SessionArchive interface {
+	ArchiveManagedSession(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)
 }
 
 type AdminSessionArchiveRequest struct {
@@ -39,11 +40,11 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	if h.adminArchive == nil {
+	if h.Execution == nil {
 		writeStoreError(w, r, store.ErrEnvironmentUnavailable)
 		return
 	}
-	result, err := h.adminArchive(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
+	result, err := h.Execution.SessionArchive.ArchiveManagedSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -62,7 +63,7 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/archive [get]
 func (h *Handler) adminGetSessionArchive(w http.ResponseWriter, r *http.Request) {
-	result, err := h.adminManagement.GetManagedSessionArchive(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
+	result, err := h.SessionAdmin.GetManagedSessionArchive(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

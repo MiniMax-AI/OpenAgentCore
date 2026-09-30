@@ -12,8 +12,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
+// inputRecorder is the Worker's input admission. It records submitted inputs
+// and answers with err.
 type inputRecorder struct {
-	ResourceStore
 	tenant, session, key string
 	inputs               []store.Input
 	err                  error
@@ -24,9 +25,15 @@ func (s *inputRecorder) SubmitInputs(_ context.Context, tenant, session, key str
 	return nil, s.err
 }
 
+// admit enables Execution whose Worker records submitted inputs in s.
+func (s *inputRecorder) admit(d *Dependencies, f *testFakes) {
+	d.Execution = f.execution()
+	f.admission.submitInputs = s.SubmitInputs
+}
+
 func TestPublicInputAdmission(t *testing.T) {
 	recorder := &inputRecorder{}
-	h, _, tenant := testHandler(t, WithExecution(recorder))
+	h, _, tenant := testHandler(t, recorder.admit)
 	body := `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"First"}]},{"role":"user","content":[{"type":"input_text","text":"Second"}]}]},{"type":"agent.session.input.cancel"}]}`
 	r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session-id/events", strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer test-api-key")
@@ -62,7 +69,7 @@ func TestPublicInputRejectsUnsupportedOrMalformedBatch(t *testing.T) {
 		`{"events":[{"type":"agent.session.input.cancel"}]} {}`,
 	} {
 		recorder := &inputRecorder{}
-		h, _, _ := testHandler(t, WithExecution(recorder))
+		h, _, _ := testHandler(t, recorder.admit)
 		r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/id/events", strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer test-api-key")
 		r.Header.Set("OpenAI-Beta", "agents=v1")
@@ -87,7 +94,7 @@ func TestPublicInputWhitespaceTextAdmission(t *testing.T) {
 		`[{"role":"user","content":[{"type":"input_text","text":""},{"type":"input_text","text":"Reply only OK."}]}]`,
 	} {
 		recorder := &inputRecorder{}
-		h, _, _ := testHandler(t, WithExecution(recorder))
+		h, _, _ := testHandler(t, recorder.admit)
 		body := `{"events":[{"type":"agent.session.input.message","input":` + input + `}]}`
 		r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session-id/events", strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer test-api-key")
@@ -113,7 +120,7 @@ func TestPublicInputWhitespaceTextAdmission(t *testing.T) {
 		`{"events":[{"type":"agent.session.input.message","input":[]}]}`,
 	} {
 		recorder := &inputRecorder{}
-		h, _, _ := testHandler(t, WithExecution(recorder))
+		h, _, _ := testHandler(t, recorder.admit)
 		r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session-id/events", strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer test-api-key")
 		r.Header.Set("OpenAI-Beta", "agents=v1")

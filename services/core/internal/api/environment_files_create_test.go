@@ -35,24 +35,25 @@ func (f *environmentFileCreateFixture) WriteEnvironmentFile(_ context.Context, e
 	return int64(len(data)), f.err
 }
 
-func environmentFileCreateHandler(t *testing.T, extra ...Option) (http.Handler, *environmentFileCreateFixture) {
+// environmentFileCreateHandler serves a hosted Environment whose workspace
+// the execution Worker lists and writes.
+func environmentFileCreateHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (http.Handler, *environmentFileCreateFixture) {
 	t.Helper()
-	_, base := environmentFilesHandler(t, false)
+	base := newEnvironmentFilesFixture()
 	base.environment.Configuration = json.RawMessage(`{"type":"openai_hosted","network":{"access":"disabled"}}`)
 	f := &environmentFileCreateFixture{environmentFilesFixture: base}
-	auth, err := NewAuthenticator([]APIKey{
-		{OrganizationID: "org", ProjectID: "project", SubjectKind: "user", SubjectID: "caller", TokenSHA256: runtimedevice.HashCredential("files-key"), TenantID: f.environment.TenantID},
-		{OrganizationID: "org", ProjectID: "other", SubjectKind: "user", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential("other-key"), TenantID: uuid.NewString()},
-	})
-	if err != nil {
-		t.Fatal(err)
+	deps, fakes := testDependencies(t)
+	fakes.projects.resolveProjectAPIKey = projectKeys(t,
+		APIKey{OrganizationID: "org", ProjectID: "project", SubjectKind: "user", SubjectID: "caller", TokenSHA256: runtimedevice.HashCredential("files-key"), TenantID: f.environment.TenantID},
+		APIKey{OrganizationID: "org", ProjectID: "other", SubjectKind: "user", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential("other-key"), TenantID: uuid.NewString()},
+	).ResolveProjectAPIKey
+	fakes.environments.getEnvironment = f.GetEnvironment
+	deps.Execution = fakes.execution()
+	fakes.workspaces.readEnvironmentDirectory, fakes.workspaces.writeEnvironmentFile = f.ReadEnvironmentDirectory, f.WriteEnvironmentFile
+	for _, c := range configure {
+		c(&deps, fakes)
 	}
-	options := append([]Option{WithEnvironmentFileWriter(f), WithEnvironmentDirectoryReader(f)}, extra...)
-	h, err := NewHandler(f, auth, "codex", options...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return h, f
+	return newTestHandler(t, deps), f
 }
 
 func requestCreateEnvironmentFile(h http.Handler, id, body, key string) *httptest.ResponseRecorder {
@@ -113,7 +114,8 @@ func TestEnvironmentFileCreateRejectsInvalidUnionAndPath(t *testing.T) {
 
 func TestEnvironmentFileCreateAuthorityAndUncertainResults(t *testing.T) {
 	body := `{"type":"inline","data":"YWJj","path":"/workspace/a"}`
-	h, f := environmentFileCreateHandler(t)
+	unavailable := 0
+	h, f := environmentFileCreateHandler(t, countEnvironmentFilesUnavailable(&unavailable))
 	for _, key := range []string{"other-key", "invalid"} {
 		w := requestCreateEnvironmentFile(h, f.environment.ID, body, key)
 		if (key == "other-key" && w.Code != 404) || (key == "invalid" && w.Code != 401) || f.writes != 0 {
@@ -127,6 +129,9 @@ func TestEnvironmentFileCreateAuthorityAndUncertainResults(t *testing.T) {
 	f.err, f.wrongSize = nil, true
 	if w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"); w.Code != 503 {
 		t.Fatal("wrong byte count reported success", w.Code)
+	}
+	if unavailable != 2 {
+		t.Fatal("unavailability not counted", unavailable)
 	}
 	f.environment.Configuration = json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)
 	f.writes, f.wrongSize = 0, false

@@ -34,8 +34,8 @@ func (h *Handler) prepareSessionModelConfiguration(ctx context.Context, input *s
 	explicitModel := input.Agent != nil && input.Agent.Model != nil
 	explicitProvider := input.XAgentsCore != nil && input.XAgentsCore.ModelProvider != nil
 	needsModel := !explicitModel && saved == nil
-	if h.modelProviderDefaults != nil && v1.ModelProviderAllowed(input.Environment.Type, v1.ModelProviderSourceDeployment) && ((inherited == nil && !explicitProvider) || needsModel) {
-		input.deploymentDefaults, err = h.modelProviderDefaults(ctx, engine)
+	if v1.ModelProviderAllowed(input.Environment.Type, v1.ModelProviderSourceDeployment) && ((inherited == nil && !explicitProvider) || needsModel) {
+		input.deploymentDefaults, err = h.ModelProviders.DeploymentModelProvider(ctx, engine)
 		if err != nil {
 			var configurationError *v1.ModelProviderError
 			if errors.As(err, &configurationError) {

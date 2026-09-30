@@ -10,19 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// ModelProviderDefaults decrypts the deployment default model provider for a
-// harness at Session creation, before the encrypted Session snapshot is
-// committed. It returns nil when the harness has no default.
-type ModelProviderDefaults func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error)
-
-func WithModelProviderDefaults(resolve ModelProviderDefaults) Option {
-	return func(h *Handler) { h.modelProviderDefaults = resolve }
-}
-
-type agentDefaultsStore interface {
-	GetAgentForSession(context.Context, string, string, bool) (store.SavedAgent, *v1.ModelProviderInput, error)
-}
-
 func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input sessionRequest) (*v1.SavedAgent, *v1.ModelProviderInput, error) {
 	if input.AgentID == nil {
 		return nil, nil, nil
@@ -31,14 +18,7 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 		return nil, nil, store.ErrNotFound
 	}
 	inherit := input.XAgentsCore == nil || input.XAgentsCore.ModelProvider == nil
-	var resource store.SavedAgent
-	var provider *v1.ModelProviderInput
-	var err error
-	if source, ok := h.store.(agentDefaultsStore); ok {
-		resource, provider, err = source.GetAgentForSession(ctx, tenant, *input.AgentID, inherit)
-	} else {
-		resource, err = h.lookupAgent(ctx, tenant, *input.AgentID)
-	}
+	resource, provider, err := h.Agents.GetAgentForSession(ctx, tenant, *input.AgentID, inherit)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -91,7 +71,7 @@ func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequ
 		}
 	}
 	environment := input.Environment.Type
-	if provider == nil && h.modelProviderDefaults != nil && v1.ModelProviderAllowed(environment, v1.ModelProviderSourceDeployment) {
+	if provider == nil && v1.ModelProviderAllowed(environment, v1.ModelProviderSourceDeployment) {
 		snapshot := input.deploymentDefaults
 		if snapshot != nil {
 			provider, revision = snapshot.Provider, snapshot.Revision

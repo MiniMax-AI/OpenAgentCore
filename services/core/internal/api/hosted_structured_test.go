@@ -20,7 +20,7 @@ func TestHostedStructuredConfigurationQualification(t *testing.T) {
 		}
 		lookup := &templateLookupStore{network: "enabled", skills: template.Initialization.Skills,
 			plugins: template.Initialization.Plugins, directories: template.Initialization.CapabilityDirectories}
-		h := Handler{store: lookup}
+		h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 		for _, environment := range []string{
 			`{"type":"openai_hosted",` + fields + `}`,
 			`{"type":"openai_hosted","environment_template_id":"saved"}`,

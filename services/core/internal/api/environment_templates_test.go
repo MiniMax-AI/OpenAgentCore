@@ -35,7 +35,6 @@ func TestTemplateConfigurationRejectsUnqualifiedInputs(t *testing.T) {
 }
 
 type templateLookupStore struct {
-	ResourceStore
 	network     string
 	domains     []string
 	tenant      string
@@ -49,9 +48,17 @@ func (s *templateLookupStore) ResolveEnvironmentTemplate(_ context.Context, tena
 	return store.EnvironmentTemplate{ID: id, NetworkAccess: s.network, AllowedDomains: s.domains, Initialization: store.EnvironmentSetup{Skills: s.skills, Plugins: s.plugins, CapabilityDirectories: s.directories}}, nil, nil
 }
 
+// templateHandler serves Environment template lookups from resolve.
+func templateHandler(t *testing.T, resolve func(context.Context, string, string) (store.EnvironmentTemplate, []store.InitialFile, error)) Handler {
+	t.Helper()
+	deps, fakes := testDependencies(t)
+	fakes.environmentTemplates.resolveEnvironmentTemplate = resolve
+	return Handler{Dependencies: deps}
+}
+
 func TestTemplateResolutionAndCreationIntent(t *testing.T) {
 	lookup := &templateLookupStore{network: "disabled"}
-	h := Handler{store: lookup}
+	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 	request := func(raw string) sessionRequest {
 		t.Helper()
 		var decoded decodedSessionRequest

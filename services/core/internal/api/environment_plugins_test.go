@@ -80,7 +80,7 @@ func TestPluginsSharedParsingConfidentialMetadataAndOverrides(t *testing.T) {
 		t.Fatal("session response", err)
 	}
 	lookup := &templateLookupStore{network: "enabled", plugins: template.Initialization.Plugins, directories: template.Initialization.CapabilityDirectories}
-	h := Handler{store: lookup}
+	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 	for _, override := range []string{"", `,"plugins":null,"capability_directories":null`, `,"plugins":[],"capability_directories":[]`} {
 		if err = json.Unmarshal([]byte(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"template"`+override+`}}`), &decoded); err != nil {
 			t.Fatal(err)
