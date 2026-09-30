@@ -10,13 +10,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 	s := &store.Store{}
-	_, nameErr := s.CreateProject(context.Background(), managementProjectID, strings.Repeat("private-name", 20))
 	upperCapacityErr := s.UpdateRuntimeNode(context.Background(), managementProjectID, store.RuntimeNodeUpdate{Name: "node", MaxActive: 1000001, MaxRetained: 8})
 	capacityErr := s.UpdateRuntimeNode(context.Background(), managementProjectID, store.RuntimeNodeUpdate{Name: "node", MaxActive: 0})
 	_, resourceErr := store.SandboxSetupForSelection(managementProjectID, store.SandboxDeploymentSetupRequest{Provider: "docker", DeploymentSpec: sandbox.DeploymentSpec{}})
@@ -26,19 +26,24 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 		code, param               string
 		details                   map[string]any
 		publicMessage, publicCode string
+		write                     func(http.ResponseWriter, *http.Request, error)
 	}{
-		{&sandbox.ValidationError{Param: "resources", Message: "E2B template build resources are outside the supported sandbox limits; select another build"}, "invalid_sandbox_configuration", "resources", nil, "E2B template build resources are outside the supported sandbox limits; select another build", "invalid_sandbox_configuration"},
-		{nameErr, "invalid_name", "name", map[string]any{"max_length": float64(128)}, "Invalid resource identifier or request limits.", "invalid_request"},
-		{upperCapacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request"},
-		{capacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request"},
-		{resourceErr, "invalid_sandbox_configuration", "resources.cpus", map[string]any{"min": float64(1), "max": float64(255)}, "invalid sandbox configuration: cpus must be 1..255 and memory_mib must be 512..1048576", "invalid_sandbox_configuration"},
-		{runtimeErr, "invalid_sandbox_configuration", "runtime", nil, "invalid sandbox configuration: managed nodes require a pinned Runtime release", "invalid_sandbox_configuration"},
+		{&sandbox.ValidationError{Param: "resources", Message: "E2B template build resources are outside the supported sandbox limits; select another build"}, "invalid_sandbox_configuration", "resources", nil, "E2B template build resources are outside the supported sandbox limits; select another build", "invalid_sandbox_configuration", nil},
+		{&projects.NameError{MaxLength: projects.ProjectNameMaxLength}, "invalid_name", "name", map[string]any{"max_length": float64(128)}, "Invalid resource identifier or request limits.", "invalid_request", writeProjectsError},
+		{upperCapacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", nil},
+		{capacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", nil},
+		{resourceErr, "invalid_sandbox_configuration", "resources.cpus", map[string]any{"min": float64(1), "max": float64(255)}, "invalid sandbox configuration: cpus must be 1..255 and memory_mib must be 512..1048576", "invalid_sandbox_configuration", nil},
+		{runtimeErr, "invalid_sandbox_configuration", "runtime", nil, "invalid sandbox configuration: managed nodes require a pinned Runtime release", "invalid_sandbox_configuration", nil},
 	} {
 		if tc.err == nil {
 			t.Fatal("missing validator error")
 		}
+		write := tc.write
+		if write == nil {
+			write = func(w http.ResponseWriter, r *http.Request, err error) { writeStoreError(w, r, err) }
+		}
 		for _, core := range []bool{false, true} {
-			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeStoreError(w, r, fmt.Errorf("wrapped: %w", tc.err)) }))
+			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { write(w, r, fmt.Errorf("wrapped: %w", tc.err)) }))
 			if core {
 				handler = coreErrorResponses(handler)
 			}

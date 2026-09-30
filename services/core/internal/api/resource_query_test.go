@@ -94,10 +94,10 @@ func twoTenantHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)
 	t.Helper()
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t,
+	fakes.projectsReader.resolveAPIKey = projectKeys(t,
 		APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential("test-api-key"), TenantID: owner},
 		APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential("foreign-key"), TenantID: foreign},
-	).ResolveProjectAPIKey
+	).ResolveAPIKey
 	for _, c := range configure {
 		c(&deps, fakes)
 	}

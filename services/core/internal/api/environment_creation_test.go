@@ -58,10 +58,10 @@ func environmentCreationHandler(t *testing.T, engine string, configure ...func(*
 	fixture := &environmentCreationFixture{}
 	deps, fakes := testDependencies(t)
 	deps.Engine = engine
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: uuid.NewString(),
-	}).ResolveProjectAPIKey
+	}).ResolveAPIKey
 	fixture.serve(fakes)
 	fakes.sessions.findSessionCreation, fakes.sessions.createSession, fakes.sessions.createSessionStream = fixture.FindSessionCreation, fixture.CreateSession, fixture.CreateSessionStream
 	fakes.modelProviders.resolve = fixtureDeploymentProvider

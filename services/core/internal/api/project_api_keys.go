@@ -2,29 +2,34 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
 	"strconv"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-// Projects manages Projects and their API keys, and resolves a Project API key
-// digest to its current binding for authentication.
+// Projects runs the Project and API key administration use cases.
 type Projects interface {
-	CreateProject(context.Context, string, string) (store.Project, error)
-	GetProject(context.Context, string) (store.ProjectBinding, error)
-	ListProjects(context.Context, string, int, bool) (store.ProjectPage, error)
-	RenameProject(context.Context, string, string) (store.Project, error)
-	ArchiveProject(context.Context, string) (store.Project, error)
-	CreateProjectAPIKey(context.Context, string, string, string) (store.IssuedProjectAPIKey, error)
-	ListProjectAPIKeys(context.Context, string, string, int, bool) (store.ProjectAPIKeyPage, error)
-	RevokeProjectAPIKey(context.Context, string, string) error
-	ResolveProjectAPIKey(context.Context, string) (store.ProjectAPIKeyBinding, error)
+	CreateProject(context.Context, projects.CreateProject) (projects.Project, error)
+	RenameProject(context.Context, projects.RenameProject) (projects.Project, error)
+	ArchiveProject(context.Context, projects.ArchiveProject) (projects.Project, error)
+	CreateAPIKey(context.Context, projects.CreateAPIKey) (projects.IssuedAPIKey, error)
+	RevokeAPIKey(context.Context, projects.RevokeAPIKey) error
+}
+
+// ProjectsReader reads Projects and their API keys, and resolves a Project API
+// key digest to its current binding for authentication.
+type ProjectsReader interface {
+	GetProject(context.Context, string) (projects.Binding, error)
+	ListProjects(context.Context, projects.ListQuery) (projects.Page, error)
+	ListAPIKeys(context.Context, string, projects.ListQuery) (projects.KeyPage, error)
+	ResolveAPIKey(context.Context, [sha256.Size]byte) (projects.KeyBinding, error)
 }
 type ProjectRequest struct {
 	Name string `json:"name"`
@@ -42,11 +47,11 @@ func (h *Handler) registerProjectAPIKeyRoutes(r chi.Router) {
 	r.Post("/projects/{project_id}/keys", h.createProjectAPIKey)
 	r.Delete("/projects/{project_id}/keys/{key_id}", h.revokeProjectAPIKey)
 }
-func (h *Handler) adminProjectScope(w http.ResponseWriter, r *http.Request) (store.ProjectBinding, bool) {
-	p, err := h.Projects.GetProject(r.Context(), chi.URLParam(r, "project_id"))
+func (h *Handler) adminProjectScope(w http.ResponseWriter, r *http.Request) (projects.Binding, bool) {
+	p, err := h.ProjectsReader.GetProject(r.Context(), chi.URLParam(r, "project_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
-		return store.ProjectBinding{}, false
+		writeProjectsError(w, r, err)
+		return projects.Binding{}, false
 	}
 	setAdminAuditSource(r, p.Project.ID)
 	return p, true
@@ -60,29 +65,28 @@ func setAdminAuditSource(r *http.Request, projectID string) {
 	}
 	*r = *r.WithContext(adminaudit.WithSource(r.Context(), source))
 }
-func adminCatalogPage(r *http.Request) (string, int, bool, error) {
+func adminCatalogPage(r *http.Request) (projects.ListQuery, error) {
 	values := r.URL.Query()
-	limit := 20
-	ascending := false
+	query := projects.ListQuery{After: values.Get("after"), Limit: 20}
 	for _, name := range []string{"after", "limit", "order"} {
 		if len(values[name]) > 1 {
-			return "", 0, false, store.ErrInvalidInput
+			return query, projects.ErrInvalidInput
 		}
 	}
 	if raw, ok := values["limit"]; ok {
 		n, err := strconv.Atoi(raw[0])
-		if err != nil || n < 1 || n > 100 {
-			return "", 0, false, store.ErrInvalidInput
+		if err != nil {
+			return query, projects.ErrInvalidInput
 		}
-		limit = n
+		query.Limit = n
 	}
 	if raw, ok := values["order"]; ok {
 		if raw[0] != "asc" && raw[0] != "desc" {
-			return "", 0, false, store.ErrInvalidInput
+			return query, projects.ErrInvalidInput
 		}
-		ascending = raw[0] == "asc"
+		query.Ascending = raw[0] == "asc"
 	}
-	return values.Get("after"), limit, ascending, nil
+	return query, query.Validate()
 }
 
 // @Summary List Projects and active key counts
@@ -92,18 +96,18 @@ func adminCatalogPage(r *http.Request) (string, int, bool, error) {
 // @Param after query string false "Project ID cursor"
 // @Param limit query int false "Page size (1-100)"
 // @Param order query string false "asc or desc by Project ID"
-// @Success 200 {object} store.ProjectPage
+// @Success 200 {object} projects.Page
 // @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/projects [get]
 func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
-	after, limit, ascending, err := adminCatalogPage(r)
+	query, err := adminCatalogPage(r)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeProjectsError(w, r, err)
 		return
 	}
-	page, err := h.Projects.ListProjects(r.Context(), after, limit, ascending)
+	page, err := h.ProjectsReader.ListProjects(r.Context(), query)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeProjectsError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, page)
@@ -115,7 +119,7 @@ func (h *Handler) listProjects(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Param body body api.ProjectRequest true "Project display name"
-// @Success 201 {object} store.Project
+// @Success 201 {object} projects.Project
 // @Failure 400,401,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects [post]
 func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
@@ -125,14 +129,14 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	var input ProjectRequest
 	if decodeInputObject(raw, &input, "name") != nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 		return
 	}
 	id := uuid.NewString()
 	setAdminAuditSource(r, id)
-	p, err := h.Projects.CreateProject(r.Context(), id, input.Name)
+	p, err := h.Projects.CreateProject(r.Context(), projects.CreateProject{ID: id, Name: input.Name})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeProjectsError(w, r, err)
 		return
 	}
 	writeJSON(w, 201, p)
@@ -145,7 +149,7 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param project_id path string true "Project UUID"
 // @Param body body api.ProjectRequest true "Project display name"
-// @Success 200 {object} store.Project
+// @Success 200 {object} projects.Project
 // @Failure 400,401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id} [post]
 func (h *Handler) renameProject(w http.ResponseWriter, r *http.Request) {
@@ -159,12 +163,12 @@ func (h *Handler) renameProject(w http.ResponseWriter, r *http.Request) {
 	}
 	var input ProjectRequest
 	if decodeInputObject(raw, &input, "name") != nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 		return
 	}
-	p, err := h.Projects.RenameProject(r.Context(), binding.Project.ID, input.Name)
+	p, err := h.Projects.RenameProject(r.Context(), projects.RenameProject{ID: binding.Project.ID, Name: input.Name})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeProjectsError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, p)
@@ -175,7 +179,7 @@ func (h *Handler) renameProject(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Param project_id path string true "Project UUID"
-// @Success 200 {object} store.Project
+// @Success 200 {object} projects.Project
 // @Failure 401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/archive [post]
 func (h *Handler) archiveProject(w http.ResponseWriter, r *http.Request) {
@@ -183,9 +187,9 @@ func (h *Handler) archiveProject(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p, err := h.Projects.ArchiveProject(r.Context(), binding.Project.ID)
+	p, err := h.Projects.ArchiveProject(r.Context(), projects.ArchiveProject{ID: binding.Project.ID})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeProjectsError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, p)
@@ -199,7 +203,7 @@ func (h *Handler) archiveProject(w http.ResponseWriter, r *http.Request) {
 // @Param after query string false "Key ID cursor"
 // @Param limit query int false "Page size (1-100)"
 // @Param order query string false "asc or desc by key ID"
-// @Success 200 {object} store.ProjectAPIKeyPage
+// @Success 200 {object} projects.KeyPage
 // @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/keys [get]
 func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
@@ -207,14 +211,14 @@ func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	after, limit, ascending, err := adminCatalogPage(r)
+	query, err := adminCatalogPage(r)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeProjectsError(w, r, err)
 		return
 	}
-	page, err := h.Projects.ListProjectAPIKeys(r.Context(), binding.Project.ID, after, limit, ascending)
+	page, err := h.ProjectsReader.ListAPIKeys(r.Context(), binding.Project.ID, query)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeProjectsError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, page)
@@ -227,7 +231,7 @@ func (h *Handler) listProjectAPIKeys(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param project_id path string true "Project UUID"
 // @Param body body api.ProjectAPIKeyRequest true "Key display name"
-// @Success 201 {object} store.IssuedProjectAPIKey
+// @Success 201 {object} projects.IssuedAPIKey
 // @Failure 400,401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/keys [post]
 func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
@@ -241,12 +245,12 @@ func (h *Handler) createProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 	var input ProjectAPIKeyRequest
 	if decodeInputObject(raw, &input, "name") != nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 		return
 	}
-	key, err := h.Projects.CreateProjectAPIKey(r.Context(), binding.Project.ID, uuid.NewString(), input.Name)
+	key, err := h.Projects.CreateAPIKey(r.Context(), projects.CreateAPIKey{ProjectID: binding.Project.ID, ID: uuid.NewString(), Name: input.Name})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeProjectsError(w, r, err)
 		return
 	}
 	writeJSON(w, 201, key)
@@ -267,8 +271,8 @@ func (h *Handler) revokeProjectAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "key_id")
-	if err := h.Projects.RevokeProjectAPIKey(r.Context(), binding.Project.ID, id); err != nil {
-		writeStoreError(w, r, err)
+	if err := h.Projects.RevokeAPIKey(r.Context(), projects.RevokeAPIKey{ProjectID: binding.Project.ID, ID: id}); err != nil {
+		writeProjectsError(w, r, err)
 		return
 	}
 	writeJSON(w, 200, SandboxMutationResponse{ID: id, Deleted: true})

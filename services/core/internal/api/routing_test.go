@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -86,11 +87,11 @@ func routingFixture(t *testing.T) (http.Handler, *chi.Mux, *routingStore) {
 	t.Helper()
 	tenant := uuid.NewString()
 	keys := projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: "test-project", SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(routingKey), TenantID: tenant})
-	keys[runtimedevice.HashCredential(routingDerivedKey)] = keys[runtimedevice.HashCredential(routingKey)]
+	keys[sha256.Sum256([]byte(routingDerivedKey))] = keys[sha256.Sum256([]byte(routingKey))]
 	s := &routingStore{tenant: tenant, agent: agents.Agent{ID: uuid.NewString(), TenantID: tenant, Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"model":"fixture"}`), CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}}
 	deps, fakes := testDependencies(trapTB{t})
-	fakes.projects.resolveProjectAPIKey = keys.ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = keys.ResolveAPIKey
 	fakes.agentsReader.getAgent, fakes.agentsReader.listAgents, fakes.agents.update = s.GetAgent, s.ListAgents, s.Update
 	fakes.filesReader.get = func(context.Context, string, string) (files.File, error) {
 		return files.File{}, files.ErrNotFound

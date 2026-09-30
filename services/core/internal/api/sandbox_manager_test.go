@@ -16,7 +16,7 @@ import (
 func sandboxFakes(t testing.TB) (Dependencies, *testFakes) {
 	t.Helper()
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, callerBinding()).ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, callerBinding()).ResolveAPIKey
 	deps.CoreKeys = coreKeys(t, "administrator")
 	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()
 	return deps, fakes

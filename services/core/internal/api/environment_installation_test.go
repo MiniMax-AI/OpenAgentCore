@@ -35,7 +35,7 @@ func (f *installationFixture) ValidateEnvironmentInstallation(context.Context, s
 func TestSelfHostedCreationReturnsInstallationWithoutWebCredential(t *testing.T) {
 	f := &installationFixture{}
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}).ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}).ResolveAPIKey
 	fakes.sessions.findSessionCreation, fakes.sessions.createSession = f.FindSessionCreation, f.CreateSession
 	fakes.modelProviders.resolve = fixtureDeploymentProvider
 	fakes.environments.authorizeEnvironmentInstallation, fakes.environments.validateEnvironmentInstallation = f.AuthorizeEnvironmentInstallation, f.ValidateEnvironmentInstallation

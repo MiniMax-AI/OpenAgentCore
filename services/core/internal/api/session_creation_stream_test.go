@@ -143,10 +143,10 @@ func newCreationStreamHarness(t *testing.T) *creationStreamHarness {
 		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`),
 	}}}
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: tenant,
-	}).ResolveProjectAPIKey
+	}).ResolveAPIKey
 	fakes.sessions.getSession, fakes.sessions.findSessionCreation, fakes.sessions.auditSessionOperation = fixture.GetSession, fixture.FindSessionCreation, fixture.AuditSessionOperation
 	fakes.sessionEvents.sessionEventCursor, fakes.sessionEvents.sessionStreamSnapshot, fakes.sessionEvents.listSessionEvents = fixture.SessionEventCursor, fixture.SessionStreamSnapshot, fixture.ListSessionEvents
 	fakes.modelProviders.resolve = noDeploymentModelProvider

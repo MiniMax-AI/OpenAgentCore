@@ -22,12 +22,7 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	}
 	s := NewWithCredentialCipher(pool, cipher)
 	ctx := t.Context()
-	project := createTestProject(t, s)
-	binding, err := s.GetProject(ctx, project.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := binding.Principal
+	p := createTestProject(t, pool).Principal
 	input := environmentInput(uuid.NewString(), "self_hosted", "/workspace")
 	input.Creator = p.Subject()
 	session, err := s.CreateSession(ctx, p.TenantID, input)

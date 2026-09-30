@@ -78,7 +78,7 @@ func environmentFilesHandler(t *testing.T, enabled bool, configure ...func(*Depe
 	}
 	deps, fakes := testDependencies(t)
 	deps.Engine = "fake_alpha"
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, keys...).ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, keys...).ResolveAPIKey
 	fakes.environments.getEnvironment = f.GetEnvironment
 	if enabled {
 		deps.Execution = fakes.execution()

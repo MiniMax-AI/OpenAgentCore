@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -18,13 +19,13 @@ import (
 const managementProjectID = "22222222-2222-4222-8222-222222222222"
 
 // managementProject resolves managementProjectID to key's Project.
-func managementProject(key APIKey) func(context.Context, string) (store.ProjectBinding, error) {
+func managementProject(key APIKey) func(context.Context, string) (projects.Binding, error) {
 	principal := identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID, OrganizationID: key.OrganizationID, ProjectID: key.ProjectID}, SubjectKind: key.SubjectKind, SubjectID: key.SubjectID}
-	return func(_ context.Context, id string) (store.ProjectBinding, error) {
+	return func(_ context.Context, id string) (projects.Binding, error) {
 		if id != managementProjectID {
-			return store.ProjectBinding{}, store.ErrNotFound
+			return projects.Binding{}, projects.ErrNotFound
 		}
-		return store.ProjectBinding{Project: store.Project{ID: id, TenantID: principal.TenantID}, Principal: principal}, nil
+		return projects.Binding{Project: projects.Project{ID: id, TenantID: principal.TenantID}, Principal: principal}, nil
 	}
 }
 
@@ -33,8 +34,8 @@ func managementProject(key APIKey) func(context.Context, string) (store.ProjectB
 func managementFakes(t testing.TB, key APIKey) (Dependencies, *testFakes) {
 	t.Helper()
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, key).ResolveProjectAPIKey
-	fakes.projects.getProject = managementProject(key)
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
+	fakes.projectsReader.getProject = managementProject(key)
 	return deps, fakes
 }
 

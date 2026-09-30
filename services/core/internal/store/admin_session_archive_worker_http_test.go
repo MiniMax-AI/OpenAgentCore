@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
@@ -64,7 +65,8 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	}
 	projectID := uuid.NewString()
 	ctx := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-	project, err := s.CreateProject(ctx, projectID, "Archive HTTP fixture")
+	_, management := fixtureProjects(t, db)
+	project, err := management.CreateProject(ctx, projects.CreateProject{ID: projectID, Name: "Archive HTTP fixture"})
 	if err != nil {
 		t.Fatal(err)
 	}

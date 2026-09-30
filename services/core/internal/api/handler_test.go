@@ -64,7 +64,7 @@ func testHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (ht
 	tenant := uuid.NewString()
 	hash := sha256.Sum256([]byte("test-api-key"))
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: hex.EncodeToString(hash[:]), TenantID: tenant}).ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: hex.EncodeToString(hash[:]), TenantID: tenant}).ResolveAPIKey
 	s := &recordingStore{}
 	s.record(fakes)
 	fakes.modelProviders.resolve = noDeploymentModelProvider

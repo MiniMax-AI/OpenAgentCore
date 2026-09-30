@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -51,7 +52,8 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 			projectID := uuid.NewString()
 			auditCtx := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-			project, err := s.CreateProject(auditCtx, projectID, "Archive diagnosis")
+			_, management := fixtureProjects(t, db)
+			project, err := management.CreateProject(auditCtx, projects.CreateProject{ID: projectID, Name: "Archive diagnosis"})
 			if err != nil {
 				t.Fatal(err)
 			}

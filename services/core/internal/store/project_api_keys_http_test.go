@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -38,12 +38,12 @@ func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {
 	}
 	base := "/core/v1/projects"
 	response := call("POST", base, adminToken, `{"name":"Default"}`, 201)
-	var p store.Project
+	var p projects.Project
 	if json.Unmarshal(response.Body.Bytes(), &p) != nil || p.ID == "" {
 		t.Fatal("Project response invalid")
 	}
 	keysPath := base + "/" + p.ID + "/keys"
-	var first, second store.IssuedProjectAPIKey
+	var first, second projects.IssuedAPIKey
 	if json.Unmarshal(call("POST", keysPath, adminToken, `{"name":"first"}`, 201).Body.Bytes(), &first) != nil {
 		t.Fatal("key response invalid")
 	}

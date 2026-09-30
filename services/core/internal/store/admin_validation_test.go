@@ -2,27 +2,11 @@ package store
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
-
-func TestAdminNameValidationIdentityAndBoundaries(t *testing.T) {
-	for _, max := range []int{80, 128} {
-		for _, name := range []string{"", " ", "private-name\t", strings.Repeat("a", max+1), string([]byte{0xff})} {
-			_, err := adminResourceName(name, max)
-			var field *AdminValidationError
-			if !errors.As(err, &field) || !errors.Is(err, ErrInvalidInput) || field.Code != "invalid_name" || field.Param != "name" || field.MaxLength != max || err.Error() != fmt.Sprintf("%s: name must contain 1–%d characters without controls", ErrInvalidInput, max) {
-				t.Fatalf("wrong name error: %#v", err)
-			}
-		}
-		if got, err := adminResourceName(" "+strings.Repeat("界", max)+" ", max); err != nil || got != strings.Repeat("界", max) {
-			t.Fatal("rune/trim semantics changed", err)
-		}
-	}
-}
 
 func TestRuntimeNodeValidationIdentityAndPrecedence(t *testing.T) {
 	for _, tc := range []struct {

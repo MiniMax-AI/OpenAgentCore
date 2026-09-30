@@ -13,7 +13,7 @@ import (
 
 func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, callerBinding()).ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, callerBinding()).ResolveAPIKey
 	deps.CoreKeys = coreKeys(t, "administrator")
 	public, id := "https://core.example", "5b7c0f3e-0000-4000-8000-000000000001"
 	settings, err := ParseInstallationConfiguration([]byte(`{"path":"/home/alice/.oac/core/config.json","apply_command":"/home/alice/.oac/core/oac apply",

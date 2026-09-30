@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
@@ -13,7 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 )
 
 func projectBearerDigest(r *http.Request) ([sha256.Size]byte, bool) {
@@ -44,8 +43,8 @@ func (h *Handler) resolveCaller(r *http.Request) (identity.Principal, writeaudit
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	binding, err := h.Projects.ResolveProjectAPIKey(ctx, hex.EncodeToString(digest[:]))
-	if errors.Is(err, store.ErrNotFound) {
+	binding, err := h.ProjectsReader.ResolveAPIKey(ctx, digest)
+	if errors.Is(err, projects.ErrNotFound) {
 		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
 	if err != nil {

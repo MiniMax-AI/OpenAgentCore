@@ -109,7 +109,7 @@ func TestGetStreamEndsAfterHostedProvisioningFailure(t *testing.T) {
 			f.session.TenantID = uuid.NewString()
 			f.session.Environment.TenantID = f.session.TenantID
 			deps, fakes := testDependencies(t)
-			fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}).ResolveProjectAPIKey
+			fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}).ResolveAPIKey
 			f.serve(fakes)
 			h := newTestHandler(t, deps)
 			server := httptest.NewServer(h)

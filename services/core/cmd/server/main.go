@@ -45,9 +45,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -146,6 +148,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	projectStore := projectpg.New(units)
+	projectService, err := projects.NewService(projectStore)
+	if err != nil {
+		return err
+	}
 	installation, err := installationFacts(public)
 	if err != nil {
 		return err
@@ -222,7 +229,7 @@ func run() error {
 			return err
 		}
 	}
-	if err := api.ValidateCredentialSeparation(ctx, keyAdmin, executionStore); err != nil {
+	if err := api.ValidateCredentialSeparation(ctx, keyAdmin, projectStore); err != nil {
 		return err
 	}
 	historyResolver, err := historystoreresolver.NewResolver(executionStore)
@@ -338,7 +345,7 @@ func run() error {
 	deps := api.Dependencies{
 		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
 		Installation: installation, InstallationBindings: executionStore,
-		Projects:       executionStore,
+		Projects: projectService, ProjectsReader: projectStore,
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
 		Skills: skillService, SkillsReader: skillStore,

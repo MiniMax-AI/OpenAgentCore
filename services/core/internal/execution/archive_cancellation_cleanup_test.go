@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
@@ -63,7 +66,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 	}{{"Kill_no_delivery", false, false}, {"KillCompute_no_delivery", true, false}, {"Kill_live_delivery", false, true}, {"KillCompute_live_delivery", true, true}} {
 		t.Run(scenario.name, func(t *testing.T) {
 			checkpoint := scenario.checkpoint
-			s, leased := resetManagerStore(t)
+			s, leased, pool := resetManagerStoreDB(t, nil)
 			writer := leased.Store
 			installation := uuid.NewString()
 			if err := writer.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
@@ -77,7 +80,11 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			}
 			projectID := uuid.NewString()
 			audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-			project, err := s.CreateProject(audit, projectID, "Cleanup diagnosis")
+			management, err := projects.NewService(projectpg.New(pgunit.NewPool(pool)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			project, err := management.CreateProject(audit, projects.CreateProject{ID: projectID, Name: "Cleanup diagnosis"})
 			if err != nil {
 				t.Fatal(err)
 			}

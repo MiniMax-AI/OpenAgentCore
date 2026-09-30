@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -31,11 +32,11 @@ const adminRuntimeObservationsPath = "/core/v1/sandbox/runtime-observations"
 
 // adminRuntimeFixture serves the administrator observation list over one
 // Project per tenant and the given Session targets.
-func adminRuntimeFixture(t *testing.T, projects []store.Project, targets []store.AdminRuntimeTarget, service RuntimeObservations) (http.Handler, *adminRuntimeTargets) {
+func adminRuntimeFixture(t *testing.T, catalog []projects.Project, targets []store.AdminRuntimeTarget, service RuntimeObservations) (http.Handler, *adminRuntimeTargets) {
 	t.Helper()
 	deps, fakes := managementFakes(t, callerBinding())
-	fakes.projects.listProjects = func(context.Context, string, int, bool) (store.ProjectPage, error) {
-		return store.ProjectPage{Data: projects}, nil
+	fakes.projectsReader.listProjects = func(context.Context, projects.ListQuery) (projects.Page, error) {
+		return projects.Page{Data: catalog}, nil
 	}
 	management := &adminRuntimeTargets{page: store.AdminRuntimeTargetPage{Data: targets, HasMore: true}}
 	fakes.admin.listAdminRuntimeTargets = management.ListAdminRuntimeTargets
@@ -71,10 +72,10 @@ func unsupportedObservation(session string, at time.Time) runtimeobs.Observation
 
 func TestAdminRuntimeObservationListKeepsTargetOrderAndProjects(t *testing.T) {
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
-	projects := []store.Project{{ID: uuid.NewString(), TenantID: uuid.NewString()}, {ID: uuid.NewString(), TenantID: uuid.NewString()}}
+	catalog := []projects.Project{{ID: uuid.NewString(), TenantID: uuid.NewString()}, {ID: uuid.NewString(), TenantID: uuid.NewString()}}
 	var targets []store.AdminRuntimeTarget
 	for index := range 3 {
-		targets = append(targets, store.AdminRuntimeTarget{SessionID: uuid.NewString(), TenantID: projects[index%2].TenantID})
+		targets = append(targets, store.AdminRuntimeTarget{SessionID: uuid.NewString(), TenantID: catalog[index%2].TenantID})
 	}
 	service := runtimeObservationServiceFunc(func(_ context.Context, tenant, session string) (runtimeobs.Observation, error) {
 		if !slices.Contains(targets, store.AdminRuntimeTarget{SessionID: session, TenantID: tenant}) {
@@ -82,21 +83,21 @@ func TestAdminRuntimeObservationListKeepsTargetOrderAndProjects(t *testing.T) {
 		}
 		return unsupportedObservation(session, now), nil
 	})
-	handler, management := adminRuntimeFixture(t, projects, targets, service)
+	handler, management := adminRuntimeFixture(t, catalog, targets, service)
 
 	response := runtimeObservationRequest(handler, adminRuntimeObservationsPath+"?after=cursor&limit=3&order=asc")
 	var page AdminRuntimeObservationList
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil {
 		t.Fatalf("list returned %d: %s", response.Code, response.Body)
 	}
-	if !slices.Equal(management.tenants, []string{projects[0].TenantID, projects[1].TenantID}) || management.after != "cursor" || management.limit != 3 || !management.ascending {
+	if !slices.Equal(management.tenants, []string{catalog[0].TenantID, catalog[1].TenantID}) || management.after != "cursor" || management.limit != 3 || !management.ascending {
 		t.Fatalf("pagination binding was not preserved: %+v", management)
 	}
 	if len(page.Data) != len(targets) || !page.HasMore || page.FirstID == nil || *page.FirstID != targets[0].SessionID || page.LastID == nil || *page.LastID != targets[2].SessionID {
 		t.Fatalf("invalid page: %s", response.Body)
 	}
 	for index, item := range page.Data {
-		if item.Observation.ID != targets[index].SessionID || item.ProjectID != projects[index%2].ID {
+		if item.Observation.ID != targets[index].SessionID || item.ProjectID != catalog[index%2].ID {
 			t.Fatalf("concurrent collection reordered or mislabelled the page: %s", response.Body)
 		}
 	}
@@ -105,7 +106,7 @@ func TestAdminRuntimeObservationListKeepsTargetOrderAndProjects(t *testing.T) {
 // The page is read in one batch with the shared concurrency and per-source bounds.
 func TestAdminRuntimeObservationListBoundsCollection(t *testing.T) {
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
-	project := store.Project{ID: uuid.NewString(), TenantID: uuid.NewString()}
+	project := projects.Project{ID: uuid.NewString(), TenantID: uuid.NewString()}
 	var targets []store.AdminRuntimeTarget
 	for range 20 {
 		targets = append(targets, store.AdminRuntimeTarget{SessionID: uuid.NewString(), TenantID: project.TenantID})
@@ -114,7 +115,7 @@ func TestAdminRuntimeObservationListBoundsCollection(t *testing.T) {
 	service := runtimeObservationPageRecorder{options: &options, runtimeObservationServiceFunc: func(_ context.Context, _, session string) (runtimeobs.Observation, error) {
 		return unsupportedObservation(session, now), nil
 	}}
-	handler, _ := adminRuntimeFixture(t, []store.Project{project}, targets, service)
+	handler, _ := adminRuntimeFixture(t, []projects.Project{project}, targets, service)
 	if response := runtimeObservationRequest(handler, adminRuntimeObservationsPath+"?limit=20"); response.Code != http.StatusOK {
 		t.Fatalf("list returned %d: %s", response.Code, response.Body)
 	}
@@ -125,7 +126,7 @@ func TestAdminRuntimeObservationListBoundsCollection(t *testing.T) {
 
 func TestAdminRuntimeObservationListRejectsWholePageOnIntegrityFailure(t *testing.T) {
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
-	project := store.Project{ID: uuid.NewString(), TenantID: uuid.NewString()}
+	project := projects.Project{ID: uuid.NewString(), TenantID: uuid.NewString()}
 	valid, invalid := uuid.NewString(), uuid.NewString()
 	service := runtimeObservationServiceFunc(func(_ context.Context, _, session string) (runtimeobs.Observation, error) {
 		if session == invalid {
@@ -133,7 +134,7 @@ func TestAdminRuntimeObservationListRejectsWholePageOnIntegrityFailure(t *testin
 		}
 		return unsupportedObservation(session, now), nil
 	})
-	handler, _ := adminRuntimeFixture(t, []store.Project{project}, []store.AdminRuntimeTarget{{SessionID: valid, TenantID: project.TenantID}, {SessionID: invalid, TenantID: project.TenantID}}, service)
+	handler, _ := adminRuntimeFixture(t, []projects.Project{project}, []store.AdminRuntimeTarget{{SessionID: valid, TenantID: project.TenantID}, {SessionID: invalid, TenantID: project.TenantID}}, service)
 
 	response := runtimeObservationRequest(handler, adminRuntimeObservationsPath+"?limit=2")
 	var envelope struct {
