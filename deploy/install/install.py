@@ -610,15 +610,16 @@ def finish(root, bundle, manifest, fresh=False, selection=None, moved=()):
             raise
         # The installer removes what it created and says how to retry.
         raise InstallError(f"The services did not start: {error.cause}") from None
-    if fresh:
-        # The first start finished: from now on the installation is kept whatever fails.
-        oac_cli.save_state(root, dict(oac_cli.load_state(root), complete=True))
     config = oac_cli.load_config(root)
     mode = config["mode"]
     if mode == "web-only":
         step("Checking Core connection and authentication")
     if mode == "web-only" and oac_cli.paired_core(root, config)[0] != 200:
-        raise InstallError("Core key authentication failed. Inspect secrets/core.key and web.core_url; no model was called")
+        where = "--core-key-file and the Core URL" if fresh else "secrets/core.key and web.core_url"
+        raise InstallError(f"Core key authentication failed. Inspect {where}; no model was called")
+    if fresh:
+        # The first start finished, Web-only reaching its Core with the key: from now on the installation is kept.
+        oac_cli.save_state(root, dict(oac_cli.load_state(root), complete=True))
     deployment = failure = None
     if selection:
         step("Configuring sandbox backend")
