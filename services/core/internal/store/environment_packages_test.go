@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 )
 
@@ -27,7 +28,7 @@ func TestStoredSystemPackagesRejected(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var output EnvironmentSetup
+		var output environmentconfig.Setup
 		if err := s.openEnvironmentSetup(tenant, "session", session, "initialization", encrypted, &output); err == nil {
 			t.Fatal("snapshot silently ignored removed system packages", value)
 		}

@@ -16,6 +16,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -50,10 +51,10 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			}
 			s := store.NewWithCredentialCipher(pool, cipher)
 			tenant := uuid.NewString()
-			input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: []store.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte("first")}, {Type: "inline", Path: "/workspace/b", Data: []byte("second")}}}
+			input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte("first")}, {Type: "inline", Path: "/workspace/b", Data: []byte("second")}}}
 			if setupOnly {
 				input.InitialFiles = nil
-				input.Initialization = store.EnvironmentSetup{Env: map[string]string{"VALUE": "private"}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}}, Commands: []store.SetupCommand{{Command: "touch first"}, {Command: "test -f first"}}}
+				input.Initialization = environmentconfig.Setup{Env: map[string]string{"VALUE": "private"}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}}, Commands: []environmentconfig.SetupCommand{{Command: "touch first"}, {Command: "test -f first"}}}
 				expectedSteps = 4
 			}
 			session, err := s.CreateSession(t.Context(), tenant, input)
@@ -156,8 +157,8 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	tenant := uuid.NewString()
 	fileBody := bytes.Repeat([]byte("bounded bytes"), 12000)
 	session, environment := hostedFailureSession(t, s, tenant, store.CreateSessionInput{
-		InitialFiles:   []store.InitialFile{{Type: "inline", Path: "/workspace/first", Data: fileBody}},
-		Initialization: store.EnvironmentSetup{Skills: []store.EnvironmentSkill{hostedFailureSkill(t)}, Plugins: []store.EnvironmentPlugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "A plugin."}, Archive: archive.Bytes()}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}, Python: []string{"packaging==24.2"}}, Commands: []store.SetupCommand{{Command: "read installed bundles and create directory"}}, CapabilityDirectories: []string{"/workspace/generated"}},
+		InitialFiles:   []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/first", Data: fileBody}},
+		Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{hostedFailureSkill(t)}, Plugins: []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "A plugin."}, Archive: archive.Bytes()}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}, Python: []string{"packaging==24.2"}}, Commands: []environmentconfig.SetupCommand{{Command: "read installed bundles and create directory"}}, CapabilityDirectories: []string{"/workspace/generated"}},
 	})
 	provider := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
 	var actions []string

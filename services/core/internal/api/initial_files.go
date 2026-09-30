@@ -4,10 +4,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func decodeInitialFiles(raw json.RawMessage) ([]store.InitialFile, error) {
+func decodeInitialFiles(raw json.RawMessage) ([]environmentconfig.InitialFile, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
@@ -15,7 +16,7 @@ func decodeInitialFiles(raw json.RawMessage) ([]store.InitialFile, error) {
 	if json.Unmarshal(raw, &entries) != nil || len(entries) > 50 {
 		return nil, store.ErrInvalidInput
 	}
-	files := make([]store.InitialFile, 0, len(entries))
+	files := make([]environmentconfig.InitialFile, 0, len(entries))
 	for _, entry := range entries {
 		var in struct {
 			Type   string  `json:"type"`
@@ -28,7 +29,7 @@ func decodeInitialFiles(raw json.RawMessage) ([]store.InitialFile, error) {
 		}
 		var fields map[string]json.RawMessage
 		_ = json.Unmarshal(entry, &fields)
-		f := store.InitialFile{Type: in.Type, Path: in.Path}
+		f := environmentconfig.InitialFile{Type: in.Type, Path: in.Path}
 		switch in.Type {
 		case "inline":
 			if _, exists := fields["file_id"]; exists || in.Data == nil || len(*in.Data) > base64.StdEncoding.EncodedLen(5<<20) {
@@ -49,23 +50,14 @@ func decodeInitialFiles(raw json.RawMessage) ([]store.InitialFile, error) {
 		}
 		files = append(files, f)
 	}
-	return files, store.ValidateInitialFiles(files)
+	return files, environmentconfig.ValidateInitialFiles(files)
 }
 
-func initialFileResponse(files []store.InitialFile) []json.RawMessage {
-	metadata := make([]store.InitialFileMetadata, 0, len(files))
-	for _, file := range files {
-		m := store.InitialFileMetadata{Type: file.Type, Path: file.Path, FileID: file.FileID}
-		if file.Type == "inline" {
-			size := int64(len(file.Data))
-			m.SizeBytes = &size
-		}
-		metadata = append(metadata, m)
-	}
-	return templateFileResponse(metadata)
+func initialFileResponse(files []environmentconfig.InitialFile) []json.RawMessage {
+	return templateFileResponse(environmentconfig.InitialFilesMetadata(files))
 }
 
-func templateFileResponse(files []store.InitialFileMetadata) []json.RawMessage {
+func templateFileResponse(files []environmentconfig.InitialFileMetadata) []json.RawMessage {
 	result := make([]json.RawMessage, 0, len(files))
 	for _, file := range files {
 		body, _ := json.Marshal(file)

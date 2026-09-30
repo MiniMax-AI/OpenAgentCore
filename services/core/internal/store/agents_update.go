@@ -8,6 +8,8 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -39,19 +41,19 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 	if len(raw) > 512*1024 {
 		return SavedAgent{}, ErrInvalidInput
 	}
-	raw, err = canonicalJSONObject(raw)
+	raw, err = jsonobject.Normalize(raw)
 	if err != nil {
-		return SavedAgent{}, err
+		return SavedAgent{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	var patch map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &patch); err != nil {
 		return SavedAgent{}, err
 	}
-	var metadata []byte
+	var encodedMetadata []byte
 	if input.Metadata != nil {
-		metadata, err = encodeMetadata(*input.Metadata)
+		encodedMetadata, err = metadata.Encode(*input.Metadata)
 		if err != nil {
-			return SavedAgent{}, err
+			return SavedAgent{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 		}
 	}
 	var updated SavedAgent
@@ -75,9 +77,9 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 		if err != nil {
 			return err
 		}
-		merged, err = canonicalJSONObject(merged)
+		merged, err = jsonobject.Normalize(merged)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: %w", ErrInvalidInput, err)
 		}
 		if len(merged) > 512*1024 {
 			return ErrInvalidInput
@@ -91,9 +93,9 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 			}
 		}
 		if input.Metadata == nil {
-			metadata = row.Metadata
+			encodedMetadata = row.Metadata
 		}
-		row, err = q.UpdateAgent(ctx, sqlc.UpdateAgentParams{TenantID: tenant, ID: id, Configuration: merged, Metadata: metadata})
+		row, err = q.UpdateAgent(ctx, sqlc.UpdateAgentParams{TenantID: tenant, ID: id, Configuration: merged, Metadata: encodedMetadata})
 		if err != nil {
 			return err
 		}

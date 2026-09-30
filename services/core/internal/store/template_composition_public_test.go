@@ -14,6 +14,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -81,14 +82,14 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	// A second handler/Store exercises reopened persistence, not an OS process restart.
 	for label, id := range receipt.Sessions {
 		env := map[string]string{"TEMPLATE_ONLY": marker + "-template-env", "SHARED": marker + "-template-shared"}
-		commands := []store.SetupCommand{{Command: "printf " + marker + "-template-command", CWD: "/workspace"}}
+		commands := []environmentconfig.SetupCommand{{Command: "printf " + marker + "-template-command", CWD: "/workspace"}}
 		packages := v1.EnvironmentPackages{Python: []string{"packaging==25.0"}, NPM: []string{"semver@7.7.2"}}
 		paths := []string{"/workspace/template-only.txt", "/workspace/overlap.txt"}
 		contents := []string{marker + "-template-file", marker + "-source"}
 		switch label {
 		case "populated":
 			env["SHARED"], env["INLINE_ONLY"] = marker+"-inline-shared", marker+"-inline-env"
-			commands = []store.SetupCommand{{Command: "printf " + marker + "-inline-one"}, {Command: "printf " + marker + "-inline-two", CWD: "/workspace"}}
+			commands = []environmentconfig.SetupCommand{{Command: "printf " + marker + "-inline-one"}, {Command: "printf " + marker + "-inline-two", CWD: "/workspace"}}
 			packages.Python, packages.NPM = []string{"idna==3.10"}, []string{}
 			paths = []string{"/workspace/overlap.txt", "/workspace/selected-source.txt"}
 			contents = []string{marker + "-inline-file", marker + "-source"}

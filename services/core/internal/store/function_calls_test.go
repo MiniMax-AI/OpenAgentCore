@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/google/uuid"
 )
 
@@ -64,8 +65,8 @@ func TestFunctionCallsPersistCompleteResultsAndReceipts(t *testing.T) {
 		if err != nil || row.Applied || row.ExecutorCallID != "native-"+id || !strings.Contains(string(row.Arguments), "9007199254740993") {
 			t.Fatal(row, err)
 		}
-		normalized, err := canonicalJSONObject(row.Result)
-		wanted, _ := canonicalJSONObject(json.RawMessage(expected))
+		normalized, err := jsonobject.Normalize(row.Result)
+		wanted, _ := jsonobject.Normalize(json.RawMessage(expected))
 		if err != nil || string(normalized) != string(wanted) {
 			t.Fatal("result changed", string(row.Result), err)
 		}

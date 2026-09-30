@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -34,7 +35,7 @@ func (operation runtimeSetupOperation) provisioningFailure(exitCode int) store.P
 	return store.ProvisioningFailure{}
 }
 
-func setupOperations(setup store.EnvironmentSetup) []runtimeSetupOperation {
+func setupOperations(setup environmentconfig.Setup) []runtimeSetupOperation {
 	if setup.Empty() {
 		return nil
 	}
@@ -97,8 +98,8 @@ func runRuntimeSetup(ctx context.Context, peer runtimePreparer, identity agentca
 	return errors.New("environment initialization operation unconfirmed")
 }
 
-func installInitialFile(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, file store.InitialFileMetadata, body []byte) error {
-	if file.SizeBytes == nil || *file.SizeBytes != int64(len(body)) || len(body) > store.MaxInitialFileBytes {
+func installInitialFile(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, file environmentconfig.InitialFileMetadata, body []byte) error {
+	if file.SizeBytes == nil || *file.SizeBytes != int64(len(body)) || len(body) > environmentconfig.MaxInitialFileBytes {
 		return errors.New("environment initialization request unavailable")
 	}
 	return runRuntimeSetup(ctx, peer, identity, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: file.Path}}, Data: body})

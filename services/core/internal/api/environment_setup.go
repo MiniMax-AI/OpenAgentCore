@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -23,8 +24,8 @@ func rejectSystemPackages(raw json.RawMessage) error {
 	return nil
 }
 
-func decodeEnvironmentSetup(fields map[string]json.RawMessage) (store.EnvironmentSetup, error) {
-	var result store.EnvironmentSetup
+func decodeEnvironmentSetup(fields map[string]json.RawMessage) (environmentconfig.Setup, error) {
+	var result environmentconfig.Setup
 	if err := rejectSystemPackages(fields["packages"]); err != nil {
 		return result, err
 	}
@@ -54,7 +55,7 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (store.Environmen
 			if decodeInputObject(command, &input, "command", "cwd") != nil || input.Command == nil {
 				return result, store.ErrInvalidInput
 			}
-			step := store.SetupCommand{Command: *input.Command}
+			step := environmentconfig.SetupCommand{Command: *input.Command}
 			if input.CWD != nil {
 				if *input.CWD == "" {
 					return result, store.ErrInvalidInput
@@ -113,7 +114,7 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (store.Environmen
 }
 
 func packageMetadata(packages *v1.EnvironmentPackages) v1.EnvironmentPackagesResponse {
-	value := store.EnvironmentSetup{}
+	value := environmentconfig.Setup{}
 	if packages != nil {
 		value.Packages = *packages
 	}

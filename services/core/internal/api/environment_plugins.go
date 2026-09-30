@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func decodeEnvironmentPlugins(raw json.RawMessage) ([]store.EnvironmentPlugin, error) {
+func decodeEnvironmentPlugins(raw json.RawMessage) ([]environmentconfig.Plugin, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
@@ -15,7 +16,7 @@ func decodeEnvironmentPlugins(raw json.RawMessage) ([]store.EnvironmentPlugin, e
 	if json.Unmarshal(raw, &entries) != nil || len(entries) > 50 {
 		return nil, store.ErrInvalidInput
 	}
-	result := make([]store.EnvironmentPlugin, 0, len(entries))
+	result := make([]environmentconfig.Plugin, 0, len(entries))
 	for _, entry := range entries {
 		var input struct {
 			Type        string          `json:"type"`
@@ -30,9 +31,9 @@ func decodeEnvironmentPlugins(raw json.RawMessage) ([]store.EnvironmentPlugin, e
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, store.EnvironmentPlugin{Metadata: agentplugin.Metadata{Type: input.Type, Name: input.Name, Description: input.Description}, Archive: body})
+		result = append(result, environmentconfig.Plugin{Metadata: agentplugin.Metadata{Type: input.Type, Name: input.Name, Description: input.Description}, Archive: body})
 	}
-	return result, store.ValidateEnvironmentPlugins(result)
+	return result, environmentconfig.ValidatePlugins(result)
 }
 
 func pluginResponse(plugins []agentplugin.Metadata) []json.RawMessage {

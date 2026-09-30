@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -22,9 +24,9 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 	if !terminalStatus(status) || len(outcome) > 512*1024 || len(nativeID) > 512 || appliedThrough < 0 {
 		return Turn{}, ErrInvalidInput
 	}
-	outcome, err = canonicalJSONObject(outcome)
+	outcome, err = jsonobject.Normalize(outcome)
 	if err != nil {
-		return Turn{}, err
+		return Turn{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	var row sqlc.Turn
 	err = s.withSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {

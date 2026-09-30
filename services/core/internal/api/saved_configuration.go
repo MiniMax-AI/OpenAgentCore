@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -26,11 +27,11 @@ func resolveSavedFields(input v1.CreateAgentRequest) (store.CreateAgentInput, er
 			return store.CreateAgentInput{}, &fieldError{param: "name", message: fmt.Sprintf("Invalid 'name': string too long. Expected a string with maximum length 128, but got a string with length %d instead.", length)}
 		}
 	}
-	metadata, err := stringMetadata(input.Metadata)
+	values, err := stringMetadata(input.Metadata)
 	if err != nil {
 		return store.CreateAgentInput{}, err
 	}
-	if err := validateMetadata(metadata); err != nil {
+	if err := metadataFieldError(metadata.Validate(values)); err != nil {
 		return store.CreateAgentInput{}, err
 	}
 	if err := input.XAgentsCore.Validate(); err != nil {
@@ -70,7 +71,7 @@ func resolveSavedFields(input v1.CreateAgentRequest) (store.CreateAgentInput, er
 		return store.CreateAgentInput{}, err
 	}
 	configuration, err := json.Marshal(cfg)
-	result := store.CreateAgentInput{Metadata: metadata, Configuration: configuration}
+	result := store.CreateAgentInput{Metadata: values, Configuration: configuration}
 	if input.XAgentsCore != nil {
 		result.ModelProvider = input.XAgentsCore.ModelProvider
 	}

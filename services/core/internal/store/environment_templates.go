@@ -12,6 +12,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -22,10 +23,10 @@ import (
 type EnvironmentTemplate struct {
 	Plugins               []agentplugin.Metadata
 	CapabilityDirectories []string
-	Skills                []EnvironmentSkillMetadata
+	Skills                []environmentconfig.SkillMetadata
 	Packages              v1.EnvironmentPackages
-	Initialization        EnvironmentSetup
-	Files                 []InitialFileMetadata
+	Initialization        environmentconfig.Setup
+	Files                 []environmentconfig.InitialFileMetadata
 	ID                    string
 	Name                  *string
 	NetworkAccess         string
@@ -35,9 +36,9 @@ type EnvironmentTemplate struct {
 }
 
 type EnvironmentTemplateInput struct {
-	Initialization                                                       EnvironmentSetup
+	Initialization                                                       environmentconfig.Setup
 	SetEnv, SetSetup, SetPackages, SetSkills, SetPlugins, SetDirectories bool
-	Files                                                                []InitialFile
+	Files                                                                []environmentconfig.InitialFile
 	SetFiles                                                             bool
 	Name                                                                 *string
 	SetName                                                              bool
@@ -64,7 +65,7 @@ func templateFromRow(row templateMetadataRow, err error) (EnvironmentTemplate, e
 	if row.Name.Valid {
 		result.Name = &row.Name.String
 	}
-	if json.Unmarshal(row.Files, &result.Files) != nil || decodeSetupJSON(row.Packages, &result.Packages) != nil || json.Unmarshal(row.Skills, &result.Skills) != nil || json.Unmarshal(row.Plugins, &result.Plugins) != nil {
+	if json.Unmarshal(row.Files, &result.Files) != nil || environmentconfig.Decode(row.Packages, &result.Packages) != nil || json.Unmarshal(row.Skills, &result.Skills) != nil || json.Unmarshal(row.Plugins, &result.Plugins) != nil {
 		return EnvironmentTemplate{}, ErrInvalidInput
 	}
 	return result, nil

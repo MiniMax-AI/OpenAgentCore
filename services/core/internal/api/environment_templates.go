@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -14,7 +15,7 @@ import (
 // EnvironmentTemplates manages Environment Templates. ResolveEnvironmentTemplate
 // reads a Template with its initial files for Session creation.
 type EnvironmentTemplates interface {
-	ResolveEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, []store.InitialFile, error)
+	ResolveEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error)
 	CreateEnvironmentTemplate(context.Context, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error)
 	GetEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, error)
 	UpdateEnvironmentTemplate(context.Context, string, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error)

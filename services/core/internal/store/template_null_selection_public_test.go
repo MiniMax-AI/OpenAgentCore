@@ -16,6 +16,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -66,11 +67,11 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 		Sessions     map[string]string `json:"sessions"`
 		RejectedKeys []string          `json:"rejected_keys"`
 		Expected     map[string]struct {
-			Skills                []store.EnvironmentSkillMetadata `json:"skills"`
-			Plugins               []agentplugin.Metadata           `json:"plugins"`
-			CapabilityDirectories []string                         `json:"capability_directories"`
-			SkillDigests          []string                         `json:"skill_digests"`
-			PluginDigests         []string                         `json:"plugin_digests"`
+			Skills                []environmentconfig.SkillMetadata `json:"skills"`
+			Plugins               []agentplugin.Metadata            `json:"plugins"`
+			CapabilityDirectories []string                          `json:"capability_directories"`
+			SkillDigests          []string                          `json:"skill_digests"`
+			PluginDigests         []string                          `json:"plugin_digests"`
 		} `json:"expected"`
 	}
 	if err := json.Unmarshal(output, &receipt); err != nil {

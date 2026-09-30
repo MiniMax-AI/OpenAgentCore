@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -20,7 +21,7 @@ func resolve(input sessionRequest, tenant, key string, saved *v1.SavedAgent) (js
 	if input.Environment == nil || (input.Environment.Type != "none" && input.Environment.Type != "self_hosted" && input.Environment.Type != "openai_hosted") {
 		return nil, errors.New("Unsupported environment type.")
 	}
-	if err := validateMetadata(input.Metadata); err != nil {
+	if err := metadataFieldError(metadata.Validate(input.Metadata)); err != nil {
 		return nil, err
 	}
 	agent, err := resolveSessionAgent(input, saved)

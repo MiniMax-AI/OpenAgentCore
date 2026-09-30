@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 )
 
@@ -27,7 +28,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 	if _, err = s.CreateSkillVersion(t.Context(), tenant, skill.ID, second, false); err != nil {
 		t.Fatal(err)
 	}
-	intent := EnvironmentSetup{Skills: []EnvironmentSkill{{Metadata: EnvironmentSkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}
+	intent := environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}
 	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetSkills: true, Initialization: intent})
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +79,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 		}
 		var cfg struct {
 			Environment struct {
-				Skills []EnvironmentSkillMetadata `json:"skills"`
+				Skills []environmentconfig.SkillMetadata `json:"skills"`
 			} `json:"environment"`
 		}
 		if json.Unmarshal(session.Configuration, &cfg) != nil || len(cfg.Environment.Skills) != 1 || cfg.Environment.Skills[0] != setup.Skills[0].Metadata || bytes.Contains(session.Configuration, archive) {
@@ -88,7 +89,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 	assertFrozen(sessionID, "1", first)
 	latest := input
 	latest.IdempotencyKey = uuid.NewString()
-	latest.Initialization.Skills = []EnvironmentSkill{{Metadata: EnvironmentSkillMetadata{Type: "skill_reference", SkillID: skill.ID, Version: "latest"}}}
+	latest.Initialization.Skills = []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID, Version: "latest"}}}
 	latestSession, err := s.CreateSession(t.Context(), tenant, latest)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +104,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 	for _, selector := range []string{"", "latest", "1"} {
 		next := input
 		next.IdempotencyKey = uuid.NewString()
-		next.Initialization.Skills = []EnvironmentSkill{{Metadata: EnvironmentSkillMetadata{Type: "skill_reference", SkillID: skill.ID, Version: selector}}}
+		next.Initialization.Skills = []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID, Version: selector}}}
 		created, err := s.CreateSession(t.Context(), tenant, next)
 		if err != nil {
 			t.Fatal(err)
@@ -142,7 +143,7 @@ func TestSkillReferenceAuthorizationRollsBackSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: EnvironmentSetup{Skills: []EnvironmentSkill{{Metadata: EnvironmentSkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}}
+	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}}
 	if _, err := s.CreateSession(t.Context(), foreign, input); !errors.Is(err, ErrNotFound) {
 		t.Fatal("foreign reference accepted", err)
 	}

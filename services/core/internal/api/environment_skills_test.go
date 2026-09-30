@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 )
 
 func skillInput(t *testing.T, body string) json.RawMessage {
@@ -32,7 +32,7 @@ func skillInput(t *testing.T, body string) json.RawMessage {
 }
 
 func TestSkillReferenceParsingInheritanceAndReplacement(t *testing.T) {
-	lookup := &templateLookupStore{network: "enabled", skills: []store.EnvironmentSkill{{Metadata: store.EnvironmentSkillMetadata{Type: "skill_reference", SkillID: "skill-template", Version: "latest"}}}}
+	lookup := &templateLookupStore{network: "enabled", skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "skill-template", Version: "latest"}}}}
 	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
 	for _, fields := range []string{"", `,"skills":[]`, `,"skills":[{"type":"skill_reference","skill_id":"skill-override","version":"2"}]`} {
 		var decoded decodedSessionRequest

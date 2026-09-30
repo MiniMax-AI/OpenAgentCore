@@ -1,81 +1,17 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"path"
-	"regexp"
-	"strings"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-// EnvironmentSetup is confidential input, never ordinary resource metadata.
-// Core freezes it once; the common Runtime initializer executes it in order.
-type EnvironmentSetup struct {
-	Env                   map[string]string      `json:"env,omitempty"`
-	Commands              []SetupCommand         `json:"setup_commands,omitempty"`
-	Packages              v1.EnvironmentPackages `json:"packages"`
-	Skills                []EnvironmentSkill     `json:"skills,omitempty"`
-	Plugins               []EnvironmentPlugin    `json:"plugins,omitempty"`
-	CapabilityDirectories []string               `json:"capability_directories,omitempty"`
-}
-
-type SetupCommand struct {
-	Command string `json:"command"`
-	CWD     string `json:"cwd,omitempty"`
-}
-
-var environmentName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-func (s EnvironmentSetup) Empty() bool {
-	return len(s.Env)+len(s.Commands)+len(s.Packages.NPM)+len(s.Packages.Python)+len(s.Skills)+len(s.Plugins)+len(s.CapabilityDirectories) == 0
-}
-
-func (s EnvironmentSetup) Validate() error {
-	return s.validate(false)
-}
-
-func (s EnvironmentSetup) validate(installed bool) error {
-	if validateEnvironmentSkills(s.Skills, installed) != nil || ValidateEnvironmentPlugins(s.Plugins) != nil || agentcapabilities.ValidateSourceDirectories(s.CapabilityDirectories) != nil {
-		return ErrInvalidInput
-	}
-	ordinary := s
-	ordinary.Skills = nil
-	ordinary.Plugins = nil
-	raw, err := json.Marshal(ordinary)
-	if err != nil || len(raw) > 512*1024 {
-		return ErrInvalidInput
-	}
-	for name, value := range s.Env {
-		// The first three reservations are explicitly part of the public guide;
-		// OAC_* identifies the actual deployment authority and binding.
-		if !environmentName.MatchString(name) || name == "PATH" || name == "OPENAI_API_KEY" || strings.HasPrefix(name, "CODEX_") || strings.HasPrefix(name, "OAC_") || strings.ContainsRune(value, 0) {
-			return ErrInvalidInput
-		}
-	}
-	for _, command := range s.Commands {
-		if command.Command == "" || strings.ContainsRune(command.Command, 0) || (command.CWD != "" && (!path.IsAbs(command.CWD) || strings.ContainsRune(command.CWD, 0))) {
-			return ErrInvalidInput
-		}
-	}
-	for _, packages := range [][]string{s.Packages.NPM, s.Packages.Python} {
-		for _, item := range packages {
-			if item == "" || strings.HasPrefix(item, "-") || strings.ContainsRune(item, 0) {
-				return ErrInvalidInput
-			}
-		}
-	}
-	return nil
-}
 
 func (s *Store) sealEnvironmentSetup(tenant, resource, id, field string, input any, empty bool) ([]byte, error) {
 	if empty {
@@ -96,15 +32,15 @@ func (s *Store) openEnvironmentSetup(tenant, resource, id, field string, ciphert
 	if err != nil {
 		return err
 	}
-	if decodeSetupJSON(plaintext, output) != nil {
+	if environmentconfig.Decode(plaintext, output) != nil {
 		return ErrInvalidInput
 	}
 	return nil
 }
 
-func (s *Store) saveEnvironmentSetup(ctx context.Context, q *sqlc.Queries, tenant string, session pgtype.UUID, setup EnvironmentSetup) error {
-	if err := setup.validate(true); err != nil {
-		return err
+func (s *Store) saveEnvironmentSetup(ctx context.Context, q *sqlc.Queries, tenant string, session pgtype.UUID, setup environmentconfig.Setup) error {
+	if setup.ValidateInstalled() != nil {
+		return ErrInvalidInput
 	}
 	if setup.Empty() {
 		return nil
@@ -120,8 +56,8 @@ func (s *Store) saveEnvironmentSetup(ctx context.Context, q *sqlc.Queries, tenan
 	return q.CreateEnvironmentSetup(ctx, sqlc.CreateEnvironmentSetupParams{SessionID: session, Contents: encrypted})
 }
 
-func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string) (EnvironmentSetup, error) {
-	var result EnvironmentSetup
+func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string) (environmentconfig.Setup, error) {
+	var result environmentconfig.Setup
 	lookup, err := deviceLookup(tenant, session)
 	if err != nil {
 		return result, ErrNotFound
@@ -136,21 +72,13 @@ func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string
 	if err = s.openEnvironmentSetup(uuid.UUID(lookup.TenantID.Bytes).String(), "session", uuid.UUID(lookup.ID.Bytes).String(), "initialization", encrypted, &result); err != nil {
 		return result, err
 	}
-	return result, result.validate(true)
+	if result.ValidateInstalled() != nil {
+		return result, ErrInvalidInput
+	}
+	return result, nil
 }
 
-func (s EnvironmentSetup) PackageMetadata() v1.EnvironmentPackages {
-	result := s.Packages
-	if result.NPM == nil {
-		result.NPM = []string{}
-	}
-	if result.Python == nil {
-		result.Python = []string{}
-	}
-	return result
-}
-
-func (s *Store) sealTemplateSetup(tenant, id string, setup EnvironmentSetup) ([]byte, []byte, []byte, error) {
+func (s *Store) sealTemplateSetup(tenant, id string, setup environmentconfig.Setup) ([]byte, []byte, []byte, error) {
 	packages, err := json.Marshal(setup.PackageMetadata())
 	if err != nil {
 		return nil, nil, nil, err
@@ -161,14 +89,4 @@ func (s *Store) sealTemplateSetup(tenant, id string, setup EnvironmentSetup) ([]
 	}
 	commands, err := s.sealEnvironmentSetup(tenant, "environment_template", id, "setup_commands", setup.Commands, len(setup.Commands) == 0)
 	return packages, env, commands, err
-}
-
-// decodeSetupJSON rejects removed configuration fields instead of silently dropping them.
-func decodeSetupJSON(data []byte, output any) error {
-	if !json.Valid(data) {
-		return ErrInvalidInput
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(output)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 )
 
 // Environment retains execution ownership; its configuration is an internal snapshot, not a public response.
@@ -77,9 +78,9 @@ func environmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration 
 	if err != nil {
 		return Environment{}, fmt.Errorf("get environment: %w", err)
 	}
-	configuration, err = canonicalJSONObject(configuration)
+	configuration, err = jsonobject.Normalize(configuration)
 	if err != nil {
-		return Environment{}, fmt.Errorf("decode environment configuration: %w", err)
+		return Environment{}, fmt.Errorf("decode environment configuration: %w: %w", ErrInvalidInput, err)
 	}
 	return Environment{
 		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(),

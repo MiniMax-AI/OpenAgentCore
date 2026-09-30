@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -38,18 +39,18 @@ type templateLookupStore struct {
 	network     string
 	domains     []string
 	tenant      string
-	skills      []store.EnvironmentSkill
-	plugins     []store.EnvironmentPlugin
+	skills      []environmentconfig.Skill
+	plugins     []environmentconfig.Plugin
 	directories []string
 }
 
-func (s *templateLookupStore) ResolveEnvironmentTemplate(_ context.Context, tenant, id string) (store.EnvironmentTemplate, []store.InitialFile, error) {
+func (s *templateLookupStore) ResolveEnvironmentTemplate(_ context.Context, tenant, id string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error) {
 	s.tenant = tenant
-	return store.EnvironmentTemplate{ID: id, NetworkAccess: s.network, AllowedDomains: s.domains, Initialization: store.EnvironmentSetup{Skills: s.skills, Plugins: s.plugins, CapabilityDirectories: s.directories}}, nil, nil
+	return store.EnvironmentTemplate{ID: id, NetworkAccess: s.network, AllowedDomains: s.domains, Initialization: environmentconfig.Setup{Skills: s.skills, Plugins: s.plugins, CapabilityDirectories: s.directories}}, nil, nil
 }
 
 // templateHandler serves Environment template lookups from resolve.
-func templateHandler(t *testing.T, resolve func(context.Context, string, string) (store.EnvironmentTemplate, []store.InitialFile, error)) Handler {
+func templateHandler(t *testing.T, resolve func(context.Context, string, string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error)) Handler {
 	t.Helper()
 	deps, fakes := testDependencies(t)
 	fakes.environmentTemplates.resolveEnvironmentTemplate = resolve

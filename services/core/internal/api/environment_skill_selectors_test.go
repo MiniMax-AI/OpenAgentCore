@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -25,7 +26,7 @@ func TestSkillReferenceNullableSelectorAdmissionAndTemplateProjection(t *testing
 			if err != nil || !template.SetSkills || len(template.Initialization.Skills) != 1 {
 				t.Fatalf("template admission: %+v %v", template, err)
 			}
-			want := store.EnvironmentSkill{Metadata: store.EnvironmentSkillMetadata{Type: "skill_reference", SkillID: "skill-owned", Version: test.selector}}
+			want := environmentconfig.Skill{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "skill-owned", Version: test.selector}}
 			if !reflect.DeepEqual(template.Initialization.Skills[0], want) {
 				t.Fatalf("unresolved selector changed: %+v", template.Initialization.Skills[0])
 			}
@@ -61,8 +62,8 @@ func TestSkillReferenceNullDoesNotWidenOtherSelectors(t *testing.T) {
 }
 
 func TestInstalledSkillReferenceRequiresConcreteVersion(t *testing.T) {
-	metadata := store.EnvironmentSkillMetadata{Type: "skill_reference", SkillID: "skill-owned", Version: "2", Name: "proof", Description: "A proof."}
-	public := skillResponse([]store.EnvironmentSkillMetadata{metadata})
+	metadata := environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "skill-owned", Version: "2", Name: "proof", Description: "A proof."}
+	public := skillResponse([]environmentconfig.SkillMetadata{metadata})
 	var reference map[string]any
 	if len(public) != 1 || json.Unmarshal(public[0], &reference) != nil {
 		t.Fatalf("installed projection: %s", public)

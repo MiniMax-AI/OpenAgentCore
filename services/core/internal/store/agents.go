@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 )
 
 // SavedAgent is reusable configuration owned by an execution tenant. It has no
@@ -40,16 +42,16 @@ func (s *Store) CreateAgent(ctx context.Context, tenantID string, input CreateAg
 	if err != nil {
 		return SavedAgent{}, err
 	}
-	metadata, err := encodeMetadata(input.Metadata)
+	encodedMetadata, err := metadata.Encode(input.Metadata)
 	if err != nil {
-		return SavedAgent{}, err
+		return SavedAgent{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	if len(input.Configuration) == 0 || len(input.Configuration) > 512*1024 {
 		return SavedAgent{}, fmt.Errorf("%w: configuration must be an object of at most 512 KiB", ErrInvalidInput)
 	}
-	configuration, err := canonicalJSONObject(input.Configuration)
+	configuration, err := jsonobject.Normalize(input.Configuration)
 	if err != nil {
-		return SavedAgent{}, err
+		return SavedAgent{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	if err := validateAgentModelExecution(configuration, input.ModelProvider); err != nil {
 		return SavedAgent{}, err
@@ -59,7 +61,7 @@ func (s *Store) CreateAgent(ctx context.Context, tenantID string, input CreateAg
 		q := s.queries.WithTx(tx)
 		row, err := q.CreateAgent(ctx, sqlc.CreateAgentParams{
 			ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant,
-			Metadata: metadata, Configuration: configuration,
+			Metadata: encodedMetadata, Configuration: configuration,
 		})
 		if err != nil {
 			return err

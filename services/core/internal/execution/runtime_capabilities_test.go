@@ -7,7 +7,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 	"testing"
 )
@@ -26,10 +26,10 @@ func (f *capabilityFixture) PrepareRuntime(_ context.Context, id string, request
 }
 func TestRuntimeCapabilitiesPreserveRawBundlesAndSetupOrdering(t *testing.T) {
 	archive := []byte("opaque archive bytes must be expanded only by Runtime")
-	setup := store.EnvironmentSetup{
-		Skills:                []store.EnvironmentSkill{{Metadata: store.EnvironmentSkillMetadata{Type: "skill_reference", SkillID: "private-reference", Version: "1", Name: "example", Description: "Safe description"}, Archive: archive}},
-		Plugins:               []store.EnvironmentPlugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "Safe plugin"}, Archive: archive}},
-		Commands:              []store.SetupCommand{{Command: "prepare directory"}},
+	setup := environmentconfig.Setup{
+		Skills:                []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "private-reference", Version: "1", Name: "example", Description: "Safe description"}, Archive: archive}},
+		Plugins:               []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "Safe plugin"}, Archive: archive}},
+		Commands:              []environmentconfig.SetupCommand{{Command: "prepare directory"}},
 		CapabilityDirectories: []string{"/workspace/generated"},
 	}
 	operations := setupOperations(setup)
