@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import runpy
+import signal
 import stat
 import subprocess
 import sys
@@ -16,6 +17,7 @@ from unittest import mock
 
 import config_model
 import distribution
+import ingress
 import ingress_config
 import install
 import node_spec
@@ -174,24 +176,71 @@ class InstallerTests(unittest.TestCase):
 
     def test_a_rerun_replaces_an_incomplete_installation(self):
         self.install("--sandbox", "none")
-        old = self.host.project
-        # What a first start killed before it finished leaves behind; its services hold their ports until removed.
-        install.oac_cli.save_state(self.root, dict(self.document("state.json"), complete=False))
-        for command in (install.oac_cli.start, install.oac_cli.apply, install.oac_cli.status):
-            with self.assertRaisesRegex(install.oac_cli.OacError, "did not finish installing. Rerun the installer"):
-                command(self.root, out=lambda _: None)
-        self.host.busy = {8080, 8091}
-        remove = install.oac_cli.remove
-        with mock.patch.object(install.oac_cli, "remove",
-                               side_effect=lambda *args, **kwargs: (remove(*args, **kwargs), self.host.busy.clear())):
-            self.install("--core-only", "--sandbox", "none")
-        self.assertIn(["docker", "compose", "-p", old, "down", "--volumes", "--remove-orphans"], self.host.commands)
-        self.assertEqual((self.document("config.json")["mode"], self.document("config.json")["ports"]["core"]),
-                         ("core-only", 8091))
-        state = self.document("state.json")
-        self.assertNotEqual(state["project"], old)
-        self.assertTrue(state["complete"])
-        self.assertEqual(self.host.running(), {"database", "core"})
+        for marker in (False, None):
+            with self.subTest(marker=marker):
+                old = self.host.project
+                # A first start killed before completion; its services still hold their ports.
+                state = dict(self.document("state.json"), complete=marker)
+                if marker is None:
+                    del state["complete"]
+                install.oac_cli.save_state(self.root, state)
+                for command in (install.oac_cli.start, install.oac_cli.apply, install.oac_cli.status):
+                    with self.assertRaisesRegex(install.oac_cli.OacError, "did not finish installing. Rerun the installer"):
+                        command(self.root, out=lambda _: None)
+                with self.assertRaisesRegex(ingress.DomainError, "did not finish installing"):
+                    ingress.prepare(self.root, "core.example", None)
+                self.host.busy = {8080, 8091}
+                remove = install.oac_cli.remove
+                with mock.patch.object(install.oac_cli, "remove",
+                                       side_effect=lambda *args, **kwargs: (remove(*args, **kwargs), self.host.busy.clear())):
+                    self.install("--core-only", "--sandbox", "none")
+                self.assertIn(["docker", "compose", "-p", old, "down", "--volumes", "--remove-orphans"], self.host.commands)
+                self.assertEqual((self.document("config.json")["mode"], self.document("config.json")["ports"]["core"]),
+                                 ("core-only", 8091))
+                state = self.document("state.json")
+                self.assertNotEqual(state["project"], old)
+                self.assertTrue(state["complete"])
+                self.assertEqual(self.host.running(), {"database", "core"})
+
+    def test_removal_keeps_recovery_state_on_failure_and_finishes_despite_signals(self):
+        self.install("--sandbox", "none")
+        state = dict(self.document("state.json"), complete=False)
+        install.oac_cli.save_state(self.root, state)
+        command = (self.root / "oac").read_bytes()
+        unlink = Path.unlink
+
+        def fail_command(path, *args, **kwargs):
+            if path == self.root / "oac":
+                raise PermissionError("command unlink refused")
+            return unlink(path, *args, **kwargs)
+
+        with install.oac_cli.locked(self.root), mock.patch.object(Path, "unlink", fail_command), \
+                self.assertRaisesRegex(install.oac_cli.OacError, "Removal did not finish"):
+            install.oac_cli.remove(self.root, state, keep_root=True)
+        self.assertEqual(self.document("state.json"), state)
+        self.assertEqual((self.root / "oac").read_bytes(), command)
+        self.assertEqual(install.layout(self.root), "incomplete")
+
+        signals = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+        for signum in signals:
+            previous = signal.signal(signum, install.interrupted)
+            self.addCleanup(signal.signal, signum, previous)
+        delivered = []
+
+        def interrupt_command(path, *args, **kwargs):
+            if path == self.root / "oac":
+                self.assertFalse((self.root / "state.json").exists())
+                for signum in signals:
+                    signal.raise_signal(signum)
+                    delivered.append(signum)
+            return unlink(path, *args, **kwargs)
+
+        with install.oac_cli.locked(self.root), mock.patch.object(Path, "unlink", interrupt_command):
+            install.oac_cli.remove(self.root, state, keep_root=True)
+        self.assertEqual(delivered, list(signals))
+        self.assertEqual([path.name for path in self.root.iterdir()], [".oac.lock"])
+        for signum in signals:
+            self.assertIs(signal.getsignal(signum), install.interrupted)
 
     def test_a_directory_without_state_json_is_refused_and_untouched(self):
         key = self.root / "secrets/e2b.key"

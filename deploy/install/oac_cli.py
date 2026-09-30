@@ -20,6 +20,7 @@ import re
 import secrets
 import shlex
 import shutil
+import signal
 import socket
 import stat
 import subprocess
@@ -154,7 +155,7 @@ def save_state(root, state):
 
 def check_complete(state):
     """Only the installer uses an installation before its first start has finished."""
-    if state.get("complete") is False:
+    if state.get("complete") is not True:
         raise OacError(INCOMPLETE)
 
 
@@ -588,7 +589,7 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
         out("web.core_url changes; apply checks which Core it reaches.")
         return state.get("core_installation_id")
     status, installation = paired_core(root, config)
-    if status == 401 and state.get("complete") is not False:
+    if status == 401 and state.get("complete") is True:
         out("Warning: Core rejects this Web host's Core key; the key is out of date. "
             "Copy secrets/core.key from the Core host, then run oac apply.")
     elif status == 404:
@@ -776,6 +777,29 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
 
 # Removal -----------------------------------------------------------------------
 
+def _remove_last_files(root, state, keep_root):
+    """Finish the few final unlinks without a handled signal losing the recovery state."""
+    handlers = {}
+    try:
+        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            handlers[signum] = signal.signal(signum, signal.SIG_IGN)
+        try:
+            for name in ("state.json", "oac", ".oac.lock"):
+                if not (keep_root and name == ".oac.lock"):
+                    (root / name).unlink(missing_ok=True)
+            if not keep_root:
+                root.rmdir()
+        except (OSError, KeyboardInterrupt):
+            # A failed command unlink must leave both the command and its state for a retry.
+            if (root / "oac").exists() and not (root / "state.json").exists():
+                with contextlib.suppress(OSError):
+                    save_state(root, state)
+            raise
+    finally:
+        for signum, handler in handlers.items():
+            signal.signal(signum, handler)
+
+
 def remove(root, state, keep_root=False):
     """Remove one installation: native Core's unit, its Compose project with its volumes, then its files.
 
@@ -812,19 +836,15 @@ def remove(root, state, keep_root=False):
     if left:
         left.append(files)
     else:
-        # state.json, then the oac command, then the lock go last: until then a rerun still finds
-        # the installation and finishes removing it, and no other command can lock it afresh.
-        last = ("state.json", "oac", ".oac.lock")
         try:
-            for path in sorted(root.iterdir(), key=lambda path: last.index(path.name) if path.name in last else -1):
-                if keep_root and path.name == ".oac.lock":
+            for path in root.iterdir():
+                if path.name in ("state.json", "oac", ".oac.lock"):
                     continue
                 if path.is_dir() and not path.is_symlink():
                     shutil.rmtree(path)
                 else:
                     path.unlink()
-            if not keep_root:
-                root.rmdir()
+            _remove_last_files(root, state, keep_root)
         except (OSError, KeyboardInterrupt):
             # A lock file alone, such as one another command just created, is harmless.
             if root.is_dir() and any(path.name != ".oac.lock" for path in root.iterdir()):

@@ -548,7 +548,7 @@ def layout(root):
             complete = None
         # create() writes state.json before anything else, with complete: false; the first
         # successful start sets it.
-        if complete is False:
+        if complete is not True:
             return "incomplete"
         return "config" if (root / "config.json").exists() else "missing-config"
     # Without state.json nothing here is known to be the installer's, so nothing is taken over or removed.
@@ -767,7 +767,7 @@ def install_locked(args, root, bundle, manifest, prepared, created):
         install_fresh(args, root, bundle, manifest, prepared)
     except (Exception, KeyboardInterrupt) as error:
         state = written_state(root)
-        if state and state.get("complete"):
+        if state and state.get("complete") is True:
             raise
         # A first installation that did not finish removes what it created, before printing
         # anything, so the same command can run again. The error goes on with the outcome.
