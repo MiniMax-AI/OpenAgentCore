@@ -242,6 +242,36 @@ class InstallerTests(unittest.TestCase):
         for signum in signals:
             self.assertIs(signal.getsignal(signum), install.interrupted)
 
+    def test_manual_removal_command_keeps_automatic_compose_isolation(self):
+        self.install("--sandbox", "none")
+        state = self.document("state.json")
+        foreign = self.work / "other-project"
+        foreign.mkdir()
+        (foreign / "compose.yaml").write_text("volumes:\n  database:\n    name: unrelated-database\n")
+        binaries = self.work / "bin"
+        binaries.mkdir()
+        docker = binaries / "docker"
+        docker.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
+                          "print(json.dumps({'cwd': os.getcwd(), 'args': sys.argv[1:], "
+                          "'compose': [key for key in os.environ if key.startswith('COMPOSE_')], "
+                          "'docker_host': os.environ.get('DOCKER_HOST')}))\n")
+        docker.chmod(0o700)
+        environment = dict(os.environ, COMPOSE_FILE=str(foreign / "compose.yaml"), COMPOSE_PROJECT_NAME="unrelated",
+                           DOCKER_HOST="unix:///synthetic-docker.sock", PATH=str(binaries) + os.pathsep + os.environ["PATH"])
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with install.oac_cli.locked(self.root), \
+                    mock.patch.object(install.oac_cli, "run", side_effect=OSError("Docker unavailable")) as run, \
+                    self.assertRaises(install.oac_cli.OacError) as raised:
+                install.oac_cli.remove(self.root, state)
+            self.assertEqual(run.call_args.kwargs["cwd"], "/")
+            self.assertFalse(any(name.startswith("COMPOSE_") for name in run.call_args.kwargs["env"]))
+            manual = str(raised.exception).splitlines()[1].strip()
+            result = REAL_RUN(["sh", "-c", manual], cwd=foreign, capture_output=True, text=True, check=True)
+        observed = json.loads(result.stdout)
+        self.assertEqual(observed, {"cwd": "/", "args": run.call_args.args[0][1:], "compose": [],
+                                    "docker_host": environment["DOCKER_HOST"]})
+        self.assertEqual(self.document("state.json"), state)
+
     def test_a_directory_without_state_json_is_refused_and_untouched(self):
         key = self.root / "secrets/e2b.key"
         key.parent.mkdir(parents=True)

@@ -825,12 +825,14 @@ def remove(root, state, keep_root=False):
     # -p without -f, outside any project directory and without COMPOSE_* settings: Compose
     # reads no project file and acts on this project's labels alone.
     down = ["docker", "compose", "-p", project, "down", "--volumes", "--remove-orphans"]
-    environment = {name: value for name, value in os.environ.items() if not name.startswith("COMPOSE_")}
+    compose_names = sorted(name for name in os.environ if name.startswith("COMPOSE_"))
+    environment = {name: value for name, value in os.environ.items() if name not in compose_names}
     try:
         run(down, cwd="/", env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL)
     except (subprocess.CalledProcessError, OSError, KeyboardInterrupt):
-        left.append((f"Compose project {project} and its volumes", " ".join(down)))
+        manual = shlex.join(["env", *(arg for name in compose_names for arg in ("-u", name)), *down])
+        left.append((f"Compose project {project} and its volumes", f"(cd / && {manual})"))
     target = shlex.quote(str(root))
     files = (f"the files in {root}", f"find {target} -mindepth 1 -delete" if keep_root else f"rm -rf {target}")
     if left:
