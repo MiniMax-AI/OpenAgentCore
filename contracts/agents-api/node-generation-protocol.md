@@ -31,21 +31,31 @@ Core sends `request` frames with:
 | `timeout_ms` | Remaining budget, 1 to 120000 |
 | `reference` | The exact `(tenant_id, environment_id, allocation_id)` |
 
-Each operation carries exactly its own argument:
+Each operation carries its own arguments and returns the following result on success:
 
-| `operation` | Provider method | Argument |
-| --- | --- | --- |
-| `create` | `Create` | `bootstrap` |
-| `info`, `renew`, `kill`, `command` | `GetInfo`, `Renew`, `Kill`, `RunCommand` | none, or `command` |
-| `observe` | `Observe` | `observation` |
-| `initial`, `new_compute`, `compute`, `kill_compute`, `resume_compute`, `command_compute` | Checkpoint compute operations | none, an optional `snapshot`, `compute`, or `compute` and `command` |
-| `suspend`, `resume`, `delete_snapshot` | `Suspend`, `Resume`, `DeleteSnapshot` | `suspend`, `resume` or `snapshot` |
+| `operation` | Provider method | Arguments | Successful result |
+| --- | --- | --- | --- |
+| `create` | `Create` | `bootstrap` | `info` |
+| `info` | `GetInfo` | None | `info` |
+| `renew` | `Renew` | None | `info` |
+| `kill` | `Kill` | None | None |
+| `command` | `RunCommand` | `command` | `command` |
+| `observe` | `Observe` | `observation` | `sample` |
+| `initial` | `Initial` | None | `compute` |
+| `new_compute` | `NewCompute` | Positive compute `generation` and optional `snapshot` | `compute` |
+| `compute` | `GetCompute` | `compute` | `state` |
+| `kill_compute` | `KillCompute` | `compute` | None |
+| `resume_compute` | `ResumeCompute` | `compute` | `state` |
+| `command_compute` | `RunCommandCompute` | `compute` and `command` | `command` |
+| `suspend` | `Suspend` | `suspend` | `state` |
+| `resume` | `Resume` | `resume` | `state` |
+| `delete_snapshot` | `DeleteSnapshot` | `snapshot` | None |
 
 A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. A node without generation management accepts only its enrolled `deployment_generation`; a generation-managing node runs the request on that generation's provider and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not observe-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
 
 The budget is relative: the node anchors `timeout_ms` to its own clock on receipt and consumes it while the request waits in its queue, so the hosts' clocks need not agree. Core still bounds its own wait. A full node queue closes the connection.
 
-The `response` frame carries `id`, `connection_id`, an `error_code` when the call failed, and on success exactly one result (`info`, `compute`, `state`, `command` or `sample`):
+The `response` frame carries `id` and `connection_id`. A successful response carries the result named in the operation table, with no result field for `kill`, `kill_compute` or `delete_snapshot`. A failed response carries an `error_code`:
 
 | `error_code` | Meaning |
 | --- | --- |
