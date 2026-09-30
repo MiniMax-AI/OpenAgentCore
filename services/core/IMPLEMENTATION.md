@@ -29,7 +29,7 @@ per-family limit bounds rather than applying one policy to every resource. Chang
 page bounds, cursor ownership or parent lookup order only with owned evidence for
 that family. Record uncertain range/lookup behavior separately; do not reproduce
 observed upstream server failures as compatibility behavior. See
-`contracts/agents-api/list-query-semantics.md` for the bounded evidence.
+[list rules](../../contracts/agents-api/wire-semantics.md#lists).
 
 Every Agents API JSON route reads its body through the shared gate
 (`readJSONObject`) before route decoding, validation or lookup. It requires a JSON
@@ -40,7 +40,7 @@ Core extension and internal routes keep their own readers. Member names match
 exactly: decode request objects with `decodeInputObject`, or check
 `inexactMember` before another decoder, so that encoding/json never matches
 a case variant to a field. See
-`contracts/agents-api/official-semantics-alignment.md#request-body-parsing--september-23`.
+[request bodies](../../contracts/agents-api/wire-semantics.md#request-bodies).
 Report validation failures with official evidence through the typed field error,
 which emits `invalid_request_error` with the observed param and message; keep
 other local codes until their official fields are sampled. Every 409 has type
@@ -58,10 +58,10 @@ their own errors. An `after` cursor that does not resolve inside its already
 resolved parent, malformed ones included, returns that list family's observed
 error: the missing-resource 404 on lookup lists, otherwise the typed store cursor
 error. Foreign and missing cursors stay identical; see
-`contracts/agents-api/list-query-semantics.md`. Reject U+0000 in metadata
+[list rules](../../contracts/agents-api/wire-semantics.md#lists). Reject U+0000 in metadata
 explicitly with its `metadata.<key>` param; other stored strings rely on the
 PostgreSQL error mapping, so keep each request's writes in one transaction. See
-`contracts/agents-api/official-semantics-alignment.md`.
+[validation errors](../../contracts/agents-api/wire-semantics.md#validation-errors).
 
 Serve requests on their canonical path and never redirect. `api.CanonicalPaths`
 wraps the complete server handler in both configurations (the daemon ServeMux and
@@ -216,7 +216,7 @@ from prior Docker or retired remote-executor evidence.
 ## Current implementation constraints
 
 The constraints below describe existing code, not requirements to preserve legacy
-design. The [protocol assessment](../../contracts/agents-api/README.md#implementation-direction)
+design. The [protocol assessment](../../contracts/agents-api/README.md#known-gaps)
 identifies replacements and gaps. Update these rules when their implementation is
 replaced; do not carry obsolete compatibility code forward to satisfy this section.
 
@@ -317,7 +317,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   Never reuse product master-key conventions or daemon transport encryption for
   this storage boundary. Missing key configuration disables credential writes;
   malformed explicit configuration fails startup. See
-  [`services/core/credentials.md`](credentials.md) for
+  [Vaults and Credentials](../../contracts/agents-api/vaults.md#storage-key) for
   key persistence and current limits. Storage-key rotation remains
   separate work; resource creation never contacts the destination.
 - `GET /v1/vaults/{vault_id}/credentials` lists safe metadata only, with both
@@ -363,7 +363,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   in `OAC_OAUTH_TRUSTED_ORIGINS`; tenants cannot relax that boundary and TLS
   verification remains mandatory. Keycloak is acceptance infrastructure only.
   Preserve the pinned update omission/null and immutable-field rules described in
-  [OAuth credentials](oauth-credentials.md); record unspecified
+  [OAuth credentials](../../contracts/agents-api/vaults.md#oauth); record unspecified
   hosted semantics. Native processes receive only access tokens. Provider revocation,
   withdrawal of already-dispatched tokens and Session cancellation remain distinct.
 - Credential `DELETE /v1/vaults/{vault_id}/credentials/{credential_id}` removes one
@@ -548,7 +548,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   unknown sources and unavailable provider metadata, without backfill. Projection metadata does not alter retry
   identity; retries cannot replace it. Keep this administrator query separate from
   runtime observations and do not touch activity or wake sandboxes. The versioned
-  contract is `contracts/agents-api/execution-configuration.md`.
+  contract is [execution configuration](../../contracts/agents-api/admin-api.md#execution-configuration).
 - Model communication uses native direct connections only. Core sends one frozen
   confidential `model_provider` bundle, independent of engine and placement;
   adapters apply it through their native provider configuration. The shared
@@ -1096,7 +1096,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   including after terminal or later Turns. Omitted/null input is permitted only
   for non-streaming hosted creation and self-hosted creation.
   Creation streaming uses the shared live path above. Image support requires the
-  qualification in [the message-input contract](../../contracts/agents-api/message-input.md).
+  qualification in [the message-input contract](../../contracts/agents-api/message-content.md#images).
 
 ### Worker ownership
 
@@ -1602,3 +1602,46 @@ required history is missing. Daemon tools run with the launching account's full
 permissions. Managed isolation is provided by the outer Environment. A user who
 installs on a host does not receive a sandbox or protection from their own tools.
 Keep failed probes and unverified platform combinations explicit.
+
+## Public and administration API constraints
+
+These constraints implement the rules in the [Agents API contracts](../../contracts/agents-api/README.md) and the [Core administration API](../../contracts/agents-api/admin-api.md).
+
+### Wire validation mechanics
+
+- Stored strings other than metadata rely on PostgreSQL rejecting U+0000 and invalid UTF-8: map SQLSTATE `22021` (text parameter) and `22P05` (`\u0000` in jsonb) to the 400 unstorable-text error, including query filters such as `agent_id`. The failing statement aborts its transaction, so keep each request's writes in one transaction.
+- An `after` cursor that cannot name a resource on a lookup list (Agents, Sessions, Turns, Templates, Vaults, Credentials, the Core Runtime observation list) resolves to the never-assigned maximum UUID and runs the normal lookup, so storage failures and missing rows behave as for a well-formed cursor. Resolve every cursor only inside its already resolved parent and tenant.
+- Lists whose parent and cursor lookups are separate statements (Artifacts, Skill versions) re-check the parent before reporting a cursor 400, so a parent deleted in between still returns its 404. Item and Subagent lists read both inside one locked Session transaction. The Skill version cursor lookup is tenant-wide so another Skill's version can be told apart from a missing one; another tenant's version stays missing.
+- Saved Agents parse tools with the saved-form parser, which keeps every pinned `web_search` mode. Session admission re-resolves the effective tools with the execution parser, which admits only disabled search; Worker device selection and the final preclaim also refuse a non-disabled search control.
+
+### Message text and result targets
+
+- Admission and the Claude bridge share one whitespace set, the union of Go `unicode.IsSpace` and ECMAScript `String.prototype.trim` (`blankTextRune` in `services/core/internal/execution/message_support.go`). A shared table test keeps both sides equal; change them together.
+- Whitespace-only admission is a field of the engine profile (`WhitespaceOnlyText`) checked with the image profile during Worker admission. Never branch on the harness name in handlers.
+- `MessageInput.Validate` treats any non-empty text part as content and never trims. It runs in Core admission, Worker delivery, daemon steering and prepared start, and in the Codex and MiniMax adapters.
+- Resolve a tool result's target under the tenant Session lock, after the Session lookup: a well-formed `turn_id` is looked up in that Session and must own the call; otherwise the Session's own calls decide between "unknown call" and "different Turn". Never reject a malformed `turn_id` before the Session lookup, so missing, malformed and foreign Sessions keep one 404, and read only the caller's Session.
+- The recorded Environment failure reason is composed only from a fixed step label and integers (setup command index, exit status 1-255), so commands, environment values, package names, paths and process output cannot reach the reason, events, logs or responses.
+
+### Environment files, Skills and Artifacts
+
+- Environment file list tokens bind a digest of the tenant, Environment, requested directory, effective order and limit, plus a fingerprint of the full sorted regular-file path and size list and an offset that is a multiple of the limit. Every page rereads the directory; there is no cursor registry, cache or snapshot. Reject every token mismatch with the single official token message.
+- The directory helper checks each requested path component with `Root.Lstat` below `os.OpenRoot(workspace)` and opens the final directory with `O_NOFOLLOW`. A missing component, a regular file or a symbolic link maps to the distinct `not_directory` result, which the daemon and gateway carry only for directory reads; Core turns it into an empty page. `not_found` (Claude SDK adapter reader), permission, transport and uncertain results keep their errors.
+- A Files.create write intent stores a digest of the path, size and content, not a path ledger, so Core cannot tell a file an earlier Files.create wrote from any other file; an existing regular file therefore gets the untracked-file message. Reserve the intent under the Session lock before dispatch. The daemon verifies the complete body's SHA-256 before calling the writer, and the writer creates parents with `Root.MkdirAll(0700)`, writes `.oac-write-<uuid>` in the workspace root and publishes it with `Root.Link`, which never replaces an existing entry. Known refusals return `write_rejected` with `reason` `destination_directory` or `unsafe_destination`; Core settles the intent as `rejected`, which leaves no committed receipt and releases the mutation owner. Only an exact committed or rejected receipt settles an intent; nothing settles an unknown one automatically.
+- Check the 5 MiB inline bound after path validation and Base64 decoding, and before the pending-hosted check, the source File lookup and execution. The JSON body limit still admits the Base64 form of 50 MiB so that oversized inline bodies up to that size get the official message.
+- Serialize Skill version uploads, default changes and version deletion on the owning Skill row lock. Deleting the default version deletes the Skill only when no other version row exists, through the same cascade as Skill deletion, so every encrypted version row goes in the same commit. `next_version` only increases.
+- Decide Artifact republication in the Turn's terminal transaction, not the capture transaction: capture commits and releases the Session lock before the Turn completes, and the terminal transaction holds the Session lock that also orders Artifact deletion. Drop staged rows whose SHA-256 equals the newest remaining published Artifact for the path, ordered by the producing Turn's creation time and then ID (publication time can come from the Runtime and does not order Turns), and unlink their large objects in the same transaction. Published rows are never modified.
+- A malformed `environment_id` Artifact filter resolves to the never-assigned maximum UUID, so it matches nothing without a text comparison.
+
+### Credential encryption and OAuth refresh bounds
+
+- `credentialcrypto` ciphertext is a format version byte followed by the standard AEAD nonce, ciphertext and tag. The authenticated data holds a fixed domain and version plus the binding (tenant, Vault, Credential, auth type, exact destination). Keep the domain string unchanged: existing rows must still decrypt.
+- Random-nonce GCM allows at most 2^32 encryptions per key. `secrets/credential.key` also seals model providers, the E2B key, Skills, initial files and environment setup, so every sealed write counts toward that bound; there is no rotation or re-encryption path.
+- OAuth dispatch refresh holds the Credential row lock and the external exchange under one 20-second context (`store.oauthRefreshTimeout`). The refresh HTTP client has a 10-second overall timeout and 5-second TLS handshake and response-header timeouts, uses no proxy and treats any redirect as failure.
+
+### Core administration errors, metrics and write provenance
+
+- Core error details are scoped by the `/core/v1` router's writer mark, never by a request path test. Write Core errors with `writeCoreError` and typed `CoreErrorDetails` values (string, number, boolean, null and string-array constructors); invalid or empty details are omitted as a whole. The mark preserves error observation, flushing and `http.ResponseController` access. A shared handler or a Core-looking path alone never changes a public or machine error envelope. Core authentication runs before operation configuration checks, and unknown paths keep their status and admission rules. When adding a code with details, document its fixed keys in `contracts/agents-api/core-errors.md`, and pass only safe Core-owned facts: never submitted values, secrets, native text or provider bodies.
+- Operation validators keep their original error text, sentinel identity and validation precedence. Package-owned typed errors carry fixed field metadata; only the marked Core error mapper translates it into operation codes and safe bound or catalog details. Keep Project and key rune limits separate from node byte limits. Sandbox validation metadata travels through its store wrapper without changing transaction or provider authority. Public Session provider validation stays byte-for-byte unchanged; cover it with handler-level golden responses. The Core clients ignore malformed optional details and never retry a write.
+- Core metrics instrument the existing worker and job owners without changing scheduling, lease or retention behavior. Count `execution_unavailable` at the HTTP error writer, once per rejected response; never capture request or response bodies and never infer the count from other 503s or failed Turns. Process CPU, RSS and cgroup limits are sampled by the 30-second Core metrics loop into the same bounded in-memory ring; the first CPU interval and restart gaps stay null, and host usage never substitutes for process usage. Root Turn history is queried read-only from PostgreSQL with native timestamps. Builds inject the source commit with `-ldflags` into `main.buildRevision`. Keep the response shape aligned with `packages/agents-client/src/core-metrics.ts`.
+- Public resource writes carry the authenticated key's provenance separately from the execution principal. Record the operation and any creation ownership in the business transaction, never in response middleware or an asynchronous queue; a failed record rolls back the write. Internal lifecycle and refresh work never acquires public provenance, and retries never replace ownership. Environment uploads persist the safe request origin before dispatch and record success with the confirmed Runtime receipt, not the native filesystem call. Never put payloads, paths or secrets in audit metadata. Do not confuse key identity with the Session creator identity used for retries.
+- Administrator writes reuse the public resource deletion and serialization code and record their administrator audit entry in the same transaction.

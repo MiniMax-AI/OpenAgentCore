@@ -97,7 +97,7 @@ counter regression produces a gap; it is never filled with zero. The sampled
 value is Core's measured Session usage, a Core extension that sums every
 recorded root Turn snapshot, active Turns included. It differs by design from
 public Session usage, which is null while a root Turn runs or after one ends
-unmeasured ([item serialization](history-events-usage.md#item-serialization-2026-09-23)). These counters
+unmeasured ([usage](sessions-events.md#usage)). These counters
 are measured model usage, not price, cost, or billing records.
 
 Core Web queries each current managed Session through the administrator Session

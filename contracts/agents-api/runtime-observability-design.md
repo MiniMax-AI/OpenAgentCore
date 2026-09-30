@@ -471,7 +471,7 @@ history sweep, the Core resolver reads the cumulative measured Session usage
 (`MeasuredSessionUsage`: every recorded root Turn snapshot, active Turns
 included) from the execution store alongside Runtime identity. Public Session
 usage follows the stricter official rule and can be null meanwhile
-([item serialization](history-events-usage.md#item-serialization-2026-09-23)). The exporter
+([usage](sessions-events.md#usage)). The exporter
 emits Session-scoped input/output token gauges with the same Session and sampling
 time, independently of Docker, microsandbox, Kubernetes, or another provider.
 PostgreSQL retains those cumulative snapshots alongside the sample; query results

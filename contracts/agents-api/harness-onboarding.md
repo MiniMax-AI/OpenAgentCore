@@ -129,7 +129,7 @@ The public text path requires durable Turns, applied input receipts, ordered obs
 MCP, public functions, deferred function discovery, structured output, image input, verbosity controls and other optional operations need not match another engine. Reject an unqualified combination with Unsupported and record the gap; never advertise a capability to bypass selection.
 
 - Structured output: consume `ExecutionControls.OutputFormat` and publish confirmed native output through the Message contract ([execution tools](execution-tools.md#structured-output)). Register the public qualification separately from the Runtime capability.
-- Images: register the Runtime's `MessageImages` and qualify the profile's `MessageImages` separately ([message input](message-input.md)).
+- Images: register the Runtime's `MessageImages` and qualify the profile's `MessageImages` separately ([message input](message-content.md)).
 - Workspace placements additionally need verified preparation, workspace reads and output export and the dedicated Runtime binding with the shared Files helpers. Enable a placement only after its lifecycle behavior is demonstrated.
 
 ### MCP origin and native limits

@@ -235,16 +235,6 @@
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
-    "path": "contracts/agents-api/README.md",
-    "regex": "Parsar owns product|Parsar, not the HTTP contract|Parsar cutover|Parsar services|no Parsar dependency",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "contracts/agents-api/official-semantics-alignment.md",
-    "regex": "The Parsar\\n",
-    "reason": "This caller verification paragraph records the separate product client audit."
-  },
-  {
     "path": "docs/design-principles.md",
     "regex": "Parsar is an ordinary API-key holder",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
@@ -257,11 +247,6 @@
   {
     "path": "services/core/README.md",
     "regex": "Parsar's product|Parsar\\sworkspace|Parsar Skill/SP",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "services/core/credentials.md",
-    "regex": "Parsar approval",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
@@ -353,11 +338,6 @@
     "path": "apps/daemon/internal/agent/mcode/tool_environment_test.go",
     "regex": "agents-api-",
     "reason": "The regression fixture uses the existing persisted Session state-key namespace required by Runtime binding validation."
-  },
-  {
-    "path": "contracts/agents-api/README.md",
-    "regex": "https://github\\.com/MiniMax-AI-Dev/parsar/pull/[0-9]+",
-    "reason": "Historical acceptance evidence links to pull requests in the separate upstream Parsar repository."
   },
   {
     "path": "services/core/migrations/000015_retire_item_backfill.sql",

@@ -280,7 +280,7 @@ Core-managed Docker `openai_hosted` and user-managed `self_hosted`. MiniMax
 images and remote URLs remain explicit implementation gaps. Workspace images reuse
 the existing preparation, active-input and workspace authority; they do not add
 a downloader, a mount or a separate execution lifecycle. Core
-does not fetch or transform media. See [message input coverage](../contracts/agents-api/message-input.md).
+does not fetch or transform media. See [message input coverage](../contracts/agents-api/message-content.md#images).
 
 ## Preparation and execution order
 

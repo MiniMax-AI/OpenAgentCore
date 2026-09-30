@@ -23,7 +23,7 @@ A function declaration requires `name`, `description` and a JSON Schema in `para
 | Unknown call, or a call of another Turn, in the caller's Session | 400 `invalid_request_error`; the pending action is unchanged |
 | Missing or foreign Session | 404 |
 
-[Session input conflicts](official-semantics-alignment.md#session-input-conflicts-and-result-targets--september-23) records the exact messages. Invalid or unsupported content cannot consume a pending call. Admission is separate from application: the adapter confirms a result only when the matching native tool result appears in the live root Turn ([receipt contract](function-result-images.md)). A transport write alone confirms nothing, and a confirmation says nothing about provider consumption or exactly-once external effects. Core never replays a result automatically.
+[Session input conflicts](official-semantics-alignment.md#session-input-conflicts-and-result-targets--september-23) records the exact messages. Invalid or unsupported content cannot consume a pending call. Admission is separate from application: the adapter confirms a result only when the matching native tool result appears in the live root Turn ([receipt contract](message-content.md#function-results)). A transport write alone confirms nothing, and a confirmation says nothing about provider consumption or exactly-once external effects. Core never replays a result automatically.
 
 ### Required actions and recovery
 

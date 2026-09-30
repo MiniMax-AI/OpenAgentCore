@@ -25,7 +25,7 @@ Parsar product execution and its eventual public-client cutover are separate.
 Static-bearer and OAuth Vault Credentials support creation, replacement, deletion
 and safe metadata retrieval/listing. Vault deletion atomically removes its
 Credentials. Configure their independent encryption key and authenticated Session
-use through the [credential guide](credentials.md); see [OAuth credentials](oauth-credentials.md)
+use through the [credential guide](../../contracts/agents-api/vaults.md); see [OAuth credentials](../../contracts/agents-api/vaults.md#oauth)
 for application authorization, dispatch-time refresh and revocation boundaries.
 
 The pinned Python client saves an Agent independently, then starts a Session with initial input:
@@ -53,7 +53,7 @@ Source and Session metadata stay separate; execution never looks up the source a
 - List Sessions with `client.beta.agents.sessions.list(agent_id=agent.id)`. Filtering
   uses the immutable root ID, including inline Agents and history after source changes.
 
-See the [configuration and retry limits](../../contracts/agents-api/README.md#public-semantics)
+See the [configuration and retry limits](../../contracts/agents-api/wire-semantics.md#sessions)
 before relying on optional settings or hosted error/default equivalence.
 
 ## Build standalone binaries
@@ -99,7 +99,7 @@ including across key rotation. Keys in the same Project share the creator princi
 so rotating a key preserves that retry identity. Records with a known creator but
 no recorded request intent retain resolved-snapshot behavior; records without a creator cannot be retried.
 These retry policies are not verified hosted semantics. See the
-[retry boundary](../../contracts/agents-api/README.md#public-semantics).
+[retry boundary](../../contracts/agents-api/wire-semantics.md#creation-retries).
 
 The Store uses internal creation keys and preserves immutable engine/configuration,
 native continuity and same-tenant device bindings. The public API applies schema
@@ -176,7 +176,7 @@ node transport contracts are unchanged.
 `OAC_ADDR` defaults to `127.0.0.1:8091`; use a TLS reverse proxy for remote
 access. `OAC_DEFAULT_HARNESS` defaults to `codex`; use `claude_sdk` for Claude Code
 or `mcode` for MiniMax Code. Configure the corresponding qualified Runtime through
-its [deployment guide](../../contracts/agents-api/README.md#public-engine-profiles).
+its [deployment guide](../../contracts/agents-api/execution-tools.md).
 It selects new Sessions independently of the requested
 model. Existing Sessions retain their stored engine. Set
 `OAC_HARNESSES=codex,claude_sdk,mcode` to explicitly enable installed profiles
@@ -202,12 +202,12 @@ resources); general Files routes do not. Supported operations include:
   deletion; see [source Files](../../contracts/agents-api/source-files.md).
 - Vault create/retrieve/list/delete, project-scoped pagination and stored status
   filtering; static-bearer and OAuth Credential create/retrieve/list/replacement/delete,
-  plus [dispatch-time OAuth refresh](oauth-credentials.md). Public archive semantics remain gaps. Already-delivered credentials
+  plus [dispatch-time OAuth refresh](../../contracts/agents-api/vaults.md#oauth-refresh). Public archive semantics remain gaps. Already-delivered credentials
   are not withdrawn by local deletion. Session attachments support
-  [authenticated HTTPS MCP](credentials.md#use-a-credential-in-a-session).
+  [authenticated HTTPS MCP](../../contracts/agents-api/vaults.md#credential-selection-in-a-session).
 
 Execution uses the selected
-[engine profile](../../contracts/agents-api/README.md#public-engine-profiles),
+[engine profile](../../contracts/agents-api/execution-tools.md),
 including `none` and the colocated self-hosted profile described below.
 Ordinary JSON requests have a 1 MiB body limit; file transfers use the separate
 bounds in the Files contracts. Session lists support `after`, `limit` (0 is treated
@@ -249,7 +249,7 @@ it executable. Unsupported requests fail explicitly. `/healthz` reports liveness
 
 The basic `openai_hosted` profiles for Codex, Claude Code and MiniMax Code require
 explicit operator configuration. Select the qualified native image using the
-[engine profile guides](../../contracts/agents-api/README.md#public-engine-profiles),
+[engine profile guides](../../contracts/agents-api/execution-tools.md),
 then follow the [Docker setup](deploy/codex/README.md#standalone-operator-configuration).
 Core-managed hosting supports deployment-selected E2B, Docker or microsandbox;
 see the [nodes guide](../../docs/getting-started/nodes.md). For the separate
@@ -428,10 +428,10 @@ created/live events. Open a GET event stream before submitting
 later work, or use the official `sessions.stream` helper for one Turn. Function
 handlers return results through the same public events endpoint. Recover missed
 output with Session/Turn/Items queries; reconnecting SSE does not replay history.
-See [creation streaming](../../contracts/agents-api/README.md#session-creation-streaming)
+See [creation streaming](../../contracts/agents-api/sessions-events.md#creation-streaming)
 for retry behavior and unverified hosted timing.
 
-The [accepted workflows](../../contracts/agents-api/README.md#acceptance-evidence-and-remaining-scope)
+The [accepted workflows](../../contracts/agents-api/README.md#known-gaps)
 include real MiniMax execution through built API/daemon/Codex and Claude SDK,
 function success/error, cancellation and native continuation. Controlled fixtures
 remain useful but do not replace real-provider acceptance for execution changes.
@@ -583,7 +583,7 @@ selects a unique matching credential, or stays anonymous if none matches. Ambigu
 fails before Session creation with 409 `conflict_error`. Selection is frozen
 privately; Session reads and events show an implicitly selected credential ID in the
 public tool, while the stored request keeps the caller's field. See
-[credential setup and limits](credentials.md).
+[credential setup and limits](../../contracts/agents-api/vaults.md).
 Authenticated execution additionally requires `mcp_http_bearer_auth`; missing keys
 or failed authorization/decryption never fall back to anonymous execution.
 
