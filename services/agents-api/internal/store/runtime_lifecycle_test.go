@@ -120,11 +120,11 @@ func managedSession(t *testing.T, s *store.Store) (string, store.Session, store.
 	tenant := uuid.NewString()
 	v, e := s.CreateSession(t.Context(), tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`)}))
 	if e != nil {
-		t.Fatal(e)
+		t.Fatalf("create managed session: %v", e)
 	}
 	env, e := s.GetSessionEnvironment(t.Context(), tenant, v.ID)
 	if e != nil {
-		t.Fatal(e)
+		t.Fatalf("load managed session environment: %v", e)
 	}
 	return tenant, v, env
 }
