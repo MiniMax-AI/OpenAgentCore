@@ -152,7 +152,7 @@ Use OpenAgentCore for public project branding. The canonical mark is `docs/asset
 
 ## OpenAgentCore name guard
 
-`make check-names` scans tracked text for retired branding, settings and installed command names. Each exception in `scripts/name-allowlist.json` names a path glob, a regular expression and a reason.
+`make check-names` scans tracked text for retired branding, GitHub organization, settings and installed command names. Each exception in `scripts/name-allowlist.json` names a path glob, a regular expression and a reason.
 
 - An exception covers only its matched text: an allowed repository import cannot hide a retired setting elsewhere on the line.
 - Keep exceptions narrow and explain the preserved contract or detection input.

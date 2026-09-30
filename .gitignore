@@ -11,7 +11,6 @@ coverage/
 go.work.sum
 __pycache__/
 *.pyc
-/.parsar/
 /config/
 /logs/
 /state/

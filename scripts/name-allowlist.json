@@ -16,8 +16,8 @@
   },
   {
     "path": "*",
-    "regex": "Parsar (?:product|repository|service|checkout)\\b",
-    "reason": "These phrases explicitly refer to the separate Parsar product."
+    "regex": "Parsar product\\b",
+    "reason": "This phrase explicitly refers to the separate Parsar product."
   },
   {
     "path": "packages/agents-client/v1/client.go",
@@ -31,18 +31,18 @@
   },
   {
     "path": "scripts/name-allowlist.json",
-    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b|@agents-core-web/",
+    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b|@agents-core-web/|\\bminimax-ai-dev\\b",
     "reason": "The reviewed guard policy must spell the names it explains; entries are checked for nonempty reasons."
   },
   {
     "path": "scripts/check-names.test.py",
-    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b|@agents-core-web/",
+    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b|@agents-core-web/|\\bminimax-ai-dev\\b",
     "reason": "Guard regression fixtures intentionally contain retired identifiers, including rejected examples."
   },
   {
-    "path": "*",
-    "regex": "\\bPARSAR_(?:CAPABILITY_UPLOAD_TOKEN|SERVER_URL|MASTER_KEY|PROTOCOL_BASELINE_REVISION)\\b",
-    "reason": "These four settings belong to the separate product integration; Core does not rename their protocol."
+    "path": "apps/daemon/internal/cli/skill_upload*.go",
+    "regex": "\\bPARSAR_(?:CAPABILITY_UPLOAD_TOKEN|SERVER_URL)\\b",
+    "reason": "These settings belong to the separate product capability upload integration; Core does not rename their protocol."
   },
   {
     "path": "services/core/migrations/000078_oac_runtime_names.sql",
@@ -58,11 +58,6 @@
     "path": "*",
     "regex": "https://developers\\.openai\\.com/api/docs/guides/agents-api(?:/[A-Za-z0-9_./-]*)?",
     "reason": "Official upstream documentation URLs are external protocol references."
-  },
-  {
-    "path": ".gitignore",
-    "regex": "(?m)^/\\.parsar/$",
-    "reason": "Ignore legacy private state; it is not a supported installed command."
   },
   {
     "path": "services/core/internal/credentialcrypto/*.go",
@@ -150,11 +145,6 @@
     "reason": "Migration input and historical Session content assertions prove only the Runtime reference changes, never stored conversation data."
   },
   {
-    "path": "services/core/internal/store/environment_setup_test.go",
-    "regex": "PARSAR_APPLICATION_VALUE",
-    "reason": "This test proves the old reservation no longer blocks application-provided product variables."
-  },
-  {
     "path": "services/core/migrations/000075_public_url_binding.sql",
     "regex": "AGENTS_API_PUBLIC_URL",
     "reason": "Historical migration commentary records the environment name used when this migration was written."
@@ -180,28 +170,8 @@
     "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
   },
   {
-    "path": "internal/runtimecrypto/cmd/emit-fixture/main.go",
-    "regex": "Parsar runtime credential envelope",
-    "reason": "This deterministic historical wire fixture names the originating protocol; its bytes remain stable."
-  },
-  {
-    "path": "internal/runtimecrypto/testdata/wire_v1.json",
-    "regex": "Parsar runtime credential envelope",
-    "reason": "This deterministic historical wire fixture names the originating protocol; its bytes remain stable."
-  },
-  {
-    "path": "internal/agentdaemon/proto/outbound.go",
-    "regex": "Parsar agent_run id",
-    "reason": "The legacy field documents the originating product wire identifier; its JSON contract is unchanged."
-  },
-  {
-    "path": "apps/web/src/features/sandbox/deployment-specification.test.ts",
-    "regex": "parsar-core-runtime@sha256:",
-    "reason": "The literal is a rejected legacy Runtime prefix fixture, not an accepted deployment reference."
-  },
-  {
     "path": "CONTRIBUTING.md",
-    "regex": "in Parsar\\.|apps/parsar/|Parsar is an ordinary client|Parsar integration|Parsar owns|`parsar` provider slug",
+    "regex": "apps/parsar/|Parsar owns",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
@@ -216,7 +186,7 @@
   },
   {
     "path": "apps/web/.impeccable/surfaces/src-app-tsx.md",
-    "regex": "Parsar [Ii]ndigo|Parsar\\n",
+    "regex": "Parsar indigo",
     "reason": "The design records explicitly attribute the copied indigo palette to its original product; it is not a rendered Core product label."
   },
   {

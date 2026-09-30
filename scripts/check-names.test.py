@@ -42,7 +42,8 @@ class NameGuardTests(unittest.TestCase):
                 self.assertTrue(names.violations("x", value, []))
 
     def test_new_names_and_pinned_public_contract_are_not_retired(self):
-        content = "OpenAgentCore oac-core OAC_CORE_PORT agents_api AgentCoreError x_agents_core core_console_session"
+        content = ("OpenAgentCore oac-core OAC_CORE_PORT agents_api AgentCoreError x_agents_core core_console_session"
+                   " github.com/MiniMax-AI/OpenAgentCore")
         self.assertFalse(names.violations("x", content, []))
 
     def test_coordinates_and_multiple_matches_do_not_disclose_line_content(self):
@@ -125,6 +126,12 @@ class NameGuardTests(unittest.TestCase):
                         '"Parsar product" PARSAR_HOME'):
             with self.subTest(content=content):
                 self.assertEqual(len(names.violations("README.md", content, rules)), 1)
+
+    def test_retired_organization_is_rejected(self):
+        for content in ("Copyright (c) 2026 MiniMax-AI-Dev", "https://github.com/minimax-ai-dev/OpenAgentCore"):
+            with self.subTest(content=content):
+                self.assertEqual([item[2].lower() for item in names.violations("LICENSE", content, [])],
+                                 ["minimax-ai-dev"])
 
     def test_former_repository_identities_are_rejected(self):
         rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))

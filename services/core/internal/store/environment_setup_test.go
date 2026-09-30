@@ -93,7 +93,7 @@ func TestEnvironmentSetupReservesOpenAgentCoreNames(t *testing.T) {
 			t.Fatalf("reserved name %s accepted: %v", name, err)
 		}
 	}
-	if err := (EnvironmentSetup{Env: map[string]string{"APPLICATION_VALUE": "ok", "PARSAR_APPLICATION_VALUE": "product"}}).Validate(); err != nil {
+	if err := (EnvironmentSetup{Env: map[string]string{"APPLICATION_VALUE": "ok"}}).Validate(); err != nil {
 		t.Fatalf("ordinary application settings rejected: %v", err)
 	}
 }

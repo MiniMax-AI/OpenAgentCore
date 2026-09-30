@@ -46,8 +46,8 @@ type PromptRequestPayload struct {
 	// (Claude --resume session id, scratch dir).
 	ConversationID string `json:"conversation_id"`
 
-	// RunID is the Parsar agent_run id; mirrored back on every
-	// upstream frame via Envelope.ID.
+	// RunID is the ID of the Core Turn this prompt executes; mirrored
+	// back on every upstream frame via Envelope.ID.
 	RunID string `json:"run_id"`
 
 	// Input preserves ordered user messages and content.

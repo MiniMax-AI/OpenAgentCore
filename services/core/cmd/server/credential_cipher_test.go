@@ -13,7 +13,6 @@ import (
 
 func TestCredentialCipherConfiguration(t *testing.T) {
 	t.Setenv("OAC_CREDENTIAL_KEY_FILE", "")
-	t.Setenv("PARSAR_MASTER_KEY", "must-not-be-used")
 	if c, err := credentialCipher(); c != nil || err != nil {
 		t.Fatal("absent dedicated key must remain disabled", err)
 	}

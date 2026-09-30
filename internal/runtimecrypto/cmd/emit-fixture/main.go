@@ -57,7 +57,7 @@ func main() {
 	}
 
 	out := fixture{
-		Description: "Wire fixture for Parsar runtime credential envelope. " +
+		Description: "Wire fixture for the Runtime credential envelope. " +
 			"Recipient keypair is committed for test reproducibility. DO NOT use these " +
 			"keys in any other context. Wire format: NaCl SealAnonymous (X25519 + " +
 			"XSalsa20-Poly1305), nonce = BLAKE2b-24(ephPub || recipientPub).",

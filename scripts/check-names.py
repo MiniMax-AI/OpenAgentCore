@@ -16,7 +16,8 @@ FORBIDDEN = re.compile(
     r"(?i:parsar)|\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\bAGENTS_API_[A-Z][A-Z0-9_]*|\bCORE_CONSOLE_[A-Z][A-Z0-9_]*"
     r"|\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider"
     r"|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\b"
-    r"|\bcore-console\b|\bagents-runtime-|(?i:\bAgents? Core(?: Web)?\b)|@agents-core-web/",
+    r"|\bcore-console\b|\bagents-runtime-|(?i:\bAgents? Core(?: Web)?\b)|@agents-core-web/"
+    r"|(?i:\bminimax-ai-dev\b)",
 )
 
 

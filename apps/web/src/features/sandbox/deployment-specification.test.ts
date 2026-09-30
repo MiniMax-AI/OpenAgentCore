@@ -51,7 +51,7 @@ describe("deployment resources and Runtime", () => {
   });
   it("accepts any well-formed Runtime image name in the Runtime reference", async () => {
     const digest = "b".repeat(64);
-    for (const runtime_ref of [`parsar-core-runtime@sha256:${digest}`, `oac-runtime@sha256:${digest}`, `custom-runtime@sha256:${digest}`]) {
+    for (const runtime_ref of [`oac-runtime@sha256:${digest}`, `custom-runtime@sha256:${digest}`]) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...manifest, runtime_ref }))));
       expect((await distributionRuntime(new AbortController().signal)).microsandbox_ref).toBe(runtime_ref);
       expect(isRuntimeReleaseField("microsandbox_ref", runtime_ref)).toBe(true);
