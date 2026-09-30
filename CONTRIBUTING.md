@@ -33,11 +33,11 @@ This guide owns how to work in the repository: documentation ownership, the repo
 
 ## Repository boundary
 
-This repository is the standalone execution substrate copied from Parsar at the revision in `provenance/source.json`. It holds the API and its migrations, the Runtime protocol and daemon, Harness adapters, shared execution packages, the standalone Core Web console and build/test tools.
+This repository is the standalone execution substrate, copied from the Parsar repository. It holds the API and its migrations, the Runtime protocol and daemon, Harness adapters, shared execution packages, the standalone Core Web console and build/test tools.
 
 Product users, workspaces, model catalogs, business assets, the Parsar product Web, product API and product migrations remain in Parsar. Do not import `server/`, `apps/parsar/`, product CLI/plugin packages or their deployment stack.
 
-Preserve copied Runtime and protocol behavior. Go import paths use this repository's module and do not require fetching the original repository. The source snapshot and per-file hashes are an audit trail; future Core development need not preserve them. Do not automatically sync or delete the original repository's Core.
+Preserve copied Runtime and protocol behavior. Go import paths use this repository's module and do not require fetching the original repository. Do not automatically sync or delete the original repository's Core.
 
 ### Product and execution service separation
 

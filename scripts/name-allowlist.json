@@ -10,11 +10,6 @@
     "reason": "Historical remediation artifacts retain their evidence paths."
   },
   {
-    "path": "provenance/*",
-    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b",
-    "reason": "This directory is the immutable source-copy audit trail, not current installation guidance."
-  },
-  {
     "path": "packages/agents-client/src/*",
     "regex": "(?:\\./)?fixtures/parsar-[0-9a-f]+/[A-Za-z0-9_./-]+",
     "reason": "Fixture directory paths identify historical product protocol snapshots."
@@ -250,11 +245,6 @@
     "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
   },
   {
-    "path": "scripts/verify-source-copy.py",
-    "regex": "parsar-core|apps/parsar/",
-    "reason": "The source-copy verifier records repository provenance and forbids importing the separate product source directory."
-  },
-  {
     "path": "internal/runtimecrypto/cmd/emit-fixture/main.go",
     "regex": "Parsar runtime credential envelope",
     "reason": "This deterministic historical wire fixture names the originating protocol; its bytes remain stable."
@@ -301,7 +291,7 @@
   },
   {
     "path": "CONTRIBUTING.md",
-    "regex": "copied from Parsar at|in Parsar\\.|apps/parsar/|Parsar is an ordinary client|Parsar integration|Parsar owns|`parsar` provider slug",
+    "regex": "in Parsar\\.|apps/parsar/|Parsar is an ordinary client|Parsar integration|Parsar owns|`parsar` provider slug",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
@@ -348,11 +338,6 @@
     "path": "docs/getting-started/operations.md",
     "regex": "~/\\.parsar/core",
     "reason": "A default install refuses while this path holds an installation of an earlier release; the troubleshooting row names it."
-  },
-  {
-    "path": "scripts/verify-source-copy.py",
-    "regex": "apps/parsar",
-    "reason": "The source-copy boundary rejects the separate product application directory."
   },
   {
     "path": "services/core/tests/official_environment_plugin_mcp.py",
@@ -443,11 +428,6 @@
     "path": "contracts/agents-api/README.md",
     "regex": "https://github\\.com/MiniMax-AI-Dev/parsar/pull/[0-9]+",
     "reason": "Historical acceptance evidence links to pull requests in the separate upstream Parsar repository."
-  },
-  {
-    "path": "scripts/verify-source-copy.py",
-    "regex": "(?:services/agents-api|apps/parsar-daemon)/[A-Za-z0-9_./-]*",
-    "reason": "Source-copy records keep their upstream paths; the verifier maps them to the current directories."
   },
   {
     "path": "services/core/migrations/000015_retire_item_backfill.sql",

@@ -29,10 +29,10 @@ class NameGuardTests(unittest.TestCase):
                          [(1, 1, "AGENTS_API_PORT")])
 
     def test_exception_is_path_scoped_and_case_sensitive(self):
-        rule = self.rule("parsar", "provenance/*")
-        self.assertFalse(names.violations("provenance/source.json", "parsar", [rule]))
+        rule = self.rule("parsar", "history/*")
+        self.assertFalse(names.violations("history/source.json", "parsar", [rule]))
         self.assertTrue(names.violations("README.md", "parsar", [rule]))
-        self.assertTrue(names.violations("provenance/source.json", "PARSAR", [rule]))
+        self.assertTrue(names.violations("history/source.json", "PARSAR", [rule]))
 
     def test_detections_include_commands_settings_labels_and_display(self):
         for value in ("PaRsAr", "io.parsar.installation", "AGENTS_API_PORT", "CORE_CONSOLE_BIND", "AGENTS_CORE_WEB_ADDR",
