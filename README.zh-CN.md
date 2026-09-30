@@ -54,8 +54,8 @@ Core 对外提供两组 API：
 
 | API | 路径 | 调用方 |
 | --- | --- | --- |
-| **Agents API** | `/v1` | 你的应用，与 OpenAI 协议一致 |
-| **Core API** | `/core/v1` | 管理员，通过 Web 调用 |
+| **[Agents API](docs/api/public-agent-api.md)** | `/v1` | 你的应用，与 [OpenAI 的 Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview) 协议一致 |
+| **[Core API](docs/api/README.md#core-api)** | `/core/v1` | 管理员，通过 Web 调用 |
 
 所有状态都由 Core 保存；Runtime 在 Environment 中运行所选 Harness。各部件之间都通过既定协议连接，
 任何一个都可以单独替换。详见[架构说明](docs/architecture.md)。
