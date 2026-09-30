@@ -132,4 +132,4 @@ The Core and node installers share one resolver for these identities. It confirm
 
 ## Validation
 
-`make check-distribution` covers the production proxy, the installation rules, release metadata and native catalog assembly, including bundle manifests larger than Node's default subprocess buffer (catalog assembly reads up to 64 MiB). Live release qualification and its stages are in the `scripts/promote-qualified-release.py` docstring. Diagnostics report observed service health, never fabricated model or environment readiness. Runtime observations belong to Core; do not add monitoring or lifecycle tracking to the installer or the landing site.
+`make check-distribution` covers the production proxy, the installation rules, release metadata and native catalog assembly, including bundle manifests larger than Node's default subprocess buffer (catalog assembly reads up to 64 MiB). Diagnostics report observed service health, never fabricated model or environment readiness. Runtime observations belong to Core; do not add monitoring or lifecycle tracking to the installer or the landing site.

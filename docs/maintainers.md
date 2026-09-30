@@ -144,10 +144,6 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 
 With `draft_release=true` the result is an unpublished `build-<full SHA>` draft Release; with `draft_release=false` the files stay in the Actions artifact. Use the exact matched asset set; never mix builds or resolve components through `latest`.
 
-### Promote a qualified candidate
-
-`scripts/promote-qualified-release.py` qualifies a candidate on a supervised host and publishes it once main reaches the reviewed promotion commit. Pass the candidate's flat files, built for the `build-<full SHA>` release base: the thin and offline archives and the native installers, each with its `.sha256`, and the Runtime and node assets. Take them from a local build with that release base and `CORE_DISTRIBUTION_OFFLINE=1`, or from the Actions artifact of a manual `core-release` run with `draft_release=false` after removing `install.sh` and `install.sh.sha256`. The command creates the draft Release itself and refuses any other file, so a draft created by `draft_release=true` cannot be promoted. Its module docstring lists the inputs, the qualification stages and the publication checks.
-
 ## Continuous integration
 
 | Workflow | Runs on | Covers |
