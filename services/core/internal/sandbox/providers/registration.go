@@ -45,16 +45,20 @@ func ValidateRegistration(a Adapter) error {
 	if err := sandbox.ValidateOperations(operations); err != nil {
 		return err
 	}
-	// The current common lifecycle admits checkpoint suspension only on nodes,
-	// and creates its policy whenever checkpoint support is declared.
-	if operations["Initial"].State == providercontract.Supported {
+	// Both suspension lifecycles use the common idle/retention policy.
+	checkpoint := operations["Initial"].State == providercontract.Supported
+	resident := operations["PauseResident"].State == providercontract.Supported
+	if (checkpoint && a.Mode != "nodes") || (resident && a.Mode != "direct") {
+		return invalid("suspension mode")
+	}
+	if checkpoint || resident {
 		const maximumSeconds = int64((1<<63 - 1) / time.Second)
-		if a.Mode != "nodes" || a.IdleSeconds < 1 || a.RetentionSeconds < 1 ||
+		if a.IdleSeconds < 1 || a.RetentionSeconds < 1 ||
 			a.IdleSeconds > maximumSeconds || a.RetentionSeconds > maximumSeconds {
-			return invalid("checkpoint policy")
+			return invalid("suspension policy")
 		}
 	} else if a.IdleSeconds != 0 || a.RetentionSeconds != 0 {
-		return invalid("non-checkpoint policy")
+		return invalid("unsupported suspension policy")
 	}
 	return nil
 }

@@ -158,13 +158,17 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 
 // Idle time is measured before suspension, retention after suspension. Neither
 // duration needs to be greater than the other.
-func TestRegistrationCheckpointPolicy(t *testing.T) {
+func TestRegistrationSuspensionPolicy(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		kind            string
 		idle, retention int64
 		direct, valid   bool
 	}{
+		{"resident suspension", "e2b", 300, 86400, false, true},
+		{"resident missing idle", "e2b", 0, 86400, false, false},
+		{"resident missing retention", "e2b", 300, 0, false, false},
+		{"resident overflow", "e2b", 1<<63 - 1, 86400, false, false},
 		{"negative idle", "microsandbox", -1, 20, false, false},
 		{"missing idle", "microsandbox", 0, 20, false, false},
 		{"missing retention", "microsandbox", 20, 0, false, false},
@@ -185,5 +189,13 @@ func TestRegistrationCheckpointPolicy(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestRegistrationRejectsResidentPauseOnNodeTransport(t *testing.T) {
+	a := adapters["e2b"]
+	a.Mode, a.BuildDirect, a.BuildLocal = "nodes", nil, adapters["docker"].BuildLocal
+	if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) {
+		t.Fatal(err)
 	}
 }

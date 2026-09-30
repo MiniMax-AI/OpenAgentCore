@@ -229,7 +229,7 @@ runtime plugin loading.
 - A `nodes` registration requires only `BuildLocal`; a `direct` registration requires only `BuildDirect`. Missing, mixed or unknown modes are rejected.
 - Specification/resource validators, the configuration adapter and the complete operation declaration are mandatory. An incomplete registration cannot publish a partial installer projection.
 - The Runtime input policy must either accept the pinned Runtime or give the adapter's fixed reason for rejecting it; it cannot do both.
-- Current checkpoint suspension requires node mode and positive idle/retention defaults that fit Runtime durations. The two durations are independent. Providers without checkpoint support must not configure suspension defaults.
+- Checkpoint suspension requires node mode; resident pause requires direct mode. Either lifecycle requires positive idle/retention defaults that fit Runtime durations. The two durations are independent. Providers supporting neither lifecycle must not configure suspension defaults.
 
 The configuration adapter must be non-nil, including its concrete value. Each `ConfigurationRequirements` field needs an explicit valid decision: `Credential` and `PublicOrigin` use `Required` or `NotRequired`; `Discovery` uses the shared supported/Unsupported declaration with its safe reason. `ConfigurationDiscoverer` must be implemented even when discovery is unsupported. New requirement fields or discovery methods require an explicit validation update; they cannot inherit an existing decision. Configuration discovery is distinct from resource selection discovery. Requiring a credential does not itself promise the resource operation `VerifyCredential`.
 
