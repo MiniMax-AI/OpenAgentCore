@@ -6,7 +6,7 @@ SWAG_VERSION ?= v1.16.4
 .PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core build-core-release check-core docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
 
 help:
-	@printf '%s\n' 'make build-core  Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
+	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
 check: check-harness-catalog check-docs check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-core check-claude-sdk check-web check-example check-mcode-harness
 	@printf 'OpenAgentCore checks passed.\n'
