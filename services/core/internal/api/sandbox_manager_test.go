@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -15,7 +15,7 @@ func TestSandboxAdministratorIsSeparateFromProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestSandboxAdministratorIsSeparateFromProject(t *testing.T) {
 	if result.Code != http.StatusUnauthorized {
 		t.Fatal("admin key gained project authority", result.Code)
 	}
-	reused, _ := NewDeploymentAuthenticator([]string{device.HashCredential("caller")})
+	reused, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("caller")})
 	collided, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, reused))
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestSandboxAdministratorIsSeparateFromProject(t *testing.T) {
 	}
 }
 func TestSandboxEnrollmentDoesNotAcceptProjectAsAdmin(t *testing.T) {
-	auth, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	auth, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	called := false
 	protected := auth.authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(http.StatusNoContent) }))
 	for _, token := range []string{"caller", "node-credential", "enrollment-token", ""} {
@@ -81,7 +81,7 @@ func TestSandboxLocalNodeRemovalExplainsDeploymentBinding(t *testing.T) {
 
 func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin))
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 // before any token is read.
 func TestSandboxNodeEnrollmentRequiresCoreURL(t *testing.T) {
 	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin))
 	if err != nil {
 		t.Fatal(err)

@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSandboxDeploymentSetupRequiresAdministratorAndStrictBody(t *testing.T) {
 	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	calls := 0
 	initialize := func(_ context.Context, input store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
 		calls++

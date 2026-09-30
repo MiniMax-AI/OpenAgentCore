@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -44,7 +44,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				t.Fatal(err)
 			}
 			awaitRelease()
-			restarted, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry()})
+			restarted, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
 			if err != nil {
 				t.Fatal(err)
 			}

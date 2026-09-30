@@ -1,14 +1,14 @@
 package api
 
 import (
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"testing"
 )
 
 func TestSandboxNodeDetailValidationAndAuthentication(t *testing.T) {
 	auth, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	h, err := NewHandler(&recordingStore{}, auth, "codex", WithSandboxManager(&store.Store{}, admin))
 	if err != nil {
 		t.Fatal(err)

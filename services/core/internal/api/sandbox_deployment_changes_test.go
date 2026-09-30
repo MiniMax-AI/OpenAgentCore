@@ -9,13 +9,13 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	updates, resets := 0, 0
 	update := func(_ context.Context, in store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
 		updates++

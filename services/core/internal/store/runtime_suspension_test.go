@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -19,7 +19,7 @@ func runtimeSuspensionFixture(t *testing.T) (*Store, *Store, *pgxpool.Pool, Runt
 	w := executionLease(t, s).Store()
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), device.HashCredential(uuid.NewString()))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestRuntimeSuspensionCountsUncertainCapacityUntilReleased(t *testing.T) {
 	for _, item := range cases {
 		tenant := uuid.NewString()
 		_, env := localEnvironment(t, s, tenant)
-		owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, env.ID, provider, device.HashCredential(uuid.NewString()))
+		owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, env.ID, provider, runtimedevice.HashCredential(uuid.NewString()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -458,7 +458,7 @@ func TestRuntimeComputePhaseChangedAtInNodeAllocations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocation, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, device.HashCredential("runtime"))
+	allocation, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}

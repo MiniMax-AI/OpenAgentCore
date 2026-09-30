@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -41,8 +41,8 @@ func environmentFileCreateHandler(t *testing.T, extra ...Option) (http.Handler, 
 	base.environment.Configuration = json.RawMessage(`{"type":"openai_hosted","network":{"access":"disabled"}}`)
 	f := &environmentFileCreateFixture{environmentFilesFixture: base}
 	auth, err := NewAuthenticator([]APIKey{
-		{OrganizationID: "org", ProjectID: "project", SubjectKind: "user", SubjectID: "caller", TokenSHA256: device.HashCredential("files-key"), TenantID: f.environment.TenantID},
-		{OrganizationID: "org", ProjectID: "other", SubjectKind: "user", SubjectID: "other", TokenSHA256: device.HashCredential("other-key"), TenantID: uuid.NewString()},
+		{OrganizationID: "org", ProjectID: "project", SubjectKind: "user", SubjectID: "caller", TokenSHA256: runtimedevice.HashCredential("files-key"), TenantID: f.environment.TenantID},
+		{OrganizationID: "org", ProjectID: "other", SubjectKind: "user", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential("other-key"), TenantID: uuid.NewString()},
 	})
 	if err != nil {
 		t.Fatal(err)

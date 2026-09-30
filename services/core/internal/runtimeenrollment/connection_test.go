@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -23,7 +23,7 @@ type connectionStub struct {
 
 func (s *connectionStub) AuthenticateEnvironmentExecutor(_ context.Context, environment, digest string) (string, error) {
 	s.calls++
-	if environment != "environment" || digest != device.HashCredential("test-key") {
+	if environment != "environment" || digest != runtimedevice.HashCredential("test-key") {
 		return "", store.ErrNotFound
 	}
 	return "tenant", s.err
@@ -34,7 +34,7 @@ func (*connectionStub) GetEnvironment(context.Context, string, string) (store.En
 func (*connectionStub) GetSessionDevice(context.Context, string, string) (store.ExecutionDevice, error) {
 	return store.ExecutionDevice{}, store.ErrNotFound
 }
-func (*connectionStub) GetDeviceCredential(context.Context, string) (device.Credential, bool, error) {
+func (*connectionStub) GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error) {
 	panic("unbound lookup")
 }
 
@@ -57,7 +57,7 @@ func TestConnectionReadContract(t *testing.T) {
 		req := httptest.NewRequest(tc.method, "/api/v1/agent-daemon/connection?"+tc.query, nil)
 		req.Header.Set("Authorization", tc.bearer)
 		res := httptest.NewRecorder()
-		ConnectionHandler(s, gateway.NewRegistry()).ServeHTTP(res, req)
+		ConnectionHandler(s, runtimegateway.NewRegistry()).ServeHTTP(res, req)
 		if res.Code != tc.code || s.calls != tc.calls || res.Header().Get("Cache-Control") != "no-store" {
 			t.Fatalf("%s %s: %d, %d calls", tc.method, tc.query, res.Code, s.calls)
 		}
@@ -100,23 +100,23 @@ func (s *liveConnectionStore) GetEnvironment(context.Context, string, string) (s
 func (s *liveConnectionStore) GetSessionDevice(context.Context, string, string) (store.ExecutionDevice, error) {
 	return store.ExecutionDevice{ID: "device", EnvironmentID: "environment"}, nil
 }
-func (s *liveConnectionStore) GetDeviceCredential(context.Context, string) (device.Credential, bool, error) {
+func (s *liveConnectionStore) GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error) {
 	s.credentialCalls++
 	if s.authCalls >= 2 && s.credentialRecheckError != nil {
-		return device.Credential{}, false, s.credentialRecheckError
+		return runtimedevice.Credential{}, false, s.credentialRecheckError
 	}
 	if s.deviceRevokedAtRecheck && s.authCalls >= 2 {
-		return device.Credential{}, false, nil
+		return runtimedevice.Credential{}, false, nil
 	}
-	return device.Credential{ID: "device", WorkspaceID: "tenant", Type: gateway.RuntimeTypeAgentDaemon, CredentialHash: s.digest}, true, nil
+	return runtimedevice.Credential{ID: "device", WorkspaceID: "tenant", Type: runtimegateway.RuntimeTypeAgentDaemon, CredentialHash: s.digest}, true, nil
 }
 func TestRuntimeConnectedCurrentAuthorityAfterPeer(t *testing.T) {
 	for _, name := range []string{"connected", "rotated before read", "revoked after peer", "device revoked after peer", "retired after peer", "store error after peer", "device store error after peer", "closed", "no registry"} {
 		t.Run(name, func(t *testing.T) {
-			digest := device.HashCredential("fixture-key")
+			digest := runtimedevice.HashCredential("fixture-key")
 			s := &liveConnectionStore{digest: digest}
-			registry := gateway.NewRegistry()
-			handler := gateway.NewHandler(gateway.HandlerConfig{Registry: registry, Authenticator: gateway.NewAuthenticator(s)})
+			registry := runtimegateway.NewRegistry()
+			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Registry: registry, Authenticator: runtimegateway.NewAuthenticator(s)})
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
 			conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"?device_id=device&version="+proto.Version, http.Header{"Authorization": {"Bearer fixture-key"}})
@@ -137,7 +137,7 @@ func TestRuntimeConnectedCurrentAuthorityAfterPeer(t *testing.T) {
 			want := name == "connected"
 			switch name {
 			case "rotated before read":
-				s.digest = device.HashCredential("new-key")
+				s.digest = runtimedevice.HashCredential("new-key")
 				digest = s.digest
 			case "revoked after peer":
 				s.revokeAtRecheck = true

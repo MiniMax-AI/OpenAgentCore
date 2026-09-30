@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -24,7 +24,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	w := lease.Store()
 	ctx := t.Context()
 	tenant, session := newSubagentSession(t, s)
-	host, err := s.CreateDevice(ctx, tenant, "identity test", device.HashCredential(uuid.NewString()))
+	host, err := s.CreateDevice(ctx, tenant, "identity test", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,11 +17,11 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -64,7 +64,7 @@ type hostedFailureProvider struct {
 	steps  []string
 }
 
-func (p *hostedFailureProvider) setRuntimeGateway(t *testing.T, endpoint string, registry *gateway.Registry) {
+func (p *hostedFailureProvider) setRuntimeGateway(t *testing.T, endpoint string, registry *runtimegateway.Registry) {
 	p.initializationPeer.setRuntimeGateway(t, endpoint, registry)
 	p.apply = p.prepare
 }
@@ -294,8 +294,8 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	w, _ := managedWorkerMode(t, s, key, p, false, true)
 	auth, err := newTestAuthenticator([]testAPIKey{
-		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: tenant},
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: device.HashCredential(foreign), TenantID: uuid.NewString()},
+		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
 	if err != nil {
 		t.Fatal(err)

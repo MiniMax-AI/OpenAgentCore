@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -18,7 +18,7 @@ func TestSandboxProviderRegistrationDoesNotRequireAnExecutionVendorBranch(t *tes
 			id := uuid.NewString()
 			config := &RuntimeProvider{InstallationID: id, ProviderKind: "contract-fixture", Mode: mode,
 				CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: &lifecycleOnlySandbox{}}
-			m, err := newRuntimeManager(nil, gateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }))
+			m, err := newRuntimeManager(nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }))
 			if err != nil {
 				t.Fatal(err)
 			}

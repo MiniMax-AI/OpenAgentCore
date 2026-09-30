@@ -14,8 +14,8 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -141,7 +141,7 @@ func newCreationStreamHarness(t *testing.T) *creationStreamHarness {
 	}}}
 	auth, err := NewAuthenticator([]APIKey{{
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
-		TokenSHA256: device.HashCredential("key"), TenantID: tenant,
+		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: tenant,
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -708,7 +708,7 @@ func (a *countingStreamAdmission) CreateSessionStream(context.Context, string, s
 }
 
 func TestCreationStreamCapabilityIsCheckedBeforeCreation(t *testing.T) {
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential("key"), TenantID: uuid.NewString()}})
+	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: uuid.NewString()}})
 	if err != nil {
 		t.Fatal(err)
 	}

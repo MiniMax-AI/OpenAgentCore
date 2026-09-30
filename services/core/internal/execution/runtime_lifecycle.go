@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -41,7 +41,7 @@ type RuntimeProvider struct {
 
 type runtimeLifecycle struct {
 	store           *store.Store
-	registry        *gateway.Registry
+	registry        *runtimegateway.Registry
 	config          RuntimeProvider
 	nodeID          string
 	gate            chan struct{}
@@ -55,7 +55,7 @@ type runtimeLifecycle struct {
 	wakeHints       chan struct{}
 }
 
-func newRuntimeManager(s *store.Store, registry *gateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
+func newRuntimeManager(s *store.Store, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
 	if config == nil {
 		return nil, nil
 	}
@@ -76,7 +76,7 @@ func newRuntimeManager(s *store.Store, registry *gateway.Registry, config *Runti
 	return &runtimeManager{store: s, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
-func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registry) (RuntimeProvider, error) {
+func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
 	u, err := url.Parse(config.CoreURL)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || config.Provider == nil || registry == nil {
 		return RuntimeProvider{}, sandbox.ErrInvalid
@@ -202,7 +202,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		return store.RuntimeAllocation{}, err
 	}
 	token := hex.EncodeToString(secret)
-	owner, err := r.store.ReserveRuntimeAllocation(ctx, tenant, environment, providerKey, device.HashCredential(token))
+	owner, err := r.store.ReserveRuntimeAllocation(ctx, tenant, environment, providerKey, runtimedevice.HashCredential(token))
 	if err != nil {
 		return owner, err
 	}

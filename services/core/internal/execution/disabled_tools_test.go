@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -38,7 +38,7 @@ func TestDisabledToolRequestPreservesIntentOnResume(t *testing.T) {
 		}
 		before, _ := json.Marshal(snapshot)
 		for _, nativeID := range []string{"", "native-session"} {
-			request, err := (&Dispatcher{}).executionRequest(t.Context(), store.Session{ID: "session"}, snapshot, device.KindCapabilities{}, store.SessionExecutionBinding{NativeSessionID: nativeID})
+			request, err := (&Dispatcher{}).executionRequest(t.Context(), store.Session{ID: "session"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{NativeSessionID: nativeID})
 			if err != nil || request.ExecutionControls.DisableProgrammaticToolCalling != disabled || request.ExecutionControls.WebSearch != "disabled" || request.AgentSessionID != nativeID {
 				t.Fatal(request, err)
 			}
@@ -68,7 +68,7 @@ func TestEnabledWebSearchNeverReachesDispatch(t *testing.T) {
 			t.Fatal(tool, err)
 		}
 		snapshot := Snapshot{Agent: v1.Agent{Model: "model", Tools: tools}}
-		if _, err := (&Dispatcher{}).executionRequest(t.Context(), store.Session{ID: "session"}, snapshot, device.KindCapabilities{}, store.SessionExecutionBinding{}); err == nil {
+		if _, err := (&Dispatcher{}).executionRequest(t.Context(), store.Session{ID: "session"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); err == nil {
 			t.Fatal("dispatch request built for", tool)
 		}
 		raw := json.RawMessage(`{"agent":{"model":"model","tools":[` + tool + `]},"environment":{"type":"none"}}`)

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -79,11 +79,11 @@ func (trapKeys) ResolveProjectAPIKey(context.Context, string) (store.ProjectAPIK
 func daemonComposition(t testing.TB) http.Handler {
 	t.Helper()
 	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "org", ProjectID: "project", SubjectKind: "service_account",
-		SubjectID: "runner", TokenSHA256: device.HashCredential("project-key"), TenantID: uuid.NewString()}})
+		SubjectID: "runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := api.NewDeploymentAuthenticator([]string{device.HashCredential("admin-key")})
+	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin-key")})
 	if err != nil {
 		t.Fatal(err)
 	}

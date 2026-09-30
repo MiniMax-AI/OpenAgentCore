@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -33,7 +33,7 @@ type fakeCheckpointProvider struct {
 	snapshots                                                    map[string]sandbox.SnapshotIdentity
 	bootstraps                                                   map[string]sandbox.Bootstrap
 	peers                                                        map[string]*websocket.Conn
-	registry                                                     *gateway.Registry
+	registry                                                     *runtimegateway.Registry
 	endpoint                                                     string
 	captures, restores, captureObservations, restoreObservations int
 	computeKills, snapshotDeletes, wakeCommands                  int
@@ -270,9 +270,9 @@ type computeLifecycleFixture struct {
 func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *computeLifecycleFixture {
 	t.Helper()
 	s, pool := store.NewManagedTestStore(t)
-	registry := gateway.NewRegistry()
+	registry := runtimegateway.NewRegistry()
 	p := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
-	handler := gateway.NewHandler(gateway.HandlerConfig{Authenticator: gateway.NewAuthenticator(s), Registry: registry})
+	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	p.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
 	t.Cleanup(func() {

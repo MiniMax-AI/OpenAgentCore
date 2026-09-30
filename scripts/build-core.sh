@@ -25,7 +25,7 @@ trap 'rm -rf "$build_context"' EXIT
 tar -C "$repo_root" -cf - \
   go.mod go.sum \
   contracts/agents-api/v1 \
-  internal/agentdaemon/device internal/agentdaemon/gateway internal/agentdaemon/proto \
+  internal/agentdaemon/proto \
   internal/runtimefs internal/runtimebootstrap internal/agentnetwork internal/agentbundle internal/agentcapabilities internal/agentplugin internal/agentskill internal/harnessconfig internal/modelprovider internal/providerassets internal/obs/log services/core \
   | tar -C "$build_context" -xf -
 

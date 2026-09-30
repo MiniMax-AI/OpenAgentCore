@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -32,7 +32,7 @@ type dispatchHarness struct {
 	session      store.Session
 	device       store.ExecutionDevice
 	conn         *websocket.Conn
-	registry     *gateway.Registry
+	registry     *runtimegateway.Registry
 	url          string
 	credential   string
 	environments map[string]*dispatchHarness
@@ -69,9 +69,9 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		if getErr != nil {
 			t.Fatal(getErr)
 		}
-		h.device, err = s.CreateEnvironmentDevice(ctx, h.tenant, environment.ID, "local runtime", device.HashCredential(secret))
+		h.device, err = s.CreateEnvironmentDevice(ctx, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
 	} else {
-		h.device, err = s.CreateDevice(ctx, h.tenant, "isolated executor", device.HashCredential(secret))
+		h.device, err = s.CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
 	}
 	if err != nil {
 		t.Fatal(err)

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -75,7 +75,7 @@ func (f *functionExchange) record(ctx context.Context, env proto.Envelope) error
 	return f.unlessCancelling(ctx, err)
 }
 
-func (f *functionExchange) start(ctx context.Context, peer *gateway.Session) error {
+func (f *functionExchange) start(ctx context.Context, peer *runtimegateway.Session) error {
 	if f.reply != nil || len(f.tools) == 0 {
 		return nil
 	}
@@ -184,7 +184,7 @@ func functionResult(call store.FunctionCall) (proto.FunctionResultPayload, error
 }
 
 // Check only this result, not ordinary function declarations or text delivery.
-func requireFunctionResultImages(peer *gateway.Session, kind string, result proto.FunctionResultPayload) error {
+func requireFunctionResultImages(peer *runtimegateway.Session, kind string, result proto.FunctionResultPayload) error {
 	if !(proto.MessageInput{{Content: result.Content}}).HasImages() {
 		return nil
 	}

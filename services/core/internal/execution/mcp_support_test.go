@@ -5,13 +5,13 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
-func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, device.KindCapabilities) {
+func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, runtimedevice.KindCapabilities) {
 	t.Helper()
 	vault, credential := uuid.NewString(), uuid.NewString()
 	tool := json.RawMessage(`{"type":"mcp","server_label":"tickets","connection_origin":"service","transport":{"type":"http","server_url":"https://mcp.example/tools"}}`)
@@ -21,7 +21,7 @@ func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, device.Ki
 	if err != nil {
 		t.Fatal(err)
 	}
-	caps := device.KindCapabilities{EnvironmentNone: true, MCPHTTPTools: true, MCPHTTPBearerAuth: true, MCPHTTPRequired: true,
+	caps := runtimedevice.KindCapabilities{EnvironmentNone: true, MCPHTTPTools: true, MCPHTTPBearerAuth: true, MCPHTTPRequired: true,
 		Preparation: true}
 	return snapshot, tools.MCP, caps
 }

@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -50,7 +50,7 @@ func managedArchiveSession(t *testing.T, s *Store, input CreateSessionInput) (st
 
 func archiveAllocation(t *testing.T, w *Store, tenant string, session Session, installation string) RuntimeAllocation {
 	t.Helper()
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, device.HashCredential(uuid.NewString()))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	if status, err := s.GetManagedSessionArchive(ctx, tenant, session.ID); err != nil || status != result {
 		t.Fatal("status differs from committed archive", status, err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, device.HashCredential(uuid.NewString())); !errors.Is(err, ErrInvalidInput) {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("archived Environment allocated after archive", err)
 	}
 	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, ErrEnvironmentUnavailable) {
@@ -155,7 +155,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("archive discarded unknown Create ownership", err)
 	}
-	replay, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, device.HashCredential(uuid.NewString()))
+	replay, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || !replay.Replayed || replay.ID != owner.ID || replay.DeviceID != owner.DeviceID || replay.State != "cleanup_pending" {
 		t.Fatal("late provisioning retry replaced archived allocation", replay, err)
 	}

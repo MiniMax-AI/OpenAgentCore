@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,9 +33,9 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{
-		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "initial-creator", TokenSHA256: device.HashCredential(token), TenantID: tenant},
-		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "user", SubjectID: "different-creator", TokenSHA256: device.HashCredential(peer), TenantID: tenant},
-		{OrganizationID: "test-org", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "initial-creator", TokenSHA256: device.HashCredential(foreign), TenantID: foreignTenant},
+		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "initial-creator", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
+		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "user", SubjectID: "different-creator", TokenSHA256: runtimedevice.HashCredential(peer), TenantID: tenant},
+		{OrganizationID: "test-org", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "initial-creator", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +202,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 
 func publicInitialWorker(t *testing.T, s *store.Store) (*execution.Worker, func(bool)) {
 	t.Helper()
-	dispatcher := &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry()}
+	dispatcher := &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}
 	worker, err := execution.StartWorker(t.Context(), dispatcher)
 	if err != nil {
 		t.Fatal(err)

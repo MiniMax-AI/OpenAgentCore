@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -37,7 +37,7 @@ func (f *installationFixture) ClaimEnvironmentInstallation(context.Context, stri
 
 func TestSelfHostedCreationReturnsInstallationWithoutWebCredential(t *testing.T) {
 	f := &installationFixture{}
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential("project-key"), TenantID: uuid.NewString()}})
+	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}})
 	if err != nil {
 		t.Fatal(err)
 	}

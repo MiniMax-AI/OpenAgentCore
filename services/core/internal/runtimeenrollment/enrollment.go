@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -43,7 +43,7 @@ func EnrollmentHandler(s EnrollmentStore) http.Handler {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		binding, err := s.EnrollRuntime(ctx, input.EnvironmentID, device.HashCredential(authorization[1]))
+		binding, err := s.EnrollRuntime(ctx, input.EnvironmentID, runtimedevice.HashCredential(authorization[1]))
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			fail(http.StatusUnauthorized)

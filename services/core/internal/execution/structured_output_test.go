@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -32,7 +32,7 @@ func TestStructuredOutputRequestKeepsFrozenSchemaAndInstructions(t *testing.T) {
 	schema := json.RawMessage(`{"type":"object","properties":{"number":{"const":9007199254740992}}}`)
 	instructions := "Keep these original instructions."
 	snapshot := Snapshot{Agent: v1.Agent{Model: "model", Instructions: &instructions, Text: v1.TextConfig{Format: v1.TextFormat{Type: "json_schema", Schema: schema}}}}
-	request, err := (&Dispatcher{}).executionRequest(context.Background(), store.Session{}, snapshot, device.KindCapabilities{MessageItems: true}, store.SessionExecutionBinding{})
+	request, err := (&Dispatcher{}).executionRequest(context.Background(), store.Session{}, snapshot, runtimedevice.KindCapabilities{MessageItems: true}, store.SessionExecutionBinding{})
 	if err != nil || request.ExecutionControls.OutputFormat == nil {
 		t.Fatal(err)
 	}

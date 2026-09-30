@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -46,7 +46,7 @@ func TestFunctionImageAdmission(t *testing.T) {
 	if err := requireFunctionResultImages(nil, "unknown", proto.FunctionResultPayload{Content: proto.TextInput("text")[0].Content}); err != nil {
 		t.Fatal(err)
 	}
-	if err := requireFunctionResultImages(&gateway.Session{}, "unknown", proto.FunctionResultPayload{Content: []proto.InputContent{{Type: "input_image", ImageURL: &image}}}); err == nil {
+	if err := requireFunctionResultImages(&runtimegateway.Session{}, "unknown", proto.FunctionResultPayload{Content: []proto.InputContent{{Type: "input_image", ImageURL: &image}}}); err == nil {
 		t.Fatal("image delivery accepted without Runtime support")
 	}
 }

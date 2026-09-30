@@ -13,9 +13,9 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -34,8 +34,8 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	reopenedStore := store.NewWithCredentialCipher(pool, cipher)
 	tenant, foreignTenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-owner", TokenSHA256: device.HashCredential(token), TenantID: tenant},
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-foreign", TokenSHA256: device.HashCredential(foreign), TenantID: foreignTenant},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
 	if err != nil {
 		t.Fatal(err)

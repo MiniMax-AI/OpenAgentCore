@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -24,7 +24,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			}
 			reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
 			writer := executionLease(t, s).Store()
-			owner, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, uuid.NewString(), device.HashCredential(uuid.NewString()))
+			owner, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -119,7 +119,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer := executionLease(t, s).Store()
-	owner, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, uuid.NewString(), device.HashCredential(uuid.NewString()))
+	owner, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -32,7 +32,7 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 	session, environment := localEnvironment(t, s, tenant)
 	sibling, _ := localEnvironment(t, s, tenant)
 	foreign, _ := localEnvironment(t, s, foreignTenant)
-	digest := device.HashCredential(uuid.NewString())
+	digest := runtimedevice.HashCredential(uuid.NewString())
 	if _, err := s.CreateEnvironmentDevice(t.Context(), foreignTenant, environment.ID, "foreign", digest); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign provisioning: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := s.CreateEnvironmentDevice(t.Context(), tenant, environment.ID, "runtime", device.HashCredential(uuid.NewString()))
+			_, err := s.CreateEnvironmentDevice(t.Context(), tenant, environment.ID, "runtime", runtimedevice.HashCredential(uuid.NewString()))
 			results <- err
 		}()
 	}
@@ -103,7 +103,7 @@ func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 	if err := s.RevokeDevice(t.Context(), tenant, bound.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateEnvironmentDevice(t.Context(), tenant, environment.ID, "replacement", device.HashCredential(uuid.NewString())); !errors.Is(err, ErrDeviceBindingConflict) {
+	if _, err := s.CreateEnvironmentDevice(t.Context(), tenant, environment.ID, "replacement", runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, ErrDeviceBindingConflict) {
 		t.Fatalf("silent placement replacement: %v", err)
 	}
 }

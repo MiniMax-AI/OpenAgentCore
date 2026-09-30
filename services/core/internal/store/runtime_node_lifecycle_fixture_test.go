@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -94,7 +94,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		t.Fatal(err)
 	}
 	s := store.NewWithCredentialCipher(pool, cipher)
-	registry := gateway.NewRegistry()
+	registry := runtimegateway.NewRegistry()
 	cp := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
 	p := &nodeIsolationProvider{fakeCheckpointProvider: cp, blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
 	preparationContext, cancelPreparation := context.WithCancel(t.Context())
@@ -110,7 +110,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		p.writes.Add(1)
 		return completedInitialization(request, data)
 	}}
-	handler := gateway.NewHandler(gateway.HandlerConfig{Authenticator: gateway.NewAuthenticator(s), Registry: registry})
+	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	cp.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
 	t.Cleanup(func() {
@@ -125,7 +125,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	// Keep restored compute awake throughout the isolation assertions.
 	// The suspension setup explicitly dates its activity two minutes in the past.
 	policy := &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour, MaxActive: 100, MaxRetained: 100}
-	f.worker, err = execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: device.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
+	f.worker, err = execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: runtimedevice.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
 	if err != nil {
 		t.Fatal(err)
 	}

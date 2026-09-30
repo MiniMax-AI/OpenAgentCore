@@ -6,12 +6,12 @@ import (
 	"io"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *gateway.Session, session store.Session, environment store.Environment, bound store.ExecutionDevice, turnID string, result Result, status string) (Result, string) {
+func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtimegateway.Session, session store.Session, environment store.Environment, bound store.ExecutionDevice, turnID string, result Result, status string) (Result, string) {
 	if status != store.TurnCompleted || !LocalWorkspaceConfiguration(environment.Configuration) {
 		return result, status
 	}

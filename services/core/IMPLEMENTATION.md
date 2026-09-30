@@ -52,7 +52,7 @@ The Worker scans pending inputs with the same scheduling slots, Session locks, d
 
 ## Runtime connections
 
-`internal/agentdaemon/gateway` is the shared daemon connection implementation; its persistence interfaces use `internal/agentdaemon/device`, and the frames and validators live in `internal/agentdaemon/proto`. It is a single-process registry: connectivity comes from the live registry, never a persisted online flag, and `last_seen_at` is diagnostic only. Session-to-device bindings are tenant-scoped and immutable. Revocation denies new connections and binding reads at once, and an open connection closes at its next heartbeat.
+`services/core/internal/runtimegateway` is Core's daemon connection implementation; its persistence interfaces use `services/core/internal/runtimedevice`, and the frames and validators live in the shared `internal/agentdaemon/proto`. It is a single-process registry: connectivity comes from the live registry, never a persisted online flag, and `last_seen_at` is diagnostic only. Session-to-device bindings are tenant-scoped and immutable. Revocation denies new connections and binding reads at once, and an open connection closes at its next heartbeat.
 
 A dedicated self-hosted device is bound to exactly one Environment's Session and is excluded from general device selection, even within the tenant. Enrollment creates or recovers the device and binding atomically under the Session lock; the frozen workspace and capability directories come from the Session configuration and must match the local binding. Core rechecks the persisted Environment and device binding for preparation and active reads; capability discovery never selects or authorizes a device for this placement.
 

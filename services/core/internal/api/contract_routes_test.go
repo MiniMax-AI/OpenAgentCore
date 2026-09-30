@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
@@ -60,7 +60,7 @@ func contractOperations(t *testing.T, file, prefix string) map[string]bool {
 // The pinned upstream /v1 set is checked by TestEveryRouteAuthenticatesItsCanonicalPath
 // and the contract tests.
 func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) {
-	admin, err := NewDeploymentAuthenticator([]string{device.HashCredential(routingAdminKey)})
+	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(routingAdminKey)})
 	if err != nil {
 		t.Fatal(err)
 	}

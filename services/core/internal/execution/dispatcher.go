@@ -9,8 +9,8 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -32,7 +32,7 @@ type Dispatcher struct {
 	notifications *executionNotifications
 	Policy
 	Store    *store.Store
-	Registry *gateway.Registry
+	Registry *runtimegateway.Registry
 	// Options optionally supplies native adapter options for Sessions that need
 	// no frozen model provider (environment none and legacy daemon Sessions).
 	// The server command leaves it nil since the operator options file was

@@ -5,15 +5,15 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // prepareTurnExecutor reserves one admission on the Runtime-owned Executor.
 // Core does not cache native ownership. A replacement requires the Runtime to
 // confirm cleanup and recover the exact Session history before returning ready.
-func (d *Dispatcher) prepareTurnExecutor(ctx context.Context, peer *gateway.Session, tenant, session, turn string, request proto.PromptRequestPayload, expectedStatus string) (*preparedStart, error) {
+func (d *Dispatcher) prepareTurnExecutor(ctx context.Context, peer *runtimegateway.Session, tenant, session, turn string, request proto.PromptRequestPayload, expectedStatus string) (*preparedStart, error) {
 	prepared, err := newPreparedStart(peer)
 	if err != nil {
 		return nil, err

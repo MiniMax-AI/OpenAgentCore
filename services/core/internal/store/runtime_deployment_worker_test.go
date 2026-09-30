@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -25,7 +25,7 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 	replacement := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	config := &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("b", 64), Provider: replacement, AdmissionPaused: true}
 	start := func(config *execution.RuntimeProvider) error {
-		_, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: config})
+		_, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: config})
 		return err
 	}
 	if err := start(config); err == nil || !strings.Contains(err.Error(), "maintenance") {

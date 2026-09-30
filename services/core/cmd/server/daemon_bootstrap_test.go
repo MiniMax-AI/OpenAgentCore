@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 )
 
 type bootstrapCredentialStore struct {
@@ -17,17 +17,17 @@ type bootstrapCredentialStore struct {
 	allocationID string
 }
 
-func (s bootstrapCredentialStore) GetDeviceCredential(context.Context, string) (device.Credential, bool, error) {
-	return device.Credential{ID: "runtime", Type: gateway.RuntimeTypeAgentDaemon,
-		CredentialHash: device.HashCredential("synthetic-token"), RuntimeNodeID: s.nodeID, RuntimeAllocationID: s.allocationID}, true, nil
+func (s bootstrapCredentialStore) GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error) {
+	return runtimedevice.Credential{ID: "runtime", Type: runtimegateway.RuntimeTypeAgentDaemon,
+		CredentialHash: runtimedevice.HashCredential("synthetic-token"), RuntimeNodeID: s.nodeID, RuntimeAllocationID: s.allocationID}, true, nil
 }
 
 func TestBootstrapAddressUsesPublicOrigin(t *testing.T) {
 	const publicURL = "wss://public.example/api/v1/agent-daemon/ws"
 	for _, node := range []string{"local-node", "remote-node", ""} {
 		t.Run(node, func(t *testing.T) {
-			h := gateway.NewHandler(gateway.HandlerConfig{Registry: gateway.NewRegistry(), PublicWSURL: publicURL,
-				Authenticator: gateway.NewAuthenticator(bootstrapCredentialStore{nodeID: node})})
+			h := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Registry: runtimegateway.NewRegistry(), PublicWSURL: publicURL,
+				Authenticator: runtimegateway.NewAuthenticator(bootstrapCredentialStore{nodeID: node})})
 			request := httptest.NewRequest(http.MethodPost, "https://forged.example/api/v1/agent-daemon/bootstrap",
 				strings.NewReader(`{"device_id":"runtime","node_id":"local-node","runtime_node_id":"local-node"}`))
 			request.Header.Set("Authorization", "Bearer synthetic-token")

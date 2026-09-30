@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSandboxE2BDiscoveryAuthenticationAndCredentialPrivacy(t *testing.T) {
 	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	calls := 0
 	discover := func(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
 		calls++

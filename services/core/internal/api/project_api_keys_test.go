@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -32,7 +32,7 @@ func (s *projectKeyStoreFixture) ResolveProjectAPIKey(_ context.Context, digest 
 	if s.resolve != nil {
 		return store.ProjectAPIKeyBinding{}, s.resolve
 	}
-	if digest != device.HashCredential("issued-project-key") {
+	if digest != runtimedevice.HashCredential("issued-project-key") {
 		return store.ProjectAPIKeyBinding{}, store.ErrNotFound
 	}
 	return s.binding, nil
@@ -103,7 +103,7 @@ func TestAdministratorCredentialSeparation(t *testing.T) {
 	if err := ValidateCredentialSeparation(t.Context(), nil, s); err == nil {
 		t.Fatal("missing administrator accepted")
 	}
-	digest := device.HashCredential("admin")
+	digest := runtimedevice.HashCredential("admin")
 	admin, _ := NewDeploymentAuthenticator([]string{digest})
 	if err := ValidateCredentialSeparation(t.Context(), admin, s); err != nil || len(s.digests) != 1 || s.digests[0] != digest {
 		t.Fatal("administrator digest was not checked against persisted keys", err)

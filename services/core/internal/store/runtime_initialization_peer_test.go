@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/gorilla/websocket"
 )
@@ -22,7 +22,7 @@ import (
 type initializationPeer struct {
 	t            *testing.T
 	endpoint     string
-	registry     *gateway.Registry
+	registry     *runtimegateway.Registry
 	apply        func(proto.RuntimePreparePayload, []byte) proto.RuntimePrepareResultPayload
 	writes       atomic.Int32
 	commandCalls atomic.Int32
@@ -31,7 +31,7 @@ type initializationPeer struct {
 	bootstrap    sandbox.Bootstrap
 }
 
-func (p *initializationPeer) setRuntimeGateway(t *testing.T, endpoint string, registry *gateway.Registry) {
+func (p *initializationPeer) setRuntimeGateway(t *testing.T, endpoint string, registry *runtimegateway.Registry) {
 	p.t, p.endpoint, p.registry = t, endpoint, registry
 }
 func (p *initializationPeer) connect(b sandbox.Bootstrap) error {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -30,7 +30,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	tenant, active := newTurnSession(t, s)
 	input := submitMessage(t, s, tenant, active.ID, "active")
 	transition(t, writer, tenant, active.ID, input.TurnID, TurnQueued, TurnInProgress)
-	host, err := s.CreateDevice(t.Context(), tenant, "owner test", device.HashCredential(uuid.NewString()))
+	host, err := s.CreateDevice(t.Context(), tenant, "owner test", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -72,8 +72,8 @@ func twoTenantHandler(t *testing.T, s ResourceStore, options ...Option) (http.Ha
 	t.Helper()
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	auth, err := NewAuthenticator([]APIKey{
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: device.HashCredential("test-api-key"), TenantID: owner},
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: device.HashCredential("foreign-key"), TenantID: foreign},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential("test-api-key"), TenantID: owner},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential("foreign-key"), TenantID: foreign},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
 type metricsFixture struct {
@@ -27,7 +27,7 @@ func (f *metricsFixture) RecordUnavailable() { f.refusals++ }
 func TestCoreMetricsAdministratorContract(t *testing.T) {
 	key := callerBinding()
 	auth, _ := NewAuthenticator([]APIKey{key})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	f := &metricsFixture{}
 	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin), WithCoreMetrics(f))
 	if err != nil {

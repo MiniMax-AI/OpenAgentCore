@@ -3,13 +3,13 @@ package execution
 import (
 	"context"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // authorizedRuntimePeer fences a connected socket against current credential
 // authority. A stable device ID does not keep an old credential alive on rotation.
-func authorizedRuntimePeer(ctx context.Context, s *store.Store, registry *gateway.Registry, id string) (*gateway.Session, error) {
+func authorizedRuntimePeer(ctx context.Context, s *store.Store, registry *runtimegateway.Registry, id string) (*runtimegateway.Session, error) {
 	peer, err := registry.LookupDevice(id)
 	if err != nil {
 		return nil, err
@@ -27,11 +27,11 @@ func authorizedRuntimePeer(ctx context.Context, s *store.Store, registry *gatewa
 		return nil, store.ErrNotFound
 	}
 	if peer.IsClosed() {
-		return nil, gateway.ErrSessionClosed
+		return nil, runtimegateway.ErrSessionClosed
 	}
 	return peer, nil
 }
 
-func (d *Dispatcher) authorizedPeer(ctx context.Context, id string) (*gateway.Session, error) {
+func (d *Dispatcher) authorizedPeer(ctx context.Context, id string) (*runtimegateway.Session, error) {
 	return authorizedRuntimePeer(ctx, d.Store, d.Registry, id)
 }

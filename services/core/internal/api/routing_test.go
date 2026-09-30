@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -82,7 +82,7 @@ type routingKeys struct {
 }
 
 func (k routingKeys) ResolveProjectAPIKey(_ context.Context, digest string) (store.ProjectAPIKeyBinding, error) {
-	if digest != device.HashCredential(routingDerivedKey) {
+	if digest != runtimedevice.HashCredential(routingDerivedKey) {
 		return store.ProjectAPIKeyBinding{}, store.ErrNotFound
 	}
 	return store.ProjectAPIKeyBinding{Principal: k.principal}, nil
@@ -102,21 +102,21 @@ func (missingFiles) GetSourceFile(context.Context, string, string) (store.Source
 func routingFixture(t *testing.T) (http.Handler, *chi.Mux, *routingStore) {
 	t.Helper()
 	tenant := uuid.NewString()
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: "test-project", SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(routingKey), TenantID: tenant}})
+	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: "test-project", SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(routingKey), TenantID: tenant}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := NewDeploymentAuthenticator([]string{device.HashCredential(routingAdminKey)})
+	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(routingAdminKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := &routingStore{tenant: tenant, agent: store.SavedAgent{ID: uuid.NewString(), TenantID: tenant, Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"model":"fixture"}`), CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}}
-	binding, err := auth.keys.ResolveProjectAPIKey(t.Context(), device.HashCredential(routingKey))
+	binding, err := auth.keys.ResolveProjectAPIKey(t.Context(), runtimedevice.HashCredential(routingKey))
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth.keys.(fixtureKeyResolver)[device.HashCredential(routingDerivedKey)] = binding
+	auth.keys.(fixtureKeyResolver)[runtimedevice.HashCredential(routingDerivedKey)] = binding
 	options := []Option{WithSandboxManager(&store.Store{}, admin), WithProjectAPIKeys(routingKeys{principal: binding.Principal}, admin), WithSourceFiles(missingFiles{})}
 	handler, err := NewHandler(s, auth, "codex", options...)
 	if err != nil {
@@ -393,10 +393,10 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 		{"/core/v1/sandbox/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
 		{"/core/v1/sandbox/nodes%2F..%2F..%2F..%2Fv1%2Fagents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusNotFound, ""},
 		// Project API key management keeps deployment administrator authority.
-		{"/v1/%2E%2E/core/v1/projects/" + device.HashCredential(routingKey), withHeaders(project, beta), http.StatusUnauthorized, "invalid_admin_key"},
-		{"/v1/agents//../../core/v1/projects/" + device.HashCredential(routingKey), withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta), http.StatusUnauthorized, "invalid_admin_key"},
-		{"/v1/x{/..%2F..%2Fcore/v1/project-api-keys/" + device.HashCredential(routingKey), http.Header{}, http.StatusBadRequest, "invalid_beta"},
-		{"/core/v1/projects/" + device.HashCredential(routingKey) + "/%2E%2E/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
+		{"/v1/%2E%2E/core/v1/projects/" + runtimedevice.HashCredential(routingKey), withHeaders(project, beta), http.StatusUnauthorized, "invalid_admin_key"},
+		{"/v1/agents//../../core/v1/projects/" + runtimedevice.HashCredential(routingKey), withHeaders([]string{"Authorization", "Bearer " + routingDerivedKey}, beta), http.StatusUnauthorized, "invalid_admin_key"},
+		{"/v1/x{/..%2F..%2Fcore/v1/project-api-keys/" + runtimedevice.HashCredential(routingKey), http.Header{}, http.StatusBadRequest, "invalid_beta"},
+		{"/core/v1/projects/" + runtimedevice.HashCredential(routingKey) + "/%2E%2E/%2E%2E/%2E%2E/%2E%2E/%2E%2E/v1/agents", withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta), http.StatusUnauthorized, ""},
 	} {
 		got := serve(handler, http.MethodGet, test.target, "", test.header)
 		if got.Code != test.status || (test.code != "" && !strings.Contains(got.Body.String(), `"code":"`+test.code+`"`)) {

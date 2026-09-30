@@ -13,9 +13,9 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -69,7 +69,7 @@ func environmentFilesHandler(t *testing.T, enabled bool) (http.Handler, *environ
 		{"other-key", uuid.NewString(), "other-project"},
 	} {
 		keys = append(keys, APIKey{OrganizationID: "files-org", ProjectID: key.project, SubjectKind: "user", SubjectID: key.project,
-			TokenSHA256: device.HashCredential(key.token), TenantID: key.tenant})
+			TokenSHA256: runtimedevice.HashCredential(key.token), TenantID: key.tenant})
 	}
 	auth, err := NewAuthenticator(keys)
 	if err != nil {

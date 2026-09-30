@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -15,7 +15,7 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	s, pool := testStore(t)
 	owner := executionLease(t, s).Store()
 	tenant, session := newSubagentSession(t, s)
-	host, err := s.CreateDevice(t.Context(), tenant, "child outputs", device.HashCredential(uuid.NewString()))
+	host, err := s.CreateDevice(t.Context(), tenant, "child outputs", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestSubagentCancelledPartialMessageSurvivesHistoryReplay(t *testing.T) {
 	s, _ := testStore(t)
 	owner := executionLease(t, s).Store()
 	tenant, session := newSubagentSession(t, s)
-	host, err := s.CreateDevice(t.Context(), tenant, "cancelled child", device.HashCredential(uuid.NewString()))
+	host, err := s.CreateDevice(t.Context(), tenant, "cancelled child", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

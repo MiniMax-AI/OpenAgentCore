@@ -10,11 +10,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -28,7 +28,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	s.SetPublicURL("https://core.example")
 	ctx := t.Context()
 	coreKey := uuid.NewString()
-	admin, err := api.NewDeploymentAuthenticator([]string{device.HashCredential(coreKey)})
+	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	// The server composition: daemon transport beside the API handler.
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(s))
-	mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(s, gateway.NewRegistry()))
+	mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(s, runtimegateway.NewRegistry()))
 	mux.Handle("/", handler)
 	server := api.CanonicalPaths(mux)
 	call := func(method, path, token, body string) *httptest.ResponseRecorder {
@@ -98,7 +98,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
 	})
-	worker, err := execution.StartWorker(ctx, &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: runtimes})
+	worker, err := execution.StartWorker(ctx, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
 	if err != nil {
 		t.Fatal(err)
 	}

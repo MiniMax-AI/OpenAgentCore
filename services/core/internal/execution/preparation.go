@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -25,14 +25,14 @@ type preparedStart struct {
 	startSentAt   time.Time
 	startObserved bool
 	readyObserved bool
-	peer          *gateway.Session
+	peer          *runtimegateway.Session
 	requestID     string
 	handle        string
 	executorID    string
-	sub           *gateway.Subscription
+	sub           *runtimegateway.Subscription
 }
 
-func newPreparedStart(peer *gateway.Session) (*preparedStart, error) {
+func newPreparedStart(peer *runtimegateway.Session) (*preparedStart, error) {
 	id := uuid.NewString()
 	sub, err := peer.SubscribePreparation(id)
 	if err != nil {

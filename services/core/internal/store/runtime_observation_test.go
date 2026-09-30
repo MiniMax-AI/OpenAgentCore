@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -15,7 +15,7 @@ func TestRuntimeNodeObservationRetainsResourcesAndFencesStaleResults(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, device.HashCredential("runtime"))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}

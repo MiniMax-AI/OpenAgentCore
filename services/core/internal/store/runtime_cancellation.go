@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,20 +16,20 @@ import (
 // cannot authorize bootstrap, reconnect, dispatch, workspace access or renewal.
 // A marker records that archive caused the first revocation; timestamps alone
 // cannot distinguish an earlier ordinary cancel/revoke followed by archive.
-func (s *Store) ArchivedCancellationReceipt(ctx context.Context, deviceID, credentialHash string, runIDs []string) (device.ArchivedCancellationReceipt, error) {
+func (s *Store) ArchivedCancellationReceipt(ctx context.Context, deviceID, credentialHash string, runIDs []string) (runtimedevice.ArchivedCancellationReceipt, error) {
 	if len(runIDs) == 0 || credentialHash == "" {
-		return device.ArchivedCancellationReceipt{}, nil
+		return runtimedevice.ArchivedCancellationReceipt{}, nil
 	}
 	id, err := parseID(deviceID)
 	if err != nil {
-		return device.ArchivedCancellationReceipt{}, err
+		return runtimedevice.ArchivedCancellationReceipt{}, err
 	}
-	row, err := s.queries.GetArchivedCancellationReceipt(ctx, sqlc.GetArchivedCancellationReceiptParams{DeviceID: id, CredentialHash: pgtype.Text{String: credentialHash, Valid: true}, RunIds: runIDs, LimitSeconds: int32(device.ArchivedCancellationReceiptLimit.Seconds())})
+	row, err := s.queries.GetArchivedCancellationReceipt(ctx, sqlc.GetArchivedCancellationReceiptParams{DeviceID: id, CredentialHash: pgtype.Text{String: credentialHash, Valid: true}, RunIds: runIDs, LimitSeconds: int32(runtimedevice.ArchivedCancellationReceiptLimit.Seconds())})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return device.ArchivedCancellationReceipt{}, nil
+		return runtimedevice.ArchivedCancellationReceipt{}, nil
 	}
 	if err != nil {
-		return device.ArchivedCancellationReceipt{}, err
+		return runtimedevice.ArchivedCancellationReceipt{}, err
 	}
-	return device.ArchivedCancellationReceipt{RunID: uuid.UUID(row.ID.Bytes).String(), Deadline: row.CancelRequestedAt.Time.Add(device.ArchivedCancellationReceiptLimit)}, nil
+	return runtimedevice.ArchivedCancellationReceipt{RunID: uuid.UUID(row.ID.Bytes).String(), Deadline: row.CancelRequestedAt.Time.Add(runtimedevice.ArchivedCancellationReceiptLimit)}, nil
 }

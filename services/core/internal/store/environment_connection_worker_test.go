@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -39,7 +39,7 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitRelease()
-	dispatcher := &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry()}
+	dispatcher := &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}
 	worker, err := execution.StartWorker(t.Context(), dispatcher)
 	if err != nil {
 		t.Fatal(err)

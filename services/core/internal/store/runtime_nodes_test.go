@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -21,7 +21,7 @@ func managerFixture(t *testing.T, active, retained int) (*Store, *Store, Runtime
 	d := deploymentSelection()
 	d.ProviderKind = "docker"
 	d.LocalNodeID = uuid.NewString()
-	d.LocalCredentialSHA256 = device.HashCredential("local-node-credential")
+	d.LocalCredentialSHA256 = runtimedevice.HashCredential("local-node-credential")
 	d.LocalMaxActive = active
 	d.LocalMaxRetained = retained
 	deploymentConfigure(t, w, &d)
@@ -238,7 +238,7 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	retained, err := w.ReserveRuntimeAllocation(t.Context(), tenant, first.Environment.ID, next.InstallationID, device.HashCredential("runtime"))
+	retained, err := w.ReserveRuntimeAllocation(t.Context(), tenant, first.Environment.ID, next.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocation, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, device.HashCredential("runtime"))
+	allocation, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, device.HashCredential("runtime"))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}

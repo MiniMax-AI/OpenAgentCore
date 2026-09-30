@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -57,7 +57,7 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 			}
 			peer, err := w.dispatcher.authorizedPeer(ctx, owner.DeviceID)
 			if err != nil {
-				if errors.Is(err, store.ErrNotFound) || errors.Is(err, gateway.ErrSessionClosed) || errors.Is(err, gateway.ErrDeviceNotRegistered) {
+				if errors.Is(err, store.ErrNotFound) || errors.Is(err, runtimegateway.ErrSessionClosed) || errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
 					continue
 				}
 				return err

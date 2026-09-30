@@ -12,10 +12,10 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -93,7 +93,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 		if err != nil {
 			t.Fatal(err)
 		}
-		host, err := s.CreateDevice(ctx, tenant, "cursor "+key, device.HashCredential(uuid.NewString()))
+		host, err := s.CreateDevice(ctx, tenant, "cursor "+key, runtimedevice.HashCredential(uuid.NewString()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -226,8 +226,8 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-owner", TokenSHA256: device.HashCredential(owner), TenantID: ownerTenant},
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-foreign", TokenSHA256: device.HashCredential(foreign), TenantID: foreignTenant},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -250,11 +250,6 @@
     "reason": "AgentStateKey retains the existing daemon/native-session resume identity; capability snapshots bind to the Session UUID carried in that identity."
   },
   {
-    "path": "apps/daemon/internal/contracttest/wire_test.go",
-    "regex": "agents-api-session",
-    "reason": "The controlled Runtime fixture uses the existing Core Session state-key prefix required by execution admission."
-  },
-  {
     "path": "apps/daemon/internal/agent/mcode/tool_environment_test.go",
     "regex": "agents-api-",
     "reason": "The regression fixture uses the existing persisted Session state-key namespace required by Runtime binding validation."

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -18,7 +18,7 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	tenant, provider := uuid.NewString(), uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
 	secret := uuid.NewString()
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, provider, device.HashCredential(secret))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, provider, runtimedevice.HashCredential(secret))
 	if err != nil || owner.Replayed || owner.State != "creating" || owner.CreateSettled {
 		t.Fatalf("reservation: %+v %v", owner, err)
 	}
@@ -26,10 +26,10 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if err != nil || bound.ID != owner.DeviceID || bound.EnvironmentID != environment.ID {
 		t.Fatalf("binding not committed with allocation: %+v %v", bound, err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), uuid.NewString(), environment.ID, provider, device.HashCredential(secret)); !errors.Is(err, ErrNotFound) {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), uuid.NewString(), environment.ID, provider, runtimedevice.HashCredential(secret)); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign allocation accepted: %v", err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), device.HashCredential(secret)); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(secret)); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatalf("provider target changed: %v", err)
 	}
 	if err := lease.Close(t.Context()); err != nil {
@@ -40,12 +40,12 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	}
 	reopened, _ := testStore(t)
 	next := executionLease(t, reopened).Store()
-	retry, err := next.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, provider, device.HashCredential(uuid.NewString()))
+	retry, err := next.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, provider, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || !retry.Replayed || retry.ID != owner.ID || retry.DeviceID != owner.DeviceID {
 		t.Fatalf("restart replaced unknown allocation: %+v %v", retry, err)
 	}
 	credential, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID)
-	if err != nil || !ok || credential.CredentialHash != device.HashCredential(secret) {
+	if err != nil || !ok || credential.CredentialHash != runtimedevice.HashCredential(secret) {
 		t.Fatal("retry rewrote bootstrap credential")
 	}
 	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
@@ -106,7 +106,7 @@ func TestRuntimeAllocationOneWinnerAndRollback(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			value, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, provider, device.HashCredential(uuid.NewString()))
+			value, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, provider, runtimedevice.HashCredential(uuid.NewString()))
 			results <- value
 			errs <- err
 		}()
@@ -142,7 +142,7 @@ func TestRuntimeAllocationOneWinnerAndRollback(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), "ALTER TABLE runtime_allocations DROP CONSTRAINT "+constraint)
 	})
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, fail.ID, provider, device.HashCredential(uuid.NewString())); err == nil {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, fail.ID, provider, runtimedevice.HashCredential(uuid.NewString())); err == nil {
 		t.Fatal("injected insert failure succeeded")
 	}
 	var count int
@@ -156,7 +156,7 @@ func TestRuntimeAllocationExpiryAndRevocation(t *testing.T) {
 	w := executionLease(t, s).Store()
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), device.HashCredential(uuid.NewString()))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestRuntimeAllocationExpiryAndRevocation(t *testing.T) {
 	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	got, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, owner.ProviderKey, device.HashCredential(uuid.NewString()))
+	got, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, owner.ProviderKey, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || !got.Replayed || got.State != "released" || got.KeptAt.After(time.Now()) {
 		t.Fatalf("cleanup permitted replacement: %+v %v", got, err)
 	}

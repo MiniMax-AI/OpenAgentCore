@@ -14,12 +14,12 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	runtimegateway "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -85,7 +85,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 				t.Fatal(err)
 			}
 			secret := uuid.NewString()
-			owner, err := writer.ReserveRuntimeAllocation(t.Context(), project.TenantID, session.Environment.ID, installation, device.HashCredential(secret))
+			owner, err := writer.ReserveRuntimeAllocation(t.Context(), project.TenantID, session.Environment.ID, installation, runtimedevice.HashCredential(secret))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -112,18 +112,18 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			registry := gateway.NewRegistry()
+			registry := runtimegateway.NewRegistry()
 			if scenario.delivery {
 				server := httptest.NewUnstartedServer(nil)
 				wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-				handler, liveRegistry, err := runtimegateway.NewGateway(s, wsURL)
+				handler, liveRegistry, err := runtime.NewGateway(s, wsURL)
 				if err != nil {
 					t.Fatal(err)
 				}
 				registry = liveRegistry
 				server.Config.Handler = handler
 				server.Start()
-				t.Cleanup(func() { runtimegateway.CloseConnections(registry); server.Close() })
+				t.Cleanup(func() { runtime.CloseConnections(registry); server.Close() })
 				u, _ := url.Parse(wsURL)
 				u.RawQuery = url.Values{"device_id": {owner.DeviceID}, "version": {proto.Version}}.Encode()
 				conn, _, err := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + secret}})
@@ -131,7 +131,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 					t.Fatal(err)
 				}
 				t.Cleanup(func() { conn.Close() })
-				var peer *gateway.Session
+				var peer *runtimegateway.Session
 				for end := time.Now().Add(3 * time.Second); ; {
 					peer, err = registry.LookupDevice(owner.DeviceID)
 					if err == nil {

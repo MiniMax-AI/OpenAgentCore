@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -46,7 +46,7 @@ func adminTestHandler(t *testing.T, options ...Option) (http.Handler, *recording
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	resources := &adminReadFixture{}
 	h, err := NewHandler(resources, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin))
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filt
 func TestAdminSummaryUsesPublicStateAndNullUsageCoverage(t *testing.T) {
 	key := callerBinding()
 	auth, _ := NewAuthenticator([]APIKey{key})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	fixture := &summaryFixture{}
 	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin), WithAdminManagement(fixture))
 	if err != nil {

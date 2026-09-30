@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -28,9 +28,9 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	principal := store.FixtureExecutorPrincipal(t, s, tenant)
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{
-		{OrganizationID: principal.OrganizationID, ProjectID: tenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: device.HashCredential(token), TenantID: tenant},
-		{OrganizationID: principal.OrganizationID, ProjectID: tenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: device.HashCredential(peer), TenantID: tenant},
-		{OrganizationID: principal.OrganizationID, ProjectID: foreignTenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: device.HashCredential(foreign), TenantID: foreignTenant},
+		{OrganizationID: principal.OrganizationID, ProjectID: tenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
+		{OrganizationID: principal.OrganizationID, ProjectID: tenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: runtimedevice.HashCredential(peer), TenantID: tenant},
+		{OrganizationID: principal.OrganizationID, ProjectID: foreignTenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
 	if err != nil {
 		t.Fatal(err)

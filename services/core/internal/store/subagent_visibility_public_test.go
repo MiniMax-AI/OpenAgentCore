@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -73,8 +73,8 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	s, _ := store.NewTestStore(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{
-		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: tenant},
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: device.HashCredential(foreign), TenantID: uuid.NewString()},
+		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 		t.Fatal(page, err)
 	}
 	root := page.Turns[0].ID
-	host, err := s.CreateDevice(ctx, tenant, "subagent visibility", device.HashCredential(uuid.NewString()))
+	host, err := s.CreateDevice(ctx, tenant, "subagent visibility", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

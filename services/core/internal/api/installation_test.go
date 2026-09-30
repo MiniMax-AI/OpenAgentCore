@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	public, id := "https://core.example", "5b7c0f3e-0000-4000-8000-000000000001"
 	settings, err := ParseInstallationConfiguration([]byte(`{"path":"/home/alice/.oac/core/config.json","apply_command":"/home/alice/.oac/core/oac apply",
 		"applied_at":"2026-09-25T09:30:00Z","settings":[{"key":"ports.core","value":8091,"default":8091,"changeable":true,"sensitive":false,"restarts":["core"]},
@@ -65,7 +65,7 @@ func TestInstallationSnapshotCannotCarryASensitiveValue(t *testing.T) {
 
 func TestDeploymentAddressIsNotInput(t *testing.T) {
 	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
 	initializations := 0
 	initialize := func(_ context.Context, input store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
 		initializations++

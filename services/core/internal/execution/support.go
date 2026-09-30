@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -78,16 +78,16 @@ func (p Policy) validateEngineInputs(engine string, configuration json.RawMessag
 
 // engineCapabilities is shared by device selection and the final preclaim check.
 // Capability bits describe the adapter; supported values still depend on its profile.
-func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapshot Snapshot) (device.KindCapabilities, error) {
-	fail := func(message string) (device.KindCapabilities, error) {
-		return device.KindCapabilities{}, errors.New(message)
+func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, snapshot Snapshot) (runtimedevice.KindCapabilities, error) {
+	fail := func(message string) (runtimedevice.KindCapabilities, error) {
+		return runtimedevice.KindCapabilities{}, errors.New(message)
 	}
 	profile, ok := p.Engines.Lookup(engine)
 	if !ok || (snapshot.Environment != nil && !profile.Accepts(snapshot.Environment.Type)) {
 		return fail("execution engine placement is not supported")
 	}
 	if err := validateProfileConfiguration(profile, snapshot); err != nil {
-		return device.KindCapabilities{}, err
+		return runtimedevice.KindCapabilities{}, err
 	}
 	info, found, known := peer.AgentKindStatus(engine)
 	caps := info.Capabilities
@@ -132,7 +132,7 @@ func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapsho
 		return fail("device must advertise function_tools")
 	}
 	if _, err := p.mcpExecutionCredentials(engine, snapshot, tools.MCP, caps); err != nil {
-		return device.KindCapabilities{}, err
+		return runtimedevice.KindCapabilities{}, err
 	}
 	if snapshot.Environment != nil && (snapshot.Environment.Type == "openai_hosted" || snapshot.Environment.Type == "self_hosted") {
 		if !caps.Preparation || !caps.LocalEnvironment || !caps.WorkspaceReadPreparation || !caps.WorkspaceOutputExport {

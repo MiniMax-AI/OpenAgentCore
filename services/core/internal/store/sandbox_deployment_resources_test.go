@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -30,7 +30,7 @@ func TestSandboxDeploymentMutationViewsIncludeActualResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, device.HashCredential(uuid.NewString())); err != nil {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString())); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); err != nil {

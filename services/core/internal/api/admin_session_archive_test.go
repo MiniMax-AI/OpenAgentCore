@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -38,7 +38,7 @@ func (s *archiveManagementFixture) GetManagedSessionArchive(_ context.Context, t
 func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
 	key := callerBinding()
 	auth, _ := NewAuthenticator([]APIKey{key})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	fixture := &archiveManagementFixture{}
 	h, err := NewHandler(&recordingStore{}, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin), WithAdminManagement(fixture), WithSessionArchive(fixture.ArchiveManagedSession))
 	if err != nil {

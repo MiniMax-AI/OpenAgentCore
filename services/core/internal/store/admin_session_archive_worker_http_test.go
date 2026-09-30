@@ -13,12 +13,12 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -47,7 +47,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: providerConfig(setup)}, nil
 	})
-	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry(), ManagedRuntimes: configuration})
+	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if _, err := s.ArchiveManagedSession(ctx, project.TenantID, active.ID, 1); !errors.Is(err, store.ErrInvalidInput) {
 		t.Fatal("fixture admission Store unexpectedly holds execution ownership", err)
 	}
-	admin, err := api.NewDeploymentAuthenticator([]string{device.HashCredential("archive-administrator")})
+	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("archive-administrator")})
 	if err != nil {
 		t.Fatal(err)
 	}

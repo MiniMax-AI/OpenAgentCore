@@ -11,11 +11,11 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -31,11 +31,11 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{53}, 32))
 	st := store.NewWithCredentialCipher(pool, cipher)
 	tenant, projectKey, coreKey := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-http", TokenSHA256: device.HashCredential(projectKey), TenantID: tenant}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-http", TokenSHA256: runtimedevice.HashCredential(projectKey), TenantID: tenant}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := api.NewDeploymentAuthenticator([]string{device.HashCredential(coreKey)})
+	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +293,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	tenant, token := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "none-retry", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "none-retry", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +359,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T) {
 	st, pool := store.NewManagedTestStore(t)
 	tenant, token := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tuple-test", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tuple-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	if err != nil {
 		t.Fatal(err)
 	}

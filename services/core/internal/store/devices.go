@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 )
 
 var ErrDeviceBindingConflict = errors.New("session is already bound to a different device")
@@ -61,20 +61,20 @@ func newDeviceParams(tenant pgtype.UUID, name, credentialHash string) (sqlc.Crea
 
 // GetDeviceCredential is used only by the shared gateway's credential verifier.
 // The standalone service does not assign a product WorkspaceID.
-func (s *Store) GetDeviceCredential(ctx context.Context, deviceID string) (device.Credential, bool, error) {
+func (s *Store) GetDeviceCredential(ctx context.Context, deviceID string) (runtimedevice.Credential, bool, error) {
 	id, err := parseID(deviceID)
 	if err != nil {
-		return device.Credential{}, false, nil
+		return runtimedevice.Credential{}, false, nil
 	}
 	row, err := s.queries.GetDeviceCredential(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return device.Credential{}, false, nil
+		return runtimedevice.Credential{}, false, nil
 	}
 	if err != nil {
-		return device.Credential{}, false, err
+		return runtimedevice.Credential{}, false, err
 	}
-	return device.Credential{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name,
-		Type: gateway.RuntimeTypeAgentDaemon, CredentialHash: row.CredentialHash, RuntimeNodeID: row.RuntimeNodeID, RuntimeAllocationID: row.RuntimeAllocationID}, true, nil
+	return runtimedevice.Credential{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name,
+		Type: runtimegateway.RuntimeTypeAgentDaemon, CredentialHash: row.CredentialHash, RuntimeNodeID: row.RuntimeNodeID, RuntimeAllocationID: row.RuntimeAllocationID}, true, nil
 }
 
 func (s *Store) RevokeDevice(ctx context.Context, tenantID, deviceID string) error {
@@ -178,24 +178,24 @@ func deviceLookup(tenantID, id string) (sqlc.GetDeviceParams, error) {
 	return p, err
 }
 
-func (s *Store) TouchRuntimeHeartbeat(ctx context.Context, deviceID string) (device.HeartbeatStatus, error) {
+func (s *Store) TouchRuntimeHeartbeat(ctx context.Context, deviceID string) (runtimedevice.HeartbeatStatus, error) {
 	id, err := parseID(deviceID)
 	if err != nil {
-		return device.HeartbeatStatus{}, err
+		return runtimedevice.HeartbeatStatus{}, err
 	}
 	n, err := s.queries.TouchDevice(ctx, id)
-	return device.HeartbeatStatus{Liveness: "online", Deleted: n == 0}, err
+	return runtimedevice.HeartbeatStatus{Liveness: "online", Deleted: n == 0}, err
 }
 
-func (s *Store) TouchAgentDaemonHeartbeat(ctx context.Context, heartbeat device.Heartbeat) (device.HeartbeatStatus, error) {
+func (s *Store) TouchAgentDaemonHeartbeat(ctx context.Context, heartbeat runtimedevice.Heartbeat) (runtimedevice.HeartbeatStatus, error) {
 	id, err := parseID(heartbeat.RuntimeID)
 	if err != nil {
-		return device.HeartbeatStatus{}, err
+		return runtimedevice.HeartbeatStatus{}, err
 	}
 	n, err := s.queries.TouchAuthenticatedDevice(ctx, sqlc.TouchAuthenticatedDeviceParams{
 		ID: id, CredentialHash: heartbeat.CredentialHash,
 	})
-	return device.HeartbeatStatus{Liveness: "online", Deleted: n == 0}, err
+	return runtimedevice.HeartbeatStatus{Liveness: "online", Deleted: n == 0}, err
 }
 
 // Live connectivity belongs to the gateway Registry. Only last-seen time is

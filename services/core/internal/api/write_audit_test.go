@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
@@ -47,7 +47,7 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	if err != nil {
 		t.Fatal(err)
 	}

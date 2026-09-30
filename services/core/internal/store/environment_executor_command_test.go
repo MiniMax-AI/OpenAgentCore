@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -64,14 +64,14 @@ func TestEnvironmentExecutorOperatorCommand(t *testing.T) {
 	if next == first {
 		t.Fatal("rotation returned the same key")
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, device.HashCredential(first)); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(first)); !errors.Is(err, store.ErrNotFound) {
 		t.Fatal("old command credential retained authority", err)
 	}
-	if owner, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, device.HashCredential(next)); err != nil || owner != tenant {
+	if owner, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(next)); err != nil || owner != tenant {
 		t.Fatal("rotated command credential failed", err)
 	}
 	command(tenant, true, "--revoke")
-	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, device.HashCredential(next)); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(next)); !errors.Is(err, store.ErrNotFound) {
 		t.Fatal("revoked command credential retained authority", err)
 	}
 	t.Log("built operator command issued before Session creation, rejected duplicate/foreign requests, rotated and revoked durable credentials")

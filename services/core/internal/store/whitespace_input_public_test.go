@@ -8,10 +8,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -23,7 +23,7 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
 	s, pool := store.NewManagedTestStore(t)
 	token := uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-owner", TokenSHA256: device.HashCredential(token), TenantID: uuid.NewString()}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,12 +100,12 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 	s, pool := store.NewManagedTestStore(t)
 	token := uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-harness", TokenSHA256: device.HashCredential(token), TenantID: uuid.NewString()}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-harness", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Real Worker admission with dispatch paused keeps admitted Turns queued.
-	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry()})
+	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
 	if err != nil {
 		t.Fatal(err)
 	}

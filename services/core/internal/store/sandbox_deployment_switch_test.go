@@ -10,8 +10,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -125,7 +125,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || len(nodes) != 1 || nodes[0] != "" {
 		t.Fatal("cloud lifecycle requires node", nodes, err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment, id, device.HashCredential(uuid.NewString()))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment, id, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || owner.NodeID != "" {
 		t.Fatal(owner, err)
 	}
@@ -305,7 +305,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, device.HashCredential(uuid.NewString()))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

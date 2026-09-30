@@ -1,0 +1,632 @@
+package runtimegateway
+
+import (
+	"context"
+	"crypto/subtle"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+)
+
+// Tunables. Package-level so tests can override via small helpers
+// without exposing struct fields on every Session.
+var (
+	// DefaultHeartbeatInterval is the cadence the daemon is told to
+	// send heartbeats at via the bootstrap response. The server uses
+	// HeartbeatTimeout (not this cadence) to decide a session is dead.
+	DefaultHeartbeatInterval = 15 * time.Second
+
+	// HeartbeatTimeout is how long the server tolerates no inbound
+	// frame (heartbeat OR data) before declaring the session unhealthy.
+	HeartbeatTimeout = 60 * time.Second
+
+	// WriteTimeout caps how long a single outbound frame may block.
+	// Past this we treat the peer as wedged and close the session.
+	WriteTimeout = 10 * time.Second
+
+	// InteractionAckTimeout bounds the application-level round trip for a
+	// permission or user-input decision after it is written to the daemon.
+	InteractionAckTimeout = 15 * time.Second
+
+	// ReadLimit caps a single inbound frame at 4 MiB. tool_call
+	// results can be large but anything past this is almost certainly
+	// a misbehaving daemon (or hostile input).
+	ReadLimit int64 = 4 * 1024 * 1024
+
+	// CloseRuntimeDeleted is a custom WS close code (4001) sent when
+	// a heartbeat discovers the runtime has been deleted. The daemon
+	// treats this as a permanent error and exits rather than reconnecting.
+	CloseRuntimeDeleted = 4001
+)
+
+// ErrSessionClosed is returned by Send / Subscribe when the session
+// has shut down.
+var ErrSessionClosed = errors.New("agentdaemon gateway: session closed")
+
+// WSConn is the slice of *websocket.Conn the session uses, exported so
+// cross-package tests can substitute a fake without a real WS upgrader.
+type WSConn interface {
+	ReadMessage() (int, []byte, error)
+	WriteMessage(messageType int, data []byte) error
+	WriteControl(messageType int, data []byte, deadline time.Time) error
+	SetReadLimit(limit int64)
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
+	Close() error
+}
+
+// SessionLogger is the minimal logging surface a session needs. Pass
+// nil to silence logs.
+type SessionLogger func(format string, args ...any)
+
+// Session owns one goroutine for the read loop and serialises writes
+// via a single send goroutine so callers can Send concurrently without
+// violating gorilla's "single writer" requirement.
+type Session struct {
+	DeviceID      string
+	WorkspaceID   string
+	DaemonVersion string
+	ConnectedAt   time.Time
+
+	conn WSConn
+	log  SessionLogger
+	reg  *Registry
+
+	// owner is non-nil in multi-pod mode. It fences this WebSocket
+	// against the DB owner row so stale connections from an older pod
+	// cannot keep handling prompts after a reconnect claimed a newer
+	// generation.
+	owner *ownerLease
+
+	// heartbeat persists daemon-advertised capability snapshots.
+	heartbeat      HeartbeatTouch
+	credentialHash string
+
+	hbMu       sync.Mutex
+	lastSeenAt time.Time
+
+	// supportedKinds is the latest daemon-advertised agent_kind snapshot,
+	// updated from heartbeat frames and read by the connector before
+	// dispatching prompt_request so unsupported engines fail on the server.
+	kindsMu        sync.RWMutex
+	kindsSeen      bool
+	supportedKinds []runtimedevice.SupportedAgentKind
+
+	// Subscribers keyed by runID. The read loop only sends on these
+	// channels; Unsubscribe is the only place that closes them.
+	subsMu            sync.Mutex
+	subs              map[string]*Subscription
+	preparationMu     sync.Mutex
+	preparations      map[string]*preparationSubscription
+	capabilitiesMu    sync.Mutex
+	capabilities      map[string]chan proto.Envelope
+	workspaceWriteMu  sync.Mutex
+	workspaceWrites   map[string]chan proto.Envelope
+	suspendMu         sync.Mutex
+	suspendReplies    map[string]chan proto.Envelope
+	workspaceReadMu   sync.Mutex
+	workspaceReads    map[string]chan proto.Envelope
+	workspaceExportMu sync.Mutex
+	workspaceExports  map[string]chan proto.Envelope
+
+	ackMu      sync.Mutex
+	ackWaiters map[string]chan proto.InteractionDecisionAckPayload
+
+	// sendCh feeds the WS write loop. Capacity is bounded so a slow
+	// peer can't queue unbounded outbound frames; once full, Send
+	// blocks up to WriteTimeout then returns an error.
+	sendCh chan proto.Envelope
+
+	// closeOnce guards the shutdown path so concurrent Close calls
+	// collapse into one.
+	receiptMu    sync.Mutex
+	deliveries   map[string]struct{}
+	receiptDrain runtimedevice.ArchivedCancellationReceipt
+	receiptTimer *time.Timer
+
+	closeOnce sync.Once
+	closed    chan struct{}
+}
+
+// NewSession wires a freshly-upgraded WS connection into a Session.
+// The session does NOT start its goroutines automatically — Start runs
+// once the handler is ready so the session can't race with response writes.
+func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
+	return NewSessionWithOwner(conn, deviceID, workspaceID, daemonVersion, reg, log, nil)
+}
+
+// NewSessionWithOwner wires a session with an optional DB-backed owner
+// lease. Multi-pod deployments pass the lease returned by
+// ClaimAgentDaemonDeviceOwner so heartbeats can fence stale connections.
+func NewSessionWithOwner(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger, owner *ownerLease) *Session {
+	if log == nil {
+		log = func(string, ...any) {}
+	}
+	if reg == nil {
+		reg = NewRegistry()
+	}
+	now := time.Now()
+	return &Session{
+		DeviceID:      deviceID,
+		WorkspaceID:   workspaceID,
+		DaemonVersion: daemonVersion,
+		ConnectedAt:   now,
+		conn:          conn,
+		log:           log,
+		reg:           reg,
+		owner:         owner,
+		lastSeenAt:    now,
+		subs:          map[string]*Subscription{},
+		preparations:  map[string]*preparationSubscription{},
+		ackWaiters:    map[string]chan proto.InteractionDecisionAckPayload{},
+		sendCh:        make(chan proto.Envelope, 64),
+		closed:        make(chan struct{}),
+	}
+}
+
+// Start kicks off the read + write loops. The caller MUST eventually
+// call Close (or wait for the read loop to fail) before *Session is
+// GC-eligible.
+func (s *Session) Start() {
+	s.conn.SetReadLimit(ReadLimit)
+	go s.writeLoop()
+	go s.readLoop()
+}
+
+// Closed returns a channel that's closed once the session has shut down.
+func (s *Session) Closed() <-chan struct{} { return s.closed }
+
+// IsClosed reports whether Close has been called.
+func (s *Session) IsClosed() bool {
+	select {
+	case <-s.closed:
+		return true
+	default:
+		return false
+	}
+}
+
+// LastSeen returns the timestamp of the most recent inbound frame.
+func (s *Session) LastSeen() time.Time {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
+	return s.lastSeenAt
+}
+
+// AgentKindStatus returns the latest advertised descriptor for kind.
+// found=false means the daemon has not advertised that kind; snapshotKnown
+// distinguishes "no heartbeat yet" from "heartbeat arrived and omitted it".
+func (s *Session) AgentKindStatus(kind string) (info runtimedevice.SupportedAgentKind, found bool, snapshotKnown bool) {
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		return runtimedevice.SupportedAgentKind{}, false, false
+	}
+	s.kindsMu.RLock()
+	seen := s.kindsSeen
+	kinds := make([]runtimedevice.SupportedAgentKind, len(s.supportedKinds))
+	copy(kinds, s.supportedKinds)
+	s.kindsMu.RUnlock()
+	if !seen {
+		return runtimedevice.SupportedAgentKind{}, false, false
+	}
+	for _, candidate := range kinds {
+		if candidate.Kind == kind {
+			return candidate, true, true
+		}
+	}
+	return runtimedevice.SupportedAgentKind{}, false, true
+}
+
+func (s *Session) setSupportedAgentKinds(kinds []runtimedevice.SupportedAgentKind) {
+	copyKinds := make([]runtimedevice.SupportedAgentKind, len(kinds))
+	copy(copyKinds, kinds)
+	s.kindsMu.Lock()
+	s.kindsSeen = true
+	s.supportedKinds = copyKinds
+	s.kindsMu.Unlock()
+}
+
+// Close closes the transport and subscriptions with ErrSessionClosed, then
+// releases connection ownership. It establishes no execution outcome. Idempotent.
+func (s *Session) Close(reason string) {
+	s.closeOnce.Do(func() {
+		s.stopReceiptTimer()
+		close(s.closed)
+		_ = s.conn.Close()
+		// Transport failure must remain distinct from native execution facts.
+		s.subsMu.Lock()
+		subs := s.subs
+		s.subs = map[string]*Subscription{}
+		s.subsMu.Unlock()
+		for runID, sub := range subs {
+			s.closeSubscription(sub)
+			s.reg.DetachRun(runID)
+		}
+		s.reg.Deregister(s)
+		s.closePreparations()
+		s.closeWorkspaceReads()
+		s.closeSuspendReplies()
+		s.closeWorkspaceWrites()
+		s.closeCapabilities()
+		s.closeWorkspaceExports()
+		s.markOfflineOnClose()
+		s.releaseOwnerLease()
+	})
+}
+
+// CloseWithCode sends a WS close frame with a custom status code so
+// permanent conditions (e.g. runtime deleted) can be distinguished
+// from transient disconnects.
+func (s *Session) CloseWithCode(code int, reason string) {
+	// gorilla permits WriteControl concurrently with the sole data writer.
+	_ = s.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason), time.Now().Add(WriteTimeout))
+	s.Close(reason)
+}
+
+// Send queues an envelope for the WS write loop. Returns ErrSessionClosed
+// if the session has shut down, or context.DeadlineExceeded if the send
+// queue is full for longer than ctx's timeout.
+//
+// Side effect: stamps env.Trace from ctx if absent, so every server →
+// daemon frame inherits the caller's trace_id. Callers that explicitly
+// set env.Trace win.
+func (s *Session) Send(ctx context.Context, env proto.Envelope) error {
+	if s.IsClosed() || !s.allowsReceiptFrame(env, true) {
+		return ErrSessionClosed
+	}
+	if env.Trace == "" {
+		if carrier, ok := obslog.TraceFromContext(ctx); ok {
+			env.Trace = carrier.String()
+		}
+	}
+	select {
+	case s.sendCh <- env:
+		return nil
+	case <-s.closed:
+		return ErrSessionClosed
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// SendAndWaitInteractionAck sends a decision and waits until the daemon
+// confirms that its agent session applied it. Queueing or writing the
+// WebSocket frame alone is not success: without this receipt the canonical
+// database interaction must remain retryable.
+func (s *Session) SendAndWaitInteractionAck(ctx context.Context, env proto.Envelope, deliveryID string) (proto.InteractionDecisionAckPayload, error) {
+	deliveryID = strings.TrimSpace(deliveryID)
+	if deliveryID == "" {
+		return proto.InteractionDecisionAckPayload{}, errors.New("agentdaemon gateway: interaction delivery id is required")
+	}
+	waiter := make(chan proto.InteractionDecisionAckPayload, 1)
+	s.ackMu.Lock()
+	if _, exists := s.ackWaiters[deliveryID]; exists {
+		s.ackMu.Unlock()
+		return proto.InteractionDecisionAckPayload{}, fmt.Errorf("agentdaemon gateway: duplicate interaction delivery id %q", deliveryID)
+	}
+	s.ackWaiters[deliveryID] = waiter
+	s.ackMu.Unlock()
+	defer func() {
+		s.ackMu.Lock()
+		delete(s.ackWaiters, deliveryID)
+		s.ackMu.Unlock()
+	}()
+
+	if err := s.Send(ctx, env); err != nil {
+		return proto.InteractionDecisionAckPayload{}, err
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, InteractionAckTimeout)
+	defer cancel()
+	select {
+	case ack := <-waiter:
+		return ack, nil
+	case <-s.closed:
+		return proto.InteractionDecisionAckPayload{}, ErrSessionClosed
+	case <-waitCtx.Done():
+		// If the ack raced the deadline, prefer the application receipt;
+		// treating an already-applied decision as retryable can trigger a
+		// contradictory second human response.
+		select {
+		case ack := <-waiter:
+			return ack, nil
+		default:
+			return proto.InteractionDecisionAckPayload{}, waitCtx.Err()
+		}
+	}
+}
+
+// writeLoop is the single writer goroutine that gorilla/websocket
+// requires. Exits when sendCh is closed (Close path) or on a write error.
+func (s *Session) writeLoop() {
+	for {
+		select {
+		case env, ok := <-s.sendCh:
+			if !ok {
+				return
+			}
+			if !s.allowsReceiptFrame(env, true) {
+				continue
+			}
+			raw, err := json.Marshal(env)
+			if err != nil {
+				s.log("agentdaemon gateway: marshal outbound envelope: %v", err)
+				continue
+			}
+			_ = s.conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
+			if err := s.conn.WriteMessage(websocket.TextMessage, raw); err != nil {
+				s.log("agentdaemon gateway: write %s frame: %v", env.Type, err)
+				s.Close("write error: " + err.Error())
+				return
+			}
+		case <-s.closed:
+			return
+		}
+	}
+}
+
+// readLoop is the only place that consumes from the WS. It owns the
+// heartbeat timestamp and the dispatch into per-run subscribers.
+func (s *Session) readLoop() {
+	defer s.Close("read loop exit")
+
+	for {
+		// Bound the read so a dead peer surfaces as a deadline rather
+		// than a hang.
+		_ = s.conn.SetReadDeadline(time.Now().Add(HeartbeatTimeout))
+		_, raw, err := s.conn.ReadMessage()
+		if err != nil {
+			s.log("agentdaemon gateway: read frame: %v", err)
+			return
+		}
+		if !s.receiptDraining() {
+			s.markSeen()
+			if !s.renewOwnerLease() {
+				return
+			}
+		}
+
+		var env proto.Envelope
+		if err := json.Unmarshal(raw, &env); err != nil {
+			s.log("agentdaemon gateway: unmarshal inbound frame: %v", err)
+			continue
+		}
+		s.dispatch(env)
+	}
+}
+
+func (s *Session) markSeen() {
+	s.hbMu.Lock()
+	s.lastSeenAt = time.Now()
+	s.hbMu.Unlock()
+}
+
+func (s *Session) renewOwnerLease() bool {
+	if s.owner == nil || s.owner.store == nil {
+		return true
+	}
+	now := time.Now().UTC()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, ok, err := s.owner.store.RenewAgentDaemonDeviceOwner(ctx, runtimedevice.RenewOwner{
+		DeviceID:       s.owner.deviceID,
+		OwnerPodID:     s.owner.ownerPodID,
+		Generation:     s.owner.generation,
+		Now:            now,
+		LeaseExpiresAt: now.Add(normalizeOwnerTTL(s.owner.ttl)),
+	})
+	if err != nil {
+		s.log("agentdaemon gateway: owner lease renew failed device=%s generation=%d: %v", s.DeviceID, s.owner.generation, err)
+		s.Close("owner lease renew failed")
+		return false
+	}
+	if !ok {
+		s.log("agentdaemon gateway: owner lease lost device=%s generation=%d", s.DeviceID, s.owner.generation)
+		s.Close("owner lease lost to a newer connection")
+		return false
+	}
+	return true
+}
+
+func (s *Session) releaseOwnerLease() {
+	if s.owner == nil || s.owner.store == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if _, err := s.owner.store.ReleaseAgentDaemonDeviceOwner(ctx, runtimedevice.ReleaseOwner{
+		DeviceID:   s.owner.deviceID,
+		OwnerPodID: s.owner.ownerPodID,
+		Generation: s.owner.generation,
+	}); err != nil {
+		s.log("agentdaemon gateway: owner lease release failed device=%s generation=%d: %v", s.DeviceID, s.owner.generation, err)
+	}
+}
+
+func (s *Session) markOfflineOnClose() {
+	if s.heartbeat == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := s.heartbeat.MarkRuntimeOffline(ctx, s.DeviceID); err != nil {
+		s.log("agentdaemon gateway: mark offline on close failed device=%s: %v", s.DeviceID, err)
+	}
+}
+
+func (s *Session) handleHeartbeat(env proto.Envelope) {
+	var p proto.HeartbeatPayload
+	if err := env.DecodePayload(&p); err != nil {
+		s.log("agentdaemon gateway: invalid heartbeat declaration device=%s", s.DeviceID)
+		s.setSupportedAgentKinds(nil)
+		s.Close("invalid heartbeat declaration")
+		return
+	}
+	kinds := deviceKindsFromHeartbeat(p)
+	s.setSupportedAgentKinds(kinds)
+	if s.heartbeat == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	status, err := s.heartbeat.TouchAgentDaemonHeartbeat(ctx, runtimedevice.Heartbeat{
+		RuntimeID:           s.DeviceID,
+		CredentialHash:      s.credentialHash,
+		DaemonVersion:       p.DaemonVersion,
+		ActiveRequests:      p.ActiveRequests,
+		HeartbeatTimestamp:  p.Timestamp,
+		SupportedAgentKinds: kinds,
+	})
+	if err != nil {
+		s.log("agentdaemon gateway: persist heartbeat device=%s: %v", s.DeviceID, err)
+		return
+	}
+	if status.Deleted {
+		draining, drainErr := s.DrainArchivedCancellation(ctx)
+		if drainErr == nil && draining {
+			return
+		}
+		s.log("agentdaemon gateway: runtime retired, closing session device=%s", s.DeviceID)
+		// "retired" rather than "deleted by admin": the row may have
+		// been soft-deleted by sandbox stale-row cleanup or by an
+		// actual admin action; the daemon only sees it's no longer
+		// the current owner.
+		s.CloseWithCode(CloseRuntimeDeleted, "runtime retired")
+	}
+}
+
+func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.SupportedAgentKind {
+	out := make([]runtimedevice.SupportedAgentKind, 0, len(p.SupportedAgentKinds))
+	for _, info := range p.SupportedAgentKinds {
+		out = append(out, runtimedevice.SupportedAgentKind{
+			Kind:      info.Kind,
+			Available: info.Available,
+			Version:   info.Version,
+			Capabilities: runtimedevice.KindCapabilities{
+				Streaming:             info.Capabilities.Streaming.IsSupported(),
+				Permissions:           info.Capabilities.Permissions.IsSupported(),
+				Usage:                 info.Capabilities.Usage.IsSupported(),
+				Resume:                info.Capabilities.Resume.IsSupported(),
+				Steering:              info.Capabilities.Steering.IsSupported(),
+				DurableTurns:          info.Capabilities.DurableTurns.IsSupported(),
+				DurableInputReceipts:  info.Capabilities.DurableInputReceipts.IsSupported(),
+				NativeSessionRecovery: info.Capabilities.NativeSessionRecovery.IsSupported(),
+				MessageItems:          info.Capabilities.MessageItems.IsSupported(),
+
+				ToolObservations:               info.Capabilities.ToolObservations.IsSupported(),
+				EnvironmentNone:                info.Capabilities.EnvironmentNone.IsSupported(),
+				LocalEnvironment:               info.Capabilities.LocalEnvironment.IsSupported(),
+				Preparation:                    info.Capabilities.Preparation.IsSupported(),
+				WorkspaceReadPreparation:       info.Capabilities.WorkspaceReadPreparation.IsSupported(),
+				WorkspaceOutputExport:          info.Capabilities.WorkspaceOutputExport.IsSupported(),
+				WebSearchControl:               info.Capabilities.WebSearchControl.IsSupported(),
+				ProgrammaticToolCallingDisable: info.Capabilities.ProgrammaticToolCallingDisable.IsSupported(),
+				TextVerbosity:                  info.Capabilities.TextVerbosity.IsSupported(),
+				StructuredOutput:               info.Capabilities.StructuredOutput.IsSupported(),
+				ToolSearch:                     info.Capabilities.ToolSearch.IsSupported(),
+				MessageImages:                  info.Capabilities.MessageImages.IsSupported(),
+				FunctionResultImages:           info.Capabilities.FunctionResultImages.IsSupported(),
+				ExecutionControls:              info.Capabilities.ExecutionControls.IsSupported(),
+				SubagentControl:                info.Capabilities.SubagentControl.IsSupported(),
+				SubagentObservations:           info.Capabilities.SubagentObservations.IsSupported(),
+				FunctionTools:                  info.Capabilities.FunctionTools.IsSupported(),
+				MCPHTTPTools:                   info.Capabilities.MCPHTTPTools.IsSupported(),
+				MCPHTTPRequired:                info.Capabilities.MCPHTTPRequired.IsSupported(),
+				MCPHTTPBearerAuth:              info.Capabilities.MCPHTTPBearerAuth.IsSupported(),
+				WorkspaceAuthoring:             info.Capabilities.WorkspaceAuthoring.IsSupported(),
+			},
+		})
+	}
+	return out
+}
+
+func (s *Session) dispatch(env proto.Envelope) {
+	if !s.allowsReceiptFrame(env, false) {
+		return
+	}
+	switch env.Type {
+	case proto.TypeWorkspaceExportResult:
+		s.dispatchWorkspaceExport(env)
+		return
+	case proto.TypeRuntimePrepareResult:
+		s.dispatchCapabilities(env)
+		return
+	case proto.TypeWorkspaceWriteResult:
+		s.dispatchWorkspaceWrite(env)
+	case proto.TypeWorkspaceReadResult:
+		s.dispatchWorkspaceRead(env)
+		return
+	case proto.TypeEnvironmentQuiesced, proto.TypeEnvironmentResumed:
+		s.dispatchSuspendReply(env)
+	case proto.TypePreparationStatus:
+		s.dispatchPreparation(env)
+		return
+	case proto.TypeHeartbeat:
+		s.handleHeartbeat(env)
+		return
+	case proto.TypePermissionRequest:
+		var p proto.PermissionRequestPayload
+		requestID := ""
+		if err := env.DecodePayload(&p); err == nil {
+			requestID = strings.TrimSpace(p.RequestID)
+		}
+		if requestID == "" {
+			return
+		}
+		s.reg.AttachPermission(requestID, s)
+	case proto.TypePermissionCancel:
+		if env.ID != "" {
+			s.reg.DetachPermission(env.ID)
+		}
+	case proto.TypePromptForUserChoice:
+		// env.ID is the run id (so the fan path below delivers this
+		// frame to the run's subscriber). The ask id rides on the
+		// payload — pull it out so SubmitPromptForUserChoice can find
+		// the session by ask id via the byAsk index.
+		var p proto.PromptForUserChoicePayload
+		if err := env.DecodePayload(&p); err == nil && p.AskID != "" {
+			s.reg.AttachPromptForUserChoice(p.AskID, s)
+		}
+	case proto.TypeInteractionDecisionAck:
+		var ack proto.InteractionDecisionAckPayload
+		if err := env.DecodePayload(&ack); err != nil {
+			s.log("agentdaemon gateway: decode interaction decision ack: %v", err)
+			return
+		}
+		s.ackMu.Lock()
+		waiter := s.ackWaiters[ack.DeliveryID]
+		s.ackMu.Unlock()
+		if waiter == nil {
+			s.log("agentdaemon gateway: interaction decision ack has no waiter delivery=%s request=%s", ack.DeliveryID, env.ID)
+			return
+		}
+		select {
+		case waiter <- ack:
+		default:
+		}
+		return
+	}
+
+	// All run-correlated frames fan to the matching subscriber. Current
+	// permission and prompt-for-user-choice frames keep their interaction ID
+	// in the payload so Envelope.ID remains the run ID.
+	if env.ID == "" {
+		return
+	}
+	s.dispatchToSubscriber(env)
+}
+
+// AuthenticatedWith compares the credential digest captured by the HTTP upgrade.
+// The digest is never accepted from a daemon frame.
+func (s *Session) AuthenticatedWith(digest string) bool {
+	return s.credentialHash != "" && subtle.ConstantTimeCompare([]byte(s.credentialHash), []byte(digest)) == 1
+}

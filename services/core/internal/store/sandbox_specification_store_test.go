@@ -10,8 +10,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -168,7 +168,7 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 			}
 			var owner RuntimeAllocation
 			if state != "pending" {
-				owner, err = w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, view.InstallationID, device.HashCredential(uuid.NewString()))
+				owner, err = w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -310,7 +310,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 	for _, session := range sessions {
 		go func() {
 			<-start
-			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, view.InstallationID, device.HashCredential(uuid.NewString()))
+			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 			results <- result{session, owner, err}
 		}()
 	}
@@ -328,7 +328,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 		result := <-results
 		if result.err == nil {
 			allocated++
-			retry, err := w.ReserveRuntimeAllocation(t.Context(), tenant, result.session.Environment.ID, view.InstallationID, device.HashCredential(uuid.NewString()))
+			retry, err := w.ReserveRuntimeAllocation(t.Context(), tenant, result.session.Environment.ID, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil || retry.ID != result.owner.ID || !retry.Replayed {
 				t.Fatal("maintenance changed an admitted allocation retry", err)
 			}
@@ -336,7 +336,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 			if !errors.Is(result.err, ErrSandboxResetAdmission) {
 				t.Fatal("allocation race failed outside admission", result.err)
 			}
-			if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, result.session.Environment.ID, view.InstallationID, device.HashCredential(uuid.NewString())); !errors.Is(err, ErrSandboxResetAdmission) {
+			if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, result.session.Environment.ID, view.InstallationID, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, ErrSandboxResetAdmission) {
 				t.Fatal("fresh allocation passed committed maintenance", err)
 			}
 		}

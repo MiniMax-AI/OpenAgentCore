@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -17,13 +17,13 @@ func legacyAdoptionFixture(t *testing.T) (*Store, *Store, RuntimeDeployment, Run
 	deploymentConfigure(t, w, &d)
 	tenant := uuid.NewString()
 	_, e := localEnvironment(t, s, tenant)
-	a, err := w.ReserveRuntimeAllocation(t.Context(), tenant, e.ID, d.InstallationID, device.HashCredential("runtime"))
+	a, err := w.ReserveRuntimeAllocation(t.Context(), tenant, e.ID, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	d.ProviderKind = "docker"
 	d.LocalNodeID = uuid.NewString()
-	d.LocalCredentialSHA256 = device.HashCredential("node")
+	d.LocalCredentialSHA256 = runtimedevice.HashCredential("node")
 	d.LocalMaxActive, d.LocalMaxRetained = 4, 16
 	return s, w, d, a
 }

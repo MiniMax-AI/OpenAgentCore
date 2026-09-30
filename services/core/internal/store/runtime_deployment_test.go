@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
 func deploymentSelection() RuntimeDeployment {
@@ -117,7 +117,7 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	old := deploymentSelection()
 	tenant := uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, device.HashCredential(uuid.NewString()))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	}
 	deploymentConfigure(t, w, &old)
 	_, environment = localEnvironment(t, s, tenant)
-	owner, err = w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, device.HashCredential(uuid.NewString()))
+	owner, err = w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	if err := w.ConfigureRuntimeDeployment(t.Context(), nil); err == nil {
 		t.Fatal("removing adapter orphaned unknown creation")
 	}
-	replay, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, device.HashCredential(uuid.NewString()))
+	replay, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || !replay.Replayed || replay.ID != owner.ID {
 		t.Fatal("maintenance blocked receipt replay", replay, err)
 	}
@@ -192,7 +192,7 @@ func TestRuntimeDeploymentMaintenancePreservesCreationRetriesAndOtherPlacements(
 	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM sessions WHERE tenant_id=$1", tenant).Scan(&count); err != nil || count != 1 {
 		t.Fatal("rejection left partial Session", count, err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, old.InstallationID, device.HashCredential(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
 		t.Fatal("maintenance reserved new allocation", err)
 	}
 	for _, kind := range []string{"none", "self_hosted"} {
@@ -204,10 +204,10 @@ func TestRuntimeDeploymentMaintenancePreservesCreationRetriesAndOtherPlacements(
 	}
 	old.AdmissionPaused = false
 	deploymentConfigure(t, w, &old)
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, uuid.NewString(), device.HashCredential(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
 		t.Fatal("wrong installation reserved resource", err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, old.InstallationID, device.HashCredential(uuid.NewString())); err != nil {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString())); err != nil {
 		t.Fatal("resume did not reopen allocation", err)
 	}
 }
@@ -259,7 +259,7 @@ func TestRuntimeDeploymentRetainedResourcesBlockSwitchWithoutMutation(t *testing
 			deploymentConfigure(t, w, &old)
 			tenant := uuid.NewString()
 			_, environment := localEnvironment(t, s, tenant)
-			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, device.HashCredential(uuid.NewString()))
+			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -318,7 +318,7 @@ func TestRuntimeDeploymentAllocationBeforeMaintenanceRetainsOwnership(t *testing
 	}
 	allocated := make(chan error, 1)
 	go func() {
-		_, err := w.ReserveRuntimeAllocation(ctx, tenant, environment.ID, config.InstallationID, device.HashCredential(uuid.NewString()))
+		_, err := w.ReserveRuntimeAllocation(ctx, tenant, environment.ID, config.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 		allocated <- err
 	}()
 	runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, allocated)

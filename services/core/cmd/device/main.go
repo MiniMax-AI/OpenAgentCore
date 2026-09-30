@@ -15,9 +15,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -63,7 +63,7 @@ func run() error {
 		return err
 	}
 	credential := base64.RawURLEncoding.EncodeToString(secret)
-	registered, err := s.CreateDevice(ctx, *tenant, *name, device.HashCredential(credential))
+	registered, err := s.CreateDevice(ctx, *tenant, *name, runtimedevice.HashCredential(credential))
 	if err != nil {
 		return err
 	}

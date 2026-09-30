@@ -1,6 +1,6 @@
 # Core–Runtime protocol
 
-This protocol connects Core to a Runtime daemon after the daemon has its machine credential. It defines the meaning and order of the messages on the daemon connection. The wire types, limits and validators live once in [`internal/agentdaemon/proto`](../internal/agentdaemon/proto); Core's [gateway](../internal/agentdaemon/gateway) and the reference Runtime's [dispatcher](../apps/daemon/internal/dispatch) both use them, so there is no second payload schema to keep in sync. The HTTP routes that issue credentials and open the connection are in the [machine connection API](../contracts/agents-api/machine-api.md).
+This protocol connects Core to a Runtime daemon after the daemon has its machine credential. It defines the meaning and order of the messages on the daemon connection. The wire types, limits and validators live once in [`internal/agentdaemon/proto`](../internal/agentdaemon/proto); Core's [gateway](../services/core/internal/runtimegateway) and the reference Runtime's [dispatcher](../apps/daemon/internal/dispatch) both use them, so there is no second payload schema to keep in sync. The HTTP routes that issue credentials and open the connection are in the [machine connection API](../contracts/agents-api/machine-api.md).
 
 Hosted and self-hosted Runtimes use the same protocol. A Harness joins through the [Harness adapter contract](../contracts/agents-api/harness-onboarding.md), which owns the Executor and Turn lifecycle obligations behind the Runtime registry.
 

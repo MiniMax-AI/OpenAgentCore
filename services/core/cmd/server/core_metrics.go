@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -19,7 +19,7 @@ type coreMetricsSource struct {
 	store    *store.Store
 	pool     *pgxpool.Pool
 	worker   *execution.Worker
-	registry *gateway.Registry
+	registry *runtimegateway.Registry
 }
 
 func metricPtr[T any](value T) *T { return &value }

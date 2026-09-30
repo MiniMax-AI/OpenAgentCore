@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -25,7 +25,7 @@ type cancellationResult struct {
 	err error
 }
 
-func requestCancellation(ctx context.Context, peer *gateway.Session, runID string) <-chan cancellationResult {
+func requestCancellation(ctx context.Context, peer *runtimegateway.Session, runID string) <-chan cancellationResult {
 	out := make(chan cancellationResult, 1)
 	go func() {
 		id := "cancel:" + runID
@@ -36,7 +36,7 @@ func requestCancellation(ctx context.Context, peer *gateway.Session, runID strin
 	return out
 }
 
-func send(ctx context.Context, peer *gateway.Session, kind, runID string, payload any) error {
+func send(ctx context.Context, peer *runtimegateway.Session, kind, runID string, payload any) error {
 	env, err := proto.NewEnvelope(kind, runID, payload)
 	if err != nil {
 		return err
@@ -46,11 +46,11 @@ func send(ctx context.Context, peer *gateway.Session, kind, runID string, payloa
 	return peer.Send(ctx, env)
 }
 
-func abort(peer *gateway.Session, runID string) {
+func abort(peer *runtimegateway.Session, runID string) {
 	_ = send(context.Background(), peer, proto.TypePromptCancel, runID, proto.PromptCancelPayload{})
 }
 
-func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, peer *gateway.Session, request proto.PromptRequestPayload, first int64, prepared *preparedStart) (result Result, status string) {
+func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, peer *runtimegateway.Session, request proto.PromptRequestPayload, first int64, prepared *preparedStart) (result Result, status string) {
 	changed, unsubscribeChanges := d.notifications.subscribe(tenantID, sessionID)
 	defer unsubscribeChanges()
 	status = store.TurnFailed

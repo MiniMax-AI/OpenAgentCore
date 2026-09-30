@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
@@ -50,7 +50,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 			},
 			FenceCredential: func(context.Context) (func(), error) { fenced++; return func() { released++ }, nil }, Publish: func(*RuntimeProvider) { published++ }}, nil
 	})
-	m, err := newRuntimeManager(writer, gateway.NewRegistry(), config)
+	m, err := newRuntimeManager(writer, runtimegateway.NewRegistry(), config)
 	if err != nil {
 		t.Fatal(err)
 	}

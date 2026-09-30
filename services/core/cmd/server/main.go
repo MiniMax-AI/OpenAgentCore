@@ -31,7 +31,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
@@ -41,6 +40,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	historystoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
@@ -221,7 +221,7 @@ func run() error {
 		options = append(options, api.WithRuntimeHistory(historyService))
 	}
 	var daemonHandler http.Handler
-	var registry *gateway.Registry
+	var registry *runtimegateway.Registry
 	if public != "" {
 		wsURL, err := runtimeWebSocketURL(public)
 		if err != nil {

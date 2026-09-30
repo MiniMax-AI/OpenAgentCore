@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -37,7 +37,7 @@ func environmentResourceHandler(t *testing.T) (http.Handler, *environmentResourc
 	}}
 	auth, err := NewAuthenticator([]APIKey{{
 		OrganizationID: "resource-org", ProjectID: "resource-project", SubjectKind: "user", SubjectID: "resource-reader",
-		TokenSHA256: device.HashCredential("resource-key"), TenantID: f.environment.TenantID,
+		TokenSHA256: runtimedevice.HashCredential("resource-key"), TenantID: f.environment.TenantID,
 	}})
 	if err != nil {
 		t.Fatal(err)

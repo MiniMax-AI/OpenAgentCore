@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 	"net/http"
@@ -70,12 +70,12 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, device.HashCredential(key.Token))
+			enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 			if err != nil {
 				t.Fatal(err)
 			}
-			registry := gateway.NewRegistry()
-			handler := gateway.NewHandler(gateway.HandlerConfig{Authenticator: gateway.NewAuthenticator(s), Registry: registry})
+			registry := runtimegateway.NewRegistry()
+			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
 			worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry})
@@ -190,7 +190,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, device.HashCredential(key.Token))
+		enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 		if err != nil {
 			t.Fatal(err)
 		}

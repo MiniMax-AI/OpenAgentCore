@@ -12,9 +12,9 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -83,7 +83,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 		}
 	}()
 	token := uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: device.HashCredential(token), TenantID: h.tenant}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
 	if err != nil {
 		t.Fatal("cannot create fixture authenticator")
 	}

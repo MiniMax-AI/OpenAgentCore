@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -56,7 +56,7 @@ func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestExecutorConnectionListObservation(t *testing.T) {
 			bound := "bound-key"
 			f := &executorManagementFixture{connection: store.ExecutorConnectionState{DeviceID: "device", BoundKeyID: &bound, EnrolledAt: &at, CredentialHash: "private-digest", EnvironmentStatus: "connected"}}
 			auth, _ := NewAuthenticator([]APIKey{key})
-			admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+			admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 			opts := []Option{WithProjectAPIKeys(managementProjectStore(key), admin)}
 			if tc.observer {
 				opts = append(opts, WithExecutorConnections(func(_ context.Context, environment, digest string) (bool, error) {
@@ -197,7 +197,7 @@ func TestExecutorConnectionListUsesResolvedEnvironment(t *testing.T) {
 		connection:          store.ExecutorConnectionState{DeviceID: "device", CredentialHash: "private-digest", EnvironmentStatus: "connected"},
 	}
 	auth, _ := NewAuthenticator([]APIKey{key})
-	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("admin")})
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	observations := 0
 	h, err := NewHandler(f, auth, "codex", WithProjectAPIKeys(managementProjectStore(key), admin),
 		WithExecutorConnections(func(_ context.Context, environment, digest string) (bool, error) {

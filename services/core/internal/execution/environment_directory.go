@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -136,7 +136,7 @@ func (w *Worker) directoryDeviceReady(ctx context.Context, id, engine string, pl
 	return known && found && info.Available && placementReady && (!prepare || (info.Capabilities.Preparation && info.Capabilities.WorkspaceReadPreparation))
 }
 
-func readEnvironmentDirectory(ctx context.Context, peer *gateway.Session, request proto.WorkspaceReadPayload) directoryReadResult {
+func readEnvironmentDirectory(ctx context.Context, peer *runtimegateway.Session, request proto.WorkspaceReadPayload) directoryReadResult {
 	result, err := peer.ListWorkspaceDirectory(ctx, request)
 	if err == nil && result.Outcome == "completed" && result.Directory != nil && !result.Directory.Truncated && proto.ValidWorkspaceDirectory(result.Directory, request.MaxEntries) {
 		return directoryReadResult{directory: *result.Directory}

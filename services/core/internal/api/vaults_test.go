@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -47,7 +47,7 @@ func (f *vaultResourceFixture) UpdateAgent(context.Context, string, string, stor
 func vaultResourceHandler(t *testing.T) (http.Handler, *vaultResourceFixture) {
 	t.Helper()
 	f := &vaultResourceFixture{vault: store.Vault{ID: uuid.NewString(), TenantID: uuid.NewString(), Metadata: map[string]string{}, CreatedAt: time.Unix(1700000000, 0)}}
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "vault-org", ProjectID: "vault-project", SubjectKind: "user", SubjectID: "vault-owner", TokenSHA256: device.HashCredential("vault-key"), TenantID: f.vault.TenantID}})
+	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "vault-org", ProjectID: "vault-project", SubjectKind: "user", SubjectID: "vault-owner", TokenSHA256: runtimedevice.HashCredential("vault-key"), TenantID: f.vault.TenantID}})
 	if err != nil {
 		t.Fatal(err)
 	}

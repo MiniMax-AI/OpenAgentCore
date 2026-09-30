@@ -12,7 +12,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -46,7 +46,7 @@ func (s *busyAuthorityStream) ListSessionEvents(ctx context.Context, _, _ string
 
 func TestBusyStreamRechecksAuthorityAndFailsClosed(t *testing.T) {
 	key := callerBinding()
-	key.TokenSHA256 = device.HashCredential("stream")
+	key.TokenSHA256 = runtimedevice.HashCredential("stream")
 	auth, err := NewAuthenticator([]APIKey{key})
 	if err != nil {
 		t.Fatal(err)

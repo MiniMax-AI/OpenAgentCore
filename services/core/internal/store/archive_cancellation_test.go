@@ -13,12 +13,12 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -61,7 +61,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 			secret := uuid.NewString()
-			owner, err := writer.ReserveRuntimeAllocation(t.Context(), project.TenantID, session.Environment.ID, installation, device.HashCredential(secret))
+			owner, err := writer.ReserveRuntimeAllocation(t.Context(), project.TenantID, session.Environment.ID, installation, runtimedevice.HashCredential(secret))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,7 +101,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			capabilities := workerEnvironmentCapabilities()
 			capabilities.FunctionTools = proto.CapabilitySupported
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: capabilities}}})
-			var peer *gateway.Session
+			var peer *runtimegateway.Session
 			for deadline := time.Now().Add(3 * time.Second); ; {
 				peer, err = registry.LookupDevice(owner.DeviceID)
 				if err == nil {
@@ -177,7 +177,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if err != nil || current.Status != store.TurnWaiting || current.CancelRequestedAt.IsZero() {
 				t.Fatal("archive must request rather than invent cancellation", current, err)
 			}
-			if _, err := gateway.NewAuthenticator(s).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, gateway.ErrAuthUnknownDevice) {
+			if _, err := runtimegateway.NewAuthenticator(s).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
 				t.Fatal("archive allowed renewed authority", err)
 			}
 			rejected, response, dialErr := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + secret}})
@@ -194,11 +194,11 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if err != nil || drain.RunID != "" {
 				t.Fatal("unowned delivery got receipt permission", drain, err)
 			}
-			drain, err = s.ArchivedCancellationReceipt(t.Context(), owner.DeviceID, device.HashCredential(secret), []string{input.TurnID})
+			drain, err = s.ArchivedCancellationReceipt(t.Context(), owner.DeviceID, runtimedevice.HashCredential(secret), []string{input.TurnID})
 			if err != nil || (drain.RunID == input.TurnID) == strings.Contains(scenario, "revoke") {
 				t.Fatal("archive revocation causality lost", drain, err)
 			}
-			if drain.RunID != "" && !drain.Deadline.Equal(current.CancelRequestedAt.Add(device.ArchivedCancellationReceiptLimit)) {
+			if drain.RunID != "" && !drain.Deadline.Equal(current.CancelRequestedAt.Add(runtimedevice.ArchivedCancellationReceiptLimit)) {
 				t.Fatal("archive renewed cancellation deadline")
 			}
 			// Explicitly observe cancel delivery before inducing transport loss. This
@@ -211,7 +211,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal("missing cancel delivery identity")
 			}
 			if scenario == "rotated" {
-				if _, err := pool.Exec(t.Context(), "UPDATE devices SET credential_hash=$2 WHERE id=$1", owner.DeviceID, device.HashCredential(uuid.NewString())); err != nil {
+				if _, err := pool.Exec(t.Context(), "UPDATE devices SET credential_hash=$2 WHERE id=$1", owner.DeviceID, runtimedevice.HashCredential(uuid.NewString())); err != nil {
 					t.Fatal(err)
 				}
 			}

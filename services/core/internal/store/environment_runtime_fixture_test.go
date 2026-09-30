@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -24,7 +24,7 @@ func enrollFixtureSession(t *testing.T, s *store.Store, tenant string, session s
 	if err != nil {
 		t.Fatal(err)
 	}
-	enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, device.HashCredential(key.Token))
+	enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 	if err != nil || enrolled.EnvironmentID != environment.ID || enrolled.SessionID != session.ID || enrolled.WorkspaceDirectory != "/workspace" {
 		t.Fatalf("Runtime enrollment: %+v %v", enrolled, err)
 	}

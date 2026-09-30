@@ -15,16 +15,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 )
 
 func registerTestDevice(t *testing.T, s *Store, tenant string) (ExecutionDevice, string) {
 	t.Helper()
 	secret := uuid.NewString() + uuid.NewString()
-	d, err := s.CreateDevice(context.Background(), tenant, "isolated executor", device.HashCredential(secret))
+	d, err := s.CreateDevice(context.Background(), tenant, "isolated executor", runtimedevice.HashCredential(secret))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,13 +177,13 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 	_ = second.SetReadDeadline(time.Now().Add(2 * time.Second))
 	for {
 		if _, _, err := second.ReadMessage(); err != nil {
-			if !websocket.IsCloseError(err, gateway.CloseRuntimeDeleted) {
+			if !websocket.IsCloseError(err, runtimegateway.CloseRuntimeDeleted) {
 				t.Fatalf("revocation did not close connection: %v", err)
 			}
 			break
 		}
 	}
-	if _, err := gateway.NewAuthenticator(s).AuthenticateBearer(ctx, a.ID, secret); !errors.Is(err, gateway.ErrAuthUnknownDevice) {
+	if _, err := runtimegateway.NewAuthenticator(s).AuthenticateBearer(ctx, a.ID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
 		t.Fatalf("revoked credential survived: %v", err)
 	}
 }

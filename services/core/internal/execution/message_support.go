@@ -4,9 +4,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -57,7 +57,7 @@ func validateMessageImageProfile(profile engine.Profile, _ string, input proto.M
 }
 
 // Image support is checked only for the operation that actually carries images.
-func (p Policy) messageInputSupport(peer *gateway.Session, kind string, snapshot Snapshot, input proto.MessageInput) error {
+func (p Policy) messageInputSupport(peer *runtimegateway.Session, kind string, snapshot Snapshot, input proto.MessageInput) error {
 	if !input.HasImages() {
 		return nil
 	}
@@ -75,7 +75,7 @@ func (p Policy) messageInputSupport(peer *gateway.Session, kind string, snapshot
 	return requireMessageImages(peer, kind, input)
 }
 
-func requireMessageImages(peer *gateway.Session, kind string, input proto.MessageInput) error {
+func requireMessageImages(peer *runtimegateway.Session, kind string, input proto.MessageInput) error {
 	if !input.HasImages() {
 		return nil
 	}

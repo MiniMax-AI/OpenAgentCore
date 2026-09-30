@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -95,7 +95,7 @@ func selfHostedMCPAdmissionFixture(t *testing.T) (*store.Store, *pgxpool.Pool, s
 
 func selfHostedMCPAdmissionHandler(t *testing.T, s *store.Store, tenant string) http.Handler {
 	t.Helper()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: device.HashCredential("test-token")}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: runtimedevice.HashCredential("test-token")}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -112,7 +112,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 					t.Fatal("late readiness moved pin or erased serving readiness", n)
 				}
 			}
-			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, pending.Environment.ID, first.InstallationID, device.HashCredential("runtime"))
+			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, pending.Environment.ID, first.InstallationID, runtimedevice.HashCredential("runtime"))
 			if err != nil {
 				t.Fatal(err)
 			}

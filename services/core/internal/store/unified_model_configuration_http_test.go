@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -17,11 +17,11 @@ import (
 func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 	st, _ := store.NewManagedTestStore(t)
 	tenant, token, coreKey := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "model-configuration", TokenSHA256: device.HashCredential(token), TenantID: tenant}})
+	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "model-configuration", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := api.NewDeploymentAuthenticator([]string{device.HashCredential(coreKey)})
+	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}

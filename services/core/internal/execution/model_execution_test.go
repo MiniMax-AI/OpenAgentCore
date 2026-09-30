@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -18,18 +18,18 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 		called = true
 		return map[string]any{"model_provider": map[string]any{"base_url": "http://127.0.0.1:1/v1"}}, nil
 	}}
-	if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, Snapshot{ModelProviderConfigured: true}, device.KindCapabilities{}, store.SessionExecutionBinding{}); err == nil || called {
+	if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); err == nil || called {
 		t.Fatal("missing Session credentials fell back")
 	}
 	// Hosted and self-hosted Runtimes have no model configuration of their own.
 	for _, environment := range []string{"openai_hosted", "self_hosted"} {
 		snapshot := Snapshot{Environment: &v1.Environment{Type: environment}}
-		if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, device.KindCapabilities{}, store.SessionExecutionBinding{}); !errors.Is(err, store.ErrModelProviderRequired) || called {
+		if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); !errors.Is(err, store.ErrModelProviderRequired) || called {
 			t.Fatal("provider-free Session dispatched", environment, err)
 		}
 	}
 	// A none device may supply its own provider environment.
-	request, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, Snapshot{Environment: &v1.Environment{Type: "none"}}, device.KindCapabilities{}, store.SessionExecutionBinding{})
+	request, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, Snapshot{Environment: &v1.Environment{Type: "none"}}, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{})
 	if err != nil || !called || request.AgentOptions["model_provider"] == nil {
 		t.Fatal("none Session lost its adapter options", err)
 	}

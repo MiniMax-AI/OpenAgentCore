@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -74,8 +74,8 @@ func artifactHTTPServer(t *testing.T, s *store.Store) (server *httptest.Server, 
 	owner, foreign = uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant = uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "artifact-owner", TokenSHA256: device.HashCredential(owner), TenantID: ownerTenant},
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "artifact-foreign", TokenSHA256: device.HashCredential(foreign), TenantID: foreignTenant},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "artifact-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "artifact-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
 	if err != nil {
 		t.Fatal(err)

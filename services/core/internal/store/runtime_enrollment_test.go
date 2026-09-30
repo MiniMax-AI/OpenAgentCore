@@ -5,9 +5,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/google/uuid"
 )
 
@@ -55,7 +55,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 	if devices, err := s.ListExecutionDevices(ctx, p.TenantID); err != nil || len(devices) != 0 {
 		t.Fatalf("enrolled Runtime entered general selection: %v", err)
 	}
-	auth := gateway.NewAuthenticator(s)
+	auth := runtimegateway.NewAuthenticator(s)
 	if _, err := auth.AuthenticateBearer(ctx, bound.DeviceID, key.Token); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := auth.AuthenticateBearer(ctx, bound.DeviceID, key.Token); !errors.Is(err, gateway.ErrAuthBadCredential) {
+	if _, err := auth.AuthenticateBearer(ctx, bound.DeviceID, key.Token); !errors.Is(err, runtimegateway.ErrAuthBadCredential) {
 		t.Fatalf("old key after rotation: %v", err)
 	}
 	if _, err := auth.AuthenticateBearer(ctx, bound.DeviceID, rotated.Token); err != nil {
@@ -80,7 +80,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 		token  string
 		denied bool
 	}{{key.Token, true}, {rotated.Token, false}} {
-		status, err := s.TouchAgentDaemonHeartbeat(ctx, device.Heartbeat{RuntimeID: bound.DeviceID, CredentialHash: executorDigest(check.token)})
+		status, err := s.TouchAgentDaemonHeartbeat(ctx, runtimedevice.Heartbeat{RuntimeID: bound.DeviceID, CredentialHash: executorDigest(check.token)})
 		if err != nil || status.Deleted != check.denied {
 			t.Fatalf("rotation heartbeat: %+v %v", status, err)
 		}
@@ -145,7 +145,7 @@ func TestRuntimeEnrollmentConcurrentAndDeletion(t *testing.T) {
 	if _, ok, err := s.GetDeviceCredential(t.Context(), bound.DeviceID); err != nil || ok {
 		t.Fatalf("deleted Session authenticates: %v", err)
 	}
-	status, err := s.TouchAgentDaemonHeartbeat(t.Context(), device.Heartbeat{RuntimeID: bound.DeviceID, CredentialHash: executorDigest(key.Token)})
+	status, err := s.TouchAgentDaemonHeartbeat(t.Context(), runtimedevice.Heartbeat{RuntimeID: bound.DeviceID, CredentialHash: executorDigest(key.Token)})
 	if err != nil || !status.Deleted {
 		t.Fatalf("deleted heartbeat: %+v %v", status, err)
 	}

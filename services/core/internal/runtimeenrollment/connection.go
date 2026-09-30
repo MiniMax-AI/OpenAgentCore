@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -18,12 +18,12 @@ type ConnectionStore interface {
 	AuthenticateEnvironmentExecutor(context.Context, string, string) (string, error)
 	GetEnvironment(context.Context, string, string) (store.Environment, error)
 	GetSessionDevice(context.Context, string, string) (store.ExecutionDevice, error)
-	GetDeviceCredential(context.Context, string) (device.Credential, bool, error)
+	GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error)
 }
 
 // ConnectionHandler observes an existing binding without enrollment or execution.
 // Executor authority never grants access to the public Session API.
-func ConnectionHandler(s ConnectionStore, registry *gateway.Registry) http.Handler {
+func ConnectionHandler(s ConnectionStore, registry *runtimegateway.Registry) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		fail := func(status int) { http.Error(w, http.StatusText(status), status) }
@@ -43,7 +43,7 @@ func ConnectionHandler(s ConnectionStore, registry *gateway.Registry) http.Handl
 			return
 		}
 		environment := query.Get("environment_id")
-		digest := device.HashCredential(authorization[1])
+		digest := runtimedevice.HashCredential(authorization[1])
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		connected, err := RuntimeConnected(ctx, s, registry, environment, digest)
@@ -70,7 +70,7 @@ func ConnectionHandler(s ConnectionStore, registry *gateway.Registry) http.Handl
 
 // RuntimeConnected observes current executor authority and a matching open peer.
 // It rechecks authority after the peer; callers must not supply a stale transaction.
-func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *gateway.Registry, environment, digest string) (bool, error) {
+func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *runtimegateway.Registry, environment, digest string) (bool, error) {
 	tenant, err := s.AuthenticateEnvironmentExecutor(ctx, environment, digest)
 	if err != nil {
 		return false, err
@@ -106,7 +106,7 @@ func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *gateway.
 		return false, nil
 	}
 	peer, err := registry.LookupDevice(bound.ID)
-	if errors.Is(err, gateway.ErrDeviceNotRegistered) {
+	if errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
 		return false, nil
 	}
 	if err != nil {

@@ -5,13 +5,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
 func callerBinding() APIKey {
-	return APIKey{TokenSHA256: device.HashCredential("caller"), TenantID: uuid.NewString(),
+	return APIKey{TokenSHA256: runtimedevice.HashCredential("caller"), TenantID: uuid.NewString(),
 		OrganizationID: "org-one", ProjectID: "project-one", SubjectKind: "user", SubjectID: "user-one"}
 }
 
@@ -24,8 +24,8 @@ func TestAuthenticatorRequiresDatabaseResolver(t *testing.T) {
 func TestCallerPrincipalHeadersAndKeyRotation(t *testing.T) {
 	key := callerBinding()
 	rotated, peer := key, key
-	rotated.TokenSHA256 = device.HashCredential("rotated")
-	peer.TokenSHA256 = device.HashCredential("peer")
+	rotated.TokenSHA256 = runtimedevice.HashCredential("rotated")
+	peer.TokenSHA256 = runtimedevice.HashCredential("peer")
 	auth, err := NewAuthenticator([]APIKey{key, rotated, peer})
 	if err != nil {
 		t.Fatal(err)

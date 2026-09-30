@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/google/uuid"
 )
 
@@ -34,22 +34,22 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			allocation, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, deployment.InstallationID, device.HashCredential(bearer))
+			allocation, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, deployment.InstallationID, runtimedevice.HashCredential(bearer))
 			if err != nil {
 				t.Fatal(err)
 			}
-			authenticator := gateway.NewAuthenticator(s)
+			authenticator := runtimegateway.NewAuthenticator(s)
 			auth, err := authenticator.AuthenticateBearer(t.Context(), allocation.DeviceID, bearer)
 			if err != nil || auth.RuntimeNodeID != nodeID {
 				t.Fatalf("authenticated node=%s want=%s error=%v", auth.RuntimeNodeID, nodeID, err)
 			}
-			if _, err := authenticator.AuthenticateBearer(t.Context(), allocation.DeviceID, "wrong-token"); !errors.Is(err, gateway.ErrAuthBadCredential) {
+			if _, err := authenticator.AuthenticateBearer(t.Context(), allocation.DeviceID, "wrong-token"); !errors.Is(err, runtimegateway.ErrAuthBadCredential) {
 				t.Fatal("binding bypassed credential check", err)
 			}
 			if err := s.RevokeDevice(t.Context(), tenant, allocation.DeviceID); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := authenticator.AuthenticateBearer(t.Context(), allocation.DeviceID, bearer); !errors.Is(err, gateway.ErrAuthUnknownDevice) {
+			if _, err := authenticator.AuthenticateBearer(t.Context(), allocation.DeviceID, bearer); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
 				t.Fatal("allocation revived revoked credential", err)
 			}
 		})
@@ -59,12 +59,12 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 func TestDeviceCredentialWithoutManagedNodeRetainsPublicRouteIdentity(t *testing.T) {
 	s, _ := testStore(t)
 	tenant := uuid.NewString()
-	ordinary, err := s.CreateDevice(t.Context(), tenant, "ordinary", device.HashCredential("ordinary-token"))
+	ordinary, err := s.CreateDevice(t.Context(), tenant, "ordinary", runtimedevice.HashCredential("ordinary-token"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, environment := localEnvironment(t, s, tenant)
-	allocation, err := executionLease(t, s).Store().ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), device.HashCredential("allocation-token"))
+	allocation, err := executionLease(t, s).Store().ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential("allocation-token"))
 	if err != nil {
 		t.Fatal(err)
 	}

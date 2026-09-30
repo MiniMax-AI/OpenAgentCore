@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
@@ -36,7 +36,7 @@ func lifecycleTestSession(t *testing.T, s *Store, node string) (string, Session)
 func lifecycleTestAllocation(t *testing.T, s, w *Store, d RuntimeDeployment, node string) RuntimeAllocation {
 	t.Helper()
 	tenant, session := lifecycleTestSession(t, s, node)
-	allocation, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, device.HashCredential(uuid.NewString()))
+	allocation, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 	if _, err := w.ResolveRuntimeLifecycleNode(t.Context(), uuid.NewString(), environment); !errors.Is(err, ErrNotFound) {
 		t.Fatal("tenant boundary", err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment, d.InstallationID, device.HashCredential("runtime"))
+	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -19,7 +19,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Checkpoint
 	}
 	peer, err := authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
 	if err != nil {
-		if !errors.Is(err, store.ErrNotFound) && !errors.Is(err, gateway.ErrDeviceNotRegistered) && !errors.Is(err, gateway.ErrSessionClosed) {
+		if !errors.Is(err, store.ErrNotFound) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(err, runtimegateway.ErrSessionClosed) {
 			return err
 		}
 		// This idempotent control signal is fenced by guest PID/start time and the

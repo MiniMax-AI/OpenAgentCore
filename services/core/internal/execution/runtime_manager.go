@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -17,7 +17,7 @@ var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", E
 
 type runtimeManager struct {
 	store               *store.Store
-	registry            *gateway.Registry
+	registry            *runtimegateway.Registry
 	config              RuntimeProvider
 	setupInstallationID string
 	loadDeployment      func(context.Context) (*RuntimeProvider, error)

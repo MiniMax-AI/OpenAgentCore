@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -17,7 +17,7 @@ func TestPublicEnvironmentMCPUsesAttachedVaultSelection(t *testing.T) {
 	for _, kind := range []string{"codex", "claude_sdk", "mcode"} {
 		t.Run(kind, func(t *testing.T) {
 			s, pool, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
-			auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: device.HashCredential("test-token")}})
+			auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: runtimedevice.HashCredential("test-token")}})
 			if err != nil {
 				t.Fatal(err)
 			}

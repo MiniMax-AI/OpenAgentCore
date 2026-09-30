@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -33,7 +33,7 @@ func (p *lifecycleProvider) Create(_ context.Context, b sandbox.Bootstrap) (sand
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.creates++
-	p.credentialHash = device.HashCredential(b.Credential)
+	p.credentialHash = runtimedevice.HashCredential(b.Credential)
 	p.credential = b.Credential
 	i := sandbox.Info{Reference: b.Reference, ProviderID: b.AllocationID, State: "running", BootstrapComplete: true}
 	if !p.absent {
@@ -78,11 +78,11 @@ func managedWorker(t *testing.T, s *store.Store, key string, p sandbox.SandboxPr
 
 func managedWorkerMode(t *testing.T, s *store.Store, key string, p sandbox.SandboxProvider, maintenance bool, run ...bool) (*execution.Worker, func()) {
 	t.Helper()
-	registry := gateway.NewRegistry()
+	registry := runtimegateway.NewRegistry()
 	if peer, ok := p.(interface {
-		setRuntimeGateway(*testing.T, string, *gateway.Registry)
+		setRuntimeGateway(*testing.T, string, *runtimegateway.Registry)
 	}); ok {
-		handler := gateway.NewHandler(gateway.HandlerConfig{Authenticator: gateway.NewAuthenticator(s), Registry: registry})
+		handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
 		server := httptest.NewServer(http.HandlerFunc(handler.WS))
 		t.Cleanup(server.Close)
 		peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry)

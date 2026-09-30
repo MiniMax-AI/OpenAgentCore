@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -27,8 +27,8 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	ctx := t.Context()
 	tenant, owner, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth, err := newTestAuthenticator([]testAPIKey{
-		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "deletion-owner", TokenSHA256: device.HashCredential(owner), TenantID: tenant},
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "deletion-foreign", TokenSHA256: device.HashCredential(foreign), TenantID: uuid.NewString()},
+		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "deletion-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: tenant},
+		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "deletion-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -229,7 +229,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 				t.Fatal("repeated deletion must append exactly two operation records", err)
 			}
 			for _, operation := range afterAudit.Data[:2] {
-				if operation.Action != "delete" || operation.APIKey.ID != uuid.NewSHA1(uuid.NameSpaceOID, []byte(device.HashCredential(owner))).String() {
+				if operation.Action != "delete" || operation.APIKey.ID != uuid.NewSHA1(uuid.NameSpaceOID, []byte(runtimedevice.HashCredential(owner))).String() {
 					t.Fatal("repeated deletion recorded the wrong operation or key")
 				}
 			}

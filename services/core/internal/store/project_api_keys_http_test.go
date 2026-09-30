@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -19,7 +19,7 @@ func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := api.NewDeploymentAuthenticator([]string{device.HashCredential(adminToken)})
+	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(adminToken)})
 	if err != nil {
 		t.Fatal(err)
 	}

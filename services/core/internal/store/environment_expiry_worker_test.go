@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -106,7 +106,7 @@ func TestWorkerEnvironmentExpiryWithoutDevicesAndAfterRestart(t *testing.T) {
 	dueTenant, due := newEnvironmentExpiryReservation(t, s)
 	futureTenant, future := newEnvironmentExpiryReservation(t, s)
 	makeEnvironmentExpiryDue(t, pool, &due)
-	d := &execution.Dispatcher{Store: s, Registry: gateway.NewRegistry()}
+	d := &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}
 	_, stop := startEnvironmentExpiryWorker(t, d)
 	waitEnvironmentExpiry(t, s, dueTenant, due)
 	got, err := s.GetEnvironmentInputReservation(t.Context(), futureTenant, future.SessionID, future.ID)
