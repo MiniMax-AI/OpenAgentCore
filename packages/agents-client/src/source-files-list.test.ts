@@ -111,11 +111,6 @@ describe("Files list", () => {
   });
 
   it("maps Core errors", async () => {
-    const unavailable = recordingClient(responses.storage_unavailable);
-    await expect(unavailable.client.listSourceFiles({ limit: 100 })).rejects.toMatchObject({
-      status: 503, code: "file_storage_unavailable", errorType: "server_error",
-    });
-
     const invalid = recordingClient(responses.list_invalid_purpose);
     await expect(invalid.client.listSourceFiles()).rejects.toMatchObject({ status: 400, param: "purpose", code: null });
 

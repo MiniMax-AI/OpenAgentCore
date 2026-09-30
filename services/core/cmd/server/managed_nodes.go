@@ -46,7 +46,7 @@ func configureManagedNodes(s *store.Store, publicURL string, owner func(context.
 	if err != nil {
 		return nil, err
 	}
-	if setupID != "" && result.admin == nil {
+	if result.admin == nil {
 		return nil, errors.New("Web sandbox setup requires OAC_CORE_KEY_DIGESTS_FILE with the Core key digest")
 	}
 	result.hub = node.NewHub(node.HubOptions{

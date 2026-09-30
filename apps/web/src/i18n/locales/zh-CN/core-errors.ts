@@ -27,7 +27,6 @@ export const coreErrors = {
   "project_api_key_exists": "此名称已被使用中的 API Key 占用。",
   "executor_credential_exists": "此名称的执行器凭证已存在。",
   "credential_storage_unavailable": "Core 凭证存储不可用，请检查凭证加密配置。",
-  "diagnostics_unavailable": "Core 诊断暂不可用。",
   "internal_error": "Core 未能完成请求。",
   "sandbox_generation_stale": "Core 的沙箱配置已更新。请刷新并检查后再提交。",
   "sandbox_reset_required": "请先重置沙箱部署，再更改此配置。",

@@ -10,7 +10,7 @@ Errors on `/v1` and `/api/v1` keep their own envelopes and never carry `details`
 
 ## Optional details
 
-`error.details`, when present, is a nonempty flat object. Its values are strings, finite numbers, booleans, null or arrays of strings (possibly empty). It holds only Core-owned facts: never submitted names, URLs or keys, echoed request values, native error text or provider response bodies. Each code that has details lists its exact keys below.
+`error.details`, when present, is a nonempty flat object. Its values are strings, finite numbers, null or arrays of strings (possibly empty). It holds only Core-owned facts: never submitted names, URLs or keys, echoed request values, native error text or provider response bodies. Each code that has details lists its exact keys below.
 
 | Code | Details |
 | --- | --- |

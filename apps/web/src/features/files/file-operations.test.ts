@@ -56,7 +56,6 @@ describe("error mapping", () => {
   it("classifies a failed first list read", () => {
     expect(classifyFilesListError(new AgentCoreError("missing", 404))).toBe("unsupported");
     expect(classifyFilesListError(new AgentCoreError("method", 405))).toBe("unsupported");
-    expect(classifyFilesListError(new AgentCoreError("storage", 503, "file_storage_unavailable"))).toBe("storage-unavailable");
     expect(classifyFilesListError(new AgentCoreError("busy", 503))).toBe("failed");
     expect(classifyFilesListError(new TypeError("Failed to fetch"))).toBe("failed");
   });

@@ -36,7 +36,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -136,18 +135,10 @@ func run() error {
 	}
 	defer managedNodes.close()
 	var managed *execution.RuntimeProvider
+	observationSources := map[string]runtimeobs.SourceResolver{}
 	if managedNodes != nil {
 		managed = managedNodes.runtime
-	}
-	observationSources := map[string]runtimeobs.SourceResolver{}
-	if managedNodes != nil && managedNodes.setup != nil {
 		observationSources[managed.InstallationID] = managedNodes.setup
-	} else if managed != nil {
-		source, ok := managed.Provider.(runtimeobs.SourceResolver)
-		if !ok {
-			return providercontract.ErrContract
-		}
-		observationSources[managed.InstallationID] = source
 	}
 	observationResolver, err := observationstoreresolver.NewResolver(executionStore)
 	if err != nil {

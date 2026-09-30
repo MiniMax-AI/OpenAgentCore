@@ -51,10 +51,6 @@ export const skills = {
     description: "Upload a folder, or a ZIP of one, whose SKILL.md starts like this:",
     exampleLabel: "Minimal report/SKILL.md",
   },
-  storage: {
-    title: "Core has no Skill storage configured",
-    description: "Skills can be listed and uploaded once the Core operator configures Skill storage.",
-  },
   unsupported: {
     title: "This Core does not offer Skills",
     description: "The connected Core answered the Skill list with {{status}}.",
@@ -178,7 +174,6 @@ export const skills = {
     errors: {
       invalid: "Core rejected the Skill: {{message}}",
       tooLarge: "The files exceed the size limit.",
-      storage: "Core has no Skill storage configured.",
       interrupted: "The upload did not finish. Your selection is kept; Core may have stored it anyway, so check the list before trying again.",
       cancelled: "Upload cancelled. Your selection is kept; Core may have stored it anyway, so check the list before trying again.",
       other: "The upload failed: {{message}}",

@@ -227,26 +227,6 @@
           "param": "purpose"
         }
       }
-    },
-    "storage_unavailable": {
-      "request": {
-        "method": "GET",
-        "path": "/v1/files",
-        "query": "limit=100"
-      },
-      "status": 503,
-      "headers": {
-        "content-type": "application/json",
-        "cache-control": "no-store"
-      },
-      "body": {
-        "error": {
-          "message": "Source file storage is unavailable.",
-          "type": "server_error",
-          "code": "file_storage_unavailable",
-          "param": null
-        }
-      }
     }
   }
 }

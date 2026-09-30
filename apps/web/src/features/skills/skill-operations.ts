@@ -6,10 +6,9 @@ import { appendCollectionPage } from "../../lib/collection-pagination";
  * Skill navigation support, from the first Skill list request:
  * - `supported`: the list succeeded;
  * - `unsupported`: 404 or 405, an older Core without Skills (hide the entry);
- * - `storage-unavailable`: 503 `skill_storage_unavailable` (show the entry with an explanation);
  * - `error`: anything else (show the entry with a retry).
  */
-export type SkillsSupport = "supported" | "unsupported" | "storage-unavailable" | "error";
+export type SkillsSupport = "supported" | "unsupported" | "error";
 
 export const SKILLS_PAGE_SIZE = 20;
 
@@ -20,7 +19,6 @@ export function isAbortError(error: unknown): boolean {
 export function classifySkillsError(error: unknown): Exclude<SkillsSupport, "supported"> {
   if (error instanceof AgentCoreError) {
     if (error.status === 404 || error.status === 405) return "unsupported";
-    if (error.status === 503 && error.code === "skill_storage_unavailable") return "storage-unavailable";
   }
   return "error";
 }
@@ -34,7 +32,6 @@ export function coreErrorMessage(error: unknown): string {
 export type SkillUploadFailure =
   | { kind: "invalid"; message: string }
   | { kind: "too-large" }
-  | { kind: "storage-unavailable" }
   | { kind: "interrupted"; cancelled: boolean }
   | { kind: "other"; message: string };
 

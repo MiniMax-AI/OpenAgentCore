@@ -51,10 +51,6 @@ export const skills = {
     description: "上传一个文件夹或它的 ZIP，其中的 SKILL.md 以这样的内容开头：",
     exampleLabel: "最小的 report/SKILL.md",
   },
-  storage: {
-    title: "Core 未配置 Skill 存储",
-    description: "Core 运维方配置 Skill 存储后，才能查看和上传 Skill。",
-  },
   unsupported: {
     title: "当前 Core 不提供 Skill",
     description: "所连接的 Core 对 Skill 列表请求返回了 {{status}}。",
@@ -178,7 +174,6 @@ export const skills = {
     errors: {
       invalid: "Core 拒绝了这个 Skill：{{message}}",
       tooLarge: "文件超出大小限制。",
-      storage: "Core 未配置 Skill 存储。",
       interrupted: "上传没有完成。已选的文件仍然保留；Core 可能已经保存了它，重试前请先查看列表。",
       cancelled: "已取消上传。已选的文件仍然保留；Core 可能已经保存了它，重试前请先查看列表。",
       other: "上传失败：{{message}}",

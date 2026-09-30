@@ -35,13 +35,12 @@ export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-export type FilesListFailure = "unsupported" | "storage-unavailable" | "failed";
+export type FilesListFailure = "unsupported" | "failed";
 
 /** How a failed first list read is presented. */
 export function classifyFilesListError(error: unknown): FilesListFailure {
   if (error instanceof AgentCoreError) {
     if (error.status === 404 || error.status === 405) return "unsupported";
-    if (error.status === 503 && error.code === "file_storage_unavailable") return "storage-unavailable";
   }
   return "failed";
 }
@@ -53,7 +52,6 @@ export function filesErrorReason(error: unknown, t: Translate): string {
   if (error instanceof AgentCoreError) {
     if (error.status === 401 || error.status === 403) return t("errors.unauthorized");
     if (error.status === 413) return t("errors.tooLarge");
-    if (error.status === 503 && error.code === "file_storage_unavailable") return t("errors.storage");
     if (error.status === 502 && typeof error.code === "string" && error.code.startsWith("invalid_source_file")) {
       return t("errors.invalidResponse");
     }

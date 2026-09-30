@@ -108,7 +108,6 @@ describe("Skill fixtures at Core d3f55046", () => {
   it("surfaces Core error envelopes as typed errors", async () => {
     const { client } = clientFor(
       fixtures.error_not_found,
-      fixtures.error_storage_unavailable,
       fixtures.error_request_too_large,
       fixtures.error_invalid_upload,
       fixtures.error_default_version_delete,
@@ -116,7 +115,6 @@ describe("Skill fixtures at Core d3f55046", () => {
     const upload: SkillUploadInput = { kind: "zip", file: new Blob(["zip"]), filename: "report.zip" };
 
     await expect(client.retrieveSkill("skill_missing")).rejects.toMatchObject({ status: 404, code: null });
-    await expect(client.listSkills()).rejects.toMatchObject({ status: 503, code: "skill_storage_unavailable" });
     await expect(client.uploadSkill(upload)).rejects.toMatchObject({ status: 413, code: "request_too_large" });
     await expect(client.uploadSkill(upload)).rejects.toMatchObject({ status: 400, message: "Invalid resource identifier or request limits." });
     await expect(client.deleteSkillVersion(skillId, "2")).rejects.toMatchObject({ status: 400, code: "invalid_value", param: "version" });

@@ -27,7 +27,6 @@ export const coreErrors = {
   "project_api_key_exists": "An active API key with this name already exists.",
   "executor_credential_exists": "An executor credential with this name already exists.",
   "credential_storage_unavailable": "Core credential storage is unavailable. Check its credential encryption configuration.",
-  "diagnostics_unavailable": "Core diagnostics are unavailable.",
   "internal_error": "Core could not complete the request.",
   "sandbox_generation_stale": "Core has a newer sandbox configuration. Refresh and review it before submitting again.",
   "sandbox_reset_required": "Reset the sandbox deployment before changing this configuration.",
