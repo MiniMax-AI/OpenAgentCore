@@ -160,16 +160,6 @@
     "reason": "Historical migration commentary records the environment name used when this migration was written."
   },
   {
-    "path": "deploy/install/install.py",
-    "regex": "\\.parsar/core|\\bparsar\\b",
-    "reason": "These old default paths and command names are used only by conversion refusal or the explicit retired-command stub."
-  },
-  {
-    "path": "deploy/install/oac_cli.py",
-    "regex": "\\.parsar/core|\\bparsar\\b",
-    "reason": "These old default paths and command names are used only by conversion refusal or the explicit retired-command stub."
-  },
-  {
     "path": "apps/daemon/internal/agent/pi/provider_config.go",
     "regex": "parsar(?:/[A-Za-z0-9<>_-]+)?|Parsar Anthropic",
     "reason": "The dormant Pi adapter consumes the separate product model-provider slug and catalog display name; Core does not rename that external protocol."
@@ -238,11 +228,6 @@
     "path": "apps/web/PRODUCT.md",
     "regex": "and Parsar itself",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "docs/getting-started/operations.md",
-    "regex": "~/\\.parsar/core",
-    "reason": "A default install refuses while this path holds an installation of an earlier release; the troubleshooting row names it."
   },
   {
     "path": "services/core/tests/official_environment_plugin_mcp.py",

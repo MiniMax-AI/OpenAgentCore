@@ -39,7 +39,7 @@ import native_service
 
 
 SOURCE_COMMIT = None  # Set by the packaged entrypoint from its build revision.
-UNSUPPORTED_VERSION = ("This installation version or historical conversion is not supported; "
+UNSUPPORTED_VERSION = ("This installation version is not supported; "
                        "preserve its data and reinstall into a new empty directory. Nothing was changed.")
 INCOMPLETE = ("This installation did not finish installing. Rerun the installer command, which removes what is "
               "left and installs again, or remove it with oac uninstall.")
@@ -144,7 +144,7 @@ def load_config(root):
 
 def load_state(root):
     state = json.loads(read_private(root / "state.json", "state.json"))
-    if (state.get("format") != 2 or state.get("converted_from") or state.get("renamed_from")
+    if (state.get("format") != 2
             or SOURCE_COMMIT is not None and state.get("source_commit") != SOURCE_COMMIT):
         raise OacError(UNSUPPORTED_VERSION)
     return state
@@ -1169,8 +1169,6 @@ def uninstall(root, yes=False, interactive=None, out=print):
 
 def main(argv=None, root=None, out=print):
     root = Path(root) if root else Path(sys.argv[0]).resolve().parent
-    if Path(sys.argv[0]).name == "parsar":
-        raise OacError(f"parsar was renamed to oac. Run {root / 'oac'} <command>.")
     parser = argparse.ArgumentParser(prog=str(root / "oac"), description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status", help="Show service health, addresses and configuration drift")

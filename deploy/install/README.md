@@ -40,7 +40,7 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 
 ## Versions and the lock
 
-- Install only into an empty directory or over an [incomplete installation](#new-installations), or repair a complete installation of the same source revision. Refuse older formats and different revisions before changing anything; keep their data and direct the operator to install separately. Distributions carry only current installation code: no conversion, migration or binary replacement. Keep the refusal checks and their tests.
+- Install only into an empty directory or over an [incomplete installation](#new-installations), or repair a complete installation of the same source revision. Require the current state format and matching source revision before changing installation files or services. Preserve data when those checks fail.
 - The packaged `oac.pyz` embeds its build revision and refuses a `state.json` whose `source_commit` differs.
 - The installer and every mutating `oac` command share `.oac.lock`. The installer holds it across creation, payload, native service and launcher repair, and apply, calling the already-locked apply implementation without locking again. Never replace the lock file; its inode must stay stable. Only the cleanup of a new installation, with the directory the installer created, and `oac uninstall` unlink it, last and while holding it. `locked` refuses a lock whose path no longer names the file it locked.
 
@@ -67,7 +67,6 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 - `docker` prints its weaker isolation and needs a y/N confirmation or `--accept-docker-risks` before anything is created.
 - `e2b` needs a non-loopback HTTPS `public_url`, `--e2b-api-key-file` and `--e2b-template`; otherwise the installer refuses before installing anything.
 - A Docker or microsandbox selection with a loopback `public_url` is saved, but no node can serve it until `public_url` is guest-reachable HTTPS.
-- `--sandbox-provider` and `--provider` fail with a message naming `--sandbox`.
 
 ## Accounts and permissions
 

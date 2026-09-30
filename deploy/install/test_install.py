@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""install.sh acceptance behavior: fresh install, repair, retired flags and bundle checks."""
+"""install.sh acceptance behavior: fresh install, repair and bundle checks."""
 
 import contextlib
 import io
@@ -320,7 +320,7 @@ class InstallerTests(unittest.TestCase):
             self.install()
         self.assertEqual(before, self.snapshot())
 
-    def test_different_revision_and_conversion_refuse_before_mutation(self):
+    def test_different_revision_refuses_before_mutation(self):
         self.install()
         state = self.document("state.json")
         state["source_commit"] = "b" * 40
@@ -328,9 +328,6 @@ class InstallerTests(unittest.TestCase):
         before = self.snapshot()
         with self.assertRaisesRegex(install.InstallError, "not supported;.*reinstall"):
             self.install()
-        self.assertEqual(before, self.snapshot())
-        with self.assertRaises(SystemExit):
-            self.install("--convert")
         self.assertEqual(before, self.snapshot())
 
     def test_fresh_install_writes_config_json_and_the_layout(self):
@@ -459,31 +456,17 @@ class InstallerTests(unittest.TestCase):
             with contextlib.redirect_stdout(self.output):
                 run_installer(install, other, ["--install-dir", self.root])
 
-    def test_retired_flags_and_old_layouts_name_their_replacement(self):
-        for flag, command in (("--status", "oac status"), ("--stop", "oac stop")):
-            output = io.StringIO()
-            with self.subTest(flag=flag), contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
-                install.arguments(["--install-dir", str(self.root), flag])
-            self.assertIn(f"{flag} is retired; run {self.root / command}", output.getvalue())
-        for flags in (["--sandbox-provider"], ["--sandbox-provider", "true", "--provider", "docker"], ["--provider", "docker"]):
-            output = io.StringIO()
-            with self.subTest(flags=flags), contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
-                install.arguments(flags)
-            self.assertIn("are retired: use --sandbox docker|microsandbox|e2b|none. The installer no longer adds this "
-                          "host as a node", output.getvalue())
-        output = io.StringIO()
-        with contextlib.redirect_stderr(output), self.assertRaises(SystemExit):
-            install.arguments(["--admin-token-file", str(self.key_file())])
-        self.assertIn("--core-key-file", output.getvalue())
+    def test_unsupported_state_format_refuses_before_lock_creation(self):
         self.root.mkdir()
-        (self.root / "installation.json").write_text("{}")
-        with self.assertRaisesRegex(install.InstallError, "not supported;.*reinstall"):
-            self.install()
-        (self.root / "installation.json").unlink()
-        (self.root / "state.json").write_text('{"format": 1, "generated": {}}')
-        (self.root / "state.json").chmod(0o600)
+        install.oac_cli.save_state(self.root, {"format": 1})
+        before = self.snapshot()
         with self.assertRaisesRegex(install.oac_cli.OacError, "not supported;.*reinstall"):
             self.install()
+        with self.assertRaisesRegex(install.oac_cli.OacError, "not supported;.*reinstall"):
+            with install.oac_cli.locked(self.root):
+                self.fail("Unsupported installation acquired the lock")
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((self.root / ".oac.lock").exists())
 
     def test_a_live_installation_missing_config_json_is_never_told_to_start_over(self):
         self.install()
@@ -673,24 +656,6 @@ class InstallerTests(unittest.TestCase):
         (payload / "node-install.pyz").write_text("changed")
         with self.assertRaisesRegex(install.InstallError, "node payload differs"):
             install.prepare_node_payload(self.root, self.document("state.json"), self.bundle)
-
-    def test_legacy_flat_payload_is_refused_without_conversion(self):
-        import shutil
-        self.install()
-        payload = self.root / "node-payload"
-        old = payload / "releases" / ("a" * 40)
-        for path in old.rglob("*"):
-            if path.is_file():
-                target = payload / path.relative_to(old)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(path, target)
-        shutil.rmtree(payload / "releases")
-        (payload / "active.json").unlink()
-        bundle, _ = make_bundle(self.work / "bundle-b", dict(MANIFEST, source_commit="b" * 40))
-        before = self.snapshot()
-        with self.assertRaisesRegex(install.InstallError, "not supported;.*reinstall"):
-            install.prepare_node_payload(self.root, self.document("state.json"), bundle)
-        self.assertEqual(before, self.snapshot())
 
     def test_bundle_verifies_transferred_bytes_and_checksum_list(self):
         self.assertEqual(install.verify_bundle(self.bundle)["source_commit"], "a" * 40)

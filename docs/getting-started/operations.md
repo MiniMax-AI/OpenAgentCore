@@ -155,7 +155,7 @@ Nodes on other hosts keep running. To uninstall them the usual way, remove them 
 
 ## Installation version policy
 
-An installation runs one release for its whole life. In-place version upgrades, downgrades and historical conversions are not supported. Nothing migrates data between releases.
+An installation runs one release for its whole life. In-place version upgrades and downgrades are not supported. Nothing migrates data between releases.
 
 To move to a new release, install it into a new, empty directory, with its own database, Core key and nodes, and add nodes from its Web. Keep the old installation, its data and its nodes until their work is finished. Nodes run the program of the console that added them and are never upgraded in place; Core accepts only nodes that speak its own node protocol.
 
@@ -175,7 +175,7 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `Automatic HTTPS needs ports 80 and 443 …` | Free the port the message names, install without `--public-url` and set up the domain later, or install with `--ingress external` and use your own [reverse proxy](install-options.md#https-and-the-reverse-proxy) |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
 | `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply`. To start over with other flags, [uninstall](#uninstall) it first |
-| `This installation version or historical conversion is not supported …` | The target directory holds an installation of another release, or a default install found one at `~/.parsar/core`. Keep it, and install into another empty `--install-dir` ([version policy](#installation-version-policy)) |
+| `This installation version is not supported …` | The target installation's state format or source revision does not match this release. Keep it, and install into another empty `--install-dir` ([version policy](#installation-version-policy)) |
 | `generated/<file> was edited by hand` | Put the change in `config.json`, then `oac apply --discard-edits` |
 | `config.json has changes that are not applied` | Run `oac apply` |
 | `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
