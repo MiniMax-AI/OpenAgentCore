@@ -36,7 +36,7 @@ ARTIFACTS = {
 BUNDLED_DOCS = (
     "README.md",
     "README.zh-CN.md",
-    "docs/user-guide.md",
+    "docs/api/public-agent-api.md",
     "docs/development.md",
     "docs/configuration.md",
     "docs/getting-started/README.md",

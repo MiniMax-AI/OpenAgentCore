@@ -89,5 +89,5 @@ The `none` profile shares the execution protocol without workspace preparation. 
 
 - **Isolation belongs to the outer Environment.** The daemon is not a sandbox ([Runtime and outer isolation](design-principles.md#runtime-and-outer-isolation)).
 - **Execution and compute have separate lifetimes.** Closing an executor does not release its allocation, destroy its Environment or delete its workspace. Reclamation is an explicit Sandbox Provider operation.
-- **Model keys stay with the compute that owns them.** A self-hosted Session brings its own model provider ([why](user-guide.md#which-model-provider-a-session-uses)).
+- **Model keys stay with the compute that owns them.** A self-hosted Session brings its own model provider ([why](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence)).
 - **Core Web is an administrator console.** It calls only `/core/v1` and cannot start Sessions or send input ([console API usage](web/console-api-usage.md#not-consumed)).

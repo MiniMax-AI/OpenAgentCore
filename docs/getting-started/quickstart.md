@@ -106,7 +106,7 @@ Success is a `completed` Turn whose Items describe the new file. A timeout neith
 
 | To | Read |
 | --- | --- |
-| Stream output, send follow-up messages, upload files, add Skills or MCP, cancel | [User guide](../user-guide.md) |
+| Stream output, send follow-up messages, upload files, add Skills or MCP, cancel | [Agents API guide](../api/public-agent-api.md#common-tasks) |
 | See every resource with request and response examples | [Agents API guide](../api/public-agent-api.md) |
 | Run the agent on your own machine | [Self-hosted execution](self-hosted.md) |
 | See a complete application | [Examples](../examples.md) |

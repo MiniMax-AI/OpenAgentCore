@@ -92,7 +92,7 @@ core() {  # core METHOD PATH [JSON body]
 | Set Codex's default model | `core PUT /harnesses/codex/model-configuration '{"model": "your-model-id", "model_provider": {"protocol": "responses", "base_url": "https://provider.example/v1", "api_key": "sk-..."}}'` |
 | Installation facts, including the API base URL | `core GET /installation` |
 
-The [API index](../api/README.md#core-api) lists every route; errors use the [Core error envelope](../../contracts/agents-api/core-errors.md).
+The [Core administration API](../../contracts/agents-api/admin-api.md) lists every route; errors use the [Core error envelope](../../contracts/agents-api/core-errors.md).
 
 ### Rotate the Core key
 
