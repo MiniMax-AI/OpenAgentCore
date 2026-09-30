@@ -61,6 +61,14 @@ class SelectionTests(unittest.TestCase):
             self.assertTrue({"backend", "api", "native", "web", "web-acceptance", "example", "distribution"} <= self.jobs(path))
         self.assertTrue({"web", "web-acceptance", "example", "api"} <= self.jobs("packages/agents-client/src/client.ts"))
 
+    def test_core_fixtures_retain_client_and_installer_consumers(self):
+        self.assertTrue({"backend", "api", "web", "web-acceptance", "example"} <= self.jobs(
+            "services/core/internal/sandbox/testdata/node-diagnostics.json"))
+        for path in ("services/core/internal/sandbox/testdata/deployment-contract.json",
+                     "services/core/internal/sandbox/e2b/testdata/configuration-selectors.json"):
+            with self.subTest(path=path):
+                self.assertTrue({"backend", "api", "distribution"} <= self.jobs(path))
+
     def test_unknown_dependencies_ci_and_empty_diffs_are_full(self):
         for paths in ([], ["new-component/source.rs"], ["pnpm-lock.yaml"], ["go.sum"], ["Makefile"],
                       [".github/actions/node/action.yml"], ["scripts/ci_plan.py"], ["../outside"], ["/outside"]):
