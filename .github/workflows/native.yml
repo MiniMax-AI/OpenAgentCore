@@ -73,6 +73,8 @@ jobs:
         run: |
           go build -ldflags "-X github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/cli.Version=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/oac-daemon${{ runner.os == 'Windows' && '.exe' || '' }}" ./apps/daemon/cmd/oac-daemon
           node --test scripts/build-native-installer.test.mjs
+      - name: Verify native download bootstrap and recovery
+        run: go test ./services/core/internal/nativeinstaller -count=1 -timeout=3m
       - name: Native filesystem, authentication and process lifecycle
         run: >-
           go test -race -count=1

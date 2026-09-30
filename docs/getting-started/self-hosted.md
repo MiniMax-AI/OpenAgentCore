@@ -23,7 +23,7 @@ The machine needs:
 - Python and pip when the Session's packages need them;
 - any system packages your setup needs. The daemon never runs apt, sudo or another elevation command, so install them through the host's normal administration.
 
-No administrator privileges or Docker are needed.
+No administrator privileges or Docker are needed. The Unix download command also uses `curl`, `tar`, `gzip`, a SHA-256 tool and the system file-lock command (`flock` on Linux, `lockf` on macOS).
 
 ## Connect a machine
 
@@ -66,6 +66,8 @@ The installer reports three results:
 | **Installation** | The selected Harnesses passed their readiness checks |
 | **Daemon connection** | Core confirmed the daemon's authenticated connection |
 | **Model configuration** | Not checked; the first Turn uses the Session's model provider |
+
+Downloads retry temporary network failures up to three attempts and show progress in a terminal. Disk space is checked before downloading, extracting and copying components. If a download or installation is interrupted, rerun the command: it clears unfinished temporary copies while preserving completed components, credentials and the workspace. Download staging lives in `native-download` under the Runtime home; its small `download.lock` file remains for concurrency control. An active download or installation is never cleared by another run. If the command expires, copy a fresh one from the Session.
 
 If the connection is not confirmed within 45 seconds, the installer prints the path of the daemon's log. The daemon keeps reconnecting. Fix the cause and run the install command again with the same installation directory, copying a fresh one from Web if it has expired: completed components and the credential are kept and a running daemon is reused. Do not remove the workspace or the Session to retry.
 
