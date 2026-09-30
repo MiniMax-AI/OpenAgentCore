@@ -73,7 +73,7 @@ func TestUsageTransportPreservesSnapshotOnFailureAndDone(t *testing.T) {
 				}
 				var want map[string]any
 				_ = json.Unmarshal([]byte(original), &want)
-				if !reflect.DeepEqual(observed.Raw["claude_sdk_result"], want) || observed.Model != "" || observed.Tokens != nil || observed.CostUSD != 0 || observed.InputTokens != 0 || observed.OutputTokens != 0 {
+				if observed.Provider != "claude_code" || !reflect.DeepEqual(observed.Raw["claude_sdk_result"], want) || observed.Model != "" || observed.Tokens != nil || observed.CostUSD != 0 || observed.InputTokens != 0 || observed.OutputTokens != 0 {
 					t.Fatalf("usage normalized or lost: %+v", observed)
 				}
 			}
