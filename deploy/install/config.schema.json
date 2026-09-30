@@ -234,7 +234,7 @@
             },
             "endpoint": {
               "type": "string",
-              "description": "OTLP/HTTP metrics URL: HTTPS, or HTTP with insecure. Omit it to keep history local.",
+              "description": "OTLP/HTTP metrics URL: a canonical absolute URL with a path and no credentials, query or fragment; HTTPS, or HTTP with insecure. Omit it to keep history local; transport, insecure and headers then must be absent.",
               "x-oac": {"restarts": ["core"]}
             },
             "insecure": {
@@ -245,7 +245,7 @@
             "headers": {
               "type": "object",
               "additionalProperties": {"type": "string"},
-              "description": "Headers sent with each export, such as credentials. Never shown by oac or Core.",
+              "description": "Headers sent with each export, such as credentials. Host, Content-Length, Content-Type and Content-Encoding are refused. Never shown by oac or Core.",
               "x-oac": {"sensitive": true, "restarts": ["core"]}
             },
             "queue_capacity": {

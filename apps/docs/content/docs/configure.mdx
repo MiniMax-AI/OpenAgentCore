@@ -25,7 +25,7 @@ The installer writes every setting that applies to the installation's [mode](/in
 
 1. It validates `config.json` and changes nothing if a value is invalid. `mode`, `native_core` and `ingress` are fixed after installation; to change them, install into a new directory.
 2. It writes the files Core, Web and Compose read into `generated/`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json` and, when used, `runtime-history.json`, the managed `Caddyfile` and the native Core unit. Don't edit them. A generated file edited by hand stops `apply` until you move the change into `config.json` and run `oac apply --discard-edits`, which keeps the edited copy as `generated/<file>.edited-<time>`.
-3. It compares what it wrote with what actually runs. Each container carries a digest of its inputs (the `io.oac.inputs` label; native Core carries `OAC_INPUTS`), and `apply` recreates or restarts exactly the services whose inputs differ: Core first, then Web. The **Restarts** column below says which services a setting affects. Restarting Web signs everyone out of the console.
+3. It compares what it wrote with what actually runs. Each container carries a digest of its inputs (the `io.oac.inputs` label; native Core carries `OAC_INPUTS`), and `apply` recreates or restarts exactly the services whose inputs differ: Core first, then Web. The **Restarts** column below says which services a setting affects; see [stop and restart](/troubleshooting#stop-and-restart) for what a restart interrupts.
 4. While any service runs, `apply` also starts the stopped ones. After `oac stop`, it only writes the files and the installation stays stopped.
 5. If Core refuses a value at startup, `apply` prints Core's startup error. If every service was running with the previous files, it restores them and starts the services again; otherwise it reports the failure, and the next `apply` finishes the work.
 
@@ -75,9 +75,9 @@ When nodes, hosted sandboxes or self-hosted executors are bound to the current a
 | `core.database_pool.health_check_period` | string or null (Go duration) | `null` | `all`, `core-only` | `oac apply` | core | Go duration. null keeps the driver default, 1m. |
 | `core.runtime_history` | object or null | `null` | `all`, `core-only` | `oac apply` | core | Runtime history collection and OTLP export. null keeps local collection with Core's defaults. Core checks the values at startup. |
 | `core.runtime_history.transport` | string | none | `all`, `core-only` | `oac apply` | core | OTLP export transport: `otlp_http`. Required with endpoint. |
-| `core.runtime_history.endpoint` | string | none | `all`, `core-only` | `oac apply` | core | OTLP/HTTP metrics URL: HTTPS, or HTTP with insecure. Omit it to keep history local. |
+| `core.runtime_history.endpoint` | string | none | `all`, `core-only` | `oac apply` | core | OTLP/HTTP metrics URL: a canonical absolute URL with a path and no credentials, query or fragment; HTTPS, or HTTP with insecure. Omit it to keep history local; transport, insecure and headers then must be absent. |
 | `core.runtime_history.insecure` | boolean | none | `all`, `core-only` | `oac apply` | core | Export without TLS. Required for an HTTP endpoint and refused for HTTPS. |
-| `core.runtime_history.headers` | object of string values | none | `all`, `core-only` | `oac apply` | core | Headers sent with each export, such as credentials. Never shown by oac or Core. Sensitive. |
+| `core.runtime_history.headers` | object of string values | none | `all`, `core-only` | `oac apply` | core | Headers sent with each export, such as credentials. Host, Content-Length, Content-Type and Content-Encoding are refused. Never shown by oac or Core. Sensitive. |
 | `core.runtime_history.queue_capacity` | integer | none | `all`, `core-only` | `oac apply` | core | Capacity of the history write queue and of the export queue, up to 4096. Omitted or 0 selects 256. |
 | `core.runtime_history.timeout_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | History write, export and query timeout in seconds, up to 30. Omitted or 0 selects 2. |
 | `core.runtime_history.sample_interval_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | Periodic sampling interval in seconds, 5 to 300. Omitted or 0 selects 30. |
@@ -97,7 +97,7 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Nodes and their capacity | **Nodes**: **Add node**; **Edit node** and **Remove node** on a node's page | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and the [nodes guide](/hosted-providers) |
 | Projects and API keys | **Projects and keys**: **Create project**, **Rename**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
 | Default model per harness | **System** → **Default model configuration**: **Set** | `/core/v1/harnesses/{harness}/model-configuration` | See [Default models](#default-models) |
-| Executor credentials of a self-hosted Session | **Session log**, the Session's page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](/self-hosted-execution) |
+| Executor credentials of a self-hosted Session | **Session log**, then the **Session** page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](/self-hosted-execution) |
 
 Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); System shows them read-only. The [API index](/public-api#core-api) lists every Core API route, and the [deployment contract](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
 
@@ -131,7 +131,7 @@ The installer creates the installation directory, `~/.oac/core` by default, with
 | `native/` | Core binaries, with native Core | The installer |
 | `.oac.lock` | The installation lock | The installer and mutating `oac` commands |
 
-A Web-only installation has only `secrets/core.key`, a copy of its Core's key, and no `state/` or `native-installers/`. A Core-only installation has no `node-payload/`. Only managed ingress has `ingress/`.
+A Web-only installation has only `secrets/core.key`, a copy of its Core's key, and no `state/` or `native-installers/`. A Core-only installation has no `node-payload/`. Only managed ingress has `ingress/`. With native Core, the installation directory and the bundle must be canonical absolute paths without control characters, quotes, backslashes or wildcards.
 
 In Docker, the Compose project is named `oac-<10 hex digits>` (`project` in `state.json`). Its services are `database`, `migrate`, `core` and `web`, plus `gateway` and `installation` with managed ingress. `gateway` publishes `ports.web`, 80 and 443 and routes to Core and Web; `installation` applies domain changes from Web and uses the Docker socket to do so. The volume `<project>_database` holds all data. Native Core runs Core as the systemd user unit `<project>-core.service` instead of a container. Apart from Docker's storage, nothing is written outside your home directory.
 

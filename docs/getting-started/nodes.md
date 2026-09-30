@@ -6,7 +6,7 @@ You add a node by generating a command in Web and running it on the host. The [s
 
 ## Before you add a node
 
-- **Core has an HTTPS public URL** that the host and its sandboxes can reach. Nodes download from Core's console and connect to Core at `public_url`. Until it is set, Add node says *Configure a domain and HTTPS in System before adding nodes*; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https).
+- **Core has an HTTPS public URL** that the host and its sandboxes can reach. Nodes download from Core's console and connect to Core at `public_url`. Until it is set, Add node says *Configure a domain and HTTPS in System before adding nodes*; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https), or with external ingress [change the public URL](../configuration.md#changing-the-public-url).
 - **The sandbox configuration is saved.** The installer saves microsandbox at the Standard size unless you passed another `--sandbox`. After `--sandbox none`, open **System** → **Manage sandbox configuration**, choose **Own machines**, then microsandbox (recommended) or Docker and a sandbox size, and **Save configuration**. Every node of an installation uses that backend.
 - **The console can serve the node files.** Nodes download their Runtime and provider files from the console, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. For hosts without access to the release, install Core from the [offline bundle](install-options.md#offline-hosts) so the console holds every file. Without the files, Add node says *This console has no node files for …*.
 
@@ -46,7 +46,6 @@ The installer shows each phase as it runs and, once Core confirms the node, a su
 
 - Linux amd64 with systemd; Python 3.9+, `curl` and `sha256sum`; root or sudo.
 - SELinux not enforcing. The installer does not support hosts with enforcing SELinux.
-- One Core per host: a host already running a node for another Core is refused.
 - Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the `docker` group with mode `0660`, enforcing CPU and memory limits (cgroup v2).
 - microsandbox: `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
 - CPUs and memory for at least one sandbox of the installation's size, and about 2 GB of disk for the Runtime image.
@@ -133,7 +132,7 @@ Use manual registration when you manage the node's files and service yourself in
 3. Read the node configuration with the token, which does not consume it: `GET /api/v1/sandbox-node/configuration` with `Authorization: Bearer <token>`.
 4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add one adapter object for the host:
    - `docker`: `host` (an explicit Unix socket), `image` (the locally imported Runtime image of the approved release), `network`, `extra_hosts`, an absolute `seccomp_file` and `nested_sandbox`.
-   - `microsandbox`: absolute `helper_path`, `runtime_path` and `firmware_path` with their `runtime_sha256` and `firmware_sha256`, `image`, the sandbox `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib`, a `network` policy, and `runtime_home`: an existing private (`0700`) directory with a short path, because microsandbox places Unix sockets under it. The installer keeps it within 48 bytes.
+   - `microsandbox`: absolute `helper_path`, `runtime_path` and `firmware_path` with their `runtime_sha256` and `firmware_sha256`, `image`, the sandbox `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib`, a `network` policy, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
 5. Register, then run the node under the host's service supervisor, with real absolute paths:
 
    ```sh
@@ -154,24 +153,29 @@ The node connects out to Core; Core needs no SSH or Docker TCP access to the hos
 
 ## When a node host fails
 
-A restarted node service keeps its identity and finds its existing sandboxes again. Core never replaces a missing sandbox by itself, and never moves a Session to another node: the Session's resources show as **Node disconnected** or **Sandbox resource missing** until the original host and its storage are back, or you archive the Session. Back up each node's state directory with its Docker volumes or microsandbox store ([Back up](operations.md#back-up)). A lost state directory is a recovery incident: restore it rather than registering the host again over existing resources.
+A restarted node service keeps its identity and finds its existing sandboxes again. Core never replaces a missing sandbox by itself, and never moves a Session to another node: the Session's resources show as **Node disconnected** or **Sandbox resource missing** until the original host and its storage are back, or you archive the Session. A lost node state directory is a recovery incident: restore it from its [backup](operations.md#back-up) together with the database and the provider storage, rather than registering the host again over existing resources.
 
 ## Troubleshooting
 
 ### Readiness codes
 
-When a node is online but its sandbox provider is not ready, **Nodes** shows **Provider not ready**, with the reason in a help tip, and **Overview** counts it the same way. When a node fails to prepare a new configuration, its target status shows **Preparation failed** with the reason. The API reports the reason as a fixed code: `diagnostic` and `rollout.diagnostic` in `GET /core/v1/sandbox/nodes`. The node's log has the local error behind the code.
+When a node is online but its sandbox provider is not ready, **Nodes** and **Overview** show it as **Provider not ready**. Where the reason appears depends on how the node was added:
+
+- **Nodes added with Web's command** report a failed check of the current sandbox configuration as **Preparation failed** in the node's target status, with the reason in a help tip (`rollout.diagnostic` in `GET /core/v1/sandbox/nodes`). The tip beside **Provider not ready** only says *Sandbox provider unavailable*.
+- **Manually registered nodes** show the reason in the help tip beside **Provider not ready** (`diagnostic`).
+
+The node's log has the local error behind the code.
 
 A node reports only its first failed check, in this order: the Docker daemon or KVM, Docker's limit support, host capacity, then the installed Runtime files. An unreachable Docker daemon therefore hides a missing image. The next heartbeat, about ten seconds after a fix, clears or replaces the code. An offline node keeps its last code, which Web hides until the node reconnects.
 
-| Code | Web shows | Cause | Fix |
+| Code | Help tip | Cause | Fix |
 | --- | --- | --- | --- |
 | `docker_unavailable` | Docker unavailable | The Docker socket is unreachable or not accessible, or Docker fails its info or image request | Start Docker and give the node's user access to `/var/run/docker.sock` |
 | `docker_limits_unsupported` | Docker limits unsupported | Docker reports no CPU quota or memory limit support | Use a host whose cgroups enforce CPU and memory limits (cgroup v2) |
 | `capacity_insufficient` | Host too small | The host has fewer CPUs or less memory than one sandbox | Use a larger host, or change the sandbox size |
-| `runtime_image_unavailable` | Runtime image missing | Docker does not have the pinned Runtime image | Rerun the add command, or load the image from the matching release |
+| `runtime_image_unavailable` | Runtime image missing | Docker does not have the pinned Runtime image | A node added with Web's command downloads it again by itself; otherwise load the image from the matching release |
 | `kvm_unavailable` | KVM unavailable | The node can't open `/dev/kvm` for reading and writing | Enable hardware virtualization and give the node's user KVM access, through the `kvm` group |
-| `microsandbox_artifacts_unavailable` | microsandbox components missing | The Runtime or firmware is missing or fails its SHA-256 check, or the helper is missing | Rerun the add command |
+| `microsandbox_artifacts_unavailable` | microsandbox components missing | The Runtime or firmware is missing or fails its SHA-256 check, or the helper is missing | A node added with Web's command downloads the missing files by itself; otherwise restore them from the matching release |
 | `runtime_download_failed` | Runtime download failed | While preparing a new configuration, the node could not download or verify the Runtime files | Check the node's HTTPS access to the console and the release. The node retries with growing delays, up to 30 minutes apart |
 | `provider_unavailable` | Sandbox provider unavailable | Any other failure | Read the node's log |
 
@@ -189,7 +193,7 @@ A new group membership applies only to a new process. Restart the node service: 
 | KVM is unavailable, or `/dev/kvm` must be group-accessible | Enable virtualization; your distribution's KVM package sets `root:kvm 0660` |
 | This host has N CPUs and M MiB of memory; each sandbox needs … | Use a larger host, or change the sandbox size |
 | SELinux is enforcing on this host | Use a host supported by the installer; it does not change SELinux settings |
-| This host already runs a sudo-mode node for another Core | One host serves one Core. Remove that node and uninstall it first |
+| This host already runs a sudo-mode node for another Core | Remove that node and uninstall it first |
 | Node installation and removal require root | Run Web's command with sudo, or from a root shell |
 | Core still lists this node | Remove it on the Nodes page first |
 | Core no longer accepts this node | It was removed, or a reset retired it. Uninstall it, then add the host with a new command |

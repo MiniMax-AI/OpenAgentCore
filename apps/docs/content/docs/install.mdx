@@ -21,7 +21,7 @@ This page follows the default path. Every flag, existing reverse proxies, split 
 - Docker Engine with Docker Compose 2.26.0 or newer (`docker compose version`).
 - An account that can run `docker` and write to its home directory. Ordinary users and root both work; the installer never calls sudo.
 - Free ports 8080 (initial Web access), 80 and 443 (HTTPS), and 8091 (Core, on loopback). Docker must be able to publish them; the installer does not change host policy.
-- A DNS hostname that points to this host, before you connect applications, nodes or E2B. You can install and sign in first.
+- A DNS hostname that points to this host, before you connect applications, nodes, E2B or self-hosted machines. You can install and sign in first.
 
 The Core host needs no KVM; nodes that run microsandbox do.
 
@@ -87,7 +87,7 @@ Web's **Overview** tracks these steps in a **Getting started** checklist.
 
 Sessions need somewhere to run:
 
-- **Nodes**, with the microsandbox backend the installer selected, or Docker: [add a node](/hosted-providers) from Web's **Nodes** page.
+- **Nodes** run the microsandbox backend the installer selected: [add a node](/hosted-providers) from Web's **Nodes** page. Docker nodes need `--sandbox docker` at installation, or a [reset](/hosted-providers#change-the-sandbox-configuration) to change the backend.
 - **E2B**, which needs no nodes: [change the sandbox configuration](/hosted-providers#change-the-sandbox-configuration) in Web, or [choose it during installation](/install-options#sandbox-backend).
 
 Day-to-day operation, backups and upgrades are in [Operations](/troubleshooting).

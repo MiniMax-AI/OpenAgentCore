@@ -134,10 +134,10 @@ Back up these together; a restore needs all of them:
 
 - the installation directory: `config.json`, `state.json` (installation ID) and `secrets/`. `credential.key` must stay with the database, or stored credentials can't be decrypted; never regenerate it to get past an error.
 - `state/e2b/`, when E2B is used: receipts Core needs to clean up E2B sandboxes.
-- each node's state directory on its host, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, with its provider storage: Docker volumes or microsandbox's store.
+- each node's state directory on its host, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, with its provider storage: Docker volumes or microsandbox's store. See [when a node host fails](/hosted-providers#when-a-node-host-fails) for restoring them.
 - the bundle you installed from, to repair the same release.
 
-A missing node state directory is a recovery incident: restore it with the database and provider storage rather than registering over existing resources. Never prune Docker volumes or delete native harness history to make a retry pass. A deleted Session does not prove that all provider resources were reclaimed.
+Never prune Docker volumes or delete native harness history to make a retry pass. A deleted Session does not prove that all provider resources were reclaimed.
 
 ## Installation version policy
 
@@ -164,13 +164,12 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `config.json has changes that are not applied` | Run `oac apply` |
 | `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
 | `config.json not applied: …` | `oac apply` printed Core's startup error above; fix `config.json` and apply again |
-| `HTTPS verification failed …` during domain setup | Point the hostname's A/AAAA records at the host and allow inbound ports 80 and 443. The previous address is kept; retry |
+| `HTTPS verification failed …` during domain setup | See [Configure the domain and HTTPS](/install#configure-the-domain-and-https) |
 | Web answers 403 `Forbidden` | Open exactly the console address `oac status` prints; a reverse proxy must pass the original Host |
 | `/v1` or `/api/v1` answers 404 | Those paths reach Web; route them to Core ([reverse proxy](/install-options#https-and-the-reverse-proxy)) |
 | Web shows that Core is unavailable (502) | Core is stopped or failing: `oac status`, then Core's log |
 | Session creation returns 400 `model_provider_required` | No model provider: set a [default model](/configure#default-models) for the harness, or pass one; self-hosted Sessions always pass their own |
-| Add node says *Configure a domain and HTTPS in System before adding nodes* | [Configure the domain](/install#configure-the-domain-and-https), or with external ingress set `public_url` and run `oac apply` |
-| Add node says *This console has no node files for …* | Install from the offline bundle, or add the node files and rerun `./install.sh` |
+| Add node shows no command | See [Before you add a node](/hosted-providers#before-you-add-a-node) |
 | A node is not ready | See [node troubleshooting](/hosted-providers#troubleshooting) |
 
 ## Exposure and network policy
@@ -183,6 +182,6 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 
 Web signs administrators in with the Core key, checks the origin of every request, and forwards signed-in `/core/v1` requests to Core with the Core key, which stays on the server. It answers 404 on `/v1` and `/api/v1` whatever credential a request carries, serves only the non-secret node payload at `/node-install/`, and has no Docker or KVM access. Machine routes under `/api/v1` use their own enrollment and connection credentials. With managed ingress, the `installation` service applies domain changes through the Docker socket; Web reaches it only over a private Unix socket, and it checks the Core key on every request.
 
-Sandboxes are the isolation boundary ([Runtime and outer isolation](/concepts#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and the node's service account is root-equivalent on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](/hosted-providers#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.
+Sandboxes are the isolation boundary ([Runtime and outer isolation](/concepts#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and a Docker node is [root-equivalent](/hosted-providers#what-the-installer-sets-up) on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](/hosted-providers#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.
 
 [Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/operations.md)
