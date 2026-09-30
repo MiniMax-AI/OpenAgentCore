@@ -103,7 +103,7 @@ cancellation uses a protected immutable effect receipt because native abort can
 leave no terminal record. The receipt preserves the confirmed effect time across
 reads without rewriting native history. This profile has no qualified close
 operation, and completed or cancelled children remain active. See the
-[adapter contract](../../packages/claude-sdk-adapter/SUBAGENTS.md) for restrictions.
+[adapter contract](../../packages/claude-sdk-adapter/README.md#subagents) for restrictions.
 
 MiniMax's fixed ACP supplies native delegation operations. Its Session-private
 SQLite records supply original child identity, accepted inputs, terminal times

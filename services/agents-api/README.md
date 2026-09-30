@@ -379,7 +379,7 @@ The test uses `OAC_TEST_DATABASE_URL`, temporary service keys and
 fresh tenant IDs. The suite checks upstream and generated response schemas, retries,
 ordering, tenant isolation, unsupported options and reads after a process restart,
 without a model provider. It also runs the
-[official Go client integration](../../packages/agents-client/README.md), using two
+[official Go client integration](../../packages/agents-client/README.md#go-client), using two
 fresh tenants, and validates its created Sessions through the Python SDK.
 
 ## Checks
@@ -619,7 +619,7 @@ Anonymous requests suppress native OAuth/credential injection with a blank
 Authorization header, without deleting native state. Servers rejecting that header, normalized
 name collisions, changing inventories and original MCP metadata fidelity remain
 gaps. Items retain the observed native JSON, which may differ from the original
-MCP envelope. See the [Claude SDK profile](../../packages/claude-sdk-adapter/README.md#bridge-and-native-lifecycle).
+MCP envelope. See the [Claude SDK profile](../../packages/claude-sdk-adapter/README.md#http-mcp).
 
 The current subset rejects native OAuth login, inline authorization, nonempty headers or
 request metadata, URL userinfo/query/fragment, the `environment` origin, stdio

@@ -1,15 +1,15 @@
 # Claude SDK adapter
 
 This package translates the pinned native Claude Agent SDK into OpenAgentCore's
-common Executor and Turn lifecycle. It owns the private TypeScript bridge and
+common Executor and Turn lifecycle. It owns the private TypeScript bridge and the
 native SDK configuration. The [Go adapter](../../apps/parsar-daemon/internal/agent/claudesdk)
-owns its subprocess and translates bridge frames into the shared Runtime protocol.
+owns the bridge subprocess and translates bridge frames into the shared Runtime
+protocol.
 
-Start with [Harness onboarding](../../contracts/agents-api/harness-onboarding.md)
-for shared interfaces, registration and acceptance. This document owns the
-Claude-specific bridge and package rules. Public operation qualification stays in
+[Harness onboarding](../../contracts/agents-api/harness-onboarding.md) defines the
+shared interfaces, registration and acceptance. Public qualification belongs to
 [the harness contract](../../contracts/agents-api/harnesses.md) and its linked
-operation contracts; local readiness cannot expand that qualification.
+operation contracts; local readiness cannot expand it.
 
 ## Develop and verify
 
@@ -30,9 +30,11 @@ for the qualified environment and Runtime build.
 
 ## Bridge and native lifecycle
 
+### Bridge protocol
+
 `packages/claude-sdk-adapter` privately owns the pinned official TypeScript SDK
 and native message translation. The Go `claudesdk.NewExecutorFactory` uses the shared
-owned process runner and emits the existing daemon delta/error/Done frames.
+owned process runner and emits the daemon's delta, error and Done frames.
 The SDK owns the model loop. Its narrow stdio protocol carries Executor preparation and identified Turn starts,
 text deltas, function calls/results/receipts, active input/receipts, usage snapshots
 and terminal result/error plus settlement; native translation stays inside the adapter.
@@ -42,7 +44,7 @@ and maps those fields explicitly to SDK options; enum membership, budget ranges
 and thinking combinations belong solely to the Go adapter declaration. The
 public `harness_config` object does not cross this private boundary.
 
-With `observe_messages`, it also emits the existing neutral `output_message`
+With `observe_messages`, it also emits the neutral `output_message`
 start/completion snapshots and tags deltas with the native Messages API message
 ID, not the SDK event UUID. Text blocks in one native message share that identity.
 The SDK's per-block assistant snapshots replace draft block text; only native
@@ -62,28 +64,33 @@ Confirmed native cancellation may settle unanswered function calls after result
 admission closes and callbacks drain. A submitted function result still requires
 its native application receipt, including when the MCP request aborts.
 
+### Workspace execution
+
 `claudesdk.Config.Workspace` is an operator binding for the selected workspace and
 native state. It enables native Bash/Read/Edit and admitted host functions in the
-existing SDK loop. Native tools run with the launching user's permissions on all
-platforms; there is no inner sandbox, protected-root deny policy or managed shell
-wrapper. Managed isolation belongs to the outer Environment, which must exclude
-other tenants' and broader application credentials. An ordinary native install
-provides no such boundary. Directory selection is not tenant authorization.
-The adapter's existing tool callback authorizes unattended execution in native
-`default` permission mode. It does not use the CLI permission-bypass flag, which
-Claude rejects for root accounts.
+SDK loop. Native tools run with the launching user's permissions on all
+platforms; the adapter adds no inner sandbox, protected-root deny policy or managed
+shell wrapper. Isolation belongs to the outer Environment
+([Runtime and outer isolation](../../docs/design-principles.md#runtime-and-outer-isolation)),
+which must exclude other tenants' and broader application credentials; an ordinary
+native install provides no such boundary, and directory selection is not tenant
+authorization. The adapter's tool callback authorizes unattended execution in
+native `default` permission mode. It does not use the CLI permission-bypass flag,
+which Claude rejects for root accounts.
 
 `Config.Env` selects readiness and native process variables. Explicit tool env is
-applied to tool execution, but this is not a guarantee that same-user tools cannot
-read credentials or history from local files. Workspace hooks retain their event,
-identity and lifecycle responsibilities, not security enforcement. Process groups
-and Windows Jobs provide cancellation and descendant cleanup, not isolation.
+applied to tool execution, but same-user tools can still read credentials or
+history from local files. Workspace hooks keep their event, identity and lifecycle
+responsibilities; they are not security enforcement. Process groups and Windows
+Jobs provide cancellation and descendant cleanup, not isolation.
 Supported MCP and subagent combinations require their own qualification. The
-existing `none` profile keeps its tool inventory. Packaged `workspace_tools`
-establishes bridge support, not outer host isolation or public API admission.
+`none` profile keeps its tool inventory. Packaged `workspace_tools` establishes
+bridge support, not outer host isolation or public API admission.
 The dedicated Runtime composes public preparation, placement quotas, command Items
 and Files ownership. Real-provider acceptance verifies effects, cancellation and
 same-history continuation for the actual platform and outer deployment.
+
+### Executor preparation and Turns
 
 The private bridge accepts `executor_prepare` without model input. It freezes
 validated configuration and resume identity, checks required history, and retains
@@ -110,6 +117,8 @@ A failed preparation returns its Executor when cleanup remains unconfirmed.
 Installed runtime checks are cached by package/file identity, while capability
 and request validation still run for each Executor configuration.
 
+### Workspace reads and directory listing
+
 The optional private `agent.WorkspaceReader` on this Executor and its delegated wrappers
 requires the packaged `workspace_read` feature. It sends bounded relative
 paths to that same SDK Query's native `readFile` control. Only the adapter combines
@@ -123,7 +132,7 @@ an admitted waiter; its original deadline still applies. Owner closure stops
 admission. Native null, malformed receipts, timeout and interrupted delivery remain
 uncertain and stop the owner; local reap is not a successful read settlement.
 The SDK's nullable result catches all native/control errors, so it cannot distinguish
-missing files from denial or transport failure. This does not provide a public
+missing files from denial or transport failure. The reader provides no public
 Files endpoint, snapshot consistency, placement registration or idle owner policy.
 The qualified live workspace fixture also checks binary, empty and bounded reads
 before input and during real execution, plus effects before cancellation and reads
@@ -140,12 +149,14 @@ truncation, literal names, kinds, and sizes only for regular files. They do not 
 ordering, snapshots, recursion, or public pagination. Missing and permission errors
 are returned only from distinguishable filesystem outcomes; unknown results stop the
 owner. Each operation closes its directory before a successful receipt.
-Caller cancellation, Turn transitions and owner shutdown retain the existing workspace
-read settlement rules. This adapter gap fill alone does not enable public Claude Files; the dedicated
-Runtime integration supplies public placement and ownership.
+Caller cancellation, Turn transitions and owner shutdown follow the workspace
+read settlement rules. The lister alone does not enable public Claude Files; the
+dedicated Runtime integration supplies public placement and ownership.
+
+### Command observations
 
 With `ObserveToolObservations`, private workspace execution requires the packaged
-`workspace_command_observations` feature and emits the existing neutral command
+`workspace_command_observations` feature and emits the neutral command
 snapshots. Match root, current-query native Bash call/result identities after input;
 ignore historical replay, synthetic and child work. Preserve exact command text and
 the native per-call textual result, including native rendering or truncation. This
@@ -158,7 +169,9 @@ Preparation alone emits no command. Cold continuation must not reissue historica
 observations. This private translation does not enable public workspace admission,
 Read/Edit Items or Files ownership.
 
-The private adapter also accepts typed anonymous HTTP and static-bearer HTTPS MCP
+### HTTP MCP
+
+The private adapter accepts typed anonymous HTTP and static-bearer HTTPS MCP
 declarations on the trusted `environment:none` harness host. The packaged readiness
 report must include `mcp_http_tools`; discovery advertises that feature only when
 present, and execution
@@ -171,10 +184,9 @@ The native HTTP client expands them from its owned process environment. Literal
 bearers must never enter SDK MCP headers because that configuration enters argv.
 Readiness probes receive no per-request bearer environment. Token validation is
 shared with the Codex adapter; credential storage remains an opaque-string contract.
-Public Claude MCP admission reuses the shared resolver, immutable Session snapshots
-and neutral Item/event projection.
-The API checks the supported profile before persistence, during device selection
-and again before claiming execution; a missing runtime capability leaves work queued.
+Public MCP admission, Vault credential selection and their failure rules belong to
+[public MCP connection origin](../../contracts/agents-api/environments.md#public-mcp-connection-origin)
+and [HTTP MCP execution](../../services/agents-api/README.md#http-mcp-execution).
 
 MCP queries use the SDK's main-thread Agent definition to restrict model-visible
 tools, in addition to empty built-ins, strict MCP configuration, empty setting
@@ -195,8 +207,8 @@ query require separate validation; this profile covers static inventories.
 Private SDK status/control objects can contain expanded authentication headers.
 Read only connection and tool identity fields; never retain, log or publish raw
 status/configuration or control responses. Diagnostic projections must whitelist
-safe fields. This does not permit filtering actual model/tool output to hide a leak.
-The bounded adapter profile currently requires connected servers, reserves the
+safe fields; filtering actual model or tool output does not fix a leak.
+The adapter profile requires connected servers, reserves the
 `functions` label, accepts alphanumeric/underscore/hyphen server labels and
 alphanumeric/underscore/hyphen/dot selected tool names, and excludes remote
 environments. Required startup is separately qualified by `mcp_http_required`.
@@ -205,20 +217,12 @@ confirm initialization hooks. Required declarations additionally check connected
 server status before the initial prompt is released exactly once. Pending, failed,
 missing or ambiguous required status rejects before input; native startup timeouts are retained without
 an adapter retry loop. Normal system/init still verifies Session identity and the
-complete inventory before input readiness/tool authority. Optional servers retain
-their existing inventory checks without a new pre-input connection requirement.
+complete inventory before input readiness/tool authority. Optional servers keep
+their inventory checks without a pre-input connection requirement.
 A Runtime must advertise the concrete required-initialization capability; there
-is no fallback to an older execution path.
+is no fallback to another execution path.
 
-Public Claude static-bearer HTTPS MCP reuses the shared
-Vault attachment, frozen selection and scoped decryption path. Selection and final
-preclaim require the existing bearer capability; shared authentication dispatch
-uses capability/placement checks rather than a Codex-name restriction. Missing keys
-or failed lookup/decryption never fall back to anonymous execution; an attached
-Vault with no matching credential may remain anonymous. These are execution limits,
-not saved-Agent schema restrictions or changes to the official protocol.
-
-Root assistant tool calls and live root user results produce the existing neutral
+Root assistant tool calls and live root user results produce the neutral
 MCP observations. Correlate actual Session/call identities; exclude replay,
 synthetic and subagent work and keep host function receipts separate. Preserve
 the exact native `tool_use_result` when one result is unambiguous, otherwise the
@@ -230,11 +234,21 @@ Unfinished observed calls become incomplete on shutdown, without claiming that
 remote tool effects were cancelled. Rich content, native truncation and asynchronous
 MCP task results remain unverified.
 
+### Deferred function discovery
+
+Workspace deferred-function discovery uses native ToolSearch alongside the normal
+workspace tool profile. Its readiness feature is `workspace_tool_search`, in
+addition to `tool_search` and the workspace/function features. Qualification,
+combination limits and model-policy limitations are owned by
+[Deferred function discovery](../../contracts/agents-api/tool-search.md).
+
+### Registration and state
+
 For unmanaged bootstrap, daemon `connect` optionally registers this factory as
 `claude_sdk` when the operator sets `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT` to the absolute packaged `dist/main.js`.
 `OAC_RUNTIME_CLAUDE_SDK_NODE` selects Node (default: `node` on PATH). Discovery resolves
 Node once and checks that exact configuration before pairing; the SDK's bounded
-runtime check is independent of legacy CLI version probes. A ready SDK alone is
+runtime check is independent of CLI version probes. A ready SDK alone is
 sufficient to start the daemon. No configuration means no SDK probe or descriptor;
 failed readiness reports an unavailable descriptor with a rejecting factory.
 Runtime checks establish local readiness, not provider authentication. Installed
@@ -245,72 +259,63 @@ and activation; ambient activation variables cannot extend that selection. See
 SDK state lives under `paths.ProfileDir(profile)/runtime/claude-sdk`, independently
 of the replaceable runtime bundle. Both the entrypoint and managed state root must
 be absolute. Background re-execution inherits operator configuration; it does not
-persist provider credentials in pairing profiles. Product `claude_code` remains
-unchanged. Product registration explicitly opts existing engines into
-`WorkspaceAuthoring`; the authoring registry wraps only that opt-in. SDK registration
-bypasses product capability-download, skill-upload and workspace-authoring wrappers.
-It does not accept caller-supplied environment variables or business write authority.
+persist provider credentials in pairing profiles. The daemon registers `claude_sdk`
+directly, without the capability-download, skill-upload and `WorkspaceAuthoring`
+wrappers of its product agent kinds. It accepts no caller-supplied environment
+variables or business write authority.
+
+### Descriptor and execution profile
 
 The SDK descriptor advertises the validated daemon subset, including durable
 Turns/input receipts, text observations, function tools, raw usage and restrictive
-execution controls. It does not advertise permissions, product authoring, legacy
-raw tool Items, general web-search control or text-verbosity levels. Router admission
+execution controls. It does not advertise permissions, product authoring, raw
+tool Items, general web-search control or text-verbosity levels. Router admission
 for `environment:none` uses the available engine capability, not an engine name.
-The independent API selects new Session engines through `OAC_DEFAULT_HARNESS`
-(`codex` by default, `claude_sdk` or `mcode`); existing Sessions keep their stored engine.
-This remains the deployment default; the optional Core harness extension selects
-an enabled engine for one saved or inline Agent configuration. API admission,
-device selection and the final preclaim check share the execution service's narrow
-engine policy without importing native adapters. Selected engines require the common
-durable execution capabilities. Codex retains its general search/verbosity checks;
-Claude uses its restrictive profile without claiming those general capabilities.
-Idle and initial-input Session creation qualify the resolved configuration before
-persistence; saved Agent resources remain independent of engine restrictions.
-Claude additionally requires medium verbosity and explicit object-root function
-schemas. Function-result batches normalize through the existing shared parser. Claude accepts
-text results and, on `none` and Core-managed Docker `openai_hosted`, successful
-ordered inline PNG/JPEG results. Unqualified placements, failed image results and
-invalid/remote references reject before any batch write, preserving pending calls
-and retry identity. Public qualification receives the full neutral result so
-success-dependent limitations remain in the profile. Image-bearing delivery alone
-requires Runtime function-result image support; text results and function
-declarations do not acquire that requirement. These are implementation limits, not changes to the upstream contract.
-Do not bypass them by dropping fields, changing model identity or fabricating usage.
-Operators may configure the daemon provider environment or the deployment default
-model provider for `claude_sdk` (HTTPS `base_url` and a write-only key), which Core
-freezes in the Session's encrypted snapshot and delivers as the adapter-owned
-`model_provider`; it never enters public Session configuration. The adapter exclusively selects the
-provider environment and removes credentials from native tool environments. Product `claude_code` and product execution are unchanged.
-The `none` public profile accepts only
+
+Core owns public admission for Claude: [harness selection](../../contracts/agents-api/harness-selection.md)
+chooses the engine for each Session; one [engine policy](../../contracts/agents-api/harness-onboarding.md#add-the-engine-to-core)
+serves API admission, device selection and the final claim; the
+[qualified operations](../../contracts/agents-api/harnesses.md#current-qualified-operations)
+table records Claude's medium-only verbosity and object-root function schemas;
+[function result images](../../contracts/agents-api/function-result-images.md)
+defines which placements accept image results; and
+[deployment defaults](../../contracts/agents-api/model-execution.md#deployment-defaults)
+define the model provider Core freezes for a Session. The adapter receives that
+provider as the adapter-owned `model_provider`, never in public Session
+configuration. Without one, a `none` host uses the daemon's own provider
+environment. The adapter alone selects the provider environment and removes
+credentials from native tool environments.
+
+The `none` profile accepts only
 text, explicit model/system instructions, managed state, exact native resume and
 declared functions with ordered text or successful inline PNG/JPEG results, and the HTTP MCP subset
 described above. It rejects unsupported request
 options and disables built-in tools and undeclared MCP discovery.
 `DisableExecutionEnvironment` and `DisableSubagents` are accepted assertions about
 the single-Agent restrictive profile. Omission does not enable built-in tools.
-Explicit Subagent observation enables only its qualified native delegation tools,
-with admission before start and verified child identity before workspace authority.
-Public function/MCP combinations remain unqualified with Subagents. Single-Agent
+Explicit Subagent observation enables only the native delegation tools described
+under [Subagents](#subagents). Single-Agent
 new and resumed queries use the SDK's empty built-in tool set, explicit function MCP
 configuration and allowlist, strict MCP configuration and empty user/project/local
 setting sources. Without HTTP MCP declarations, native initialization and real
 provider request inventories must contain only the declared host functions. Managed operator policy may further
-restrict execution; it must not widen the profile. This limits model tool access,
-not native state files or filesystem access by an explicitly supplied host function;
-it is not sandbox/file isolation. The private factory accepts typed execution
+restrict execution; it must not widen the profile. The profile limits model tool
+access; it does not isolate native state files or filesystem access by an
+explicitly supplied host function. The private factory accepts typed execution
 controls only for disabled search and medium text verbosity. Search remains excluded
 by the native tool inventory; medium retains the SDK's default text generation,
 without adding instructions or changing caller input. The pinned SDK has no native
-verbosity-level option: low/high and enabled search remain explicit implementation
-gaps. Missing/invalid fields in a supplied control block fail before native setup;
-omitting the block keeps the same restrictive profile. Public engine admission is
-qualified separately by the API policy described above.
+verbosity-level option, so low and high verbosity and enabled search are
+unsupported. Missing/invalid fields in a supplied control block fail before native setup;
+omitting the block keeps the same restrictive profile.
 Use the SDK's history lookup before explicit resume; never fall back to a new
 Session. Native files remain device-affine under a caller-selected managed
 runtime directory. The launch configuration supplies trusted provider environment;
 request options cannot supply environment variables or business write authority.
 Omitted, null and empty `system_prompt` map to empty SDK instructions only at this
 adapter boundary; null model values and unsupported options remain rejected.
+
+### Function server and results
 
 The internal SDK function-server helper uses the maintained MCP server's public
 request handlers and standard Tool/CallToolResult types. It snapshots definitions
@@ -339,9 +344,10 @@ Missing/mismatched receipts fail the execution; do not replay unknown delivery.
 Result submission waits at most ten seconds for a receipt and cancels uncertain
 execution on timeout. Invalid or unsupported image results fail before consuming
 a pending call. Function state belongs to one live Run and ends with it; the
-existing router owns receipt retry/conflict handling. This does not establish
-crash recovery or exactly-once effects. Public schemas outside MCP's object-root
-contract, failed image results and remote image references remain admission/execution gaps.
+router owns receipt retry/conflict handling. This does not establish
+crash recovery or exactly-once effects.
+
+### Usage
 
 Each SDK result supplies one native usage snapshot, including reported failures.
 `Usage.Raw.claude_sdk_result` holds the latest; queries with multiple native results
@@ -355,8 +361,10 @@ Turn has a fresh snapshot list, but query totals may include earlier Turns; neve
 represent those totals as consumption by the current Turn. Missing native results do not imply zero consumption. SDK estimates stay
 in raw evidence, outside the billed cost field; do not select an arbitrary model
 or invent missing public token breakdowns. The API does not parse native counters.
-Precise public usage projection, unreported costs and crash/partial accounting
-remain gaps; the native snapshot alone is not complete protocol Usage compatibility.
+The native snapshot is not a complete public Usage: precise public usage
+projection, unreported costs and crash or partial accounting are not provided.
+
+### Active input
 
 Active text uses the SDK's `AsyncIterable<SDKUserMessage>` input, with a fresh
 native UUID mapped to each daemon input ID. A native query may fold text into its
@@ -385,15 +393,69 @@ A receipt timeout after a full write preserves the process and pending identity
 without redelivery; a blocked write is cancelled and released.
 The private adapter permits one input awaiting consumption and at most 63 extra
 inputs per Run, preserving the native 64-UUID receipt bound. Durable receipt opt-in
-separates bounded writes from native consumption waits; calls without it retain
-the router's ten-second deadline. Larger input capacity and interrupted-input
-recovery remain separate work. Daemon registration alone does not establish public acceptance.
+separates bounded writes from native consumption waits; calls without it keep
+the router's ten-second deadline. Larger input capacity and recovery of
+interrupted input are not supported. Daemon registration alone does not establish
+public acceptance.
 
-Current public qualification is recorded in the
-[harness contract](../../contracts/agents-api/harnesses.md) and its linked operation
-contracts. Keep native execution evidence separate from local registration and
-packaging checks. Live adapter acceptance uses a real provider with private
-credentials; fixture tests cannot substitute for it.
+The [harness contract](../../contracts/agents-api/harnesses.md) and its linked
+operation contracts record current public qualification. Keep native execution
+evidence separate from local registration and packaging checks. Live adapter
+acceptance uses a real provider with private credentials; fixture tests cannot
+substitute for it.
+
+## Subagents
+
+The adapter uses the pinned Claude Agent SDK's native Agent and SendMessage
+execution; it implements no model loop. An explicit Runtime request enables the
+`oac_worker` agent; ordinary requests keep their tools. The packaged
+`subagent_resources` readiness feature gates this request.
+
+A child identity comes from native task admission and persisted child metadata.
+The metadata's `toolUseId` must identify the parent's original Agent call;
+`parentAgentId` identifies a nested parent, and root children require native
+`spawnDepth: 1`. The child history must belong to the same root Session and child
+ID. The SDK resolves its persisted conversation chain; the adapter reads the
+corresponding private original records for ownership and timestamps that the
+SDK's public TypeScript message shape omits.
+
+The first own native user record has a null `parentUuid`. Its timestamp supplies
+`opened_at`, in seconds, and the first Turn's creation and start time, in
+milliseconds: the original input time, not discovery time or a copied parent
+record. The fixed native metadata has no separate creation timestamp. Reopening
+the Runtime preserves these values. Each later own input starts a child Turn;
+native end-turn assistant records supply completion time. Own messages, reasoning
+and native Bash receipts keep their native IDs and ordering. Completion leaves the
+Subagent active and idle: the adapter emits no closed state because this native
+profile has no qualified close operation.
+
+The native query owns child execution and cleanup. PreToolUse admission reserves
+each native Agent or idle-child SendMessage call before execution. Native
+`task_started` associates the call and child ID; completion releases that
+reservation. The frozen limit applies across the child tree, excludes the root,
+and defaults to six. Unknown call associations fail closed. SendMessage to a
+running child is rejected; only idle continuation is qualified. Native background
+execution, alternate agent types, worktree isolation and per-call model overrides
+are rejected.
+
+Workspace children use native Bash with the same launching-user permissions as the
+parent, and the daemon and adapter add no filesystem, permission or network
+sandbox. Workspace hooks keep their execution and event responsibilities but are
+not a private-file boundary: tools can access Runtime state that the host user can
+access. Isolation belongs to the outer Environment. Functions and MCP combined with
+Subagents are not qualified and are rejected explicitly
+([subagents contract](../../contracts/agents-api/subagents.md)); functions and MCP
+without Subagents are unaffected. Claude on Windows requires Git Bash.
+
+Cancellation uses an adapter-owned effect receipt only after the query owner
+confirms native process exit, because the fixed native history can end at a tool
+call without a cancellation result or timestamp. Each receipt is linked into the
+native history directory atomically, without overwriting an earlier receipt, and
+records the child, own Turn, spawn call and confirmed effect time. Native records
+stay unchanged. Replay uses that same timestamp; it never takes a new cancellation
+time from an unfinished history. Child Items and the cancelled Turn precede the
+root cancellation event. Missing native exit confirmation or a missing receipt
+does not imply a terminal child state.
 
 ## Runtime artifact
 
@@ -409,7 +471,7 @@ It does not add Node or SDK assets to the Agents API binaries/image.
 
 The build validates source manifests with the repository-pinned pnpm frozen
 install and compiles into fresh managed staging, never exporting incremental
-checkout output. It then uses modern `pnpm deploy` with command-scoped workspace injection
+checkout output. It then uses `pnpm deploy` with command-scoped workspace injection
 and its dedicated frozen lock. The adapter has no workspace dependencies; keep
 that boundary explicit. Do not enable injection globally or replace this with a
 custom dependency copier. Export only compiled `dist` and production dependencies;
@@ -441,10 +503,3 @@ Return unavailable on failed or malformed probes; never forward native diagnosti
 or treat local readiness as provider authentication, public capability acceptance
 or filesystem isolation. The native installer reuses this readiness check after
 copying its release components.
-
-
-Workspace deferred-function discovery uses native ToolSearch alongside the normal
-workspace tool profile. Its readiness feature is `workspace_tool_search`, in
-addition to `tool_search` and the existing workspace/function features. Qualification,
-combination limits and model-policy limitations are owned by
-[Deferred function discovery](../../contracts/agents-api/tool-search.md).
