@@ -182,8 +182,8 @@ func TestPendingAskTableTakeRace(t *testing.T) {
 // into a single human-friendly answer string.
 func TestBuildAskUserControlResponseMultiSelect(t *testing.T) {
 	body, err := claudecode.BuildAskUserControlResponseForTest(
-		claudecode.PendingAskEntry{CCRequestID: "cc_m", Questions: []proto.PromptForUserChoiceQuestion{{Header: "Pick lens"}}},
-		proto.PromptForUserChoiceDecisionPayload{Answers: []string{"Safety", "Performance"}},
+		claudecode.PendingAskEntry{CCRequestID: "cc_m", Questions: []proto.PromptForUserChoiceQuestion{{ID: "q0", Header: "Pick lens"}}},
+		proto.PromptForUserChoiceDecisionPayload{QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"Safety", "Performance"}}}},
 	)
 	if err != nil {
 		t.Fatalf("buildAskUserControlResponse: %v", err)
@@ -194,26 +194,22 @@ func TestBuildAskUserControlResponseMultiSelect(t *testing.T) {
 	}
 }
 
-// TestBuildAskUserControlResponseMultiQuestionPositional locks in the
-// positional pairing contract: when two questions share the same Header
-// (or both are blank — claude-code treats `header` as optional), each
-// question still gets its own answer back. A previous header-keyed map
-// approach collapsed duplicates and fed the model the wrong answer.
-func TestBuildAskUserControlResponseMultiQuestionPositional(t *testing.T) {
+// Duplicate display headers cannot change the identity or ordering of answers.
+func TestBuildAskUserControlResponseDuplicateHeaders(t *testing.T) {
 	// Two questions with IDENTICAL headers — the realistic shape when the
 	// model omits header entirely and both fall back to "".
 	body, err := claudecode.BuildAskUserControlResponseForTest(
 		claudecode.PendingAskEntry{
 			CCRequestID: "cc_pos",
 			Questions: []proto.PromptForUserChoiceQuestion{
-				{Header: "", Question: "q1"},
-				{Header: "", Question: "q2"},
+				{ID: "first", Header: "", Question: "q1"},
+				{ID: "second", Header: "", Question: "q2"},
 			},
 		},
 		proto.PromptForUserChoiceDecisionPayload{
 			QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{
-				{Header: "", Answer: "A1"},
-				{Header: "", Answer: "B1"},
+				{QuestionID: "second", Answers: []string{"B1"}},
+				{QuestionID: "first", Answers: []string{"A1"}},
 			},
 		},
 	)
@@ -371,8 +367,8 @@ func TestTranslateControlRequestAskUserQuestionIntercepted(t *testing.T) {
 // message is what the SDK surfaces to the model as the tool_result.
 func TestBuildAskUserControlResponseSingleSelect(t *testing.T) {
 	body, err := claudecode.BuildAskUserControlResponseForTest(
-		claudecode.PendingAskEntry{CCRequestID: "cc_req_xyz", Questions: []proto.PromptForUserChoiceQuestion{{Header: "Confirm delete"}}},
-		proto.PromptForUserChoiceDecisionPayload{Answers: []string{"Confirm"}},
+		claudecode.PendingAskEntry{CCRequestID: "cc_req_xyz", Questions: []proto.PromptForUserChoiceQuestion{{ID: "q0", Header: "Confirm delete"}}},
+		proto.PromptForUserChoiceDecisionPayload{QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"Confirm"}}}},
 	)
 	if err != nil {
 		t.Fatalf("buildAskUserControlResponse: %v", err)

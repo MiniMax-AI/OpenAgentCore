@@ -112,62 +112,75 @@ func TestEnvironmentInputPromotionRollsBackHistoryAndSettlement(t *testing.T) {
 }
 
 func TestEnvironmentInputDeadlineIsCheckedAfterSessionLock(t *testing.T) {
-	s, pool := testStore(t)
-	lease := executionLease(t, s)
-	writer := lease.Store()
-	tenant, session := environmentInputSession(t, s)
-	pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	var blocker int32
-	if err := tx.QueryRow(ctx, "SELECT pg_backend_pid() FROM sessions WHERE id=$1 FOR UPDATE", session.ID).Scan(&blocker); err != nil {
-		t.Fatal(err)
-	}
-	type outcome struct {
-		value EnvironmentInputReservation
-		err   error
-	}
-	done := make(chan outcome, 1)
-	go func() {
-		got, err := writer.PromoteEnvironmentInput(ctx, tenant, session.ID, pending.ID)
-		done <- outcome{got, err}
-	}()
-	for {
-		var blocked bool
-		if err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)))", blocker).Scan(&blocked); err != nil {
-			t.Fatal(err)
-		}
-		if blocked {
-			break
-		}
-		select {
-		case result := <-done:
-			t.Fatal("promotion bypassed Session lock", result)
-		case <-ctx.Done():
-			t.Fatal("promotion lock wait not observed")
-		case <-time.After(5 * time.Millisecond):
-		}
-	}
-	// Transaction-start time is now older than the controlled deadline.
-	if _, err := tx.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp() WHERE id=$1", pending.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatal(err)
-	}
-	result := <-done
-	if result.err != nil || result.value.State != EnvironmentInputExpired || result.value.SettledAt == nil {
-		t.Fatal("lock wait extended input lifetime", result)
-	}
-	environmentInputHistory(t, pool, session.ID, 0, 0)
-	stored, err := s.GetEnvironmentInputReservation(ctx, tenant, session.ID, pending.ID)
-	if err != nil || stored.State != EnvironmentInputExpired {
-		t.Fatal("expiry was rolled back", stored, err)
+	for _, action := range []string{"promote", "fail"} {
+		t.Run(action, func(t *testing.T) {
+			s, pool := testStore(t)
+			lease := executionLease(t, s)
+			writer := lease.Store()
+			tenant, session := environmentInputSession(t, s)
+			pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback(context.Background()) }()
+			var blocker int32
+			if err := tx.QueryRow(ctx, "SELECT pg_backend_pid() FROM sessions WHERE id=$1 FOR UPDATE", session.ID).Scan(&blocker); err != nil {
+				t.Fatal(err)
+			}
+			type outcome struct {
+				value EnvironmentInputReservation
+				err   error
+			}
+			done := make(chan outcome, 1)
+			go func() {
+				var got EnvironmentInputReservation
+				var err error
+				if action == "promote" {
+					got, err = writer.PromoteEnvironmentInput(ctx, tenant, session.ID, pending.ID)
+				} else {
+					err = writer.FailEnvironmentInput(ctx, tenant, session.ID, pending.ID, "runtime_preparation_failed")
+					if err == nil {
+						got, err = s.GetEnvironmentInputReservation(ctx, tenant, session.ID, pending.ID)
+					}
+				}
+				done <- outcome{got, err}
+			}()
+			for {
+				var blocked bool
+				if err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)))", blocker).Scan(&blocked); err != nil {
+					t.Fatal(err)
+				}
+				if blocked {
+					break
+				}
+				select {
+				case result := <-done:
+					t.Fatal("settlement bypassed Session lock", result)
+				case <-ctx.Done():
+					t.Fatal("settlement lock wait not observed")
+				case <-time.After(5 * time.Millisecond):
+				}
+			}
+			// Transaction-start time is now older than the controlled deadline.
+			if _, err := tx.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp() WHERE id=$1", pending.ID); err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			result := <-done
+			if result.err != nil || result.value.State != EnvironmentInputExpired || result.value.SettledAt == nil {
+				t.Fatal("lock wait extended input lifetime", result)
+			}
+			environmentInputHistory(t, pool, session.ID, 0, 0)
+			stored, err := s.GetEnvironmentInputReservation(ctx, tenant, session.ID, pending.ID)
+			if err != nil || stored.State != EnvironmentInputExpired {
+				t.Fatal("expiry was rolled back", stored, err)
+			}
+		})
 	}
 }
 

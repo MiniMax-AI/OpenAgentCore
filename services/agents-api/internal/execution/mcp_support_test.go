@@ -48,7 +48,7 @@ func TestMCPPublicBearerPolicyIsIndependentOfRuntimeCapabilities(t *testing.T) {
 			if allowed && err.Error() != "authenticated MCP execution is unavailable" {
 				t.Fatal("accepted profile did not reach scoped credential lookup", err)
 			}
-			if !allowed && err.Error() != "The configured engine currently supports anonymous HTTP MCP only." {
+			if !allowed && err.Error() != "The configured engine does not support this MCP connection origin." {
 				t.Fatal("unverified profile bypassed public policy", err)
 			}
 		})

@@ -21,7 +21,7 @@ func beginRawNode(t *testing.T, origin string, id Identity) *websocket.Conn {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true}}); err != nil {
+	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}}); err != nil {
 		t.Fatal(err)
 	}
 	return conn
@@ -44,7 +44,7 @@ func assertInfoResponsive(t *testing.T, hub *Hub, id Identity) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	info, err := hub.Proxy(id.NodeID, id.Provider).GetInfo(ctx, reference())
+	info, err := hub.Proxy(id.NodeID, id.Provider, 1).GetInfo(ctx, reference())
 	if err != nil || info.ProviderID != "retained" {
 		t.Fatalf("unrelated node RPC blocked: info=%+v err=%v", info, err)
 	}
@@ -124,7 +124,7 @@ func TestHubCloseCancelsEveryOpeningCallback(t *testing.T) {
 					return
 				}
 				defer conn.Close()
-				_ = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true}})
+				_ = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}})
 				if f, err := readFrame(conn); err == nil {
 					t.Errorf("canceled opening published welcome: %s", f.Type)
 				}
@@ -284,7 +284,7 @@ func TestHubSendQueueRespectsCallerCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { _, err := hub.Proxy(id.NodeID, id.Provider).GetInfo(ctx, reference()); done <- err }()
+	go func() { _, err := hub.Proxy(id.NodeID, id.Provider, 1).GetInfo(ctx, reference()); done <- err }()
 	select {
 	case err := <-done:
 		if !errors.Is(err, context.DeadlineExceeded) {
@@ -422,7 +422,7 @@ func TestHubDisconnectCancelsPeriodicHeartbeatCallback(t *testing.T) {
 	hub.mu.Lock()
 	connection := hub.peers[id.NodeID].id
 	hub.mu.Unlock()
-	if err := writeFrame(conn, frame{Type: "heartbeat", ConnectionID: connection, Health: &Health{ProviderReady: true}}); err != nil {
+	if err := writeFrame(conn, frame{Type: "heartbeat", ConnectionID: connection, OwnerEpoch: 2, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}}); err != nil {
 		t.Fatal(err)
 	}
 	select {

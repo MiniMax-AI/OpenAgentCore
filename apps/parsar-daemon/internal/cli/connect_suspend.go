@@ -159,7 +159,7 @@ func (s *suspendedRouter) heartbeats(ctx context.Context, conn *transport.Conn, 
 		kinds := s.registry.SupportedAgentKinds()
 		for i := range kinds {
 			caps := &kinds[i].Capabilities
-			caps.WorkspaceOutputExport = s.local.CanExport() && caps.LocalEnvironment && caps.WorkspaceReadPreparation
+			caps.WorkspaceOutputExport = proto.CapabilityFromBool(s.local.CanExport() && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
 		}
 		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), ActiveRequests: s.router.ActiveRuns(), DaemonVersion: Version, SupportedAgentKinds: kinds}
 	}, obslog.Bg())

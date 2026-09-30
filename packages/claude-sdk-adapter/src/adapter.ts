@@ -49,7 +49,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
   const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names);
   const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume) : undefined;
-  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents, !!request.output_format);
+  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents, !!request.output_format, !!request.tool_search);
   let commands = workspace ? new CommandObserver() : undefined;
   if (request.type === "prepare" && !workspace) throw new Error("invalid_request");
   if (workspace && "mcp_http_servers" in request) throw new Error("invalid_request");
@@ -89,17 +89,17 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         ...(request.native_model_options?.effort !== undefined ? { effort: request.native_model_options.effort } : {}),
         ...(request.native_model_options?.thinking !== undefined ? { thinking: request.native_model_options.thinking } : {}),
         cwd: request.cwd,
-        env: request.tool_search ? toolSearchEnvironment(process.env, request.model) : workspace?.options.env ?? { ...process.env, ...(subagents ? { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } : {}) },
+        env: workspace?.options.env ?? { ...process.env, ...(subagents ? { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } : {}) },
         model: request.model,
         ...(request.output_format ? { outputFormat: request.output_format } : {}),
         systemPrompt: request.system_prompt,
         ...(request.resume ? { resume: request.resume } : {}),
         tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed, strictMcpConfig: true, settingSources: [],
-        ...(profile && !workspace ? {
+        ...(profile ? {
           agent: "oac_root", disallowedTools: profile.denied,
           hooks: { PreToolUse: [{ hooks: [profile.beforeTool] }] },
           agents: { oac_root: { description: "Execution root.", prompt: request.system_prompt,
-            model: request.model, tools: profile.allowed } },
+            model: request.model, tools: [...(Array.isArray(workspace?.options.tools) ? workspace.options.tools : []), ...profile.allowed] } },
         } : {}),
         persistSession: true, includePartialMessages: true, abortController: abort,
         canUseTool: async () => ({ behavior: "deny", message: "Tools are unavailable in this execution profile." }),
@@ -121,6 +121,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
           return child;
         },
     };
+    if (request.tool_search) options.env = toolSearchEnvironment(options.env ?? process.env, request.model);
     if(turns) {
       for(const matchers of Object.values(options.hooks ?? {})) for(const matcher of matchers ?? []) {
         matcher.hooks=matcher.hooks.map(hook=>(...args)=>turns.track(()=>hook(...args)));
@@ -140,7 +141,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         reads.bind(stream, request.cwd);
         if (process.platform === "linux") await directories.bind(request.cwd);
       }
-      if (request.mcp_http_servers?.some(server=>server.required)) profile?.verifyRequired(await stream.mcpServerStatus());
+      if (declarations?.some(server => "required" in server && server.required)) profile?.verifyRequired(await stream.mcpServerStatus());
       if(turns) {
         turns.configure(stream,(input,output)=>{
           inputs=new Inputs(input);
@@ -163,7 +164,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       stream = warm.query(turns ?? inputs);
       const initialized = await stream.initializationResult();
       if (initialized.hooks_applied !== true || children.length !== 1) throw new Error("MCP initialization unavailable");
-      if (request.mcp_http_servers?.some(server => server.required)) profile.verifyRequired(await stream.mcpServerStatus());
+      if (declarations?.some(server => "required" in server && server.required)) profile.verifyRequired(await stream.mcpServerStatus());
       if (abort.signal.aborted || !nativeAlive) throw new Error("MCP initialization interrupted");
       inputs.release(request.input);
     } else stream = query({ prompt: inputs, options });

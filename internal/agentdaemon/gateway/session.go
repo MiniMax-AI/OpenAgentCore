@@ -465,7 +465,9 @@ func (s *Session) markOfflineOnClose() {
 func (s *Session) handleHeartbeat(env proto.Envelope) {
 	var p proto.HeartbeatPayload
 	if err := env.DecodePayload(&p); err != nil {
-		s.log("agentdaemon gateway: decode heartbeat payload device=%s: %v", s.DeviceID, err)
+		s.log("agentdaemon gateway: invalid heartbeat declaration device=%s", s.DeviceID)
+		s.setSupportedAgentKinds(nil)
+		s.Close("invalid heartbeat declaration")
 		return
 	}
 	kinds := deviceKindsFromHeartbeat(p)
@@ -510,37 +512,37 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []device.SupportedAgentK
 			Available: info.Available,
 			Version:   info.Version,
 			Capabilities: device.KindCapabilities{
-				Streaming:                      info.Capabilities.Streaming,
-				Permissions:                    info.Capabilities.Permissions,
-				Usage:                          info.Capabilities.Usage,
-				Resume:                         info.Capabilities.Resume,
-				Steering:                       info.Capabilities.Steering,
-				DurableTurns:                   info.Capabilities.DurableTurns,
-				DurableInputReceipts:           info.Capabilities.DurableInputReceipts,
-				NativeSessionRecovery:          info.Capabilities.NativeSessionRecovery,
-				MessageItems:                   info.Capabilities.MessageItems,
-				ToolItems:                      info.Capabilities.ToolItems,
-				ToolObservations:               info.Capabilities.ToolObservations,
-				EnvironmentNone:                info.Capabilities.EnvironmentNone,
-				LocalEnvironment:               info.Capabilities.LocalEnvironment,
-				Preparation:                    info.Capabilities.Preparation,
-				WorkspaceReadPreparation:       info.Capabilities.WorkspaceReadPreparation,
-				WorkspaceOutputExport:          info.Capabilities.WorkspaceOutputExport,
-				WebSearchControl:               info.Capabilities.WebSearchControl,
-				ProgrammaticToolCallingDisable: info.Capabilities.ProgrammaticToolCallingDisable,
-				TextVerbosity:                  info.Capabilities.TextVerbosity,
-				StructuredOutput:               info.Capabilities.StructuredOutput,
-				ToolSearch:                     info.Capabilities.ToolSearch,
-				MessageImages:                  info.Capabilities.MessageImages,
-				FunctionResultImages:           info.Capabilities.FunctionResultImages,
-				ExecutionControls:              info.Capabilities.ExecutionControls,
-				SubagentControl:                info.Capabilities.SubagentControl,
-				SubagentObservations:           info.Capabilities.SubagentObservations,
-				FunctionTools:                  info.Capabilities.FunctionTools,
-				MCPHTTPTools:                   info.Capabilities.MCPHTTPTools,
-				MCPHTTPRequired:                info.Capabilities.MCPHTTPRequired,
-				MCPHTTPBearerAuth:              info.Capabilities.MCPHTTPBearerAuth,
-				WorkspaceAuthoring:             info.Capabilities.WorkspaceAuthoring,
+				Streaming:             info.Capabilities.Streaming.IsSupported(),
+				Permissions:           info.Capabilities.Permissions.IsSupported(),
+				Usage:                 info.Capabilities.Usage.IsSupported(),
+				Resume:                info.Capabilities.Resume.IsSupported(),
+				Steering:              info.Capabilities.Steering.IsSupported(),
+				DurableTurns:          info.Capabilities.DurableTurns.IsSupported(),
+				DurableInputReceipts:  info.Capabilities.DurableInputReceipts.IsSupported(),
+				NativeSessionRecovery: info.Capabilities.NativeSessionRecovery.IsSupported(),
+				MessageItems:          info.Capabilities.MessageItems.IsSupported(),
+
+				ToolObservations:               info.Capabilities.ToolObservations.IsSupported(),
+				EnvironmentNone:                info.Capabilities.EnvironmentNone.IsSupported(),
+				LocalEnvironment:               info.Capabilities.LocalEnvironment.IsSupported(),
+				Preparation:                    info.Capabilities.Preparation.IsSupported(),
+				WorkspaceReadPreparation:       info.Capabilities.WorkspaceReadPreparation.IsSupported(),
+				WorkspaceOutputExport:          info.Capabilities.WorkspaceOutputExport.IsSupported(),
+				WebSearchControl:               info.Capabilities.WebSearchControl.IsSupported(),
+				ProgrammaticToolCallingDisable: info.Capabilities.ProgrammaticToolCallingDisable.IsSupported(),
+				TextVerbosity:                  info.Capabilities.TextVerbosity.IsSupported(),
+				StructuredOutput:               info.Capabilities.StructuredOutput.IsSupported(),
+				ToolSearch:                     info.Capabilities.ToolSearch.IsSupported(),
+				MessageImages:                  info.Capabilities.MessageImages.IsSupported(),
+				FunctionResultImages:           info.Capabilities.FunctionResultImages.IsSupported(),
+				ExecutionControls:              info.Capabilities.ExecutionControls.IsSupported(),
+				SubagentControl:                info.Capabilities.SubagentControl.IsSupported(),
+				SubagentObservations:           info.Capabilities.SubagentObservations.IsSupported(),
+				FunctionTools:                  info.Capabilities.FunctionTools.IsSupported(),
+				MCPHTTPTools:                   info.Capabilities.MCPHTTPTools.IsSupported(),
+				MCPHTTPRequired:                info.Capabilities.MCPHTTPRequired.IsSupported(),
+				MCPHTTPBearerAuth:              info.Capabilities.MCPHTTPBearerAuth.IsSupported(),
+				WorkspaceAuthoring:             info.Capabilities.WorkspaceAuthoring.IsSupported(),
 			},
 		})
 	}

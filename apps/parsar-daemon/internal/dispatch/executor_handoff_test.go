@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 type terminalHandoffSender struct {
@@ -92,7 +93,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 			}
 			owner := &terminalHandoffExecutor{turns: make(chan *terminalHandoffTurn, 3)}
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: proto.AgentKindCapabilities{EnvironmentNone: true}},
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
 				harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 					return nil, errors.New("legacy path forbidden")
 				})
@@ -227,4 +228,9 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 			}
 		})
 	}
+}
+
+// These fixtures exercise settlement only; active input is deliberately rejected.
+func (*terminalHandoffTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
+	return agent.ErrSteeringRejected
 }

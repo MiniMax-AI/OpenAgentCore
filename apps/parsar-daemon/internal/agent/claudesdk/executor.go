@@ -97,11 +97,16 @@ func validateExecutorFeatures(info RuntimeInfo, start startRequest) error {
 	if start.Workspace != nil && len(start.Functions) > 0 && !info.SupportsWorkspaceFunctions() {
 		return errors.New("claudesdk: workspace functions are unavailable")
 	}
-	if start.MCPHTTPServers != nil {
+	if servers := start.declaredMCP(); len(servers) > 0 {
+		for _, server := range servers {
+			if start.Workspace != nil && server.ServerURL != "" && !info.SupportsWorkspaceMCP() {
+				return errors.New("claudesdk: workspace HTTP MCP is unavailable")
+			}
+		}
 		if !info.SupportsHTTPMCP() {
 			return errors.New("claudesdk: packaged runtime does not support HTTP MCP")
 		}
-		for _, server := range *start.MCPHTTPServers {
+		for _, server := range servers {
 			if server.Required && !info.SupportsHTTPMCPRequired() {
 				return errors.New("claudesdk: packaged runtime does not support required HTTP MCP")
 			}

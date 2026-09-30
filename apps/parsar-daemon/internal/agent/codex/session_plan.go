@@ -17,7 +17,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if err != nil {
 		return SessionPlan{}, nil, err
 	}
-	mcpServers, err := publicMCPHTTPServers(req)
+	mcpServers, mcpEnv, err := runtimeMCPServers(req)
 	if err != nil {
 		return SessionPlan{}, nil, err
 	}
@@ -52,12 +52,6 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 
 	if req.DisableSubagents {
 		disableSubagents(&plan)
-	}
-	mcpBearerEnv := prepareMCPHTTPBearer(mcpServers, req.MCPHTTPServers)
-	mcpServers, environmentMCPEnv, err := mergeEnvironmentMCP(mcpServers, req.LocalEnvironment)
-	if err != nil {
-		plan.Cleanup()
-		return SessionPlan{}, nil, err
 	}
 	if mcpServers != nil {
 		if err := configureMCP(&plan, mcpServers); err != nil {
@@ -96,8 +90,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		return SessionPlan{}, nil, err
 	}
 
-	plan.Env = append(plan.Env, mcpBearerEnv...)
-	plan.Env = append(plan.Env, environmentMCPEnv...)
+	plan.Env = append(plan.Env, mcpEnv...)
 
 	return plan, skillRoots, nil
 }

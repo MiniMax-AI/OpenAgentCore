@@ -11,7 +11,7 @@ import (
 )
 
 func TestGenerationGrantJSONRefusesAmbiguousDeletionAuthority(t *testing.T) {
-	f := frame{Version: 2, Type: "retention_ack", Deployment: &sandbox.NodeDeployment{Generation: 2, SpecificationDigest: strings.Repeat("a", 64)}, Control: &generationControl{ID: uuid.NewString(), ConnectionID: uuid.NewString(), Sequence: 1, OwnerEpoch: 1, Retentions: []sandbox.GenerationRetention{{GenerationReference: sandbox.GenerationReference{Generation: 1, SpecificationDigest: strings.Repeat("b", 64)}, Keep: true}}}}
+	f := frame{Version: ProtocolVersion, Type: "retention_ack", Deployment: &sandbox.NodeDeployment{Generation: 2, SpecificationDigest: strings.Repeat("a", 64)}, Control: &generationControl{ID: uuid.NewString(), ConnectionID: uuid.NewString(), Sequence: 1, OwnerEpoch: 1, Retentions: []sandbox.GenerationRetention{{GenerationReference: sandbox.GenerationReference{Generation: 1, SpecificationDigest: strings.Repeat("b", 64)}, Keep: true}}}}
 	raw, err := json.Marshal(f)
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestGenerationGrantJSONRefusesAmbiguousDeletionAuthority(t *testing.T) {
 }
 
 func TestGenerationHealthRejectsUnboundedOrAmbiguousNumbers(t *testing.T) {
-	f := frame{Version: 2, Type: "heartbeat", ConnectionID: uuid.NewString(), OwnerEpoch: 1, Health: &Health{ObservedAt: time.Now().UTC()}}
+	f := frame{Version: ProtocolVersion, Type: "heartbeat", ConnectionID: uuid.NewString(), OwnerEpoch: 1, Health: &Health{ObservedAt: time.Now().UTC()}}
 	good, _ := json.Marshal(f)
 	if _, err := decodeFrame(good); err != nil {
 		t.Fatal(err)
@@ -58,6 +58,35 @@ func TestGenerationHealthRejectsUnboundedOrAmbiguousNumbers(t *testing.T) {
 	} {
 		if _, err := decodeFrame([]byte(strings.Replace(string(good), replacement.from, replacement.to, 1))); err == nil {
 			t.Fatal("invalid health accepted", replacement.to)
+		}
+	}
+}
+
+func TestNodeProtocolRejectsHistoricalVersions(t *testing.T) {
+	for _, version := range []int{1, 2} {
+		raw, _ := json.Marshal(frame{Version: version, Type: "hello", Identity: new(Identity), Health: &Health{ObservedAt: time.Now().UTC()}})
+		if _, err := decodeFrame(raw); err == nil {
+			t.Fatalf("accepted historical protocol %d", version)
+		}
+	}
+}
+
+func TestNodeGenerationManagementIsAnExplicitCurrentCapability(t *testing.T) {
+	for _, managed := range []bool{false, true} {
+		f := frame{Version: ProtocolVersion, Type: "hello", GenerationManagement: managed, Identity: new(Identity), Health: &Health{ObservedAt: time.Now().UTC()}}
+		if managed {
+			f.Health.Generations = []sandbox.GenerationStatus{{Generation: 1, SpecificationDigest: strings.Repeat("a", 64), State: "ready"}}
+		}
+		raw, _ := json.Marshal(f)
+		if _, err := decodeFrame(raw); err != nil {
+			t.Fatalf("current mode managed=%v: %v", managed, err)
+		}
+		if managed {
+			f.GenerationManagement = false
+			raw, _ = json.Marshal(f)
+			if _, err := decodeFrame(raw); err == nil {
+				t.Fatal("generation management accepted without declaration")
+			}
 		}
 	}
 }

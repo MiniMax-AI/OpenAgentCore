@@ -50,6 +50,16 @@ def now():
 
 # Private files ---------------------------------------------------------------
 
+def private_parent(target):
+    """Create the canonical installation parent and keep the default home private."""
+    parent = target.parent
+    if parent.is_symlink() or parent.resolve() != parent:
+        raise OacError("The destination's parent must be canonical and not a symlink")
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if parent == Path.home() / ".oac":
+        os.chmod(parent, 0o700)
+
+
 def check_private(path, what):
     try:
         info = os.lstat(path)

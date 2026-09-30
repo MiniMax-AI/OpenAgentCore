@@ -21,61 +21,8 @@ func toolSnapshotFixtures() []string {
 	}
 }
 
-func TestToolSnapshotsPreserveNativeResultsOnlyWhenRequested(t *testing.T) {
-	for _, item := range toolSnapshotFixtures() {
-		var identity struct{ ID string }
-		if err := json.Unmarshal([]byte(item), &identity); err != nil {
-			t.Fatal(err)
-		}
-		t.Run(identity.ID, func(t *testing.T) {
-			var legacy []proto.Envelope
-			for _, enabled := range []bool{false, true} {
-				out := make(chan proto.Envelope, 4)
-				s := &Session{runID: "run", observeTools: enabled, out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig()}
-				s.setThreadID("private-thread")
-				s.onTurnStarted(json.RawMessage(`{"threadId":"private-thread","turn":{"id":"private-turn"}}`))
-				raw := json.RawMessage(`{"threadId":"private-thread","turnId":"private-turn","item":` + item + `}`)
-				s.onItemStarted(raw)
-				s.onItemCompleted(raw)
-				if len(out) != 2 {
-					t.Fatalf("tool event count changed: %d", len(out))
-				}
-				for i, stage := range []string{"before", "after"} {
-					event := <-out
-					var tool proto.ToolCallPayload
-					if err := event.DecodePayload(&tool); err != nil {
-						t.Fatal(err)
-					}
-					if event.Type != proto.TypeToolCall || event.ID != "run" || tool.ID != identity.ID || tool.Stage != stage {
-						t.Fatalf("tool identity/stage changed: %+v %+v", event, tool)
-					}
-					if !enabled {
-						if tool.NativeItem != nil || tool.Observation != nil || bytes.Contains(event.Payload, []byte("native_item")) {
-							t.Fatal("legacy request acquired tool snapshot")
-						}
-						legacy = append(legacy, event)
-						continue
-					}
-					var expected bytes.Buffer
-					if err := json.Compact(&expected, []byte(item)); err != nil {
-						t.Fatal(err)
-					}
-					if !bytes.Equal(tool.NativeItem, expected.Bytes()) {
-						t.Fatalf("native result lost or coerced: %s", tool.NativeItem)
-					}
-					tool.NativeItem = nil
-					payload, err := json.Marshal(tool)
-					if err != nil || !bytes.Equal(payload, legacy[i].Payload) {
-						t.Fatalf("legacy tool fields changed: %s, %v", payload, err)
-					}
-				}
-			}
-		})
-	}
-}
-
-func TestToolObservationsReplaceNativeSnapshotsWhenRequested(t *testing.T) {
-	for _, nativeSnapshots := range []bool{false, true} {
+func TestToolObservationsOnlyWhenRequested(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
 		for _, item := range toolSnapshotFixtures() {
 			var source struct{ ID string }
 			if err := json.Unmarshal([]byte(item), &source); err != nil {
@@ -83,7 +30,7 @@ func TestToolObservationsReplaceNativeSnapshotsWhenRequested(t *testing.T) {
 			}
 			t.Run(source.ID, func(t *testing.T) {
 				out := make(chan proto.Envelope, 4)
-				s := &Session{runID: "run", observeTools: nativeSnapshots, observeToolObservations: true, out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig()}
+				s := &Session{runID: "run", observeToolObservations: enabled, out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig()}
 				s.setThreadID("private-thread")
 				s.onTurnStarted(json.RawMessage(`{"threadId":"private-thread","turn":{"id":"private-turn"}}`))
 				raw := json.RawMessage(`{"threadId":"private-thread","turnId":"private-turn","item":` + item + `}`)
@@ -95,13 +42,19 @@ func TestToolObservationsReplaceNativeSnapshotsWhenRequested(t *testing.T) {
 				for _, stage := range []string{"before", "after"} {
 					event := <-out
 					var tool proto.ToolCallPayload
-					if event.DecodePayload(&tool) != nil || event.Type != proto.TypeToolCall || tool.ID != source.ID || tool.Stage != stage || tool.Observation == nil {
+					if event.DecodePayload(&tool) != nil || event.Type != proto.TypeToolCall || tool.ID != source.ID || tool.Stage != stage {
 						t.Fatal(event)
 					}
-					if tool.NativeItem != nil || bytes.Contains(event.Payload, []byte("native_item")) {
-						t.Fatal("duplicate native snapshot")
+					if bytes.Contains(event.Payload, []byte("native_item")) {
+						t.Fatal("engine-specific snapshot escaped adapter")
 					}
-					if stage == "before" && tool.Observation.Status != "in_progress" {
+					if !enabled {
+						if tool.Observation != nil {
+							t.Fatal("unrequested observation")
+						}
+						continue
+					}
+					if tool.Observation == nil || stage == "before" && tool.Observation.Status != "in_progress" {
 						t.Fatal(tool.Observation)
 					}
 					if source.ID == "mcp" && !bytes.Contains(tool.Observation.Output, []byte("9007199254740993")) {

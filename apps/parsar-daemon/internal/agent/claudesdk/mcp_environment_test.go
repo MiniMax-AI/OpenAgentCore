@@ -66,7 +66,7 @@ func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 	} {
 		environment := &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
 		mutate(environment)
-		if _, _, err := prepareEnvironmentMCP(environment); err == nil {
+		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}); err == nil {
 			t.Fatal("unsupported declaration accepted")
 		}
 	}

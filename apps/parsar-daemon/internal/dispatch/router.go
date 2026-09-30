@@ -51,7 +51,7 @@ type Router struct {
 	preparations        map[string]*preparationState
 	preparationRequests map[string]*preparationState
 	preparationTimeout  time.Duration
-	runtimePreparation *runtimePreparationTransfer
+	runtimePreparation  *runtimePreparationTransfer
 	workspaceWrite      *workspaceUpload
 	workspaceExport     *workspaceExport
 	workspaceReads      map[string]struct{}
@@ -71,6 +71,7 @@ type appliedInteractionDecision struct {
 // outbound frame stamps env.Trace with the same value, completing
 // frontend → server → daemon → agent → server attribution.
 type sessionState struct {
+	capabilities        proto.AgentKindCapabilities
 	runID               string
 	environmentID       string
 	stateKey            string

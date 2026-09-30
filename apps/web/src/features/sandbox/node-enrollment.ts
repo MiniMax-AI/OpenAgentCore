@@ -26,7 +26,7 @@ export interface HostPrerequisite {
  * - Docker: `provider_group` needs rootful Docker Engine running, its socket
  *   group-accessible (0660) and, through `device_group`, owned by the docker
  *   group, which the service user joins; and CPU and memory limits enforced (the
- *   node is ready only then: services/agents-api/internal/sandbox/config/probe.go).
+ *   node is ready only then: services/agents-api/internal/sandbox/providers/probe.go).
  *   It installs nothing;
  * - microsandbox: `provider_group` needs /dev/kvm, readable and writable by all or
  *   group-accessible in the kvm group, and `prepare_runtime` the libraries its

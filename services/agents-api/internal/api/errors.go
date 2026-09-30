@@ -9,6 +9,7 @@ import (
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
@@ -93,6 +94,11 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 }
 
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
+	// Adapter discovery and persisted configuration share the same public error.
+	var validation *sandbox.ValidationError
+	if errors.As(err, &validation) {
+		err = &store.SandboxConfigurationError{Message: validation.Message, Validation: validation}
+	}
 	if writeCoreValidationError(w, err) {
 		return
 	}

@@ -2,6 +2,7 @@ package localworkspace
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -167,8 +168,8 @@ func TestRuntimePreparationRejectsMissingRequiredToolEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	configured.LocalEnvironment.ToolEnvironment = false
-	if _, err = b.Prepare(t.Context(), configured); err != nil {
-		t.Fatal("optional tool environment became mandatory", err)
+	if _, err = b.Prepare(t.Context(), configured); err == nil {
+		t.Fatal("deleted prepared tool environment was silently recreated")
 	}
 }
 
@@ -176,5 +177,47 @@ func TestRuntimePreparationRejectsMissingExplicitToolEnvironment(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", filepath.Join(t.TempDir(), "missing.json"))
 	if _, err := ReadOptionalToolEnvironment(); err == nil {
 		t.Fatal("missing explicitly configured tool environment ignored")
+	}
+}
+
+func TestPreparationFreezesToolOnlyEnvironmentAcrossReconnect(t *testing.T) {
+	for _, initialFile := range []bool{false, true} {
+		t.Run(fmt.Sprint(initialFile), func(t *testing.T) {
+			b, req := testBinding(t)
+			t.Setenv("OAC_RUNTIME_INITIALIZATION_DIRECTORY", t.TempDir())
+			t.Setenv("OAC_RUNTIME_PACKAGE_DIRECTORY", t.TempDir())
+			source := filepath.Join(t.TempDir(), "operator.json")
+			if err := os.WriteFile(source, []byte(`{"LOCAL_ONLY":"original"}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", source)
+			if initialFile {
+				if err := b.installInitialFile(t.Context(), proto.RuntimeInitialFile{Path: "/workspace/input"}, []byte("file")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			configured, err := b.Configure(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := b.Prepare(t.Context(), configured); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(source, []byte(`{"LOCAL_ONLY":"changed"}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			reconnect, err := New(b.environment, b.capabilityIdentity().SessionID, b.workspace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reconnect.networkAccess, reconnect.capabilityRoot = b.networkAccess, b.capabilityRoot
+			if _, err := reconnect.Prepare(t.Context(), configured); err != nil {
+				t.Fatal(err)
+			}
+			values, err := ReadOptionalToolEnvironment()
+			if err != nil || values["LOCAL_ONLY"] != "original" {
+				t.Fatal("reconnect reread mutable source", err)
+			}
+		})
 	}
 }

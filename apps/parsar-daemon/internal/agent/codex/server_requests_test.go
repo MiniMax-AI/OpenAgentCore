@@ -169,6 +169,12 @@ func TestCodexUserInputMapsAnswersByQuestionID(t *testing.T) {
 		t.Fatalf("ask timeout = %v, want 2m", pending.timeout)
 	}
 
+	if err := s.SubmitPromptForUserChoice(context.Background(), request.AskID, proto.PromptForUserChoiceDecisionPayload{
+		QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "foreign", Answers: []string{"yes"}}},
+	}); err == nil {
+		t.Fatal("accepted a foreign question ID")
+	}
+	// Invalid identity must leave the original native request pending.
 	submitDone := make(chan error, 1)
 	go func() {
 		submitDone <- s.SubmitPromptForUserChoice(context.Background(), request.AskID, proto.PromptForUserChoiceDecisionPayload{
@@ -318,7 +324,7 @@ func TestCodexInteractionExpiryUnblocksRuntime(t *testing.T) {
 		if reply.Error == nil || reply.Error.Code != -32001 {
 			t.Fatalf("expiry reply = %+v", reply)
 		}
-		if err := s.SubmitPromptForUserChoice(context.Background(), request.AskID, proto.PromptForUserChoiceDecisionPayload{Answers: []string{"yes"}}); !errors.Is(err, agent.ErrUnknownAsk) {
+		if err := s.SubmitPromptForUserChoice(context.Background(), request.AskID, proto.PromptForUserChoiceDecisionPayload{QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}}); !errors.Is(err, agent.ErrUnknownAsk) {
 			t.Fatalf("late input error = %v, want ErrUnknownAsk", err)
 		}
 	})

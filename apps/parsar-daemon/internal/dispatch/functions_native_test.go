@@ -20,6 +20,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent/codex"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/dispatch"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 type nativeFunctionSender chan proto.Envelope
@@ -109,7 +110,7 @@ func TestNativeFunctionBridge(t *testing.T) {
 	}))
 	defer model.Close()
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{FunctionTools: true, EnvironmentNone: true}}, harnessconfig.Configuration{}, codex.Factory)
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}, harnessconfig.Configuration{}, codex.Factory)
 	sender := make(nativeFunctionSender, 256)
 	router, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
 	if err != nil {
@@ -137,7 +138,7 @@ func TestNativeFunctionBridge(t *testing.T) {
 	nativeID := ""
 	for index := 0; index < 3; index++ {
 		run := fmt.Sprintf("run-%d", index)
-		request := proto.PromptRequestPayload{AgentKind: "codex", Input: proto.TextInput("Look up ticket 42."), RunID: run, AgentStateKey: "native-functions", AgentSessionID: nativeID, StrictResume: true, ReleaseOnCompletion: true, DisableExecutionEnvironment: true, ObserveTools: true,
+		request := proto.PromptRequestPayload{AgentKind: "codex", Input: proto.TextInput("Look up ticket 42."), RunID: run, AgentStateKey: "native-functions", AgentSessionID: nativeID, StrictResume: true, ReleaseOnCompletion: true, DisableExecutionEnvironment: true, ObserveToolObservations: true,
 			FunctionTools: []proto.FunctionTool{{Name: "lookup_ticket", Description: "Read a synthetic ticket", Parameters: json.RawMessage(`{"type":"object","properties":{"ticket":{"type":"string"}},"required":["ticket"],"additionalProperties":false}`)}},
 			AgentOptions:  map[string]any{"model": "gpt-5.5", "model_provider": map[string]any{"protocol": "responses", "base_url": model.URL + "/v1", "api_key": "synthetic-local-token"}}}
 		env, _ := proto.NewEnvelope(proto.TypePromptRequest, run, request)

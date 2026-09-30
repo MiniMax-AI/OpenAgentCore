@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
-func TestHostedImageQualification(t *testing.T) {
+func TestImageQualificationIsIndependentOfEnvironmentSource(t *testing.T) {
 	image := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII="
 	message := store.Input{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"inspect"},{"type":"input_image","image_url":"` + image + `"}]}]}`)}
 	result := store.Input{Kind: "tool_result", Payload: json.RawMessage(`{"call_id":"call","result":{"success":true,"output":[{"type":"input_image","image_url":"` + image + `"}]}}`)}
@@ -17,7 +17,7 @@ func TestHostedImageQualification(t *testing.T) {
 		profile, _ := (engine.Catalog{}).Lookup(kind)
 		for _, placement := range []string{"none", "openai_hosted", "self_hosted"} {
 			err := validateProfileInputs(profile, placement, []store.Input{message})
-			want := kind != "mcode" && placement != "self_hosted"
+			want := kind != "mcode"
 			if (err == nil) != want {
 				t.Fatalf("%s/%s: %v", kind, placement, err)
 			}

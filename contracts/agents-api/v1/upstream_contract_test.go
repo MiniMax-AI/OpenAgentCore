@@ -101,7 +101,7 @@ var listEnvelopeFields = []string{"object", "first_id", "last_id"}
 // definitions, and only as these members.
 var (
 	coreExtensionOwners  = []string{"v1.Agent", "v1.InlineAgent", "v1.SavedAgent", "v1.CreateAgentRequest", "v1.UpdateAgentRequest", "v1.Session", "v1.CreateSessionRequest"}
-	coreExtensionMembers = []string{"harness", "model_provider", "harness_config"}
+	coreExtensionMembers = []string{"harness", "model_provider", "harness_config", "environment"}
 )
 
 type upstreamFields struct {

@@ -50,44 +50,47 @@ _openapi:
           without anonymous fallback. Required initialization uses native
           startup before the first native Turn, including cold resume, and
           requires a separately advertised capability; exact hosted creation
-          timing and error parity remain unverified. Other MCP origins and
-          native OAuth login remain unsupported. The self_hosted profile uses a
-          qualified native harness, a clean absolute workspace_directory and
-          optional absolute local capability_directories prepared by Runtime,
-          with optional non-deferred function tools and HTTP MCP using service
-          origin, optionally authenticated by the attached Vault rules. Remote
-          MCP and remote Bearer authentication each require separately
-          advertised combination support; old peers cannot receive unsupported
-          work. Omitted/null capability_directories use the empty-list default;
-          self_hosted requires configured execution plus executor registry.
-          Claude SDK currently requires medium verbosity and object-root
-          function schemas. It supports anonymous or attached static-bearer
-          service-origin HTTP MCP on none with boolean required and separately
-          advertised MCP/bearer/required runtime support. Required servers must
-          be connected before the first native input is released; pending or
-          failed startup rejects execution. The shared Vault selection and
-          immutable binding rules apply; unsupported native labels/tool names
-          reject before persistence. An attached Vault with no matching
-          credential may remain anonymous; missing keys or failed credential
-          lookup/decryption never fall back to anonymous execution. Omitted
-          stream defaults to false; stream and agent_id cannot be null. Metadata
-          may be null; non-string values and limit violations return
-          invalid_request_error with a metadata or metadata.<key> param. The
-          inline agent uses the Agent create configuration validation with
-          agent.-prefixed params, reported before the input requirement and
-          saved-Agent lookup; saved configurations with conflicting tools or
-          schema roots reject admission with the same errors, and execution
-          limits keep unsupported_or_invalid_configuration. Hosted network
-          policy rejections return invalid_request_error with a null param.
-          Initial input accepts a string or ordered user-message array. Codex
-          and Claude SDK on none and qualified openai_hosted also accept inline
-          PNG/JPEG image content; other image combinations and remote URLs are
-          unsupported. None initial input atomically starts a Turn; self_hosted
-          initial input is reserved while returning its Environment connection
-          target, with execution deferred to native readiness and Session
-          failure on initial timeout. Initial input is required for none and for
-          streamed creation outside self_hosted. Omitted/null input remains
-          valid for non-streaming hosted and self_hosted creation. With
+          timing and error parity remain unverified. Explicit environment-origin
+          HTTP MCP is supported on managed and self-hosted workspaces through
+          the same Runtime bindings; native OAuth login remains unsupported. The
+          self_hosted profile uses a qualified native harness, a clean absolute
+          workspace_directory and optional absolute local capability_directories
+          prepared by Runtime, with optional non-deferred function tools and
+          HTTP MCP using explicit environment origin, optionally authenticated
+          by the attached Vault rules. Service-origin HTTP remains restricted to
+          service-side environment:none. Remote MCP and remote Bearer
+          authentication each require separately advertised combination support;
+          old peers cannot receive unsupported work. Omitted/null
+          capability_directories use the empty-list default; self_hosted
+          requires configured execution plus executor registry. Claude SDK
+          currently requires medium verbosity and object-root function schemas.
+          It supports anonymous or attached static-bearer service-origin HTTP
+          MCP on none with boolean required and separately advertised
+          MCP/bearer/required runtime support. Required servers must be
+          connected before the first native input is released; pending or failed
+          startup rejects execution. The shared Vault selection and immutable
+          binding rules apply; unsupported native labels/tool names reject
+          before persistence. An attached Vault with no matching credential may
+          remain anonymous; missing keys or failed credential lookup/decryption
+          never fall back to anonymous execution. Omitted stream defaults to
+          false; stream and agent_id cannot be null. Metadata may be null;
+          non-string values and limit violations return invalid_request_error
+          with a metadata or metadata.<key> param. The inline agent uses the
+          Agent create configuration validation with agent.-prefixed params,
+          reported before the input requirement and saved-Agent lookup; saved
+          configurations with conflicting tools or schema roots reject admission
+          with the same errors, and execution limits keep
+          unsupported_or_invalid_configuration. Hosted network policy rejections
+          return invalid_request_error with a null param. Initial input accepts
+          a string or ordered user-message array. Codex and Claude SDK on none
+          and qualified managed or self_hosted workspace profiles also accept
+          inline PNG/JPEG image content; other image combinations and remote
+          URLs are unsupported. None initial input atomically starts a Turn;
+          self_hosted initial input is reserved while returning its Environment
+          connection target, with execution deferred to native readiness and
+          Session failure on initial timeout. Initial input is required for none
+          and for streamed creation outside self_hosted. Omitted/null input
+          remains valid for non-streaming hosted and self_hosted creation. With
           stream=true, returns live Session events starting with the committed
           creation snapshot and closes right after the first agent.session.idle
           recorded when a Turn ends or an input reservation stops being pending,
@@ -110,40 +113,47 @@ _openapi:
           are local and not verified hosted parity. A same-key stream=true retry
           of an existing creation returns 201 with no events and closes at once;
           retry with stream=false or use the GET events stream to recover.
-          Claude SDK on none and Core-managed Docker openai_hosted supports
-          qualified object-root json_schema output with medium verbosity,
-          single-Agent execution and ordinary functions. Hosted execution reuses
-          native workspace tools and Files/Artifacts; Skills, Plugins,
-          capability directories, HTTP MCP, Subagent and tool_search
+          Claude SDK on none, Core-managed Docker openai_hosted and self_hosted
+          supports qualified object-root json_schema output with medium
+          verbosity, single-Agent execution and ordinary functions. Hosted
+          execution reuses native workspace tools and Files/Artifacts; Skills,
+          Plugins, capability directories, HTTP MCP, Subagent and tool_search
           combinations remain unqualified, including inherited template
           contents. Other non-text initial input remains unsupported. Basic
           Codex and Claude SDK openai_hosted creation requires an explicitly
           configured managed provider. The Claude workspace profile supports
           non-deferred function tools with text or successful inline PNG/JPEG
-          results alongside native workspace tools; HTTP MCP remains
-          unsupported. Idle Sessions provision automatically; initial
-          provisioning has no caller connection action. Network defaults to
-          enabled; disabled and restricted exact ASCII hostnames are supported.
-          Restricted policy requires 1–100 allowed domains. Unsupported hostname
-          forms and startup installations are rejected. Confidential env,
-          npm/Python packages and ordered setup commands use the shared
-          initialization lifecycle; requested network applies after setup.
-          System dependencies must be preinstalled in the sandbox image or
-          template, or on the host machine; packages.system is rejected. Initial
-          inline and tenant-owned file_id files freeze encrypted bytes before
-          provisioning, then install through the common Core lifecycle before
-          native execution or live Files access. With a template reference,
-          omitted/null files, env, packages and setup_commands inherit. Non-null
-          files and command lists replace; env overlays by key; each package
-          manager inherits on omission/null and otherwise replaces its list.
-          Empty lists clear their selected field. Tenant-owned
-          environment_template_id references inherit omitted/null network and
-          allow only narrowing overrides. Inline hosted network:null retains the
-          enabled default; updating a Template with network:null resets its
-          saved policy to enabled. Core freezes effective configuration;
-          template updates/deletion do not alter Session snapshots or
-          same-intent creation retries. Inline or tenant-owned skill_reference
-          Skills share initialization. Templates preserve
+          results alongside native workspace tools; explicit environment-origin
+          HTTP MCP uses the common Runtime path. MiniMax accepts public
+          environment-origin HTTP MCP only with null or omitted allowed_tools
+          and required=false; even an empty non-null allowlist rejects. Idle
+          Sessions provision automatically; initial provisioning has no caller
+          connection action. Network defaults to enabled; disabled and
+          restricted policies reject before compute allocation because the
+          current Runtime cannot enforce them. The x_agents_core.environment
+          extension accepts common preparation fields for either hosted or
+          self-hosted placement: environment_template_id, files, env, packages,
+          setup_commands, skills, plugins and capability_directories. Duplicate
+          fields in environment and the extension reject. Confidential env,
+          npm/Python packages and ordered setup commands use the same
+          Environment-owned initialization lifecycle; compute allocation does
+          not own preparation. Unknown side effects are not replayed after
+          disconnect or restart. System dependencies must be preinstalled in the
+          sandbox image or template, or on the host machine; packages.system is
+          rejected. Initial inline and tenant-owned file_id files freeze
+          encrypted bytes before provisioning, then install through the common
+          Core lifecycle before native execution or live Files access. With a
+          template reference, omitted/null files, env, packages and
+          setup_commands inherit. Non-null files and command lists replace; env
+          overlays by key; each package manager inherits on omission/null and
+          otherwise replaces its list. Empty lists clear their selected field.
+          Tenant-owned environment_template_id references inherit omitted/null
+          network and allow only narrowing overrides. Inline hosted network:null
+          retains the enabled default; updating a Template with network:null
+          resets its saved policy to enabled. Core freezes effective
+          configuration; template updates/deletion do not alter Session
+          snapshots or same-intent creation retries. Inline or tenant-owned
+          skill_reference Skills share initialization. Templates preserve
           default/latest/explicit selectors; Session creation freezes concrete
           metadata and encrypted content atomically. Skill, Plugin and
           capability-directory list omission/null inherit; a non-null list
@@ -151,15 +161,15 @@ _openapi:
           selectors resolve the default version. Source deletion/default updates
           cannot change committed Session Skill contents. Deferred function
           discovery uses type-only tool_search and per-function defer_loading in
-          the qualified single-agent Claude environment:none function profile,
-          including qualified inline image messages and text results. Explicit
-          web_search mode disabled and programmatic_tool_calling enabled false
-          use frozen common Runtime controls. Enabled forms, including those
-          saved on an Agent, remain unqualified and reject before any write
-          unless the Session replaces tools. Omitted programmatic configuration
-          preserves native behavior, a documented difference from the official
-          default-on behavior. Other combinations remain unqualified; see the
-          operation coverage.
+          the qualified single-agent Claude function profile on none or a
+          managed/user-owned workspace, including qualified inline image
+          messages and text results. Explicit web_search mode disabled and
+          programmatic_tool_calling enabled false use frozen common Runtime
+          controls. Enabled forms, including those saved on an Agent, remain
+          unqualified and reject before any write unless the Session replaces
+          tools. Omitted programmatic configuration preserves native behavior, a
+          documented difference from the official default-on behavior. Other
+          combinations remain unqualified; see the operation coverage.
       - content: >-
           Returns supported none, self_hosted and basic openai_hosted Session
           environments. Self-hosted pending input can require a caller
@@ -191,12 +201,12 @@ _openapi:
           An empty events array is a resource-authorized no-op; it creates no
           execution retry identity, Turn, Item or input receipt. For environment
           none, atomically accepts text messages, cancellation and function
-          results. Messages steer active work or start a queued Turn. The
-          supported self_hosted profile accepts text-only messages; qualified
-          Codex and Claude SDK openai_hosted profiles also accept inline
-          PNG/JPEG. Under the Session lock, matching retries retain their
-          original target; new active messages append to the current Turn, while
-          idle messages reserve work and wait up to the original five-minute
+          results. Messages steer active work or start a queued Turn. Qualified
+          Codex and Claude SDK workspace profiles accept text and inline
+          PNG/JPEG messages, independently of managed or self_hosted ownership.
+          Under the Session lock, matching retries retain their original target;
+          new active messages append to the current Turn, while idle messages
+          reserve work and wait up to the original five-minute
           connection/admission deadline. Return 202 only after durable
           admission, without claiming native application; active messages create
           no Turn or reservation. Cancellation-only prepared-environment batches
@@ -226,15 +236,15 @@ _openapi:
           cancel retained work or restart its deadline. Retry keys identify the
           whole ordered batch. Function output accepts text or ordered
           text/image parts subject to engine support; Claude SDK accepts text
-          results and, on none and qualified openai_hosted, successful inline
-          PNG/JPEG results, preserving ordered content; error images and remote
-          references reject before admission. Native image resizing may change
-          bytes. Runtime image-result support is checked only for image-bearing
-          delivery. Codex and Claude SDK on none and qualified openai_hosted
-          accept ordered inline PNG/JPEG image messages. Self-hosted profiles
-          and other engines remain text-only; remote image URLs are unsupported.
-          Image references are retained unchanged without service-side
-          downloads.
+          results and, on none and qualified workspace profiles, successful
+          inline PNG/JPEG results, preserving ordered content; error images and
+          remote references reject before admission. Native image resizing may
+          change bytes. Runtime image-result support is checked only for
+          image-bearing delivery. Codex and Claude SDK on none and qualified
+          managed or self_hosted workspace profiles accept ordered inline
+          PNG/JPEG image messages. Other engines remain text-only; remote image
+          URLs are unsupported. Image references are retained unchanged without
+          service-side downloads.
 ---
 
 {/* This file was generated by Fumadocs. Do not edit this file directly. Any changes should be made by running the generation command again. */}

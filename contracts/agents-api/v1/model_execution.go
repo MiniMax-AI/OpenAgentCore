@@ -19,6 +19,8 @@ func (e *ModelProviderError) Error() string { return e.message }
 
 // SessionExecutionInput is a write-only execution extension, not a provider resource.
 type SessionExecutionInput struct {
+	// Environment supplies placement-independent preparation through the Core extension.
+	Environment   json.RawMessage     `json:"environment,omitempty" swaggertype:"object"`
 	ModelProvider *ModelProviderInput `json:"model_provider,omitempty"`
 	HarnessConfig json.RawMessage     `json:"harness_config,omitempty" swaggertype:"object"`
 }

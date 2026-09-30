@@ -37,6 +37,10 @@ func (info RuntimeInfo) SupportsToolSearch() bool {
 	return slices.Contains(info.Features, "tool_search")
 }
 
+func (info RuntimeInfo) SupportsWorkspaceToolSearch() bool {
+	return info.SupportsWorkspaceFunctions() && info.SupportsToolSearch() && slices.Contains(info.Features, "workspace_tool_search")
+}
+
 func (info RuntimeInfo) SupportsStructuredOutput() bool {
 	return slices.Contains(info.Features, "structured_output")
 }
@@ -55,6 +59,10 @@ func (info RuntimeInfo) SupportsHTTPMCP() bool {
 
 func (info RuntimeInfo) SupportsHTTPMCPBearer() bool {
 	return info.SupportsHTTPMCP() && slices.Contains(info.Features, "mcp_http_bearer_auth")
+}
+
+func (info RuntimeInfo) SupportsWorkspaceMCP() bool {
+	return info.SupportsLocalRuntime() && info.SupportsHTTPMCP() && slices.Contains(info.Features, "workspace_mcp_http")
 }
 
 func (info RuntimeInfo) SupportsHTTPMCPRequired() bool {

@@ -5,6 +5,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
+import { execFileSync } from 'node:child_process'
 const app = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const repo = path.resolve(app, '../..')
 const record = JSON.parse(fs.readFileSync(path.join(app, 'content/guide-sources.json')))
@@ -25,6 +26,22 @@ for (const [slug, tokens] of [
 for (const file of fs.readdirSync(path.join(app, 'content/docs')).filter(n => n.endsWith('.mdx'))) {
   const text = fs.readFileSync(path.join(app, 'content/docs', file), 'utf8')
   for (const retired of ['/core/v1/admin', 'sandbox-manager.openapi.yaml']) assert.ok(!text.includes(retired), 'Obsolete claim in ' + file + ': ' + retired)
+}
+// Retired behavior must not reappear in any authored or generated surface.
+// Each claim contradicts its current owner; update the owner, not this list.
+const retiredClaims = [
+  ['it has no implicit deployment default', 'contracts/agents-api/model-execution.md#deployment-defaults'],
+  ['Sessions must name `agent.model`', 'contracts/agents-api/model-execution.md#deployment-defaults'],
+  ['automatically adapted by Runtime', 'contracts/agents-api/model-execution.md (native protocols only)'],
+  ['`none` and Docker sandboxes only', 'contracts/agents-api/message-input.md'],
+  ['当前 Core 不接受托管 Skill 引用', 'contracts/agents-api/environments.md (x_agents_core.environment)'],
+]
+// Provenance and historical protocol evaluations keep their original wording.
+const historical = /^provenance\/|\/model-protocol-[^/]*\.md$|verify-docs-facts\.mjs$/
+const tracked = execFileSync('git', ['ls-files', '-z', '--', '*.md', '*.mdx', '*.yaml', '*.json', '*.ts', '*.tsx', '*.mjs', '*.go'], { cwd: repo, encoding: 'utf8' }).split('\0').filter(n => n && !historical.test(n))
+for (const file of tracked) {
+  const text = fs.readFileSync(path.join(repo, file), 'utf8')
+  for (const [claim, owner] of retiredClaims) assert.ok(!text.includes(claim), `Retired claim in ${file}: "${claim}". Current rule: ${owner}`)
 }
 assert.deepEqual(fs.readFileSync(path.join(app, 'app/icon.svg')), fs.readFileSync(path.join(repo, 'apps/web/public/favicon.svg')), 'Docs favicon must match the approved Web asset')
 console.log('Guide copies, source authority and namespace/configuration facts are current.')

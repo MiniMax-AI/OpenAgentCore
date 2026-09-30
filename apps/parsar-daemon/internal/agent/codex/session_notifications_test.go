@@ -14,7 +14,7 @@ func TestRootNotificationIsolation(t *testing.T) {
 			out := make(chan proto.Envelope, 64)
 			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(),
 				rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers(), observeMessages: true,
-				observeTools: true, observeToolObservations: true}
+				observeToolObservations: true}
 			s.registerHandlers()
 			s.setThreadID("root")
 			notify := func(method, params string) { t.Helper(); scopeNotification(t, s, method, params) }

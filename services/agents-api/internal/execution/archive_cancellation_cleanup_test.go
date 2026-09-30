@@ -3,8 +3,8 @@ package execution
 import (
 	"context"
 	"encoding/json"
-	runtimegateway "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
-	"github.com/gorilla/websocket"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,9 +17,11 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
+	runtimegateway "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
 // Provider callbacks inspect the real database at the instant destructive
@@ -35,6 +37,10 @@ func (p waitingCleanupProvider) GetInfo(_ context.Context, r sandbox.Reference) 
 func (p waitingCleanupProvider) Kill(context.Context, sandbox.Reference) error {
 	p.beforeKill()
 	return nil
+}
+
+func (waitingCleanupCheckpoint) ProviderOperations() providercontract.Operations {
+	return microsandbox.Operations()
 }
 
 type waitingCleanupCheckpoint struct {
@@ -60,7 +66,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err := writer.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 				t.Fatal(err)
 			}
-			selection := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}}
+			selection := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}}
 			selection.Resources.CPUs = 2
 			selection.Resources.MemoryMiB = 2048
 			if _, err := writer.InitializeSandboxDeployment(t.Context(), installation, selection); err != nil {

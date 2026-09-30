@@ -11,14 +11,8 @@ Start from two entry points:
 - [`internal/harnessconfig/harness.go`](../../internal/harnessconfig/harness.go):
   the shared model configuration contract (declarations and preparation).
 - [`agent/harness.go`](../../apps/parsar-daemon/internal/agent/harness.go): the
-  execution lifecycle, optional interfaces and registration methods.
+  execution lifecycle, explicit extension contracts and registration methods.
 
-
-The code entry point is
-[`agent/harness.go`](../../apps/parsar-daemon/internal/agent/harness.go). It
-declares the required lifecycle, the separate optional interfaces and the
-registration methods. The pinned public Agents API in [upstream.json](upstream.json)
-is separate from this internal adapter contract.
 
 ## Ownership
 
@@ -69,7 +63,7 @@ model communication configuration, not Turn scheduling or native process ownersh
    process, credential/configuration and local workspace helpers.
 3. **Register the kind in the Runtime** in `apps/parsar-daemon/internal/cli`.
    See [Register the adapter](#register-the-adapter).
-4. **Add the Core engine identifier and service profile.** See
+4. **Add the service profile and one catalog entry.** See
    [Add the engine to Core](#add-the-engine-to-core).
 5. **Package native prerequisites.** Add a Runtime image under
    `services/agents-api/deploy/<kind>` and, optionally,
@@ -80,8 +74,17 @@ model communication configuration, not Turn scheduling or native process ownersh
    [Harness integration](harnesses.md#acceptance-checklist). Record results in
    the [qualification table](harnesses.md#current-qualified-operations).
 
-Start with the mandatory text lifecycle, then qualify optional operations one at
-a time. Do not copy an adapter's native limitations into the shared Core protocol.
+Implement the mandatory text lifecycle and explicitly handle every extension.
+Qualify supported extensions one at a time; an unqualified extension returns
+`agent.ErrUnsupportedOperation` without native effects. Call the reusable `agent/contracttest.TextLifecycle` assertions with the
+adapter's prepared Executor and deterministic native fixture. These assertions
+cover healthy reuse, durable input and cancellation for adapters whose native
+owner remains reusable. A native cancellation may instead require retirement:
+`Reusable=false` carries a reason and the caller must confirm `Executor.Close`.
+Do not force reuse to fit a test helper. Keep native fault and live acceptance
+separate. Name the entry test `TestSharedTextLifecycle` so
+`make check-runtime-contract` includes it. Do not copy an adapter's native
+limitations into the shared Core protocol.
 
 ## Architecture rules
 
@@ -92,7 +95,7 @@ a time. Do not copy an adapter's native limitations into the shared Core protoco
 - A new engine supplies an adapter, a qualified profile, registration and an
   independently verified deployment. It adds no engine-name branches to API
   handlers, persistence, dispatch, scheduling or Environment providers.
-- Keep required lifecycle declarations, optional interfaces and registration
+- Keep required lifecycle declarations, extension interfaces and registration
   methods in `agent/harness.go`. Result types, errors and Registry storage may
   stay in focused files. Keep this guide linked to that entry point.
 - Use the existing `proto.SupportedAgentKind` and `AgentKindCapabilities`
@@ -100,7 +103,8 @@ a time. Do not copy an adapter's native limitations into the shared Core protoco
   interface.
 - Onboarding does not require feature equality. Verify common lifecycle
   obligations and use the same public assertions for each declared operation.
-  Optional native differences are separate capability work, not onboarding blockers.
+  Native differences do not block onboarding, but an omitted declaration or
+  missing extension implementation does.
 - Never equate accepted parameters with applied native behavior.
 
 ## Native model configuration
@@ -154,52 +158,28 @@ ownership are in the [unified model configuration design](model-configuration-de
 
 [`agent/harness.go`](../../apps/parsar-daemon/internal/agent/harness.go) is the
 canonical interface entry point. Its required lifecycle is `ExecutorFactory`,
-`Executor`, `Turn` and `TurnSettlement`. Optional Turn and workspace interfaces
-remain separate; their result types and error values stay in the corresponding
-operation files in the same package. All use the existing neutral protocol types.
+`Executor`, `Turn` (including `DurableSteerer`) and `TurnSettlement`. Required
+methods must perform their native obligations; returning Unsupported is not an
+implementation of cancellation, receipts, settlement or cleanup. Turn and workspace
+extension interfaces remain small and separate, but every public adapter implements
+each explicitly. Their result types and errors stay in focused operation files. All use the existing neutral protocol types.
 
-The factory prepares a fixed configuration without sending model input. Executor
-owns the native process or connection, native Session, capability configuration and
-cleanup resources. If preparation fails while cleanup remains unconfirmed, return
-that non-nil Executor together with the error so Runtime retains its cleanup owner.
-`StartTurn` creates a fresh Turn wrapper and event stream;
-normal completion retains the Executor. Never reset a completed Turn object or
-restart the process merely to implement the next Turn.
+The [Core–Runtime lifecycle contract](../../docs/runtime-protocol.md#executor-and-turn-lifetimes)
+owns preparation failure, partial StartTurn results, output closure, settlement,
+reuse and cleanup. Implement those obligations through the interfaces above.
+Native callbacks and resources stay inside the adapter; Runtime owns admission,
+idle expiry and replacement.
 
-A nil Turn from `StartTurn` guarantees no input was submitted and no output writer
-was retained. Runtime closes the output channel in that case. Once input may have
-been submitted, return a non-nil Turn even with an error: that Turn owns exactly
-one output-channel close, and uncertain input must not be replayed.
-
-`Cancel` addresses that exact Turn (see
-[Cancellation ownership](#cancellation-ownership)). `AwaitSettlement` confirms that native events,
-inputs, function results, interactions, child work and output writes have settled.
-Only then may `Reusable` be true. False requires a reason and confirmed Executor
-close before replacement. An error means settlement is unconfirmed. A caller
-cancelling its wait cannot discard resource ownership or redirect a late callback
-to the next Turn. Close must retain its exact cleanup target after failure so the
-Runtime can retry serially. Successful resource close alone does not prove that a
-cancelled input was applied or that its original outcome is known.
-
-The Runtime owns admission handles, idle deadlines and resource limits. Adapters
-own native translation. For example, a Codex adapter retains its app-server and
-thread, a Claude adapter retains one streaming Query, and a MiniMax adapter retains
-its ACP connection and native Session. Core sees the same Executor and Turn
-semantics in each case.
+For example, a Codex adapter retains its app-server and thread, a Claude adapter
+retains one streaming Query, and a MiniMax adapter retains its ACP connection and
+native Session. Their implementations expose the same Executor and Turn contract.
 
 ### Cancellation ownership
 
-Cancellation is declared on the base `agent.Session` interface, which every
-`Turn` embeds. The adapter's Turn implements `Cancel` for that exact Turn and
-never retargets it to a successor; `Executor` has no `Cancel`. Runtime dispatch
-decides when to call it (for example on `prompt_cancel` or shutdown).
-
-`Cancel` alone does not transfer resource ownership. `AwaitSettlement` confirms
-the Turn settled, and `Executor.Close` retires native resources. Permission and
-user-choice responses are the optional `PermissionResponder` and
-`UserChoiceResponder` interfaces; implement them only when the adapter emits
-those interactions. Unsupported responses receive a negative receipt. The router
-keeps its interaction routing and retry ownership.
+Implement cancellation on the exact Turn through `agent.Session`. Follow the
+[lifecycle and settlement rules](../../docs/runtime-protocol.md#executor-and-turn-lifetimes);
+the adapter must supply native completion evidence to the shared Runtime.
+Permission and user-choice responses use the explicit extension interfaces below.
 
 ## Events, inputs and optional capabilities
 
@@ -212,23 +192,56 @@ never attribute a late result to whichever Turn is currently active.
 Initial input and steering use ordered `proto.MessageInput`. Preserve user-message
 and content order. Text-only adapters reject images through `TextOnly()` instead
 of dropping them. A successful transport write is distinct from confirmed native
-application. Resume only the exact history bound to the Session; missing or
-ambiguous required history fails before new model input.
+application. User-choice answers use the emitted question ID and an array of
+values; shared `PromptForUserChoiceDecisionPayload.AnswersFor` validates identity
+before consuming a pending interaction. Do not map answers by header or position.
+Resume only the exact history bound to the Session; missing or ambiguous required
+history fails before new model input.
 
-| Interface or contract | When required | Obligation |
+| Interface or contract | Required handling | Obligation |
 | --- | --- | --- |
-| `agent.DurableSteerer` | Current public text execution | Distinguish write and application receipts; preserve retry identity |
-| `agent.FunctionResultSubmitter` | Public function tools | Match call/result identity and acknowledge native application |
-| `agent.PermissionResponder`, `agent.UserChoiceResponder` | When emitting these interactions | Route exact identities and settle receipts |
-| `agent.WorkspaceReader`, `agent.WorkspaceDirectoryLister`, `agent.WorkspaceWriter` | Qualified workspace operations | Use the fixed authorized workspace and retain accepted operations through close |
-| Neutral message, image, MCP, structured-output and Subagent observations | Only when qualified and advertised | Preserve the operation-specific contract and reject unsupported combinations |
+| `ExecutorFactory`, `Executor.StartTurn`, `Executor.Close` | Real implementation | Prepare without model input; keep failed or uncertain resource ownership; confirm cleanup |
+| `Turn`, `Session.Cancel`, `CancellationOutcome`, `AwaitSettlement` | Real implementation | Cancel the exact Turn, preserve observed results and confirm settlement independently of cancellation requests |
+| `DurableSteerer` | Real implementation on every Turn | Distinguish complete write from native application receipt; preserve retry identity |
+| `Steerer` | Explicit implementation or Unsupported | Additional non-durable active-turn input |
+| `FunctionResultSubmitter` | Explicit implementation or Unsupported | Match native call/result identity and acknowledge application |
+| `PermissionResponder`, `UserChoiceResponder` | Explicit implementation or Unsupported | Respond to exact emitted identities; unknown/expired interactions remain distinct from Unsupported |
+| `WorkspaceReader`, `WorkspaceDirectoryLister`, `WorkspaceWriter` | Explicit on Turn, Executor and Prepared owners | Use the authorized workspace, confirm access/commit/close, or return the operation's Unsupported error |
+| `Prepared`, `PreparedCancellation` | Real implementation for an executable preparation | Preserve resource and output ownership across Start, cancellation and unused cleanup |
+| Neutral messages, images, MCP, structured output and Subagent observations | Explicit capability decisions | Preserve each operation's protocol semantics; reject unsupported input before submission |
 
-Optional features need not match another harness. The service profile qualifies
-public combinations; the Runtime advertises this installation's available support.
-Neither replaces schema validation or tenant authorization. Declaring a capability
-without implementing its semantics is an error. Workspace reads may use separate
-read-only preparations; those do not start model work or provide another execution
-lifecycle.
+Each adapter's `contracts.go` contains individual compile-time assertions for these
+small interfaces. Do not embed a default implementation that makes future
+interfaces appear implemented. Adding a contract also requires classification in
+the common completeness check and an explicit assertion for every public adapter;
+the check follows the authored Harness catalog.
+
+For a design-level refusal, implement the method directly, for example:
+
+```go
+func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+    return fmt.Errorf("%w: native public function tools are not qualified", agent.ErrUnsupportedOperation)
+}
+```
+
+The reason is a fixed safe string, never submitted content, a credential or raw
+native diagnostics. Unsupported guarantees no native side effect. It is not a
+successful empty operation. Installation unavailability, unknown interaction IDs,
+native failures and uncertain outcomes keep their existing errors and ownership.
+A nil `Turn` still means no input was submitted and output remains with the caller;
+it must not be repurposed as an Unsupported marker.
+
+Workspace capability describes the actual Runtime/resource-owner combination.
+Codex and MiniMax resource objects explicitly reject native workspace access while
+the common authorized `localworkspace` owner provides it. Claude can expose native
+read/list access; writes are provided by the common owner. Interface presence alone
+must never select a resource or advertise support.
+
+The service profile qualifies public combinations; the Runtime advertises the
+installed combination. Neither replaces schema validation or tenant authorization.
+Native behavior tests must agree with supported declarations. An advertised
+operation returning Unsupported is a contract violation, never success or grounds
+for automatic replay.
 
 ## Register the adapter
 
@@ -245,8 +258,29 @@ from [`cli/agent_registration.go`](../../apps/parsar-daemon/internal/cli/agent_r
 | 3 | `RegisterPreparation(kind, workspaceRead, agent.PreparationFactory)` | Optional. Separate read-only workspace preparation when qualified workspace operations need it. |
 
 The direct-call `agent.Factory` should delegate to the same Executor
-implementation. Every other capability declaration must match behavior verified
-for that installation. Runtime registration does not grant Core qualification;
+implementation. Every `proto.AgentKindCapabilities` field must be explicitly
+`proto.CapabilitySupported` or `proto.CapabilityUnsupported`.
+`proto.CapabilityUnspecified` is invalid: zero values and omitted fields do not mean
+Unsupported. Installation probes may use `proto.CapabilityFromBool` for an
+individual field; they must not populate all unmentioned or future fields.
+Availability remains separate in `SupportedAgentKind.Available`.
+
+Registration and wire decoding validate the complete declaration. The wire carries
+an explicit boolean for every field; omitted and null fields are invalid. A new
+field requires a decision by every production declaration. Runtime consumers use
+`IsSupported()` and reject unsupported requests before native operations; an
+interface assertion only verifies implementation, never support. Every declaration
+must match behavior verified for that installation.
+
+The admission mapping is explicit: `Steering` controls non-durable `Steerer` input;
+`DurableInputReceipts` controls `DurableSteerer` input and also requires the Turn
+settlement contract. Neither implies the other. Core's current public text profile
+requires both advertised capabilities. `Permissions` qualifies permission and
+user-choice responses together; a supported declaration requires both native
+response paths. Workspace declarations describe the selected authorized resource
+owner, including the common Runtime workspace implementation.
+
+Runtime registration does not grant Core qualification;
 that belongs to the service profile.
 
 The runnable test-only example is
@@ -257,14 +291,25 @@ never shipped as a real engine.
 
 ## Add the engine to Core
 
-Core recognizes engine identifiers explicitly. Add the new identifier to:
+Core recognizes the [built-in Harness registrations](harness-catalog.md).
+Add one entry to `internal/harnessconfig/builtin/catalog.json` with:
 
-| File | Purpose |
-| --- | --- |
-| [`internal/engine/profile.go`](../../services/agents-api/internal/engine/profile.go) | The static service profile catalog |
-| [`contracts/agents-api/v1/core_extension.go`](v1/core_extension.go) | Accepted `x_agents_core.harness` values |
-| [`internal/api/saved_core_input.go`](../../services/agents-api/internal/api/saved_core_input.go) | Saved Agent extension validation |
-| [`internal/harnessconfig/builtin/registry.go`](../../internal/harnessconfig/builtin/registry.go) | Built-in Harness configuration |
+- the public `kind` and display `label`;
+- the model `configuration` package under `internal/harnessconfig`;
+- the `profile` constructor under `services/agents-api/internal/engine`.
+
+Implement the profile constructor, then run `make generate-harness-catalog`.
+This generates the model configuration registry, Core profile catalog, client
+identifiers/display names and registration reference. Public input validators read
+the generated registry. `make openapi` derives Harness enums from the same authored
+catalog; do not add handwritten enums to DTO tags or route annotations.
+`make check-harness-catalog` rejects stale projections.
+
+Runtime registration uses `builtin.Configuration(kind)` for public Harnesses and
+separately registers native factories, probes and installed capability evidence.
+The catalog cannot declare a machine's availability. Adapter discovery and
+packaging still require their own implementation and qualification; no dynamic
+plugin loader is introduced.
 
 The profile is pure: it declares supported placements, public configuration and
 result limits and required Runtime controls, using existing public/protocol
@@ -282,16 +327,11 @@ mutable global registration or compatibility fallback.
 
 ## Engine selection
 
-| Setting | Scope | Effect |
-| --- | --- | --- |
-| `OAC_DEFAULT_HARNESS` | Core deployment | Default engine for new Sessions; `codex` when unset |
-| `OAC_HARNESSES` | Core deployment | Comma-separated extra engines to enable, without requiring a managed Provider |
-| `agent.x_agents_core.harness` | Saved Agent or inline Session Agent | Explicitly selects an enabled engine; never falls back to another |
+The [Harness selection contract](harness-selection.md) owns the public selector,
+deployment enablement, defaults and immutable Session binding. This guide adds no
+second selector or fallback rule.
 
-Existing Sessions keep their engine. Do not add another selector; the
-[harness selection extension](harness-selection.md) owns the field's semantics.
-
-## Required versus optional operations
+## Required versus extension operations
 
 The current public text path requires durable turns, applied input receipts,
 ordered observations, cancellation and enforcement of disabled execution controls.
@@ -302,7 +342,7 @@ of enforcement.
 
 MCP, public function calls, deferred function discovery, structured output, image inputs, verbosity controls and other optional
 operations do not need to match another engine. Reject unqualified combinations
-explicitly and record the gap. Never advertise a capability to bypass selection.
+with Unsupported and record the gap. Never advertise a capability to bypass selection.
 
 Structured-output adapters consume `ExecutionControls.OutputFormat` and publish
 confirmed native output through the existing Message contract. Register public
@@ -313,7 +353,7 @@ Initial requests, `Executor.StartTurn` and steering consume the same ordered
 `proto.MessageInput`. Text-only adapters use `TextOnly()` to reject images without
 discarding content. Image adapters translate each part natively and acknowledge
 an active batch only after all its messages are applied. Register
-`MessageImages` and qualify `MessageImagePlacements` separately; see the
+Runtime `MessageImages` and qualify the engine profile’s `MessageImages` separately; see the
 [message-input contract and real acceptance](message-input.md).
 
 Hosted workspace execution additionally requires verified preparation, workspace
@@ -321,6 +361,23 @@ reads/output export, network behavior and credential/history isolation. Reuse th
 same dedicated Runtime binding and shared Files helpers. A native Bash sandbox
 alone does not establish isolation for other native file tools. Enable a placement
 only after its required security and lifecycle behavior is demonstrated.
+
+### MCP origin and native limits
+
+Declare supported public origins in the existing engine profile's `MCPOrigins`
+and bearer support in `MCPBearer`. Runtime advertises actual HTTP, bearer and
+required-initialization capabilities. Shared admission validates origin and
+placement; adapter validation retains native label, allowlist and initialization
+limits. These are separate checks, not a second MCP executor.
+
+Consume `agent.ResolveMCPBindings` for public and installed declarations; preserve
+origin, credential authority, null versus empty allowlists and required startup.
+Do not copy tokens into native profiles or reinterpret a service request as an
+Environment request. Reject unsupported native policies instead of dropping them.
+Follow [the MCP origin contract](environments.md#public-mcp-connection-origin)
+and run public-client, failure, cancellation and cold-recovery qualification for
+each advertised combination. Model capability remains separate from Harness
+transport support; never infer it from model names or silently degrade input.
 
 ## Optional Subagent observations
 
@@ -331,6 +388,26 @@ the authenticated Run, then qualifies those facts with real execution. It does
 not add routes, storage branches or a harness-specific Core scheduler. Report
 unsupported native facts explicitly; completing a child task is not closing its
 Subagent. Native background work must remain owned through settlement and cancel.
+
+## Contract verification
+
+Run `make check-runtime-contract`, the three adapter test packages and `make check`.
+The common completeness gate covers capability omissions and interface assertions;
+adapter tests must cover actual native semantics, not only method presence.
+
+| Boundary | Existing focused evidence |
+| --- | --- |
+| Codex reuse, cancellation and unconfirmed cleanup | `codex/executor_test.go`, `terminal_cleanup_test.go`, `prepared_cancel_test.go` |
+| Codex input receipts and strict recovery | `codex/function_write_receipt_test.go`, `function_receipt_test.go`, `resume_test.go`, `recovery_test.go` |
+| Claude input ownership, cancellation and preparation cleanup | `claudesdk/executor_test.go`, `cancellation_test.go`, `preparation_test.go` |
+| MiniMax cancellation retirement, failed Start and cleanup retry | `mcode/executor_test.go`, `executor_backpressure_test.go` |
+| MiniMax native history binding | `mcode/session_test.go` |
+| Explicit refusals without native effects or fabricated results | Each adapter's `unsupported_test.go` |
+
+These paths are relative to `apps/parsar-daemon/internal/agent`. Controlled native
+transport fixtures establish failure and ownership behavior; they are not live model
+qualification. Preserve the separate native acceptance requirements in
+[Harness integration](harnesses.md#acceptance-checklist).
 
 ## Native installer participation
 

@@ -43,7 +43,7 @@ func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runti
 // helper request. The helper takes sandbox IDs from its private receipts,
 // confirms each running sandbox by its allocation labels and reads E2B's batch
 // metrics once. It never connects to, renews or changes a sandbox.
-func (p *Provider) ObserveBatch(ctx context.Context, targets []runtimeobs.Target) ([]runtimeobs.BatchResult, bool) {
+func (p *Provider) ObserveBatch(ctx context.Context, targets []runtimeobs.Target) ([]runtimeobs.BatchResult, error) {
 	results := make([]runtimeobs.BatchResult, len(targets))
 	references := make([]sandbox.Reference, 0, len(targets))
 	positions := make([]int, 0, len(targets))
@@ -60,7 +60,7 @@ func (p *Provider) ObserveBatch(ctx context.Context, targets []runtimeobs.Target
 		}
 	}
 	if len(references) == 0 {
-		return results, true
+		return results, nil
 	}
 	observations, err := p.observe(ctx, references)
 	now := p.now()
@@ -71,7 +71,7 @@ func (p *Provider) ObserveBatch(ctx context.Context, targets []runtimeobs.Target
 		}
 		results[index].Sample, results[index].Err = sampleFromObservation(observations[offset], now)
 	}
-	return results, true
+	return results, nil
 }
 
 func (p *Provider) observe(ctx context.Context, references []sandbox.Reference) ([]Observation, error) {

@@ -58,12 +58,18 @@ func (r *Router) handlePermissionDecision(ctx context.Context, env proto.Envelop
 	ctx, stop := r.shutdownContext(ctx)
 	defer stop()
 
+	if !state.capabilities.Permissions.IsSupported() {
+		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "unsupported", "The runtime declaration does not support interaction decisions.")
+	}
 	responder, supported := session.(agent.PermissionResponder)
 	if !supported {
 		r.dropPermission(state, env.ID)
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "unsupported", "runtime does not support permission responses")
+		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "contract_violation", "Declared runtime capability does not implement permission responses")
 	}
 	if err := responder.SubmitPermission(ctx, env.ID, payload); err != nil {
+		if errors.Is(err, agent.ErrUnsupportedOperation) {
+			return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "contract_violation", "Declared permission capability has no implementation.")
+		}
 		if errors.Is(err, agent.ErrUnknownPermission) {
 			r.log.InfoContext(ctx, "agent reports unknown perm (race with cancel)", "perm_id", env.ID, "run_id", runID)
 			r.dropPermission(state, env.ID)
@@ -139,13 +145,19 @@ func (r *Router) handlePromptForUserChoiceDecision(ctx context.Context, env prot
 	ctx, stop := r.shutdownContext(ctx)
 	defer stop()
 
+	if !state.capabilities.Permissions.IsSupported() {
+		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "unsupported", "The runtime declaration does not support interaction decisions.")
+	}
 	responder, supported := session.(agent.UserChoiceResponder)
 	if !supported {
 		r.dropAsk(state, env.ID)
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "unsupported", "runtime does not support user-choice responses")
+		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "contract_violation", "Declared runtime capability does not implement user-choice responses")
 	}
 	err = responder.SubmitPromptForUserChoice(ctx, env.ID, payload)
 	if err != nil {
+		if errors.Is(err, agent.ErrUnsupportedOperation) {
+			return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "contract_violation", "Declared user-choice capability has no implementation.")
+		}
 		if errors.Is(err, agent.ErrUnknownAsk) {
 			r.log.InfoContext(ctx, "agent reports unknown ask (race with cancel)", "ask_id", env.ID, "run_id", runID)
 			r.dropAsk(state, env.ID)

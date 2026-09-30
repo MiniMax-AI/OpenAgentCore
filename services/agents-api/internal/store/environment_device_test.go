@@ -19,9 +19,9 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			bound := workerEnvironmentReservation(t, h)
 			originalRuntime := h.environments[bound.SessionID]
 			caps := workerEnvironmentCapabilities()
-			caps.Preparation = missing != "preparation"
-			caps.LocalEnvironment = missing != "local_environment"
-			caps.DurableInputReceipts = missing != "durable_input_receipts"
+			caps.Preparation = proto.CapabilityFromBool(missing != "preparation")
+			caps.LocalEnvironment = proto.CapabilityFromBool(missing != "local_environment")
+			caps.DurableInputReceipts = proto.CapabilityFromBool(missing != "durable_input_receipts")
 			awaitFixtureCapabilities(t, originalRuntime, caps)
 			generalFrames := workerFrames(t, h)
 			boundFrames := workerFrames(t, originalRuntime)

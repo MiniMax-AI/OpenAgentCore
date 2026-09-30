@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestMCPHTTPBearerCapabilitySurvivesHeartbeatMapping(t *testing.T) {
 	for _, supported := range []bool{false, true} {
 		heartbeat := proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true,
-			Capabilities: proto.AgentKindCapabilities{MCPHTTPTools: true, MCPHTTPBearerAuth: supported}}}}
+			Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilityFromBool(supported)})}}}
 		raw, err := json.Marshal(heartbeat)
 		if err != nil || strings.Contains(string(raw), `"mcp_http_bearer_auth":true`) != supported {
 			t.Fatal("wire capability changed", err)
@@ -31,7 +32,7 @@ func TestMCPHTTPBearerCapabilitySurvivesHeartbeatMapping(t *testing.T) {
 
 func TestMCPRequiredCapabilityIsExplicit(t *testing.T) {
 	for _, supported := range []bool{false, true} {
-		heartbeat := proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{MCPHTTPTools: true, MCPHTTPBearerAuth: true, MCPHTTPRequired: supported}}}}
+		heartbeat := proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilityFromBool(supported)})}}}
 		raw, err := json.Marshal(heartbeat)
 		if err != nil || strings.Contains(string(raw), `"mcp_http_required":true`) != supported {
 			t.Fatal("wire capability differs", err)

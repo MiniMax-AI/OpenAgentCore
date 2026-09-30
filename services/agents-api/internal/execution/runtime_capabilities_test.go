@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -74,12 +73,5 @@ func TestRuntimeCapabilitiesConfirmedAndUnknownFailures(t *testing.T) {
 	err := runRuntimeSetup(t.Context(), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{}})
 	if err == nil || bytes.Contains([]byte(err.Error()), []byte(setupCanary)) {
 		t.Fatal("transport error leaked or succeeded", err)
-	}
-}
-func TestRuntimeInitializationWaitsForMissingSocket(t *testing.T) {
-	lifecycle := runtimeLifecycle{registry: gateway.NewRegistry()}
-	peer, err := lifecycle.initializationPeer(t.Context(), store.RuntimeAllocation{DeviceID: uuid.NewString()})
-	if err != nil || peer != nil || lifecycle.initializing != nil {
-		t.Fatal("missing socket became initialization failure", peer, err)
 	}
 }

@@ -74,9 +74,6 @@ func (r *Registry) SupportedAgentKinds() []proto.SupportedAgentKind {
 	out := make([]proto.SupportedAgentKind, 0, len(r.factories))
 	for kind := range r.factories {
 		info := r.kinds[kind]
-		if info.Kind == "" {
-			info = proto.SupportedAgentKind{Kind: kind, Available: true}
-		}
 		out = append(out, info)
 	}
 	slices.SortFunc(out, func(a, b proto.SupportedAgentKind) int {

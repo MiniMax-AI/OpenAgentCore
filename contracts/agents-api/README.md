@@ -15,8 +15,9 @@ the boundary; it does not imply that every upstream feature is implemented.
 `scripts/extract-agents-api-upstream.py` (run it with the pinned SDK installed).
 Contract tests require `openapi.yaml` and the live router to have exactly those
 method and path pairs, every query parameter to be official, and every other
-field to sit inside `x_agents_core` on Agents and Sessions, whose only members are
-`harness` and `model_provider`.
+field to sit inside `x_agents_core` on Agents and Sessions. The
+[API index](../../docs/api/README.md) identifies the extension fields; request and
+response types live in [`v1/`](v1/).
 
 Parsar owns product Agents and Teams. This service owns upstream execution
 resources, including reusable Agents and protocol subagents. The OpenAI Agents
@@ -31,10 +32,8 @@ with official observations separated from Core acceptance.
 ## Implementation direction
 
 Keep the independent service, authentication, PostgreSQL/sqlc persistence,
-transactional admission and official-client test harness. Replace the parts that
-let legacy daemon representations define execution semantics. Starting over is
-permitted where a replacement is smaller and clearer; neither a wholesale rewrite
-nor compatibility with the old private implementation is a goal.
+transactional admission and official-client test harness. Shared Runtime contracts
+define execution semantics; native representations stay inside adapters.
 
 Concentrate native configuration, structured input/output and Item translation
 in an execution adapter. The application core owns execution state and persistence;
@@ -443,7 +442,10 @@ upgrade the protocol.
   exact hosted error semantics remain gaps.
 
 [Environment Templates](environment-templates.md) provide tenant-owned CRUD/list
-and immutable Session resolution through the same hosted initialization. They do not
+and immutable Session resolution through common Environment preparation.
+The `x_agents_core.environment` extension supplies that configuration to either
+placement; self-hosted machines never need a managed allocation. See
+[shared preparation qualification](environment-preparation-qualification.md). They do not
 select an E2B image or make unsupported initialization executable.
 The supported Docker configuration has [composed real acceptance](environment-templates.md#composed-initialization-acceptance)
 across the three harnesses, including frozen source deletion, cold continuation
@@ -478,16 +480,18 @@ operation and placement; native support is not public admission by itself.
 
 | Engine | Qualified placements and limits |
 | --- | --- |
-| `codex` (default) | Qualified `none` and Docker `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none` only; verbosity follows native policy |
-| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text or successful inline PNG/JPEG results; qualified anonymous/static-bearer service-origin HTTP MCP on `none` |
-| `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
+| `codex` (default) | Qualified `none` and Docker `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none` only; Environment-origin HTTP uses the common workspace path; verbosity follows native policy |
+| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text or successful inline PNG/JPEG results; anonymous/static-bearer HTTP MCP on `none` (service origin) or a workspace (Environment origin), subject to qualification |
+| `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; Environment-origin HTTP MCP with null/omitted allowlist and optional initialization; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
 
 All three profiles implement user-managed `self_hosted` enrollment at `/workspace`
 through our private daemon transport; [separate real acceptance](user-managed-runtime-v1.md)
 records qualified deployments and limits. A `self_hosted` Session supplies its own
 model provider in the request or through a saved Agent; deployment defaults apply
 to `openai_hosted` and `none`, never to `self_hosted` ([model execution](model-execution.md)). Service-origin HTTP MCP is rejected on `self_hosted` and hosted local
-placements. This does not remove separately qualified Environment Plugin MCP.
+placements. Explicit Environment-origin HTTP declarations use the same Runtime
+binding path as Plugin MCP; see the [origin matrix](environments.md#public-mcp-connection-origin)
+and [public qualification](public-mcp-qualification.md).
 The [Docker lifecycle](environments.md#basic-public-docker-hosted-profile) retains
 workspace Files/Artifacts, cancellation and recovery. Managed isolation belongs to
 the outer Environment; native tools use the starting account's permissions.
@@ -504,7 +508,7 @@ unsupported startup installations, unqualified restricted hostname forms and hos
 service-origin HTTP MCP remain outside these accepted profiles. Environment-origin
 MCP Plugins have a separate [Docker qualification and transport matrix](environment-templates.md#environment-origin-mcp-plugins):
 stdio on all three harnesses, Codex HTTP with literal headers or HTTPS bearer,
-and Claude anonymous HTTP or HTTPS bearer without literal headers. This batch
+and Claude/MiniMax anonymous HTTP or HTTPS bearer without literal headers. This batch
 does not qualify those new Plugin paths on E2B. MiniMax's private workspace MCP
 bridge remains internal transport, distinct from installed Environment MCP servers.
 
@@ -735,8 +739,8 @@ adds type-only `tool_search` for its qualified profile. Other discovery combinat
 the native 64-definition cap and nonblank names of at most 512 bytes remain
 compatibility gaps; repeated names and explicit non-object root types reject as
 officially. Claude SDK additionally requires an explicit object root. It accepts text and
-successful inline PNG/JPEG function results on `none` and Docker `openai_hosted`;
-failed images, unqualified placements and remote references
+successful inline PNG/JPEG function results on `none`, Docker `openai_hosted` and `self_hosted`;
+failed images and remote references
 remain gaps. See [function image coverage](function-result-images.md). Codex internal Goal/Skills/user-input/discovery semantics need
 upstream evidence; their presence alone does not prove a tool-set mismatch.
 

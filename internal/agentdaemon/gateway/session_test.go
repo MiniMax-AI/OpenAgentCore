@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 // fakeConn is the WSConn implementation used by session + registry
@@ -383,25 +384,25 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 				Kind:      "opencode",
 				Available: false,
 				Version:   "missing",
-				Capabilities: proto.AgentKindCapabilities{
-					Streaming: true,
-				},
+				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+					Streaming: proto.CapabilitySupported,
+				}),
 			},
 			{
 				Kind:      "claude_code",
 				Available: true,
 				Version:   "1.2.3",
-				Capabilities: proto.AgentKindCapabilities{
-					Streaming:   true,
-					Permissions: true,
-					Usage:       true,
-					Resume:      true,
-				},
+				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+					Streaming:   proto.CapabilitySupported,
+					Permissions: proto.CapabilitySupported,
+					Usage:       proto.CapabilitySupported,
+					Resume:      proto.CapabilitySupported,
+				}),
 			},
 			{
 				Kind:         "codex",
 				Available:    true,
-				Capabilities: proto.AgentKindCapabilities{MCPHTTPTools: true, Steering: true, MessageItems: true, ToolItems: true, ToolObservations: true, EnvironmentNone: true, WebSearchControl: true, TextVerbosity: true, ExecutionControls: true, SubagentControl: true},
+				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, Steering: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported}),
 			},
 		},
 	})
@@ -427,7 +428,7 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 	if opencode.Available || opencode.Version != "missing" || !opencode.Capabilities.Streaming {
 		t.Fatalf("opencode descriptor not converted: %#v", opencode)
 	}
-	if !byKind["codex"].Capabilities.ExecutionControls || claude.Capabilities.ExecutionControls || opencode.Capabilities.ExecutionControls || !byKind["codex"].Capabilities.ToolObservations || claude.Capabilities.ToolObservations || opencode.Capabilities.ToolObservations || !byKind["codex"].Capabilities.SubagentControl || claude.Capabilities.SubagentControl || opencode.Capabilities.SubagentControl || !byKind["codex"].Capabilities.TextVerbosity || claude.Capabilities.TextVerbosity || opencode.Capabilities.TextVerbosity || !byKind["codex"].Capabilities.WebSearchControl || claude.Capabilities.WebSearchControl || opencode.Capabilities.WebSearchControl || !byKind["codex"].Capabilities.EnvironmentNone || claude.Capabilities.EnvironmentNone || opencode.Capabilities.EnvironmentNone || !byKind["codex"].Capabilities.ToolItems || claude.Capabilities.ToolItems || opencode.Capabilities.ToolItems || !byKind["codex"].Capabilities.MessageItems || !byKind["codex"].Capabilities.Steering || claude.Capabilities.Steering || opencode.Capabilities.Steering {
+	if !byKind["codex"].Capabilities.ExecutionControls || claude.Capabilities.ExecutionControls || opencode.Capabilities.ExecutionControls || !byKind["codex"].Capabilities.ToolObservations || claude.Capabilities.ToolObservations || opencode.Capabilities.ToolObservations || !byKind["codex"].Capabilities.SubagentControl || claude.Capabilities.SubagentControl || opencode.Capabilities.SubagentControl || !byKind["codex"].Capabilities.TextVerbosity || claude.Capabilities.TextVerbosity || opencode.Capabilities.TextVerbosity || !byKind["codex"].Capabilities.WebSearchControl || claude.Capabilities.WebSearchControl || opencode.Capabilities.WebSearchControl || !byKind["codex"].Capabilities.EnvironmentNone || claude.Capabilities.EnvironmentNone || opencode.Capabilities.EnvironmentNone || !byKind["codex"].Capabilities.MessageItems || !byKind["codex"].Capabilities.Steering || claude.Capabilities.Steering || opencode.Capabilities.Steering {
 		t.Fatalf("steering capability not preserved: %#v", byKind)
 	}
 	if !byKind["codex"].Capabilities.MCPHTTPTools || claude.Capabilities.MCPHTTPTools || opencode.Capabilities.MCPHTTPTools {

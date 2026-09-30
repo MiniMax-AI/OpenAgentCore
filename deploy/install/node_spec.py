@@ -25,17 +25,47 @@ def release(manifest):
             "firmware_sha256": manifest["microsandbox"]["firmware_sha256"]}
 
 
-def digest(provider, specification):
+# BEGIN GENERATED DEPLOYMENT CONTRACT
+# Generated from sandbox/deployment_contract.go; do not edit.
+_CONTRACT = json.loads("{\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"disk\":false,\"runtime\":true},\"e2b\":{\"disk\":false,\"runtime\":false},\"microsandbox\":{\"disk\":true,\"runtime\":true}},\"minimum_disk\":1024}")
+# END GENERATED DEPLOYMENT CONTRACT
+
+
+def canonical_spec(provider, specification, validate=True):
+    rules = _CONTRACT["providers"][provider]
+    if validate and (not isinstance(specification, dict) or set(specification) != ({"resources", "runtime"} if rules["runtime"] else {"resources"})):
+        raise ValueError("Invalid specification fields")
     resources = specification["resources"]
-    ordered = {"cpus": resources["cpus"], "memory_mib": resources["memory_mib"]}
-    for field in ("root_disk_mib", "environment_disk_mib"):
-        if resources.get(field):
-            ordered[field] = resources[field]
-    runtime = specification["runtime"]
-    ordered_runtime = {key: runtime[key] for key in ("source_commit", "image_id", "image_manifest_digest",
-                                                    "microsandbox_ref", "runtime_sha256", "firmware_sha256")}
-    raw = json.dumps({"provider": provider, "resources": ordered, "runtime": ordered_runtime},
-                     separators=(",", ":"), ensure_ascii=False).encode()
+    if validate and (not isinstance(resources, dict) or set(resources) - {rule["name"] for rule in _CONTRACT["resources"]}):
+        raise ValueError("Invalid resource fields")
+    ordered = {}
+    for rule in _CONTRACT["resources"]:
+        name = rule["name"]
+        value = resources.get(name, 0) if rule["omit_zero"] else resources[name]
+        minimum, maximum = rule["min"], rule["max"]
+        if rule["omit_zero"]:
+            minimum, maximum = (_CONTRACT["minimum_disk"], maximum) if rules["disk"] else (0, 0)
+        if validate and (type(value) is not int or not minimum <= value <= maximum):
+            raise ValueError("Invalid resource value")
+        if value or not rule["omit_zero"]:
+            ordered[name] = value
+    result = {"provider": provider, "resources": ordered}
+    if rules["runtime"]:
+        runtime = specification["runtime"]
+        if validate and (not isinstance(runtime, dict) or set(runtime) != {rule["name"] for rule in _CONTRACT["runtime"]}):
+            raise ValueError("Invalid release fields")
+        ordered_runtime = {}
+        for rule in _CONTRACT["runtime"]:
+            value = runtime[rule["name"]]
+            if validate and (not isinstance(value, str) or not re.fullmatch(rule["pattern"], value)):
+                raise ValueError("Invalid release identity")
+            ordered_runtime[rule["name"]] = value
+        result["runtime"] = ordered_runtime
+    return result
+
+
+def digest(provider, specification):
+    raw = json.dumps(canonical_spec(provider, specification, validate=False), separators=(",", ":"), ensure_ascii=False).encode()
     return hashlib.sha256(raw).hexdigest()
 
 
@@ -51,26 +81,7 @@ def validate(data, args):
                 or type(data["max_active"]) is not int or type(data["max_retained"]) is not int
                 or not 1 <= data["max_active"] <= data["max_retained"] <= 1000000):
             raise ValueError()
-        resources = spec["resources"]
-        if (not {"cpus", "memory_mib"}.issubset(resources)
-                or set(resources) - {"cpus", "memory_mib", "root_disk_mib", "environment_disk_mib"}
-                or any(type(value) is not int for value in resources.values())
-                or not 1 <= resources["cpus"] <= 255 or not 512 <= resources["memory_mib"] <= 1048576):
-            raise ValueError()
-        for field in ("root_disk_mib", "environment_disk_mib"):
-            if provider == "microsandbox":
-                if not 1024 <= resources.get(field, 0) <= 4294967295:
-                    raise ValueError()
-            elif resources.get(field, 0) != 0:
-                raise ValueError()
-        runtime = spec["runtime"]
-        patterns = {"source_commit": r"[0-9a-f]{40}", "image_id": r"sha256:[0-9a-f]{64}",
-                    "image_manifest_digest": r"sha256:[0-9a-f]{64}",
-                    "microsandbox_ref": r"oac-runtime@sha256:[0-9a-f]{64}",
-                    "runtime_sha256": r"[0-9a-f]{64}", "firmware_sha256": r"[0-9a-f]{64}"}
-        if set(runtime) != set(patterns) or any(not isinstance(runtime[key], str) or not re.fullmatch(pattern, runtime[key])
-                                               for key, pattern in patterns.items()):
-            raise ValueError()
+        canonical_spec(provider, spec)
         if data["specification_digest"] != digest(provider, spec):
             raise ValueError()
     except (KeyError, ValueError, TypeError, AttributeError):

@@ -505,23 +505,6 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(install.InstallError, "node payload differs"):
             install.prepare_node_payload(self.root, self.document("state.json"), self.bundle)
 
-    def test_node_payload_upgrade_retains_immutable_old_release(self):
-        self.install()
-        payload = self.root / "node-payload"
-        old = payload / "releases" / ("a" * 40)
-        snapshot = {str(p.relative_to(old)): p.read_bytes() for p in old.rglob("*") if p.is_file()}
-        manifest = dict(MANIFEST, source_commit="b" * 40)
-        bundle, _ = make_bundle(self.work / "bundle-b", manifest)
-        install.prepare_node_payload(self.root, self.document("state.json"), bundle, replace=True)
-        self.assertEqual(json.loads((payload / "active.json").read_text()), {"source_commit": "b" * 40})
-        self.assertEqual(snapshot, {str(p.relative_to(old)): p.read_bytes() for p in old.rglob("*") if p.is_file()})
-        self.assertTrue((payload / "releases" / ("b" * 40) / "node-install.pyz").is_file())
-        # A changed release cannot overwrite its immutable name or publication.
-        (bundle / "node-install.pyz").write_text("changed release")
-        with self.assertRaisesRegex(install.InstallError, "node payload differs"):
-            install.prepare_node_payload(self.root, self.document("state.json"), bundle, replace=True)
-        self.assertEqual(json.loads((payload / "active.json").read_text()), {"source_commit": "b" * 40})
-
     def test_legacy_flat_payload_is_refused_without_conversion(self):
         import shutil
         self.install()
@@ -537,7 +520,7 @@ class InstallerTests(unittest.TestCase):
         bundle, _ = make_bundle(self.work / "bundle-b", dict(MANIFEST, source_commit="b" * 40))
         before = self.snapshot()
         with self.assertRaisesRegex(install.InstallError, "not supported;.*reinstall"):
-            install.prepare_node_payload(self.root, self.document("state.json"), bundle, replace=True)
+            install.prepare_node_payload(self.root, self.document("state.json"), bundle)
         self.assertEqual(before, self.snapshot())
 
     def test_bundle_verifies_transferred_bytes_and_checksum_list(self):

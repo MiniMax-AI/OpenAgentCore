@@ -58,7 +58,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		})
 	}
 	t.Cleanup(stop)
-	selection := store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
+	selection := store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
 	if _, err := worker.InitializeSandboxDeployment(t.Context(), selection); err != nil {
 		t.Fatal(err)
 	}

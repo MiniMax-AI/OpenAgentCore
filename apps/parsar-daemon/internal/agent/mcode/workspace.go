@@ -57,18 +57,21 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	if !req.StrictResume || req.LocalEnvironment == nil || req.WorkDir != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("mcode: execution does not match the dedicated workspace")
 	}
-	servers, err := environmentMCP(req.LocalEnvironment)
+	servers, err := runtimeMCP(req)
 	if err != nil {
 		return launchOptions{}, err
 	}
-	// Reuse public option validation and private Session state provisioning. Native
-	// cwd remains private; only the internal MCP worker receives the public workspace.
+	// Reuse public option validation and private Session state provisioning.
+	// The native process, ACP Session and workspace tools share the declared cwd.
 	private := req
 	private.LocalEnvironment, private.WorkDir, private.DisableExecutionEnvironment = nil, "", true
+	// Public declarations have already been resolved into the transient ACP map.
+	private.MCPHTTPServers = nil
 	opts, err := prepareOptionsWithSkills(ctx, private, false)
 	if err != nil {
 		return opts, err
 	}
+	opts.Dir = c.Directory
 	if len(req.LocalEnvironment.Skills) > 0 {
 		root := filepath.Join(opts.DataDir, "skills")
 		if err := os.MkdirAll(root, 0700); err != nil {
@@ -99,6 +102,17 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	}
 	config["permissionMode"] = "bypassPermissions"
 	config["sandbox"] = map[string]bool{"enabled": false}
+	if len(req.LocalEnvironment.Skills) > 0 {
+		selected := config["agents"].(map[string]any)["default"].(map[string]any)
+		names := make([]string, 0, len(req.LocalEnvironment.Skills))
+		for _, skill := range req.LocalEnvironment.Skills {
+			names = append(names, skill.Metadata.Name)
+		}
+		selected["skills"] = names
+		for _, key := range []string{"tools", "builtinTools"} {
+			selected[key] = append(selected[key].([]any), "skill")
+		}
+	}
 	raw, err = json.Marshal(config)
 	if err != nil {
 		return opts, err
@@ -110,11 +124,13 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 
 	profile["workspace"] = c.Directory
 	{
-		values, err := localworkspace.ReadOptionalToolEnvironment()
+		file, err := localworkspace.ToolEnvironmentFile()
 		if err != nil {
 			return opts, err
 		}
-		profile["toolEnv"] = values
+		if file != "" {
+			profile["toolEnvFile"] = file
+		}
 	}
 
 	raw, err = json.Marshal(profile)

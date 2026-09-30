@@ -10,12 +10,13 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/authoring"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestPreparationRegistrationBypassesProductWrappers(t *testing.T) {
 	for _, supported := range []bool{false, true} {
 		reg := agent.NewRegistry()
-		registerAgentKinds(reg, agentCLIDiscovery{Codex: proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{LocalEnvironment: supported}}, ClaudeCode: proto.SupportedAgentKind{Kind: "claude_code"}, OpenCode: proto.SupportedAgentKind{Kind: "opencode"}, Pi: proto.SupportedAgentKind{Kind: "pi"}, MCode: proto.SupportedAgentKind{Kind: "mcode"}}, "http://unreachable.invalid")
+		registerAgentKinds(reg, agentCLIDiscovery{Codex: proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilityFromBool(supported)})}, ClaudeCode: proto.SupportedAgentKind{Kind: "claude_code", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, OpenCode: proto.SupportedAgentKind{Kind: "opencode", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, Pi: proto.SupportedAgentKind{Kind: "pi", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, MCode: proto.SupportedAgentKind{Kind: "mcode", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}, "http://unreachable.invalid")
 		_, err := reg.ResolvePreparation("codex")
 		if (err == nil) != supported {
 			t.Fatal("unverified native version advertised preparation")
@@ -39,11 +40,11 @@ func TestPreparationRegistrationBypassesProductWrappers(t *testing.T) {
 			t.Fatal("raw preparation was lost or wrapped", err)
 		}
 		for _, info := range wrapped.SupportedAgentKinds() {
-			if info.Kind == "codex" && (!info.Capabilities.Preparation || !info.Capabilities.WorkspaceReadPreparation) {
+			if info.Kind == "codex" && (!info.Capabilities.Preparation.IsSupported() || !info.Capabilities.WorkspaceReadPreparation.IsSupported()) {
 				t.Fatal("real heartbeat registry lost preparation")
 			}
 		}
-		wrapped.Register("codex", harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		wrapped.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 			return nil, stop
 		})
 		if _, err := wrapped.ResolvePreparation("codex"); err == nil {

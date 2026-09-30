@@ -72,6 +72,7 @@ the [architecture guide](docs/architecture.md).
 | Build an application on the API | [Quickstart](docs/getting-started/quickstart.md), then the [Agents API guide](docs/api/public-agent-api.md) |
 | See a complete application | [Examples](docs/examples.md) |
 | Run agents on my own machine | [Self-hosted execution](docs/getting-started/self-hosted.md) |
+| Check verified Runtime capabilities and limits | [Capability qualification](contracts/agents-api/environment-capabilities-qualification.md) |
 | Understand the design | [Architecture](docs/architecture.md) |
 | Add a sandbox, harness or other component | [Developer guide](docs/development.md) |
 

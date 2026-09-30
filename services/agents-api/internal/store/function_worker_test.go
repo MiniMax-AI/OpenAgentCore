@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -44,7 +45,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				caps := proto.AgentKindCapabilities{Preparation: missing != "preparation", Streaming: true, Steering: true, DurableTurns: true, DurableInputReceipts: missing != "durable_input_receipts", EnvironmentNone: true, WebSearchControl: true, TextVerbosity: true, ExecutionControls: missing != "execution_controls", SubagentControl: true, ToolObservations: missing != "tool_observations", MCPHTTPTools: missing != "mcp_http_tools", MCPHTTPRequired: missing != "mcp_http_required", MCPHTTPBearerAuth: missing != "mcp_http_bearer_auth", FunctionTools: missing != "function_tools" && !isMCP}
+				caps := prototest.Capabilities(proto.AgentKindCapabilities{Preparation: proto.CapabilityFromBool(missing != "preparation"), Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilityFromBool(missing != "durable_input_receipts"), EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilityFromBool(missing != "execution_controls"), SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilityFromBool(missing != "tool_observations"), MCPHTTPTools: proto.CapabilityFromBool(missing != "mcp_http_tools"), MCPHTTPRequired: proto.CapabilityFromBool(missing != "mcp_http_required"), MCPHTTPBearerAuth: proto.CapabilityFromBool(missing != "mcp_http_bearer_auth"), FunctionTools: proto.CapabilityFromBool(missing != "function_tools" && !isMCP)})
 				heartbeat := func() {
 					h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 				}
@@ -53,7 +54,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				for {
 					peer, _ := h.registry.LookupDevice(h.device.ID)
 					info, _, _ := peer.AgentKindStatus("codex")
-					if info.Capabilities.Preparation == caps.Preparation && info.Capabilities.DurableInputReceipts == caps.DurableInputReceipts && info.Capabilities.ExecutionControls == caps.ExecutionControls && info.Capabilities.FunctionTools == caps.FunctionTools && info.Capabilities.ToolObservations == caps.ToolObservations && info.Capabilities.MCPHTTPTools == caps.MCPHTTPTools && info.Capabilities.MCPHTTPBearerAuth == caps.MCPHTTPBearerAuth && info.Capabilities.MCPHTTPRequired == caps.MCPHTTPRequired {
+					if info.Capabilities.Preparation == caps.Preparation.IsSupported() && info.Capabilities.DurableInputReceipts == caps.DurableInputReceipts.IsSupported() && info.Capabilities.ExecutionControls == caps.ExecutionControls.IsSupported() && info.Capabilities.FunctionTools == caps.FunctionTools.IsSupported() && info.Capabilities.ToolObservations == caps.ToolObservations.IsSupported() && info.Capabilities.MCPHTTPTools == caps.MCPHTTPTools.IsSupported() && info.Capabilities.MCPHTTPBearerAuth == caps.MCPHTTPBearerAuth.IsSupported() && info.Capabilities.MCPHTTPRequired == caps.MCPHTTPRequired.IsSupported() {
 						break
 					}
 					if time.Now().After(deadline) {
@@ -88,8 +89,8 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 						t.Fatal("bound an incapable device", err)
 					}
 				}
-				caps.Preparation, caps.DurableInputReceipts, caps.ExecutionControls, caps.ToolObservations, caps.MCPHTTPTools = true, true, true, true, true
-				caps.MCPHTTPBearerAuth, caps.FunctionTools, caps.MCPHTTPRequired = true, !isMCP, true
+				caps.Preparation, caps.DurableInputReceipts, caps.ExecutionControls, caps.ToolObservations, caps.MCPHTTPTools = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
+				caps.MCPHTTPBearerAuth, caps.FunctionTools, caps.MCPHTTPRequired = proto.CapabilitySupported, proto.CapabilityFromBool(!isMCP), proto.CapabilitySupported
 				heartbeat()
 				request := h.read(testExecutionRequest)
 				var prompt proto.PromptRequestPayload

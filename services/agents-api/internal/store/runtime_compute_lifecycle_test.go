@@ -15,6 +15,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -181,6 +182,11 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 	header := http.Header{"Authorization": []string{"Bearer " + b.Credential}}
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, p.endpoint+"?device_id="+b.DeviceID+"&version="+proto.Version, header)
 	if err != nil {
+		return err
+	}
+	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
+	if err := conn.WriteJSON(heartbeat); err != nil {
+		conn.Close()
 		return err
 	}
 	p.mu.Lock()

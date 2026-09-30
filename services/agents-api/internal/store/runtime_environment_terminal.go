@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// provisioningFailureReason is the safe reason for a hosted Environment that
+// provisioningFailureReason is the safe reason for an Environment that
 // failed without a confirmed failed step: timeouts, unknown effects, missing or
 // old receipts, bootstrap rejection and Core restart during initialization.
 const provisioningFailureReason = "Failed to provision environment: initialization did not complete"
@@ -23,9 +23,10 @@ const (
 	ProvisioningNPMPackages    = "npm"
 	ProvisioningInitialFile    = "file"
 	ProvisioningSkill          = "skill"
+	ProvisioningHarness        = "harness"
 )
 
-// ProvisioningFailure identifies a confirmed failed hosted initialization step.
+// ProvisioningFailure identifies a confirmed failed initialization step.
 // It cannot carry Runtime output: Step selects a fixed label, Index is the setup
 // command position and ExitCode is the Runtime-reported status (0 when absent).
 type ProvisioningFailure struct {
@@ -51,13 +52,15 @@ func (f ProvisioningFailure) reason() string {
 		return fmt.Sprintf("Failed to provision environment: script %q failed with exit code %d", label, f.ExitCode)
 	case f.Step == ProvisioningInitialFile:
 		return "Failed to provision environment: initial file installation failed"
+	case f.Step == ProvisioningHarness:
+		return "Failed to prepare environment: the selected Harness is unavailable. Install the supported Harness version on the Runtime and create a new Session."
 	case f.Step == ProvisioningSkill:
 		return "Failed to provision environment: Skill installation failed"
 	}
 	return provisioningFailureReason
 }
 
-// EnvironmentFailure is a hosted Environment's recorded provisioning failure. It
+// EnvironmentFailure is an Environment's recorded provisioning failure. It
 // makes the Session failed with this reason and last activity time.
 type EnvironmentFailure struct {
 	Reason   string                     `json:"reason"`
@@ -88,7 +91,7 @@ func terminateRuntimeEnvironment(ctx context.Context, q *sqlc.Queries, current s
 	}
 	terminal := row.Environment.Status == "expired" || row.Environment.Status == "failed"
 	if !terminal && !current.Expired {
-		return failHostedEnvironment(ctx, q, row, current.SessionID, reason, detail, cancel)
+		return failEnvironment(ctx, q, row, current.SessionID, reason, detail, cancel)
 	}
 	return withEnvironmentInputActivity(ctx, q, current.SessionID, func() error {
 		if !terminal {
@@ -103,12 +106,12 @@ func terminateRuntimeEnvironment(ctx context.Context, q *sqlc.Queries, current s
 	})
 }
 
-// failHostedEnvironment records, in the caller's transaction and in the observed
+// failEnvironment records, in the caller's transaction and in the observed
 // official order, agent.session.environment.failed, an error event carrying the
 // safe reason, then one agent.session.failed snapshot. The snapshot captures the
 // settled input activity, Usage and the failure, matching later Session reads.
 // Pending input settles as failed exactly as before.
-func failHostedEnvironment(ctx context.Context, q *sqlc.Queries, row sqlc.GetSessionEnvironmentRow, session pgtype.UUID, reason string, detail *ProvisioningFailureDetail, cancel func() error) error {
+func failEnvironment(ctx context.Context, q *sqlc.Queries, row sqlc.GetSessionEnvironmentRow, session pgtype.UUID, reason string, detail *ProvisioningFailureDetail, cancel func() error) error {
 	var rawDetail []byte
 	if detail != nil {
 		var err error

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestPreparationSubscriptionHasNoRunIdentityAndOrdersRevisions(t *testing.T) {
@@ -77,7 +78,7 @@ func TestPreparationCloseAndOverflowDoNotInventRunEvents(t *testing.T) {
 }
 
 func TestPreparationCapabilitySurvivesHeartbeatMapping(t *testing.T) {
-	kinds := deviceKindsFromHeartbeat(proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: proto.AgentKindCapabilities{Preparation: true, LocalEnvironment: true, WorkspaceReadPreparation: true, NativeSessionRecovery: true}}}})
+	kinds := deviceKindsFromHeartbeat(proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Preparation: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported})}}})
 	if len(kinds) != 1 || (!kinds[0].Capabilities.Preparation || !kinds[0].Capabilities.LocalEnvironment || !kinds[0].Capabilities.WorkspaceReadPreparation || !kinds[0].Capabilities.NativeSessionRecovery) {
 		t.Fatal("preparation capability lost")
 	}

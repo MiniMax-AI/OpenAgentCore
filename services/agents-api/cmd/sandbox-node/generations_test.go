@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
 
-	providerconfig "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/config"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	providerconfig "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 )
 
 func TestGenerationJournalRestartIdentity(t *testing.T) {

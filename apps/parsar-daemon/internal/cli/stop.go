@@ -42,7 +42,7 @@ func runStop(ctx *runContext, args []string) error {
 	}
 
 	fmt.Fprintf(ctx.stdout, "oac-daemon: requesting stop for pid=%d\n", pid)
-	if err := daemonize.StopPIDFile(pidPath, killTimeout); err != nil {
+	if err := daemonize.StopPIDFile(pidPath, stopTimeout); err != nil {
 		return fmt.Errorf("stop: signal: %w", err)
 	}
 	fmt.Fprintln(ctx.stdout, "oac-daemon: stopped")

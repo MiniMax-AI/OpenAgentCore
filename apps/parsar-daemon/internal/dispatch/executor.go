@@ -16,6 +16,7 @@ import (
 const executorIdleCapacity = 16
 
 type executorState struct {
+	capabilities                           proto.AgentKindCapabilities
 	id, sessionID, environmentID, stateKey string
 	fingerprint                            [32]byte
 	native                                 agent.Executor
@@ -47,16 +48,19 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if strings.TrimSpace(input.SessionID) == "" || req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.WorkspaceAuthoring || req.AgentStateKey != "agents-api-"+input.SessionID || !req.StrictResume {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	caps := r.availableCapabilities(req.AgentKind)
+	caps, available := r.availableCapabilities(req.AgentKind)
+	if !available {
+		return r.rejectPreparation(env, "resource_unavailable")
+	}
 	factory, err := r.registry.ResolveExecutor(req.AgentKind)
-	if err != nil || !caps.Preparation {
+	if err != nil || !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
 	req, err = r.localWorkspace.Configure(req)
 	if err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools {
+	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_configuration")
 	}
 	fingerprint, err := executorFingerprint(req)
@@ -137,12 +141,12 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 			return r.rejectPreparation(env, "executor_capacity")
 		}
 		ownerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-		owner = &executorState{id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, ctx: ownerCtx, cancel: cancel, preparing: true, nativeID: req.AgentSessionID}
+		owner = &executorState{capabilities: caps, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, ctx: ownerCtx, cancel: cancel, preparing: true, nativeID: req.AgentSessionID}
 		r.executors[input.SessionID] = owner
 		r.log.Info("executor owner_created", "executor_id", owner.id, "session_id", owner.sessionID)
 	}
 	operation, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{requestID: env.ID, trace: env.Trace, fingerprint: requestFingerprint, ctx: operation, cancel: cancel, stateKey: req.AgentStateKey, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: owner.capabilities, requestID: env.ID, trace: env.Trace, fingerprint: requestFingerprint, ctx: operation, cancel: cancel, stateKey: req.AgentStateKey, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
 	state := "preparing"
 	if reused {
 		state = "ready"

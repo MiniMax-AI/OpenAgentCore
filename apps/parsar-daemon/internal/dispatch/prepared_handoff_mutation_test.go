@@ -104,7 +104,7 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 			case "choice":
 				session.out <- mustEnv(t, proto.TypePromptForUserChoice, "run", proto.PromptForUserChoicePayload{AskID: "ask"})
 				waitFor(t, func() bool { return hasFrame(sender.recSender, proto.TypePromptForUserChoice, "run") }, "choice request")
-				mutation = mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: sender.deliveryID, Answers: []string{"yes"}})
+				mutation = mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: sender.deliveryID, QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}})
 			case "steering":
 				mutation = mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: sender.inputID, Input: proto.TextInput("continue")})
 			}
@@ -137,12 +137,12 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 				}
 				assertDecisionAck(t, sender.recSender, "new-permission", false, "not_pending")
 			case "choice":
-				late := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "late-choice", Answers: []string{"yes"}})
+				late := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "late-choice", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}})
 				if err := r.Handle(t.Context(), late); err != nil {
 					t.Fatal(err)
 				}
 				assertDecisionAck(t, sender.recSender, "late-choice", true, "")
-				newRequest := mustEnv(t, proto.TypePromptForUserChoiceDecision, "new-choice", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "new-choice", Answers: []string{"yes"}})
+				newRequest := mustEnv(t, proto.TypePromptForUserChoiceDecision, "new-choice", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "new-choice", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}})
 				if err := r.Handle(t.Context(), newRequest); err != nil {
 					t.Fatal(err)
 				}
@@ -259,7 +259,7 @@ func TestPreparedHandoffRouterShutdownWaitsForReceiptAttempt(t *testing.T) {
 			case "choice":
 				session.out <- mustEnv(t, proto.TypePromptForUserChoice, "run", proto.PromptForUserChoicePayload{AskID: "ask"})
 				waitFor(t, func() bool { return hasFrame(sender.recSender, proto.TypePromptForUserChoice, "run") }, "choice request")
-				mutation = mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: sender.deliveryID, Answers: []string{"yes"}})
+				mutation = mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: sender.deliveryID, QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}})
 			case "steering":
 				mutation = mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: sender.inputID, Input: proto.TextInput("continue")})
 			}

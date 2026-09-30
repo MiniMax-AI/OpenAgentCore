@@ -41,12 +41,21 @@ func (r *Router) handlePromptRequest(callerCtx context.Context, env proto.Envelo
 		r.emitTerminalError(callerCtx, runID, err.Error())
 		return err
 	}
-	if len(req.FunctionTools) > 0 && !r.availableCapabilities(req.AgentKind).FunctionTools {
+	caps, available := r.availableCapabilities(req.AgentKind)
+	if !available {
+		_, err := r.registry.Resolve(req.AgentKind)
+		if err == nil {
+			err = errors.New("engine is unavailable on this runtime")
+		}
+		r.emitTerminalError(callerCtx, runID, err.Error())
+		return err
+	}
+	if len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
 		err := errors.New("engine does not support function tools")
 		r.emitTerminalError(callerCtx, runID, err.Error())
 		return err
 	}
-	if err := validateExecutionEnvironment(req, r.availableCapabilities(req.AgentKind)); err != nil {
+	if err := validateExecutionEnvironment(req, caps); err != nil {
 		r.emitTerminalError(callerCtx, runID, err.Error())
 		return err
 	}
@@ -97,6 +106,7 @@ func (r *Router) handlePromptRequest(callerCtx context.Context, env proto.Envelo
 	out := make(chan proto.Envelope, 64)
 	state := &sessionState{
 		runID:               runID,
+		capabilities:        caps,
 		environmentID:       req.EnvironmentID(),
 		stateKey:            stateKey,
 		out:                 out,

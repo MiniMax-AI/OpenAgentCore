@@ -35,50 +35,44 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 	if json.Unmarshal(configuration, &placement) != nil {
 		return placement, store.ErrInvalidInput
 	}
-	switch placement.Type {
-	case "self_hosted":
-		var local struct {
-			Type                  string   `json:"type"`
-			WorkspaceDirectory    string   `json:"workspace_directory"`
-			CapabilityDirectories []string `json:"capability_directories"`
-		}
-		decoder := json.NewDecoder(bytes.NewReader(configuration))
-		decoder.DisallowUnknownFields()
-		if decoder.Decode(&local) == nil && validSelfHostedPlacement(placement) {
-			placement.NetworkAccess = "enabled"
-			return placement, nil
-		}
-	case "openai_hosted":
-		placement.WorkspaceDirectory = "/workspace"
-		// Stored policy is shared by preparation and provider bootstrap.
-		var local struct {
-			Plugins               []agentplugin.Metadata           `json:"plugins,omitempty"`
-			Skills                []store.EnvironmentSkillMetadata `json:"skills,omitempty"`
-			Files                 []store.InitialFileMetadata      `json:"files"`
-			Packages              *v1.EnvironmentPackages          `json:"packages,omitempty"`
-			Initialization        bool                             `json:"initialization,omitempty"`
-			Type                  string                           `json:"type"`
-			CapabilityDirectories []string                         `json:"capability_directories"`
-			Network               *struct {
-				Access         string   `json:"access"`
-				AllowedDomains []string `json:"allowed_domains"`
-			} `json:"network"`
-		}
-		decoder := json.NewDecoder(bytes.NewReader(configuration))
-		decoder.DisallowUnknownFields()
-		if decoder.Decode(&local) == nil && agentcapabilities.ValidateDirectories(local.CapabilityDirectories) == nil {
-			placement.NetworkAccess = "enabled"
-			if local.Network != nil {
-				if (agentnetwork.Policy{Access: local.Network.Access, AllowedDomains: local.Network.AllowedDomains}).Validate() != nil {
-					return placement, store.ErrInvalidInput
-				}
-				placement.NetworkAccess = local.Network.Access
-				placement.AllowedDomains = append([]string(nil), local.Network.AllowedDomains...)
-			}
-			return placement, nil
-		}
+	var local struct {
+		Plugins               []agentplugin.Metadata           `json:"plugins,omitempty"`
+		Skills                []store.EnvironmentSkillMetadata `json:"skills,omitempty"`
+		Files                 []store.InitialFileMetadata      `json:"files"`
+		Packages              *v1.EnvironmentPackages          `json:"packages,omitempty"`
+		Initialization        bool                             `json:"initialization,omitempty"`
+		Type                  string                           `json:"type"`
+		WorkspaceDirectory    string                           `json:"workspace_directory,omitempty"`
+		CapabilityDirectories []string                         `json:"capability_directories"`
+		Network               *v1.EnvironmentNetworkInput      `json:"network"`
 	}
-	return placement, store.ErrInvalidInput
+	decoder := json.NewDecoder(bytes.NewReader(configuration))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&local) != nil || agentcapabilities.ValidateSourceDirectories(local.CapabilityDirectories) != nil {
+		return placement, store.ErrInvalidInput
+	}
+	// Placement selects a workspace; all preparation fields are shared.
+	switch placement.Type {
+	case "openai_hosted":
+		if local.WorkspaceDirectory != "" || agentcapabilities.ValidateDirectories(local.CapabilityDirectories) != nil {
+			return placement, store.ErrInvalidInput
+		}
+		placement.WorkspaceDirectory = "/workspace"
+	case "self_hosted":
+		if !validSelfHostedPlacement(placement) {
+			return placement, store.ErrInvalidInput
+		}
+	default:
+		return placement, store.ErrInvalidInput
+	}
+	placement.NetworkAccess = "enabled"
+	if local.Network != nil {
+		if (agentnetwork.Policy{Access: local.Network.Access, AllowedDomains: local.Network.AllowedDomains}).Validate() != nil {
+			return placement, store.ErrInvalidInput
+		}
+		placement.NetworkAccess, placement.AllowedDomains = local.Network.Access, append([]string(nil), local.Network.AllowedDomains...)
+	}
+	return placement, nil
 }
 
 func environmentDeviceMatches(session store.Session, environment store.Environment, bound store.ExecutionDevice) bool {
@@ -113,6 +107,5 @@ func (d *Dispatcher) configurePreparedEnvironment(session store.Session, environ
 
 func validSelfHostedPlacement(placement environmentPlacement) bool {
 	return agentcapabilities.ValidateSourceDirectories([]string{placement.WorkspaceDirectory}) == nil &&
-		agentcapabilities.ValidateSourceDirectories(placement.CapabilityDirectories) == nil &&
-		!placement.ToolEnvironment && len(placement.Skills)+len(placement.Plugins) == 0
+		agentcapabilities.ValidateSourceDirectories(placement.CapabilityDirectories) == nil
 }

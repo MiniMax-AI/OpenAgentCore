@@ -95,6 +95,8 @@ func (h *Handler) getSessionDiagnostics(w http.ResponseWriter, r *http.Request) 
 				failure.Code = "environment_connection_timeout"
 			case "environment_unavailable":
 				failure.Code = "environment_unavailable"
+			case "runtime_preparation_failed":
+				failure.Code = "runtime_preparation_failed"
 			case "model_provider_required":
 				failure.Code = "model_provider_required"
 			}

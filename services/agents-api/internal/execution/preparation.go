@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 )
 
+var errPreparationFailed = errors.New("runtime preparation failed before admission")
+
 type preparationRejection struct {
 	code      string
 	operation string
@@ -76,6 +78,9 @@ func (p *preparedStart) observation(env proto.Envelope) (proto.PreparationStatus
 	if status.State == "rejected" {
 		return status, &preparationRejection{code: status.ErrorCode, operation: status.Operation}
 	}
+	if status.State == "failed" && status.ErrorCode == "preparation_failed" && status.RunID == "" {
+		return status, errPreparationFailed
+	}
 	switch status.State {
 	case "preparing", "ready", "starting", "started":
 		return status, nil
@@ -102,6 +107,13 @@ func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session strin
 			}
 			status, err := prepared.observation(env)
 			if err != nil {
+				var rejection *preparationRejection
+				if status.RunID == "" && errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionPrepare {
+					switch rejection.code {
+					case "invalid_configuration", "unsupported_configuration", "unsupported_preparation":
+						return pending, errPreparationFailed
+					}
+				}
 				return pending, err
 			}
 			if status.State == "ready" && status.RunID == "" && status.ExecutorID != "" {

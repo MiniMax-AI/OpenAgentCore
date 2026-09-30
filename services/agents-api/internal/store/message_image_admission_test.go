@@ -25,7 +25,7 @@ func TestUnqualifiedImageAdmissionIsAtomic(t *testing.T) {
 			// A registered text-only profile must stay closed regardless of the
 			// adapters currently qualified by the built-in catalog.
 			profile, _ := (engine.Catalog{}).Lookup("codex")
-			profile.MessageImagePlacements = nil
+			profile.MessageImages = false
 			h.d.Policy = execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"codex": profile})}
 			worker, err := execution.StartWorker(t.Context(), h.d)
 			if err != nil {

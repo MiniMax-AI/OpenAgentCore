@@ -141,6 +141,12 @@
     "description": "Implement and validate a native Harness adapter."
   },
   {
+    "slug": "runtime-bootstrap",
+    "source": "docs/runtime-bootstrap.md",
+    "title": "Runtime startup",
+    "description": "Provider delivery of Runtime-owned connection input."
+  },
+  {
     "slug": "runtime-protocol",
     "source": "docs/runtime-protocol.md",
     "title": "Core\u2013Runtime protocol",

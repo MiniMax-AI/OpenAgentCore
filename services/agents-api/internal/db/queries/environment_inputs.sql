@@ -41,7 +41,7 @@ WHERE session_id = $1 AND state = 'pending';
 UPDATE environment_input_reservations SET state = 'failed', settled_at = clock_timestamp()
 WHERE session_id = $1 AND state = 'pending';
 
--- name: FailEnvironmentInputWithoutModelProvider :execrows
+-- name: FailEnvironmentInput :execrows
 UPDATE environment_input_reservations
-SET state = 'failed', settled_at = clock_timestamp(), failure_code = 'model_provider_required'
+SET state = 'failed', settled_at = clock_timestamp(), failure_code = sqlc.narg(failure_code)
 WHERE session_id = @session_id AND id = @id AND state = 'pending';

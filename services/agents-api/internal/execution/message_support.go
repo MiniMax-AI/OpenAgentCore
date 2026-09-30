@@ -2,7 +2,6 @@ package execution
 
 import (
 	"errors"
-	"slices"
 	"strings"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
@@ -47,11 +46,11 @@ func blankTextRune(r rune) bool {
 	return r >= '\u2000' && r <= '\u200a'
 }
 
-func validateMessageImageProfile(profile engine.Profile, placement string, input proto.MessageInput) error {
+func validateMessageImageProfile(profile engine.Profile, _ string, input proto.MessageInput) error {
 	if !input.HasImages() {
 		return nil
 	}
-	if !slices.Contains(profile.MessageImagePlacements, placement) || input.ValidateInlineImages() != nil {
+	if !profile.MessageImages || input.ValidateInlineImages() != nil {
 		return store.ErrInvalidInput
 	}
 	return nil

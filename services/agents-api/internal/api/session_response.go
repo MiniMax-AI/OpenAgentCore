@@ -82,6 +82,8 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 			switch activity.Failure {
 			case "environment_unavailable":
 				message = "The environment is no longer available for this input."
+			case "runtime_preparation_failed":
+				message = "Runtime preparation failed before execution. Check the daemon logs and installed capabilities, then submit new input."
 			case "model_provider_required":
 				message = "This Session was created without a model provider and cannot run. Create a new Session with x_agents_core.model_provider or an Agent that has one saved."
 			}
@@ -99,7 +101,7 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 	// A hosted provisioning failure is terminal and supersedes the settled input
 	// activity: the Session reports its safe reason and failure time.
 	if failure := session.EnvironmentFailure; failure != nil {
-		if cfg.Environment.Type != "openai_hosted" {
+		if cfg.Environment.Type != "openai_hosted" && cfg.Environment.Type != "self_hosted" {
 			return v1.Session{}, errors.New("unsupported stored environment failure")
 		}
 		reason := failure.Reason

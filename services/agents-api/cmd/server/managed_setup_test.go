@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"errors"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
@@ -86,7 +86,7 @@ func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
 	t.Setenv("OAC_E2B_STATE_DIR", t.TempDir())
 	s := &managedSetup{installationID: id, store: &setupStore{value: store.SandboxSetup{
 		InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
-		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()},
+		E2B: &sandbox.E2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()},
 	}}}
 	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("missing local helper must leave administrative recovery available", err)
@@ -126,7 +126,7 @@ func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.publish(previous)
 	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct",
-		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
+		E2B: &sandbox.E2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
 	if !errors.Is(err, execution.ErrExecutionUnavailable) || s.selected.Load().Config != previous {
 		t.Fatal("rejected candidate lost the previous selection", err)
 	}
@@ -136,7 +136,7 @@ func TestE2BRequiresAPublicURLOutsideTheHost(t *testing.T) {
 	id := uuid.NewString()
 	s := &managedSetup{installationID: id, publicURL: "http://127.0.0.1:8091"}
 	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct",
-		E2B: &store.SandboxE2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
+		E2B: &sandbox.E2BConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
 	if !errors.Is(err, store.ErrSandboxPublicURLUnreachable) {
 		t.Fatal("E2B accepted a loopback public URL", err)
 	}

@@ -25,13 +25,10 @@ func validSpecificationDigest(v string) bool {
 }
 
 func validateVersionFrame(f frame, size int) error {
-	if f.Version == ProtocolVersion {
-		if f.Deployment != nil || f.Control != nil || f.Health != nil && f.Health.Generations != nil || f.Request != nil && f.Request.DeploymentGeneration != 0 {
-			return sandbox.ErrInvalid
-		}
-		return nil
+	if f.Version != ProtocolVersion {
+		return sandbox.ErrInvalid
 	}
-	if f.Version != GenerationProtocolVersion {
+	if f.GenerationManagement && f.Type != "hello" {
 		return sandbox.ErrInvalid
 	}
 	if f.Type != "request" && f.Type != "response" && size > MaxControlFrameBytes {
@@ -75,11 +72,14 @@ func validateVersionFrame(f frame, size int) error {
 	}
 	switch f.Type {
 	case "hello":
+		if !f.GenerationManagement && f.Health != nil && f.Health.Generations != nil {
+			return sandbox.ErrInvalid
+		}
 		if f.Identity == nil || f.Health == nil || f.Request != nil || f.Response != nil || f.Control != nil || f.Deployment != nil {
 			return sandbox.ErrInvalid
 		}
 	case "welcome", "heartbeat_ack":
-		if f.Deployment == nil || !validID(f.ConnectionID) || !validGeneration(f.OwnerEpoch) || f.Health != nil || f.Identity != nil || f.Request != nil || f.Response != nil || f.Control != nil {
+		if !validID(f.ConnectionID) || !validGeneration(f.OwnerEpoch) || f.Health != nil || f.Identity != nil || f.Request != nil || f.Response != nil || f.Control != nil {
 			return sandbox.ErrInvalid
 		}
 	case "heartbeat":

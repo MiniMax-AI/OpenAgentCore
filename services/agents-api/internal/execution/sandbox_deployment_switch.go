@@ -155,14 +155,14 @@ func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input store.Sandbo
 	if err != nil {
 		return store.RuntimeDeploymentView{}, err
 	}
-	if input.Provider == "e2b" {
+	if input.HasCredential() || candidate.VerifyCredential != nil {
 		if candidate.VerifyCredential == nil || candidate.FenceCredential == nil {
 			return store.RuntimeDeploymentView{}, ErrExecutionUnavailable
 		}
 		if err := candidate.VerifyCredential(ctx); err != nil {
 			return store.RuntimeDeploymentView{}, err
 		}
-		if input.E2B.ReplaceCredential {
+		if input.ReplacesCredential() {
 			fenceCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 			release, err := candidate.FenceCredential(fenceCtx)
@@ -176,7 +176,7 @@ func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input store.Sandbo
 			}
 		}
 	}
-	input.SandboxDeploymentSetupRequest = withTemplateBuild(input.SandboxDeploymentSetupRequest, candidate)
+	input.SandboxDeploymentSetupRequest = *candidate.Selection
 	result, err := m.store.UpdateSandboxDeployment(ctx, m.setupInstallationID, input)
 	if err != nil {
 		return store.RuntimeDeploymentView{}, err

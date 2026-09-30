@@ -31,7 +31,7 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	}
 	disk := int32(24063)
 	input.Resources = sandbox.Resources{CPUs: 2, MemoryMiB: 2048}
-	input.E2B.TemplateBuild = &SandboxE2BTemplateBuild{Status: "ready", CPUs: 2, MemoryMiB: 2048, RootDiskMiB: &disk}
+	input.E2B.TemplateBuild = &sandbox.TemplateBuild{Status: "ready", CPUs: 2, MemoryMiB: 2048, RootDiskMiB: &disk}
 	view, err := w.InitializeSandboxDeployment(t.Context(), id, input)
 	if err != nil {
 		t.Fatal(err)

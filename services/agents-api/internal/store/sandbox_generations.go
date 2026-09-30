@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -19,29 +20,15 @@ func (s *Store) ClassifySandboxDeploymentChange(ctx context.Context, installatio
 		if err := checkSandboxSwitch(ctx, q, d, installation, input); err != nil {
 			return err
 		}
-		if input.E2B != nil {
-			copy := *input.E2B
-			copy.ReplaceCredential = copy.ReplaceCredential || copy.APIKey != ""
-			input.E2B = &copy
-			// Omitted endpoint selectors retain the committed E2B connection.
-			if copy.APIURL == "" && copy.Domain == "" {
-				input.E2B.APIURL, input.E2B.Domain = d.E2bApiUrl, d.E2bDomain
-			}
-			if copy.APIKey == "" && !copy.ReplaceCredential {
-				key, err := s.credentialCipher.OpenSandboxDeployment(d.E2bCredential, installation, uint64(d.Generation))
-				if err != nil {
-					return ErrSandboxCredentialUnavailable
-				}
-				input.E2B.APIKey = string(key)
-			}
-			if input.E2B.Template == d.E2bTemplate && E2BResourcesPending(input.SandboxDeploymentSetupRequest) {
-				var saved sandbox.DeploymentSpec
-				if err := json.Unmarshal(d.Specification, &saved); err != nil {
-					return err
-				}
-				input.Resources = saved.Resources
-			}
+		previous, err := s.sandboxSetup(d)
+		if err != nil {
+			return err
 		}
+		resolved, err := providers.ResolveChange(input.SandboxDeploymentSetupRequest, sandbox.Selection{Provider: previous.Provider, DeploymentSpec: previous.Specification, E2B: previous.E2B})
+		if err != nil {
+			return sandboxConfigurationError(err)
+		}
+		input.SandboxDeploymentSetupRequest = resolved
 		if err := validateSandboxSelection(input.SandboxDeploymentSetupRequest); err != nil {
 			return err
 		}
@@ -119,8 +106,8 @@ func (s *Store) SandboxGenerationPage(ctx context.Context, after int64) ([]Sandb
 		if err := json.Unmarshal(r.Specification, &v.Specification); err != nil {
 			return nil, err
 		}
-		if r.ProviderKind == "e2b" {
-			v.E2B = &SandboxE2BConfiguration{Template: r.E2bTemplate, APIURL: r.E2bApiUrl, Domain: r.E2bDomain}
+		if providers.UsesCredential(r.ProviderKind) {
+			v.E2B = &sandbox.E2BConfiguration{Template: r.E2bTemplate, APIURL: r.E2bApiUrl, Domain: r.E2bDomain}
 		}
 		result = append(result, v)
 	}

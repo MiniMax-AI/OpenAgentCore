@@ -17,6 +17,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/dispatch"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 type sender struct {
@@ -160,9 +161,9 @@ func (s *session) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, er
 func run() error {
 	registry := agent.NewRegistry()
 	h := &harness{history: map[string]string{}}
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture_harness", Available: true, Capabilities: proto.AgentKindCapabilities{
-		Streaming: true, Steering: true, DurableTurns: true, DurableInputReceipts: true, ExecutionControls: true, ToolObservations: true, SubagentControl: true, EnvironmentNone: true,
-	}}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture_harness", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+		Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported,
+	})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		return nil, errors.New("fixture execution requires an Executor")
 	})
 	registry.RegisterExecutor("fixture_harness", h.prepare)

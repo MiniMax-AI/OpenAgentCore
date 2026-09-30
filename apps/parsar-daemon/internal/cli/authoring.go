@@ -58,7 +58,7 @@ func authoringRegistry(registry *agent.Registry, bridge *authoring.Bridge) *agen
 	wrapped := agent.NewRegistry()
 	for _, info := range registry.SupportedAgentKinds() {
 		factory, _ := registry.Resolve(info.Kind)
-		if info.Capabilities.WorkspaceAuthoring {
+		if info.Capabilities.WorkspaceAuthoring.IsSupported() {
 			factory = withAuthoringBridge(factory, bridge)
 		}
 		configuration, err := registry.Configuration(info.Kind)
@@ -70,7 +70,7 @@ func authoringRegistry(registry *agent.Registry, bridge *authoring.Bridge) *agen
 			wrapped.RegisterExecutor(info.Kind, executor)
 		}
 		if prepare, err := registry.ResolvePreparation(info.Kind); err == nil {
-			wrapped.RegisterPreparation(info.Kind, info.Capabilities.WorkspaceReadPreparation, prepare)
+			wrapped.RegisterPreparation(info.Kind, info.Capabilities.WorkspaceReadPreparation.IsSupported(), prepare)
 		}
 	}
 	return wrapped

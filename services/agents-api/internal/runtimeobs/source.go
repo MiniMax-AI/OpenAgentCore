@@ -3,6 +3,7 @@ package runtimeobs
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 )
 
 var (
@@ -13,19 +14,19 @@ var (
 // Source reads one provider-owned Runtime instance. Implementations must verify
 // ownership before returning data and must not renew, restart, or stop compute.
 type Source interface {
+	providercontract.Declared
 	Observe(context.Context, Target) (Sample, error)
 }
 
 // MaxBatchTargets bounds the targets of one BatchSource read.
 const MaxBatchTargets = 100
 
-// BatchSource is an optional Source extension for providers that read many
-// Runtime instances in one bounded request. ObserveBatch returns ok=false,
-// without reading, when the current provider has no batch read; the Service
-// then reads each target with Observe. Otherwise it returns one result per
-// target, in order, under the same ownership rules as Observe.
+// BatchSource reads multiple instances under the same ownership rules as Observe.
+// Unsupported returns a typed providercontract.UnsupportedError before reading;
+// only that result permits per-target observation. Unavailable or failed reads
+// must not silently retry through Observe. Successful results preserve target order.
 type BatchSource interface {
-	ObserveBatch(context.Context, []Target) (results []BatchResult, ok bool)
+	ObserveBatch(context.Context, []Target) (results []BatchResult, err error)
 }
 
 type BatchResult struct {

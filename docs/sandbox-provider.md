@@ -32,13 +32,13 @@ connectivity; see [Runtime and outer isolation](design-principles.md#runtime-and
 
 ## Steps
 
-1. **Read the contract.** Implement the five required operations and any
-   optional interfaces in [Implement the interface](#implement-the-interface).
+1. **Read the contract.** Implement the five required operations and explicitly handle all
+   extension interfaces in [Implement the interface](#implement-the-interface).
 2. **Write the adapter package** under `services/agents-api/internal/sandbox/<kind>`
    (native SDK calls, ownership checks, identity translation, private config).
    Assert `var _ sandbox.SandboxProvider = (*YourAdapter)(nil)` at compile time.
    Out-of-process helpers live in `services/agents-api/tools/<kind>-provider`.
-3. **Register the kind** in every file listed in
+3. **Register the kind** once using
    [Register the provider kind](#register-the-provider-kind). Registration is
    explicit construction, not an init-time plugin registry.
 4. **Label owned resources** with `io.oac.*` labels, or `oac_*` metadata keys
@@ -66,20 +66,53 @@ Use the existing types; do not introduce another lifecycle protocol or a
 vendor-specific execution path. A backend without a native renewable lease
 (Docker) still keeps service-owned hosted expiry and cleanup requirements.
 
-### Required and optional interfaces
+### Explicit operation contracts
+
+Keep the existing small interfaces. Every Provider must implement their methods
+and return a complete `ProviderOperations()` declaration. The interface methods
+are the operation inventory; `sandbox.ValidateOperations` checks it without a
+second hand-maintained list.
 
 | Contract | Requirement | Responsibility |
 | --- | --- | --- |
-| `sandbox.SandboxProvider` | Required | `Create`, `GetInfo`, `Renew`, `Kill`, and bounded bootstrap/diagnostic `RunCommand` |
-| `sandbox.CheckpointProvider` | Optional, separate interface | Exact compute incarnations, snapshot capture/restore, retained-source resume and cleanup |
-| `runtimeobs.Source` | Optional, separate interface | Read-only, ownership-checked resource observations |
-| `runtimeobs.BatchSource` | Optional, separate interface | Bounded observations in input order, with per-target errors; `ok=false` means no batch read occurred |
+| `sandbox.SandboxProvider` | Five operations must be supported | Allocation lifecycle and bounded administrative commands |
+| `sandbox.CheckpointProvider` | Explicit supported or unsupported decision for every method | Exact compute incarnations, capture/restore, retained-source resume and cleanup |
+| `runtimeobs.Source` | Explicit decision | Ownership-checked read-only observations |
+| `runtimeobs.BatchSource` | Explicit decision | Bounded observations in input order, with per-target errors |
+| `sandbox.SelectionDiscoverer` | Explicit decision | Read-only native configuration discovery before commit |
+| `sandbox.CredentialVerifier` | Explicit decision | Verify access to owned resources without mutation |
 
-Do not implement an optional interface with successful no-op methods. Core uses
-interface assertions to select optional operations. Advertised support requires
-contract and native acceptance evidence; a healthy node or an available CLI does
-not establish it. Observation never renews a lease, starts compute or prepares a
-Harness. See the [observation contract](../contracts/agents-api/runtime-observability.md).
+Each declaration entry has `state: supported` with no reason, or
+`state: unsupported` with an authored reason code. Missing entries, zero states,
+unknown entries, missing methods and unsafe reasons fail validation. The entire
+checkpoint lifecycle must agree on support; batch observation requires single
+observation. Adding a method to an existing interface requires an explicit
+decision and implementation in every adapter. Never supply a default base class
+or generate blanket unsupported implementations for future methods.
+
+Unsupported methods return `providercontract.UnsupportedError` before native
+I/O. The error identifies the exact operation and a safe code, not a native
+message, resource identity, endpoint or credential. Empty results, nil errors,
+`Unavailable`, and unknown mutation outcomes cannot substitute for unsupported.
+The five required methods cannot return unsupported; a backend without a native
+lease preserves the existing read-only `Renew` semantics.
+
+Each adapter owns one `Operations()` function, shared by its concrete instance
+and registration. `providers.ValidateBinding` checks both against the existing
+interfaces and against each other. Runtime admission and node generation loading
+also reject incomplete providers. Interface assertions establish method shape
+only; callers use the declaration to decide whether an operation is supported.
+
+`ObserveBatch` returns an error instead of an ambiguous boolean. Only a typed,
+safe `UnsupportedError` for `ObserveBatch` permits per-target `Observe` calls.
+An unavailable service, timeout or other failure never triggers that fallback.
+Observation never renews, starts, prepares or stops compute; see the
+[observation contract](../contracts/agents-api/runtime-observability.md).
+
+Contract tests call every declared unsupported native method with no configured
+native client, require its matching error and zero result, and reject incomplete
+or contradictory declarations. Supported behavior still requires native and
+lifecycle tests; declaration validation alone cannot prove SDK semantics.
 
 `RunCommand` is an existing administrative bootstrap/diagnostic facility, not an
 alternate route for Skills, Plugins, MCP setup, initial files, Session execution or
@@ -168,25 +201,51 @@ A provider must not implement a competing preparation path.
 
 ## Register the provider kind
 
-Provider kinds are enumerated explicitly. Add a new kind to each surface
-below; none accepts an arbitrary provider string.
+`sandbox/providers/registry.go` is the sole registration table. Each entry binds
+an adapter's specification/resource validators, selection normalization, deployment
+mode, defaults, the adapter-owned operation declaration, and local or direct constructor.
+`providers.Build` constructs node-local adapters; `providers.BuildDirect` constructs
+direct adapters. Neither allocates compute. There is no init-time registration or
+runtime plugin loading.
 
-| Surface | File | What it enumerates |
-| --- | --- | --- |
-| Node-local construction | [`sandbox/config/config.go`](../services/agents-api/internal/sandbox/config/config.go), [`specification.go`](../services/agents-api/internal/sandbox/config/specification.go) | Typed construction, readiness probe and node specification |
-| Direct construction | [`cmd/server/managed_setup.go`](../services/agents-api/cmd/server/managed_setup.go) (`managedSetup.provider`) | Direct adapters (E2B) and node-proxied kinds (Docker, microsandbox) |
-| Resource validation | [`sandbox/deployment.go`](../services/agents-api/internal/sandbox/deployment.go) (`Resources.Validate`) | Per-kind resource limits |
-| Node proxy and identity | [`sandbox/node/proxy.go`](../services/agents-api/internal/sandbox/node/proxy.go), [`node/identity.go`](../services/agents-api/internal/sandbox/node/identity.go) | Node-capable kinds and their checkpoint capability |
-| Deployment persistence | [`sandbox_deployment_mutations.go`](../services/agents-api/internal/store/sandbox_deployment_mutations.go), [`sandbox_deployment_setup.go`](../services/agents-api/internal/store/sandbox_deployment_setup.go), [`sandbox_specification.go`](../services/agents-api/internal/store/sandbox_specification.go), [`runtime_node_deployment.go`](../services/agents-api/internal/store/runtime_node_deployment.go) | Deployment admission and node-mode kinds |
-| Database constraint | A new migration in [`migrations/`](../services/agents-api/migrations) | `provider_kind` `CHECK` constraints, last set in `000081_sandbox_generations.sql`; never edit a landed migration |
-| Node installation | [`node_installation.go`](../services/core-console/node_installation.go) | Node artifacts per kind |
-| Installer | [`deploy/install/sandbox_setup.py`](../deploy/install/sandbox_setup.py) (`CHOICES`, used by `install.py --sandbox`) | Installer backend choices |
-| Distribution | [`scripts/core-distribution-manifest.py`](../scripts/core-distribution-manifest.py) | Bundled provider helper binaries |
-| Clients and Web | [`sandbox-client.ts`](../packages/agents-client/src/sandbox-client.ts) (`SandboxProvider`), [`features/sandbox`](../apps/web/src/features/sandbox) (`SandboxSetupWizard.tsx`, `console-config.ts`, `node-enrollment.ts`), [`sandbox-labels.ts`](../apps/web/src/lib/sandbox-labels.ts) | Backend choices and labels shown to operators |
+For a new implementation:
+
+1. Implement the operation contracts above in the adapter package and add native contract tests.
+2. Add its configuration validators and optional read-only `SelectionDiscoverer`
+   for native resource discovery. Normalization must copy input before changing it.
+   `RestoreSelection` must retain access to owned resources without requiring new
+   template validation. Put native credential verification behind
+   `CredentialVerifier` when needed.
+3. Register its constructor, policies, operation declaration and defaults in `providers/registry.go`.
+   Node proxy identity and checkpoint advertisement consume this same entry.
+   The installer projection uses those registered policies and the common field
+   bounds in `sandbox/deployment_contract.go`; regenerate it with
+   `go run ./services/agents-api/cmd/specification-contract -write`.
+4. If new configuration fields are necessary, extend the typed `sandbox.Selection`
+   envelope and its dedicated encrypted persistence fields, API DTO and operator
+   client. Do not replace typed configuration with unrestricted JSON. Field codecs
+   may map columns; Store must not parse native endpoints, templates or defaults.
+5. Supply required installer/distribution artifacts and operator labels. A new
+   provider must not add a Session/Turn scheduling path or a Store vendor switch.
+
+Preview and persistence use `providers.Normalize` and `providers.Describe`.
+`SelectionDiscoverer` resolves omitted native resource values before commit; the
+complete specification is validated again at persistence. Store owns transactions,
+credential encryption, generation fencing, resource ownership and typed column
+mapping. Database constraints validate structure, not the registration list.
+`providers.ResolveChange` owns configuration inheritance and comparison uses
+normalized selectors, so preview, retry and commit share the same defaults.
+
+A direct adapter with credentials verifies all retained generations and allocation
+references before replacing a key. The common `sandbox.CallFence` excludes native
+calls and waits for helper completion, including calls whose callers timed out.
+Execution invokes prepared verification/fencing callbacks without branching on a
+vendor. A transport wrapper advertises only capabilities that its adapter supports;
+new optional capabilities need forwarding and qualification before registration.
 
 Keep vendor-specific deployment validation and SDK setup at the construction
 boundary. Construction must not create an Environment. For node-local adapters
-the `Built` result returns the provider, probe, installation identity, backend
+the `providers.Built` result returns the provider, probe, installation identity, backend
 fingerprint and specification digest; the factory also returns its close function.
 
 Preserve the `execution.RuntimeProvider` deployment binding: `ProviderKind`,
@@ -234,6 +293,10 @@ Node tests separately exercise disconnect/reconnect fencing and cleanup after a
 lost create response. Provider helper protocols and the node protocol require an
 exact version match and reject mismatches; do not add fallback decoders or old
 binary migration. Direct in-process interfaces have no independent wire version.
+Node generation management is an explicit current hello capability, not another
+wire version. Fixed-configuration manual nodes use the same protocol and only
+serve their enrolled deployment generation. See the
+[node contract](../contracts/agents-api/node-generation-protocol.md).
 
 Run `make check` with its dedicated database before completion. Retain native
 acceptance for SDK behavior that fixtures cannot prove: creation, lease behavior,

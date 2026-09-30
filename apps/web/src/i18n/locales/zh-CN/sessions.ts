@@ -1,3 +1,5 @@
+import { coreHarnessNames } from "@agents-core-web/agents-client";
+
 import { sessions as english } from "../en/sessions";
 
 export const sessions = {
@@ -12,7 +14,7 @@ export const sessions = {
   },
   sessionStatus: { all: "全部", in_progress: "运行中", requires_action: "等待调用方", failed: "失败", idle: "空闲", other: "其他" },
   environment: { none: "无环境", self_hosted: "自托管", openai_hosted: "托管沙箱", other: "其他" },
-  harness: { claude_sdk: "Claude Code", codex: "Codex", mcode: "MiniMax Code" },
+  harness: coreHarnessNames,
   usage: { input: "输入", output: "输出", total: "总计", cached: "缓存", reasoning: "推理" },
   log: {
     title: "Session 日志",
@@ -301,7 +303,6 @@ export const sessions = {
     supportedTextParts: "用户消息 {{number}} 必须包含受支持的文本片段。",
     nonblankTextParts: "用户消息 {{number}} 的文本片段中必须包含非空文本。",
     atLeastOneTextPart: "用户消息 {{number}} 至少需要一个文本片段。",
-    inlineModelRequired: "请输入内联 Agent 的模型 ID。",
     selectSavedAgent: "配置 Session 专用覆盖项前，请先选择已保存的 Agent。",
     nonemptyModelOverride: "请输入非空的 Session 模型覆盖值。",
     inlineMustNotSendId: "创建内联 Agent Session 时不得发送 agent_id。",

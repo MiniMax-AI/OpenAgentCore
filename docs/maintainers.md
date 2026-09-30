@@ -231,6 +231,9 @@ The project has no historical installation compatibility or in-place version upg
 contract. Install only into an empty directory, or repair the exact same source
 revision. Refuse old formats, conversion journals and different revisions before
 installation mutation; retain their data and direct operators to reinstall separately.
+Distributions contain only current installation and maintenance code; historical
+layout conversion, brand migration and native binary replacement implementations
+are not packaged. Keep refusal checks and their tests when retiring these paths.
 The installer and every mutating `oac` command share the stable `.oac.lock` inode.
 The installer owns this lock across creation, payload/native/launcher repair and
 apply, invoking the already-locked apply implementation without nested locking.
@@ -556,7 +559,14 @@ can reach the administrator's terminal. That child also joins a new session
 keyring and dies with its parent, and root shows its output only as plain text
 (terminal controls become `?`). The installer turns SIGINT, SIGHUP and SIGTERM
 into stopping that child and what it started, which would otherwise outlive a
-closed terminal. Root never runs a file that user can write,
+closed terminal. The generated bootstrap requests only the six standard
+HTTP/HTTPS proxy and bypass environment names through sudo, and normalizes
+both spellings to the lowercase value when present, even if empty. This keeps
+curl, urllib and the Go registration command on the same proxy and bypass rules. The installation child retains just those names
+in addition to its fixed service-account environment. Proxy values stay out of
+arguments, persisted configuration, service units and diagnostics; do not use
+broad sudo environment inheritance. This is installation networking only, not
+node-service proxy configuration. Root never runs a file that user can write,
 opens a URL it wrote, or follows a link in its home. Sudo mode
 never installs Docker, KVM or packages, never changes device permissions, refuses
 SELinux-enforcing hosts and a token in the environment, and changes nothing when a

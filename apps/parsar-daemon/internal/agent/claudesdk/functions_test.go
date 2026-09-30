@@ -64,7 +64,7 @@ func TestFunctionFactoryNativeReceipts(t *testing.T) {
 					if err := event.DecodePayload(&tool); err != nil {
 						t.Fatal(err)
 					}
-					if tool.NativeItem != nil || tool.Observation == nil || tool.Observation.Kind != "function" {
+					if tool.Observation == nil || tool.Observation.Kind != "function" {
 						t.Fatal("expected neutral observation")
 					}
 					if tool.Stage != "before" && tool.Stage != "after" {

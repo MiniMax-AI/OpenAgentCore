@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 // Wrapping only Cancel proves that no responder stubs are required for a Session.
@@ -21,7 +22,7 @@ func TestOptionalInteractionResponders(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			var output chan<- proto.Envelope
-			h.reg.Register("minimal", harnessconfig.Configuration{}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "minimal", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				output = out
 				s := &fakeSession{out: out, closeOutOnCancel: true}
 				return lifecycleOnly{cancel: s.Cancel}, nil

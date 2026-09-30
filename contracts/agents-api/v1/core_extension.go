@@ -3,11 +3,12 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
 )
 
 // AgentsCore selects an existing Core harness independently of model identity.
 type AgentsCore struct {
-	Harness       string          `json:"harness,omitempty" enums:"codex,claude_sdk,mcode"`
+	Harness       string          `json:"harness,omitempty"`
 	HarnessConfig json.RawMessage `json:"harness_config,omitempty" swaggertype:"object"`
 }
 
@@ -18,10 +19,8 @@ func (x *AgentsCore) Validate() error {
 	if x.Harness == "" && len(x.HarnessConfig) == 0 {
 		return fmt.Errorf("x_agents_core requires harness or harness_config")
 	}
-	switch x.Harness {
-	case "", "codex", "claude_sdk", "mcode":
-		return ValidateHarnessConfig(x.Harness, x.HarnessConfig)
-	default:
-		return fmt.Errorf("x_agents_core.harness must be codex, claude_sdk or mcode")
+	if x.Harness != "" && !builtin.Contains(x.Harness) {
+		return fmt.Errorf("x_agents_core.harness must select a registered harness")
 	}
+	return ValidateHarnessConfig(x.Harness, x.HarnessConfig)
 }

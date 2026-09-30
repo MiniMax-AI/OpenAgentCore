@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"io"
 	"time"
 
@@ -16,8 +17,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const ProtocolVersion = 1
-const GenerationProtocolVersion = 2
+const ProtocolVersion = 4
 const MaxControlFrameBytes = 32 * 1024
 const MaxFrameBytes = 72 * 1024 * 1024
 const maxPending = 32
@@ -97,27 +97,29 @@ type request struct {
 }
 
 type response struct {
-	ID           string                 `json:"id"`
-	ConnectionID string                 `json:"connection_id"`
-	ErrorCode    string                 `json:"error_code,omitempty"`
-	Info         *sandbox.Info          `json:"info,omitempty"`
-	Compute      *sandbox.Compute       `json:"compute,omitempty"`
-	State        *sandbox.ComputeState  `json:"state,omitempty"`
-	Command      *sandbox.CommandResult `json:"command,omitempty"`
-	Sample       *runtimeobs.Sample     `json:"sample,omitempty"`
+	Unsupported  *providercontract.UnsupportedError `json:"unsupported,omitempty"`
+	ID           string                             `json:"id"`
+	ConnectionID string                             `json:"connection_id"`
+	ErrorCode    string                             `json:"error_code,omitempty"`
+	Info         *sandbox.Info                      `json:"info,omitempty"`
+	Compute      *sandbox.Compute                   `json:"compute,omitempty"`
+	State        *sandbox.ComputeState              `json:"state,omitempty"`
+	Command      *sandbox.CommandResult             `json:"command,omitempty"`
+	Sample       *runtimeobs.Sample                 `json:"sample,omitempty"`
 }
 
 type frame struct {
-	Deployment   *sandbox.NodeDeployment `json:"deployment,omitempty"`
-	Control      *generationControl      `json:"control,omitempty"`
-	Version      int                     `json:"version"`
-	Type         string                  `json:"type"`
-	Identity     *Identity               `json:"identity,omitempty"`
-	Health       *Health                 `json:"health,omitempty"`
-	ConnectionID string                  `json:"connection_id,omitempty"`
-	OwnerEpoch   uint64                  `json:"owner_epoch,omitempty"`
-	Request      *request                `json:"request,omitempty"`
-	Response     *response               `json:"response,omitempty"`
+	GenerationManagement bool                    `json:"generation_management,omitempty"`
+	Deployment           *sandbox.NodeDeployment `json:"deployment,omitempty"`
+	Control              *generationControl      `json:"control,omitempty"`
+	Version              int                     `json:"version"`
+	Type                 string                  `json:"type"`
+	Identity             *Identity               `json:"identity,omitempty"`
+	Health               *Health                 `json:"health,omitempty"`
+	ConnectionID         string                  `json:"connection_id,omitempty"`
+	OwnerEpoch           uint64                  `json:"owner_epoch,omitempty"`
+	Request              *request                `json:"request,omitempty"`
+	Response             *response               `json:"response,omitempty"`
 }
 
 func validID(s string) bool {
@@ -143,10 +145,10 @@ func decodeFrame(data []byte) (frame, error) {
 	var f frame
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
-	if d.Decode(&f) != nil || d.Decode(new(any)) != io.EOF || (f.Version != ProtocolVersion && f.Version != GenerationProtocolVersion) {
+	if d.Decode(&f) != nil || d.Decode(new(any)) != io.EOF || f.Version != ProtocolVersion {
 		return frame{}, sandbox.ErrInvalid
 	}
-	if f.Version == GenerationProtocolVersion && validateGenerationJSON(data, f.Type) != nil {
+	if validateGenerationJSON(data, f.Type) != nil {
 		return frame{}, sandbox.ErrInvalid
 	}
 	if err := validateVersionFrame(f, len(data)); err != nil {
@@ -171,6 +173,8 @@ func errorCode(err error) string {
 	switch {
 	case err == nil:
 		return ""
+	case errors.Is(err, providercontract.ErrUnsupported):
+		return "unsupported"
 	case errors.Is(err, runtimeobs.ErrUnavailable):
 		return "observation_unavailable"
 	case errors.Is(err, runtimeobs.ErrNotRunning):
@@ -189,8 +193,20 @@ func errorCode(err error) string {
 		return "unconfirmed"
 	}
 }
-func responseError(code string) error {
-	switch code {
+func responseError(out response) error {
+	if out.ErrorCode == "unsupported" {
+		if out.Unsupported == nil || operationWire(out.Unsupported.Operation) == "" {
+			return sandbox.ErrComputeUnconfirmed
+		}
+		if _, valid := providercontract.UnsupportedReason(out.Unsupported, out.Unsupported.Operation); !valid {
+			return sandbox.ErrComputeUnconfirmed
+		}
+		return out.Unsupported
+	}
+	if out.Unsupported != nil {
+		return sandbox.ErrComputeUnconfirmed
+	}
+	switch out.ErrorCode {
 	case "":
 		return nil
 	case "observation_unavailable":
@@ -278,6 +294,14 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		out.ErrorCode = errorCode(err)
 		return out
 	}
+	if err := providercontract.Require(p, operationMethod(q.Operation)); err != nil {
+		out.ErrorCode = errorCode(err)
+		var unsupported *providercontract.UnsupportedError
+		if errors.As(err, &unsupported) {
+			out.Unsupported = unsupported
+		}
+		return out
+	}
 	var info sandbox.Info
 	var command sandbox.CommandResult
 	switch q.Operation {
@@ -300,9 +324,9 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		command, err = p.RunCommand(ctx, q.Reference, *q.Command)
 		out.Command = &command
 	default:
-		cp, ok := p.(sandbox.CheckpointProvider)
-		if !ok {
-			err = sandbox.ErrInvalid
+		cp, checkpointErr := sandbox.Checkpoint(p)
+		if checkpointErr != nil {
+			err = checkpointErr
 			break
 		}
 		var state sandbox.ComputeState
@@ -338,6 +362,10 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		}
 	}
 	out.ErrorCode = errorCode(err)
+	var unsupported *providercontract.UnsupportedError
+	if errors.As(err, &unsupported) {
+		out.Unsupported = unsupported
+	}
 	if err != nil {
 		out.Sample = nil
 		if !creationSettled(out.Info, q.Reference) {

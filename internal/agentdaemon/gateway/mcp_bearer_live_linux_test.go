@@ -81,13 +81,13 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	allowed, anonymousTools := []string{"remember", "fail"}, []string{"ping"}
-	servers := []proto.MCPHTTPServer{{ServerLabel: "private_mcp", ServerURL: fixture.private.URL, AllowedTools: &allowed, BearerToken: &token}, {ServerLabel: "anonymous_mcp", ServerURL: fixture.anonymous.URL, AllowedTools: &anonymousTools}}
+	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "private_mcp", ServerURL: fixture.private.URL, AllowedTools: &allowed, BearerToken: &token}, {ConnectionOrigin: "service", ServerLabel: "anonymous_mcp", ServerURL: fixture.anonymous.URL, AllowedTools: &anonymousTools}}
 	run := func(prompt, resume string, expected map[string]string) *mcpBearerTurn {
 		t.Helper()
 		turn := &mcpBearerTurn{}
 		turns = append(turns, turn)
 		runID := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "codex", ConversationID: "mcp-bearer-acceptance", RunID: runID, Input: proto.TextInput(prompt), AgentStateKey: "mcp-bearer-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveTools: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "MiniMax-M3"}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		request := proto.PromptRequestPayload{AgentKind: "codex", ConversationID: "mcp-bearer-acceptance", RunID: runID, Input: proto.TextInput(prompt), AgentStateKey: "mcp-bearer-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "MiniMax-M3"}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
 		sub, err := peer.SubscribeDurable(runID)
 		if err != nil {
 			t.Fatal("cannot subscribe before real daemon dispatch")

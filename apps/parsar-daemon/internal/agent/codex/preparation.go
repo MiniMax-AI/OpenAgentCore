@@ -87,10 +87,10 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	rpc := NewJSONRPCClient(rpcCfg)
 
 	s := &Session{
-		nativeHome:                nativeHomeFromPlan(plan),
-		functions:                 functions,
-		observeMessages:           req.ObserveMessages,
-		observeTools:              req.ObserveTools,
+		nativeHome:      nativeHomeFromPlan(plan),
+		functions:       functions,
+		observeMessages: req.ObserveMessages,
+
 		observeToolObservations:   req.ObserveToolObservations,
 		observeSubagentIdentities: req.ObserveSubagentIdentities && !req.DisableSubagents,
 		cfg:                       cfg,

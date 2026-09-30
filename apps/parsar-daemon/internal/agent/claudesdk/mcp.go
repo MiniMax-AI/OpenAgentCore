@@ -21,10 +21,11 @@ func validateMCP(req proto.PromptRequestPayload) error {
 	if req.MCPHTTPServers == nil {
 		return nil
 	}
-	if !req.DisableExecutionEnvironment {
-		return fmt.Errorf("claudesdk: HTTP MCP requires environment:none")
+	if err := validateMCPServers(*req.MCPHTTPServers); err != nil {
+		return err
 	}
-	return validateMCPServers(*req.MCPHTTPServers)
+	_, err := agent.ResolveMCPBindings(req)
+	return err
 }
 
 func validateMCPServers(servers []proto.MCPHTTPServer) error {

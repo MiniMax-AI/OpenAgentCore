@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"fmt"
 )
 
 type WorkspaceReadResult struct {
@@ -10,7 +11,7 @@ type WorkspaceReadResult struct {
 }
 
 var (
-	ErrWorkspaceReadUnsupported = errors.New("workspace read unsupported")
+	ErrWorkspaceReadUnsupported = fmt.Errorf("%w: workspace read", ErrUnsupportedOperation)
 	ErrWorkspaceReadUnavailable = errors.New("workspace read unavailable")
 	ErrWorkspaceReadBusy        = errors.New("workspace read busy")
 	ErrWorkspaceReadInvalid     = errors.New("workspace read invalid")

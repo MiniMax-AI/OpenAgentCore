@@ -19,10 +19,10 @@ func TestMCPHTTPBearerDiscoveryExcludesUnconfiguredSDK(t *testing.T) {
 	registry := agent.NewRegistry()
 	registerAgentKinds(registry, discovery, "https://service.example")
 	for _, kind := range registry.SupportedAgentKinds() {
-		if kind.Capabilities.MCPHTTPBearerAuth != (kind.Kind == "codex") {
+		if kind.Capabilities.MCPHTTPBearerAuth.IsSupported() != (kind.Kind == "codex") {
 			t.Fatal("bearer capability missing or advertised for another adapter")
 		}
-		if kind.Kind == "codex" && (!kind.Available || !kind.Capabilities.MCPHTTPTools || !kind.Capabilities.EnvironmentNone) {
+		if kind.Kind == "codex" && (!kind.Available || !kind.Capabilities.MCPHTTPTools.IsSupported() || !kind.Capabilities.EnvironmentNone.IsSupported()) {
 			t.Fatal("bearer capability lacks prerequisite profile")
 		}
 	}
@@ -36,13 +36,13 @@ func TestMCPRequiredDiscoveryRequiresPinnedNative(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.Codex.Capabilities.MCPHTTPRequired != (version == "codex-cli 0.153.4") {
+		if got.Codex.Capabilities.MCPHTTPRequired.IsSupported() != (version == "codex-cli 0.153.4") {
 			t.Fatal("unverified native combination advertised")
 		}
-		if got.Codex.Capabilities.NativeSessionRecovery != (version == "codex-cli 0.153.4") {
+		if got.Codex.Capabilities.NativeSessionRecovery.IsSupported() != (version == "codex-cli 0.153.4") {
 			t.Fatal("unverified native recovery advertised")
 		}
-		if got.ClaudeCode.Capabilities.MCPHTTPRequired || got.OpenCode.Capabilities.MCPHTTPRequired || got.Pi.Capabilities.MCPHTTPRequired {
+		if got.ClaudeCode.Capabilities.MCPHTTPRequired.IsSupported() || got.OpenCode.Capabilities.MCPHTTPRequired.IsSupported() || got.Pi.Capabilities.MCPHTTPRequired.IsSupported() {
 			t.Fatal("other engine advertised combination")
 		}
 	}

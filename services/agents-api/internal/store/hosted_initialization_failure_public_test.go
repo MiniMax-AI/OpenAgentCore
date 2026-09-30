@@ -129,11 +129,11 @@ func hostedFailureSession(t *testing.T, s *store.Store, tenant string, input sto
 func failHostedInitialization(t *testing.T, s *store.Store, tenant string, environment store.Environment, p *hostedFailureProvider) {
 	t.Helper()
 	key := uuid.NewString()
-	w, _ := managedWorker(t, s, key, p)
+	w, _ := managedWorkerMode(t, s, key, p, false, true)
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}
-	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
+	awaitInitialization(t, s, tenant, environment.ID, "failed")
 }
 
 // H1/H2/H3/H4: one transaction records the Environment failure, an error event
@@ -186,8 +186,8 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 			p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}},
 				fail: test.p.fail, skip: test.p.skip, result: test.p.result, err: test.p.err}
 			failHostedInitialization(t, s, tenant, environment, p)
-			if !reflect.DeepEqual(p.steps, test.steps) || p.kills != 1 || p.commandCalls.Load() != 0 {
-				t.Fatal("failed initialization continued or was not reclaimed", p.steps, p.kills)
+			if !reflect.DeepEqual(p.steps, test.steps) || p.kills != 0 || p.commandCalls.Load() != 0 {
+				t.Fatal("failed initialization continued or reclaimed compute", p.steps, p.kills)
 			}
 
 			read, err := s.GetSession(t.Context(), tenant, session.ID)
@@ -199,6 +199,11 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 				t.Fatal("Session list", page, err)
 			}
 			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+			// Transport may connect while initialization is still running.
+			if len(events) > 0 && events[0].Event.Type == "agent.session.environment.connected" {
+				events = events[1:]
+			}
+
 			if err != nil || len(events) != 3 {
 				t.Fatal("failure events", events, err)
 			}
@@ -287,7 +292,7 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
-	w, _ := managedWorker(t, s, key, p)
+	w, _ := managedWorkerMode(t, s, key, p, false, true)
 	auth, err := newTestAuthenticator([]testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: device.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: device.HashCredential(foreign), TenantID: uuid.NewString()},
@@ -333,7 +338,7 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}
-	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
+	awaitInitialization(t, s, tenant, environment.ID, "failed")
 
 	reason := `Failed to provision environment: script "setup_commands[0]" failed with exit code 3`
 	read, err := s.GetSession(t.Context(), tenant, session.ID)
@@ -363,6 +368,10 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 			t.Fatal("invalid frame", line)
 		}
 		bodies = append(bodies, data)
+		if frame["type"] == "agent.session.environment.connected" && len(frames) == 0 && len(names) == 1 {
+			names = nil
+			continue
+		}
 		frames = append(frames, frame)
 	}
 	live.ended(t, 5*time.Second)
@@ -418,7 +427,7 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 		}
 	}
 	// Logs were captured (the failed step is logged) and hold no output either.
-	if logged := logs.String(); !strings.Contains(logged, "managed Runtime file initialization incomplete") || strings.Contains(logged, hostedFailureCanary) {
+	if logged := logs.String(); !strings.Contains(logged, "Environment preparation failed") || strings.Contains(logged, hostedFailureCanary) {
 		t.Fatal("log capture", logged)
 	}
 }

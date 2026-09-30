@@ -118,6 +118,16 @@ func (s *Store) GetSessionDevice(ctx context.Context, tenantID, sessionID string
 	if err := s.requireInitializedEnvironment(ctx, params.TenantID, params.ID); err != nil {
 		return ExecutionDevice{}, err
 	}
+	return s.GetSessionRuntimeDevice(ctx, tenantID, sessionID)
+}
+
+// GetSessionRuntimeDevice reports an authorized connection binding. It does not
+// admit native execution or file access before Environment preparation completes.
+func (s *Store) GetSessionRuntimeDevice(ctx context.Context, tenantID, sessionID string) (ExecutionDevice, error) {
+	params, err := deviceLookup(tenantID, sessionID)
+	if err != nil {
+		return ExecutionDevice{}, err
+	}
 	row, err := s.queries.GetSessionDevice(ctx, sqlc.GetSessionDeviceParams(params))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ExecutionDevice{}, ErrNotFound

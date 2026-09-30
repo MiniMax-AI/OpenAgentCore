@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/authoring"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestAuthoringSocketEndsWithTurnWhileSessionIsRetained(t *testing.T) {
@@ -71,7 +72,7 @@ func TestAuthoringRegistryRequiresExplicitCapability(t *testing.T) {
 		called := false
 		stop := errors.New("controlled factory stop")
 		out := make(chan proto.Envelope, 1)
-		reg.RegisterKind(proto.SupportedAgentKind{Kind: "engine", Available: true, Capabilities: proto.AgentKindCapabilities{WorkspaceAuthoring: optIn}}, harnessconfig.Configuration{}, func(_ context.Context, req proto.PromptRequestPayload, events chan<- proto.Envelope) (agent.Session, error) {
+		reg.RegisterKind(proto.SupportedAgentKind{Kind: "engine", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{WorkspaceAuthoring: proto.CapabilityFromBool(optIn)})}, harnessconfig.Configuration{}, func(_ context.Context, req proto.PromptRequestPayload, events chan<- proto.Envelope) (agent.Session, error) {
 			called = true
 			env, _ := req.AgentOptions["env"].(map[string]any)
 			socket, _ := env[proto.AuthoringSocketEnv].(string)

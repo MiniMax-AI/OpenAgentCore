@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/dispatch"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 type receiptCancelSender struct {
@@ -126,7 +127,7 @@ func TestExecutorCancellationReachesNativeBeforeDurableReceiptJoin(t *testing.T)
 			sender := &receiptCancelSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
 			owner := &receiptCancelExecutor{turn: make(chan *receiptCancelTurn, 2), cancelFails: mode == "cancel_failure" || mode == "close_failure_retry", closeFailsFirst: mode == "close_failure_retry", closeEntered: make(chan struct{}), closeRelease: make(chan struct{})}
 			reg := agent.NewRegistry()
-			reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: proto.AgentKindCapabilities{EnvironmentNone: true}}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+			reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 				return nil, errors.New("legacy factory forbidden")
 			})
 			reg.RegisterExecutor("reusable", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return owner, nil })

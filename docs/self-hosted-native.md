@@ -167,3 +167,6 @@ dependencies before launch. Official API read responses retain the required
 On Windows, stdio MCP commands named npm or npx (including explicit .cmd
 paths) run through the selected installation's JavaScript entrypoint with Node.
 Other batch wrappers require an explicit cmd.exe command and its arguments.
+
+For precedence and snapshot behavior of `--tool-env-file` with Session
+preparation, see the [Environment contract](../contracts/agents-api/environments.md#explicit-local-tool-environment).

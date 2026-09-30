@@ -9,13 +9,14 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestNoEnvironmentRejectsOtherEngineBeforeFactory(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	called := false
-	h.reg.Register("claude_code", harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		called = true
 		return nil, nil
 	})
@@ -34,7 +35,7 @@ func TestNoEnvironmentUsesAvailableCapability(t *testing.T) {
 		h := newHarness(t)
 		defer h.router.Shutdown(context.Background())
 		called := false
-		h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_sdk", Available: available, Capabilities: proto.AgentKindCapabilities{EnvironmentNone: true}}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_sdk", Available: available, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 			called = true
 			return nil, errors.New("controlled factory stop")
 		})
@@ -52,7 +53,7 @@ func TestLocalEnvironmentRequiresAvailableCapability(t *testing.T) {
 			defer h.router.Shutdown(context.Background())
 			called := false
 			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: mode != "unavailable",
-				Capabilities: proto.AgentKindCapabilities{LocalEnvironment: mode != "unsupported"}},
+				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilityFromBool(mode != "unsupported")})},
 				harnessconfig.Configuration{}, func(_ context.Context, req proto.PromptRequestPayload, _ chan<- proto.Envelope) (agent.Session, error) {
 					called = true
 					if req.LocalEnvironment == nil || req.LocalEnvironment.ID != preparationEnvironmentID {

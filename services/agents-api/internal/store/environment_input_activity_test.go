@@ -251,3 +251,25 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 		t.Fatal("deleted activity events remained visible", err)
 	}
 }
+
+func TestPreparationFailurePreservesCancelledAndNewerInput(t *testing.T) {
+	s, _ := testStore(t)
+	tenant, session := environmentInputSession(t, s)
+	first := reserveEnvironmentInput(t, s, tenant, session.ID, "cancelled")
+	if _, err := s.CancelEnvironmentInput(t.Context(), tenant, session.ID, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	next := reserveEnvironmentInput(t, s, tenant, session.ID, "new")
+	if err := s.FailEnvironmentInput(t.Context(), tenant, session.ID, first.ID, "runtime_preparation_failed"); err != nil {
+		t.Fatal(err)
+	}
+	for id, state := range map[string]string{first.ID: EnvironmentInputCancelled, next.ID: EnvironmentInputPending} {
+		current, err := s.GetEnvironmentInputReservation(t.Context(), tenant, session.ID, id)
+		if err != nil || current.State != state {
+			t.Fatal("late failure changed another outcome", err)
+		}
+	}
+	if err := s.FailEnvironmentInput(t.Context(), tenant, session.ID, next.ID, "secret-canary"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("unclassified diagnostic accepted", err)
+	}
+}

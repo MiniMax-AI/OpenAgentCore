@@ -69,11 +69,9 @@ TLS reverse proxy routes `/v1` (applications) and `/api/v1` (nodes and Runtime
 daemons, with their own credentials) directly to Core and everything else,
 including `/core/v1`, to Web. Operator scripts call `/core/v1` on Core's loopback
 port.
-Nodes and Core come from one distribution. Older nodes using the removed
-`/core/v1/sandbox` paths are unsupported; preserve their installation and data and
-use a separate fresh installation. There is no drained in-place upgrade or
-historical re-enrollment procedure. Current-version Runtime generation rollout
-retains its separate resource lifecycle.
+Nodes and Core come from one distribution. Runtime generation rollout has a
+separate resource lifecycle; see the
+[installation version policy](../../docs/getting-started/operations.md#installation-version-policy).
 
 The Web manager offers no manual Core key entry outside sign-in, and Web refuses
 to start without its Core key file. It holds no Project API key and never calls

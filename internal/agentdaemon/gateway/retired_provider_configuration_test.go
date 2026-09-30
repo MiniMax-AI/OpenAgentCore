@@ -6,10 +6,15 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestRetiredProviderConfigurationDoesNotAffectHeartbeatAdmission(t *testing.T) {
-	const oldHeartbeat = `{"supported_agent_kinds":[{"kind":"codex","available":true,"capabilities":{"function_tools":true},"provider_configuration":{"schema_version":1,"providers":[{"protocol":"responses"}]}}]}`
+	caps, err := json.Marshal(prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldHeartbeat := `{"supported_agent_kinds":[{"kind":"codex","available":true,"capabilities":` + string(caps) + `,"provider_configuration":{"schema_version":1,"providers":[{"protocol":"responses"}]}}]}`
 	var heartbeat proto.HeartbeatPayload
 	if err := json.Unmarshal([]byte(oldHeartbeat), &heartbeat); err != nil {
 		t.Fatal(err)

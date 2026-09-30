@@ -18,9 +18,12 @@ copy, when a contract changes.
 | API callers, credentials and route inventory | [API index](docs/api/README.md) |
 | Public wire types and qualified behavior | [Agents API contracts](contracts/agents-api/README.md), [pinned upstream](contracts/agents-api/upstream.json), and linked operation contracts |
 | Core service implementation constraints | [Agents API implementation constraints](services/agents-api/IMPLEMENTATION.md) and [service README](services/agents-api/README.md) |
+| Provider-to-Runtime startup input | [Runtime bootstrap](docs/runtime-bootstrap.md) and `internal/runtimebootstrap` |
 | Runtime messages, Executor/Turn lifetimes, receipts and failure ownership | [Core–Runtime protocol](docs/runtime-protocol.md) and `internal/agentdaemon/proto` |
 | Environment ownership and capability preparation (Skills, Plugins, MCP, `packages.system`) | [Environments](contracts/agents-api/environments.md) |
 | Adding a Harness (steps) | [Harness onboarding](contracts/agents-api/harness-onboarding.md), `apps/parsar-daemon/internal/agent/harness.go` and `internal/harnessconfig/harness.go` |
+| Built-in Harness identifiers, configuration/profile bindings and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
+| Effective MCP bindings and credential authority | [Environment MCP](contracts/agents-api/environments.md#skills-plugins-and-environment-mcp) and `apps/parsar-daemon/internal/agent/mcp_binding.go` |
 | Harness qualification and acceptance | [Harness integration](contracts/agents-api/harnesses.md) |
 | Harness selection and Agent defaults | [Harness selection](contracts/agents-api/harness-selection.md) |
 | Adding a Sandbox Provider | [Sandbox Provider guide](docs/sandbox-provider.md) and `services/agents-api/internal/sandbox/sandbox_provider.go` |
@@ -45,6 +48,9 @@ copy, when a contract changes.
   are evidence, not current instructions or authority to restore a retired
   implementation. Keep task chronology and rollout reports out of contributor rules.
 - Keep current integration guidance separate from historical qualification evidence.
+- A guide may summarize a workflow but must link to the owning contract for
+  versions, accepted values, precedence and lifecycle rules. Do not maintain
+  another normative copy. Generated references are projections, not new owners.
 
 ## Repository boundary
 
@@ -118,7 +124,9 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   Core handlers, storage or scheduling. Qualify public workflows through the same
   shared chain; direct native probes establish feasibility only.
 - Keep engine-specific types, process management and protocol translation inside
-  execution adapters. The public API and persistence/application core must not
+  execution adapters. Native workspace execution must use the declared Environment
+  directory; a separate native history/configuration directory is not a workspace.
+  The public API and persistence/application core must not
   interpret Parsar product payloads or depend on one engine's native item types.
   Prefer maintained upstream SDKs and native execution protocols over a second
   hand-written model/tool loop or a general-purpose compatibility framework.
@@ -185,6 +193,9 @@ Two lifetimes stay separate:
 Closing a Session Executor does not release its allocation, destroy its
 Environment or delete its workspace; see
 [Executor and Turn lifetimes](docs/runtime-protocol.md#executor-and-turn-lifetimes).
+Environment preparation state belongs to the Environment, independently of any
+managed allocation. Both user-owned and managed machines use the same frozen
+preparation input and initializer; resource managers never run installation steps.
 Capability preparation follows [Environments](contracts/agents-api/environments.md#runtime-capability-preparation).
 The Runtime is not a sandbox; see
 [Runtime and outer isolation](docs/design-principles.md#runtime-and-outer-isolation).
@@ -192,6 +203,11 @@ The Runtime is not a sandbox; see
 - Keep component boundaries explicit through shared interfaces and versioned
   protocols. Register implementations behind those interfaces. Adding an
   implementation must not require a new orchestration path selected by its name.
+  Sandbox registration, configuration adaptation and persistence boundaries follow
+  the [Sandbox Provider guide](docs/sandbox-provider.md#register-the-provider-kind).
+  Resource operation declarations are exhaustive and validated against the existing
+  small interfaces; support is never inferred from method presence. See the
+  [explicit operation contract](docs/sandbox-provider.md#explicit-operation-contracts).
 - Core owns durable Session/Turn state and scheduling. Runtime owns local
   execution resources. Harness adapters translate the common execution contract
   into native operations; model and sandbox provider details stay behind their
@@ -199,15 +215,24 @@ The Runtime is not a sandbox; see
 - Fix shared lifecycle, admission, cancellation, reuse and performance problems
   in the common protocol or flow, not with Harness-, Runtime- or vendor-specific
   branches in Core. Adapters may differ natively but keep shared semantics.
+- Public Harnesses explicitly implement every extension interface, returning the
+  shared Unsupported error when unqualified; required lifecycle obligations cannot
+  be skipped. Capability declarations must be complete. Follow the single
+  [Harness onboarding contract](contracts/agents-api/harness-onboarding.md).
 - Express compatibility through declared capabilities and validate selected
-  combinations explicitly. Replaceability does not mean every model, Harness and
+  combinations explicitly. Public MCP origin and credential authority follow the
+  [Environment MCP contract](contracts/agents-api/environments.md#public-mcp-connection-origin);
+  changing an input source must not change outbound network or credential scope. Replaceability does not mean every model, Harness and
   Environment combination is supported. Never silently substitute another
   implementation or give a capability different meanings per vendor.
 - Core preparation and execution never branch on operating system or
   Environment source. Platform support requires native CI builds and automated
   tests; cross-compilation alone is insufficient.
 - Evolve shared contracts and their implementations together, document
-  ownership and validate the same contract across implementations. This rule
+  ownership and validate the same contract across implementations. Each rule has
+  one authored definition; cross-language projections are generated from it or
+  checked against common fixtures. Bootstrap credentials use the Runtime-owned
+  launch input, never a Provider-authored private auth file. This rule
   does not claim every implementation already meets every target, change the
   pinned public API, or authorize unrelated refactors.
 
@@ -215,13 +240,16 @@ The Runtime is not a sandbox; see
 
 | Boundary | Canonical guide | Code entry point |
 | --- | --- | --- |
+| Provider–Runtime startup | [Runtime bootstrap](docs/runtime-bootstrap.md) | `internal/runtimebootstrap` |
 | Core–Runtime wire | [Core–Runtime protocol](docs/runtime-protocol.md) | `internal/agentdaemon/proto` |
 | Harness | [Harness onboarding](contracts/agents-api/harness-onboarding.md) | `apps/parsar-daemon/internal/agent/harness.go`, `internal/harnessconfig/harness.go` |
 | Sandbox Provider | [Sandbox Provider guide](docs/sandbox-provider.md) | `services/agents-api/internal/sandbox/sandbox_provider.go` |
 
 Shared wire types and validators live only in `internal/agentdaemon/proto`.
 Change both peers together with an exact wire-version check; do not add a
-parallel schema or a historical wire fallback.
+parallel schema or a historical wire fallback. Capability completeness and
+interface coverage are mandatory extension gates under the
+[explicit declaration contract](docs/runtime-protocol.md#explicit-capability-declarations).
 
 ### Pre-release policy
 
@@ -259,6 +287,8 @@ broader compatibility target is complete from one merged batch.
 - Split growing files at an existing ownership boundary instead of adding
   unrelated responsibilities.
 - Use `internal/obs/log` for logs. Keep credentials out of source and logs.
+  Harness profiles must not copy Runtime tool environment values; see the
+  [environment contract](contracts/agents-api/environments.md#explicit-local-tool-environment).
 - Require absolute user-supplied working directories.
 - Keep test artifacts under `~/.oac/` and build output under
   `${OAC_DEV_HOME:-$HOME/.oac}`. Runtime state uses `${OAC_RUNTIME_HOME:-$HOME/.oac}`.
@@ -317,6 +347,13 @@ production provider-switch guard.
 
 ### Contract and schema rules
 
+- `internal/harnessconfig/builtin/catalog.json` is the single authored public
+  Harness registration list. `make generate-harness-catalog` generates Go
+  configuration/profile registration, client identifiers/names and the reference;
+  `make openapi` derives the matching enums. `make check-harness-catalog` verifies
+  freshness in the full gate. Native configuration rules stay in their adapter
+  declarations; Core qualification and Runtime availability stay separate.
+
 - `make sqlc-generate` owns only `services/agents-api/internal/db/sqlc`
   (sqlc v1.29.0). Do not rewrite landed migrations.
 - The public protocol schema is `contracts/agents-api/openapi.yaml`. Preserve
@@ -351,9 +388,15 @@ names. Daemon startup rejects renamed settings before any subcommand and
 reports replacements without values; the separate Parsar product integration
 settings remain unchanged. No old label is accepted as a fallback.
 
-Historical Runtime and project-version upgrades are not supported. Preserve
+Historical Runtime and project-version upgrades are not supported. Do not ship
+retired installer conversion implementations; preserve rejection guards under the
+[installer lifecycle contract](docs/maintainers.md#distribution-and-installer-rules). Preserve
 older installations, Runtime files, provider resources and Session history;
-install the current release separately. Use this release's template builder for
+install the current release separately. Startup never verifies and rebinds historical
+allocations or accepts node deployments without a valid specification. Keep the
+original Core responsible for unresolved resources; see the
+[operator boundary](services/agents-api/HOSTED-SANDBOX-MANAGER.md#historical-installations).
+Use this release's template builder for
 new E2B templates. Landed migrations and historical evidence stay as repository
 history; ordinary current-version database initialization uses the migration runner.
 
@@ -361,9 +404,7 @@ The dormant Pi adapter keeps its `parsar` provider slug because the separate
 Parsar product pins model selections to that identity. This is a product
 boundary exception for the name guard, like the skill-upload integration.
 
-Build the MiniMax companion from this revision's patched native sources when
-packaging a renamed Runtime. An older companion still uses the old
-model-provider, workspace and subagent names and cannot be reused.
+Build the MiniMax companion from this revision's pinned patched native sources.
 
 ## Branding
 

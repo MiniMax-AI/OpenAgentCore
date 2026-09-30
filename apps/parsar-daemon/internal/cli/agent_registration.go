@@ -1,8 +1,7 @@
 package cli
 
 import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
-import codexconfiguration "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/codex"
-import mcodeconfiguration "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/mcode"
+import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
 
 import (
 	"context"
@@ -25,11 +24,11 @@ func registerAgentKinds(registry *agent.Registry, agentCLIs agentCLIDiscovery, s
 
 	registerProduct(agentCLIs.ClaudeCode, harnessconfig.Configuration{}, withSkillUploadServer(withCapabilityDownloads(claudecode.Factory, serverURL), serverURL))
 	registerProduct(agentCLIs.OpenCode, harnessconfig.Configuration{}, withSkillUploadServer(withCapabilityDownloads(opencodeagent.Factory, serverURL), serverURL))
-	registerProduct(agentCLIs.Codex, codexconfiguration.Configuration(), withSkillUploadServer(withCapabilityDownloads(codex.Factory, serverURL), serverURL))
+	registerProduct(agentCLIs.Codex, builtin.Configuration("codex"), withSkillUploadServer(withCapabilityDownloads(codex.Factory, serverURL), serverURL))
 	if agentCLIs.Codex.Available {
 		registry.RegisterExecutor("codex", withExecutorCapabilities(codex.NewExecutorFactory(), serverURL))
 	}
-	if agentCLIs.Codex.Available && agentCLIs.Codex.Capabilities.LocalEnvironment {
+	if agentCLIs.Codex.Available && agentCLIs.Codex.Capabilities.LocalEnvironment.IsSupported() {
 		registry.RegisterPreparation("codex", true, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Prepared, error) {
 			prepared, err := codex.Prepare(ctx, req)
 			if prepared == nil {
@@ -40,10 +39,10 @@ func registerAgentKinds(registry *agent.Registry, agentCLIs agentCLIDiscovery, s
 	}
 	registerProduct(agentCLIs.Pi, harnessconfig.Configuration{}, withSkillUploadServer(withCapabilityDownloads(pi.Factory, serverURL), serverURL))
 	if agentCLIs.MCodeWorkspace != nil {
-		registry.RegisterKind(agentCLIs.MCode, mcodeconfiguration.Configuration(), mcode.Factory)
+		registry.RegisterKind(agentCLIs.MCode, builtin.Configuration("mcode"), mcode.Factory)
 		registry.RegisterPreparation("mcode", true, mcode.NewPreparationFactory(*agentCLIs.MCodeWorkspace))
 	} else {
-		registerProduct(agentCLIs.MCode, mcodeconfiguration.Configuration(), withSkillUploadServer(withCapabilityDownloads(mcode.Factory, serverURL), serverURL))
+		registerProduct(agentCLIs.MCode, builtin.Configuration("mcode"), withSkillUploadServer(withCapabilityDownloads(mcode.Factory, serverURL), serverURL))
 	}
 	if agentCLIs.MCode.Available {
 		registry.RegisterExecutor("mcode", withExecutorCapabilities(mcode.NewExecutorFactory(agentCLIs.MCodeWorkspace), serverURL))
@@ -52,6 +51,6 @@ func registerAgentKinds(registry *agent.Registry, agentCLIs agentCLIDiscovery, s
 }
 
 func registerProductAgentKind(registry *agent.Registry, info proto.SupportedAgentKind, configuration harnessconfig.Configuration, factory agent.Factory) {
-	info.Capabilities.WorkspaceAuthoring = true
+	info.Capabilities.WorkspaceAuthoring = proto.CapabilitySupported
 	registry.RegisterKind(info, configuration, factory)
 }

@@ -4,8 +4,10 @@
 //
 // Required lifecycle: ExecutorFactory prepares a fixed Session-owned Executor;
 // each StartTurn returns a fresh Turn with its own output and settlement.
-// The current public text profile also requires DurableSteerer. Keep optional
-// interfaces separate and implement them only for qualified operations. MCP,
+// Turn includes the public text DurableSteerer requirement. Keep extension
+// interfaces separate, but implement each explicitly: unsupported operations
+// return ErrUnsupportedOperation before any native effects. Interface presence
+// does not advertise support; the capability declaration controls admission. MCP,
 // images, structured output and Subagent observations use protocol messages
 // rather than additional Go interfaces; qualify and advertise them separately.
 //
@@ -64,6 +66,7 @@ type Executor interface {
 // Turn owns one output stream and never retargets cancellation to a successor.
 type Turn interface {
 	Session
+	DurableSteerer
 	CancellationOutcome() proto.DonePayload
 	// Success confirms closed output and settled native input, function,
 	// interaction and child-work obligations. Errors cannot prove cancellation.
@@ -86,14 +89,18 @@ type Session interface {
 	Cancel(ctx context.Context) error
 }
 
-// Turn capabilities. Public profiles determine which operations are required.
+// Turn extension contracts. Every public Harness implements each interface;
+// unsupported operations return ErrUnsupportedOperation with a fixed safe reason.
 
 // DurableSteerer reports one complete write synchronously, then waits for the native receipt.
+// It is independent of Steerer and is mandatory on every public Turn.
+// Required input receipts cannot be implemented by returning Unsupported.
 type DurableSteerer interface {
 	SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error
 }
 
-// Steerer optionally delivers additional text to the session's active turn.
+// Steerer delivers non-durable input when qualified; otherwise it explicitly
+// returns ErrUnsupportedOperation without submitting input.
 type Steerer interface {
 	Steer(context.Context, proto.PromptSteerPayload) error
 }
@@ -104,19 +111,24 @@ type FunctionResultSubmitter interface {
 	SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error
 }
 
-// PermissionResponder optionally accepts decisions for emitted permission requests.
+// PermissionResponder accepts decisions for qualified permission requests.
+// An adapter that never supports these interactions returns ErrUnsupportedOperation.
 // Unknown or expired requests return ErrUnknownPermission.
 type PermissionResponder interface {
 	SubmitPermission(context.Context, string, proto.PermissionDecisionPayload) error
 }
 
-// UserChoiceResponder optionally accepts answers for emitted user-choice requests.
+// UserChoiceResponder accepts answers for qualified user-choice requests.
+// An adapter that never supports these interactions returns ErrUnsupportedOperation.
 // Unknown or expired requests return ErrUnknownAsk.
 type UserChoiceResponder interface {
 	SubmitPromptForUserChoice(context.Context, string, proto.PromptForUserChoiceDecisionPayload) error
 }
 
-// Optional workspace capabilities, implemented by the authorized resource owner.
+// Workspace extensions, implemented by each owner explicitly. The common
+// Runtime may supply an authorized workspace owner independently of the adapter.
+// A resource without native access returns the corresponding Unsupported error;
+// this does not disable capabilities provided by the common workspace owner.
 
 // WorkspaceReader returns success only after acknowledged native close on an existing owner.
 type WorkspaceReader interface {
@@ -191,6 +203,9 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 	if err := configuration.ValidateDeclaration(); err != nil {
 		panic(err)
 	}
+	if err := info.ValidateDeclaration(); err != nil {
+		panic(err)
+	}
 	configuration = configuration.Clone()
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -203,8 +218,8 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 	}
 	delete(r.preparers, kind)
 	delete(r.executors, kind)
-	info.Capabilities.Preparation = false
-	info.Capabilities.WorkspaceReadPreparation = false
+	info.Capabilities.Preparation = proto.CapabilityUnsupported
+	info.Capabilities.WorkspaceReadPreparation = proto.CapabilityUnsupported
 	r.kinds[kind] = info
 }
 
@@ -227,7 +242,7 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 		}
 		return factory(ctx, req)
 	}
-	info.Capabilities.Preparation = true
+	info.Capabilities.Preparation = proto.CapabilitySupported
 	r.kinds[kind] = info
 }
 
@@ -250,13 +265,7 @@ func (r *Registry) RegisterPreparation(kind string, workspaceRead bool, prepare 
 		}
 		return prepare(ctx, req)
 	}
-	info.Capabilities.Preparation = true
-	info.Capabilities.WorkspaceReadPreparation = workspaceRead
+	info.Capabilities.Preparation = proto.CapabilitySupported
+	info.Capabilities.WorkspaceReadPreparation = proto.CapabilityFromBool(workspaceRead)
 	r.kinds[kind] = info
-}
-
-// Register installs f as the factory for kind with a basic available
-// descriptor. Panics on empty kind or nil factory.
-func (r *Registry) Register(kind string, configuration harnessconfig.Configuration, f Factory) {
-	r.RegisterKind(proto.SupportedAgentKind{Kind: kind, Available: true}, configuration, f)
 }

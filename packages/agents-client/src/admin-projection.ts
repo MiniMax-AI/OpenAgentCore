@@ -1,3 +1,4 @@
+import { coreHarnessKinds } from "./harness-catalog";
 import { AgentCoreError, projectRuntimeObservation, projectSavedAgentConfiguration } from "./client";
 import { projectTokenUsage } from "./usage-projection";
 import { safeProvider } from "./execution-configuration-projection";
@@ -224,7 +225,7 @@ export function projectIssuedExecutorCredential(value: unknown, keyId: string, e
 }
 
 const providerObservationErrors = new Set<string>(["authentication_error", "connection_failed", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "resource_not_found", "request_timeout", "invalid_request"]);
-const harnessKinds = new Set<string>(["claude_sdk", "codex", "mcode"]);
+const harnessKinds = new Set<string>(coreHarnessKinds);
 /** A deployment default model provider: exactly the safe view, never `api_key`. */
 export function projectHarnessModelConfiguration(value: unknown, harness?: CoreHarnessKind): HarnessModelConfiguration {
   if (!isRecord(value) || !onlyFields(value, new Set(["object", "harness", "updated_at", "last_used_at", "last_error_code", "last_error_at", "model_provider", "model", "harness_config"]))) return invalidAdminResponse();

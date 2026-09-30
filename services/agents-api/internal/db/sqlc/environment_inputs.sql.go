@@ -105,19 +105,20 @@ func (q *Queries) ExpireEnvironmentInputReservation(ctx context.Context, arg Exp
 	return err
 }
 
-const failEnvironmentInputWithoutModelProvider = `-- name: FailEnvironmentInputWithoutModelProvider :execrows
+const failEnvironmentInput = `-- name: FailEnvironmentInput :execrows
 UPDATE environment_input_reservations
-SET state = 'failed', settled_at = clock_timestamp(), failure_code = 'model_provider_required'
-WHERE session_id = $1 AND id = $2 AND state = 'pending'
+SET state = 'failed', settled_at = clock_timestamp(), failure_code = $1
+WHERE session_id = $2 AND id = $3 AND state = 'pending'
 `
 
-type FailEnvironmentInputWithoutModelProviderParams struct {
-	SessionID pgtype.UUID `json:"session_id"`
-	ID        pgtype.UUID `json:"id"`
+type FailEnvironmentInputParams struct {
+	FailureCode pgtype.Text `json:"failure_code"`
+	SessionID   pgtype.UUID `json:"session_id"`
+	ID          pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) FailEnvironmentInputWithoutModelProvider(ctx context.Context, arg FailEnvironmentInputWithoutModelProviderParams) (int64, error) {
-	result, err := q.db.Exec(ctx, failEnvironmentInputWithoutModelProvider, arg.SessionID, arg.ID)
+func (q *Queries) FailEnvironmentInput(ctx context.Context, arg FailEnvironmentInputParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failEnvironmentInput, arg.FailureCode, arg.SessionID, arg.ID)
 	if err != nil {
 		return 0, err
 	}

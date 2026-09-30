@@ -21,6 +21,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 const credential = "synthetic-contract-credential"
@@ -85,7 +86,7 @@ func connectFixture(t *testing.T, factory agent.ExecutorFactory) *wireFixture {
 		t.Fatal(err)
 	}
 	kinds := agent.NewRegistry()
-	kinds.RegisterKind(proto.SupportedAgentKind{Kind: "contract", Available: true, Capabilities: proto.AgentKindCapabilities{EnvironmentNone: true}},
+	kinds.RegisterKind(proto.SupportedAgentKind{Kind: "contract", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
 		harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 			return nil, errors.New("prepared execution must not use prompt_request")
 		})
@@ -373,4 +374,9 @@ func TestWireContractDisconnectIsUnknownAndReconnectDoesNotReplay(t *testing.T) 
 	if executor.starts.Load() != 1 {
 		t.Fatal("reconnect replayed input")
 	}
+}
+
+// These fixtures exercise settlement only; active input is deliberately rejected.
+func (*controlledTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
+	return agent.ErrSteeringRejected
 }

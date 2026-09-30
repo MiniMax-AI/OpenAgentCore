@@ -43,6 +43,7 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 			}
 			var params struct {
 				SessionID string `json:"sessionId"`
+				Cwd       string `json:"cwd"`
 				MCP       []struct {
 					Name, Command string
 					Args          []string
@@ -51,6 +52,11 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 			}
 			if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 2 || params.MCP[0].Name != "oac_workspace" {
 				t.Fatal("environment MCP displaced workspace tools")
+			}
+			cwd, err := os.ReadFile(record + ".cwd")
+			workspace, pathErr := filepath.EvalSymlinks(req.WorkDir)
+			if err != nil || pathErr != nil || string(cwd) != workspace || params.Cwd != req.WorkDir {
+				t.Fatalf("native process and ACP Session must use the declared workspace: process=%q ACP=%q", cwd, params.Cwd)
 			}
 			server := params.MCP[1]
 			executable, _ := os.Executable()
@@ -66,15 +72,22 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 }
 
 func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T) {
-	for _, name := range []string{"http", "http-bearer", "restricted", "disabled", "duplicate", "reserved"} {
+	for _, name := range []string{"http-headers", "http-bearer-insecure", "http-bearer-missing", "restricted", "disabled", "duplicate", "reserved"} {
 		t.Run(name, func(t *testing.T) {
 			c, req, _ := workspaceFixture(t)
 			c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 			req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
 			switch name {
-			case "http", "http-bearer":
+			case "http-headers", "http-bearer-insecure", "http-bearer-missing":
 				req.LocalEnvironment.MCP[0].Server = agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}
-				if name == "http-bearer" {
+				if name == "http-headers" {
+					req.LocalEnvironment.MCP[0].Server.HTTPHeaders = map[string]string{"X-Private": "secret"}
+				}
+				if name == "http-bearer-missing" {
+					req.LocalEnvironment.MCP[0].Server.BearerTokenEnvVar = "SELECTED_TOKEN"
+				}
+				if name == "http-bearer-insecure" {
+					req.LocalEnvironment.MCP[0].Server.URL = "http://example.invalid/mcp"
 					token := "confidential-http-token"
 					req.LocalEnvironment.MCP[0].BearerToken = &token
 				}
@@ -165,4 +178,101 @@ func writeMCPRegistry(path string, entries ...map[string]any) error {
 func mcpRegistryEntry(server, segment, tool, toolSegment string) map[string]any {
 	key, _ := json.Marshal([]string{"configured", server})
 	return map[string]any{"key": string(key), "raw": server, "segment": segment, "tools": []map[string]string{{"raw": tool, "segment": toolSegment}}}
+}
+
+func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
+	for _, authenticated := range []bool{false, true} {
+		c, req, record := workspaceFixture(t)
+		c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
+		item := proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}
+		const token = "private-mcp-canary"
+		if authenticated {
+			value := token
+			item.BearerToken = &value
+		}
+		req.LocalEnvironment.MCP = []proto.EnvironmentMCP{item}
+		resource, err := NewPreparationFactory(c)(t.Context(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = resource.Close() })
+		raw, err := os.ReadFile(record + ".session")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var params struct {
+			MCP []struct {
+				Name, Type, URL string
+				Headers         []map[string]string
+			} `json:"mcpServers"`
+		}
+		if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 2 {
+			t.Fatal("HTTP MCP displaced workspace tools")
+		}
+		server := params.MCP[1]
+		if server.Name != "remote" || server.Type != "http" || server.URL != item.Server.URL || server.Headers == nil {
+			t.Fatal("invalid native HTTP projection")
+		}
+		if authenticated {
+			if !reflect.DeepEqual(server.Headers, []map[string]string{{"name": "Authorization", "value": "Bearer " + token}}) {
+				t.Fatal("credential missing from ACP transport")
+			}
+		} else if len(server.Headers) != 0 {
+			t.Fatal("anonymous MCP inherited credentials")
+		}
+		dataDir := resource.(*prepared).session.opts.DataDir
+		for _, name := range []string{"config.yaml", "mcp.json", "workspace-profile.json"} {
+			body, err := os.ReadFile(filepath.Join(dataDir, name))
+			if err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(body), token) {
+				t.Fatal("MCP credential persisted in native configuration")
+			}
+		}
+	}
+}
+
+func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
+	c, req, _ := workspaceFixture(t)
+	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
+	token := "selected-public-vault-canary"
+	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", BearerToken: &token}}
+	opts, err := prepareWorkspaceOptions(t.Context(), c, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(opts.MCP)
+	if err != nil || !strings.Contains(string(raw), "Bearer "+token) {
+		t.Fatal("selected token not supplied to native ACP")
+	}
+	err = filepath.WalkDir(opts.DataDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		value, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(value), token) {
+			t.Fatal("public credential persisted in native state")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := []string{}
+	(*req.MCPHTTPServers)[0].AllowedTools = &empty
+	if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil {
+		t.Fatal("empty allowlist silently treated as all")
+	}
+	(*req.MCPHTTPServers)[0].AllowedTools = nil
+	(*req.MCPHTTPServers)[0].Required = true
+	if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil {
+		t.Fatal("required initialization silently ignored")
+	}
 }

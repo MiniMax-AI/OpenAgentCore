@@ -41,7 +41,7 @@ type sessionRequest struct {
 func (request decodedSessionRequest) validated() (sessionRequest, error) {
 	input := sessionRequest{CreateSessionRequest: request.CreateSessionRequest, Input: request.Input}
 	if len(request.Execution) > 0 && !bytes.Equal(bytes.TrimSpace(request.Execution), []byte("null")) {
-		if decodeInputObject(request.Execution, &input.XAgentsCore, "model_provider", "harness_config") != nil {
+		if decodeInputObject(request.Execution, &input.XAgentsCore, "model_provider", "harness_config", "environment") != nil {
 			return input, store.ErrInvalidInput
 		}
 		var fields map[string]json.RawMessage
@@ -59,27 +59,24 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 		}
 		input.VaultIDs = append(input.VaultIDs, *id)
 	}
+	canonicalEnvironment, err := preparationEnvironmentInput(request.Environment, input.XAgentsCore)
+	if err != nil {
+		return input, err
+	}
 	input.originalEnvironment = request.Environment
 	var environmentFields map[string]json.RawMessage
-	if json.Unmarshal(request.Environment, &environmentFields) != nil {
+	if json.Unmarshal(canonicalEnvironment, &environmentFields) != nil {
 		return input, store.ErrInvalidInput
 	}
-	var err error
-	var environmentType string
-	_ = json.Unmarshal(environmentFields["type"], &environmentType)
-	// Self-hosted paths are frozen in Environment.Configuration. They do not
-	// create managed initialization state or require a managed allocation.
-	if environmentType != "self_hosted" {
-		input.initialization, err = decodeEnvironmentSetup(environmentFields)
-		if err != nil {
-			return input, err
-		}
+	input.initialization, err = decodeEnvironmentSetup(environmentFields)
+	if err != nil {
+		return input, err
 	}
 	input.initialFiles, err = decodeInitialFiles(environmentFields["files"])
 	if err != nil {
 		return input, err
 	}
-	input.Environment, input.templateID, input.templateEnvironment, err = decodeTemplateEnvironment(request.Environment)
+	input.Environment, input.templateID, input.templateEnvironment, err = decodePreparationTemplate(canonicalEnvironment, true)
 	if err != nil {
 		return input, err
 	}

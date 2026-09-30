@@ -1,0 +1,5 @@
+[
+  {"kind": "claude_sdk", "label": "Claude Code", "configuration": "claudesdk", "profile": "claudeProfile"},
+  {"kind": "codex", "label": "Codex", "configuration": "codex", "profile": "codexProfile"},
+  {"kind": "mcode", "label": "MiniMax Code", "configuration": "mcode", "profile": "mcodeProfile"}
+]

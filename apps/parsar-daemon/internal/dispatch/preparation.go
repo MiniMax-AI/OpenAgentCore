@@ -19,6 +19,7 @@ const preparationRecords = 64
 // All mutable fields are protected by Router.mu. owns includes resources whose
 // cancellation is underway; a slow close cannot bypass the capacity bound.
 type preparationState struct {
+	capabilities      proto.AgentKindCapabilities
 	executor          *executorState
 	requestID         string
 	trace             string
@@ -48,12 +49,15 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if !req.WorkspaceReadOnly {
 		return r.handleExecutorPrepare(ctx, env, input)
 	}
-	caps := r.availableCapabilities(req.AgentKind)
+	caps, available := r.availableCapabilities(req.AgentKind)
+	if !available {
+		return r.rejectPreparation(env, "resource_unavailable")
+	}
 	prepare, err := r.registry.ResolvePreparation(req.AgentKind)
-	if err != nil || !caps.Preparation {
+	if err != nil || !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
-	if req.WorkspaceReadOnly && (!caps.WorkspaceReadPreparation || !proto.ValidWorkspaceReadPreparation(req)) {
+	if req.WorkspaceReadOnly && (!caps.WorkspaceReadPreparation.IsSupported() || !proto.ValidWorkspaceReadPreparation(req)) {
 		return r.rejectPreparation(env, "unsupported_read_preparation")
 	}
 	if req, err = r.localWorkspace.Configure(req); err != nil {
@@ -62,7 +66,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.WorkspaceAuthoring || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" || !req.StrictResume || !req.ReleaseOnCompletion {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if validateExecutionEnvironment(req, caps) != nil || (len(req.FunctionTools) > 0 && !caps.FunctionTools) {
+	if validateExecutionEnvironment(req, caps) != nil || (len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported()) {
 		return r.rejectPreparation(env, "unsupported_configuration")
 	}
 	if req.LocalEnvironment != nil && req.WorkspaceReadOnly {
@@ -104,7 +108,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	owner, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, stateKey: req.AgentStateKey, environmentID: req.EnvironmentID(), workspaceReadOnly: req.WorkspaceReadOnly, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, stateKey: req.AgentStateKey, environmentID: req.EnvironmentID(), workspaceReadOnly: req.WorkspaceReadOnly, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
 	p.status = proto.PreparationStatusPayload{Handle: uuid.NewString(), Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}
 	r.preparations[p.status.Handle], r.preparationRequests[p.requestID] = p, p
 	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true, true) })

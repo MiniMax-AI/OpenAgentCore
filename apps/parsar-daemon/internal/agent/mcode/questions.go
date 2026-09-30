@@ -127,6 +127,9 @@ func (s *Session) SubmitPromptForUserChoice(_ context.Context, id string, decisi
 	if !ok {
 		return agent.ErrUnknownAsk
 	}
+	if err := decision.Validate(); err != nil {
+		return err
+	}
 	response := map[string]any{"action": "cancel"}
 	if !decision.Cancelled {
 		content, err := questionContent(pending, decision)
@@ -144,22 +147,20 @@ func (s *Session) SubmitPromptForUserChoice(_ context.Context, id string, decisi
 }
 
 func questionContent(pending pendingQuestion, decision proto.PromptForUserChoiceDecisionPayload) (map[string]any, error) {
-	answers := decision.QuestionAnswers
-	if len(answers) == 0 && len(pending.Properties) == 1 {
-		for key := range pending.Properties {
-			answers = []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: key, Answers: decision.Answers}}
-		}
+	ids := make([]string, 0, len(pending.Properties))
+	for id := range pending.Properties {
+		ids = append(ids, id)
+	}
+	if _, err := decision.AnswersFor(ids); err != nil {
+		return nil, err
 	}
 	content := map[string]any{}
-	for _, answer := range answers {
+	for _, answer := range decision.QuestionAnswers {
 		property, ok := pending.Properties[answer.QuestionID]
 		if !ok {
 			return nil, fmt.Errorf("mcode: unknown input field")
 		}
 		values := append([]string{}, answer.Answers...)
-		if len(values) == 0 && answer.Answer != "" {
-			values = []string{answer.Answer}
-		}
 		if len(values) == 0 {
 			continue
 		}

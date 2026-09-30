@@ -710,9 +710,19 @@ def service_child(account, function, arguments, parent, mask, read_ends, output_
         if os.getppid() != parent:
             os._exit(1)
         os.umask(0o077)
+        # This child runs installation/removal steps, never the persistent node
+        # service. Keep only standard HTTP proxy settings across the UID boundary.
+        # curl/urllib prefer lowercase, while the Go registration command prefers
+        # uppercase. Give both spellings one value, including an explicit empty value.
+        proxies = {}
+        for name in ("http_proxy", "https_proxy", "no_proxy"):
+            value = os.environ.get(name, os.environ.get(name.upper()))
+            if value is not None:
+                proxies[name] = proxies[name.upper()] = value
         os.environ.clear()
         os.environ.update(HOME=account.pw_dir, USER=account.pw_name, LOGNAME=account.pw_name, PATH=SAFE_PATH,
                           LANG="C.UTF-8", DOCKER_CONFIG=str(CHILD_DOCKER_CONFIG))
+        os.environ.update(proxies)
         os.chdir(account.pw_dir)
         function(*arguments)
         code = 0

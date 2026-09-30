@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/dispatch"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 // ---------------------------------------------------------------------
@@ -153,7 +154,7 @@ func newHarnessWithIdleTimeout(t *testing.T, idleTimeout time.Duration) *harness
 		gotReq:  make(chan proto.PromptRequestPayload, 16),
 		gotSess: make(chan *fakeSession, 16),
 	}
-	h.reg.Register("claude_code", harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Permissions: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		sess := &fakeSession{out: out, ctx: ctx}
 		h.gotReq <- req
 		h.gotSess <- sess
@@ -445,7 +446,7 @@ func TestPromptForUserChoiceDecisionRoutesToSession(t *testing.T) {
 	waitFor(t, func() bool { return len(h.sender.snapshot()) >= 1 }, "prompt_for_user_choice forwarded")
 
 	dec := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_abcd1234", proto.PromptForUserChoiceDecisionPayload{
-		DeliveryID: "delivery-ask-1", Answers: []string{"yes"},
+		DeliveryID: "delivery-ask-1", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
 	})
 	if err := h.router.Handle(context.Background(), dec); err != nil {
 		t.Fatalf("prompt_for_user_choice_decision: %v", err)
@@ -457,7 +458,7 @@ func TestPromptForUserChoiceDecisionRoutesToSession(t *testing.T) {
 	if len(calls) != 1 || calls[0].id != "ask_abcd1234" {
 		t.Fatalf("askCalls = %+v, want one ask_abcd1234", calls)
 	}
-	if len(calls[0].decision.Answers) != 1 || calls[0].decision.Answers[0] != "yes" {
+	if len(calls[0].decision.QuestionAnswers[0].Answers) != 1 || calls[0].decision.QuestionAnswers[0].Answers[0] != "yes" {
 		t.Errorf("answer payload mismatch: %+v", calls[0].decision)
 	}
 	assertDecisionAck(t, h.sender, "delivery-ask-1", true, "")
@@ -500,7 +501,7 @@ func TestPromptForUserChoiceDecisionClearsIndexOnAgentUnknown(t *testing.T) {
 	waitFor(t, func() bool { return len(h.sender.snapshot()) >= 1 }, "prompt_for_user_choice forwarded")
 
 	dec := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_xxxxxxxx", proto.PromptForUserChoiceDecisionPayload{
-		DeliveryID: "delivery-ask-gone", Answers: []string{"yes"},
+		DeliveryID: "delivery-ask-gone", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
 	})
 	if err := h.router.Handle(context.Background(), dec); err != nil {
 		t.Fatalf("prompt_for_user_choice_decision: %v", err)
@@ -535,7 +536,7 @@ func TestPromptForUserChoiceDecisionKeepsIndexOnTransientAgentError(t *testing.T
 	waitFor(t, func() bool { return len(h.sender.snapshot()) >= 1 }, "prompt_for_user_choice forwarded")
 
 	decision := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_retry", proto.PromptForUserChoiceDecisionPayload{
-		DeliveryID: "delivery-ask-retry", Answers: []string{"yes"},
+		DeliveryID: "delivery-ask-retry", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
 	})
 	if err := h.router.Handle(context.Background(), decision); err != nil {
 		t.Fatalf("first decision: %v", err)

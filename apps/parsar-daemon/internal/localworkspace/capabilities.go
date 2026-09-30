@@ -36,6 +36,9 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 	defer unlock()
 	input := *r.LocalEnvironment.CapabilitySources
 	identity := b.capabilityIdentity()
+	if err := prepareToolEnvironment(r.LocalEnvironment.ToolEnvironment, marker.completed); err != nil {
+		return r, err
+	}
 	manifest, err := b.loadCapabilitySnapshot(root, input, identity, marker.completed)
 	if err != nil || marker.complete() != nil {
 		return r, agentcapabilities.ErrInvalid
@@ -116,6 +119,9 @@ func (b *Binding) ApplyRuntimePreparation(ctx context.Context, input proto.Runti
 	case "plugin":
 		err = agentcapabilities.InstallPlugin(root, input.Slot, data, *input.Plugin)
 	case "finalize":
+		if err := prepareToolEnvironment(false, false); err != nil {
+			return err
+		}
 		_, err = b.loadCapabilitySnapshot(root, *input.Sources, b.capabilityIdentity(), false)
 		if err == nil {
 			err = marker.complete()

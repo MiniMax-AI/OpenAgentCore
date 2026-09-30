@@ -19,14 +19,14 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 			req, cfg, root := preparationFixture(t)
 			req.StrictResume = true
 			req.AgentOptions = map[string]any{"model": "fixture-model"}
-			servers := []proto.MCPHTTPServer{{ServerLabel: "docs", ServerURL: "https://docs.example/mcp", Required: true}}
+			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp", Required: true}}
 			req.MCPHTTPServers = &servers
 			method := "thread/start"
 			if strings.HasPrefix(mode, "resume") {
 				req.AgentSessionID = "fixture-native-thread"
 				method = "thread/resume"
 			}
-			declarations, err := publicMCPHTTPServers(req)
+			declarations, _, err := runtimeMCPServers(req)
 			if err != nil {
 				t.Fatal(err)
 			}

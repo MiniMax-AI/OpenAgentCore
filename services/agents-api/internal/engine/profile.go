@@ -15,10 +15,11 @@ var ErrInvalidInput = errors.New("invalid engine configuration")
 type Profile struct {
 	ProgrammaticToolCallingDisable             bool
 	Placements                                 []string
+	MCPOrigins                                 []string
 	WebSearchControl, TextVerbosity, MCPBearer bool
 	StructuredOutput                           bool
 	ToolSearch                                 bool
-	MessageImagePlacements                     []string
+	MessageImages                              bool
 	ValidateConfiguration                      func(agent v1.Agent, environment *v1.Environment, hasDaemon bool) error
 	ValidateTools                              func(environment *v1.Environment, hasDaemon bool, functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error
 	ValidateFunctionResult                     func(placement string, result proto.FunctionResultPayload) error
@@ -42,7 +43,7 @@ func NewCatalog(profiles map[string]Profile) Catalog {
 	c := Catalog{profiles: make(map[string]Profile, len(profiles))}
 	for kind, profile := range profiles {
 		profile.Placements = slices.Clone(profile.Placements)
-		profile.MessageImagePlacements = slices.Clone(profile.MessageImagePlacements)
+		profile.MCPOrigins = slices.Clone(profile.MCPOrigins)
 		c.profiles[kind] = profile
 	}
 	return c
@@ -54,7 +55,7 @@ func (c Catalog) Lookup(kind string) (Profile, bool) {
 	}
 	profile, ok := c.profiles[kind]
 	profile.Placements = slices.Clone(profile.Placements)
-	profile.MessageImagePlacements = slices.Clone(profile.MessageImagePlacements)
+	profile.MCPOrigins = slices.Clone(profile.MCPOrigins)
 	return profile, ok
 }
 
@@ -67,9 +68,3 @@ func (c Catalog) Kinds() []string {
 	slices.Sort(kinds)
 	return kinds
 }
-
-var qualified = NewCatalog(map[string]Profile{
-	"codex":      codexProfile(),
-	"claude_sdk": claudeProfile(),
-	"mcode":      mcodeProfile(),
-})

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
+	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent/contracttest"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
@@ -79,9 +80,10 @@ func runPersistentExecutorHelper() {
 	}
 	for scanner.Scan() {
 		var command struct {
-			Type   string             `json:"type"`
-			TurnID string             `json:"turn_id"`
-			Input  proto.MessageInput `json:"input"`
+			Type    string             `json:"type"`
+			TurnID  string             `json:"turn_id"`
+			InputID string             `json:"input_id"`
+			Input   proto.MessageInput `json:"input"`
 		}
 		if json.Unmarshal(scanner.Bytes(), &command) != nil {
 			return
@@ -107,6 +109,10 @@ func runPersistentExecutorHelper() {
 			}
 			settle(false)
 		case "steer":
+			if os.Getenv("SDK_EXECUTOR_MODE") == "text_contract" {
+				encode(bridgeEvent{Type: "input_applied", TurnID: active, InputID: command.InputID})
+				continue
+			}
 			// A full bridge write has happened, but no native input receipt exists.
 			encode(bridgeEvent{Type: "delta", TurnID: active, Delta: "steer-written"})
 		case "turn_cancel":
@@ -305,4 +311,18 @@ func TestExecutorCancellationDeadlineInterruptsBlockedTransport(t *testing.T) {
 	<-written
 	for range out {
 	}
+}
+
+func TestSharedTextLifecycle(t *testing.T) {
+	config, req := persistentConfig(t, "text_contract")
+	owner, err := NewExecutorFactory(config)(t.Context(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contracttest.TextLifecycle(t, contracttest.TextFixture{
+		Executor:      owner,
+		CompleteInput: proto.TextInput("hello"), ActiveInput: proto.TextInput("wait"), SteeringInput: proto.TextInput("continue waiting"),
+		Ready:       func(e proto.Envelope) bool { return e.Type == proto.TypeDelta },
+		NativeOwner: func() string { return strconv.Itoa(owner.(*executor).base.process.Cmd.Process.Pid) },
+	})
 }

@@ -143,7 +143,7 @@ def main():
             reference = {"type": "skill_reference", "skill_id": first.id}
             template_skills = [{**reference, "version": "1", "name": first.name, "description": first.description}]
             plugin_metadata = [{key: plugin[key] for key in ("type", "name", "description")}]
-            network = {"access": "restricted", "allowed_domains": ["example.com", "api.example.com"]}
+            network = {"access": "enabled", "allowed_domains": []}
             files = [{"type": "file_id", "path": "/workspace/source.txt", "file_id": source.id}]
             template = api.with_raw_response.create(name="selection", network=network, env={"PRIVATE_SELECTION": marker},
                 files=files, skills=[reference], plugins=[plugin], capability_directories=["/workspace/template-capabilities"])
@@ -161,7 +161,7 @@ def main():
             replaced = {"skills": [{key: replacement[key] for key in ("type", "name", "description")}],
                         "plugins": [{key: replacement_plugin[key] for key in ("type", "name", "description")}],
                         "capability_directories": ["/workspace/replacement-capabilities"],
-                        "network": {"access": "restricted", "allowed_domains": ["api.example.com"]},
+                        "network": {"access": "enabled", "allowed_domains": []},
                         "skill_digests": [hashlib.sha256(replacement_archive).hexdigest()],
                         "plugin_digests": [hashlib.sha256(replacement_plugin_archive).hexdigest()]}
             rows = [
@@ -185,7 +185,7 @@ def main():
             missing = copy.deepcopy(base)
             missing["environment"]["environment_template_id"] = "00000000-0000-0000-0000-000000000001"
             assert reject(missing, 404, settings["foreign"]) == denied
-            reject({**base, "environment": {**base["environment"], "network": {"access": "enabled"}}}, 400)
+            reject({**base, "environment": {**base["environment"], "network": {"access": "restricted", "allowed_domains": ["example.com"]}}}, 400)
             reject({**base, "environment": {**base["environment"], "skills": [{"type": "skill_reference", "skill_id": foreign_skill.id}]}}, 404)
             reject({**base, "environment": {**base["environment"], "capability_directories": ["/outside"]}}, 400)
             malformed = copy.deepcopy(plugin)
@@ -194,8 +194,8 @@ def main():
             disabled = {"access": "disabled", "allowed_domains": []}
             api.update(template_id, network={"access": "disabled"})
             assert api.update(template_id, name="network omission preserves").network.to_dict() == disabled
-            create("disabled-omitted", base, {**default, "network": disabled})
-            create("disabled-null", {**base, "environment": {**base["environment"], "network": None}}, {**default, "network": disabled})
+            reject(base, 400)
+            reject({**base, "environment": {**base["environment"], "network": None}}, 400)
             reject({**base, "environment": {**base["environment"], "network": {"access": "enabled"}}}, 400)
             enabled = {"access": "enabled", "allowed_domains": []}
             assert api.update(template_id, network=None).network.to_dict() == enabled

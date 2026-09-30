@@ -27,7 +27,6 @@ type RuntimeProvider struct {
 	Mode                             string
 	loadDeployment                   func(context.Context) (*RuntimeProvider, error)
 	prepareDeployment                RuntimeDeploymentPreparer
-	VerifyLegacyOwnership            store.RuntimeOwnershipVerifier
 	ProviderKind                     string
 	LocalNodeID                      string
 	LocalCredentialSHA256            string
@@ -53,7 +52,6 @@ type runtimeLifecycle struct {
 	cursor          string
 	pendingCursor   string
 	connections     map[string]*runtimeConnection
-	initializing    *runtimeInitialization
 	wakeHints       chan struct{}
 }
 
@@ -88,6 +86,9 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registr
 	if err != nil || id == uuid.Nil || id.String() != config.InstallationID || fingerprintErr != nil || len(fingerprint) != 32 || hex.EncodeToString(fingerprint) != config.BackendFingerprint {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
+	if err := sandbox.ValidateProvider(config.Provider); err != nil {
+		return RuntimeProvider{}, err
+	}
 	copied := *config
 	if copied.Mode == "" && copied.ProviderKind != "" {
 		copied.Mode = "nodes"
@@ -100,7 +101,7 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registr
 	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
-		if _, ok := config.Provider.(sandbox.CheckpointProvider); !ok || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
+		if !sandbox.SupportsCheckpoint(config.Provider) || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
 			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy
@@ -277,12 +278,6 @@ func (r *runtimeLifecycle) reconcile(ctx context.Context) error {
 	if len(rows) == 0 {
 		wrapped := r.cursor != ""
 		r.cursor = ""
-		if err := r.advanceInitialization(ctx); err != nil {
-			if ownership := r.store.CheckExecutionOwnership(ctx); ownership != nil {
-				return ownership
-			}
-			log.Ctx(ctx).Warn("managed Runtime file initialization incomplete")
-		}
 		if wrapped {
 			// Service the next page now instead of spending a ticker interval on EOF.
 			// Refill only once so an empty store still returns without spinning.
@@ -313,13 +308,6 @@ func (r *runtimeLifecycle) reconcile(ctx context.Context) error {
 func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAllocation) error {
 	if owner.ProviderKey != r.config.InstallationID || owner.NodeID != r.nodeID {
 		return sandbox.ErrOwnership
-	}
-	if owner.Initialization == "running" && (r.initializing == nil || r.initializing.owner.ID != owner.ID) {
-		var err error
-		owner, err = r.store.RequestRuntimeCleanup(ctx, owner)
-		if err != nil {
-			return err
-		}
 	}
 	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
 		var err error
@@ -405,10 +393,11 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	if err != nil {
 		return err
 	}
-	if err := r.observeInitialization(ctx, owner); err != nil {
+	environment, err := r.store.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
+	if err != nil {
 		return err
 	}
-	if r.config.Suspension != nil && owner.Initialization == "complete" {
+	if r.config.Suspension != nil && environment.Initialization == "complete" {
 		return r.enableCompute(ctx, owner)
 	}
 	if peer, err := r.registry.LookupDevice(owner.DeviceID); err != nil || peer.IsClosed() {
@@ -425,12 +414,9 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	return err
 }
 
-// Allocation identity owns initialization; Environment identity owns connectivity.
+// Environment identity owns connectivity; preparation has an independent owner.
 func (r *runtimeLifecycle) clearRuntimeState(owner store.RuntimeAllocation) {
 	delete(r.connections, owner.EnvironmentID)
-	if r.initializing != nil && r.initializing.owner.ID == owner.ID {
-		r.initializing = nil
-	}
 }
 
 func runtimeReference(owner store.RuntimeAllocation) sandbox.Reference {

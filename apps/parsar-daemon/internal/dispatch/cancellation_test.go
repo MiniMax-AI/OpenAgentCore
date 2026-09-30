@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 type cancelReceiptSession struct {
@@ -26,7 +27,7 @@ func TestCompletionWaitsForNativeWriterRelease(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	sess := &cancelReceiptSession{entered: make(chan struct{}), release: make(chan struct{})}
-	h.reg.Register("codex", harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		sess.fakeSession = &fakeSession{out: out, closeOutOnCancel: true}
 		return sess, nil
 	})
@@ -65,7 +66,7 @@ func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
 			if fails {
 				sess.err = errors.New("adapter could not cancel")
 			}
-			h.reg.Register("codex", harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				sess.fakeSession = &fakeSession{out: out, closeOutOnCancel: true}
 				return sess, nil
 			})

@@ -142,6 +142,17 @@ Exporter component checks do not establish public Artifact compatibility.
 
 ## Dispatch and pending input
 
+Environment initialization is owned by the leased Worker's common preparation
+scheduler, independently of any RuntimeAllocation. Both managed and enrolled
+connections use the same frozen files/setup/capability snapshots and typed Runtime
+operations. Preparation has bounded concurrency separate from Turn scheduling;
+a blocked Runtime must not block resource cleanup or other connections. Check
+Harness availability before installing. A persisted running initialization whose
+owner is lost fails without replaying side effects. Completion requires the same
+authorized Environment/device binding. Failure settles pending input and preserves
+compute ownership and user files. Connection observations do not imply completion.
+
+
 Successful input commits send a coalesced hint to the existing Worker scheduler.
 The scheduler keeps lease, capacity, cursor fairness and per-Session ownership
 checks; a hint does not admit work itself. If capacity is occupied, preserve one
@@ -931,11 +942,8 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   completion text snapshot. A snapshot is not another delta; uncompleted messages
   remain partial when their Turn ends. Keep these observations in the journal
   before projecting public Items. This does not promise daemon event replay.
-- Legacy `tool_items` / `observe_tools` raw snapshots remain available to old
-  daemon callers. New Agents API execution does not request or decode them.
 - `tool_observations` advertises engine-neutral tool snapshots. The opt-in
-  `observe_tool_observations` takes precedence over legacy `observe_tools`:
-  attach the typed `observation` to existing tool-call frames without `native_item`.
+  `observe_tool_observations` attaches the typed `observation` to tool-call frames.
   Native adapters own discriminator/status/action translation and preserve raw
   structured values; reuse the shared function-result content type. Kinds are
   `command`, `mcp`, `function` and `web_search`; observation status is
@@ -1188,7 +1196,9 @@ All sandbox writes require the observed generation, including initial POST at
 zero; reject stale state before provider preparation, reset or no-op checks, and
 repeat it under the committing row lock. Same-provider PUT advances the target
 without draining execution or retiring nodes, tokens or the owner epoch. Node
-providers prepare independently and keep their old qualified serving pin. A different backend, E2B team or unspecified old selection requires reset.
+providers prepare independently and keep their old qualified serving pin. A different backend or E2B team requires reset. Historical selections without a
+valid specification are unsupported and rejected at startup; keep their original
+Core responsible for retained resources and install the current release separately.
 Preserve historical allocation ownership and placement, never migrate a Session.
 
 Persist immutable allocation and placement deployment generations, distinct from
@@ -1202,9 +1212,11 @@ and owner epoch. Promote a durable pin only for readiness of the then-current ta
 under deployment serialization. Late superseded readiness cannot acquire a pin.
 Filter online/readiness/address/capacity before preferring the newest eligible pin;
 newest-full must not mask older-free. Route Create, restore and cleanup through the
-immutable allocation/placement generation. V1 keeps its qualified enrolled fallback.
+immutable allocation/placement generation. Fixed-configuration manual nodes serve
+only their enrolled generation; generation management is an explicit hello capability
+on the same current wire protocol, never a historical-version fallback.
 
-Use sparse v2 control batches of at most eight entries with no lifetime cap. Omitted
+Use sparse generation control batches of at most eight entries with no lifetime cap. Omitted
 facts never authorize deletion. Correlate whole retention grants to connection,
 epoch, sequence, generation and digest; recheck queued/inflight/helper references.
 Permanent generation flock files survive updates and GC. Before any helper starts,
@@ -1217,7 +1229,7 @@ Only transfer/checksum/provenance errors report runtime_download_failed; preserv
 other fixed causes without parsing native error text. Retained Runtime bytes and
 the console's exact-release HTTP allowlist must agree. See
 `contracts/agents-api/node-generation-protocol.md` for recovery, immutable artifacts
-and the conservative v1 legacy-helper retention boundary.
+and conservative retention of unproven historical helper ownership.
 Interrupted node collection keeps an exact private generation journal and immutable
 configuration. Restart treats it only as a candidate for a fresh correlated Core
 drop grant, never as preparation or serving readiness. Persist native cleanup
@@ -1255,7 +1267,7 @@ alone never imply preparation or high-frequency polling. Rollout state is settle
 unless actual target preparation is active. Offline/unconfirmed nodes are unknown;
 only exact current connection/epoch/generation readiness is ready. A durable pin is
 not connectivity. Fixed diagnostics alone may explain failed preparation. Report
-preparing only from an actual target observation; an online v1 node can be
+preparing only from an actual target observation; an online fixed-configuration node can be
 update_required while its valid pin remains available for admission.
 
 Reset is durable execution state, advanced by the existing manager outside its
@@ -1393,7 +1405,7 @@ unconfirmed resources; keep these separate from the lifecycle and do not invent
 a successful running observation after a host restart.
 
 Managed lifecycle state is owned by one serial worker per registered node:
-its gate, allocation and pending cursors, connections, initialization progress and
+its gate, allocation and pending cursors, connections and
 wake hints are not shared with other nodes. A thin coordinator discovers nodes
 and owns worker shutdown; it never holds its map mutex during database, provider
 or wait operations. Each worker advances independently, including when another
@@ -1444,9 +1456,8 @@ change guard. This boundary does not add cross-node Session
 migration, Core multi-active, autoscaling, Kubernetes or harness residency.
 
 The common
-`services/agents-api/internal/sandbox` contract owns the four base operations
-(Create, GetInfo, Renew, Kill) and the optional CheckpointProvider
-capability. Core orchestration must not import an adapter or SDK. Exact compute
+`services/agents-api/internal/sandbox` contract owns the five required operations and optional capabilities documented
+in [the Provider guide](../../docs/sandbox-provider.md). Core orchestration must not import an adapter or SDK. Exact compute
 identity, generation construction, inspection, full snapshot capture, restore,
 thaw and owned artifact cleanup use that common capability. Initialization and
 execution use the authenticated Runtime peer.
