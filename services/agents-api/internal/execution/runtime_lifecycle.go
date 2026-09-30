@@ -86,6 +86,9 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registr
 	if err != nil || id == uuid.Nil || id.String() != config.InstallationID || fingerprintErr != nil || len(fingerprint) != 32 || hex.EncodeToString(fingerprint) != config.BackendFingerprint {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
+	if err := sandbox.ValidateProvider(config.Provider); err != nil {
+		return RuntimeProvider{}, err
+	}
 	copied := *config
 	if copied.Mode == "" && copied.ProviderKind != "" {
 		copied.Mode = "nodes"
@@ -98,7 +101,7 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registr
 	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
-		if _, ok := config.Provider.(sandbox.CheckpointProvider); !ok || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
+		if !sandbox.SupportsCheckpoint(config.Provider) || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
 			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy

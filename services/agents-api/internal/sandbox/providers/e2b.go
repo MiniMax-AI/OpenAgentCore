@@ -22,7 +22,14 @@ func BuildDirect(c DirectConfig) (sandbox.SandboxProvider, error) {
 	if a.BuildDirect == nil {
 		return nil, sandbox.ErrInvalid
 	}
-	return a.BuildDirect(c)
+	p, err := a.BuildDirect(c)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateBinding(a, p); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 func buildE2B(c DirectConfig) (sandbox.SandboxProvider, error) {
 	if c.Selection.E2B == nil {

@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
@@ -40,9 +41,12 @@ func (p *provider) Observe(ctx context.Context, target runtimeobs.Target) (runti
 }
 
 func observeProvider(ctx context.Context, provider sandbox.SandboxProvider, target runtimeobs.Target) (runtimeobs.Sample, error) {
+	if err := providercontract.Require(provider, "Observe"); err != nil {
+		return runtimeobs.Sample{}, err
+	}
 	source, ok := provider.(runtimeobs.Source)
 	if !ok {
-		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
+		return runtimeobs.Sample{}, providercontract.ErrContract
 	}
 	return source.Observe(ctx, target)
 }

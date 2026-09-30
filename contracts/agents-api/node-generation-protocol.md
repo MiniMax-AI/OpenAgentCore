@@ -10,6 +10,22 @@ Every Provider request carries its exact allocation-owned deployment generation;
 Core never strips it for an older peer. Automatic preparation and retention frames
 are sent only to nodes advertising generation management.
 
+## Provider operation outcomes
+
+Node startup and generation loading validate complete Provider operation
+declarations before accepting work. Proxies use the same registered declaration
+for admission; unsupported operations reject before node resolution or native I/O.
+The Provider [operation contract](../../docs/sandbox-provider.md#explicit-operation-contracts)
+owns the inventory and support rules.
+
+A Provider response with `error_code: unsupported` carries an `unsupported` object
+containing the exact method `operation` and an authored safe `reason` code. The
+proxy checks both against the request. Missing, malformed or mismatched evidence
+is an unconfirmed result, never proof that a mutation was rejected. Unsupported
+remains distinct from observation unavailability and unknown compute/command
+results; it does not settle resource ownership or authorize replay. The current
+private wire version requires both peers to understand this outcome.
+
 ## Bounded control
 
 A generation-managing node's hello or heartbeat contains at most eight generation observations.

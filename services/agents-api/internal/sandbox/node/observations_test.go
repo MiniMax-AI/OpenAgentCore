@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"net/http/httptest"
 	"reflect"
 	"sync"
@@ -143,7 +144,7 @@ func TestObservationWirePreservesUnavailableAndRejectsMismatchedIdentity(t *test
 		provider sandbox.SandboxProvider
 		want     error
 	}{
-		{"unsupported", &fakeProvider{}, runtimeobs.ErrUnavailable},
+		{"unsupported", &fakeProvider{}, providercontract.ErrUnsupported},
 		{"unavailable", &observationProvider{fakeProvider: &fakeProvider{}, err: runtimeobs.ErrUnavailable}, runtimeobs.ErrUnavailable},
 		{"stopped", &observationProvider{fakeProvider: &fakeProvider{}, err: runtimeobs.ErrNotRunning}, runtimeobs.ErrNotRunning},
 		{"ownership", &observationProvider{fakeProvider: &fakeProvider{}, err: sandbox.ErrOwnership}, sandbox.ErrOwnership},
@@ -151,7 +152,7 @@ func TestObservationWirePreservesUnavailableAndRejectsMismatchedIdentity(t *test
 	for _, test := range providers {
 		t.Run(test.name, func(t *testing.T) {
 			out := execute(t.Context(), test.provider, q)
-			if !errors.Is(responseError(out.ErrorCode), test.want) || out.Sample != nil {
+			if !errors.Is(responseError(out), test.want) || out.Sample != nil {
 				t.Fatal("observation error or missing sample was fabricated", out)
 			}
 		})
@@ -161,7 +162,7 @@ func TestObservationWirePreservesUnavailableAndRejectsMismatchedIdentity(t *test
 		invalid := target
 		mutate(&invalid)
 		q.Observation = &invalid
-		if out := execute(t.Context(), p, q); !errors.Is(responseError(out.ErrorCode), sandbox.ErrInvalid) {
+		if out := execute(t.Context(), p, q); !errors.Is(responseError(out), sandbox.ErrInvalid) {
 			t.Fatal("mismatched observation reached provider", out)
 		}
 	}

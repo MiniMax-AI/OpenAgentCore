@@ -4,6 +4,8 @@ package contracttest
 
 import (
 	"context"
+	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"reflect"
 	"testing"
@@ -51,6 +53,9 @@ func RunFailures(t *testing.T, factory Factory) {
 				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 				defer cancel()
 				f := factory(t, Scenario{operation, fault}, cancel)
+				if err := sandbox.ValidateProvider(f.Provider); err != nil {
+					t.Fatal(err)
+				}
 				var info sandbox.Info
 				var err error
 				switch operation {
@@ -62,6 +67,9 @@ func RunFailures(t *testing.T, factory Factory) {
 					info, err = f.Provider.Renew(ctx, f.Bootstrap.Reference)
 				case "kill":
 					err = f.Provider.Kill(ctx, f.Bootstrap.Reference)
+				}
+				if errors.Is(err, providercontract.ErrUnsupported) {
+					t.Fatal("required operation returned Unsupported", err)
 				}
 				if err == nil {
 					t.Fatal("native failure was reported as success")

@@ -2,6 +2,9 @@ package node
 
 import (
 	"context"
+	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
@@ -12,10 +15,9 @@ type provider struct {
 	resolveGeneration func(context.Context, sandbox.Reference) (string, uint64, error)
 	kind              string
 }
-type checkpointProvider struct{ *provider }
 
 var _ sandbox.SandboxProvider = (*provider)(nil)
-var _ sandbox.CheckpointProvider = (*checkpointProvider)(nil)
+var _ sandbox.CheckpointProvider = (*provider)(nil)
 
 // Proxy binds a fixed node and deployment generation explicitly.
 func (h *Hub) Proxy(id, kind string, generation uint64) sandbox.SandboxProvider {
@@ -23,6 +25,9 @@ func (h *Hub) Proxy(id, kind string, generation uint64) sandbox.SandboxProvider 
 
 }
 func (p *provider) call(ctx context.Context, q request) (response, error) {
+	if err := providercontract.Require(p, operationMethod(q.Operation)); err != nil {
+		return response{}, err
+	}
 	id, generation, err := p.resolveGeneration(ctx, q.Reference)
 	if err != nil {
 		return response{}, err
@@ -31,7 +36,13 @@ func (p *provider) call(ctx context.Context, q request) (response, error) {
 		return response{}, sandbox.ErrOwnership
 	}
 	q.DeploymentGeneration = generation
-	return p.hub.call(ctx, id, q)
+	out, err := p.hub.call(ctx, id, q)
+	if errors.Is(err, providercontract.ErrUnsupported) {
+		if _, valid := providercontract.UnsupportedReason(err, operationMethod(q.Operation)); !valid {
+			return response{}, sandbox.ErrComputeUnconfirmed
+		}
+	}
+	return out, err
 }
 func (p *provider) info(ctx context.Context, q request) (sandbox.Info, error) {
 	r, e := p.call(ctx, q)
@@ -57,6 +68,26 @@ func creationSettled(info *sandbox.Info, ref sandbox.Reference) bool {
 		return info.ProviderID == "" && !info.BootstrapComplete
 	}
 	return info.ProviderID != ""
+}
+func (p *provider) ProviderOperations() providercontract.Operations {
+	adapter, err := providers.Lookup(p.kind)
+	if err != nil {
+		return nil
+	}
+	ops := adapter.Operations()
+	ops["DiscoverSelection"] = providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_is_core_owned"}
+	ops["VerifyCredential"] = providercontract.Support{State: providercontract.Unsupported, Reason: "node_credentials_are_transport_owned"}
+	ops["ObserveBatch"] = providercontract.Support{State: providercontract.Unsupported, Reason: "node_transport_has_no_batch_observation"}
+	return ops
+}
+func (*provider) ObserveBatch(context.Context, []runtimeobs.Target) ([]runtimeobs.BatchResult, error) {
+	return nil, &providercontract.UnsupportedError{Operation: "ObserveBatch", Reason: "node_transport_has_no_batch_observation"}
+}
+func (p *provider) DiscoverSelection(context.Context, sandbox.Selection) (sandbox.Selection, error) {
+	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "node_configuration_is_core_owned"}
+}
+func (p *provider) VerifyCredential(context.Context, []sandbox.Reference) error {
+	return &providercontract.UnsupportedError{Operation: "VerifyCredential", Reason: "node_credentials_are_transport_owned"}
 }
 func (p *provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	return p.info(ctx, request{Operation: "create", Reference: b.Reference, Bootstrap: &b})
@@ -84,7 +115,7 @@ func (p *provider) command(ctx context.Context, q request) (sandbox.CommandResul
 func (p *provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
 	return p.command(ctx, request{Operation: "command", Reference: r, Command: &c})
 }
-func (p *checkpointProvider) Initial(ctx context.Context, r sandbox.Reference) (sandbox.Compute, error) {
+func (p *provider) Initial(ctx context.Context, r sandbox.Reference) (sandbox.Compute, error) {
 	out, e := p.call(ctx, request{Operation: "initial", Reference: r})
 	if e != nil {
 		return sandbox.Compute{}, e
@@ -94,7 +125,7 @@ func (p *checkpointProvider) Initial(ctx context.Context, r sandbox.Reference) (
 	}
 	return *out.Compute, nil
 }
-func (p *checkpointProvider) NewCompute(ctx context.Context, r sandbox.Reference, g uint64, s *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
+func (p *provider) NewCompute(ctx context.Context, r sandbox.Reference, g uint64, s *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
 	out, e := p.call(ctx, request{Operation: "new_compute", Reference: r, Generation: g, Snapshot: s})
 	if e != nil {
 		return sandbox.Compute{}, e
@@ -104,7 +135,7 @@ func (p *checkpointProvider) NewCompute(ctx context.Context, r sandbox.Reference
 	}
 	return *out.Compute, nil
 }
-func (p *checkpointProvider) state(ctx context.Context, q request) (sandbox.ComputeState, error) {
+func (p *provider) state(ctx context.Context, q request) (sandbox.ComputeState, error) {
 	r, e := p.call(ctx, q)
 	if e != nil {
 		return sandbox.ComputeState{}, e
@@ -114,27 +145,27 @@ func (p *checkpointProvider) state(ctx context.Context, q request) (sandbox.Comp
 	}
 	return *r.State, nil
 }
-func (p *checkpointProvider) GetCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+func (p *provider) GetCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	return p.state(ctx, request{Operation: "compute", Reference: r, Compute: &c})
 }
-func (p *checkpointProvider) Suspend(ctx context.Context, q sandbox.SuspendRequest) (sandbox.ComputeState, error) {
+func (p *provider) Suspend(ctx context.Context, q sandbox.SuspendRequest) (sandbox.ComputeState, error) {
 	return p.state(ctx, request{Operation: "suspend", Reference: q.Reference, Suspend: &q})
 }
-func (p *checkpointProvider) Resume(ctx context.Context, q sandbox.ResumeRequest) (sandbox.ComputeState, error) {
+func (p *provider) Resume(ctx context.Context, q sandbox.ResumeRequest) (sandbox.ComputeState, error) {
 	return p.state(ctx, request{Operation: "resume", Reference: q.Reference, Resume: &q})
 }
-func (p *checkpointProvider) KillCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) error {
+func (p *provider) KillCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) error {
 	_, e := p.call(ctx, request{Operation: "kill_compute", Reference: r, Compute: &c})
 	return e
 }
-func (p *checkpointProvider) DeleteSnapshot(ctx context.Context, r sandbox.Reference, s sandbox.SnapshotIdentity) error {
+func (p *provider) DeleteSnapshot(ctx context.Context, r sandbox.Reference, s sandbox.SnapshotIdentity) error {
 	_, e := p.call(ctx, request{Operation: "delete_snapshot", Reference: r, Snapshot: &s})
 	return e
 }
-func (p *checkpointProvider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, v sandbox.Command) (sandbox.CommandResult, error) {
+func (p *provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, v sandbox.Command) (sandbox.CommandResult, error) {
 	return p.command(ctx, request{Operation: "command_compute", Reference: r, Compute: &c, Command: &v})
 }
-func (p *checkpointProvider) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+func (p *provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	return p.state(ctx, request{Operation: "resume_compute", Reference: r, Compute: &c})
 }
 
@@ -142,8 +173,5 @@ func (p *checkpointProvider) ResumeCompute(ctx context.Context, r sandbox.Refere
 // distinct from the request's compute generation.
 func (h *Hub) GenerationProvider(kind string, resolve func(context.Context, sandbox.Reference) (string, uint64, error)) sandbox.SandboxProvider {
 	p := &provider{hub: h, kind: kind, resolveGeneration: resolve}
-	if providers.SupportsCheckpoint(kind) {
-		return &checkpointProvider{p}
-	}
 	return p
 }

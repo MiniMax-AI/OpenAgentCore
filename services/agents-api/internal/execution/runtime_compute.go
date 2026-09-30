@@ -63,9 +63,9 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner store.RuntimeA
 	return r.store.SetRuntimeCompute(ctx, owner, phase, raw, until, idleTimeout)
 }
 func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.RuntimeAllocation) error {
-	p, ok := r.config.Provider.(sandbox.CheckpointProvider)
-	if !ok {
-		return sandbox.ErrInvalid
+	p, capabilityErr := sandbox.Checkpoint(r.config.Provider)
+	if capabilityErr != nil {
+		return capabilityErr
 	}
 	initial, err := p.Initial(ctx, runtimeReference(owner))
 	if err != nil {
@@ -83,9 +83,9 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.Runtim
 }
 
 func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner store.RuntimeAllocation) error {
-	p, ok := r.config.Provider.(sandbox.CheckpointProvider)
-	if !ok {
-		return sandbox.ErrInvalid
+	p, capabilityErr := sandbox.Checkpoint(r.config.Provider)
+	if capabilityErr != nil {
+		return capabilityErr
 	}
 	var state runtimeCompute
 	if json.Unmarshal(owner.ComputeState, &state) != nil || state.Current.ID == "" {

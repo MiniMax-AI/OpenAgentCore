@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"sync/atomic"
 	"time"
 
@@ -94,7 +95,8 @@ func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (e
 		return execution.PreparedRuntimeDeployment{}, err
 	}
 	selection := sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, E2B: setup.E2B}
-	if discoverer, ok := candidate.Config.Provider.(sandbox.SelectionDiscoverer); ok {
+	if err := providercontract.Require(candidate.Config.Provider, "DiscoverSelection"); err == nil {
+		discoverer := candidate.Config.Provider.(sandbox.SelectionDiscoverer)
 		selection, err = discoverer.DiscoverSelection(ctx, selection)
 		if err != nil {
 			return execution.PreparedRuntimeDeployment{}, err
@@ -121,13 +123,16 @@ func (s *managedSetup) configuration(setup store.SandboxSetup) (execution.Prepar
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused,
 		CoreURL: s.publicURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
-	if _, supportsCheckpoint := provider.(sandbox.CheckpointProvider); supportsCheckpoint {
+	if sandbox.SupportsCheckpoint(provider) {
 		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.IdleSeconds) * time.Second,
 			Retention: time.Duration(setup.RetentionSeconds) * time.Second, MaxActive: 4, MaxRetained: 16}
 	}
 	return execution.PreparedRuntimeDeployment{Config: selected, Publish: s.publish}, nil
 }
 
+func (*managedSetup) ProviderOperations() providercontract.Operations {
+	return providercontract.Operations{"Observe": {State: providercontract.Supported}, "ObserveBatch": {State: providercontract.Supported}}
+}
 func (s *managedSetup) ObservationProviderType() string {
 	if selected := s.selected.Load(); selected != nil && selected.Config != nil {
 		return selected.Config.ProviderKind
@@ -135,16 +140,22 @@ func (s *managedSetup) ObservationProviderType() string {
 	return ""
 }
 
-// ObserveBatch delegates to the selected provider's batch read. It reports
-// ok=false for providers without one, so each target uses Observe instead.
-func (s *managedSetup) ObserveBatch(ctx context.Context, targets []runtimeobs.Target) ([]runtimeobs.BatchResult, bool) {
+// ObserveBatch preserves the selected provider's explicit Unsupported or failure.
+// Only Unsupported permits the observation service to read targets individually.
+func (s *managedSetup) ObserveBatch(ctx context.Context, targets []runtimeobs.Target) ([]runtimeobs.BatchResult, error) {
 	selected, err := s.load(ctx)
-	if err != nil || selected == nil {
-		return nil, false
+	if err != nil {
+		return nil, err
+	}
+	if selected == nil {
+		return nil, runtimeobs.ErrUnavailable
+	}
+	if err := providercontract.Require(selected.Provider, "ObserveBatch"); err != nil {
+		return nil, err
 	}
 	source, ok := selected.Provider.(runtimeobs.BatchSource)
 	if !ok {
-		return nil, false
+		return nil, providercontract.ErrContract
 	}
 	return source.ObserveBatch(ctx, targets)
 }
@@ -157,9 +168,12 @@ func (s *managedSetup) Observe(ctx context.Context, target runtimeobs.Target) (r
 	if selected == nil {
 		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
 	}
+	if err := providercontract.Require(selected.Provider, "Observe"); err != nil {
+		return runtimeobs.Sample{}, err
+	}
 	source, ok := selected.Provider.(runtimeobs.Source)
 	if !ok {
-		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
+		return runtimeobs.Sample{}, providercontract.ErrContract
 	}
 	return source.Observe(ctx, target)
 }

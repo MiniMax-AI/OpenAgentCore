@@ -2,6 +2,8 @@ package providers
 
 import (
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/docker"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
@@ -63,7 +65,7 @@ func TestSelectionNormalizationAndCredentialInheritance(t *testing.T) {
 func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 	const kind = "contract-test-provider"
 	// Registration is test-local: production registrations are fixed, never plugins.
-	adapters[kind] = Adapter{Mode: "nodes", ValidateSpecification: func(sandbox.DeploymentSpec) error { return nil }, Normalize: nodeSelection(func(sandbox.DeploymentSpec) error { return nil })}
+	adapters[kind] = Adapter{Mode: "nodes", Operations: docker.Operations, ValidateSpecification: func(sandbox.DeploymentSpec) error { return nil }, Normalize: nodeSelection(func(sandbox.DeploymentSpec) error { return nil })}
 	defer delete(adapters, kind)
 	s, err := Normalize(sandbox.Selection{Provider: kind})
 	if err != nil || s.Provider != kind || !IsNode(kind) || SupportsCheckpoint(kind) {
@@ -82,7 +84,11 @@ func TestRetainedLimitUsesRegisteredCapabilities(t *testing.T) {
 	const kind = "capacity-test-provider"
 	defer delete(adapters, kind)
 	for _, checkpoint := range []bool{false, true} {
-		adapters[kind] = Adapter{Mode: "nodes", Checkpoint: checkpoint}
+		operations := docker.Operations
+		if checkpoint {
+			operations = microsandbox.Operations
+		}
+		adapters[kind] = Adapter{Mode: "nodes", Operations: operations}
 		for _, retained := range []int{0, 20} {
 			want := 10
 			if checkpoint {

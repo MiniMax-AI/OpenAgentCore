@@ -3,23 +3,25 @@ package execution
 import (
 	"context"
 	"encoding/json"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
+	runtimegateway "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	runtimegateway "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
-	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 )
 
 // Provider callbacks inspect the real database at the instant destructive
@@ -35,6 +37,10 @@ func (p waitingCleanupProvider) GetInfo(_ context.Context, r sandbox.Reference) 
 func (p waitingCleanupProvider) Kill(context.Context, sandbox.Reference) error {
 	p.beforeKill()
 	return nil
+}
+
+func (waitingCleanupCheckpoint) ProviderOperations() providercontract.Operations {
+	return microsandbox.Operations()
 }
 
 type waitingCleanupCheckpoint struct {

@@ -203,6 +203,9 @@ The Runtime is not a sandbox; see
   implementation must not require a new orchestration path selected by its name.
   Sandbox registration, configuration adaptation and persistence boundaries follow
   the [Sandbox Provider guide](docs/sandbox-provider.md#register-the-provider-kind).
+  Resource operation declarations are exhaustive and validated against the existing
+  small interfaces; support is never inferred from method presence. See the
+  [explicit operation contract](docs/sandbox-provider.md#explicit-operation-contracts).
 - Core owns durable Session/Turn state and scheduling. Runtime owns local
   execution resources. Harness adapters translate the common execution contract
   into native operations; model and sandbox provider details stay behind their

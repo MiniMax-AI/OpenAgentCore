@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/docker"
@@ -14,7 +15,7 @@ import (
 )
 
 // Adapter describes configuration and transport independently of compute operations.
-// Optional native operations remain interface assertions on SandboxProvider.
+// Native operation support comes from the adapter-owned complete declaration.
 type Adapter struct {
 	Policy                        sandbox.DeploymentPolicy
 	ReplaceCredential             func(sandbox.Selection, sandbox.Selection) sandbox.Selection
@@ -27,7 +28,7 @@ type Adapter struct {
 	Credential                    bool
 	PublicOrigin                  bool
 	Mode                          string
-	Checkpoint                    bool
+	Operations                    func() providercontract.Operations
 	IdleSeconds, RetentionSeconds int64
 	ValidateSpecification         func(sandbox.DeploymentSpec) error
 	ValidateResources             func(sandbox.Resources) error
@@ -36,18 +37,18 @@ type Adapter struct {
 
 var adapters = map[string]Adapter{
 	"docker": {
-		Policy: docker.Policy(), Mode: "nodes", BuildLocal: buildDocker,
+		Policy: docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: buildDocker,
 		ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
 		Normalize: nodeSelection(docker.ValidateSpecification),
 	},
 	"microsandbox": {
-		Policy: microsandbox.Policy(), Mode: "nodes", BuildLocal: buildMicrosandbox,
-		Checkpoint: true, IdleSeconds: 300, RetentionSeconds: 86400,
+		Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: buildMicrosandbox,
+		IdleSeconds: 300, RetentionSeconds: 86400,
 		ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
 		Normalize: nodeSelection(microsandbox.ValidateSpecification),
 	},
 	"e2b": {
-		Policy: e2b.Policy(), Mode: "direct", BuildDirect: buildE2B,
+		Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: buildE2B,
 		Credential: true, PublicOrigin: true,
 		ReplaceCredential: e2b.ReplaceCredential, CredentialRequiresReset: e2b.CredentialRequiresReset,
 		CredentialUnconfirmed: e2b.ErrRequestUnconfirmed, Restore: e2b.RestoreSelection,
@@ -58,18 +59,24 @@ var adapters = map[string]Adapter{
 
 func Lookup(kind string) (Adapter, error) {
 	a, ok := adapters[kind]
-	if !ok {
+	if !ok || a.Operations == nil {
 		return Adapter{}, fmt.Errorf("%w: unsupported sandbox provider", sandbox.ErrInvalid)
+	}
+	if err := sandbox.ValidateOperations(a.Operations()); err != nil {
+		return Adapter{}, err
 	}
 	return a, nil
 }
-func IsNode(kind string) bool             { a, e := Lookup(kind); return e == nil && a.Mode == "nodes" }
-func SupportsCheckpoint(kind string) bool { a, e := Lookup(kind); return e == nil && a.Checkpoint }
+func IsNode(kind string) bool { a, e := Lookup(kind); return e == nil && a.Mode == "nodes" }
+func SupportsCheckpoint(kind string) bool {
+	a, e := Lookup(kind)
+	return e == nil && a.Operations()["Initial"].State == providercontract.Supported
+}
 
 // RetainedLimit keeps nodes without checkpoint support within their active capacity.
 func RetainedLimit(kind string, active, retained int) int {
 	a, err := Lookup(kind)
-	if err == nil && a.Mode == "nodes" && !a.Checkpoint {
+	if err == nil && a.Mode == "nodes" && !SupportsCheckpoint(kind) {
 		return active
 	}
 	return retained

@@ -380,7 +380,7 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	defer timer.Stop()
 	select {
 	case result := <-ch:
-		return result, responseError(result.ErrorCode)
+		return result, responseError(result)
 	case <-p.done:
 		return response{}, uncertain(q.Operation, ErrUnavailable)
 	case <-ctx.Done():

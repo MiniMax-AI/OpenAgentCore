@@ -166,7 +166,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 func TestOfflineIsUnknownAndDockerDoesNotAdvertiseCheckpoint(t *testing.T) {
 	h := NewHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
 	p := h.Proxy(uuid.NewString(), "docker", 1)
-	if _, ok := p.(sandbox.CheckpointProvider); ok {
+	if sandbox.SupportsCheckpoint(p) {
 		t.Fatal("docker advertised checkpoint")
 	}
 	_, err := p.GetInfo(context.Background(), reference())
