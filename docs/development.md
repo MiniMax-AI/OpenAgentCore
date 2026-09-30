@@ -64,7 +64,7 @@ under `~/.oac/build/daemon/` by default. `OAC_DEV_HOME` selects another build ro
 `OAC_DEV_CORE_BUILD_DIR` selects an absolute Core output directory. Building does
 not configure a database, start a deployment or qualify native execution.
 
-Use the [service guide](../services/core/README.md#build-standalone-binaries)
+Use the [service guide](../services/core/README.md#run-from-source)
 to run the Core migrator and server with a separate development database. The
 [configuration appendix](configuration.md#appendix-core-environment-without-the-installer)
 owns standalone process settings. For a complete operator installation, use the
@@ -82,7 +82,7 @@ site; `pnpm dev:docs` starts its development server.
 | Location | Responsibility | Read next |
 | --- | --- | --- |
 | `services/core/internal/api` | Public, administrator and machine HTTP boundaries | [API index](api/README.md) |
-| `services/core/internal/store` and `internal/db` | Core persistence, transactions, queries and migrations | [Service guide](../services/core/README.md#database-ownership) |
+| `services/core/internal/store` and `internal/db` | Core persistence, transactions, queries and migrations | [Service guide](../services/core/README.md#database) |
 | `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](runtime-protocol.md) |
 | `services/core/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
 | `internal/agentdaemon/proto` and `gateway` | Shared wire types, validators and authenticated Runtime connections | [Runtime protocol](runtime-protocol.md) |
