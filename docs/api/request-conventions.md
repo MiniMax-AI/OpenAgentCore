@@ -9,7 +9,7 @@ from them.
 | --- | --- |
 | `Authorization` | `Bearer <project-api-key>` on every operation. See [API namespaces and credentials](README.md). |
 | `OpenAI-Beta` | Exactly one `agents=v1` value on every operation except Files (`/files`) and Skills (`/skills`). Otherwise 400 `invalid_beta`. The pinned SDK sends it. |
-| `OpenAI-Organization`, `OpenAI-Project` | Optional. If present they must be `core` and `proj_<project UUID>`. |
+| `OpenAI-Organization`, `OpenAI-Project` | Optional. If present they must be `core` and `proj_<project UUID>`; otherwise the request gets the same 401 as a rejected key. |
 | `Idempotency-Key` | Optional on Session creation and on event submission, up to 128 bytes. A Core extension: a retry with the same key and request returns the original result, and the same key with a different request returns 409 `idempotency_conflict`. A streamed Session creation retry is the exception; see Create an execution Session. The hosted service returned distinct Sessions for repeated creation keys; its event submission behavior is not documented. |
 
 ## JSON request bodies
@@ -40,8 +40,8 @@ limit of Core's storage, not of the official API.
 
 ## Lists
 
-Lists take `after`, `limit` and `order`; the Environment files list pages with
-`path`, `page` and `order` instead. `order` is `asc` or `desc`; omitting it uses the
+Lists take `after`, `limit` and `order`; the Environment files list takes `path`,
+`limit` and `order` and continues with an opaque `page` token instead of `after`. `order` is `asc` or `desc`; omitting it uses the
 operation's default, and an explicitly empty value is invalid. Unknown query keys
 are ignored, and a supported scalar key given twice is rejected. Array parameters,
 such as the Vault and Credential `status[]` filter, may repeat.

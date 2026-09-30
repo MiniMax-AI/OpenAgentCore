@@ -811,3 +811,57 @@ func TestErrorCodeRegistryMatchesEmittedCodes(t *testing.T) {
 	returnedCodes(t, gateway, daemon)
 	compareRegistry(t, "Runtime daemon transport codes", daemon)
 }
+
+// TestInstallationDomainCodesMatchRegistry keeps the relayed installer
+// rejections equal to the codes deploy/install/ingress.py answers with before
+// it accepts a domain request. verify and execute run after the 202, so their
+// codes reach the caller only as the status message.
+func TestInstallationDomainCodesMatchRegistry(t *testing.T) {
+	const source = "deploy/install/ingress.py"
+	raw, err := os.ReadFile(filepath.Join(conformanceRepoRoot, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	definition := regexp.MustCompile(`(?m)^def (\w+)\(`)
+	enclosing := func(offset int) string {
+		name := ""
+		for _, match := range definition.FindAllStringSubmatchIndex(text[:offset], -1) {
+			name = text[match[2]:match[3]]
+		}
+		return name
+	}
+	line := func(offset int) string { return source + ":" + strconv.Itoa(strings.Count(text[:offset], "\n")+1) }
+	emitted := map[emittedCode][]string{}
+	add := func(status int, code string, offset int) {
+		key := emittedCode{status, code}
+		emitted[key] = append(emitted[key], line(offset))
+	}
+	raised := regexp.MustCompile(`DomainError\("(\w+)", (?:"(?:[^"\\]|\\.)*"|[\w.()]+)(?:, (\d{3}))?\)`)
+	for _, match := range raised.FindAllStringSubmatchIndex(text, -1) {
+		if name := enclosing(match[0]); name == "verify" || name == "execute" {
+			continue
+		}
+		status := 400
+		if match[4] >= 0 {
+			status, _ = strconv.Atoi(text[match[4]:match[5]])
+		}
+		add(status, text[match[2]:match[3]], match[0])
+	}
+	replied := regexp.MustCompile(`self\.reply\((\d{3}), \{"error": \{"code": "(\w+)"`)
+	for _, match := range replied.FindAllStringSubmatchIndex(text, -1) {
+		status, _ := strconv.Atoi(text[match[2]:match[3]])
+		add(status, text[match[4]:match[5]], match[0])
+	}
+	// The handler's fallback maps an installer error and invalid JSON to fixed pairs.
+	codes := regexp.MustCompile(`"(\w+)" if isinstance\(error, oac_cli\.OacError\) else "(\w+)"`).FindStringSubmatchIndex(text)
+	statuses := regexp.MustCompile(`(\d{3}) if isinstance\(error, oac_cli\.OacError\) else (\d{3})`).FindStringSubmatch(text)
+	if codes == nil || statuses == nil {
+		t.Fatalf("%s: the request handler's fallback error mapping changed; update this test", source)
+	}
+	busy, _ := strconv.Atoi(statuses[1])
+	invalid, _ := strconv.Atoi(statuses[2])
+	add(busy, text[codes[2]:codes[3]], codes[0])
+	add(invalid, text[codes[4]:codes[5]], codes[0])
+	compareRegistry(t, "Installation domain setup codes", emitted)
+}

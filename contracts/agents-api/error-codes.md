@@ -11,8 +11,9 @@ Two checks compare it with the code. `contract_conformance_test.go` in
 be written somewhere and every written status and code to have a row, and the
 statuses of the uncoded tables to equal the statuses their handlers write.
 `apps/docs/scripts/verify-error-codes.mjs` does the same for client-generated
-codes and for every code the client and Web compare against. The Namespaces and
-Meaning columns are maintained by review.
+codes and for every code the client and Web compare against, and the Go test
+also compares the installation domain setup codes with the installer. The
+Namespaces and Meaning columns are maintained by review.
 
 ## Which "code" is meant
 
@@ -36,7 +37,7 @@ that value, and `invalid_request_error` otherwise.
 ## HTTP API codes
 
 `/v1`, `/core/v1` and `/api/v1` share one writer, so a code keeps its meaning in
-every namespace. `/core/v1` adds optional `details` ([Core errors](core-errors.md)).
+every namespace; a row names a namespace-specific trigger where one differs. `/core/v1` adds optional `details` ([Core errors](core-errors.md)).
 Clients branch on `code`, never on `message`. A `null` row is a response whose
 `code` is null.
 
@@ -53,7 +54,7 @@ Clients branch on `code`, never on `message`. A `null` row is a response whose
 | 400 | `unsupported_or_invalid_configuration` | `/v1` | The configuration or input is outside what the selected harness supports |
 | 400 | `model_provider_required` | `/v1` | The Session resolved no model provider and cannot run |
 | 400 | `invalid_sandbox_configuration` | `/core/v1` | Sandbox deployment configuration is invalid |
-| 400 | `invalid_name` | `/core/v1` | A Project, key or node name fails its length or character rules; `details.max_length` gives the limit |
+| 400 | `invalid_name` | `/core/v1`, `/api/v1` | A Project, key or node name, including the name a node enrolls with, fails its length or character rules; on `/core/v1`, `details.max_length` gives the limit |
 | 400 | `invalid_node_capacity` | `/core/v1` | Node `max_active` or `max_retained` is outside 1-1000000, or retained is below active |
 | 400 | `invalid_model_provider` | `/core/v1` | The model configuration body is missing or malformed; a complete bundle is required |
 | 400 | `model_provider_base_url_invalid` | `/core/v1` | `base_url` is not HTTPS, or carries credentials, a query or a fragment |
@@ -70,21 +71,21 @@ Clients branch on `code`, never on `message`. A `null` row is a response whose
 | 401 | `invalid_node_credential` | `/api/v1` | The node enrollment token or node credential is missing or wrong |
 | 401 | `installation_authorization_invalid` | `/api/v1` | The native installation authorization is invalid or expired; get a new command from the Session |
 | 401 | null | `/v1` | No valid Bearer Project API key on an Agents API Beta route, or none supplied to Files or Skills |
-| 404 | `not_found_error` | `/v1`, `/core/v1` | The resource does not exist in the caller's or the selected Project's tenant |
+| 404 | `not_found_error` | `/v1`, `/core/v1`, `/api/v1` | The resource does not exist in the caller's or the selected Project's tenant, or the Environment of a native installation no longer exists |
 | 404 | `not_found` | `/core/v1` | Unknown Core operation, unknown harness, or a harness without a deployment default model provider |
 | 404 | `unsupported_operation` | `/v1` | Unknown `/v1` operation |
 | 404 | null | `/v1` | Missing File or Skill on the public Files and Skills routes |
 | 405 | `unsupported_operation` | all | Method not allowed, including HEAD on content downloads and Runtime reads |
 | 409 | `conflict_error` | `/v1`, `/core/v1` | Official conflicts: Session not idle for deletion, pending input, MCP credential ambiguity, hosted environment failure or a different tool result |
-| 409 | `turn_conflict` | `/v1` | The Turn cannot accept this input in its current state |
-| 409 | `idempotency_conflict` | `/v1` | The Idempotency-Key was used with different input |
+| 409 | `turn_conflict` | `/v1` | The Session or Turn cannot accept this change in its current state, such as an Environment file write while Session input is pending |
+| 409 | `idempotency_conflict` | `/v1`, `/api/v1` | The Idempotency-Key was used with different input; on sandbox node enrollment, the node ID is already enrolled |
 | 409 | `environment_unavailable` | `/v1` | The Environment no longer accepts new input |
 | 409 | `environment_input_expired` | `/v1` | The Environment input deadline passed before admission |
 | 409 | `environment_input_cancelled` | `/v1` | The Environment input was cancelled before admission |
 | 409 | `project_exists` | `/core/v1` | The Project ID already exists |
 | 409 | `project_api_key_exists` | `/core/v1` | The API key ID already exists; list its metadata and revoke it if the secret was not saved |
 | 409 | `project_archived` | `/core/v1` | The target Project is archived |
-| 409 | `executor_credential_exists` | `/core/v1` | The executor key ID already exists; rotate it explicitly to replace the secret |
+| 409 | `executor_credential_exists` | `/core/v1`, `/api/v1` | The executor key ID already exists; rotate it explicitly to replace the secret. On the native installation claim, the Environment already has another, rotated or revoked executor credential |
 | 409 | `runtime_history_unsupported` | `/core/v1` | Runtime history is not supported for this Session |
 | 409 | `sandbox_deployment_conflict` | `/core/v1`, `/api/v1` | The sandbox deployment cannot change in its current state |
 | 409 | `sandbox_configuration_error` | `/core/v1` | The deployment cannot be served as configured, for example E2B with a loopback public URL |
@@ -95,7 +96,7 @@ Clients branch on `code`, never on `message`. A `null` row is a response whose
 | 409 | `sandbox_generation_stale` | `/core/v1` | The deployment generation changed; `details.current_generation` gives the new one. Refresh before submitting again |
 | 409 | `sandbox_reset_required` | `/core/v1` | The change needs a reset first, such as another backend or E2B team; `details` names both providers |
 | 409 | `sandbox_in_use` | `/core/v1` | Hosted sandbox resources still belong to the deployment; `details.allocations` and `details.pending` count them |
-| 409 | `sandbox_reset_in_progress` | `/core/v1` | A sandbox reset is in progress, so the deployment cannot change |
+| 409 | `sandbox_reset_in_progress` | `/core/v1`, `/api/v1` | A sandbox reset is in progress, so the deployment cannot change and nodes cannot enroll or read their configuration |
 | 409 | `sandbox_not_configured` | `/core/v1` | The operation needs a configured sandbox deployment |
 | 409 | `e2b_team_mismatch` | `/core/v1` | The E2B key cannot manage the retained deployment; reset before changing teams (param `e2b.api_key`) |
 | 413 | `request_too_large` | all | The body exceeds the operation's limit, or an uploaded File or Skill exceeds its content limit |
@@ -112,7 +113,7 @@ Clients branch on `code`, never on `message`. A `null` row is a response whose
 | 503 | `execution_configuration_unavailable` | `/core/v1` | Session execution configuration cannot be read |
 | 503 | `runtime_history_unavailable` | `/core/v1` | Durable Runtime history is not configured or temporarily unavailable |
 | 503 | `core_metrics_unavailable` | `/core/v1` | Core metrics are not configured or could not be read |
-| 503 | `runtime_node_unavailable` | `/core/v1`, `/api/v1` | The selected sandbox node is unavailable or has no capacity |
+| 503 | `runtime_node_unavailable` | `/v1`, `/core/v1`, `/api/v1` | The selected sandbox node is unavailable, or no node has capacity for a new hosted Session |
 | 503 | `sandbox_credential_unavailable` | `/core/v1`, `/api/v1` | Sandbox credentials cannot be decrypted; check the service credential encryption configuration |
 | 503 | `sandbox_reset_in_progress` | `/v1` | Hosted admission is paused while a sandbox reset runs; nothing was admitted |
 | 503 | `sandbox_nodes_preparing` | `/v1` | The nodes with free capacity are still preparing the deployment's Runtime |
@@ -169,7 +170,7 @@ in `{"error":{"code":"…","message":"…"}}`. The installation controller in
 `deploy/install/ingress.py` writes them; see [Web management](../../docs/api/web-management.md)
 and the [installer contract](../../docs/maintainers.md#managed-https-ownership).
 Failures after the `202` acceptance are reported through the status `message`,
-not as codes. This table is maintained by review.
+not as codes.
 
 | Status | Code | Meaning |
 | --- | --- | --- |
