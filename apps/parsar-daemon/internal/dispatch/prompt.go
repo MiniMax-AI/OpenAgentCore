@@ -43,7 +43,10 @@ func (r *Router) handlePromptRequest(callerCtx context.Context, env proto.Envelo
 	}
 	caps, available := r.availableCapabilities(req.AgentKind)
 	if !available {
-		err := errors.New("engine is unavailable on this runtime")
+		_, err := r.registry.Resolve(req.AgentKind)
+		if err == nil {
+			err = errors.New("engine is unavailable on this runtime")
+		}
 		r.emitTerminalError(callerCtx, runID, err.Error())
 		return err
 	}
