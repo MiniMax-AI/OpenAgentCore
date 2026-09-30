@@ -1,0 +1,250 @@
+{
+  "endpoints": [
+    {
+      "name": "official",
+      "api_url": null,
+      "domain": null,
+      "valid": true
+    },
+    {
+      "name": "explicit_official",
+      "api_url": "https://api.e2b.app",
+      "domain": "e2b.app",
+      "valid": true
+    },
+    {
+      "name": "custom_root",
+      "api_url": "https://sand.example",
+      "domain": "sand.example",
+      "valid": true
+    },
+    {
+      "name": "custom_subdomain",
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "valid": true
+    },
+    {
+      "name": "one_missing_url",
+      "api_url": null,
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "one_missing_domain",
+      "api_url": "https://api.sand.example",
+      "domain": null,
+      "valid": false
+    },
+    {
+      "name": "http",
+      "api_url": "http://api.sand.example",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "path",
+      "api_url": "https://api.sand.example/",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "query",
+      "api_url": "https://api.sand.example?x=1",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "empty_query",
+      "api_url": "https://api.sand.example?",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "fragment",
+      "api_url": "https://api.sand.example#x",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "userinfo",
+      "api_url": "https://user@api.sand.example",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "port",
+      "api_url": "https://api.sand.example:443",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "uppercase",
+      "api_url": "https://API.sand.example",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "foreign",
+      "api_url": "https://sand.example.evil.test",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "leading_space",
+      "api_url": " https://api.sand.example",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "newline",
+      "api_url": "https://api.sand.example\n",
+      "domain": "sand.example",
+      "valid": false
+    },
+    {
+      "name": "localhost",
+      "api_url": "https://localhost",
+      "domain": "localhost",
+      "valid": false
+    },
+    {
+      "name": "local_suffix",
+      "api_url": "https://sand.local",
+      "domain": "sand.local",
+      "valid": false
+    },
+    {
+      "name": "localhost_suffix",
+      "api_url": "https://sand.localhost",
+      "domain": "sand.localhost",
+      "valid": false
+    },
+    {
+      "name": "ipv4",
+      "api_url": "https://127.0.0.1",
+      "domain": "127.0.0.1",
+      "valid": false
+    },
+    {
+      "name": "ipv6",
+      "api_url": "https://::1",
+      "domain": "::1",
+      "valid": false
+    },
+    {
+      "name": "empty_label",
+      "api_url": "https://sand..example",
+      "domain": "sand..example",
+      "valid": false
+    },
+    {
+      "name": "leading_dash",
+      "api_url": "https://-sand.example",
+      "domain": "-sand.example",
+      "valid": false
+    },
+    {
+      "name": "trailing_dash",
+      "api_url": "https://sand-.example",
+      "domain": "sand-.example",
+      "valid": false
+    },
+    {
+      "name": "underscore",
+      "api_url": "https://sand_box.example",
+      "domain": "sand_box.example",
+      "valid": false
+    },
+    {
+      "name": "trailing_dot",
+      "api_url": "https://sand.example.",
+      "domain": "sand.example.",
+      "valid": false
+    },
+    {
+      "name": "label_length",
+      "api_url": "https://xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.example",
+      "domain": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.example",
+      "valid": false
+    },
+    {
+      "name": "domain_length",
+      "api_url": "https://a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.example",
+      "domain": "a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.example",
+      "valid": false
+    }
+  ],
+  "templates": [
+    {
+      "name": "simple",
+      "value": "base:0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11",
+      "valid": true
+    },
+    {
+      "name": "characters",
+      "value": "My_template-2:0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11",
+      "valid": true
+    },
+    {
+      "name": "maximum_length",
+      "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11",
+      "valid": true
+    },
+    {
+      "name": "unpinned",
+      "value": "base",
+      "valid": false
+    },
+    {
+      "name": "no_build",
+      "value": "base:",
+      "valid": false
+    },
+    {
+      "name": "empty_template",
+      "value": ":0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11",
+      "valid": false
+    },
+    {
+      "name": "uppercase_uuid",
+      "value": "base:0F6C1E8E-7D3A-4B8E-9A51-2B7F7F0C9D11",
+      "valid": false
+    },
+    {
+      "name": "compact_uuid",
+      "value": "base:0f6c1e8e7d3a4b8e9a512b7f7f0c9d11",
+      "valid": false
+    },
+    {
+      "name": "zero_uuid",
+      "value": "base:00000000-0000-0000-0000-000000000000",
+      "valid": false
+    },
+    {
+      "name": "dot",
+      "value": "ba.se:0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11",
+      "valid": false
+    },
+    {
+      "name": "too_long",
+      "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11",
+      "valid": false
+    },
+    {
+      "name": "extra_colon",
+      "value": "base:0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11:extra",
+      "valid": false
+    },
+    {
+      "name": "space",
+      "value": "base :0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11",
+      "valid": false
+    },
+    {
+      "name": "unicode",
+      "value": "\u6a21\u677f:0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11",
+      "valid": false
+    }
+  ]
+}

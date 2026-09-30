@@ -198,6 +198,8 @@ An administrator [Session archive](../contracts/agents-api/admin-api.md#session-
 
 ## Validate the integration
 
+E2B template and endpoint validators in the installer and Go adapter consume the shared [selector fixtures](../services/core/internal/sandbox/e2b/testdata/configuration-selectors.json). Extend these cases with any validation change so both entry points accept the same selectors.
+
 Run `make check-sandbox-provider-contract` while developing. It runs the shared [`contracttest`](../services/core/internal/sandbox/contracttest) suite through real adapter boundaries with controlled native failures, plus the adapter and node transport tests; `make check` includes the same packages. Call the public failure runner with native-side fixtures instead of a fake `SandboxProvider`, and keep tests for foreign ownership, unknown mutation results, cancellation, no automatic replay, failed cleanup and reference-bound settlement.
 
 Node tests separately cover disconnect and reconnect fencing and cleanup after a lost Create response. Helper protocols and the [sandbox node protocol](../contracts/agents-api/node-generation-protocol.md) require an exact version match; direct in-process interfaces have no separate wire version.
