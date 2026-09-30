@@ -1,6 +1,6 @@
 {
   "sources": {
-    "contracts/agents-api/openapi.yaml": "8051d41d848957b487cc5f2b470a6ec3789110b5ced4ae90f7fbf96ac69ffb6f",
+    "contracts/agents-api/openapi.yaml": "949acc918b75ceaf9daa102f69e039a42a090eca55b1e521988400d432b2c0d3",
     "contracts/agents-api/core.openapi.yaml": "2a351d8e305097853e5404484a8c0b8e9545eb17d72b42da72025273d5941637",
     "contracts/agents-api/runtime.openapi.yaml": "d86fa523c6444b7292c06290800cee35dbc723d84dad5740c1d92776fb4165bc"
   },
@@ -19,7 +19,7 @@
     "content/docs/api-reference/environment-templates/update-an-environment-template.mdx": "4b1ea639682fdce2bce063cea68cf2928fff646d59235a5d4e17c657193fa7d9",
     "content/docs/api-reference/environment-templates/delete-an-environment-template.mdx": "c6f10446d1ca50e0a490c0296aca5d01f39c8ce96423732a271f729575dc278c",
     "content/docs/api-reference/sessions/list-execution-sessions.mdx": "fbd004c1385d827feb7c4d9398c3b91297b10c42588186b6e7125b5a38e09b0b",
-    "content/docs/api-reference/sessions/create-an-execution-session.mdx": "af343c0296b6cc47d1a3f220a63b8b1423afc1c6fd68684d6e71f66ee9e408bb",
+    "content/docs/api-reference/sessions/create-an-execution-session.mdx": "472beea09aa889ecf66701dd97b9c39be4726f4dc7a7ab471658b5c5e3036910",
     "content/docs/api-reference/sessions/retrieve-an-execution-session.mdx": "538ec687302c904eb47f6fc00f760a5f6964782d835ab4262ebc531b27c75161",
     "content/docs/api-reference/sessions/update-execution-session-metadata.mdx": "f3ad7c0fa0bdb9c6e2afb9382aaa0370fd523a7363904416d12ecebf1e3c8e86",
     "content/docs/api-reference/sessions/delete-an-execution-session.mdx": "51afc3a526d6f457df3690119e6771dafcf420850a067ba9a420c712bef85aa3",
@@ -28,7 +28,7 @@
     "content/docs/api-reference/artifacts/delete-a-published-artifact.mdx": "7f45066a7d4ca2db500625a22f14116bd1ef8a77fb15fbecf51a45ce4b6dcee8",
     "content/docs/api-reference/artifacts/download-immutable-artifact-bytes.mdx": "e5f842289d785399eb2e6b43a3740f34a170cd771574e2eadc02bde57a0607b7",
     "content/docs/api-reference/events/stream-live-session-events.mdx": "dfb350eda50b6349a15394359de6f95e534d43b2f521da070836d0fae23ed013",
-    "content/docs/api-reference/sessions/submit-session-input-events.mdx": "5005034faa3d33d5133a4081c13827d33981f82af2313650639fdbdb2b089413",
+    "content/docs/api-reference/sessions/submit-session-input-events.mdx": "e517a517e06778a55058347952c593fee7a1e2dd4fd1f75078b03e79a3a3da41",
     "content/docs/api-reference/items/list-persisted-execution-items.mdx": "a94e0c89918ec26d5964e731abf06f9ed7ad58168757df5660975855e63f8ec0",
     "content/docs/api-reference/subagents/list-session-subagents.mdx": "bed7a780c8b4e75f2cb32b56fb95d502c4ba02ad8646dc4748c0f1bd5fb4943f",
     "content/docs/api-reference/subagents/retrieve-a-session-subagent.mdx": "a203ebd474073bb78b249a52a4cf9c3359725e4a6b8580db41f488fd0daec7d0",
@@ -91,7 +91,7 @@
     "content/docs/api-reference/credentials/meta.json": "5e3368b7f365590f31c245fb326fe25c8d3ab82ee4e79e03df10ea016e7b3da3",
     "content/docs/api-reference/meta.json": "d8d58d48c955a9b161d880805bc3634617566fe3f1780ee170878358412cafe4",
     "content/docs/api-reference/index.mdx": "b32be3060e86fefc5f6b32a67353a2621ea2e7cfd88a69fa19caf67e6ab28d00",
-    "openapi/public-api.yaml": "3f034ebe892b200f06fb44cb265c244456527fe04811d2c3e1a0e2bf14b7d0f8",
+    "openapi/public-api.yaml": "2715e821e8c35a9580751b00c72fd5dbf7a8d4adc1332ee2be2bccab593b5842",
     "content/docs/api-reference/core/core-administration/query-committed-administrator-mutations.mdx": "bab0589c4dd5944b24594eb2cab6e2266075ce77b7e224cf57a63b9c8e0c89af",
     "content/docs/api-reference/core/deployment-model-providers/list-harnesses-and-their-deployment-default-model-providers.mdx": "05a4ef8d4d41c97221a805a4184242b32bd25754223984f36552cf44ec0a7332",
     "content/docs/api-reference/core/deployment-model-providers/retrieve-a-harness-s-deployment-default-model-provider.mdx": "7a4aeeb7603fd1328b3145dada0a0778cf9929f91b25938399c465de916b87d6",
