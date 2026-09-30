@@ -6,7 +6,6 @@ import (
 	"errors"
 	"slices"
 	stdstrconv "strconv"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -71,13 +70,4 @@ func verifySubagentObservationProfile(ctx context.Context, rpc *JSONRPCClient, c
 		}
 	}
 	return nil
-}
-
-func nativeHomeFromPlan(plan SessionPlan) string {
-	for _, value := range plan.Env {
-		if strings.HasPrefix(value, "CODEX_HOME=") {
-			return strings.TrimPrefix(value, "CODEX_HOME=")
-		}
-	}
-	return ""
 }

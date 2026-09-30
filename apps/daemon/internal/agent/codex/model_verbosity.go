@@ -45,12 +45,7 @@ func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan
 		// Protocol medium means the default text amount, which needs no native override.
 		plan.ExtraConfig = slices.DeleteFunc(plan.ExtraConfig, func(kv [2]string) bool { return kv[0] == "model_verbosity" })
 	}
-	codexHome := ""
-	for _, entry := range plan.Env {
-		if value, ok := strings.CutPrefix(entry, "CODEX_HOME="); ok {
-			codexHome = value
-		}
-	}
+	codexHome := nativeHomeFromPlan(*plan)
 	if !filepath.IsAbs(codexHome) {
 		return fmt.Errorf("codex: missing managed home for model catalog")
 	}
