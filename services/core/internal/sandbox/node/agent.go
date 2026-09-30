@@ -84,7 +84,7 @@ func Run(ctx context.Context, config AgentConfig) error {
 		if err := sandbox.ValidateProvider(config.Provider); err != nil {
 			return err
 		}
-		if sandbox.SupportsCheckpoint(config.Provider) != providers.SupportsCheckpoint(config.Identity.Provider) {
+		if sandbox.SupportsSuspension(config.Provider) != providers.SupportsSuspension(config.Identity.Provider) {
 			return sandbox.ErrInvalid
 		}
 	}

@@ -4,7 +4,7 @@
 // SandboxProvider owns compute and bootstrap, Runtime owns capability preparation,
 // and Harness adapters own native execution. Compute running is not execution ready.
 //
-// Required operations are on SandboxProvider. CheckpointProvider and runtimeobs
+// Required operations are on SandboxProvider. SuspensionProvider and runtimeobs
 // observation remain separate small interfaces. Every registered adapter explicitly
 // declares and implements each operation, including safe Unsupported rejections.
 // Method-set presence never means an extension is supported. ValidateProvider and
@@ -92,17 +92,18 @@ type SandboxProvider interface {
 	RunCommand(context.Context, Reference, Command) (CommandResult, error)
 }
 
-// CheckpointProvider is an explicitly declared extension. It supplies
+// SuspensionProvider is an explicitly declared extension. It supplies
 // exact-incarnation operations; Worker and Store remain the lifecycle owner.
-type CheckpointProvider interface {
+type SuspensionProvider interface {
 	SandboxProvider
 	Initial(context.Context, Reference) (Compute, error)
-	NewCompute(context.Context, Reference, uint64, *SnapshotIdentity) (Compute, error)
+	NewCompute(context.Context, Reference, uint64, *RetainedState) (Compute, error)
 	GetCompute(context.Context, Reference, Compute) (ComputeState, error)
+	RenewCompute(context.Context, Reference, Compute) (ComputeState, error)
 	Suspend(context.Context, SuspendRequest) (ComputeState, error)
 	Resume(context.Context, ResumeRequest) (ComputeState, error)
 	KillCompute(context.Context, Reference, Compute) error
-	DeleteSnapshot(context.Context, Reference, SnapshotIdentity) error
+	DeleteRetained(context.Context, Reference, RetainedState) error
 	RunCommandCompute(context.Context, Reference, Compute, Command) (CommandResult, error)
 	// ResumeCompute thaws only the same resident instance after an aborted pause.
 	ResumeCompute(context.Context, Reference, Compute) (ComputeState, error)
@@ -114,3 +115,100 @@ type ProcessPaths struct {
 	ArtifactRoot string
 	StateRoot    string
 }
+
+// ValidateRetained checks the shared envelope; only its adapter interprets Data.
+func ValidateRetained(s RetainedState) error {
+	if s.Reference == "" || s.ID == "" || s.OperationID == "" || s.SourceID == "" || s.SourceName == "" || len(s.Data) == 0 || len(s.Data) > 64*1024 {
+		return ErrInvalid
+	}
+	return nil
+}
+
+// ErrComputeUnconfirmed requires observation of the retained operation identity;
+// it does not authorize another Create, capture, restore, or cold start.
+var ErrComputeUnconfirmed = errors.New("sandbox lifecycle outcome unconfirmed")
+
+// Compute identifies one incarnation of an allocation. Name is provider-derived.
+// ID is empty only until the original create or restore result is observed.
+type Compute struct {
+	Generation   uint64
+	Name         string
+	ID           string
+	RestoredFrom *RetainedState
+}
+
+// RetainedState is adapter-owned recoverable state. Data is opaque to Core.
+// A retained state does not imply an independent snapshot.
+type RetainedState struct {
+	Reference        string
+	ID               string
+	Data             string
+	OperationID      string
+	SourceGeneration uint64
+	SourceName       string
+	SourceID         string
+}
+
+type ComputeState struct {
+	Compute           Compute
+	Status            string
+	BootstrapComplete bool
+	Retained          *RetainedState
+	ResourcesReleased bool
+	SuspendSettled    bool
+}
+type SuspendRequest struct {
+	Reference   Reference
+	OperationID string
+	Source      Compute
+	Retained    *RetainedState
+	// Recovery settles the previous attempt without another capture.
+	// Ownership-verified cleanup of a durable retained artifact may complete.
+	ReconcileOnly bool
+}
+type ResumeRequest struct {
+	Reference   Reference
+	OperationID string
+	Retained    RetainedState
+	Target      Compute
+	// Recovery observes the previous target and never starts a new restore.
+	ReconcileOnly bool
+}
+
+// ValidateComputeResult binds an observation to its precommitted incarnation.
+func ValidateComputeResult(want, got Compute) error {
+	if got.ID == "" || got.Name != want.Name || got.Generation != want.Generation || (want.ID != "" && got.ID != want.ID) || (want.RestoredFrom == nil) != (got.RestoredFrom == nil) {
+		return ErrOwnership
+	}
+	if want.RestoredFrom != nil && *want.RestoredFrom != *got.RestoredFrom {
+		return ErrOwnership
+	}
+	return nil
+}
+
+// ValidateSuspendResult distinguishes settled rollback from uncertain native work.
+func ValidateSuspendResult(q SuspendRequest, s ComputeState) error {
+	if ValidateComputeResult(q.Source, s.Compute) != nil {
+		return ErrOwnership
+	}
+	if !s.SuspendSettled || !s.BootstrapComplete {
+		return ErrComputeUnconfirmed
+	}
+	if s.Retained == nil {
+		if !q.ReconcileOnly || s.ResourcesReleased || (s.Status != "running" && s.Status != "paused") {
+			return ErrComputeUnconfirmed
+		}
+		return nil
+	}
+	v := s.Retained
+	if ValidateRetained(*v) != nil || v.OperationID != q.OperationID || v.SourceID != q.Source.ID || v.SourceName != q.Source.Name || v.SourceGeneration != q.Source.Generation || (q.Retained != nil && *q.Retained != *v) {
+		return ErrOwnership
+	}
+	if !s.ResourcesReleased || s.Status != "suspended" {
+		return ErrComputeUnconfirmed
+	}
+	return nil
+}
+
+// SuspensionStateVersion fences incompatible durable lifecycle shapes.
+const SuspensionStateVersion = "1"

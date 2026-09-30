@@ -187,7 +187,7 @@ func runtimeDeploymentView(d sqlc.RuntimeDeployment, publicURL string) (RuntimeD
 		result.CredentialConfigured = len(d.ProviderCredential) > 0
 	}
 
-	if providers.SupportsCheckpoint(d.ProviderKind) {
+	if providers.SupportsSuspension(d.ProviderKind) {
 		result.Suspension = &SandboxSuspensionView{IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds}
 	}
 	return result, nil

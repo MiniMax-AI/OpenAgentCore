@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -40,6 +41,10 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 	}
 	owned := *dispatcher
 	owned.Store = lease.Store()
+	if err := owned.Store.CheckRuntimeComputeProtocol(ctx, sandbox.SuspensionStateVersion); err != nil {
+		_ = lease.Close(context.Background())
+		return nil, err
+	}
 	owned.notifications = &executionNotifications{}
 	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: &owned, admission: dispatcher.Store, lease: lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
 	worker.runtimes, err = newRuntimeManager(owned.Store, owned.Registry, owned.ManagedRuntimes)

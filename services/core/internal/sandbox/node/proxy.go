@@ -17,7 +17,7 @@ type provider struct {
 }
 
 var _ sandbox.SandboxProvider = (*provider)(nil)
-var _ sandbox.CheckpointProvider = (*provider)(nil)
+var _ sandbox.SuspensionProvider = (*provider)(nil)
 
 // Proxy binds a fixed node and deployment generation explicitly.
 func (h *Hub) Proxy(id, kind string, generation uint64) sandbox.SandboxProvider {
@@ -125,8 +125,8 @@ func (p *provider) Initial(ctx context.Context, r sandbox.Reference) (sandbox.Co
 	}
 	return *out.Compute, nil
 }
-func (p *provider) NewCompute(ctx context.Context, r sandbox.Reference, g uint64, s *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
-	out, e := p.call(ctx, request{Operation: "new_compute", Reference: r, Generation: g, Snapshot: s})
+func (p *provider) NewCompute(ctx context.Context, r sandbox.Reference, g uint64, s *sandbox.RetainedState) (sandbox.Compute, error) {
+	out, e := p.call(ctx, request{Operation: "new_compute", Reference: r, Generation: g, Retained: s})
 	if e != nil {
 		return sandbox.Compute{}, e
 	}
@@ -158,8 +158,8 @@ func (p *provider) KillCompute(ctx context.Context, r sandbox.Reference, c sandb
 	_, e := p.call(ctx, request{Operation: "kill_compute", Reference: r, Compute: &c})
 	return e
 }
-func (p *provider) DeleteSnapshot(ctx context.Context, r sandbox.Reference, s sandbox.SnapshotIdentity) error {
-	_, e := p.call(ctx, request{Operation: "delete_snapshot", Reference: r, Snapshot: &s})
+func (p *provider) DeleteRetained(ctx context.Context, r sandbox.Reference, s sandbox.RetainedState) error {
+	_, e := p.call(ctx, request{Operation: "delete_retained", Reference: r, Retained: &s})
 	return e
 }
 func (p *provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, v sandbox.Command) (sandbox.CommandResult, error) {
@@ -174,4 +174,8 @@ func (p *provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c san
 func (h *Hub) GenerationProvider(kind string, resolve func(context.Context, sandbox.Reference) (string, uint64, error)) sandbox.SandboxProvider {
 	p := &provider{hub: h, kind: kind, resolveGeneration: resolve}
 	return p
+}
+
+func (p *provider) RenewCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+	return p.state(ctx, request{Operation: "renew_compute", Reference: r, Compute: &c})
 }

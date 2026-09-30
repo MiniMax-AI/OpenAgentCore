@@ -180,3 +180,19 @@ func checkRuntimeComputeAdmission(ctx context.Context, q *sqlc.Queries, session 
 	}
 	return err
 }
+
+// CheckRuntimeComputeProtocol blocks activation before incompatible retained state
+// could lose cleanup evidence. The previous executable must drain its resources.
+func (s *Store) CheckRuntimeComputeProtocol(ctx context.Context, version string) error {
+	if err := s.CheckExecutionOwnership(ctx); err != nil {
+		return err
+	}
+	incompatible, err := s.queries.HasIncompatibleRuntimeComputeState(ctx, version)
+	if err != nil {
+		return err
+	}
+	if incompatible {
+		return errors.New("incompatible retained runtime state: use the previous release to archive allocations before upgrading; history is preserved")
+	}
+	return nil
+}

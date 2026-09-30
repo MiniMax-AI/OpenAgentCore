@@ -88,6 +88,21 @@ func (q *Queries) GetRuntimeActivity(ctx context.Context, id pgtype.UUID) (GetRu
 	return i, err
 }
 
+const hasIncompatibleRuntimeComputeState = `-- name: HasIncompatibleRuntimeComputeState :one
+SELECT EXISTS (
+ SELECT 1 FROM runtime_allocations
+ WHERE state <> 'released' AND compute_phase <> 'disabled'
+ AND (compute_state->>'protocol_version') IS DISTINCT FROM $1::text
+)::boolean
+`
+
+func (q *Queries) HasIncompatibleRuntimeComputeState(ctx context.Context, protocolVersion string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasIncompatibleRuntimeComputeState, protocolVersion)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const recordRuntimeTerminalActivity = `-- name: RecordRuntimeTerminalActivity :exec
 UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
 FROM environments e

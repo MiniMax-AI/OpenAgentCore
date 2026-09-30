@@ -64,3 +64,10 @@ SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
     WHERE e.session_id = $1 AND a.node_id IS NOT NULL
 )::boolean;
+
+-- name: HasIncompatibleRuntimeComputeState :one
+SELECT EXISTS (
+ SELECT 1 FROM runtime_allocations
+ WHERE state <> 'released' AND compute_phase <> 'disabled'
+ AND (compute_state->>'protocol_version') IS DISTINCT FROM sqlc.arg(protocol_version)::text
+)::boolean;

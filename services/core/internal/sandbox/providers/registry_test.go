@@ -25,7 +25,7 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 				t.Fatalf("wrong namespace or defaults: %+v %v", d, err)
 			}
 			a, err := Lookup(tc.kind)
-			if err != nil || SupportsCheckpoint(tc.kind) != tc.checkpoint || IsNode(tc.kind) != (tc.mode == "nodes") || (a.BuildLocal != nil) != (tc.mode == "nodes") || (a.BuildDirect != nil) != (tc.mode == "direct") {
+			if err != nil || SupportsSuspension(tc.kind) != tc.checkpoint || IsNode(tc.kind) != (tc.mode == "nodes") || (a.BuildLocal != nil) != (tc.mode == "nodes") || (a.BuildDirect != nil) != (tc.mode == "direct") {
 				t.Fatal("inconsistent construction/capability registration", err)
 			}
 		})
@@ -66,7 +66,7 @@ func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 	adapters[kind] = adapters["docker"]
 	defer delete(adapters, kind)
 	s, err := Normalize(sandbox.Selection{Provider: kind, DeploymentSpec: validRegistrationSpec()})
-	if err != nil || s.Provider != kind || !IsNode(kind) || SupportsCheckpoint(kind) {
+	if err != nil || s.Provider != kind || !IsNode(kind) || SupportsSuspension(kind) {
 		t.Fatal("new entry did not follow shared boundary", err)
 	}
 	d, err := Describe(kind, uuid.NewString())

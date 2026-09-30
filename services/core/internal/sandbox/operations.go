@@ -11,7 +11,7 @@ import (
 // These existing interfaces are the canonical operation inventory. Declarations
 // must cover every method, including explicit unsupported implementations.
 var providerInterfaces = []reflect.Type{
-	reflect.TypeFor[SandboxProvider](), reflect.TypeFor[CheckpointProvider](),
+	reflect.TypeFor[SandboxProvider](), reflect.TypeFor[SuspensionProvider](),
 	reflect.TypeFor[SelectionDiscoverer](), reflect.TypeFor[CredentialVerifier](),
 	reflect.TypeFor[runtimeobs.SourceResolver](), reflect.TypeFor[runtimeobs.Source](), reflect.TypeFor[runtimeobs.BatchSource](),
 }
@@ -59,7 +59,7 @@ func ValidateOperations(operations providercontract.Operations) error {
 	}
 	// The checkpoint lifecycle is indivisible: partial cleanup or restore support
 	// cannot safely own a compute incarnation.
-	checkpoint := reflect.TypeFor[CheckpointProvider]()
+	checkpoint := reflect.TypeFor[SuspensionProvider]()
 	for i := 0; i < checkpoint.NumMethod(); i++ {
 		name := checkpoint.Method(i).Name
 		if _, required := reflect.TypeFor[SandboxProvider]().MethodByName(name); !required && operations[name].State != operations["Initial"].State {
@@ -72,15 +72,15 @@ func ValidateOperations(operations providercontract.Operations) error {
 	return nil
 }
 
-func SupportsCheckpoint(p SandboxProvider) bool {
+func SupportsSuspension(p SandboxProvider) bool {
 	return providercontract.Require(p, "Initial") == nil
 }
 
-func Checkpoint(p SandboxProvider) (CheckpointProvider, error) {
+func Suspension(p SandboxProvider) (SuspensionProvider, error) {
 	if err := providercontract.Require(p, "Initial"); err != nil {
 		return nil, err
 	}
-	cp, ok := p.(CheckpointProvider)
+	cp, ok := p.(SuspensionProvider)
 	if !ok {
 		return nil, providercontract.ErrContract
 	}

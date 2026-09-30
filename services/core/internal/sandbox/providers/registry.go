@@ -66,7 +66,7 @@ func Lookup(kind string) (Adapter, error) {
 	return a, nil
 }
 func IsNode(kind string) bool { a, e := Lookup(kind); return e == nil && a.Mode == "nodes" }
-func SupportsCheckpoint(kind string) bool {
+func SupportsSuspension(kind string) bool {
 	a, e := Lookup(kind)
 	return e == nil && a.Operations()["Initial"].State == providercontract.Supported
 }
@@ -74,7 +74,7 @@ func SupportsCheckpoint(kind string) bool {
 // RetainedLimit keeps nodes without checkpoint support within their active capacity.
 func RetainedLimit(kind string, active, retained int) int {
 	a, err := Lookup(kind)
-	if err == nil && a.Mode == "nodes" && !SupportsCheckpoint(kind) {
+	if err == nil && a.Mode == "nodes" && !SupportsSuspension(kind) {
 		return active
 	}
 	return retained

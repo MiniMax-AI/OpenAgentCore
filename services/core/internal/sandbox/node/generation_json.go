@@ -130,7 +130,7 @@ func validateGenerationJSON(raw []byte, kind string) error {
 		}
 	}
 	if value := values["request"]; value != nil {
-		if _, err := generationObject(value, "deployment_generation id sequence connection_id owner_epoch operation timeout_ms reference", "bootstrap compute generation command suspend resume snapshot observation", ""); err != nil {
+		if _, err := generationObject(value, "deployment_generation id sequence connection_id owner_epoch operation timeout_ms reference", "bootstrap compute generation command suspend resume retained observation", ""); err != nil {
 			return err
 		}
 	}
