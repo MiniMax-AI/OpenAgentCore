@@ -93,8 +93,8 @@ class NameGuardTests(unittest.TestCase):
         self.assertEqual([item[2] for item in found], ["PARSAR"])
         self.assertTrue(names.violations("README.md", content, rules))
 
-    def test_retirement_table_exception_does_not_hide_runtime_setting(self):
-        rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))
+    def test_scoped_exception_does_not_hide_runtime_setting(self):
+        rules = [self.rule(r"AGENTS_API_ADDR", path="services/core/cmd/server/process_configuration.go")]
         content = '{"AGENTS_API_ADDR", "OAC_ADDR"}; os.Getenv("PARSAR_HOME")'
         found = names.violations("services/core/cmd/server/process_configuration.go", content, rules)
         self.assertEqual([item[2] for item in found], ["PARSAR"])
