@@ -107,8 +107,17 @@ func TestResidentUnknownPauseUsesObservationWithoutReplay(t *testing.T) {
 	tenant, _, environment, owner := f.create()
 	f.phase(tenant, environment.ID, "running")
 	f.complete(owner)
-	if err := f.worker.ReconcileManagedRuntimes(t.Context()); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
-		t.Fatal("unknown pause was reported as settled", err)
+	for range 100 {
+		if err := f.worker.ReconcileManagedRuntimes(t.Context()); err != nil && !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
+			t.Fatal("resident pause reconciliation failed", err)
+		}
+		if resident.pauses == 1 {
+			break
+		}
+	}
+	uncertain, err := f.store.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+	if err != nil || resident.pauses != 1 || uncertain.ComputePhase != "suspending" {
+		t.Fatal("unknown pause was not retained for observation", resident.pauses, uncertain.ComputePhase, err)
 	}
 	f.phase(tenant, environment.ID, "suspended")
 	if resident.pauses != 1 {

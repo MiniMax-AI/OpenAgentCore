@@ -344,7 +344,6 @@ func (f *computeLifecycleFixture) create() (string, store.Session, store.Environ
 	t := f.t
 	t.Helper()
 	tenant, session, environment := managedSession(t, f.store)
-	t.Log("managed session created")
 	owner, err := f.worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, f.key)
 	if err != nil {
 		t.Fatalf("provision environment: %v", err)
@@ -356,7 +355,6 @@ func (f *computeLifecycleFixture) create() (string, store.Session, store.Environ
 		t.Fatalf("connect runtime: %v", err)
 	}
 	owner = f.phase(tenant, environment.ID, "running")
-	t.Log("managed runtime running")
 	return tenant, session, environment, owner
 }
 func (f *computeLifecycleFixture) phase(tenant, environment, phase string) store.RuntimeAllocation {
