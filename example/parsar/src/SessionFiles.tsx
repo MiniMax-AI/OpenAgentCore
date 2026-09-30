@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Upload, Download } from "lucide-react";
-import type { ListPage, SessionArtifact } from "@agents-core-web/agents-client";
+import type { ListPage, SessionArtifact } from "@oac/agents-client";
 import { api, dateTime } from "./lib/api";
 import { Button } from "./components/ui/button";
 import {
