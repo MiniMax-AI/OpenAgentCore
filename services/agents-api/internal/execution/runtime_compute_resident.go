@@ -69,9 +69,9 @@ func (r *runtimeLifecycle) observeResidentCompute(ctx context.Context, p sandbox
 		if err != nil {
 			return err
 		}
-		return r.restoreResidentCompute(ctx, p, next, state, true)
+		return r.restoreResidentCompute(ctx, p, next, state)
 	case "restoring":
-		return r.restoreResidentCompute(ctx, p, owner, state, false)
+		return r.restoreResidentCompute(ctx, p, owner, state)
 	case "waking":
 		return r.wakeResidentCompute(ctx, p, owner, state)
 	default:
@@ -163,16 +163,8 @@ func (r *runtimeLifecycle) idleResidentCompute(ctx context.Context, p sandbox.Re
 	return err
 }
 
-func (r *runtimeLifecycle) restoreResidentCompute(ctx context.Context, p sandbox.ResidentPauseProvider, owner store.RuntimeAllocation, state runtimeCompute, issue bool) error {
-	var info sandbox.Info
-	var err error
-	if issue {
-		info, err = p.Resume(ctx, runtimeReference(owner))
-	} else {
-		// A lost Resume response may have restored the original VM. Observe
-		// the durable restoring receipt without sending another Resume.
-		info, err = p.GetInfo(ctx, runtimeReference(owner))
-	}
+func (r *runtimeLifecycle) restoreResidentCompute(ctx context.Context, p sandbox.ResidentPauseProvider, owner store.RuntimeAllocation, state runtimeCompute) error {
+	info, err := p.Resume(ctx, runtimeReference(owner))
 	if err != nil {
 		return err
 	}
