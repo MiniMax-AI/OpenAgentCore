@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
 func TestMain(m *testing.M) {

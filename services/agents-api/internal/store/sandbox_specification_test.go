@@ -1,8 +1,9 @@
 package store
 
 import (
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"strings"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
 func SandboxDeploymentTestSpec(provider string) sandbox.DeploymentSpec {

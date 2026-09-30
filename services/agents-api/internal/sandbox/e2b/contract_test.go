@@ -3,10 +3,11 @@ package e2b
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/contracttest"
 	"github.com/google/uuid"
-	"testing"
 )
 
 type contractCaller func(context.Context, Request) (Response, error)

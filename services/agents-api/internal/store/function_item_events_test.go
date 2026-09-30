@@ -2,9 +2,10 @@ package store
 
 import (
 	"encoding/json"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/items"
 	"reflect"
 	"testing"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/items"
 )
 
 func TestFunctionResultEventsAreInputs(t *testing.T) {

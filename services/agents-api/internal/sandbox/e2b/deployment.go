@@ -18,7 +18,7 @@ func Policy() sandbox.DeploymentPolicy {
 func ValidateResources(r sandbox.Resources) error          { return r.ValidatePolicy("e2b", Policy()) }
 func ValidateSpecification(s sandbox.DeploymentSpec) error { return s.ValidatePolicy("e2b", Policy()) }
 
-func ValidateConfiguration(c *sandbox.E2BConfiguration) error {
+func ValidateConfiguration(c *DeploymentConfiguration) error {
 	if c == nil || c.APIKey == "" || len(c.APIKey) > 4096 || strings.IndexFunc(c.APIKey, func(r rune) bool { return unicode.IsSpace(r) || r == 0 }) >= 0 {
 		return sandbox.ErrInvalid
 	}
@@ -48,23 +48,23 @@ func NormalizeSelection(s sandbox.Selection) (sandbox.Selection, error) {
 	} else if err := ValidateSpecification(s.DeploymentSpec); err != nil {
 		return s, err
 	}
-	if err := ValidateConfiguration(s.E2B); err != nil {
+	if err := ValidateConfiguration(configuration(s)); err != nil {
 		return s, err
 	}
-	c := *s.E2B
+	c := *configuration(s)
 	c.APIURL, c.Domain, _ = NormalizeEndpoint(c.APIURL, c.Domain)
-	s.E2B = &c
+	s.Configuration = &c
 	return s, nil
 }
 
-func WithTemplateBuild(input sandbox.Selection, build *sandbox.TemplateBuild) sandbox.Selection {
-	if input.E2B != nil && build != nil {
-		c, b := *input.E2B, *build
+func WithTemplateBuild(input sandbox.Selection, build *DeploymentBuild) sandbox.Selection {
+	if configuration(input) != nil && build != nil {
+		c, b := *configuration(input), *build
 		if input.Resources == (sandbox.Resources{}) {
 			input.Resources = sandbox.Resources{CPUs: uint32(b.CPUs), MemoryMiB: uint32(b.MemoryMiB)}
 		}
 		c.TemplateBuild = &b
-		input.E2B = &c
+		input.Configuration = &c
 	}
 	return input
 }
@@ -73,15 +73,15 @@ func WithTemplateBuild(input sandbox.Selection, build *sandbox.TemplateBuild) sa
 func (p *Provider) DiscoverSelection(ctx context.Context, s sandbox.Selection) (sandbox.Selection, error) {
 	build, err := p.ValidateDeployment(ctx)
 	if err != nil {
-		if errors.Is(err, ErrCredentialInvalid) || errors.Is(err, ErrTeamMismatch) {
+		if errors.Is(err, sandbox.ErrCredentialRejected) || errors.Is(err, sandbox.ErrCredentialOwnership) {
 			return s, err
 		}
 		if errors.Is(err, sandbox.ErrInvalid) {
-			return s, ErrTemplateInvalid
+			return s, sandbox.ErrConfigurationSelection
 		}
-		return s, ErrRequestUnconfirmed
+		return s, sandbox.ErrConfigurationUnconfirmed
 	}
-	recorded := &sandbox.TemplateBuild{Status: build.Status, CPUs: int32(build.CPUs), MemoryMiB: int32(build.MemoryMiB)}
+	recorded := &DeploymentBuild{Status: build.Status, CPUs: int32(build.CPUs), MemoryMiB: int32(build.MemoryMiB)}
 	if build.RootDiskMiB != nil && *build.RootDiskMiB <= math.MaxInt32 {
 		disk := int32(*build.RootDiskMiB)
 		recorded.RootDiskMiB = &disk
@@ -93,45 +93,21 @@ func (p *Provider) DiscoverSelection(ctx context.Context, s sandbox.Selection) (
 	return s, nil
 }
 
-// RestoreSelection normalizes stored connection fields without admitting a new
-// template or requiring remote availability for retained-resource cleanup.
-func RestoreSelection(s sandbox.Selection) (sandbox.Selection, error) {
-	if s.E2B == nil {
-		return s, sandbox.ErrInvalid
-	}
-	c := *s.E2B
-	var err error
-	c.APIURL, c.Domain, err = NormalizeEndpoint(c.APIURL, c.Domain)
-	s.E2B = &c
-	return s, err
-}
 func ResolveChange(next, previous sandbox.Selection) sandbox.Selection {
-	if next.E2B == nil || previous.E2B == nil {
+	if configuration(next) == nil || configuration(previous) == nil {
 		return next
 	}
-	c := *next.E2B
-	c.ReplaceCredential = c.ReplaceCredential || c.APIKey != ""
+	c := *configuration(next)
+	c.CredentialSupplied = c.CredentialSupplied || c.APIKey != ""
 	if c.APIURL == "" && c.Domain == "" {
-		c.APIURL, c.Domain = previous.E2B.APIURL, previous.E2B.Domain
+		c.APIURL, c.Domain = configuration(previous).APIURL, configuration(previous).Domain
 	}
-	if c.APIKey == "" && !c.ReplaceCredential {
-		c.APIKey = previous.E2B.APIKey
+	if c.APIKey == "" && !c.CredentialSupplied {
+		c.APIKey = configuration(previous).APIKey
 	}
-	if c.Template == previous.E2B.Template && next.Resources == (sandbox.Resources{}) {
+	if c.Template == configuration(previous).Template && next.Resources == (sandbox.Resources{}) {
 		next.Resources = previous.Resources
 	}
-	next.E2B = &c
+	next.Configuration = &c
 	return next
-}
-
-func ReplaceCredential(owner, candidate sandbox.Selection) sandbox.Selection {
-	if owner.E2B != nil && candidate.E2B != nil {
-		c := *owner.E2B
-		c.APIKey = candidate.E2B.APIKey
-		owner.E2B = &c
-	}
-	return owner
-}
-func CredentialRequiresReset(err error) bool {
-	return errors.Is(err, ErrCredentialInvalid) || errors.Is(err, ErrTeamMismatch)
 }

@@ -7,43 +7,33 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
-
-// SandboxE2BInput is write-only provider configuration. Safe responses use the
-// store's separate deployment view and never serialize this request.
-type SandboxE2BInput struct {
-	APIKey   *string `json:"api_key,omitempty"`
-	APIURL   string  `json:"api_url,omitempty"`
-	Domain   string  `json:"domain,omitempty"`
-	Template string  `json:"template"`
-}
 
 type SandboxDeploymentInput struct {
 	ExpectedGeneration *uint64 `json:"expected_generation" binding:"required"`
 	// Per-sandbox limits, required for Docker and microsandbox. E2B may omit
 	// them; Core then uses the validated template build's cpus and memory_mib.
-	Resources sandbox.Resources       `json:"resources"`
-	Runtime   *sandbox.RuntimeRelease `json:"runtime,omitempty"`
-	Provider  string                  `json:"provider"`
-	E2B       *SandboxE2BInput        `json:"e2b,omitempty"`
+	Resources     sandbox.Resources       `json:"resources"`
+	Runtime       *sandbox.RuntimeRelease `json:"runtime,omitempty"`
+	Provider      string                  `json:"provider"`
+	Configuration json.RawMessage         `json:"configuration" swaggertype:"object"`
+	Credential    json.RawMessage         `json:"credential,omitempty" swaggertype:"object"`
 }
 
 type SandboxDeploymentChangeInput struct {
 	SandboxDeploymentInput
 }
 
-func (v SandboxDeploymentInput) request() store.SandboxDeploymentSetupRequest {
-	input := store.SandboxDeploymentSetupRequest{ExpectedGeneration: *v.ExpectedGeneration, Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Runtime: v.Runtime}}
-	if v.E2B != nil {
-		input.E2B = &sandbox.E2BConfiguration{Template: v.E2B.Template, APIURL: v.E2B.APIURL, Domain: v.E2B.Domain}
-		if v.E2B.APIKey != nil {
-			input.E2B.APIKey = *v.E2B.APIKey
-			input.E2B.ReplaceCredential = true
-		}
+func (v SandboxDeploymentInput) request() (store.SandboxDeploymentSetupRequest, error) {
+	c, err := providers.DecodeInput(v.Provider, v.Configuration, v.Credential)
+	if err != nil {
+		return store.SandboxDeploymentSetupRequest{}, err
 	}
-	return input
+	return store.SandboxDeploymentSetupRequest{ExpectedGeneration: *v.ExpectedGeneration, Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Runtime: v.Runtime}, Configuration: c}, nil
 }
 
 // rejectCoreURL names the retired member instead of reporting a generic unknown
@@ -91,7 +81,7 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var input SandboxDeploymentInput
-	if decodeInputObject(raw, &input, "provider", "e2b", "resources", "runtime", "expected_generation") != nil || input.ExpectedGeneration == nil || nullSandboxKey(raw) {
+	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "runtime", "expected_generation") != nil || input.ExpectedGeneration == nil {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
@@ -99,7 +89,12 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 		writeStoreError(w, r, store.ErrSandboxDeploymentConflict)
 		return
 	}
-	result, err := h.sandboxSetup(r.Context(), input.request())
+	selection, err := input.request()
+	if err != nil {
+		writeStoreError(w, r, err)
+		return
+	}
+	result, err := h.sandboxSetup(r.Context(), selection)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -126,7 +121,7 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var input SandboxDeploymentChangeInput
-	if decodeInputObject(raw, &input, "provider", "e2b", "resources", "runtime", "expected_generation") != nil || input.ExpectedGeneration == nil || nullSandboxKey(raw) {
+	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "runtime", "expected_generation") != nil || input.ExpectedGeneration == nil {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
@@ -134,7 +129,12 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 		writeStoreError(w, r, store.ErrSandboxDeploymentConflict)
 		return
 	}
-	result, err := h.sandboxUpdate(r.Context(), store.SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input.request(), ExpectedGeneration: *input.ExpectedGeneration})
+	selection, err := input.request()
+	if err != nil {
+		writeStoreError(w, r, err)
+		return
+	}
+	result, err := h.sandboxUpdate(r.Context(), store.SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: selection, ExpectedGeneration: *input.ExpectedGeneration})
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -162,7 +162,7 @@ func (h *Handler) startSandboxReset(w http.ResponseWriter, r *http.Request) {
 		Clear              string  `json:"clear"`
 		DeadlineSeconds    *int32  `json:"deadline_seconds"`
 	}
-	if decodeInputObject(raw, &input, "expected_generation", "clear", "deadline_seconds") != nil || input.ExpectedGeneration == nil || nullSandboxKey(raw) {
+	if decodeInputObject(raw, &input, "expected_generation", "clear", "deadline_seconds") != nil || input.ExpectedGeneration == nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "A current expected_generation is required.", "expected_generation")
 		return
 	}
@@ -226,16 +226,4 @@ func parseResetGeneration(r *http.Request) (uint64, error) {
 		return 0, store.ErrInvalidInput
 	}
 	return strconv.ParseUint(query.Get("expected_generation"), 10, 64)
-}
-
-// Null is an invalid explicit credential, not the omitted-key preservation path.
-func nullSandboxKey(raw json.RawMessage) bool {
-	var body struct {
-		E2B map[string]json.RawMessage `json:"e2b"`
-	}
-	if json.Unmarshal(raw, &body) != nil {
-		return false
-	}
-	key, present := body.E2B["api_key"]
-	return present && string(key) == "null"
 }

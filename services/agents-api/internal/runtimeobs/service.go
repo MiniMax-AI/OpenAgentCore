@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"reflect"
 	"regexp"
 	"sync"
 	"time"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 )
 
 var providerTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)

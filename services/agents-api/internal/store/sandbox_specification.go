@@ -42,7 +42,7 @@ func SandboxSetupForSelection(installationID string, input SandboxDeploymentSetu
 	if err != nil {
 		return SandboxSetup{}, sandboxConfigurationError(err)
 	}
-	result := SandboxSetup{InstallationID: installationID, Provider: input.Provider, Mode: description.Mode, Specification: normalized.DeploymentSpec, E2B: normalized.E2B, BackendFingerprint: description.BackendFingerprint, IdleSeconds: description.IdleSeconds, RetentionSeconds: description.RetentionSeconds}
+	result := SandboxSetup{InstallationID: installationID, Provider: input.Provider, Mode: description.Mode, Specification: normalized.DeploymentSpec, Configuration: normalized.Configuration, BackendFingerprint: description.BackendFingerprint, IdleSeconds: description.IdleSeconds, RetentionSeconds: description.RetentionSeconds}
 	return result, nil
 }
 

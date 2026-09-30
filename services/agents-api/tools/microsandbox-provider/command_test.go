@@ -5,11 +5,12 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
+	"testing"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	wire "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
-	"strings"
-	"testing"
 )
 
 func TestCommandRequiresExitAndSuccessfulStdin(t *testing.T) {

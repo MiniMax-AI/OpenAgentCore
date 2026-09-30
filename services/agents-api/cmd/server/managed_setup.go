@@ -87,21 +87,21 @@ func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (e
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
 	}
-	if adapter.PublicOrigin && store.LoopbackOrigin(s.publicURL) {
+	if adapter.Configuration.Requirements().PublicOrigin == sandbox.Required && store.LoopbackOrigin(s.publicURL) {
 		return execution.PreparedRuntimeDeployment{}, store.ErrSandboxPublicURLUnreachable
 	}
 	candidate, err := s.configuration(setup)
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
 	}
-	selection := sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, E2B: setup.E2B}
+	selection := sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}
 	if err := providercontract.Require(candidate.Config.Provider, "DiscoverSelection"); err == nil {
 		discoverer := candidate.Config.Provider.(sandbox.SelectionDiscoverer)
 		selection, err = discoverer.DiscoverSelection(ctx, selection)
 		if err != nil {
 			return execution.PreparedRuntimeDeployment{}, err
 		}
-		setup.Specification, setup.E2B = selection.DeploymentSpec, selection.E2B
+		setup.Specification, setup.Configuration = selection.DeploymentSpec, selection.Configuration
 		candidate, err = s.configuration(setup)
 		if err != nil {
 			return execution.PreparedRuntimeDeployment{}, err
@@ -191,5 +191,5 @@ func (s *managedSetup) provider(setup store.SandboxSetup) (sandbox.SandboxProvid
 		}
 		return s.hub.GenerationProvider(setup.Provider, s.store.ResolveRuntimeGeneration), nil
 	}
-	return providers.BuildDirect(providers.DirectConfig{InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, E2B: setup.E2B}, Fence: &s.providerCalls})
+	return providers.BuildDirect(providers.DirectConfig{InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}, Fence: &s.providerCalls})
 }

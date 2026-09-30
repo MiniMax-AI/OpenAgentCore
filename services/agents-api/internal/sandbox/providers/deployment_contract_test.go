@@ -3,10 +3,11 @@ package providers
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
 func TestInstallerDeploymentProjectionIsCurrent(t *testing.T) {

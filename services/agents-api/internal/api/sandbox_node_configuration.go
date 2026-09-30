@@ -1,10 +1,11 @@
 package api
 
 import (
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"math"
 	"net/http"
 	"strconv"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
 // @Summary Read the active configuration for node installation

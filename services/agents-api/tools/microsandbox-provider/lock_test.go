@@ -5,11 +5,12 @@ package main
 import (
 	"context"
 	"errors"
-	wire "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	wire "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/microsandbox"
 )
 
 func TestAllocationLockSurvivesCallerDeadlineUntilExplicitSettlement(t *testing.T) {

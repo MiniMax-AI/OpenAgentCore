@@ -32,29 +32,22 @@ func (q *Queries) ClaimWebSandboxDeployment(ctx context.Context, installationID 
 
 const initializeSandboxDeployment = `-- name: InitializeSandboxDeployment :exec
 UPDATE runtime_deployment SET provider_kind=$1, backend_fingerprint=$2,
-idle_seconds=$3, retention_seconds=$4, generation=$5, mode=$6, e2b_template=$7, e2b_credential=$8, specification=$9,
-e2b_api_url=$10, e2b_domain=$11,
-e2b_template_build_status=$12, e2b_template_cpus=$13,
-e2b_template_memory_mib=$14, e2b_template_root_disk_mib=$15,
+idle_seconds=$3, retention_seconds=$4, generation=$5, mode=$6,
+provider_config=$7,provider_metadata=$8,provider_credential=$9,specification=$10,
 updated_at=clock_timestamp() WHERE singleton=true
 `
 
 type InitializeSandboxDeploymentParams struct {
-	ProviderKind           string      `json:"provider_kind"`
-	BackendFingerprint     string      `json:"backend_fingerprint"`
-	IdleSeconds            int64       `json:"idle_seconds"`
-	RetentionSeconds       int64       `json:"retention_seconds"`
-	Generation             int64       `json:"generation"`
-	Mode                   string      `json:"mode"`
-	E2bTemplate            string      `json:"e2b_template"`
-	E2bCredential          []byte      `json:"e2b_credential"`
-	Specification          []byte      `json:"specification"`
-	E2bApiUrl              string      `json:"e2b_api_url"`
-	E2bDomain              string      `json:"e2b_domain"`
-	E2bTemplateBuildStatus pgtype.Text `json:"e2b_template_build_status"`
-	E2bTemplateCpus        pgtype.Int4 `json:"e2b_template_cpus"`
-	E2bTemplateMemoryMib   pgtype.Int4 `json:"e2b_template_memory_mib"`
-	E2bTemplateRootDiskMib pgtype.Int4 `json:"e2b_template_root_disk_mib"`
+	ProviderKind       string `json:"provider_kind"`
+	BackendFingerprint string `json:"backend_fingerprint"`
+	IdleSeconds        int64  `json:"idle_seconds"`
+	RetentionSeconds   int64  `json:"retention_seconds"`
+	Generation         int64  `json:"generation"`
+	Mode               string `json:"mode"`
+	ProviderConfig     []byte `json:"provider_config"`
+	ProviderMetadata   []byte `json:"provider_metadata"`
+	ProviderCredential []byte `json:"provider_credential"`
+	Specification      []byte `json:"specification"`
 }
 
 func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg InitializeSandboxDeploymentParams) error {
@@ -65,39 +58,21 @@ func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg Initializ
 		arg.RetentionSeconds,
 		arg.Generation,
 		arg.Mode,
-		arg.E2bTemplate,
-		arg.E2bCredential,
+		arg.ProviderConfig,
+		arg.ProviderMetadata,
+		arg.ProviderCredential,
 		arg.Specification,
-		arg.E2bApiUrl,
-		arg.E2bDomain,
-		arg.E2bTemplateBuildStatus,
-		arg.E2bTemplateCpus,
-		arg.E2bTemplateMemoryMib,
-		arg.E2bTemplateRootDiskMib,
 	)
 	return err
 }
 
-const recordSandboxTemplateBuild = `-- name: RecordSandboxTemplateBuild :exec
-UPDATE runtime_deployment SET e2b_template_build_status=$1, e2b_template_cpus=$2,
-e2b_template_memory_mib=$3, e2b_template_root_disk_mib=$4,
-updated_at=clock_timestamp() WHERE singleton=true AND e2b_template<>''
+const recordSandboxConfigurationMetadata = `-- name: RecordSandboxConfigurationMetadata :exec
+UPDATE runtime_deployment SET provider_metadata=$1,updated_at=clock_timestamp()
+WHERE singleton=true AND provider_kind<>''
 `
 
-type RecordSandboxTemplateBuildParams struct {
-	E2bTemplateBuildStatus pgtype.Text `json:"e2b_template_build_status"`
-	E2bTemplateCpus        pgtype.Int4 `json:"e2b_template_cpus"`
-	E2bTemplateMemoryMib   pgtype.Int4 `json:"e2b_template_memory_mib"`
-	E2bTemplateRootDiskMib pgtype.Int4 `json:"e2b_template_root_disk_mib"`
-}
-
-func (q *Queries) RecordSandboxTemplateBuild(ctx context.Context, arg RecordSandboxTemplateBuildParams) error {
-	_, err := q.db.Exec(ctx, recordSandboxTemplateBuild,
-		arg.E2bTemplateBuildStatus,
-		arg.E2bTemplateCpus,
-		arg.E2bTemplateMemoryMib,
-		arg.E2bTemplateRootDiskMib,
-	)
+func (q *Queries) RecordSandboxConfigurationMetadata(ctx context.Context, providerMetadata []byte) error {
+	_, err := q.db.Exec(ctx, recordSandboxConfigurationMetadata, providerMetadata)
 	return err
 }
 

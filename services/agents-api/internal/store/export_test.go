@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 
+	"testing"
+
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"testing"
 )
 
 func NewTestStore(t *testing.T) (*Store, *pgxpool.Pool) { return testStore(t) }

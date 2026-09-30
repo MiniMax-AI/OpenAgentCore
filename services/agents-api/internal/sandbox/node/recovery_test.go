@@ -3,9 +3,6 @@ package node
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +11,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
 func TestCoreRestartFencesOldConnectionAndNodeRestartKeepsIdentity(t *testing.T) {

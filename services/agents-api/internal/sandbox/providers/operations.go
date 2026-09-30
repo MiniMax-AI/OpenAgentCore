@@ -1,9 +1,10 @@
 package providers
 
 import (
+	"reflect"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
-	"reflect"
 )
 
 // ValidateBinding catches construction that disagrees with its registration.

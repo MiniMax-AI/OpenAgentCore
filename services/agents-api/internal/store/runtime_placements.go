@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,7 +28,7 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 		// E2B guests reach Core over the internet. A selection saved before the
 		// public URL became loopback admits nothing, while its existing sandboxes
 		// stay reachable for cleanup through the loaded provider.
-		if LoopbackOrigin(publicURL) {
+		if providers.RequiresPublicOrigin(d.ProviderKind) && LoopbackOrigin(publicURL) {
 			return ErrSandboxPublicURLUnreachable
 		}
 		return nil

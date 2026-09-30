@@ -26,9 +26,9 @@ func (s *routingSetupStore) GetSandboxAllocationSetup(_ context.Context, ref san
 	value := s.value
 	if ref.AllocationID == s.oldID {
 		value = s.old
-		key := *value.E2B
-		key.APIKey = s.value.E2B.APIKey
-		value.E2B = &key
+		key := *value.Configuration.(*e2b.DeploymentConfiguration)
+		key.APIKey = s.value.Configuration.(*e2b.DeploymentConfiguration).APIKey
+		value.Configuration = &key
 	}
 	return value, nil
 }
@@ -52,11 +52,11 @@ print(json.dumps({'Version':1,'Info':info}))
 	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
 	t.Setenv("OAC_E2B_STATE_DIR", state)
 	id := uuid.NewString()
-	old := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, E2B: &sandbox.E2BConfiguration{APIKey: "old-key", Template: "old:" + uuid.NewString()}}
+	old := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "old-key", Template: "old:" + uuid.NewString()}}
 	current := old
 	current.Generation = 2
 	current.Specification.Resources.CPUs = 4
-	current.E2B = &sandbox.E2BConfiguration{APIKey: "new-key", Template: "new:" + uuid.NewString()}
+	current.Configuration = &e2b.DeploymentConfiguration{APIKey: "new-key", Template: "new:" + uuid.NewString()}
 	ref := sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
 	db := &routingSetupStore{setupStore: setupStore{value: current}, old: old, oldID: ref.AllocationID}
 	setup := &managedSetup{store: db, installationID: id}
@@ -100,7 +100,7 @@ print(json.dumps({'Version':1,'Info':info}))
 		if i == 3 {
 			expected = current
 		}
-		if q.Config.APIKey != "new-key" || q.Config.Template != expected.E2B.Template || q.Config.Resources != expected.Specification.Resources {
+		if q.Config.APIKey != "new-key" || q.Config.Template != expected.Configuration.(*e2b.DeploymentConfiguration).Template || q.Config.Resources != expected.Specification.Resources {
 			t.Fatal("generation or credential mismatch", i)
 		}
 	}
@@ -116,8 +116,8 @@ func TestE2BReplacementRequiresCommittedOwnershipAnchor(t *testing.T) {
 	}{
 		{name: "legacy public template cross team", committedKey: "team-a", committedTemplate: "public-b", candidateKey: "team-b", candidateTemplate: "public-b", reset: true},
 		{name: "revoked committed key", committedKey: "revoked", committedTemplate: "owned-a", candidateKey: "team-a", candidateTemplate: "owned-a", reset: true},
-		{name: "unknown committed ownership", committedKey: "unconfirmed", committedTemplate: "owned-a", candidateKey: "team-a", candidateTemplate: "owned-a", want: e2b.ErrRequestUnconfirmed},
-		{name: "proven different team", committedKey: "team-a", committedTemplate: "owned-a", candidateKey: "team-b", candidateTemplate: "public-b", want: e2b.ErrTeamMismatch},
+		{name: "unknown committed ownership", committedKey: "unconfirmed", committedTemplate: "owned-a", candidateKey: "team-a", candidateTemplate: "owned-a", want: sandbox.ErrConfigurationUnconfirmed},
+		{name: "proven different team", committedKey: "team-a", committedTemplate: "owned-a", candidateKey: "team-b", candidateTemplate: "public-b", want: sandbox.ErrCredentialOwnership},
 		{name: "same team replacement", committedKey: "team-a", committedTemplate: "owned-a", candidateKey: "team-a-rotated", candidateTemplate: "new-a"},
 		{name: "explicit same key", committedKey: "team-a", committedTemplate: "owned-a", candidateKey: "team-a", candidateTemplate: "owned-a"},
 	} {
@@ -152,7 +152,7 @@ print(json.dumps(result))
 			id, build := uuid.NewString(), ":"+uuid.NewString()
 			current := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
 				Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
-				E2B:           &sandbox.E2BConfiguration{APIKey: tc.committedKey, Template: tc.committedTemplate + build}}
+				Configuration: &e2b.DeploymentConfiguration{APIKey: tc.committedKey, Template: tc.committedTemplate + build}}
 			db := &setupStore{value: current}
 			s := &managedSetup{installationID: id, store: db}
 			loaded, err := s.load(t.Context())
@@ -160,7 +160,7 @@ print(json.dumps(result))
 				t.Fatal(err)
 			}
 			next := current
-			next.E2B = &sandbox.E2BConfiguration{APIKey: tc.candidateKey, Template: tc.candidateTemplate + build}
+			next.Configuration = &e2b.DeploymentConfiguration{APIKey: tc.candidateKey, Template: tc.candidateTemplate + build}
 			candidate, err := s.prepare(t.Context(), next)
 			if err != nil {
 				t.Fatal(err)
@@ -168,13 +168,13 @@ print(json.dumps(result))
 			err = candidate.VerifyCredential(t.Context())
 			var reset *store.SandboxResetRequiredError
 			if tc.reset {
-				if !errors.As(err, &reset) || errors.Is(err, e2b.ErrCredentialInvalid) || errors.Is(err, e2b.ErrTeamMismatch) {
+				if !errors.As(err, &reset) || errors.Is(err, sandbox.ErrCredentialRejected) || errors.Is(err, sandbox.ErrCredentialOwnership) {
 					t.Fatalf("unanchored ownership misattributed: %v", err)
 				}
 			} else if !errors.Is(err, tc.want) {
 				t.Fatalf("got %v; want %v", err, tc.want)
 			}
-			if db.value.Generation != 1 || db.value.E2B.APIKey != tc.committedKey || s.selected.Load().Config != loaded {
+			if db.value.Generation != 1 || db.value.Configuration.(*e2b.DeploymentConfiguration).APIKey != tc.committedKey || s.selected.Load().Config != loaded {
 				t.Fatal("verification mutated committed selection")
 			}
 			raw, err := os.ReadFile(filepath.Join(state, "requests"))
@@ -192,10 +192,10 @@ print(json.dumps(result))
 					t.Fatal("verification mutated provider", q.Operation)
 				}
 			}
-			if len(requests) < 2 || requests[1].Config.APIKey != tc.committedKey || requests[1].Config.Template != current.E2B.Template {
+			if len(requests) < 2 || requests[1].Config.APIKey != tc.committedKey || requests[1].Config.Template != current.Configuration.(*e2b.DeploymentConfiguration).Template {
 				t.Fatal("committed key was replaced before establishing ownership")
 			}
-			if tc.reset || tc.want == e2b.ErrRequestUnconfirmed {
+			if tc.reset || tc.want == sandbox.ErrConfigurationUnconfirmed {
 				if len(requests) != 2 {
 					t.Fatal("unanchored current ownership reached candidate verification")
 				}

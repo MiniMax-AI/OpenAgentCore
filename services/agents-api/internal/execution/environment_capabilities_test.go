@@ -2,10 +2,11 @@ package execution
 
 import (
 	"encoding/json"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"slices"
 	"testing"
+
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
 func TestSelfHostedCapabilitySourcesAreFrozenAndStrict(t *testing.T) {

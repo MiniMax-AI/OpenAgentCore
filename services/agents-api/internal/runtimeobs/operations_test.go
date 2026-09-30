@@ -3,9 +3,10 @@ package runtimeobs
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 )
 
 type failingBatchSource struct {

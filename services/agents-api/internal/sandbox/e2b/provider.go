@@ -163,7 +163,7 @@ func (c Config) Validate() error {
 	if !validID(c.InstallationID) || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 86400 {
 		return sandbox.ErrInvalid
 	}
-	if err := ValidateConfiguration(&sandbox.E2BConfiguration{APIKey: c.APIKey, Template: c.Template, APIURL: c.APIURL, Domain: c.Domain}); err != nil {
+	if err := ValidateConfiguration(&DeploymentConfiguration{APIKey: c.APIKey, Template: c.Template, APIURL: c.APIURL, Domain: c.Domain}); err != nil {
 		return err
 	}
 	for _, path := range []string{c.Binary, c.StateDir} {
@@ -227,9 +227,9 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 	case "template_invalid":
 		return out, fmt.Errorf("%w: This E2B template lacks the current Runtime startup entry point. Build a template with this release's build-template.py and select it in the sandbox deployment.", sandbox.ErrInvalid)
 	case "team_mismatch":
-		return out, ErrTeamMismatch
+		return out, sandbox.ErrCredentialOwnership
 	case "unauthorized":
-		return out, ErrCredentialInvalid
+		return out, sandbox.ErrCredentialRejected
 	case "invalid":
 		return out, sandbox.ErrInvalid
 	case "ownership":

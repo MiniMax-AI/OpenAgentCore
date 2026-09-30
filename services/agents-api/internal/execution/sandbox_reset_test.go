@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
+
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
@@ -90,7 +91,7 @@ func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
-	selection := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}}
+	selection := store.SandboxDeploymentSetupRequest{Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}}
 	selection.Resources.CPUs = 2
 	selection.Resources.MemoryMiB = 2048
 	if _, err := w.InitializeSandboxDeployment(t.Context(), id, selection); err != nil {

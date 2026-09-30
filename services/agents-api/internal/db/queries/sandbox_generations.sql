@@ -1,6 +1,6 @@
 -- name: RetainSandboxGeneration :exec
-INSERT INTO runtime_deployment_generations(generation,provider_kind,specification,e2b_template,e2b_template_build_status,e2b_template_cpus,e2b_template_memory_mib,e2b_template_root_disk_mib,e2b_api_url,e2b_domain)
-SELECT generation,provider_kind,specification,e2b_template,e2b_template_build_status,e2b_template_cpus,e2b_template_memory_mib,e2b_template_root_disk_mib,e2b_api_url,e2b_domain
+INSERT INTO runtime_deployment_generations(generation,provider_kind,specification,provider_config,provider_metadata)
+SELECT generation,provider_kind,specification,provider_config,provider_metadata
 FROM runtime_deployment d WHERE provider_kind <> '' AND (
  EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.state <> 'released' AND a.deployment_generation=d.generation)
  OR EXISTS(SELECT 1 FROM runtime_placements p WHERE p.released_at IS NULL AND p.deployment_generation=d.generation)

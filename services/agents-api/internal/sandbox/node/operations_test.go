@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"testing"
+
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/google/uuid"
-	"testing"
 )
 
 func TestUnsupportedWireIsExplicitAndDoesNotInvokeProvider(t *testing.T) {

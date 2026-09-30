@@ -158,7 +158,7 @@ func TestSandboxResetCancellationABADeadlineAndGeneration(t *testing.T) {
 		t.Fatal("cancelled reset finalized successor", err)
 	}
 	empty, err := w.CompleteSandboxReset(ctx, installation, 1, second.Reset.RequestedAt)
-	if err != nil || empty.Provider != "" || empty.Generation != 2 || empty.Reset != nil || empty.InstallationID != installation || empty.E2B != nil || empty.Specification != nil {
+	if err != nil || empty.Provider != "" || empty.Generation != 2 || empty.Reset != nil || empty.InstallationID != installation || empty.Configuration != nil || empty.Specification != nil {
 		t.Fatal("reset commit", empty, err)
 	}
 	if _, err := w.CancelSandboxReset(ctx, installation, 1); !errors.Is(err, ErrSandboxDeploymentConflict) {

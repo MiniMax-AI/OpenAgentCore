@@ -5,11 +5,12 @@ package contracttest
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
 type Fault string
