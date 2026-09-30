@@ -46,40 +46,37 @@ func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, tur
 	if configuration.Type != "openai_hosted" && configuration.Type != "self_hosted" {
 		return ErrInvalidInput
 	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(context.Background())
-	rows, err := captureArtifactArchive(ctx, tx, input)
-	if err != nil {
-		return err
-	}
-	q := s.queries.WithTx(tx)
-	locked, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-	if locked.DeletedAt.Valid {
-		return ErrNotFound
-	}
-	turn, err := q.GetTurn(ctx, lookup)
-	if err != nil {
-		return err
-	}
-	if turn.Status != TurnInProgress || turn.CancelRequestedAt.Valid {
-		return ErrTurnConflict
-	}
-	for _, row := range rows {
-		row.SessionID, row.TurnID, row.EnvironmentID = lookup.SessionID, lookup.ID, environment
-		if err := q.StageSessionArtifact(ctx, row); err != nil {
+	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		rows, err := captureArtifactArchive(ctx, tx, input)
+		if err != nil {
 			return err
 		}
-	}
-	return tx.Commit(ctx)
+		q := s.queries.WithTx(tx)
+		locked, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if locked.DeletedAt.Valid {
+			return ErrNotFound
+		}
+		turn, err := q.GetTurn(ctx, lookup)
+		if err != nil {
+			return err
+		}
+		if turn.Status != TurnInProgress || turn.CancelRequestedAt.Valid {
+			return ErrTurnConflict
+		}
+		for _, row := range rows {
+			row.SessionID, row.TurnID, row.EnvironmentID = lookup.SessionID, lookup.ID, environment
+			if err := q.StageSessionArtifact(ctx, row); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func captureArtifactArchive(ctx context.Context, tx pgx.Tx, input io.Reader) ([]sqlc.StageSessionArtifactParams, error) {

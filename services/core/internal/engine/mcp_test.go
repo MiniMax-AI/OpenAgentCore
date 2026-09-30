@@ -19,11 +19,8 @@ func TestMCPOriginQualification(t *testing.T) {
 			for _, origin := range []string{"service", "environment", "", "unknown"} {
 				servers := []proto.MCPHTTPServer{{ConnectionOrigin: origin, ServerLabel: "proof", ServerURL: "https://example.test/mcp"}}
 				allowed := origin == "environment" && placement != "none" || origin == "service" && placement == "none" && kind != "mcode"
-				if err := profile.ValidateMCPOrigins(&v1.Environment{Type: placement}, false, servers); (err == nil) != allowed {
+				if err := profile.ValidateMCPOrigins(&v1.Environment{Type: placement}, servers); (err == nil) != allowed {
 					t.Fatalf("%s/%s/%s: %v", kind, placement, origin, err)
-				}
-				if profile.ValidateMCPOrigins(&v1.Environment{Type: placement}, true, servers) == nil {
-					t.Fatal("legacy daemon placement admitted")
 				}
 			}
 		}
@@ -36,7 +33,7 @@ func TestMiniMaxMCPPoliciesRejectInsteadOfDropping(t *testing.T) {
 	for _, allowed := range []*[]string{nil, &empty, &named} {
 		for _, required := range []bool{false, true} {
 			server := proto.MCPHTTPServer{ConnectionOrigin: "environment", ServerLabel: "proof", ServerURL: "https://example.test", AllowedTools: allowed, Required: required}
-			err := p.ValidateTools(&v1.Environment{Type: "self_hosted"}, false, nil, []proto.MCPHTTPServer{server})
+			err := p.ValidateTools(&v1.Environment{Type: "self_hosted"}, nil, []proto.MCPHTTPServer{server})
 			if (err == nil) != (allowed == nil && !required) {
 				t.Fatal("unsupported MCP policy accepted", err)
 			}

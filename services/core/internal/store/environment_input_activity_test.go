@@ -50,7 +50,7 @@ func TestEnvironmentInputActivityWaitsBeforeTurnAndClearsOnConnection(t *testing
 		t.Fatal("missing pre-Turn snapshot", first, err)
 	}
 	reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")
-	writer := executionLease(t, s).Store()
+	writer := executionWriter(t, s)
 	generation := uuid.NewString()
 	if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
 		t.Fatal(err)
@@ -100,7 +100,7 @@ func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			s, pool := testStore(t)
 			tenant, session := environmentInputSession(t, s)
-			writer := executionLease(t, s).Store()
+			writer := executionWriter(t, s)
 			prior, err := s.SubmitInputs(t.Context(), tenant, session.ID, "prior", []Input{messageInput("prior")})
 			if err != nil {
 				t.Fatal(err)
@@ -183,7 +183,7 @@ func TestEnvironmentInputActivityRollsBackReservationAndConnection(t *testing.T)
 	}
 	reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")
 	value := requireEnvironmentInputActivity(t, s, tenant, session.ID, "requires_action", session.Environment.ID)
-	writer := executionLease(t, s).Store()
+	writer := executionWriter(t, s)
 	generation := uuid.NewString()
 	if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, value.Environment.ID, generation); err != nil {
 		t.Fatal(err)
@@ -205,20 +205,20 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 	s, pool := testStore(t)
 	tenant, session := environmentInputSession(t, s)
 	reservation := reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")
-	old := executionLease(t, s)
+	old := executionWriter(t, s)
 	generation := uuid.NewString()
 	environment := session.Environment.ID
-	if err := old.Store().ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
+	if err := old.ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
 		t.Fatal(err)
 	}
-	if err := old.Store().ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
+	if err := old.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
 	requireEnvironmentInputActivity(t, s, tenant, session.ID, "idle", "")
-	if err := old.Close(t.Context()); err != nil {
+	if err := old.CloseExecution(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	next := executionLease(t, s).Store()
+	next := executionWriter(t, s)
 	if err := next.ReconcileEnvironmentConnections(t.Context()); err != nil {
 		t.Fatal(err)
 	}

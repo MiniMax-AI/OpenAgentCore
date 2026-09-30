@@ -93,8 +93,8 @@ func recordConfigurationMetadata(ctx context.Context, q *sqlc.Queries, input San
 }
 
 func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID string, input SandboxDeploymentSetupRequest) (RuntimeDeploymentView, error) {
-	if s.executionLease == nil {
-		return RuntimeDeploymentView{}, ErrInvalidInput
+	if err := s.checkExecutionAuthority(); err != nil {
+		return RuntimeDeploymentView{}, err
 	}
 	if err := validateSandboxSelection(input); err != nil {
 		return RuntimeDeploymentView{}, err
@@ -103,10 +103,8 @@ func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID 
 	if err != nil {
 		return RuntimeDeploymentView{}, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
-	defer cancel()
 	var result RuntimeDeploymentView
-	err = s.executionLease.transaction(ctx, func(tx pgx.Tx) error {
+	err = s.writer.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		d, err := q.LockRuntimeDeployment(ctx)
 		if err != nil {
@@ -144,15 +142,13 @@ func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID 
 // CheckSandboxDeploymentSwitch is a preliminary check only. The mutation repeats
 // it in the committing transaction; no database lock spans provider work.
 func (s *Store) CheckSandboxDeploymentSwitch(ctx context.Context, installation string, input SandboxDeploymentUpdateRequest) error {
-	if s.executionLease == nil {
-		return ErrInvalidInput
+	if err := s.checkExecutionAuthority(); err != nil {
+		return err
 	}
 	if err := validateSandboxSelection(input.SandboxDeploymentSetupRequest); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
-	defer cancel()
-	return s.executionLease.transaction(ctx, func(tx pgx.Tx) error {
+	return s.writer.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		d, err := q.LockRuntimeDeployment(ctx)
 		if err != nil {
@@ -182,16 +178,14 @@ func checkSandboxSwitch(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDepl
 }
 
 func (s *Store) UpdateSandboxDeployment(ctx context.Context, installation string, input SandboxDeploymentUpdateRequest) (RuntimeDeploymentView, error) {
-	if s.executionLease == nil {
-		return RuntimeDeploymentView{}, ErrInvalidInput
+	if err := s.checkExecutionAuthority(); err != nil {
+		return RuntimeDeploymentView{}, err
 	}
 	if err := validateSandboxSelection(input.SandboxDeploymentSetupRequest); err != nil {
 		return RuntimeDeploymentView{}, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
-	defer cancel()
 	var result RuntimeDeploymentView
-	err := s.executionLease.transaction(ctx, func(tx pgx.Tx) error {
+	err := s.writer.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		d, err := q.LockRuntimeDeployment(ctx)
 		if err != nil {

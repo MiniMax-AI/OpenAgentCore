@@ -33,7 +33,7 @@ func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter Ad
 	if visit == nil || filter.CreatedAfter != nil && filter.CreatedBefore != nil && !filter.CreatedAfter.Before(*filter.CreatedBefore) {
 		return counts, ErrInvalidInput
 	}
-	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		raw, err := q.AdminAssetCounts(ctx, tenant)
 		if err != nil {

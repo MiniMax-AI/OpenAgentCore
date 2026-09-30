@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -61,12 +62,13 @@ func oauthFixtureBinding(credential Credential) MCPCredentialBinding {
 
 func storedOAuthSecret(t *testing.T, s *Store, tenant string, credential Credential) oauthSecret {
 	t.Helper()
-	tx, _, secret, err := s.lockOAuth(t.Context(), tenant, credential.VaultID, credential.ID, "")
+	var secret oauthSecret
+	err := s.withOAuth(t.Context(), tenant, credential.VaultID, credential.ID, "", "credential read failed", func(_ context.Context, _ pgx.Tx, _ Credential, stored oauthSecret) error {
+		secret = stored
+		return nil
+	})
 	if err != nil {
 		t.Fatal("read private test grant", err)
-	}
-	if err := tx.Rollback(t.Context()); err != nil {
-		t.Fatal(err)
 	}
 	return secret
 }

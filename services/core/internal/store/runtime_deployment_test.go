@@ -43,10 +43,10 @@ func legacyRuntimeSpecification(t *testing.T, w *Store, provider string) {
 
 func TestRuntimeDeploymentRequiresMaintenanceBeforeIdentityChange(t *testing.T) {
 	s, pool := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	old := deploymentSelection()
 	deploymentConfigure(t, w, &old)
-	if err := s.ConfigureRuntimeDeployment(t.Context(), &old); !errors.Is(err, ErrInvalidInput) {
+	if err := s.ConfigureRuntimeDeployment(t.Context(), &old); !errors.Is(err, ErrExecutionAuthority) {
 		t.Fatal("unleased configuration accepted", err)
 	}
 	for _, changeID := range []bool{false, true} {
@@ -89,7 +89,7 @@ func TestRuntimeDeploymentRequiresMaintenanceBeforeIdentityChange(t *testing.T) 
 
 func TestRuntimeDeploymentPendingSessionsCannotMigrate(t *testing.T) {
 	s, _ := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	session, _ := localEnvironment(t, s, tenant)
 	old := deploymentSelection()
@@ -113,7 +113,7 @@ func TestRuntimeDeploymentPendingSessionsCannotMigrate(t *testing.T) {
 
 func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T) {
 	s, _ := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	old := deploymentSelection()
 	tenant := uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
@@ -169,7 +169,7 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 
 func TestRuntimeDeploymentMaintenancePreservesCreationRetriesAndOtherPlacements(t *testing.T) {
 	s, pool := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	old := deploymentSelection()
 	deploymentConfigure(t, w, &old)
 	tenant := uuid.NewString()
@@ -214,7 +214,7 @@ func TestRuntimeDeploymentMaintenancePreservesCreationRetriesAndOtherPlacements(
 
 func TestRuntimeDeploymentMaintenanceSerializesHostedCreation(t *testing.T) {
 	s, pool := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	config := deploymentSelection()
 	deploymentConfigure(t, w, &config)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -254,7 +254,7 @@ func TestRuntimeDeploymentRetainedResourcesBlockSwitchWithoutMutation(t *testing
 	for _, state := range []string{"running", "suspended", "cleanup_pending"} {
 		t.Run(state, func(t *testing.T) {
 			s, pool := newManagedTestStore(t)
-			w := executionLease(t, s).Store()
+			w := executionWriter(t, s)
 			old := deploymentSelection()
 			deploymentConfigure(t, w, &old)
 			tenant := uuid.NewString()
@@ -300,7 +300,7 @@ func TestRuntimeDeploymentRetainedResourcesBlockSwitchWithoutMutation(t *testing
 
 func TestRuntimeDeploymentAllocationBeforeMaintenanceRetainsOwnership(t *testing.T) {
 	s, pool := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	config := deploymentSelection()
 	deploymentConfigure(t, w, &config)
 	tenant := uuid.NewString()

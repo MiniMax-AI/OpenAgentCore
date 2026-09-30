@@ -1,28 +1,25 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) {
 	h, ctx, home := nativeDispatchHarness(t)
+	model, output, requests := nativeFunctionModel(t, home)
+	defer model.Close()
 	var err error
-	h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "native-functions", Configuration: json.RawMessage(functionConfiguration)})
+	h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "native-functions", Configuration: json.RawMessage(functionConfiguration), ModelProvider: nativeModelProvider(model), ModelProviderSource: v1.ModelProviderSourceDeployment})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
-	}
-	model, output, requests := nativeFunctionModel(t, home)
-	defer model.Close()
-	h.d.Options = func(context.Context, store.Session) (map[string]any, error) {
-		return map[string]any{"model_provider": map[string]any{"protocol": "responses", "base_url": model.URL + "/v1", "api_key": "synthetic-test-token"}}, nil
 	}
 	nativeID := ""
 	for index := range 3 {

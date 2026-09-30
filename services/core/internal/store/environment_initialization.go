@@ -39,8 +39,8 @@ func (s *Store) ListEnvironmentInitializations(ctx context.Context, after string
 }
 
 func (s *Store) mutateEnvironmentInitialization(ctx context.Context, owner EnvironmentInitialization, apply func(*sqlc.Queries, sqlc.GetSessionEnvironmentRow) error) error {
-	if s.executionLease == nil {
-		return errors.New("Environment initialization requires execution ownership")
+	if err := s.checkExecutionAuthority(); err != nil {
+		return err
 	}
 	tenant, err := parseID(owner.TenantID)
 	if err != nil {

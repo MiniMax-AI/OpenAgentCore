@@ -60,7 +60,7 @@ func (s *Store) ProjectExecutorCredentialState(ctx context.Context, project iden
 	}
 	environmentID := parsePathID(environment)
 	result := ExecutorCredentialState{Credentials: []ExecutorCredential{}}
-	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.GetEnvironmentExecutorConnection(ctx, sqlc.GetEnvironmentExecutorConnectionParams{EnvironmentID: environmentID, TenantID: tenant})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -144,7 +144,7 @@ func (s *Store) RevokeProjectExecutorCredential(ctx context.Context, project ide
 		return err
 	}
 	record := executorCredentialAudit(project, "revoke", keyID)
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		n, err := q.RevokeExecutorCredential(ctx, sqlc.RevokeExecutorCredentialParams{KeyID: id, TenantID: tenant, SubjectKind: pgtype.Text{String: project.SubjectKind, Valid: true}, SubjectID: pgtype.Text{String: project.SubjectID, Valid: true}})
 		if err != nil {

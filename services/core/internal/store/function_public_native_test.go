@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -25,10 +25,7 @@ func TestNativePublicFunctionExecution(t *testing.T) {
 	h, ctx, home := nativeDispatchHarness(t)
 	model, output, requests := nativeFunctionModel(t, home)
 	defer model.Close()
-	h.d.Options = func(context.Context, store.Session) (map[string]any, error) {
-		return map[string]any{"enable_features": []any{"multi_agent", "multi_agent_v2"}, "model_provider": map[string]any{"protocol": "responses", "base_url": model.URL + "/v1", "api_key": "synthetic-test-token"}}, nil
-	}
-	serverURL, token := nativePublicFunctionServer(t, h, ctx)
+	serverURL, token := nativePublicFunctionServer(t, h, ctx, nativeModelProvider(model))
 	outputPath, proofPath := filepath.Join(home, "function-output.json"), filepath.Join(home, "public-functions.json")
 	raw, _ := json.Marshal(output)
 	if err := os.WriteFile(outputPath, raw, 0600); err != nil {
@@ -63,7 +60,7 @@ func TestNativePublicFunctionExecution(t *testing.T) {
 	t.Logf("Official SDK configured functions, native text/image/error results, application receipts, next Turn and cancellation passed; evidence %s", home)
 }
 
-func nativePublicFunctionServer(t *testing.T, h *dispatchHarness, ctx context.Context) (string, string) {
+func nativePublicFunctionServer(t *testing.T, h *dispatchHarness, ctx context.Context, provider *v1.ModelProviderInput) (string, string) {
 	t.Helper()
 	worker, err := execution.StartWorker(ctx, h.d)
 	if err != nil {
@@ -86,7 +83,7 @@ func nativePublicFunctionServer(t *testing.T, h *dispatchHarness, ctx context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(h.s, auth, "codex", api.WithExecution(worker))
+	handler, err := api.NewHandler(h.s, auth, "codex", api.WithExecution(worker), nativeDeploymentDefaults("gpt-5.5", provider))
 	if err != nil {
 		t.Fatal(err)
 	}

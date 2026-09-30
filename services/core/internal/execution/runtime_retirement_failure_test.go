@@ -3,81 +3,13 @@ package execution
 import (
 	"context"
 	"errors"
-	"net"
-	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// Each case has its own real advisory-lock namespace. The delayed driver read
-// lets the cancellation fence hit its own deadline without shortening production
-// timeouts or depending on an unrelated SQL failure to exercise this branch.
-func retirementFailureLease(t *testing.T, armed *atomic.Bool, reading chan struct{}, release <-chan struct{}) (*store.ExecutionLease, *pgxpool.Pool) {
-	t.Helper()
-	dsn := os.Getenv("OAC_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("dedicated PostgreSQL required")
-	}
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(cfg.ConnConfig.Database, "oac_") || !strings.HasSuffix(cfg.ConnConfig.Database, "_tests") {
-		t.Fatal("dedicated test database required")
-	}
-	admin, err := pgxpool.NewWithConfig(t.Context(), cfg.Copy())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(admin.Close)
-	name := "oac_retirement_" + uuid.NewString()[:8] + "_tests"
-	quoted := pgx.Identifier{name}.Sanitize()
-	if _, err := admin.Exec(t.Context(), "CREATE DATABASE "+quoted); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if _, err := admin.Exec(ctx, "DROP DATABASE "+quoted+" WITH (FORCE)"); err != nil {
-			t.Error(err)
-		}
-	})
-	cfg.ConnConfig.Database = name
-	dial := cfg.ConnConfig.DialFunc
-	cfg.ConnConfig.DialFunc = func(ctx context.Context, network, address string) (net.Conn, error) {
-		c, err := dial(ctx, network, address)
-		if err != nil {
-			return nil, err
-		}
-		return &delayedLeaseRead{Conn: c, armed: armed, reading: reading, release: release}, nil
-	}
-	pool, err := pgxpool.NewWithConfig(t.Context(), cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	lease, err := store.New(pool).AcquireExecutionLease(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := lease.Close(ctx); err != nil {
-			t.Error(err)
-		}
-	})
-	return lease, pool
-}
 
 func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 	for _, mode := range []string{"gate_timeout", "lease_loss"} {
@@ -87,9 +19,9 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 			var readOnce sync.Once
 			unblockRead := func() { readOnce.Do(func() { close(releaseRead) }) }
 			defer unblockRead()
-			lease, pool := retirementFailureLease(t, &armed, reading, releaseRead)
+			writer, pool := delayedReadWriter(t, &armed, reading, releaseRead)
 			m := testRuntimeManager(t)
-			m.store = lease.Store()
+			m.store = writer
 			m.loadDeployment = func(context.Context) (*RuntimeProvider, error) { return nil, nil }
 			m.mutationGate = make(chan struct{}, 1)
 			// This fixture models an already loaded node deployment; its provider is
@@ -117,7 +49,7 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 				defer cancel()
 				queryDone = make(chan error, 1)
 				armed.Store(true)
-				go func() { queryDone <- lease.Ping(queryCtx) }()
+				go func() { queryDone <- writer.CheckExecutionOwnership(queryCtx) }()
 				select {
 				case <-reading:
 				case <-time.After(2 * time.Second):

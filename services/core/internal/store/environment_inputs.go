@@ -164,8 +164,8 @@ func (s *Store) GetEnvironmentInputReservation(ctx context.Context, tenantID, se
 
 // PromoteEnvironmentInput admits and claims work for the retained native preparation.
 func (s *Store) PromoteEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID string) (EnvironmentInputReservation, error) {
-	if s.executionLease == nil {
-		return EnvironmentInputReservation{}, errors.New("Environment input promotion requires an execution lease")
+	if err := s.checkExecutionAuthority(); err != nil {
+		return EnvironmentInputReservation{}, err
 	}
 	return s.settleEnvironmentInput(ctx, tenantID, sessionID, reservationID, EnvironmentInputAdmitted)
 }

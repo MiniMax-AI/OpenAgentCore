@@ -55,7 +55,7 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 		}
 	}
 	var updated SavedAgent
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.LockAgent(ctx, sqlc.LockAgentParams{TenantID: tenant, ID: id})
 		if errors.Is(err, pgx.ErrNoRows) {

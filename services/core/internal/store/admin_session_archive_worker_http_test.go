@@ -87,7 +87,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ArchiveManagedSession(ctx, project.TenantID, active.ID, 1); !errors.Is(err, store.ErrInvalidInput) {
+	if _, err := s.ArchiveManagedSession(ctx, project.TenantID, active.ID, 1); !errors.Is(err, store.ErrExecutionAuthority) {
 		t.Fatal("fixture admission Store unexpectedly holds execution ownership", err)
 	}
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("archive-administrator")})

@@ -23,7 +23,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 				t.Fatal(err)
 			}
 			reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
-			writer := executionLease(t, s).Store()
+			writer := executionWriter(t, s)
 			owner, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil {
 				t.Fatal(err)
@@ -118,7 +118,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writer := executionLease(t, s).Store()
+	writer := executionWriter(t, s)
 	owner, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)

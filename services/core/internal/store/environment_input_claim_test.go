@@ -7,7 +7,7 @@ import (
 
 func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 	s, pool := testStore(t)
-	writer := executionLease(t, s).Store()
+	writer := executionWriter(t, s)
 	tenant, session := environmentInputSession(t, s)
 	pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
 	reservationCursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)

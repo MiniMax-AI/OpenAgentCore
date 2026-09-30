@@ -45,50 +45,50 @@ func (s *Store) CreateSourceFile(ctx context.Context, tenantID string, upload fu
 	if err != nil || upload == nil {
 		return SourceFile{}, ErrInvalidInput
 	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return SourceFile{}, err
-	}
-	defer tx.Rollback(context.Background())
-	objects := tx.LargeObjects()
-	oid, err := objects.Create(ctx, 0)
-	if err != nil {
-		return SourceFile{}, err
-	}
-	body, err := objects.Open(ctx, oid, pgx.LargeObjectModeWrite)
-	if err != nil {
-		return SourceFile{}, err
-	}
-	writer := newSourceFileWriter(body)
-	input, err := upload(writer)
-	if writer.err != nil {
-		return SourceFile{}, writer.err
-	}
-	if err != nil {
-		return SourceFile{}, err
-	}
-	if !validSourceFilename(input.Filename) || input.Purpose != "user_data" {
-		return SourceFile{}, ErrInvalidInput
-	}
-	if err := body.Close(); err != nil {
-		return SourceFile{}, err
-	}
-	row, err := s.queries.WithTx(tx).CreateSourceFile(ctx, sqlc.CreateSourceFileParams{
-		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant,
-		Filename: input.Filename, Purpose: input.Purpose, BodyOid: pgtype.Uint32{Uint32: oid, Valid: true},
-		SizeBytes: writer.size, Sha256: hex.EncodeToString(writer.hash.Sum(nil)),
+	var created SourceFile
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		objects := tx.LargeObjects()
+		oid, err := objects.Create(ctx, 0)
+		if err != nil {
+			return err
+		}
+		body, err := objects.Open(ctx, oid, pgx.LargeObjectModeWrite)
+		if err != nil {
+			return err
+		}
+		writer := newSourceFileWriter(body)
+		input, err := upload(writer)
+		if writer.err != nil {
+			return writer.err
+		}
+		if err != nil {
+			return err
+		}
+		if !validSourceFilename(input.Filename) || input.Purpose != "user_data" {
+			return ErrInvalidInput
+		}
+		if err := body.Close(); err != nil {
+			return err
+		}
+		row, err := s.queries.WithTx(tx).CreateSourceFile(ctx, sqlc.CreateSourceFileParams{
+			ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant,
+			Filename: input.Filename, Purpose: input.Purpose, BodyOid: pgtype.Uint32{Uint32: oid, Valid: true},
+			SizeBytes: writer.size, Sha256: hex.EncodeToString(writer.hash.Sum(nil)),
+		})
+		if err != nil {
+			return fmt.Errorf("create source file: %w", err)
+		}
+		resource := sourceFileFromRow(row)
+		if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "create", "file", resource.ID, "", AuditResource{Type: "file", ID: resource.ID}); err != nil {
+			return err
+		}
+		created = resource
+		return nil
 	})
 	if err != nil {
-		return SourceFile{}, fmt.Errorf("create source file: %w", err)
-	}
-	resource := sourceFileFromRow(row)
-	if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "create", "file", resource.ID, "", AuditResource{Type: "file", ID: resource.ID}); err != nil {
 		return SourceFile{}, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return SourceFile{}, err
-	}
-	return sourceFileFromRow(row), nil
+	return created, nil
 }
 
 func (s *Store) GetSourceFile(ctx context.Context, tenantID, fileID string) (SourceFile, error) {
@@ -156,22 +156,16 @@ func (s *Store) ReadSourceFile(ctx context.Context, tenantID, fileID string, con
 	if consume == nil {
 		return ErrInvalidInput
 	}
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(context.Background())
-	row, err := s.queries.WithTx(tx).GetSourceFile(ctx, sqlc.GetSourceFileParams{TenantID: tenant, ID: id})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-	if err := consumeSourceFile(ctx, tx, row, consume); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		row, err := s.queries.WithTx(tx).GetSourceFile(ctx, sqlc.GetSourceFileParams{TenantID: tenant, ID: id})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return consumeSourceFile(ctx, tx, row, consume)
+	})
 }
 
 func consumeSourceFile(ctx context.Context, tx pgx.Tx, row sqlc.SourceFile, consume func(SourceFile, io.Reader) error) error {
@@ -191,26 +185,20 @@ func (s *Store) DeleteSourceFile(ctx context.Context, tenantID, fileID string) e
 	if err != nil {
 		return err
 	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(context.Background())
-	oid, err := s.queries.WithTx(tx).DeleteSourceFile(ctx, sqlc.DeleteSourceFileParams{TenantID: tenant, ID: id})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-	objects := tx.LargeObjects()
-	if err := objects.Unlink(ctx, oid.Uint32); err != nil {
-		return err
-	}
-	if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "delete", "file", fileID, ""); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		oid, err := s.queries.WithTx(tx).DeleteSourceFile(ctx, sqlc.DeleteSourceFileParams{TenantID: tenant, ID: id})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		objects := tx.LargeObjects()
+		if err := objects.Unlink(ctx, oid.Uint32); err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "delete", "file", fileID, "")
+	})
 }
 
 func sourceFileIDs(tenantID, fileID string) (pgtype.UUID, pgtype.UUID, error) {

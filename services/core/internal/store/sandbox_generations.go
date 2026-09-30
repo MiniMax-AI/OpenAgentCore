@@ -42,69 +42,70 @@ func (s *Store) ClassifySandboxDeploymentChange(ctx context.Context, installatio
 // GetSandboxAllocationSetup reads immutable ownership and the current credential
 // in one snapshot. A released receipt remains historical but is never rebound.
 func (s *Store) GetSandboxAllocationSetup(ctx context.Context, ref sandbox.Reference) (SandboxSetup, error) {
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
-	if err != nil {
-		return SandboxSetup{}, err
-	}
-	defer tx.Rollback(ctx)
-	q := s.queries.WithTx(tx)
-	lookup, err := deviceLookup(ref.TenantID, ref.EnvironmentID)
-	if err != nil {
-		return SandboxSetup{}, err
-	}
-	a, err := q.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
-	if err != nil {
-		return SandboxSetup{}, err
-	}
-	if runtimeUUID(a.RuntimeAllocation.ID) != ref.AllocationID || !a.RuntimeAllocation.DeploymentGeneration.Valid || a.RuntimeAllocation.State == "released" {
-		return SandboxSetup{}, ErrInvalidInput
-	}
-	d, err := q.GetRuntimeDeployment(ctx)
-	if err != nil {
-		return SandboxSetup{}, err
-	}
-	if a.RuntimeAllocation.ProviderKey != d.InstallationID {
-		return SandboxSetup{}, sandbox.ErrOwnership
-	}
-	result, err := s.sandboxSetup(d)
-	if err != nil {
-		return SandboxSetup{}, err
-	}
-	generation := a.RuntimeAllocation.DeploymentGeneration.Int64
-	if generation != d.Generation {
-		g, err := q.GetSandboxGeneration(ctx, generation)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return SandboxSetup{}, ErrSandboxDeploymentConflict
-		}
+	var result SandboxSetup
+	err := s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		lookup, err := deviceLookup(ref.TenantID, ref.EnvironmentID)
 		if err != nil {
-			return SandboxSetup{}, err
+			return err
 		}
-		if g.ProviderKind != d.ProviderKind {
-			return SandboxSetup{}, ErrSandboxDeploymentConflict
-		}
-		result.Generation = uint64(generation)
-		if err = json.Unmarshal(g.Specification, &result.Specification); err != nil {
-			return SandboxSetup{}, err
-		}
-		retained, err := providers.Decode(g.ProviderKind, sandbox.ConfigurationRecord{Public: g.ProviderConfig, Metadata: g.ProviderMetadata})
+		a, err := q.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
 		if err != nil {
-			return SandboxSetup{}, ErrSandboxDeploymentConflict
+			return err
 		}
-		needsCredential, err := providers.UsesCredential(g.ProviderKind)
+		if runtimeUUID(a.RuntimeAllocation.ID) != ref.AllocationID || !a.RuntimeAllocation.DeploymentGeneration.Valid || a.RuntimeAllocation.State == "released" {
+			return ErrInvalidInput
+		}
+		d, err := q.GetRuntimeDeployment(ctx)
 		if err != nil {
-			return SandboxSetup{}, err
+			return err
 		}
-		if needsCredential {
-			composed, err := providers.WithCredential(sandbox.Selection{Provider: g.ProviderKind, Configuration: retained}, sandbox.Selection{Provider: d.ProviderKind, Configuration: result.Configuration})
-			if err != nil {
-				return SandboxSetup{}, ErrSandboxDeploymentConflict
+		if a.RuntimeAllocation.ProviderKey != d.InstallationID {
+			return sandbox.ErrOwnership
+		}
+		result, err = s.sandboxSetup(d)
+		if err != nil {
+			return err
+		}
+		generation := a.RuntimeAllocation.DeploymentGeneration.Int64
+		if generation != d.Generation {
+			g, err := q.GetSandboxGeneration(ctx, generation)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrSandboxDeploymentConflict
 			}
-			retained = composed.Configuration
+			if err != nil {
+				return err
+			}
+			if g.ProviderKind != d.ProviderKind {
+				return ErrSandboxDeploymentConflict
+			}
+			result.Generation = uint64(generation)
+			if err = json.Unmarshal(g.Specification, &result.Specification); err != nil {
+				return err
+			}
+			retained, err := providers.Decode(g.ProviderKind, sandbox.ConfigurationRecord{Public: g.ProviderConfig, Metadata: g.ProviderMetadata})
+			if err != nil {
+				return ErrSandboxDeploymentConflict
+			}
+			needsCredential, err := providers.UsesCredential(g.ProviderKind)
+			if err != nil {
+				return err
+			}
+			if needsCredential {
+				composed, err := providers.WithCredential(sandbox.Selection{Provider: g.ProviderKind, Configuration: retained}, sandbox.Selection{Provider: d.ProviderKind, Configuration: result.Configuration})
+				if err != nil {
+					return ErrSandboxDeploymentConflict
+				}
+				retained = composed.Configuration
+			}
+			result.Configuration = retained
 		}
-		result.Configuration = retained
-
+		return nil
+	})
+	if err != nil {
+		return SandboxSetup{}, err
 	}
-	return result, tx.Commit(ctx)
+	return result, nil
 }
 
 // SandboxGenerationPage is bounded; callers retain a deadline over the full scan.

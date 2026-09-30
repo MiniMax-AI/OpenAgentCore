@@ -21,10 +21,10 @@ func TestEnvironmentUploadWriteAuditSurvivesRequestAndLeaseContext(t *testing.T)
 	cancel()
 	sessionAuditCount(t, f.s, f.tenant, 0)
 	// Neither the settlement caller nor the newly acquired execution lease owns the request context.
-	if err := f.lease.Close(context.Background()); err != nil {
+	if err := f.writer.CloseExecution(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	next := executionLease(t, f.s).Store()
+	next := executionWriter(t, f.s)
 	var group sync.WaitGroup
 	for range 4 {
 		group.Go(func() {

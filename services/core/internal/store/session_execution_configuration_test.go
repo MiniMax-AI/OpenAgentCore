@@ -244,7 +244,7 @@ func TestSessionExecutionConfigurationConcurrentRetryKeepsWinner(t *testing.T) {
 
 func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 	s, pool := testStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, executionProjectionInput("agent"))
 	if err != nil {

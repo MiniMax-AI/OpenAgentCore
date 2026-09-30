@@ -27,7 +27,7 @@ func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, server
 		return nil, errors.New(message)
 	}
 	profile, _ := p.Engines.Lookup(engine)
-	if err := profile.ValidateMCPOrigins(snapshot.Environment, snapshot.Daemon != nil, servers); err != nil {
+	if err := profile.ValidateMCPOrigins(snapshot.Environment, servers); err != nil {
 		return nil, err
 	}
 	if len(servers) > 0 && !caps.MCPHTTPTools {

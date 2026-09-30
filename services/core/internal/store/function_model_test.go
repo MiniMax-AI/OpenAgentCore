@@ -38,7 +38,7 @@ func nativeFunctionModel(t *testing.T, home string) (*httptest.Server, []any, *a
 func nativeFunctionResultsModel(t *testing.T, home string, results []any) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 	var requests atomic.Int32
-	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	model := nativeModelServer(t, home, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)

@@ -20,7 +20,7 @@ func codexProfile() Profile {
 		ConfigurationValidation:        AdditionalValidation,
 		ToolsValidation:                CommonValidationOnly,
 		FunctionResultValidation:       CommonValidationOnly,
-		ValidateConfiguration: func(agent v1.Agent, _ *v1.Environment, _ bool) error {
+		ValidateConfiguration: func(agent v1.Agent, _ *v1.Environment) error {
 			return rejectSubagentTools(agent, "function", "mcp")
 		},
 	}

@@ -77,7 +77,7 @@ func (s *Store) CreateProjectAPIKey(ctx context.Context, project, id, name strin
 		return IssuedProjectAPIKey{}, err
 	}
 	var result IssuedProjectAPIKey
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		p, err := q.LockProject(ctx, projectID)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -147,7 +147,7 @@ func (s *Store) RevokeProjectAPIKey(ctx context.Context, project, id string) err
 	if err != nil {
 		return ErrNotFound
 	}
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		p, err := q.LockProject(ctx, projectID)
 		if errors.Is(err, pgx.ErrNoRows) {

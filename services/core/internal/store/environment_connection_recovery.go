@@ -6,26 +6,24 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ReconcileEnvironmentConnections runs before the new owner's connection producers start.
 // It discards previous process generations and records loss of their connected transport.
 func (s *Store) ReconcileEnvironmentConnections(ctx context.Context) error {
-	if s.executionLease == nil {
-		return errors.New("Environment reconciliation requires an execution lease")
+	if err := s.checkExecutionAuthority(); err != nil {
+		return err
 	}
 	after := pgtype.UUID{Valid: true}
 	for {
 		var rows []sqlc.ListEnvironmentConnectionsRow
-		queryCtx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
-		err := s.executionLease.withConn(queryCtx, func(conn *pgxpool.Conn) error {
+		err := s.writer.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 			var err error
-			rows, err = sqlc.New(conn).ListEnvironmentConnections(queryCtx, after)
+			rows, err = s.queries.WithTx(tx).ListEnvironmentConnections(ctx, after)
 			return err
 		})
-		cancel()
 		if err != nil {
 			return err
 		}

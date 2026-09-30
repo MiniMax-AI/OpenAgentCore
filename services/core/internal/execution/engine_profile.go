@@ -21,7 +21,7 @@ func validateProfileConfiguration(profile engine.Profile, snapshot Snapshot) err
 		return errors.New("Structured output is not qualified for this engine.")
 	}
 	if profile.ConfigurationValidation == engine.AdditionalValidation {
-		if err := profile.ValidateConfiguration(snapshot.Agent, snapshot.Environment, snapshot.Daemon != nil); err != nil {
+		if err := profile.ValidateConfiguration(snapshot.Agent, snapshot.Environment); err != nil {
 			return profileError(err)
 		}
 	}
@@ -31,7 +31,7 @@ func validateProfileConfiguration(profile engine.Profile, snapshot Snapshot) err
 		return err
 	}
 	if err == nil {
-		if err := profile.ValidateMCPOrigins(snapshot.Environment, snapshot.Daemon != nil, tools.MCP); err != nil {
+		if err := profile.ValidateMCPOrigins(snapshot.Environment, tools.MCP); err != nil {
 			return err
 		}
 		if tools.DisableProgrammatic && !profile.ProgrammaticToolCallingDisable.IsSupported() {
@@ -43,7 +43,7 @@ func validateProfileConfiguration(profile engine.Profile, snapshot Snapshot) err
 		}
 	}
 	if profile.ToolsValidation == engine.AdditionalValidation {
-		if validationErr := profile.ValidateTools(snapshot.Environment, snapshot.Daemon != nil, tools.Functions, tools.MCP); validationErr != nil {
+		if validationErr := profile.ValidateTools(snapshot.Environment, tools.Functions, tools.MCP); validationErr != nil {
 			return profileError(validationErr)
 		}
 	}

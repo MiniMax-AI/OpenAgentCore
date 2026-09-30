@@ -7,6 +7,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -76,10 +77,10 @@ func (s *Store) ObserveEnvironmentConnection(ctx context.Context, tenant, enviro
 }
 
 func (s *Store) withEnvironmentConnection(ctx context.Context, tenant, environment string, apply func(context.Context, *sqlc.Queries, sqlc.GetSessionEnvironmentRow) error) error {
-	if s.executionLease == nil {
-		return errors.New("Environment observations require an execution lease")
+	if err := s.checkExecutionAuthority(); err != nil {
+		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
+	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
 	owned, err := s.GetEnvironment(ctx, tenant, environment)
 	if err != nil {

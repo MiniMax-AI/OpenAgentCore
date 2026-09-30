@@ -40,16 +40,15 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	lease, err := s.AcquireExecutionLease(ctx)
+	writer, err := store.NewExecution(ctx, s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		closing, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = lease.Close(closing)
+		_ = writer.CloseExecution(closing)
 	})
-	writer := lease.Store()
 
 	create := func(environment string, initial bool) store.Session {
 		t.Helper()

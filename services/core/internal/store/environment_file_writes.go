@@ -45,7 +45,10 @@ func (k FileWriteIdentity) valid() bool {
 // ReserveEnvironmentFileWrite persists intent before external dispatch. A retry
 // observes the earlier operation and never authorizes resending an unknown write.
 func (s *Store) ReserveEnvironmentFileWrite(ctx context.Context, tenant, environment string, key FileWriteIdentity) (EnvironmentFileWrite, error) {
-	if s.executionLease == nil || !key.valid() {
+	if err := s.checkExecutionAuthority(); err != nil {
+		return EnvironmentFileWrite{}, err
+	}
+	if !key.valid() {
 		return EnvironmentFileWrite{}, ErrInvalidInput
 	}
 	owned, err := s.GetEnvironment(ctx, tenant, environment)
@@ -147,7 +150,10 @@ func (s *Store) GetEnvironmentFileWrite(ctx context.Context, tenant, environment
 // SettleEnvironmentFileWrite requires an independently validated exact receipt.
 // A missing receipt, cancellation or owner retirement is not a rejected upload.
 func (s *Store) SettleEnvironmentFileWrite(ctx context.Context, tenant, environment string, key FileWriteIdentity, state string) (EnvironmentFileWrite, error) {
-	if s.executionLease == nil || !key.valid() || (state != "committed" && state != "rejected") {
+	if err := s.checkExecutionAuthority(); err != nil {
+		return EnvironmentFileWrite{}, err
+	}
+	if !key.valid() || (state != "committed" && state != "rejected") {
 		return EnvironmentFileWrite{}, ErrInvalidInput
 	}
 	previous, err := s.GetEnvironmentFileWrite(ctx, tenant, environment, key.ID)

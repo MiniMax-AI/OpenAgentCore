@@ -22,6 +22,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 )
 
 var (
@@ -79,9 +80,16 @@ type SessionPage struct {
 }
 
 type Store struct {
-	queries          *sqlc.Queries
-	pool             *pgxpool.Pool
-	executionLease   *ExecutionLease
+	queries *sqlc.Queries
+	// pool supplies the execution lease's dedicated connection; pooled runs
+	// every other transaction.
+	pool   *pgxpool.Pool
+	pooled *pgunit.Pool
+	// writer runs Session and execution-only transactions, and lease grants
+	// execution authority. New sets writer to pooled and leaves lease nil;
+	// NewExecution sets both to the same execution lease. Neither changes later.
+	writer           transactor
+	lease            *pgunit.Lease
 	credentialCipher *credentialcrypto.Cipher
 	oauthRefresher   oauthrefresh.Refresher
 	// publicURL is OAC_PUBLIC_URL. Core derives every address it gives
@@ -89,7 +97,10 @@ type Store struct {
 	publicURL string
 }
 
-func New(pool *pgxpool.Pool) *Store { return &Store{queries: sqlc.New(pool), pool: pool} }
+func New(pool *pgxpool.Pool) *Store {
+	pooled := pgunit.NewPool(pool)
+	return &Store{queries: sqlc.New(pool), pool: pool, pooled: pooled, writer: pooled}
+}
 
 func ValidEngine(engine string) bool { return enginePattern.MatchString(engine) }
 

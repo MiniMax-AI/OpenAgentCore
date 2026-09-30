@@ -57,11 +57,6 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 		t.Fatal("cannot resolve private model protocol options")
 	}
 	h := newDispatchHarness(t)
-	// Deliberately leave Dispatcher.Options unset. Only the public SDK Session
-	// creation freezes the deployment default used by the environment:none profile.
-	if h.d.Options != nil {
-		t.Fatal("fixture must not override public model provider admission")
-	}
 	home, err := os.MkdirTemp(root, "model-protocol-public-")
 	if err != nil {
 		t.Fatal("cannot create controlled evidence directory")

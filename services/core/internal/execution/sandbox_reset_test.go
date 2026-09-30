@@ -3,8 +3,6 @@ package execution
 import (
 	"bytes"
 	"context"
-	"database/sql"
-	"os"
 	"testing"
 	"time"
 
@@ -12,81 +10,39 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 )
 
-// The execution lease is database-scoped, so this manager test owns a database.
-func resetManagerStore(t *testing.T) (*store.Store, *store.ExecutionLease) {
+// The execution lease is database-scoped, so these manager tests own a database.
+// They receive the pooled Store and the execution writer built on it.
+func resetManagerStore(t *testing.T) (*store.Store, *store.Store) {
 	t.Helper()
 	return resetManagerStoreConfig(t, nil)
 }
 
-func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, *store.ExecutionLease) {
+func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, *store.Store) {
 	t.Helper()
-	url := os.Getenv("OAC_TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("OAC_TEST_DATABASE_URL is required")
-	}
-	admin, err := pgxpool.New(t.Context(), url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(admin.Close)
-	name := "oac_reset_" + uuid.NewString()[:8] + "_tests"
-	quoted := pgx.Identifier{name}.Sanitize()
-	if _, err := admin.Exec(t.Context(), "CREATE DATABASE "+quoted); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if _, err := admin.Exec(ctx, "DROP DATABASE "+quoted+" WITH (FORCE)"); err != nil {
-			t.Error(err)
-		}
-	})
-	cfg := admin.Config().Copy()
-	cfg.ConnConfig.Database = name
-	db := sql.OpenDB(stdlib.GetConnector(*cfg.ConnConfig))
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../migrations"), goose.WithTableName("agents_api_schema_version"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = provider.Up(t.Context())
-	_ = db.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if configure != nil {
-		configure(cfg)
-	}
-	pool, err := pgxpool.NewWithConfig(t.Context(), cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
+	pool := pgtest.OpenIsolated(t, configure)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := store.NewWithCredentialCipher(pool, cipher)
-	lease, err := s.AcquireExecutionLease(t.Context())
+	writer, err := store.NewExecution(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	return s, lease
+	t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
+	return s, writer
 }
 
 func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
-	s, lease := resetManagerStore(t)
-	w := lease.Store()
+	s, w := resetManagerStore(t)
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)

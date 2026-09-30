@@ -16,7 +16,7 @@ import (
 func runtimeSuspensionFixture(t *testing.T) (*Store, *Store, *pgxpool.Pool, RuntimeAllocation) {
 	t.Helper()
 	s, pool := testStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
 	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
@@ -261,7 +261,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 
 func TestRuntimeSuspensionCountsUncertainCapacityUntilReleased(t *testing.T) {
 	s, pool := testStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	provider := uuid.NewString()
 	cases := []struct {
 		state, phase string
@@ -359,7 +359,7 @@ func TestRuntimeSuspensionExpiredRunningAndLostWriterAreFenced(t *testing.T) {
 	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("expired running allocation entered checkpoint", err)
 	}
-	if err := w.executionLease.Close(t.Context()); err != nil {
+	if err := w.CloseExecution(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.RuntimeActivity(t.Context(), owner); err == nil {

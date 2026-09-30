@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"maps"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -31,19 +30,8 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 		// Require the frozen bundle before dispatch so the harness cannot
 		// select an implicit provider endpoint.
 		return proto.PromptRequestPayload{}, store.ErrModelProviderRequired
-	} else if d.Options != nil {
-		options, err = d.Options(ctx, session)
-		if err != nil {
-			return proto.PromptRequestPayload{}, err
-		}
-		options = maps.Clone(options)
-		if options == nil {
-			options = map[string]any{}
-		}
 	}
 	options["model"], options["system_prompt"] = snapshot.Agent.Model, snapshot.Agent.Instructions
-	delete(options, "override_system_prompt")
-	delete(options, "harness_config")
 	if snapshot.Agent.XAgentsCore != nil && len(snapshot.Agent.XAgentsCore.HarnessConfig) > 0 {
 		var native map[string]any
 		if err := json.Unmarshal(snapshot.Agent.XAgentsCore.HarnessConfig, &native); err != nil {

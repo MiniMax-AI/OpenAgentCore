@@ -18,7 +18,7 @@ type directoryResult struct {
 	err   error
 }
 
-func directoryWorker(t *testing.T, execute ...bool) (*dispatchHarness, *execution.Worker, store.Environment) {
+func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, store.Environment) {
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"unavailable-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
@@ -34,13 +34,6 @@ func directoryWorker(t *testing.T, execute ...bool) (*dispatchHarness, *executio
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.WorkspaceReadPreparation
 	})
-	h.d.Options = func(context.Context, store.Session) (map[string]any, error) {
-		if len(execute) > 0 && execute[0] {
-			return nil, nil
-		}
-		t.Error("read resolved model credentials")
-		return nil, errors.New("no credentials")
-	}
 	w, err := execution.StartWorker(t.Context(), h.d)
 	if err != nil {
 		t.Fatal(err)

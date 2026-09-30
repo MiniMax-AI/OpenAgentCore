@@ -32,16 +32,15 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			heartbeat := scenario != "receipt_without_heartbeat"
 			s, pool := store.NewManagedTestStore(t)
-			lease, err := s.AcquireExecutionLease(t.Context())
+			writer, err := store.NewExecution(t.Context(), s)
 			if err != nil {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() {
-				if err := lease.Close(context.Background()); err != nil {
+				if err := writer.CloseExecution(context.Background()); err != nil {
 					t.Error(err)
 				}
 			})
-			writer := lease.Store()
 			installation := uuid.NewString()
 			if err := writer.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 				t.Fatal(err)

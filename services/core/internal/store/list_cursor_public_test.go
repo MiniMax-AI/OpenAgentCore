@@ -239,13 +239,13 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	lease, err := s.AcquireExecutionLease(t.Context())
+	writer, err := store.NewExecution(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = lease.Close(t.Context()) }()
-	a := seedCursorFixture(t, s, lease.Store(), client, owner, ownerTenant, "a")
-	b := seedCursorFixture(t, s, lease.Store(), client, foreign, foreignTenant, "b")
+	defer func() { _ = writer.CloseExecution(t.Context()) }()
+	a := seedCursorFixture(t, s, writer, client, owner, ownerTenant, "a")
+	b := seedCursorFixture(t, s, writer, client, foreign, foreignTenant, "b")
 
 	text := func(value string) *string { return &value }
 	var (

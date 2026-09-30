@@ -23,7 +23,7 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, Run
 		t.Fatal(err)
 	}
 	s := NewWithCredentialCipher(pool, cipher)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)

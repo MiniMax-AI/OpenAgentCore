@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/jackc/pgx/v5"
@@ -11,13 +10,11 @@ import (
 // ExpireEnvironmentInputs settles one bounded batch without creating Turn history.
 // Only the current execution writer may run this cross-Session maintenance.
 func (s *Store) ExpireEnvironmentInputs(ctx context.Context) (int64, error) {
-	if s.executionLease == nil {
-		return 0, errors.New("Environment input expiry requires an execution lease")
+	if err := s.checkExecutionAuthority(); err != nil {
+		return 0, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
-	defer cancel()
 	var expired int64
-	err := s.executionLease.transaction(ctx, func(tx pgx.Tx) error {
+	err := s.writer.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		rows, err := q.ListDueEnvironmentInputs(ctx)
 		if err != nil {

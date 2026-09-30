@@ -15,7 +15,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			s, pool := testStore(t)
-			writer := executionLease(t, s).Store()
+			writer := executionWriter(t, s)
 			tenant, session := environmentInputSession(t, s)
 			original := submitMessage(t, s, tenant, session.ID, "original")
 			transition(t, s, tenant, session.ID, original.TurnID, TurnQueued, TurnInProgress)

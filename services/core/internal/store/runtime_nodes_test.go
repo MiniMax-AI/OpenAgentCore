@@ -17,7 +17,7 @@ import (
 func managerFixture(t *testing.T, active, retained int) (*Store, *Store, RuntimeDeployment) {
 	t.Helper()
 	s, _ := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	d := deploymentSelection()
 	d.ProviderKind = "docker"
 	d.LocalNodeID = uuid.NewString()

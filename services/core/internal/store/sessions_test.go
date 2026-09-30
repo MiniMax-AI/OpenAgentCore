@@ -3,73 +3,20 @@ package store
 import (
 	"context"
 	"errors"
-	"os"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/migrations"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 )
 
 func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("OAC_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("OAC_TEST_DATABASE_URL is not set; dedicated PostgreSQL required")
-	}
-	cfg, err := testDatabaseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	// A separate database, not product fixtures or migrations, is sufficient.
-	var database string
-	var productTable *string
-	if err := pool.QueryRow(ctx, "SELECT current_database(), to_regclass('workspaces')::text").Scan(&database, &productTable); err != nil || productTable != nil || database != cfg.ConnConfig.Database {
-		t.Fatal("execution tests require a database without product workspace tables")
-	}
-	if err := migrations.Apply(ctx, dsn); err != nil {
-		t.Fatal(err)
-	}
+	pool := pgtest.Open(t)
 	return New(pool), pool
-}
-
-// Validate the driver's effective database, including query parameters and DSNs.
-func testDatabaseConfig(dsn string) (*pgxpool.Config, error) {
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		return nil, errors.New("invalid test database configuration")
-	}
-	database := cfg.ConnConfig.Database
-	if !strings.HasPrefix(database, "oac_") || !strings.HasSuffix(database, "_tests") {
-		return nil, errors.New("test database must be named oac_*_tests")
-	}
-	return cfg, nil
-}
-
-func TestDatabaseGuardUsesEffectiveDatabase(t *testing.T) {
-	for _, dsn := range []string{
-		"postgres://localhost/oac_local_tests?dbname=agents_api",
-		"host=localhost dbname=agents_api",
-		"postgres://localhost/agents_api",
-	} {
-		if _, err := testDatabaseConfig(dsn); err == nil {
-			t.Fatalf("unsafe database accepted: %s", dsn)
-		}
-	}
-	cfg, err := testDatabaseConfig("postgres://localhost/oac_local_tests")
-	if err != nil || cfg.ConnConfig.Database != "oac_local_tests" {
-		t.Fatalf("valid dedicated database rejected: %v", err)
-	}
 }
 
 func TestSessionsPersistAndStayTenantScoped(t *testing.T) {

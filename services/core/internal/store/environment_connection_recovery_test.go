@@ -8,7 +8,7 @@ import (
 
 func TestEnvironmentConnectionRecoveryFencesLostOwnerAcrossPages(t *testing.T) {
 	s, pool := testStore(t)
-	old := executionLease(t, s)
+	old := executionWriter(t, s)
 	type target struct {
 		tenant      string
 		session     Session
@@ -19,27 +19,27 @@ func TestEnvironmentConnectionRecoveryFencesLostOwnerAcrossPages(t *testing.T) {
 	for range 33 {
 		tenant, session, environment := connectionFixture(t, s)
 		generation := uuid.NewString()
-		if err := old.Store().ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
+		if err := old.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 			t.Fatal(err)
 		}
-		if err := old.Store().ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
+		if err := old.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
 			t.Fatal(err)
 		}
 		targets = append(targets, target{tenant, session, environment, generation})
 	}
 	var killed bool
-	if err := pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1,1000)", old.conn.Conn().PgConn().PID()).Scan(&killed); err != nil || !killed {
+	if err := pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1,1000)", executionOwnerPID(t, pool)).Scan(&killed); err != nil || !killed {
 		t.Fatal(killed, err)
 	}
-	next := executionLease(t, s)
+	next := executionWriter(t, s)
 	first := targets[0]
-	if err := old.Store().ObserveEnvironmentConnection(t.Context(), first.tenant, first.environment.ID, first.generation, 2, false); err == nil {
+	if err := old.ObserveEnvironmentConnection(t.Context(), first.tenant, first.environment.ID, first.generation, 2, false); err == nil {
 		t.Fatal("lost owner wrote state")
 	}
 	if err := s.ReconcileEnvironmentConnections(t.Context()); err == nil {
 		t.Fatal("unleased reconciliation accepted")
 	}
-	if err := next.Store().ReconcileEnvironmentConnections(t.Context()); err != nil {
+	if err := next.ReconcileEnvironmentConnections(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	for _, target := range targets {
@@ -52,24 +52,24 @@ func TestEnvironmentConnectionRecoveryFencesLostOwnerAcrossPages(t *testing.T) {
 			t.Fatal("recovery lost event snapshots", changes)
 		}
 		before := connectionSnapshot(t, pool, target.environment.ID)
-		if err := next.Store().ObserveEnvironmentConnection(t.Context(), target.tenant, target.environment.ID, target.generation, 100, true); err != nil {
+		if err := next.ObserveEnvironmentConnection(t.Context(), target.tenant, target.environment.ID, target.generation, 100, true); err != nil {
 			t.Fatal(err)
 		}
 		if after := connectionSnapshot(t, pool, target.environment.ID); after != before {
 			t.Fatal("old generation survived recovery")
 		}
 	}
-	if err := next.Store().ReconcileEnvironmentConnections(t.Context()); err != nil {
+	if err := next.ReconcileEnvironmentConnections(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if len(connectionChanges(t, s, first.tenant, first.session.ID)) != 2 {
 		t.Fatal("repeated recovery duplicated a disconnect")
 	}
 	generation := uuid.NewString()
-	if err := next.Store().ReplaceEnvironmentConnection(t.Context(), first.tenant, first.environment.ID, generation); err != nil {
+	if err := next.ReplaceEnvironmentConnection(t.Context(), first.tenant, first.environment.ID, generation); err != nil {
 		t.Fatal(err)
 	}
-	if err := next.Store().ObserveEnvironmentConnection(t.Context(), first.tenant, first.environment.ID, generation, 1, true); err != nil {
+	if err := next.ObserveEnvironmentConnection(t.Context(), first.tenant, first.environment.ID, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.GetEnvironment(t.Context(), first.tenant, first.environment.ID)

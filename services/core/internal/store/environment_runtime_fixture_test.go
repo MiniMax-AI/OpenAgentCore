@@ -37,8 +37,9 @@ func enrollFixtureSession(t *testing.T, s *store.Store, tenant string, session s
 
 func connectFixtureRuntime(t *testing.T, h *dispatchHarness, session store.Session) *dispatchHarness {
 	t.Helper()
-	other := *h
-	other.session = session
+	// The Runtime shares the harness's Core, not its connection or write lock.
+	other := &dispatchHarness{t: h.t, s: h.s, d: h.d, tenant: h.tenant, session: session, registry: h.registry, url: h.url,
+		admissions: h.admissions, environments: h.environments}
 	other.device, other.credential = enrollFixtureSession(t, h.s, h.tenant, session)
 	u, err := url.Parse(h.url)
 	if err != nil {
@@ -51,8 +52,8 @@ func connectFixtureRuntime(t *testing.T, h *dispatchHarness, session store.Sessi
 		t.Fatal("enrolled Runtime connection failed")
 	}
 	t.Cleanup(func() { _ = other.conn.Close() })
-	enableWorkerEnvironment(t, &other)
-	return &other
+	enableWorkerEnvironment(t, other)
+	return other
 }
 
 func assertPreparationReleased(t *testing.T, h *dispatchHarness, request, handle string) {

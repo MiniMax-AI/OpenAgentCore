@@ -26,8 +26,8 @@ type Profile struct {
 	ConfigurationValidation                    ValidationPolicy
 	ToolsValidation                            ValidationPolicy
 	FunctionResultValidation                   ValidationPolicy
-	ValidateConfiguration                      func(agent v1.Agent, environment *v1.Environment, hasDaemon bool) error
-	ValidateTools                              func(environment *v1.Environment, hasDaemon bool, functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error
+	ValidateConfiguration                      func(agent v1.Agent, environment *v1.Environment) error
+	ValidateTools                              func(environment *v1.Environment, functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error
 	ValidateFunctionResult                     func(placement string, result proto.FunctionResultPayload) error
 	// WhitespaceOnlyText qualifies messages without an image or non-whitespace
 	// text. Unqualified harnesses reject them at admission; Core never trims or
