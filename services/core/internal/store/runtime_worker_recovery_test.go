@@ -21,6 +21,15 @@ func insertWorkerRuntimeAllocation(t *testing.T, pool *pgxpool.Pool, h *dispatch
 	if err != nil {
 		t.Fatal(err)
 	}
+	// This synthetic allocation must not outlive the test in the shared fixture
+	// database, where the next worker validates every retained protocol receipt.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := pool.Exec(ctx, "DELETE FROM runtime_allocations WHERE environment_id=$1", h.device.EnvironmentID); err != nil {
+			t.Error(err)
+		}
+	})
 }
 
 func runtimeWorkerHarness(t *testing.T) (*dispatchHarness, *pgxpool.Pool) {

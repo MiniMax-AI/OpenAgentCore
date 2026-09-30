@@ -15,7 +15,7 @@ import (
 
 func runtimeSuspensionFixture(t *testing.T) (*Store, *Store, *pgxpool.Pool, RuntimeAllocation) {
 	t.Helper()
-	s, pool := testStore(t)
+	s, pool := newManagedTestStore(t)
 	w := executionLease(t, s).Store()
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
@@ -260,7 +260,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 }
 
 func TestRuntimeSuspensionCountsUncertainCapacityUntilReleased(t *testing.T) {
-	s, pool := testStore(t)
+	s, pool := newManagedTestStore(t)
 	w := executionLease(t, s).Store()
 	provider := uuid.NewString()
 	cases := []struct {
