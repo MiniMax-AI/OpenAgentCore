@@ -4,7 +4,7 @@ import type { SandboxAllocation, SandboxDeployment, SandboxNode } from "@agents-
 import { expectManagementBoundary, failNext, openConsole, setDeployment, setNode, writes } from "./console";
 
 const deploymentPath = "/core/v1/sandbox/deployment";
-const templateDiscoveryPath = "/core/v1/sandbox/e2b/templates";
+const templateDiscoveryPath = "/core/v1/sandbox/providers/e2b/discovery";
 const rollout = (page: Page) => page.getByRole("region", { name: "Configuration rollout", exact: true });
 const fact = (scope: Locator, label: string) => scope.locator("dt").filter({ hasText: new RegExp(`^${label}`) }).locator("..").locator("dd");
 async function inspectRollout(page: Page, values: Record<string, string>) {

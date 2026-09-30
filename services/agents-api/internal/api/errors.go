@@ -124,7 +124,11 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 			writeError(w, status, "internal_error", "The operation could not be completed.")
 			return
 		}
-		writeError(w, status, configuration.Code, configuration.Message, configuration.Param)
+		if configuration.Param == "" {
+			writeError(w, status, configuration.Code, configuration.Message)
+		} else {
+			writeError(w, status, configuration.Code, configuration.Message, configuration.Param)
+		}
 	case errors.As(err, &unsupported):
 		writeError(w, http.StatusBadRequest, "sandbox_operation_unsupported", "The selected sandbox provider does not support this operation.")
 	case errors.Is(err, sandbox.ErrInvalid):

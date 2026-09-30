@@ -3,6 +3,7 @@ package providers_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/api"
@@ -10,10 +11,11 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/migrations"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -98,7 +100,14 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	}
 	defer admin.Exec(context.Background(), "DROP DATABASE "+quoted+" WITH (FORCE)")
 	cfg.ConnConfig.Database = name
-	if err = migrations.Apply(t.Context(), cfg.ConnString()); err != nil {
+	db := sql.OpenDB(stdlib.GetConnector(*cfg.ConnConfig))
+	migration, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../../migrations"), goose.WithTableName("agents_api_schema_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = migration.Up(t.Context())
+	db.Close()
+	if err != nil {
 		t.Fatal(err)
 	}
 	pool, err := pgxpool.NewWithConfig(t.Context(), cfg)

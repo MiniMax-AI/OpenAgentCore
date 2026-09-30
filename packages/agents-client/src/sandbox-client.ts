@@ -363,6 +363,7 @@ export class SandboxAdminClient {
     } catch (error) {
       if (error instanceof AgentCoreError && [400, 409, 503].includes(error.status)) {
         const messages: Record<string, string> = {
+          invalid_sandbox_configuration: "Invalid sandbox provider configuration.",
           sandbox_specification_mismatch: "The node specification differs from the deployment.",
           sandbox_deployment_conflict: "The sandbox deployment cannot change in its current state.",
           sandbox_generation_stale: "The sandbox configuration changed. Refresh before submitting again.",
@@ -378,10 +379,10 @@ export class SandboxAdminClient {
         if (error.code && Object.hasOwn(messages, error.code)) {
           // Credential-bearing errors expose fixed local copy and allowlisted
           // numeric facts plus exact status/code/field matches only.
-          const fields = error.code === "sandbox_generation_stale" ? ["current_generation"] : error.code === "sandbox_in_use" ? ["allocations", "pending"] : [];
+          const fields = error.code === "sandbox_generation_stale" ? ["current_generation"] : error.code === "sandbox_in_use" ? ["allocations", "pending"] : error.code === "invalid_sandbox_configuration" ? ["min", "max"] : [];
           const details = Object.fromEntries(fields.filter(field => isNonnegativeInteger(error.details?.[field])).map(field => [field, Number(error.details![field])]));
           const safeParam = error.status === 400
-            ? error.code === "sandbox_credential_invalid" ? "credential" : error.code === "sandbox_configuration_invalid" ? "configuration" : null
+            ? error.code === "sandbox_credential_invalid" ? "credential" : error.code === "sandbox_configuration_invalid" ? "configuration" : error.code === "invalid_sandbox_configuration" && ["runtime", "resources.cpus", "resources.memory_mib", "resources.root_disk_mib", "resources.environment_disk_mib"].includes(error.param ?? "") ? error.param : null
             : error.status === 409 && error.code === "sandbox_credential_ownership" ? "credential" : null;
           const param = error.param === safeParam ? safeParam : null;
           throw new AgentCoreError(messages[error.code]!, error.status, error.code, param, undefined, Object.keys(details).length ? details : undefined);

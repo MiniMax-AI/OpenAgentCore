@@ -262,7 +262,7 @@ export const chinese = {
   "Sign in to the console again to access sandbox management.": "请重新登录控制台以访问沙箱管理。",
   "Sandbox administration is not configured on this console.": "此控制台尚未配置沙箱管理权限。",
   "Core rejected the sandbox change": "Core 拒绝了此次沙箱更改",
-  "Core rejected the E2B configuration.": "Core 拒绝了这个 E2B 配置。",
+  "Core rejected the sandbox configuration.": "Core 拒绝了这个沙箱配置。",
   "The console configuration could not be read. Refresh to try again.": "无法读取控制台配置。请刷新重试。",
   "The sandbox request was rejected. Refresh to check the current state.": "沙箱请求被拒绝。请刷新并检查当前状态。",
   "The sandbox service is unavailable. Refresh to check the current state.": "沙箱服务不可用。请刷新并检查当前状态。",
