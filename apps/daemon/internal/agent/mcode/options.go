@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/claudecode"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/managedskills"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
@@ -58,7 +58,7 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 		}
 	}
 	if managedSkills {
-		installed, err := claudecode.InstallManagedSkills(ctx, log.With("component", "mcode"), root, req.AgentOptions["skills"])
+		installed, err := managedskills.InstallManagedSkills(ctx, log.With("component", "mcode"), root, req.AgentOptions["skills"])
 		if err != nil {
 			return result, err
 		}

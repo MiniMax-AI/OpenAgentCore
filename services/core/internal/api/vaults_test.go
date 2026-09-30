@@ -51,7 +51,7 @@ func vaultResourceHandler(t *testing.T) (http.Handler, *vaultResourceFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := NewHandler(f, auth, "claude_code")
+	h, err := NewHandler(f, auth, "fake_alpha")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -143,3 +143,37 @@ func TestUnresolvedPreparationRemainsRecoveryOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerationStateDirectoryOwnership(t *testing.T) {
+	for _, mode := range []string{"private", "public", "symlink", "symlink_parent"} {
+		t.Run(mode, func(t *testing.T) {
+			stateDir := t.TempDir()
+			directory := filepath.Join(stateDir, "generations")
+			if mode == "symlink" {
+				if err := os.Symlink(t.TempDir(), directory); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := os.Mkdir(directory, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "public" {
+				if err := os.Chmod(directory, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "symlink_parent" {
+				link := filepath.Join(t.TempDir(), "node")
+				if err := os.Symlink(stateDir, link); err != nil {
+					t.Fatal(err)
+				}
+				stateDir = link
+			}
+			_, err := generationLocalState(providerconfig.Config{Generation: 1}, stateDir)
+			if mode == "private" && err != nil || mode != "private" && !errors.Is(err, sandbox.ErrOwnership) {
+				t.Fatalf("directory ownership: %v", err)
+			}
+		})
+	}
+}

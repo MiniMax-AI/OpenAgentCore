@@ -236,7 +236,7 @@ The data contract is part of the look. Core reports only what it observes, so th
 A restrained neutral ledger with one indigo voice, three signal colours and a separate categorical palette that belongs to multi-series data alone.
 
 ### Primary
-- **OpenAgentCore Indigo** (accent): keyboard focus outlines and rings, the focus ring of fields, the text caret and the text selection wash. Deepens to **Pressed Indigo** (accent-emphasis) for hovered name links. It is the console's only accent; the public landing (`site/`) uses its own violet, `#5a43c7`.
+- **OpenAgentCore Indigo** (accent): keyboard focus outlines and rings, the focus ring of fields, the text caret and the text selection wash. Deepens to **Pressed Indigo** (accent-emphasis) for hovered name links. It is the console's only accent.
 - **Data** (`--data`, the same colour as Series 1, a lighter indigo): the one measured series of a chart that has only one, such as Sessions created per hour on Overview, drawn as a tint (62% into the surface) rather than full strength.
 
 ### Neutral

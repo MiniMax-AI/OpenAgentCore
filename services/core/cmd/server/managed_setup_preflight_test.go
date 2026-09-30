@@ -21,14 +21,13 @@ func TestE2BRejectedSpecificationHasSafeActionableDiagnostic(t *testing.T) {
 	if err := os.WriteFile(helper, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":1,\"ErrorCode\":\"invalid\"}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	state := t.TempDir()
-	if err := os.Chmod(state, 0700); err != nil {
+	state := filepath.Join(t.TempDir(), "e2b")
+	if err := os.MkdirAll(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
-	t.Setenv("OAC_E2B_STATE_DIR", state)
+	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	s := &managedSetup{installationID: id}
+	s := &managedSetup{processPaths: paths, installationID: id}
 	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 3, MemoryMiB: 3072}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	_, err := s.prepare(t.Context(), selection)
 	if !errors.Is(err, sandbox.ErrConfigurationSelection) || strings.Contains(err.Error(), "synthetic-private-key") || s.selected.Load() != nil {
@@ -59,17 +58,16 @@ else:
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	state := t.TempDir()
-	if err := os.Chmod(state, 0700); err != nil {
+	state := filepath.Join(t.TempDir(), "e2b")
+	if err := os.MkdirAll(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
-	t.Setenv("OAC_E2B_STATE_DIR", state)
+	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
 	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Generation: 1,
 		Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
-	s := &managedSetup{installationID: id, store: &setupStore{value: selection}}
+	s := &managedSetup{processPaths: paths, installationID: id, store: &setupStore{value: selection}}
 	if _, err := s.prepare(t.Context(), selection); err == nil || s.selected.Load() != nil {
 		t.Fatal("invalid new template selection was published", err)
 	}
@@ -94,8 +92,8 @@ else:
 }
 
 func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
-	state := t.TempDir()
-	if err := os.Chmod(state, 0700); err != nil {
+	state := filepath.Join(t.TempDir(), "e2b")
+	if err := os.MkdirAll(state, 0700); err != nil {
 		t.Fatal(err)
 	}
 	helper := filepath.Join(t.TempDir(), "provider")
@@ -104,10 +102,9 @@ func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
-	t.Setenv("OAC_E2B_STATE_DIR", state)
+	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	s := &managedSetup{installationID: id, store: &setupStore{}}
+	s := &managedSetup{processPaths: paths, installationID: id, store: &setupStore{}}
 	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	candidate, err := s.prepare(t.Context(), selection)
 	disk := int32(24063)
@@ -136,14 +133,13 @@ func TestInitialE2BPublicTemplateOutsideTeamIsRejected(t *testing.T) {
 	if err := os.WriteFile(helper, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":1,\"ErrorCode\":\"team_mismatch\"}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	state := t.TempDir()
-	if err := os.Chmod(state, 0700); err != nil {
+	state := filepath.Join(t.TempDir(), "e2b")
+	if err := os.MkdirAll(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
-	t.Setenv("OAC_E2B_STATE_DIR", state)
+	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	s := &managedSetup{installationID: id, store: &setupStore{}}
+	s := &managedSetup{processPaths: paths, installationID: id, store: &setupStore{}}
 	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-team-a", Template: "public-team-b:" + uuid.NewString()}}
 	if _, err := s.prepare(t.Context(), selection); !errors.Is(err, sandbox.ErrCredentialOwnership) || s.selected.Load() != nil {
 		t.Fatal("public readability accepted as team ownership", err)

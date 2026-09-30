@@ -108,6 +108,20 @@ Core approves a node's capacity when you generate its Add node command: **Sandbo
 
 Set a default in **System** → **Default model configuration**, or use `PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys with `secrets/credential.key` and never returns them. [Model execution](../contracts/agents-api/model-execution.md#deployment-defaults) owns the request fields and replacement rules, and [precedence](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which Sessions use a default.
 
+## Docker node configuration
+
+The node installer writes Docker’s provider configuration into the node’s configuration file; these fields are separate from Core’s `config.json`. Deployment resources, Runtime images and capacity remain in [Core’s database](#runtime-settings-web).
+
+| Field | Installer value | Meaning |
+| --- | --- | --- |
+| `host` | `unix:///var/run/docker.sock` | Explicit Docker Engine socket |
+| `network` | `oac-node-<installation-id>` | Runtime container network |
+| `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
+| `nested_sandbox` | `true` | Enables the Docker adapter’s init process and proc-mask configuration |
+| `extra_hosts` | Optional | Additional container host mappings |
+
+The [Docker adapter](sandbox-provider.md#docker-adapter) owns container isolation, volume layout and lifecycle behavior.
+
 ## Installation directory
 
 The installer creates the installation directory, `~/.oac/core` by default, with mode `0700`; the files in `secrets/` are `0600`.
@@ -139,20 +153,38 @@ Core reads only its environment. The installer renders `generated/core.env` from
 | Variable | Set from |
 | --- | --- |
 | `OAC_PUBLIC_URL` | `public_url`, or Core's loopback origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers. Without it, Core runs no Runtime gateway and executes no Sessions |
-| `OAC_ADDR` | `ports.core` (native Core) or `:8091` in the container |
+| `OAC_ADDR` | The installer derives the native listener from `ports.core` and sets `:8091` in the container. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
 | `OAC_DATABASE_URL` | The installation's PostgreSQL without a password, plus `core.database_pool` as `pool_*` query parameters |
 | `OAC_DATABASE_PASSWORD_FILE` | `secrets/database.password`. The URL must then carry no password; migrations and the maintenance commands read the file too |
 | `OAC_CREDENTIAL_KEY_FILE` | `secrets/credential.key` |
 | `OAC_CORE_KEY_DIGESTS_FILE` | `generated/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
 | `OAC_INSTALLATION_ID` | The installation ID from `state.json`, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL` and `OAC_CORE_KEY_DIGESTS_FILE`. Core refuses an ID other than the one its database recorded, so keep the two together |
 | `OAC_SETTINGS_FILE` | `generated/settings.json`, the snapshot Core serves at `GET /core/v1/installation`; Core does not act on it |
-| `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching `core.*` settings |
+| `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching [process settings](#settings); omitted or empty default Harness uses `core.default_harness`’s documented default |
+| `OAC_HARNESSES` | `core.harnesses` with the installer. Independently started Core enables only the default Harness when unset; comma-separated explicit names supplement it. Entries are trimmed and deduplicated; unknown names stop startup |
 | `OAC_HISTORY_SETTINGS_FILE` | `generated/runtime-history.json`: the [`core.runtime_history`](#settings) object, when it is set |
 | `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
-| `OAC_E2B_STATE_DIR` | `state/e2b/`: an absolute directory owned by Core's user, with no group or other access. Back it up with the database and `credential.key`; don't mount it into Web or a Runtime |
-| `OAC_E2B_PROVIDER_BIN` | The E2B helper: `/opt/oac/e2b/oac-e2b-provider` in the Core image, `native/e2b/oac-e2b-provider` for native Core. The E2B key and template live in the database |
+| `OAC_PROVIDER_ROOT` | Absolute adapter artifact root: `native/` for native Core, `/opt/oac` in the Core image. Each adapter owns its helper paths beneath this root |
+| `OAC_PROVIDER_STATE_ROOT` | Absolute private state root: `state/` for native Core, `/state` in the Core image. Each adapter owns its subdirectory; E2B uses `e2b/`, owned by Core's user with no group or other access. Back it up with the database and `credential.key`; don't mount it into Web or a Runtime |
 | `OAC_NATIVE_INSTALLER_DIR` | `native-installers/`, served to self-hosted machines; the Core image has a copy at `/opt/oac/native-installers`, used when this is unset. Core checks the catalog against its own release before serving it |
 
 Core logs the file paths it loads, never environment values or file contents.
 
-A Web you run without the installer reads the variables in [Console server settings](web/console-server.md#settings), plus `OAC_WEB_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's node payload (the installer's `node-payload/`). Without it, Add node is unavailable.
+Invalid explicit OAuth trusted origins stop Core at startup. Entries must be HTTPS origins without credentials, query or a non-root path; the installer validates `core.oauth_trusted_origins` before generating them. [Vaults](../contracts/agents-api/vaults.md) owns refresh and network policy. A private issuer also needs a trusted CA: independently managed Unix Core can use Go’s `SSL_CERT_FILE` PEM CA-bundle override, which preserves certificate verification. Managed installation has no custom-CA setting or mount; do not edit `generated/core.env`.
+
+## Appendix: Web environment without the installer
+
+The installer sets these variables from `config.json`; set them yourself only when you run the console without the installer. Of the installation's secrets, the installer gives the console only `secrets/core.key`.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `OAC_WEB_ADDR` | `:8080` | Listener address |
+| `OAC_WEB_ORIGIN` | `http://127.0.0.1:8080` | The exact browser-facing origin, HTTP or HTTPS, without a path. Host and origin checks use it; HTTPS makes the session cookie `Secure` |
+| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core's origin, HTTP or HTTPS, without credentials, query or path |
+| `OAC_WEB_CORE_KEY_FILE` | `/admin/core.key` | Absolute path of a regular file with no group or other permissions, holding the Core key: at least 32 characters, no whitespace, at most 4 KiB |
+| `OAC_WEB_DIST` | `/www` | Absolute directory of the built console; must contain `index.html` |
+| `OAC_WEB_NODE_PAYLOAD_DIR` | unset | Absolute path of the matched distribution's node payload (the installer's `node-payload/`). Unset, `/node-install/*` is not served and Add node is unavailable |
+| `OAC_WEB_INSTALLATION_SOCKET` | unset | Absolute path of the installer's domain socket. Unset, domain setup reports unsupported |
+| `OAC_WEB_BOOTSTRAP` | `0` | `1` accepts literal-IP hosts before a domain is configured. Requires an `http://` origin and `OAC_WEB_INSTALLATION_SOCKET` |
+
+Defaults apply when a variable is absent; an explicitly empty value is validated as supplied. An invalid `OAC_WEB_*` value stops the console at startup with a message naming the variable. The console also reads `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT` and `OAC_LOG_ADD_SOURCE` ([Core environment](#appendix-core-environment-without-the-installer)); unknown values fall back to their defaults. Use HTTPS for any browser that is not on the same machine.

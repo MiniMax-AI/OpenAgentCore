@@ -178,7 +178,7 @@ func TestBuildSessionPlan_RejectsRelativeWorkDir(t *testing.T) {
 	}
 }
 
-// TestBuildSessionPlan_CreatesMissingWorkDir: align with claudecode —
+// TestBuildSessionPlan_CreatesMissingWorkDir:
 // a non-existent absolute path is mkdir -p'd so a user can pin a fresh
 // project root in the agent wizard. Without this, codex agents would
 // hard-fail the first turn instead of running.

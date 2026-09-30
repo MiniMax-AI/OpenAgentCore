@@ -11,13 +11,11 @@
 // images, structured output and Subagent observations use protocol messages
 // rather than additional Go interfaces; qualify and advertise them separately.
 //
-// Registration: RegisterKind takes the existing proto.SupportedAgentKind
-// descriptor (kind, availability, native version and AgentKindCapabilities),
-// the mandatory shared Configuration and the direct-call Factory. RegisterExecutor supplies the Session-owned lifecycle.
-// RegisterPreparation optionally adds workspace access without model input.
-// RegisterKind resets the other factories, so register it first. Preparation
-// flags are derived by these methods; other advertised capabilities must reflect
-// verified native behavior. Built-in registration lives in internal/cli.
+// Registration: each adapter exports one Declaration. The Runtime discovers the
+// static declaration list and installs each resulting Runtime through Register.
+// Availability and factory selection belong to the adapter. RegisterKind resets
+// the other factories, so Register installs it first. Preparation capabilities
+// are derived from the declared factories.
 //
 // Runtime registration and Core service qualification remain separate. A public
 // Harness also needs a profile in services/core/internal/engine; advertising
@@ -27,10 +25,55 @@ package agent
 
 import (
 	"context"
+	"io"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
+
+// Declaration is the complete startup contract for a Harness implementation.
+// Discover returns nil when the adapter is not configured. An unavailable
+// configured adapter returns a Runtime with Available=false and a session factory.
+// Discovery owns runtime-specific configuration, readiness and feature gates.
+type Declaration struct {
+	Info          proto.SupportedAgentKind
+	Configuration harnessconfig.Configuration
+	Discover      func(context.Context, DiscoveryOptions, proto.SupportedAgentKind) *Runtime
+}
+
+// DiscoveryOptions provides process context without naming an implementation.
+type DiscoveryOptions struct {
+	Profile        string
+	Stdout, Stderr io.Writer
+}
+
+// Runtime binds one discovered descriptor to its native factories.
+// SessionCapabilityContext and ExecutorCapabilityContext request the Runtime's
+// capability-download URL and scoped product-upload context for those factories.
+// Preparation never receives those execution-only effects.
+type Runtime struct {
+	Info                      proto.SupportedAgentKind
+	Session                   Factory
+	Preparation               PreparationFactory
+	Executor                  ExecutorFactory
+	WorkspaceReadPreparation  bool
+	SessionCapabilityContext  bool
+	ExecutorCapabilityContext bool
+}
+
+// Register installs a discovered Runtime with its declaration's configuration.
+func (r *Registry) Register(declaration Declaration, runtime Runtime) {
+	if runtime.Info.Kind != declaration.Info.Kind {
+		panic("agent.Registry.Register: discovery kind differs from declaration")
+	}
+	r.RegisterKind(runtime.Info, declaration.Configuration, runtime.Session)
+	if runtime.Executor != nil {
+		r.RegisterExecutor(runtime.Info.Kind, runtime.Executor)
+	}
+	if runtime.Preparation != nil {
+		r.RegisterPreparation(runtime.Info.Kind, runtime.WorkspaceReadPreparation, runtime.Preparation)
+	}
+}
 
 // Model configuration has one shared contract, authored in
 // internal/harnessconfig/harness.go. RegisterKind requires that declaration;
@@ -67,7 +110,6 @@ type Executor interface {
 type Turn interface {
 	Session
 	DurableSteerer
-	CancellationOutcome() proto.DonePayload
 	// Success confirms closed output and settled native input, function,
 	// interaction and child-work obligations. Errors cannot prove cancellation.
 	AwaitSettlement(context.Context) (TurnSettlement, error)
@@ -80,13 +122,19 @@ type TurnSettlement struct {
 	Reason   string
 }
 
-// Session is the cancellation surface shared by direct prompt runs and Turns.
+// Session is the cancellation and outcome surface shared by direct prompt runs
+// and Turns. Every owner exposes observed state, including direct-call sessions.
 // For Executor-owned Turns, AwaitSettlement and Executor.Close define settlement
 // and resource retirement; Cancel alone does not transfer resource ownership.
 type Session interface {
 	// Cancel signals the session to abort. Idempotent. Actual teardown
 	// happens asynchronously and is signalled via the out channel close.
 	Cancel(ctx context.Context) error
+	// CancellationOutcome snapshots observed native identity, usage and output.
+	// It remains readable after Cancel; missing evidence stays unset. An empty
+	// result means no observed evidence, not unsupported cancellation or success.
+	// Reading it does not wait for or establish native settlement.
+	CancellationOutcome() proto.DonePayload
 }
 
 // Turn extension contracts. Every public Harness implements each interface;
@@ -172,10 +220,10 @@ type Prepared interface {
 // same native resource across Start. Read-only preparations need only Prepared.
 type PreparedCancellation interface {
 	Prepared
+	Session
 	// Cancel returns after local cleanup and all output writes have stopped.
 	// An error retains ownership so callers can retry this exact object serially.
 	Cancel(context.Context) error
-	CancellationOutcome() proto.DonePayload
 }
 
 // A factory may return both a resource and an error when construction failed but

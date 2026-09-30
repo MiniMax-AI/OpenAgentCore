@@ -11,10 +11,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 )
 
-// Wrapping only Cancel proves that no responder stubs are required for a Session.
-type lifecycleOnly struct{ cancel func(context.Context) error }
-
-func (s lifecycleOnly) Cancel(ctx context.Context) error { return s.cancel(ctx) }
+// Wrapping Session proves that no responder stubs are required for a Session.
+type lifecycleOnly struct{ agent.Session }
 
 func TestOptionalInteractionResponders(t *testing.T) {
 	for _, ask := range []bool{false, true} {
@@ -25,7 +23,7 @@ func TestOptionalInteractionResponders(t *testing.T) {
 			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "minimal", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				output = out
 				s := &fakeSession{out: out, closeOutOnCancel: true}
-				return lifecycleOnly{cancel: s.Cancel}, nil
+				return lifecycleOnly{Session: s}, nil
 			})
 			if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "minimal"})); err != nil {
 				t.Fatal(err)

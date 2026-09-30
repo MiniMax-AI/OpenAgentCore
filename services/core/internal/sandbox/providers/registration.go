@@ -16,10 +16,16 @@ func ValidateRegistration(a Adapter) error {
 	}
 	switch a.Mode {
 	case "nodes":
+		if err := validateNodeArtifacts(a.NodeArtifacts); err != nil {
+			return err
+		}
 		if a.BuildLocal == nil || a.BuildDirect != nil {
 			return invalid("node constructor")
 		}
 	case "direct":
+		if len(a.NodeArtifacts) != 0 {
+			return invalid("direct node artifacts")
+		}
 		if a.BuildDirect == nil || a.BuildLocal != nil {
 			return invalid("direct constructor")
 		}

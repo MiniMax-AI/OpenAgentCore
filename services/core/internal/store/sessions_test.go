@@ -142,7 +142,7 @@ func TestConcurrentSessionCreationIsIdempotent(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "claude_code", Metadata: map[string]string{"b": "2", "a": "1"}, IdempotencyKey: "repeated"}
+	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "fake_alpha", Metadata: map[string]string{"b": "2", "a": "1"}, IdempotencyKey: "repeated"}
 	const count = 8
 	ids := make(chan string, count)
 	errs := make(chan error, count)
@@ -171,7 +171,7 @@ func TestConcurrentSessionCreationIsIdempotent(t *testing.T) {
 	if len(unique) != 1 {
 		t.Fatalf("duplicate sessions: %+v", unique)
 	}
-	replay, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "claude_code", Metadata: map[string]string{"a": "1", "b": "2"}, IdempotencyKey: "repeated"})
+	replay, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "fake_alpha", Metadata: map[string]string{"a": "1", "b": "2"}, IdempotencyKey: "repeated"})
 	if err != nil || !unique[replay.ID] {
 		t.Fatalf("reordered metadata was not replayed: %+v %v", replay, err)
 	}

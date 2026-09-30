@@ -146,7 +146,7 @@ func TestSamplerSweepsEveryPageAndIsolatesSessionFailures(t *testing.T) {
 func TestSamplerBoundsConcurrencyAndSourceDeadline(t *testing.T) {
 	source := &countingSource{}
 	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
-	service, err := NewService(fixedResolver{target: target}, map[string]Source{"provider": source})
+	service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": source})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestSamplerPreservesProviderTimeoutAndFinalFenceAfterSlowResolution(t *test
 	records := make(chan ExportRecord, 1)
 	service, err := NewService(
 		resolver,
-		map[string]Source{"provider": blockingSource{}},
+		map[string]SourceResolver{"provider": blockingSource{}},
 		WithExporter(channelExporter{records: records}, ExportOptions{}),
 	)
 	if err != nil {

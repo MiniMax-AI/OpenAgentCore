@@ -48,8 +48,6 @@ SETTING_ARGUMENTS = {
 }
 SETTING_FLAGS = ("core_only", "web_only", "native_core", *(
     flag.removeprefix("--").replace("-", "_") for flag in SETTING_ARGUMENTS))
-RETIRED_NODE_FLAGS = ("--sandbox-provider and --provider are retired: use --sandbox docker|microsandbox|e2b|none. "
-                      "The installer no longer adds this host as a node; add it with Add node on the Nodes page in Web.")
 AVOID = 20  # An omitted Core or Web port moves at most this far above its default.
 DOCKER_RISKS = """Docker sandboxes isolate less than microsandbox, the default:
 - Containers share the node's kernel, so a container escape reaches the host;
@@ -163,36 +161,18 @@ def arguments(argv=None):
     parser.add_argument("--e2b-template", help="With --sandbox e2b: the ready template build, template-id:build-uuid")
     parser.add_argument("--e2b-api-url", help="With --sandbox e2b: compatible service HTTPS API origin")
     parser.add_argument("--e2b-domain", help="With --sandbox e2b: compatible service data-plane domain")
-    parser.add_argument("--sandbox-provider", nargs="?", const=True, help=argparse.SUPPRESS)
-    parser.add_argument("--provider", nargs="?", const=True, help=argparse.SUPPRESS)
     parser.add_argument("--install-dir", type=Path)
     for flag, (_, node) in SETTING_ARGUMENTS.items():
         value_type = int if node.get("type") == "integer" else public_origin if config_model.annotation(node, "check") == "origin" else str
         parser.add_argument(flag, type=value_type, help=node["description"])
     parser.add_argument("--core-key-file", type=Path, help="Web-only: private file containing the existing Core's Core key")
     parser.add_argument("--config", type=Path, help="Seed a new installation's config.json from this file")
-    parser.add_argument("--convert", action="store_true",
-                        help=argparse.SUPPRESS)
-    parser.add_argument("--yes", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--admin-token-file", type=Path, help=argparse.SUPPRESS)
-    parser.add_argument("--status", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stop", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
-    if args.convert or args.yes:
-        parser.error(oac_cli.UNSUPPORTED_VERSION)
-    args.explicit_install_dir = args.install_dir is not None
     args.install_dir = args.install_dir or Path.home() / ".oac/core"
-    if args.admin_token_file:
-        parser.error("--admin-token-file was renamed; use --core-key-file")
-    if args.sandbox_provider is not None or args.provider is not None:
-        parser.error(RETIRED_NODE_FLAGS)
-    for retired in ("status", "stop"):
-        if getattr(args, retired):
-            parser.error(f"--{retired} is retired; run {args.install_dir / 'oac'} {retired}")
     if not args.install_dir.is_absolute():
         parser.error("--install-dir must be absolute")
     args.given = [name for name, value in vars(args).items()
-                  if name not in ("install_dir", "given", "explicit_install_dir") and value not in (None, False)]
+                  if name not in ("install_dir", "given") and value not in (None, False)]
     return args
 
 
@@ -492,8 +472,6 @@ def prepare_node_payload(root, state, bundle):
     if destination.is_symlink():
         raise InstallError("Invalid node payload directory")
     destination.mkdir(mode=0o700, exist_ok=True)
-    if (destination / "manifest.json").exists():
-        raise InstallError(oac_cli.UNSUPPORTED_VERSION)
     revision = publish(bundle)
     pointer = destination / "active.json"
     if pointer.is_symlink():
@@ -677,10 +655,6 @@ def main(argv=None):
     if root.is_symlink() or root.resolve() != root:
         raise InstallError("Installation directory must be canonical and not a symlink")
     bundle = Path(__file__).resolve().parent
-    if not args.explicit_install_dir:
-        old = Path.home() / ".parsar/core"
-        if (old / "state.json").exists() or (old / "installation.json").exists():
-            raise InstallError(oac_cli.UNSUPPORTED_VERSION)
     # Settings and listeners take seconds to check, so they come before hashing the bundle.
     prepared = None
     if layout(root) == "empty":
@@ -701,14 +675,10 @@ def main(argv=None):
 
 
 def check_release(root, manifest):
-    if (root / "installation.json").exists():
-        raise InstallError(oac_cli.UNSUPPORTED_VERSION)
     if (root / "state.json").exists():
         state = oac_cli.load_state(root)
         if state.get("source_commit") != manifest["source_commit"]:
             raise InstallError(oac_cli.UNSUPPORTED_VERSION)
-    if (root / "node-payload/manifest.json").exists():
-        raise InstallError(oac_cli.UNSUPPORTED_VERSION)
 
 
 def prepare_fresh(args):

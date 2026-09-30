@@ -95,9 +95,6 @@ func (r *runtimeLifecycle) idleResidentCompute(ctx context.Context, p sandbox.Re
 	if err != nil {
 		return err
 	}
-	if activity.WakeRequested {
-		return r.store.ClearRuntimeWake(ctx, owner, owner.ComputeActivityAt)
-	}
 	policy := r.config.Suspension
 	if policy == nil || !activity.ReadyToPauseResident(policy.IdleTimeout) {
 		info, err := p.Renew(ctx, runtimeReference(owner))
@@ -107,8 +104,13 @@ func (r *runtimeLifecycle) idleResidentCompute(ctx context.Context, p sandbox.Re
 		if !residentInfo(owner, state, info, "running") {
 			return sandbox.ErrComputeUnconfirmed
 		}
-		_, err = r.store.KeepRuntimeAllocation(ctx, owner)
-		return err
+		if _, err = r.store.KeepRuntimeAllocation(ctx, owner); err != nil {
+			return err
+		}
+		if activity.WakeRequested {
+			return r.store.ClearRuntimeWake(ctx, owner, owner.ComputeActivityAt)
+		}
+		return nil
 	}
 	info, err := p.GetInfo(ctx, runtimeReference(owner))
 	if err != nil {

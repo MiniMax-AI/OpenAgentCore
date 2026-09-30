@@ -12,17 +12,15 @@ INSTALLATION = "94be54a1-138c-4f30-bc87-b13686272dbe"
 
 
 class SandboxSetupTests(unittest.TestCase):
-    def test_e2b_endpoint_pair(self):
-        for api_url, domain in ((None, None), ("https://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai")):
-            self.assertTrue(sandbox_setup.e2b_endpoint(api_url, domain))
-        for api_url, domain in (("https://sandbox-test.sandbase.ai", None),
-                                ("http://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai"),
-                                ("https://sandbox-test.sandbase.ai/path", "sandbox-test.sandbase.ai"),
-                                ("https://localhost", "sandbox-test.sandbase.ai"),
-                                ("https://127.0.0.1", "sandbox-test.sandbase.ai"),
-                                ("https://unrelated.example", "sandbox-test.sandbase.ai"),
-                                ("https://good.example", "-bad.example")):
-            self.assertFalse(sandbox_setup.e2b_endpoint(api_url, domain))
+    def test_shared_e2b_selectors(self):
+        fixture = Path(__file__).resolve().parents[2] / "services/core/internal/sandbox/e2b/testdata/configuration-selectors.json"
+        cases = json.loads(fixture.read_text())
+        for case in cases["endpoints"]:
+            with self.subTest(endpoint=case["name"]):
+                self.assertEqual(sandbox_setup.e2b_endpoint(case["api_url"], case["domain"]), case["valid"])
+        for case in cases["templates"]:
+            with self.subTest(template=case["name"]):
+                self.assertEqual(sandbox_setup.e2b_template(case["value"]), case["valid"])
 
     def setUp(self):
         base = Path.home() / ".oac/tests/sandbox-setup"
@@ -70,13 +68,6 @@ class SandboxSetupTests(unittest.TestCase):
                 self.assertEqual(writes, [dict(selection, expected_generation=generation)])
                 self.assertNotIn("expected_generation", selection)
 
-    def test_e2b_template_is_an_exact_build(self):
-        build = "0f6c1e8e-7d3a-4b8e-9a51-2b7f7f0c9d11"
-        for value in ("base:" + build, "my_template-2:" + build):
-            self.assertTrue(sandbox_setup.e2b_template(value), value)
-        for value in ("base", "base:", ":" + build, "base:" + build.upper(), "base:" + build.replace("-", ""),
-                      "base:00000000-0000-0000-0000-000000000000", "ba.se:" + build, "x" * 129 + ":" + build):
-            self.assertFalse(sandbox_setup.e2b_template(value), value)
 
 
 if __name__ == "__main__":

@@ -50,3 +50,7 @@ func observeProvider(ctx context.Context, provider sandbox.SandboxProvider, targ
 	}
 	return source.Observe(ctx, target)
 }
+
+func (p *provider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
+	return p, nil
+}

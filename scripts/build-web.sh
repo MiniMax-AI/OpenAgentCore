@@ -22,7 +22,7 @@ trap 'rm -rf "$build_context"' EXIT
 mkdir -p "$build_context/tmp"
 export GOTMPDIR="$build_context/tmp"
 # Keep the independent console build separate from API and frontend sources.
-tar -C "$repo_root" -cf - go.mod go.sum internal/obs/log services/web \
+tar -C "$repo_root" -cf - go.mod go.sum internal/obs/log internal/providerassets services/web \
   | tar -C "$build_context" -xf -
 (
   cd "$build_context"

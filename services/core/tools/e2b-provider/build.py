@@ -11,6 +11,8 @@ import sys
 import tarfile
 import tempfile
 
+from helper_contract_generated import PROTOCOL_VERSION, SDK_VERSION
+
 SOURCE = Path('/source/services/core/tools/e2b-provider')
 OUTPUT = Path('/output')
 NAME = 'oac-e2b-provider'
@@ -51,7 +53,7 @@ def main():
         checked([python, str(source / 'licenses.py'), str(licenses)])
         shutil.copy2('/source/LICENSE', licenses / 'OpenAgentCore-LICENSE')
         report = json.loads(subprocess.check_output([str(exported / NAME), '--check'], text=True))
-        if report != {'Version': 1, 'SDKVersion': '2.51.0'}:
+        if report != {'Version': PROTOCOL_VERSION, 'SDKVersion': SDK_VERSION}:
             raise RuntimeError('Unexpected helper readiness report')
         manifest = {'format_version': 1, 'source_revision': os.environ['E2B_SOURCE_REVISION'],
                     'sdk_version': report['SDKVersion'], 'python_version': platform.python_version(),

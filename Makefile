@@ -167,6 +167,7 @@ build-e2b-provider:
 
 # The pinned SDK environment is also tested when building the shipped helper.
 check-e2b-provider:
+	go run ./services/core/internal/sandbox/e2b/internal/contractgen --check
 	PYTHONDONTWRITEBYTECODE=1 $${OAC_TEST_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/core/deploy/e2b -p '*_test.py'
 	PYTHONDONTWRITEBYTECODE=1 $${OAC_TEST_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/core/tools/e2b-provider -p '*_test.py'
 

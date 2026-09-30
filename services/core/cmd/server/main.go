@@ -23,6 +23,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -37,12 +38,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	historystoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	observationstoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/storeresolver"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -143,13 +146,15 @@ func run() error {
 	if managedNodes != nil {
 		managed = managedNodes.runtime
 	}
-	observationSources := map[string]runtimeobs.Source{}
+	observationSources := map[string]runtimeobs.SourceResolver{}
 	if managedNodes != nil && managedNodes.setup != nil {
 		observationSources[managed.InstallationID] = managedNodes.setup
 	} else if managed != nil {
-		if source, ok := managed.Provider.(runtimeobs.Source); ok {
-			observationSources[managed.InstallationID] = source
+		source, ok := managed.Provider.(runtimeobs.SourceResolver)
+		if !ok {
+			return providercontract.ErrContract
 		}
+		observationSources[managed.InstallationID] = source
 	}
 	observationResolver, err := observationstoreresolver.NewResolver(executionStore)
 	if err != nil {
@@ -186,7 +191,9 @@ func run() error {
 	options := []api.Option{api.WithCoreMetrics(metrics), api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
 	if managedNodes != nil {
 		options = append(options, api.WithSandboxManager(executionStore, managedNodes.admin))
-		options = append(options, api.WithSandboxConfigurationDiscovery(providers.DiscoverConfiguration))
+		options = append(options, api.WithSandboxConfigurationDiscovery(func(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+			return providers.DiscoverConfiguration(ctx, kind, input, managedNodes.setup.processPaths)
+		}))
 	}
 	var keyAdmin *api.DeploymentAuthenticator
 	if managedNodes != nil {

@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -110,4 +113,33 @@ func verifyMicrosandboxArtifacts(entry Microsandbox) error {
 		}
 	}
 	return nil
+}
+
+// Image availability is checked on every retained-generation probe, after the
+// platform, capacity and local artifact checks.
+func microsandboxGenerationProbe(entry Microsandbox, probe func(context.Context) error) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := probe(ctx); err != nil {
+			return err
+		}
+		command := exec.CommandContext(ctx, entry.RuntimePath, "image", "inspect", entry.Image, "--format", "json")
+		command.Env = append([]string{"PATH=/usr/local/bin:/usr/bin:/bin", "HOME=" + os.Getenv("HOME")}, "MSB_BACKEND=local", "MSB_HOME="+entry.RuntimeHome, "MSB_PATH="+entry.RuntimePath, "MSB_LIBKRUNFW_PATH="+entry.FirmwarePath)
+		reader, err := command.StdoutPipe()
+		if err != nil {
+			return sandbox.ErrRuntimeImageUnavailable
+		}
+		if err := command.Start(); err != nil {
+			return sandbox.ErrRuntimeImageUnavailable
+		}
+		raw, readErr := io.ReadAll(io.LimitReader(reader, 64*1024+1))
+		if len(raw) > 64*1024 {
+			_ = command.Process.Kill()
+		}
+		waitErr := command.Wait()
+		var image struct{ Digest, Architecture, OS string }
+		if readErr != nil || waitErr != nil || len(raw) > 64*1024 || json.Unmarshal(raw, &image) != nil || image.Digest != strings.SplitN(entry.Image, "@", 2)[1] || image.Architecture != "amd64" || image.OS != "linux" {
+			return sandbox.ErrRuntimeImageUnavailable
+		}
+		return nil
+	}
 }

@@ -136,10 +136,10 @@ func TestUnsupportedConfigurationDiscoveryMatchesAuthoredReason(t *testing.T) {
 		native := a.Configuration.(sandbox.ConfigurationDiscoverer)
 		for _, read := range []func() ([]byte, error){
 			func() ([]byte, error) {
-				return native.DiscoverConfiguration(t.Context(), sandbox.ConfigurationDiscoveryInput{})
+				return native.DiscoverConfiguration(t.Context(), sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
 			},
 			func() ([]byte, error) {
-				return DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{})
+				return DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
 			},
 		} {
 			result, err := read()

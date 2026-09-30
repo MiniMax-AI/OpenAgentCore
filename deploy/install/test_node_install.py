@@ -57,7 +57,7 @@ class NodeInstallTests(unittest.TestCase):
                          "image_manifest_digests": {"runtime": "sha256:" + "c" * 64},
                          "runtime_ref": "oac-runtime@sha256:" + "c" * 64,
                          "microsandbox": {"runtime_sha256": "d" * 64, "firmware_sha256": "e" * 64}}
-        self.payloads = {name: b"fixture-payload-" + name.encode() for name in installer.COMMON + installer.MICRO}
+        self.payloads = {name: b"fixture-payload-" + name.encode() for name in installer.provider_assets.artifacts("microsandbox", ("node", "policy", "runtime"))}
         self.payloads["images/runtime.tar.gz"] = gzip.compress(b"runtime archive")
         self.refresh_manifest()
         self.containerd = False
@@ -169,7 +169,7 @@ class NodeInstallTests(unittest.TestCase):
         program = copy.deepcopy(self.manifest)
         program["source_commit"] = new_source
         payloads = dict(self.payloads)
-        payloads[installer.COMMON[0]] = b"new protocol program from current release"
+        payloads[installer.provider_assets.artifacts("docker", ("node",))[0]] = b"new protocol program from current release"
         for name, artifact in program["artifacts"].items():
             artifact["filename"] = artifact["filename"].replace(old_source, new_source)
             artifact["size"] = len(payloads[name])
@@ -191,12 +191,12 @@ class NodeInstallTests(unittest.TestCase):
                 for name, item in manifest["artifacts"].items():
                     if url == prefix + item["filename"]:
                         # Only the node executable comes from the host release.
-                        self.assertEqual(manifest["source_commit"], new_source if name == installer.COMMON[0] else old_source)
+                        self.assertEqual(manifest["source_commit"], new_source if name == installer.provider_assets.artifacts("docker", ("node",))[0] else old_source)
                         return Response(files[name])
             raise AssertionError("Unexpected immutable artifact URL " + url)
         with mock.patch.object(installer, "fetch", side_effect=fetch), mock.patch.object(installer.distribution.urllib.request, "build_opener", return_value=mock.Mock(open=artifact_response)):
             self.install()
-        self.assertEqual((self.root / installer.COMMON[0]).read_bytes(), payloads[installer.COMMON[0]])
+        self.assertEqual((self.root / installer.provider_assets.artifacts("docker", ("node",))[0]).read_bytes(), payloads[installer.provider_assets.artifacts("docker", ("node",))[0]])
         config = json.loads((self.root / "provider.json").read_text())
         self.assertEqual(config["specification"]["runtime"], node_spec.release(self.manifest))
         self.assertEqual(json.loads((self.root / "registered.json").read_text())["source_commit"], old_source)
@@ -220,7 +220,7 @@ class NodeInstallTests(unittest.TestCase):
             with self.assertRaisesRegex(installer.InstallError, "does not contain Core's selected Runtime"):
                 self.install()
         self.assertFalse((self.root / "installation.json").exists())
-        self.assertFalse((self.root / installer.COMMON[0]).exists())
+        self.assertFalse((self.root / installer.provider_assets.artifacts("docker", ("node",))[0]).exists())
         self.assertFalse(any("register" in command or "load" in command or "enable" in command for command, _ in self.calls))
 
     def test_missing_retained_runtime_never_falls_back_to_current_runtime(self):
@@ -253,7 +253,7 @@ class NodeInstallTests(unittest.TestCase):
         self.args.provider = "microsandbox"
         self.install()
         successor = self.prepare_successor_runtime()
-        keep = (installer.COMMON[0], "generation-preparer.pyz", "provider.json", "registered.json",
+        keep = (installer.provider_assets.artifacts("docker", ("node",))[0], "generation-preparer.pyz", "provider.json", "registered.json",
                 "installation.json", "preparation.json", "runtime-artifacts.json", "state/node/identity.json")
         before = {name: (self.root / name).read_bytes() for name in keep}
         original = installer.private_json(self.root / "provider.json")
@@ -337,7 +337,7 @@ class NodeInstallTests(unittest.TestCase):
             installer.node_generations.collect(self.args, installer)
         self.assertFalse((self.root / installer.MICRO[2]).exists())
         self.assertTrue((self.root / "provider.json").exists())
-        self.assertTrue((self.root / installer.COMMON[0]).exists())
+        self.assertTrue((self.root / installer.provider_assets.artifacts("docker", ("node",))[0]).exists())
 
     def test_original_runtime_gc_preserves_exact_shared_native_file_references(self):
         self.args.provider = "microsandbox"
@@ -528,7 +528,7 @@ class NodeInstallTests(unittest.TestCase):
             self.install()
         for name in ("installation.json", "provider.json", "state/node/identity.json", "registered.json"):
             self.assertFalse((self.root / name).exists(), name)
-        self.assertTrue((self.root / installer.COMMON[0]).is_file())
+        self.assertTrue((self.root / installer.provider_assets.artifacts("docker", ("node",))[0]).is_file())
         self.register_stderr = None
         self.args.core_url = "https://core-new.example"
         self.install()
@@ -566,15 +566,15 @@ class NodeInstallTests(unittest.TestCase):
         with self.assertRaisesRegex(installer.InstallError, "manifest checksum"):
             self.install()
         self.refresh_manifest()
-        self.payloads[installer.COMMON[0]] += b"corrupt"
+        self.payloads[installer.provider_assets.artifacts("docker", ("node",))[0]] += b"corrupt"
         with self.assertRaisesRegex(installer.distribution.DistributionError, "published size|checksum"):
             self.install()
         self.assertFalse(self.calls)
-        self.assertFalse((self.root / installer.COMMON[0]).exists())
+        self.assertFalse((self.root / installer.provider_assets.artifacts("docker", ("node",))[0]).exists())
 
     def test_installed_payload_and_config_are_not_overwritten(self):
         self.install()
-        target = self.root / installer.COMMON[0]
+        target = self.root / installer.provider_assets.artifacts("docker", ("node",))[0]
         target.write_bytes(b"existing-different-payload")
         with self.assertRaisesRegex(installer.distribution.DistributionError, "Cached artifact differs"):
             self.install()

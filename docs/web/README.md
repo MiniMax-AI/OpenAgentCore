@@ -38,7 +38,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](conso
 | Issue, rotate or revoke a self-hosted executor's credential, or copy its install command | The Session's page in the **Session log**; see [self-hosted executors](../getting-started/self-hosted.md) |
 | Delete a resource, for example a leaked Credential | The resource's row in its list, or its page; Files are deleted from the Files list. The public deletion rules apply |
 
-Installation creates no Project or key. Opening the console neither allocates compute nor calls a model, and an installation may have zero nodes. Web never starts a Session, sends input or cancels work; the [design principles](../design-principles.md#what-administrators-can-and-cannot-do) state what administrators can and cannot do.
+Installation creates no Project or key. Opening the console neither allocates compute nor calls a model, and an installation may have zero nodes. Web never starts a Session or sends input. Archiving a hosted Session requests cancellation and reclamation; [administrator authority](../concepts.md#what-administrators-can-and-cannot-do) state what administrators can and cannot do.
 
 The deployment's sandbox backend serves hosted Sessions. An application's `self_hosted` Runtime, including one in its own E2B account, is a separate path that the sandbox configuration does not change.
 

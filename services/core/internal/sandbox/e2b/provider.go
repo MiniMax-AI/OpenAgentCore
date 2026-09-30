@@ -17,51 +17,11 @@ import (
 	"github.com/google/uuid"
 )
 
-const ProtocolVersion = 1
-const SDKVersion = "2.51.0"
-const MaxOutputBytes = 1024 * 1024
-const MaxRequestBytes = 72 * 1024 * 1024
-const MaxResponseBytes = 16 * 1024 * 1024
-
 // Config contains trusted deployment configuration; APIKey travels only on stdin.
 type Config struct {
 	Binary, StateDir, InstallationID, APIKey, Template, APIURL, Domain string
 	TimeoutSeconds                                                     int
 	Resources                                                          *sandbox.Resources
-}
-
-type Request struct {
-	Version   int
-	Operation string
-	Config    Config
-	Reference sandbox.Reference
-	// References lists the allocations of one read-only observe request.
-	References       []sandbox.Reference          `json:",omitempty"`
-	Bootstrap        *sandbox.Bootstrap           `json:",omitempty"`
-	RuntimeBootstrap *runtimebootstrap.Connection `json:",omitempty"`
-	Command          *sandbox.Command             `json:",omitempty"`
-	Deadline         time.Time
-}
-type Response struct {
-	Version         int
-	Info            *sandbox.Info          `json:",omitempty"`
-	Command         *sandbox.CommandResult `json:",omitempty"`
-	ErrorCode       string
-	DeploymentValid bool              `json:",omitempty"`
-	TemplateBuild   *TemplateBuild    `json:",omitempty"`
-	Templates       []TemplateSummary `json:",omitempty"`
-	Builds          []ReadyBuild      `json:",omitempty"`
-	Observations    []Observation     `json:",omitempty"`
-}
-
-type TemplateSummary struct {
-	ID    string   `json:"id"`
-	Names []string `json:"names"`
-}
-type ReadyBuild struct {
-	ID        string `json:"id"`
-	CPUs      uint32 `json:"cpus"`
-	MemoryMiB uint32 `json:"memory_mib"`
 }
 
 // Discover uses the same pinned SDK helper without requiring a saved deployment.

@@ -4,12 +4,9 @@ import (
 	"context"
 	"errors"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
-
-type cancellationOutcomeProvider interface {
-	CancellationOutcome() proto.DonePayload
-}
 
 func (r *Router) releaseCompletedSession(state *sessionState) error {
 	r.mu.Lock()
@@ -35,7 +32,7 @@ func (r *Router) handlePromptCancel(ctx context.Context, env proto.Envelope) err
 	if state != nil {
 		state.retain = false
 	}
-	var cancelSession func(context.Context) error
+	var owner agent.Session
 	if state != nil && state.preparedHandoff != nil {
 		handoff := state.preparedHandoff
 		release, attempt := r.claimPreparedReleaseLocked(state, true, "", true)
@@ -47,22 +44,20 @@ func (r *Router) handlePromptCancel(ctx context.Context, env proto.Envelope) err
 		return nil
 	}
 	if state != nil && state.session != nil {
-		cancelSession = state.session.Cancel
+		owner = state.session
 	}
 	r.mu.Unlock()
 	ack := proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, ErrorCode: "run_inactive"}
-	if state != nil && cancelSession == nil {
+	if state != nil && owner == nil {
 		ack.ErrorCode = "not_ready"
-	} else if cancelSession != nil {
-		if err := cancelSession(ctx); err != nil {
+	} else if owner != nil {
+		if err := owner.Cancel(ctx); err != nil {
 			r.log.WarnContext(ctx, "session.Cancel failed", "run_id", env.ID, "err", err)
 			ack.ErrorCode = "cancel_failed"
 		} else {
 			ack.Applied, ack.ErrorCode = true, ""
-			if provider, ok := state.session.(cancellationOutcomeProvider); ok {
-				outcome := provider.CancellationOutcome()
-				ack.Outcome = &outcome
-			}
+			outcome := owner.CancellationOutcome()
+			ack.Outcome = &outcome
 		}
 		state.ctxCancel()
 	}

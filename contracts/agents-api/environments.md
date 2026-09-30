@@ -8,7 +8,7 @@ Related owners:
 - [Executor credentials](environment-executor-credentials.md): enrollment, the installation grant and connection status of a `self_hosted` machine.
 - [Sandbox deployment](sandbox-deployment.md): which Sandbox Provider (E2B, Docker or microsandbox) hosts `openai_hosted` Environments.
 - [Core–Runtime protocol](../../docs/runtime-protocol.md): the `runtime_prepare` transfer and every other wire message.
-- [Runtime and outer isolation](../../docs/design-principles.md#runtime-and-outer-isolation): the daemon runs tools with its launching user's permissions; isolation comes from the outer Environment.
+- [Runtime and outer isolation](../../docs/concepts.md#runtime-and-outer-isolation): the daemon runs tools with its launching user's permissions; isolation comes from the outer Environment.
 
 ## Resources and states
 

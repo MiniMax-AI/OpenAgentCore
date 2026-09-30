@@ -82,7 +82,7 @@ Neither record proves enrollment, native readiness or a successful Turn; check t
 
 `init.py` runs once as root. It restores the ownership and modes that E2B finalization changes under `/usr/local` and on `envd`, `/etc/inittab` and `/etc/init.d/rcS`, locks E2B's passwordless `user` account, checks that the image environment is not already bound to an Environment or Session and bind-mounts `/environment/workspace` at `/workspace`. It writes the executor key to `/home/runtime/.oac/daemon/executor-key.json` (mode 0600, owned by UID 1000), deletes the startup input and starts `oac-daemon connect --profile default --remote … --environment-id … --credential-file …` as UID/GID 1000. No credential enters the daemon's arguments or inherited environment. The daemon owns enrollment and the local binding. E2B clears `/run` at boot, so the records live under `/root/.oac/e2b`.
 
-The E2B VM is the isolation boundary; tools have UID 1000's access to Runtime state ([Runtime and outer isolation](../../../../docs/design-principles.md#runtime-and-outer-isolation)).
+The E2B VM is the isolation boundary; tools have UID 1000's access to Runtime state ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)).
 
 ## Tests
 

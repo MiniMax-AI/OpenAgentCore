@@ -34,7 +34,11 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 import uuid
 
-HARNESSES = ("codex", "claude_sdk", "mcode")
+from harness_catalog import PROVIDERS
+
+# This campaign deliberately qualifies only these combinations. Catalog additions
+# do not expand live model calls; supported combinations are declared in PROVIDERS.
+CAMPAIGN = {"codex": "responses", "claude_sdk": "anthropic", "mcode": "anthropic"}
 TERMINAL = {"completed", "cancelled", "failed"}
 MAX_RESPONSE = 8 * 1024 * 1024
 
@@ -87,10 +91,12 @@ def validate_origin(raw, model=False):
 
 
 def settings(args):
+    require(CAMPAIGN and all(harness in PROVIDERS and protocol in PROVIDERS[harness]
+                for harness, protocol in CAMPAIGN.items()), "unsupported_acceptance_campaign")
     token = private_file(args.caller_key_file).strip()
     require(token and not any(c in token for c in "\r\n\0"), "invalid_caller_key")
     models = json.loads(private_file(args.model_config_file))
-    require(isinstance(models, dict) and set(models) == set(HARNESSES), "require_all_three_harness_configs")
+    require(isinstance(models, dict) and set(models) == set(CAMPAIGN), "require_all_three_harness_configs")
     secrets = [token]
     for harness, entry in models.items():
         require(isinstance(entry, dict) and set(entry) == {"model", "model_provider"}, "invalid_model_config_fields")
@@ -101,17 +107,17 @@ def settings(args):
         require(set(provider) <= allowed and {"protocol", "base_url", "api_key"} <= set(provider),
                 "invalid_model_provider_fields")
         validate_origin(provider["base_url"], model=True)
-        protocol = "responses" if harness == "codex" else "anthropic"
-        require(provider["protocol"] == protocol, "provider_protocol_does_not_match_harness")
+        protocol = CAMPAIGN[harness]
+        require(provider["protocol"] == protocol, "provider_protocol_does_not_match_campaign")
         key = provider["api_key"]
         require(isinstance(key, str) and key and len(key) <= 16384
                 and not any(c in key for c in "\r\n\0"), "invalid_model_provider_key")
         for name in ("context_window", "max_output_tokens"):
             require(type(provider.get(name, 0)) is int and provider.get(name, 0) >= 0,
                     "invalid_model_limits")
-        if harness == "mcode":
+        if PROVIDERS[harness][protocol]["requires_token_limits"]:
             require(provider.get("context_window", 0) > 0 and provider.get("max_output_tokens", 0) > 0,
-                    "mcode_requires_positive_model_limits")
+                    "harness_requires_positive_model_limits")
         if provider.get("context_window") and provider.get("max_output_tokens"):
             require(provider["max_output_tokens"] <= provider["context_window"], "invalid_model_limits")
         secrets.append(key)
@@ -404,7 +410,7 @@ def main():
     args.report_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     require(args.report_dir.stat().st_mode & 0o077 == 0, "report_directory_must_be_private")
     failed = False
-    for harness in HARNESSES:
+    for harness in CAMPAIGN:
         location = args.report_dir / (harness + ".json")
         record = json.loads(private_file(location)) if location.exists() else {"harness": harness, "stages": {}}
         require(record.get("harness") == harness, "report_harness_mismatch")

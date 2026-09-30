@@ -74,3 +74,7 @@ func sampleFromMetrics(config Config, metrics Metrics) (runtimeobs.Sample, error
 		MemoryUsageBytes: &memoryUsage, MemoryLimitBytes: &memoryLimit,
 	}, nil
 }
+
+func (p *Provider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
+	return p, nil
+}

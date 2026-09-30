@@ -10,7 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -83,9 +87,7 @@ func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T)
 
 func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
 	id := uuid.NewString()
-	t.Setenv("OAC_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
-	t.Setenv("OAC_E2B_STATE_DIR", t.TempDir())
-	s := &managedSetup{installationID: id, store: &setupStore{value: store.SandboxSetup{
+	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, installationID: id, store: &setupStore{value: store.SandboxSetup{
 		InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()},
 	}}}
@@ -121,9 +123,7 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 
 func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 	id := uuid.NewString()
-	t.Setenv("OAC_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
-	t.Setenv("OAC_E2B_STATE_DIR", t.TempDir())
-	s := &managedSetup{installationID: id}
+	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, installationID: id}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.publish(previous)
 	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct",
@@ -176,7 +176,7 @@ func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if s.selected.Load().Generation != 2 || s.selected.Load().Config != nil || s.ObservationProviderType() != "" {
+	if s.selected.Load().Generation != 2 || s.selected.Load().Config != nil {
 		t.Fatal("empty publication lost its generation")
 	}
 	s.publish(&execution.RuntimeProvider{Generation: 1, ProviderKind: "docker"})
@@ -185,7 +185,7 @@ func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 	}
 	next := &execution.RuntimeProvider{Generation: 3, ProviderKind: "microsandbox"}
 	s.publish(next)
-	if s.selected.Load().Config != next || s.ObservationProviderType() != "microsandbox" {
+	if s.selected.Load().Config != next {
 		t.Fatal("reset blocked subsequent configuration")
 	}
 }
@@ -202,4 +202,61 @@ func (s *setupStore) SandboxCredentialAllocationPage(context.Context, string) ([
 
 func (s *setupStore) ResolveRuntimeGeneration(context.Context, sandbox.Reference) (string, uint64, error) {
 	return "", 0, errors.New("unexpected node generation lookup")
+}
+
+func testProviderPaths(t *testing.T, helper, state string) sandbox.ProcessPaths {
+	t.Helper()
+	paths := sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: filepath.Dir(state)}
+	binary, resolvedState, err := e2b.InstalledPaths(paths)
+	if err != nil || resolvedState != state {
+		t.Fatalf("provider layout: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(binary), 0700); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(helper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binary, raw, 0700); err != nil {
+		t.Fatal(err)
+	}
+	return paths
+}
+
+func TestManagedObservationSourceKeepsSelectionAcrossReconfiguration(t *testing.T) {
+	db := &setupStore{value: store.SandboxSetup{InstallationID: "installation", Generation: 1}}
+	setup := &managedSetup{store: db, installationID: "installation"}
+	if source, err := setup.ResolveObservationSource(t.Context()); source != nil || !errors.Is(err, runtimeobs.ErrUnavailable) {
+		t.Fatal("unconfigured setup did not return typed unavailability", source, err)
+	}
+	first := &docker.Provider{}
+	db.value.Provider, db.value.Generation = "docker", 2
+	setup.publish(&execution.RuntimeProvider{Generation: 2, Provider: first})
+	source, err := setup.ResolveObservationSource(t.Context())
+	if err != nil || source != first {
+		t.Fatal(source, err)
+	}
+	next := &microsandbox.Provider{}
+	db.value.Provider, db.value.Generation = "microsandbox", 3
+	setup.publish(&execution.RuntimeProvider{Generation: 3, Provider: next})
+	if source.ObservationProviderType() != "docker" {
+		t.Fatal("in-flight identity changed")
+	}
+	selected, err := setup.ResolveObservationSource(t.Context())
+	if err != nil || selected != next || selected.ObservationProviderType() != "microsandbox" {
+		t.Fatal(selected, err)
+	}
+}
+
+func TestObservationGenerationIdentityMustMatchRoutedAllocation(t *testing.T) {
+	hub := node.NewHub(node.HubOptions{})
+	defer hub.Close()
+	db := &setupStore{value: store.SandboxSetup{Provider: "docker"}}
+	setup := &managedSetup{hub: hub, store: db}
+	source := &observedGenerationRouter{&generationRouter{setup: setup, store: db, providerType: "e2b"}}
+	_, err := source.Observe(t.Context(), runtimeobs.Target{TenantID: "tenant", EnvironmentID: "environment", Instance: runtimeobs.Instance{AllocationID: "allocation"}})
+	if !errors.Is(err, providercontract.ErrContract) {
+		t.Fatal("routed allocation was attributed to another provider", err)
+	}
 }

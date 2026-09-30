@@ -3,6 +3,9 @@ import copy
 import json
 from pathlib import Path
 import tempfile
+import shutil
+import subprocess
+import sys
 import unittest
 from unittest.mock import Mock, patch
 from uuid import uuid4
@@ -19,6 +22,28 @@ def payload():
 
 
 class ManagedStartupTest(unittest.TestCase):
+    def test_isolated_packaged_import(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for name in ('init.py', 'managed_init.py', 'helper_contract_generated.py'):
+                shutil.copy2(Path(__file__).with_name(name), Path(temporary, name))
+            subprocess.run([sys.executable, '-I', '-c',
+                            "import runpy,sys; runpy.run_path(sys.argv[1], run_name='fixture')",
+                            str(Path(temporary, 'managed_init.py'))], cwd=temporary, check=True,
+                           capture_output=True)
+
+    def test_shared_bootstrap_exchanges(self):
+        fixture = Path(__file__).resolve().parents[2] / 'tools/e2b-provider/testdata/contract.json'
+        for case in json.loads(fixture.read_text()):
+            if case['kind'] != 'managed':
+                continue
+            with self.subTest(name=case['name']):
+                try:
+                    managed_init.identity(case['payload'])
+                    valid = True
+                except (ValueError, TypeError, KeyError):
+                    valid = False
+                self.assertEqual(valid, case['valid'])
+
     def test_invalid_binding_rejected(self):
         source = payload()
         for key, value in [('DeviceID', 'other'), ('NetworkAccess', 'unknown')]:

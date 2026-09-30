@@ -12,7 +12,7 @@ import (
 func (p *Provider) VerifyCredential(ctx context.Context, refs []sandbox.Reference) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if len(refs) > 32 {
+	if len(refs) > MaxCredentialReferences {
 		return sandbox.ErrInvalid
 	}
 	for _, r := range refs {

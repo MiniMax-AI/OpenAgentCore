@@ -1,37 +1,56 @@
 package e2b
 
 import (
-	"strings"
+	"encoding/json"
+	"os"
 	"testing"
 )
 
-func TestNormalizeEndpoint(t *testing.T) {
-	for _, tc := range []struct {
-		apiURL, domain string
-		valid          bool
-	}{
-		{"", "", true},
-		{"https://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai", true},
-		{"https://api.e2b.app", "e2b.app", true},
-		{"https://api.sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai", true},
-		{"https://unrelated.example", "sandbox-test.sandbase.ai", false},
-		{"https://sandbox-test.sandbase.ai", "", false},
-		{"", "sandbox-test.sandbase.ai", false},
-		{"http://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai", false},
-		{"https://sandbox-test.sandbase.ai/path", "sandbox-test.sandbase.ai", false},
-		{"https://sandbox-test.sandbase.ai:443", "sandbox-test.sandbase.ai", false},
-		{"https://127.0.0.1", "sandbox-test.sandbase.ai", false},
-		{"https://localhost", "sandbox-test.sandbase.ai", false},
-		{"https://-bad.example", "sandbox-test.sandbase.ai", false},
-		{"https://good.example", "bad..example", false},
-		{"https://" + strings.Repeat("a.", 125) + "example", "good.example", false},
-	} {
-		apiURL, domain, err := NormalizeEndpoint(tc.apiURL, tc.domain)
-		if (err == nil) != tc.valid {
-			t.Errorf("NormalizeEndpoint(%q, %q): unexpected error %v", tc.apiURL, tc.domain, err)
+// The installer consumes this same fixture; native selectors are owned here.
+func TestSharedConfigurationSelectors(t *testing.T) {
+	raw, err := os.ReadFile("testdata/configuration-selectors.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases struct {
+		Endpoints []struct {
+			Name   string
+			APIURL string `json:"api_url"`
+			Domain string
+			Valid  bool
 		}
-		if tc.apiURL == "" && tc.domain == "" && (apiURL != OfficialAPIURL || domain != OfficialDomain) {
-			t.Errorf("official defaults: %q %q", apiURL, domain)
+		Templates []struct {
+			Name  string
+			Value string
+			Valid bool
 		}
+	}
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range cases.Endpoints {
+		t.Run("endpoint/"+tc.Name, func(t *testing.T) {
+			apiURL, domain, err := NormalizeEndpoint(tc.APIURL, tc.Domain)
+			if (err == nil) != tc.Valid {
+				t.Fatalf("valid=%v: %v", tc.Valid, err)
+			}
+			if tc.Valid {
+				expectedURL, expectedDomain := tc.APIURL, tc.Domain
+				if expectedURL == "" && expectedDomain == "" {
+					expectedURL, expectedDomain = OfficialAPIURL, OfficialDomain
+				}
+				if apiURL != expectedURL || domain != expectedDomain {
+					t.Fatalf("unexpected normalized selectors: %q %q", apiURL, domain)
+				}
+			}
+		})
+	}
+	for _, tc := range cases.Templates {
+		t.Run("template/"+tc.Name, func(t *testing.T) {
+			err := ValidateConfiguration(&DeploymentConfiguration{APIKey: "fixture-key", Template: tc.Value})
+			if (err == nil) != tc.Valid {
+				t.Fatalf("valid=%v: %v", tc.Valid, err)
+			}
+		})
 	}
 }

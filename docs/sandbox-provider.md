@@ -9,7 +9,7 @@ A **Sandbox Provider** supplies the outer compute that a Runtime daemon runs in 
 | Runtime | The daemon inside the Environment; it prepares capabilities and executes Turns |
 | Deployment | The single deployment-wide provider selection; see [Sandbox deployment](../contracts/agents-api/sandbox-deployment.md) |
 
-Core owns durable Environment, allocation, placement and cleanup state; the Provider owns compute and bootstrap only. The Runtime prepares capabilities and runs Turns over the [Core–Runtime protocol](runtime-protocol.md), and the provider hands it its identity through the [Runtime bootstrap](runtime-bootstrap.md) file. A provider never runs Environment initialization, Skills, Plugins, MCP setup, initial files, execution or Files; those use the Runtime. Isolation belongs to the provider's infrastructure, not the daemon; see [Runtime and outer isolation](design-principles.md#runtime-and-outer-isolation). Use the vendor's maintained SDK behind a thin adapter.
+Core owns durable Environment, allocation, placement and cleanup state; the Provider owns compute and bootstrap only. The Runtime prepares capabilities and runs Turns over the [Core–Runtime protocol](runtime-protocol.md), and the provider hands it its identity through the [Runtime bootstrap](runtime-bootstrap.md) file. A provider never runs Environment initialization, Skills, Plugins, MCP setup, initial files, execution or Files; those use the Runtime. Isolation belongs to the provider's infrastructure, not the daemon; see [Runtime and outer isolation](concepts.md#runtime-and-outer-isolation). Use the vendor's maintained SDK behind a thin adapter.
 
 A thin adapter lets a Provider be replaced without changing the common execution flow. Core owns shared scheduling, persistence and recovery through declared capability contracts; provider SDK calls and native behavior stay inside the adapter. Shared policy decisions use registered policy rather than vendor names.
 
@@ -126,6 +126,8 @@ A new provider takes these steps:
 
 **Known design gap:** the installer's `--sandbox` choices and Web's setup views carry provider-specific options, such as E2B's installer flags and Web views. Exposing another provider through these surfaces currently requires shared installer and Web edits. This coupling does not meet [Complexity stays in the adapter](../AGENTS.md#complexity-stays-in-the-adapter); new integrations must express their configuration through the protocol and keep vendor-specific behavior in the adapter. Never add a Session or Turn scheduling path, a vendor column or API field, or a vendor switch in the store.
 
+`providers.Build` passes persisted node configuration and ephemeral `LocalOptions` to `BuildLocal`. The caller explicitly selects standalone registration or single-provider execution with `Standalone`, or generation-owned execution with a canonical absolute node state directory in `GenerationStateDirectory`. Missing or mixed contexts are rejected. The adapter owns generation-specific native preparation and readiness checks. Microsandbox binds helper leases to the installation, generation and specification digest, then checks the pinned image after platform, capacity and artifact readiness.
+
 ### Registration validation
 
 `providers.ValidateRegistration` is the single wiring check. Lookup, constructor binding and the installer projection run it before any configuration callback or constructor. An unknown provider name stays invalid input; a malformed registration returns a safe `providercontract.ErrContract` that includes no submitted configuration or native diagnostics.
@@ -146,6 +148,12 @@ A direct adapter with a credential verifies all retained generations and allocat
 Vendor deployment validation and SDK setup stay at the construction boundary, and construction never creates an Environment. For node-local adapters `providers.Built` returns the provider, probe, installation identity, backend fingerprint and specification digest, and the factory also returns its close function. `execution.RuntimeProvider` binds the adapter to its kind, installation ID, backend fingerprint, generation, mode and node ownership; the database owns the selection, and the in-memory copy is never another authority. Docker and microsandbox run on nodes, and E2B is constructed directly. The node proxy exposes checkpoint operations only for a backend whose registered declaration supports them, and common lifecycle code admits suspension through the declared `CheckpointProvider` or `ResidentPauseProvider` capability, never through a provider name.
 
 The backend fingerprint identifies a native resource namespace, not capacity. Core keeps deployment generations so that owned allocations keep resolving to their original backend; never repoint retained allocations at a replacement backend.
+
+### Distribution artifacts and process paths
+
+Each node adapter's registration owns its typed `NodeArtifacts` declaration: logical distribution path, release filename suffix and installation role (`node`, `runtime`, `policy` or `image`). Registration rejects missing declarations, unsafe paths and unknown roles. `go run ./services/core/cmd/provider-artifacts -write` generates the shared Web catalog and Python projection. Run the command without `-write` to check freshness. Distribution packaging, Web availability and node installation read this projection; adding a provider's payload does not add a provider-name branch to those consumers.
+
+The launcher supplies `sandbox.ProcessPaths` from the [derived process environment](configuration.md). Core reads these paths once and passes them to direct construction and configuration discovery. They are fixed distribution properties, not deployment settings or user-selectable helper paths. Each adapter resolves its own relative helper and state locations; E2B uses `e2b/oac-e2b-provider` and `e2b/`. Missing or nonabsolute roots fail before helper execution. Provider construction and discovery never read process environment variables.
 
 ## Managed lifecycle
 
@@ -201,6 +209,8 @@ An administrator [Session archive](../contracts/agents-api/admin-api.md#session-
 
 ## Validate the integration
 
+E2B template and endpoint validators in the installer and Go adapter consume the shared [selector fixtures](../services/core/internal/sandbox/e2b/testdata/configuration-selectors.json). Extend these cases with any validation change so both entry points accept the same selectors.
+
 Run `make check-sandbox-provider-contract` while developing. It runs the shared [`contracttest`](../services/core/internal/sandbox/contracttest) suite through real adapter boundaries with controlled native failures, plus the adapter and node transport tests; `make check` includes the same packages. Call the public failure runner with native-side fixtures instead of a fake `SandboxProvider`, and keep tests for foreign ownership, unknown mutation results, cancellation, no automatic replay, failed cleanup and reference-bound settlement.
 
 Node tests separately cover disconnect and reconnect fencing and cleanup after a lost Create response. Helper protocols and the [sandbox node protocol](../contracts/agents-api/node-generation-protocol.md) require an exact version match; direct in-process interfaces have no separate wire version.
@@ -211,6 +221,24 @@ Native acceptance proves what fixtures cannot: creation, lease behavior, owned p
 
 | Kind | Adapter | Helper and adapter rules | Operator guide |
 | --- | --- | --- | --- |
-| Docker (node) | [`sandbox/docker`](../services/core/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/core/internal/sandbox/node); [Docker sandbox settings](../services/core/deploy/codex/README.md#docker-sandbox-settings) | [Nodes](getting-started/nodes.md) |
+| Docker (node) | [`sandbox/docker`](../services/core/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/core/internal/sandbox/node) | [Docker adapter](#docker-adapter) |
 | microsandbox (node) | [`sandbox/microsandbox`](../services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](../services/core/tools/microsandbox-provider/README.md) | [Nodes](getting-started/nodes.md) |
 | E2B (direct) | [`sandbox/e2b`](../services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](../services/core/tools/e2b-provider/README.md) | [Sandbox deployment](../contracts/agents-api/sandbox-deployment.md#e2b-configuration); application-managed templates in [`deploy/e2b`](../services/core/deploy/e2b/README.md) |
+
+## Docker adapter
+
+The Docker Sandbox Provider ([`sandbox/docker`](../services/core/internal/sandbox/docker)) runs every Runtime image, whichever Harness it serves, with the same container settings ([`container_options.go`](../services/core/internal/sandbox/docker/container_options.go)):
+
+- user 1000:1000, read-only root filesystem, all capabilities dropped, `no-new-privileges`, the [seccomp profile](#seccomp-profile) and AppArmor `unconfined`;
+- the node’s configured network and extra hosts ([node configuration](configuration.md#docker-node-configuration));
+- CPU and memory from the deployment specification, a 128-process limit and a 128 MiB `/tmp` tmpfs;
+- two named volumes labelled with the installation, tenant, Environment and allocation: `<name>-home` at `/home` and `<name>-environment` at `/environment`, whose `workspace` subdirectory is also mounted at `/workspace`. The Docker Engine must support volume subpath mounts;
+- with the configured `nested_sandbox` option, Docker's `/proc` masks are lifted (`/sys/firmware` and `/sys/devices/virtual/powercap` stay masked) and the container runs an init process.
+
+Create refuses to reuse retained volumes that have no container. It copies the [Runtime bootstrap](runtime-bootstrap.md) file to `/home/runtime/runtime-bootstrap.json` (mode 0600, UID 1000) and the `/environment` workspace, staging, initialization and package directories into the container, then starts `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json`. When the created container does not have the configured CPU, memory and exact image, Create returns the error with `CreateSettled`. Docker has no lease, so Renew only reads the container state. Kill checks the ownership labels of the container and both volumes before removing any of them, then confirms that all three are gone.
+
+The node uses the explicit Unix socket in its [provider configuration](configuration.md#docker-node-configuration) and ignores `DOCKER_HOST`. No Docker socket, host home or Core credential is mounted into a Runtime.
+
+### Seccomp profile
+
+[`seccomp.json`](../services/core/deploy/codex/seccomp.json) is the Moby default profile at [revision 65adc7e](https://github.com/moby/profiles/blob/65adc7e022c97f55e45c054ff012988027733b87/seccomp/default.json) (Apache-2.0, see [seccomp.LICENSE](../services/core/deploy/codex/seccomp.LICENSE); upstream file SHA-256 `785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334`) with one appended rule that allows `clone`, `unshare`, `setns`, `mount`, `umount2` and `pivot_root`. The distribution ships this file to every Docker node as `runtime/seccomp.json`.

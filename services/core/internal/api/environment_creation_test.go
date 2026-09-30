@@ -168,7 +168,7 @@ func TestSelfHostedCreationRejectsBeforePersistence(t *testing.T) {
 		{name: "initial assistant message", environment: validEnvironment, input: `,"input":[{"role":"assistant","content":[{"type":"input_text","text":"start"}]}]`},
 		{name: "deferred functions", environment: validEnvironment, agentFields: `,"tools":[{"type":"function","name":"lookup","description":"Find a value","parameters":{"type":"object"},"defer_loading":true}]`},
 		{name: "unregistered harness placement", environment: validEnvironment, engine: "unregistered"},
-		{name: "Claude Code placement", environment: validEnvironment, engine: "claude_code"},
+		{name: "Unsupported Harness placement", environment: validEnvironment, engine: "fake_alpha"},
 	} {
 		for _, stream := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/stream=%t", tc.name, stream), func(t *testing.T) {

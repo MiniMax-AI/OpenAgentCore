@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -57,4 +58,8 @@ func logConfigurationSources() {
 			log.Bg().Info("Core auxiliary configuration", "setting", key, "path", path)
 		}
 	}
+}
+
+func providerProcessPaths() sandbox.ProcessPaths {
+	return sandbox.ProcessPaths{ArtifactRoot: os.Getenv("OAC_PROVIDER_ROOT"), StateRoot: os.Getenv("OAC_PROVIDER_STATE_ROOT")}
 }

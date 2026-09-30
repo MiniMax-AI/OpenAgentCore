@@ -24,10 +24,6 @@ import (
 )
 
 const (
-	// cliVersionTimeout caps CLI `--version` preflights so a hung agent
-	// binary can't keep `oac-daemon connect` blocked at startup.
-	cliVersionTimeout = 15 * time.Second
-
 	bootstrapTimeout = 10 * time.Second
 
 	// Allow the native process grace period and subsequent owner/pipe cleanup.

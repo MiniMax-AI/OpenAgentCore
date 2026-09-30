@@ -45,7 +45,7 @@ def helper_archive(args, installer):
     with tempfile.TemporaryDirectory() as directory:
         package = Path(directory)
         source_dir = Path(installer.__file__).parent
-        for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py"):
+        for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py"):
             shutil.copyfile(source_dir / name, package / ("__main__.py" if name == "node_install.py" else name))
         archive = io.BytesIO()
         zipapp.create_archive(package, archive, compressed=True)
@@ -124,8 +124,8 @@ def marker_identity(args):
 
 def record_root_runtime(root, args, manifest, sums, installer):
     checksums = {"runtime/seccomp.json": sums["runtime/seccomp.json"]}
-    if args.provider == "microsandbox":
-        checksums.update({name: installer.distribution.artifact(manifest, name)["sha256"] for name in installer.MICRO})
+    checksums.update({name: installer.distribution.artifact(manifest, name)["sha256"]
+                      for name in installer.provider_assets.artifacts(args.provider, ("runtime",))})
     archive = installer.distribution.artifact(manifest, "images/runtime.tar.gz")
     checksums["images/runtime.tar.gz"] = archive["sha256"]
     checksums["images/runtime.tar"] = archive["unpacked_sha256"]
@@ -330,7 +330,7 @@ def runtime_files(root, value, args, manifest, sums, installer):
             raise installer.InstallError("Retained Runtime artifacts are outside this installation")
     installer.no_links(release)
     installer.safe_directory(release)
-    names = ("runtime/seccomp.json",) + (installer.MICRO if args.provider == "microsandbox" else ())
+    names = installer.provider_assets.artifacts(args.provider, ("policy", "runtime"))
     saved = installer.private_json(release / "manifest.json")
     if (release / "manifest.json").exists():
         if saved is None:

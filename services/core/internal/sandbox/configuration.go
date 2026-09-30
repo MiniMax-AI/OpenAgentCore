@@ -67,7 +67,7 @@ type ConfigurationDiscoveryInput struct {
 // ConfigurationDiscoverer is separate from compute and candidate admission.
 // Support must also be explicitly declared in ConfigurationRequirements.
 type ConfigurationDiscoverer interface {
-	DiscoverConfiguration(context.Context, ConfigurationDiscoveryInput) (json.RawMessage, error)
+	DiscoverConfiguration(context.Context, ConfigurationDiscoveryInput, ProcessPaths) (json.RawMessage, error)
 }
 
 // DecodeConfigurationObject rejects unknown fields, null, nonobjects and trailing

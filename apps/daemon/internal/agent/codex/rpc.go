@@ -33,7 +33,7 @@ const rpcInitTimeout = 10 * time.Second
 const rpcKillTimeout = 3 * time.Second
 
 // rpcStdoutBufferMax caps a single NDJSON line on stdout. Codex's
-// aggregated_output frames can run large; 16 MiB matches the opencode
+// aggregated_output frames can run large; 16 MiB bounds the
 // adapter and is well above any realistic single-line payload.
 const rpcStdoutBufferMax = 16 * 1024 * 1024
 

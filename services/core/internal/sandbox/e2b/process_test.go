@@ -18,7 +18,7 @@ func TestProcessWireRejectsUnknownAndTrailingOutput(t *testing.T) {
 		if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s' '"+output+"'\n"), 0700); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := (&ProcessCaller{}).Call(bounded(t), Request{Config: Config{Binary: binary}}); err == nil || strings.Contains(err.Error(), "private") {
+		if _, err := (&ProcessCaller{}).Call(bounded(t), Request{Version: ProtocolVersion, Operation: "list_templates", Config: Config{Binary: binary}, Deadline: time.Now().Add(time.Minute)}); err == nil || strings.Contains(err.Error(), "private") {
 			t.Fatal("invalid helper response accepted or leaked", err)
 		}
 	}
@@ -35,7 +35,7 @@ func TestTimeoutDoesNotTerminateOwnedHelper(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancel()
-	if _, err := (&ProcessCaller{}).Call(ctx, Request{Config: Config{Binary: binary}}); err == nil {
+	if _, err := (&ProcessCaller{}).Call(ctx, Request{Version: ProtocolVersion, Operation: "list_templates", Config: Config{Binary: binary}, Deadline: time.Now().Add(time.Minute)}); err == nil {
 		t.Fatal("timeout not reported")
 	}
 	deadline := time.Now().Add(time.Second)
@@ -57,7 +57,7 @@ func TestEnvironmentDropsProviderSelectorsAndCredentials(t *testing.T) {
 	t.Setenv("E2B_API_KEY", "secret")
 	t.Setenv("E2B_API_URL", "https://wrong.example")
 	t.Setenv("PRIVATE_MODEL_KEY", "secret")
-	if _, err := (&ProcessCaller{}).Call(bounded(t), Request{Config: Config{Binary: binary}}); err != nil {
+	if _, err := (&ProcessCaller{}).Call(bounded(t), Request{Version: ProtocolVersion, Operation: "list_templates", Config: Config{Binary: binary}, Deadline: time.Now().Add(time.Minute)}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -79,7 +79,7 @@ func TestCredentialFenceWaitsForActualHelperExitAfterCancellation(t *testing.T) 
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := (&ProcessCaller{Fence: fence}).Call(ctx, Request{Config: Config{Binary: binary}})
+		_, err := (&ProcessCaller{Fence: fence}).Call(ctx, Request{Version: ProtocolVersion, Operation: "list_templates", Config: Config{Binary: binary}, Deadline: time.Now().Add(time.Minute)})
 		entered()
 		done <- err
 	}()

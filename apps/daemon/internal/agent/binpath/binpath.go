@@ -1,7 +1,7 @@
 // Package binpath resolves which executable each agent adapter should
 // probe and spawn.
 //
-// By default every engine is looked up by bare name on PATH ("claude",
+// By default every engine is looked up by bare name on PATH ("codex",
 // "codex", ...). That breaks in images where PATH is not under our
 // control: e2b's base image, for instance, ships its own
 // /usr/local/bin entries that can shadow the ones we install, and a
@@ -13,8 +13,8 @@
 // The env overrides below let an image or operator pin an absolute path
 // instead. They are read in ONE place so the version probe
 // (CheckCLIAvailable) and the run-time spawn (sessionConfig) can never
-// disagree: a probe that succeeds against /custom/claude while the run
-// spawns PATH's `claude` would advertise a capability the daemon cannot
+// disagree: a probe that succeeds against /custom/codex while the run
+// spawns PATH's `codex` would advertise a capability the daemon cannot
 // actually honour.
 package binpath
 
@@ -26,20 +26,14 @@ import (
 // Env var names for the per-engine executable overrides. Empty or unset
 // means "look up the default name on PATH".
 const (
-	EnvClaudeCode = "OAC_RUNTIME_CLAUDE_BIN"
-	EnvCodex      = "OAC_RUNTIME_CODEX_BIN"
-	EnvPi         = "OAC_RUNTIME_PI_BIN"
-	EnvOpenCode   = "OAC_RUNTIME_OPENCODE_BIN"
-	EnvMCode      = "OAC_RUNTIME_MCODE_BIN"
+	EnvCodex = "OAC_RUNTIME_CODEX_BIN"
+	EnvMCode = "OAC_RUNTIME_MCODE_BIN"
 )
 
 // Default executable names, used when the matching env var is unset.
 const (
-	DefaultClaudeCode = "claude"
-	DefaultCodex      = "codex"
-	DefaultPi         = "pi"
-	DefaultOpenCode   = "opencode"
-	DefaultMCode      = "mcode"
+	DefaultCodex = "codex"
+	DefaultMCode = "mcode"
 )
 
 // resolve returns the trimmed env override when set, else fallback.
@@ -50,17 +44,8 @@ func resolve(envVar, fallback string) string {
 	return fallback
 }
 
-// ClaudeCode returns the claude executable to probe and spawn.
-func ClaudeCode() string { return resolve(EnvClaudeCode, DefaultClaudeCode) }
-
 // Codex returns the codex executable to probe and spawn.
 func Codex() string { return resolve(EnvCodex, DefaultCodex) }
-
-// Pi returns the pi executable to probe and spawn.
-func Pi() string { return resolve(EnvPi, DefaultPi) }
-
-// OpenCode returns the opencode executable to probe and spawn.
-func OpenCode() string { return resolve(EnvOpenCode, DefaultOpenCode) }
 
 // MCode returns the mcode executable to probe and spawn.
 func MCode() string { return resolve(EnvMCode, DefaultMCode) }

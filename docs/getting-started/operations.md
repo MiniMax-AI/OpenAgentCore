@@ -107,7 +107,7 @@ A separate Web-only installation keeps its own copy of the key. After rotating, 
 
 ## Projects and API keys
 
-Create Projects and issue keys in Web, on **Projects and keys**, or through the [Core API](#script-the-core-api). How Projects and keys behave is in [Projects own assets](../design-principles.md#projects-own-assets).
+Create Projects and issue keys in Web, on **Projects and keys**, or through the [Core API](#script-the-core-api). How Projects and keys behave is in [Projects own assets](../concepts.md#projects-own-assets).
 
 To rotate an application key:
 
@@ -155,7 +155,7 @@ Nodes on other hosts keep running. To uninstall them the usual way, remove them 
 
 ## Installation version policy
 
-An installation runs one release for its whole life. In-place version upgrades, downgrades and historical conversions are not supported. Nothing migrates data between releases.
+An installation runs one release for its whole life. In-place version upgrades and downgrades are not supported. Nothing migrates data between releases.
 
 To move to a new release, install it into a new, empty directory, with its own database, Core key and nodes, and add nodes from its Web. Keep the old installation, its data and its nodes until their work is finished. Nodes run the program of the console that added them and are never upgraded in place; Core accepts only nodes that speak its own node protocol.
 
@@ -175,7 +175,7 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `Automatic HTTPS needs ports 80 and 443 …` | Free the port the message names, install without `--public-url` and set up the domain later, or install with `--ingress external` and use your own [reverse proxy](install-options.md#https-and-the-reverse-proxy) |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
 | `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply`. To start over with other flags, [uninstall](#uninstall) it first |
-| `This installation version or historical conversion is not supported …` | The target directory holds an installation of another release, or a default install found one at `~/.parsar/core`. Keep it, and install into another empty `--install-dir` ([version policy](#installation-version-policy)) |
+| `This installation version is not supported …` | The target installation's state format or source revision does not match this release. Keep it, and install into another empty `--install-dir` ([version policy](#installation-version-policy)) |
 | `generated/<file> was edited by hand` | Put the change in `config.json`, then `oac apply --discard-edits` |
 | `config.json has changes that are not applied` | Run `oac apply` |
 | `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
@@ -202,4 +202,4 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 
 Web signs administrators in with the Core key, checks the origin of every request, and forwards signed-in `/core/v1` requests to Core with the Core key, which stays on the server. It answers 404 on `/v1` and `/api/v1` whatever credential a request carries, serves only the non-secret node payload at `/node-install/`, and has no Docker or KVM access. Machine routes under `/api/v1` use their own enrollment and connection credentials. With managed ingress, the `installation` service applies domain changes through the Docker socket; Web reaches it only over a private Unix socket, and it checks the Core key on every request.
 
-Sandboxes are the isolation boundary ([Runtime and outer isolation](../design-principles.md#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and a Docker node is [root-equivalent](nodes.md#what-the-installer-sets-up) on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](nodes.md#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.
+Sandboxes are the isolation boundary ([Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and a Docker node is [root-equivalent](nodes.md#what-the-installer-sets-up) on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](nodes.md#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.

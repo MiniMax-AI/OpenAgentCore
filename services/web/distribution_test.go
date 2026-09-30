@@ -68,7 +68,7 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 	write(filepath.Join(dist, "index.html"), "console")
 	write(filepath.Join(payload, "node-install.pyz"), "bootstrap")
 	artifacts := map[string]any{}
-	for logical := range map[string]bool{"native/bin/oac-node": true, "images/runtime.tar.gz": true, "native/microsandbox/msb": true} {
+	for logical := range map[string]bool{"native/bin/oac-node": true, "images/runtime.tar.gz": true, "native/microsandbox/msb": true, "runtime/seccomp.json": true} {
 		name := strings.ReplaceAll(logical, "/", "-")
 		artifacts[logical] = map[string]any{"filename": name, "size": len("runtime-bytes")}
 		write(filepath.Join(payload, "artifacts", name), "runtime-bytes")

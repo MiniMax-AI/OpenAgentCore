@@ -91,7 +91,7 @@ func configureManagedNodes(s *store.Store, publicURL string, owner func(context.
 			return s.HeartbeatRuntimeNode(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health))
 		},
 	})
-	result.setup = &managedSetup{store: s, hub: result.hub, installationID: setupID, publicURL: publicURL}
+	result.setup = &managedSetup{processPaths: providerProcessPaths(), store: s, hub: result.hub, installationID: setupID, publicURL: publicURL}
 	result.runtime = execution.NewDeferredRuntimeProvider(setupID, result.setup.load, result.setup.prepare)
 	result.runtime.PublishUnconfigured = result.setup.publishUnconfigured
 	success = true

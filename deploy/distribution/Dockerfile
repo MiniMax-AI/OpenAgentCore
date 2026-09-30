@@ -12,7 +12,6 @@ COPY e2b/ /opt/oac/e2b/
 COPY native-installers/ /opt/oac/native-installers/
 
 ENV OAC_ADDR=:8091
-ENV OAC_E2B_PROVIDER_BIN=/opt/oac/e2b/oac-e2b-provider
 EXPOSE 8091
 USER 65532:65532
 CMD ["/usr/local/bin/oac-core"]

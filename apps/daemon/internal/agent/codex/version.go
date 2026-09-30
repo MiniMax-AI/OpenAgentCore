@@ -28,7 +28,7 @@ var ErrCLINotFound = errors.New("codex CLI not found")
 
 // CheckCLIAvailable runs `<binary> --version` and returns the trimmed
 // first line. The empty binary name defaults to defaultBinary(). Matches
-// the CheckCLIAvailable signature of the claudecode and opencode adapters
+// the CLI availability check signature
 // so connect.go's preflight loop treats every engine uniformly.
 func CheckCLIAvailable(ctx context.Context, binary string) (string, error) {
 	if strings.TrimSpace(binary) == "" {

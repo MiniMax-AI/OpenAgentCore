@@ -30,6 +30,7 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 ## Configuration and apply
 
 - Every process setting has one home: the installation's private `config.json`, described by `config.schema.json`. Keep the schema, `config_model.py`, the generator and the reference tables that `scripts/config-reference.py` renders into [configuration](../../docs/configuration.md) and [installation options](../../docs/getting-started/install-options.md) in step.
+- `make generate-harness-catalog` projects the [built-in Harness catalog](../../internal/harnessconfig/builtin/catalog.json) and adapter-owned Go provider declarations into `harness_catalog.py`. `make check-harness-catalog` checks its freshness, schema enum membership and process-default membership. `acceptance.py` uses this projection to validate its explicitly selected campaign combinations and token-limit requirements; adding catalog support does not expand the live acceptance campaign. These acceptance modules run from the checkout; installed configuration and `oac.pyz` use the checked schema.
 - Installation flags only seed `config.json`. A rerun of the installer over a complete installation accepts only `--install-dir` and repairs.
 - `oac apply` validates `config.json`, derives `generated/` and converges on what actually runs. Each service carries the digest of its inputs (Compose label `io.oac.inputs`, native `OAC_INPUTS`), and exactly the services whose running inputs differ are recreated or restarted. Decide restarts from what runs, never from recorded bookkeeping, so the next apply finishes an interrupted one. Apply contacts running services at the last applied address before changing listeners.
 - Health checks, setup, apply and generated service files derive addresses from the same `config.json`. `host` selects the gateway listener for managed ingress and the Core and Web listeners for external ingress. A non-loopback external bind requires an HTTPS public origin.
@@ -40,7 +41,7 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 
 ## Versions and the lock
 
-- Install only into an empty directory or over an [incomplete installation](#new-installations), or repair a complete installation of the same source revision. Refuse older formats and different revisions before changing anything; keep their data and direct the operator to install separately. Distributions carry only current installation code: no conversion, migration or binary replacement. Keep the refusal checks and their tests.
+- Install only into an empty directory or over an [incomplete installation](#new-installations), or repair a complete installation of the same source revision. Require the current state format and matching source revision before changing installation files or services. Preserve data when those checks fail.
 - The packaged `oac.pyz` embeds its build revision and refuses a `state.json` whose `source_commit` differs.
 - The installer and every mutating `oac` command share `.oac.lock`. The installer holds it across creation, payload, native service and launcher repair, and apply, calling the already-locked apply implementation without locking again. Never replace the lock file; its inode must stay stable. Only the cleanup of a new installation, with the directory the installer created, and `oac uninstall` unlink it, last and while holding it. `locked` refuses a lock whose path no longer names the file it locked.
 
@@ -67,7 +68,6 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 - `docker` prints its weaker isolation and needs a y/N confirmation or `--accept-docker-risks` before anything is created.
 - `e2b` needs a non-loopback HTTPS `public_url`, `--e2b-api-key-file` and `--e2b-template`; otherwise the installer refuses before installing anything.
 - A Docker or microsandbox selection with a loopback `public_url` is saved, but no node can serve it until `public_url` is guest-reachable HTTPS.
-- `--sandbox-provider` and `--provider` fail with a message naming `--sandbox`.
 
 ## Accounts and permissions
 
@@ -147,4 +147,4 @@ The Core and node installers share one resolver for these identities. It confirm
 
 ## Validation
 
-`make check-distribution` covers the production proxy, the installation rules, release metadata and native catalog assembly, including bundle manifests larger than Node's default subprocess buffer (catalog assembly reads up to 64 MiB). Diagnostics report observed service health, never fabricated model or environment readiness. Runtime observations belong to Core; do not add monitoring or lifecycle tracking to the installer or the landing site.
+`make check-distribution` covers the production proxy, the installation rules, release metadata and native catalog assembly, including bundle manifests larger than Node's default subprocess buffer (catalog assembly reads up to 64 MiB). Diagnostics report observed service health, never fabricated model or environment readiness. Runtime observations belong to Core; do not add monitoring or lifecycle tracking to the installer.

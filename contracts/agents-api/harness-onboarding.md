@@ -28,7 +28,7 @@ Runtime: Executor preparation, reuse, idle expiry, recovery
 | Adapter | Native configuration, resources, API calls, event translation and restrictions | `apps/daemon/internal/agent/<kind>` |
 | Harness | Native model and tool loop and history | Pinned SDK or executable |
 | Service profile | Pure validation of qualified operations and placements | `services/core/internal/engine` |
-| Registration | Installed factories and verified capability declarations | `apps/daemon/internal/cli` |
+| Registration | Adapter declarations, installed factories and verified capabilities | `apps/daemon/internal/agent/<kind>/declaration.go`; static list in `apps/daemon/internal/cli/agent_discovery.go` |
 
 An Environment supplies execution resources. Managed E2B, Docker and microsandbox machines and application-owned machines differ in provisioning and connection; the connected Runtime uses this same contract. The daemon runs on Linux, macOS and Windows, managed Providers are Linux-only, and each adapter qualifies its own platforms ([self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms)). Native factories receive capabilities only after the Runtime has loaded the bound installed snapshot ([capability preparation](environments.md#runtime-capability-preparation)). Model providers supply model communication settings, not Turn scheduling or native process ownership.
 
@@ -36,7 +36,7 @@ An Environment supplies execution resources. Managed E2B, Docker and microsandbo
 
 1. **Pin the native source.** Record the upstream package version and source revision and document the native entry point next to the adapter.
 2. **Implement the adapter** in `apps/daemon/internal/agent/<kind>`: an `ExecutorFactory`, an `Executor` and a `Turn` ([required interfaces](#required-adapter-interfaces), [lifetimes](#executor-and-turn-lifetimes)). Reuse the shared process, credential, configuration and local workspace helpers.
-3. **Register the kind in the Runtime** in `apps/daemon/internal/cli` ([register the adapter](#register-the-adapter)).
+3. **Declare the kind in the adapter** and add its declaration to the Runtime’s static list in `apps/daemon/internal/cli/agent_discovery.go` ([register the adapter](#register-the-adapter)).
 4. **Add the service profile and one catalog entry** ([add the engine to Core](#add-the-engine-to-core)).
 5. **Package native prerequisites.** Add a Runtime image under `services/core/deploy/<kind>` and, optionally, [native installer participation](#native-installer-participation).
 6. **Enable and select the engine** with the `core.harnesses` setting and [Harness selection](model-execution.md#harness-selection).
@@ -63,7 +63,7 @@ For example, the Codex adapter keeps its app-server and thread, the Claude adapt
 | Interface or contract | Required handling | Obligation |
 | --- | --- | --- |
 | `ExecutorFactory`, `Executor.StartTurn`, `Executor.Close` | Real implementation | Prepare without model input; keep ownership of failed or uncertain resources; confirm cleanup |
-| `Turn`, `Session.Cancel`, `CancellationOutcome`, `AwaitSettlement` | Real implementation | Cancel the exact Turn, keep observed results and confirm settlement independently of cancellation requests |
+| `Session`, `Turn`, `CancellationOutcome`, `AwaitSettlement` | Real implementation | Cancel the exact Turn, keep observed results and confirm settlement independently of cancellation requests |
 | `DurableSteerer` | Real implementation on every Turn | Distinguish a complete write from the native application receipt; keep retry identity |
 | `Steerer` | Explicit implementation or Unsupported | Additional non-durable active-Turn input |
 | `FunctionResultSubmitter` | Explicit implementation or Unsupported | Match native call and result identity and acknowledge application |
@@ -112,7 +112,8 @@ A Session owns one reusable Executor in its connected Runtime; a Turn owns one i
 - An error means settlement is unconfirmed and frees neither ownership nor capacity. Caller deadlines stop the wait, not the tracked cleanup. Retry the same cleanup target serially; a failed cleanup blocks replacement and keeps its resource slot.
 - `Executor.Close` confirms resource retirement independently of the Turn outcome: an immutable Turn error must not prevent closing the native transport once its work and output have stopped.
 - Include owned background work in settlement and keep the exact native cleanup target after a failure. Native termination belongs to the adapter; a bulk cleanup acknowledgement alone does not establish quiescence.
-- The observed cancellation outcome keeps native identity, Usage and output without fabricating missing evidence.
+- Every `Session`, including a direct-call factory result, declares `CancellationOutcome`. `Turn` and `PreparedCancellation` inherit it. The snapshot keeps observed native identity, Usage and output and remains readable after cancellation. Missing evidence stays unset; an empty `DonePayload` means nothing has been observed, not that cancellation succeeded or is unsupported. Reading the snapshot does not wait for settlement.
+- Direct-call `Session.Cancel` requests cancellation; output closure signals teardown. Executable `PreparedCancellation.Cancel` waits for local cleanup and output writes to stop. Turn settlement still requires `AwaitSettlement` and any required `Executor.Close`; neither a successful cancellation request nor its snapshot replaces those waits.
 
 **What the Runtime does around a Turn.** One output consumer starts before native Start, drains the bounded 64-frame channel and keeps the terminal observation until Start publication, Turn settlement and admitted operation receipts finish. Natural completion never calls Cancel. Input, function and interaction admission close before settlement; operations already admitted hold their barrier through native receipts and outbound acknowledgement. The Runtime sends cancellation to the Turn before waiting on that barrier, because a written input may need a native interrupt to produce its receipt. It joins native settlement, any required confirmed Executor close, output drain and all admitted operations before an applied acknowledgement or reuse, and only then forwards Done or an applied cancellation receipt. A failed Close can report failure while keeping the same Run and outstanding operations for retry; a closed caller wait cannot manufacture an applied input receipt. The Runtime commits native continuity and releases the old Run's admission before publishing Done, since the receiver may start another Turn at once; a late terminal-send failure belongs to the old Run and cannot invalidate a successor that already owns the Executor. Connection shutdown owns transport-loss cleanup. The settlement wait is ten seconds and the receipt send budget five seconds; a timeout is not proof of quiescence.
 
@@ -144,7 +145,11 @@ A Harness that supports the Subagent reads implements the [neutral observation c
 
 ## Register the adapter
 
-Registration is static and requires a build. The methods live in `agent/harness.go`, and the built-in adapters call them from [`cli/agent_registration.go`](../../apps/daemon/internal/cli/agent_registration.go) (Codex, MiniMax Code) and [`cli/claude_sdk.go`](../../apps/daemon/internal/cli/claude_sdk.go) (Claude Code).
+Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](../../apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration` and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
+
+`Runtime.SessionCapabilityContext` and `Runtime.ExecutorCapabilityContext` explicitly request capability-download URL resolution and scoped product-upload context for the corresponding execution factory. Preparation never receives those effects. An adapter that supports product workspace authoring declares `WorkspaceAuthoring` itself; common registration does not grant it.
+
+[`cli/agent_registration.go`](../../apps/daemon/internal/cli/agent_registration.go) iterates the discovered runtimes and calls `Registry.Register` from `agent/harness.go`. It verifies that discovery retained the declared kind and installs factories in this order:
 
 | Order | Method | Registers |
 | --- | --- | --- |
@@ -170,7 +175,7 @@ Core recognizes the [built-in Harness registrations](harness-catalog.md). Add on
 
 Implement the profile constructor, then run `make generate-harness-catalog`. It generates the model configuration registry, Core profile catalog, client identifiers and display names and the registration reference; public input validators read the generated registry. `make openapi` derives Harness enums from the same catalog, so do not add handwritten enums to DTO tags or route annotations. `make check-harness-catalog` rejects stale projections.
 
-The Runtime registers public Harnesses with `builtin.Configuration(kind)` and separately registers native factories, probes and installed capability evidence. The catalog cannot declare a machine's availability, and there is no dynamic plugin loader.
+Each Runtime declaration references the same `internal/harnessconfig/<kind>.Configuration()` used by the generated catalog and owns its native factories, probes and installed capability evidence. The catalog cannot declare a machine's availability, and there is no dynamic plugin loader.
 
 The profile is pure: it declares supported placements, public configuration and result limits and required Runtime controls, using existing public and protocol types. Profile callbacks cannot query business data, decrypt credentials or control native processes. Shared dispatch checks capability combinations, not a whitelist of engine names.
 

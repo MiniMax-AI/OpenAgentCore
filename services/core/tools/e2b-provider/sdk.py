@@ -18,8 +18,7 @@ from e2b.api.client.types import UNSET
 
 from state import Failure
 
-SDK_VERSION = '2.51.0'
-MAX_OUTPUT = 1024 * 1024
+from helper_contract_generated import SDK_VERSION, MAX_OUTPUT, MAX_COMMAND_INPUT, MAX_OBSERVATION_REFERENCES
 
 
 def list_templates(config, remaining):
@@ -123,7 +122,7 @@ def validate_deployment(config, remaining):
 
 def read_metrics(config, sandbox_ids, remaining):
     """Latest metrics point per sandbox from one batch request of at most 100 IDs."""
-    if not 1 <= len(sandbox_ids) <= 100:
+    if not 1 <= len(sandbox_ids) <= MAX_OBSERVATION_REFERENCES:
         raise Failure('invalid')
     client = get_api_client(ConnectionConfig(**sdk_options(config, remaining)))
     response = get_sandboxes_metrics.sync_detailed(client=client, sandbox_ids=sandbox_ids)
@@ -161,7 +160,7 @@ def definitely_rejected(error):
 def run(sandbox, command, remaining, user='runtime'):
     raw = command.get('Stdin')
     data = base64.b64decode(raw, validate=True) if raw is not None else None
-    if data is not None and len(data) > 50 * 1024 * 1024 + 32:
+    if data is not None and len(data) > MAX_COMMAND_INPUT:
         raise Failure('invalid')
     args = command.get('Args')
     if not isinstance(args, list) or not args or any(not isinstance(arg, str) or '\0' in arg for arg in args):

@@ -1,93 +1,47 @@
 # Architecture
 
-OpenAgentCore separates control, runtime and execution. Core owns durable state and the API; the Runtime daemon runs work inside an Environment; the native harness keeps its own model and tool loop. Each connection between them is a defined protocol, so any part can be replaced without changing Core orchestration.
-
-This page is a map. Each section names a component, its boundary and the document that owns its rules.
-
-Resource provisioning and task execution meet at the Runtime daemon. Managed sandboxes and user-owned machines enter through different setup paths, then use the same preparation and execution protocol.
+OpenAgentCore separates orchestration, compute and native execution. Core owns the API and durable state. Sandbox Providers manage compute. A Runtime daemon prepares an Environment and runs the selected Harness, whose native SDK or protocol owns the model and tool loop.
 
 ```mermaid
 flowchart TB
-    App["Application / official SDK"] <-->|"1. Agents API: HTTP / SSE"| Core
-    Web["Web administrator console"] <-->|"Core management API"| Core
-    Core["Core<br/>Authorization, configuration snapshots,<br/>orchestration and durable state"]
+    App["Application / official SDK"] <-->|"Agents API /v1: HTTP and SSE"| Core
+    Web["Web administrator console"] <-->|"Core API /core/v1"| Core
+    Core["Core: authorization, configuration snapshots,<br/>orchestration and durable state"]
     Core --- DB[("PostgreSQL")]
-
-    Core -->|"2. Sandbox Provider contract"| SP["Sandbox Provider adapters<br/>Docker / E2B / microsandbox"]
-    SP -.->|"Provision the outer Environment,<br/>bootstrap daemon, reclaim compute"| R
-    User["User runs the installer"] -.->|"Start daemon on a user-owned machine"| R
-    Core <-->|"3. Core-Runtime protocol<br/>Prepare, execute, cancel, recover;<br/>events and receipts"| R
-
+    Core -->|"Sandbox Provider protocol"| SP["Sandbox Provider: Docker / E2B / microsandbox"]
+    SP -.->|"Provision compute and bootstrap Runtime"| R
+    User["User-machine installer"] -.->|"Start Runtime"| R
+    Core <-->|"Core–Runtime protocol:<br/>preparation, execution, events and receipts"| R
     subgraph Env["Environment: managed sandbox or user-owned machine"]
-        R["Runtime / daemon"]
-        P["Common preparation<br/>Workspace, Skills, Plugins, MCP<br/>Fixed installed.json capability snapshot"]
-        A["Harness adapters<br/>Codex / Claude / MiniMax"]
-        H["Native Harness<br/>Model and tool loop"]
-        F["Workspace, files,<br/>commands and artifacts"]
-        R --> P
-        P -->|"4. Harness contract<br/>Executor / Turn / optional capabilities"| A
-        A <-->|"Native SDK or protocol"| H
-        H <--> F
+        R["Runtime daemon"] --> P["Workspace and capability preparation"]
+        P -->|"Harness protocol"| A["Harness adapter"]
+        A <-->|"Native SDK or protocol"| H["Native Harness: model and tool loop"]
+        H <--> F["Workspace, tools and artifacts"]
     end
-
-    H <-->|"Model API"| Model["Model service"]
-    H <-->|"MCP protocol"| MCP["MCP servers"]
+    H <-->|"Model API"| Model["Model provider"]
+    H <-->|"MCP"| MCP["Local or remote MCP servers"]
 ```
 
-Dashed arrows show provisioning and installation. Solid arrows show component interactions; they do not all imply network calls. Sandbox Provider and Harness contracts are primarily in-process interfaces. The daemon initiates the Core-Runtime WebSocket connection and exchanges ordered messages with Core. MCP servers may be local processes or remote services.
+Dashed arrows show provisioning and installation. Solid arrows show component interactions, including in-process interfaces. The daemon initiates its authenticated WebSocket connection to Core. The [API index](api/README.md) describes the application, operator and machine namespaces; [protocol boundaries](../AGENTS.md#protocols-at-every-boundary) lists each protocol's code and owning document.
 
-Each Harness adapter declares its supported model protocols. Core and Runtime validate that declaration; model calls use the Harness's own implementation. See [model execution](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence).
+## Component responsibilities
 
-## Two APIs, and a machine channel
+| Component | Responsibility | Reference |
+| --- | --- | --- |
+| Core | Authenticate callers, resolve and freeze configuration, schedule Turns, handle cancellation and pending interactions, persist resources and execution facts in PostgreSQL | [Core service](../services/core/README.md) |
+| Sandbox Provider | Create, observe, renew and reclaim compute; supply Runtime startup input | [Sandbox Provider](sandbox-provider.md), [Runtime bootstrap](runtime-bootstrap.md) |
+| Sandbox node | Operate a Docker or microsandbox host and reconcile its assigned generation and allocations | [Sandbox node protocol](../contracts/agents-api/node-generation-protocol.md) |
+| Runtime | Prepare the workspace and capabilities, manage Session Executors, execute Turns and report events and receipts | [Core–Runtime protocol](runtime-protocol.md) |
+| Harness adapter | Validate native configuration, invoke the upstream SDK or protocol, translate events and confirm native cleanup | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
+| Model provider | Serve the model protocol selected for the Harness | [Model execution](../contracts/agents-api/model-execution.md) |
+| Web | Let administrators configure and observe the installation through a server-side Core API connection | [Console server](web/console-server.md) |
 
-![Three namespaces and their credentials](assets/architecture-api-surfaces.png)
-
-Core serves three namespaces: the Agents API (`/v1`) for applications, the Core API (`/core/v1`) for operators, and a machine API (`/api/v1`) for nodes and Runtime daemons. Each has its own credential; one used elsewhere gets 401. The [API index](api/README.md) owns the full matrix of callers, credentials and routes.
-
-## Core
-
-Core is the only owner of durable execution facts: Projects and keys, Agents, Sessions, Turns, Items, Environments, files and audit records, all in PostgreSQL. It schedules Turns, handles cancellation and pending interactions, and checks that a requested harness, Environment and capability combination is supported before starting work.
-
-Core does not isolate tools, run a model or talk to a vendor SDK directly. It reaches Sandbox Providers and Runtimes through the protocols below, and Harnesses only through the Runtime. The [repository map](development.md#repository-map) shows where each component lives.
-
-## Protocol boundaries
-
-The numbers below match the overview. Each protocol defines behavior, ownership, errors and completion semantics as well as types or method signatures. Its code and document are listed in [Protocols at every boundary](../AGENTS.md#protocols-at-every-boundary).
-
-| Boundary | Responsibility |
-| --- | --- |
-| 1. Application / Core | Sessions, Turns, inputs, Items, files and events over HTTP / SSE |
-| 2. Core / Sandbox Provider | Compute creation, observation, renewal, bootstrap and reclamation |
-| 3. Core / Runtime | Capability declarations, preparation, execution, cancellation, recovery and receipts |
-| 4. Runtime / Harness | Native configuration, execution, event translation and confirmed cleanup |
-| Harness / Model Provider | Model inference through a protocol supported by the selected Harness |
-
-The [bootstrap contract](runtime-bootstrap.md) carries the Runtime's startup input across the provisioning boundary. After connection, capability preparation belongs to Runtime; the Provider does not become a second execution path.
-
-Not every combination of Harness, model and Environment works. The supported ones are recorded in [Harness capabilities](../contracts/agents-api/harness-capabilities.md) and the [coverage record](../contracts/agents-api/README.md).
+The [repository map](development.md#repository-map) locates these components. [Concepts and ownership](concepts.md) explains Project boundaries, administrator authority and tool isolation.
 
 ## A Session, end to end
 
-The application creates a Session through the Agents API. Core freezes its configuration and establishes the execution location:
+An application creates a Session through the Agents API. Core resolves its configuration and execution location. A managed Session obtains compute through the selected Sandbox Provider; a self-hosted Session waits for the user to run its installation command. A Session with `environment: none` uses a connected execution device without a workspace. The [application guide](api/public-agent-api.md#create-a-session) describes these choices.
 
-- **Core-managed (`openai_hosted`):** the Sandbox Provider creates compute and bootstraps the daemon.
-- **User-managed (`self_hosted`):** an administrator issues an executor credential; the user starts the daemon on their own machine ([self-hosted guide](getting-started/self-hosted.md)).
-- **No workspace Environment (`none`):** Core uses an existing device connection with the selected Harness's qualified service profile.
+After the daemon connects, Core checks the available Harness and requested capabilities. The Runtime prepares a workspace Environment and its capability snapshot, then prepares or reuses the Session Executor. Each Turn runs through the native Harness. Core persists the output, tool interactions and receipts for application reads and events. Completion or cancellation settles the Turn; a healthy Executor can serve the next Turn in the same Environment.
 
-For workspace Environments, the common path is:
-
-1. Authenticate the daemon connection and check Harness availability.
-2. Prepare the workspace and capabilities from the Session's frozen configuration.
-3. Load the fixed installed capability snapshot and prepare or reuse the Session Executor.
-4. Submit an input as a Turn; the native Harness runs its model and tool loop.
-5. Return output, tool interactions and receipts to Core, which persists the execution state for application reads and events.
-6. Confirm Turn settlement after completion or cancellation. A healthy Executor can serve the next Turn without destroying the Environment.
-
-The `none` profile shares the execution protocol without workspace preparation. Compute availability, daemon connection, completed capability preparation and execution readiness are separate states. Sending a request is not proof that execution started or finished. See the [Environment contract](../contracts/agents-api/environments.md) for preparation and the [Core-Runtime protocol](runtime-protocol.md) for ordering, receipts and failure ownership.
-
-## Boundaries to keep in mind
-
-- **Isolation belongs to the outer Environment.** The daemon is not a sandbox ([Runtime and outer isolation](design-principles.md#runtime-and-outer-isolation)).
-- **Execution and compute have separate lifetimes.** Closing an executor does not release its allocation, destroy its Environment or delete its workspace. Reclamation is an explicit Sandbox Provider operation.
-- **Model keys stay with the compute that owns them.** A self-hosted Session brings its own model provider ([why](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence)).
-- **Core Web is an administrator console.** It calls only `/core/v1` and cannot start Sessions or send input ([console API usage](web/console-api-usage.md#not-consumed)).
+Execution and compute have separate lifetimes: closing an Executor preserves its allocation and workspace until the Provider reclaims them. Preparation, connection and execution readiness have distinct states. The [Environment contract](../contracts/agents-api/environments.md) owns preparation, and the [Core–Runtime protocol](runtime-protocol.md) owns ordering, receipts and failure handling.

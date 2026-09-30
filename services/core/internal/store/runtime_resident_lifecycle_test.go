@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
+	"sync/atomic"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -14,6 +15,7 @@ type fakeResidentProvider struct {
 	*fakeCheckpointProvider
 	pauses, resumes int
 	losePause       bool
+	renewals        atomic.Int32
 }
 
 func (p *fakeResidentProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
@@ -163,4 +165,36 @@ func (p *fakeResidentProvider) ProviderOperations() providercontract.Operations 
 	ops["PauseResident"] = providercontract.Support{State: providercontract.Supported}
 	ops["ResumeResident"] = providercontract.Support{State: providercontract.Supported}
 	return ops
+}
+
+func (p *fakeResidentProvider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
+	p.renewals.Add(1)
+	return p.fakeCheckpointProvider.Renew(ctx, r)
+}
+
+func TestResidentRepeatedWakeRequestsStillRenewRunningCompute(t *testing.T) {
+	var resident *fakeResidentProvider
+	f := newComputeLifecycleFixtureWithProvider(t, 2, 4, func(p *fakeCheckpointProvider) sandbox.SandboxProvider {
+		resident = &fakeResidentProvider{fakeCheckpointProvider: p}
+		return resident
+	})
+	tenant, _, environment, _ := f.create()
+	for range 3 {
+		if err := f.store.TouchRuntimeActivity(t.Context(), tenant, environment.ID); err != nil {
+			t.Fatal(err)
+		}
+		before := resident.renewals.Load()
+		owner := f.phase(tenant, environment.ID, "running")
+		if resident.renewals.Load() <= before {
+			t.Fatal("wake request skipped provider renewal")
+		}
+		var wakeRequested bool
+		err := f.pool.QueryRow(t.Context(), `SELECT compute_wake_requested FROM runtime_allocations WHERE id=$1`, owner.ID).Scan(&wakeRequested)
+		if err != nil || wakeRequested {
+			t.Fatal("wake request not cleared after renewal", err)
+		}
+	}
+	if resident.pauses != 0 || resident.resumes != 0 {
+		t.Fatal("active file access changed resident compute")
+	}
 }

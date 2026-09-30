@@ -2,6 +2,8 @@
 
 The console server (`services/web`, the `oac-web` process) serves the built console, signs the administrator in with the Core key and forwards the signed-in browser's `/core/v1` requests to Core with that key. The browser never holds the Core key or any API key. Applications, nodes and self-hosted executors call Core directly; the console forwards none of their traffic.
 
+[Configuration](../configuration.md#appendix-web-environment-without-the-installer) owns its process settings and defaults.
+
 ## Request boundary
 
 ```mermaid
@@ -109,23 +111,6 @@ Without `OAC_WEB_INSTALLATION_SOCKET` (external reverse proxy installations), `G
 The System page submits a hostname once, polls the status every 2 seconds while it is `checking` or `applying`, and asks for confirmation when the installer requires it. During setup, network failures and HTTP 502/503/504 responses keep polling active. The page allows 30 seconds without a successful status response before showing the disconnected message, and recovers when a poll succeeds. It never retries a write. Applying the domain restarts the console, which ends every session; the page keeps a sign-in link to the new HTTPS address. Only the `ready` state confirms HTTPS; the browser does not probe the new origin. The installer owns certificates, locking and recovery ([managed HTTPS](../../deploy/install/README.md#managed-https)).
 
 `OAC_WEB_BOOTSTRAP=1`, which the installer sets while no public URL is configured, lets the console also accept plain HTTP requests addressed to a literal IP address, treating `http://<that address>` as the origin, so an operator can sign in through the server's IP address. Host names still require `OAC_WEB_ORIGIN`, so DNS rebinding cannot reach the console.
-
-## Settings
-
-The installer sets these variables from `config.json`; set them yourself only when you run the console without the installer. Of the installation's secrets, the installer gives the console only `secrets/core.key`.
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `OAC_WEB_ADDR` | `:8080` | Listener address |
-| `OAC_WEB_ORIGIN` | `http://127.0.0.1:8080` | The exact browser-facing origin, HTTP or HTTPS, without a path. Host and origin checks use it; HTTPS makes the session cookie `Secure` |
-| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core's origin, HTTP or HTTPS, without credentials, query or path |
-| `OAC_WEB_CORE_KEY_FILE` | `/admin/core.key` | Absolute path of a regular file with no group or other permissions, holding the Core key: at least 32 characters, no whitespace, at most 4 KiB |
-| `OAC_WEB_DIST` | `/www` | Absolute directory of the built console; must contain `index.html` |
-| `OAC_WEB_NODE_PAYLOAD_DIR` | unset | Absolute path of the matched distribution's node payload (the installer's `node-payload/`). Unset, `/node-install/*` is not served and Add node is unavailable |
-| `OAC_WEB_INSTALLATION_SOCKET` | unset | Absolute path of the installer's domain socket. Unset, domain setup reports unsupported |
-| `OAC_WEB_BOOTSTRAP` | `0` | `1` accepts literal-IP hosts before a domain is configured. Requires an `http://` origin and `OAC_WEB_INSTALLATION_SOCKET` |
-
-An invalid `OAC_WEB_*` value stops the console at startup with a message naming the variable. The console also reads `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT` and `OAC_LOG_ADD_SOURCE` ([configuration](../configuration.md#appendix-core-environment-without-the-installer)); unknown values fall back to their defaults. Use HTTPS for any browser that is not on the same machine.
 
 ## Verification
 

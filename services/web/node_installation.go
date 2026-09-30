@@ -9,7 +9,10 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/providerassets"
 )
 
 // These are distribution artifacts, never installation configuration or secrets.
@@ -19,13 +22,16 @@ var nodePayloadFiles = map[string]bool{
 	"manifest.json":    true, "SHA256SUMS": true, "runtime/seccomp.json": true,
 }
 
-// An offline distribution exposes only artifacts declared for these payloads.
-var optionalPayloadFiles = map[string]bool{
-	"native/bin/oac-node": true, "native/bin/oac-daemon": true,
-	"native/bin/oac-microsandbox-provider": true,
-	"native/microsandbox/msb":              true, "native/microsandbox/libkrunfw.so.5.6.1": true,
-	"images/runtime.tar.gz": true, "runtime/seccomp.json": true,
-}
+// The generated adapter declarations bound the distribution payload endpoint.
+var optionalPayloadFiles = func() map[string]bool {
+	files := map[string]bool{}
+	for _, artifacts := range providerassets.Catalog() {
+		for _, artifact := range artifacts {
+			files[artifact.Path] = true
+		}
+	}
+	return files
+}()
 
 var payloadRevision = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
@@ -144,14 +150,6 @@ func (h *console) serveNodePayload(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
 }
 
-// providerArtifacts lists the artifacts a node of each provider downloads from
-// this console, besides the fixed payload files.
-var providerArtifacts = map[string][]string{
-	"docker": {"native/bin/oac-node", "images/runtime.tar.gz"},
-	"microsandbox": {"native/bin/oac-node", "images/runtime.tar.gz", "native/bin/oac-microsandbox-provider",
-		"native/microsandbox/msb", "native/microsandbox/libkrunfw.so.5.6.1"},
-}
-
 // nodeArtifacts reports the providers whose node artifacts this console can serve:
 // each is present locally or has a pinned release download. Nodes verify every
 // checksum themselves. It is read per
@@ -169,9 +167,10 @@ func (h *console) nodeArtifacts() []string {
 	if err != nil {
 		return available
 	}
-	for _, provider := range []string{"docker", "microsandbox"} {
+	for provider, artifacts := range providerassets.Catalog() {
 		complete := true
-		for _, logical := range providerArtifacts[provider] {
+		for _, artifact := range artifacts {
+			logical := artifact.Path
 			entry, ok := manifest.Artifacts[logical]
 			info, err := h.nodePayload.Stat(prefix + "artifacts/" + entry.Filename)
 			local := err == nil && info.Mode().IsRegular() && info.Size() == entry.Size
@@ -185,6 +184,7 @@ func (h *console) nodeArtifacts() []string {
 			available = append(available, provider)
 		}
 	}
+	sort.Strings(available)
 	return available
 }
 

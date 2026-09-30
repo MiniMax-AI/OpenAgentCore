@@ -17,6 +17,8 @@ func (s suspendSender) Send(ctx context.Context, env proto.Envelope) error { ret
 
 type suspendedSession struct{ cancelled atomic.Int32 }
 
+func (s *suspendedSession) CancellationOutcome() proto.DonePayload { return proto.DonePayload{} }
+
 func (s *suspendedSession) Cancel(context.Context) error { s.cancelled.Add(1); return nil }
 
 func suspensionRouter(t *testing.T, sender Sender) *Router {
