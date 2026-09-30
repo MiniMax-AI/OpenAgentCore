@@ -266,7 +266,7 @@ explicit operator configuration. Select the qualified native image using the
 [engine profile guides](../../contracts/agents-api/README.md#public-engine-profiles),
 then follow the [Docker setup](deploy/codex/README.md#standalone-operator-configuration).
 Core-managed hosting supports deployment-selected E2B, Docker or microsandbox;
-see the [nodes and sandbox backends reference](HOSTED-SANDBOX-MANAGER.md). For the separate
+see the [nodes guide](../../docs/getting-started/nodes.md). For the separate
 user-managed E2B path, see
 [E2B Runtime packaging](deploy/e2b/README.md).
 Core remains independently deployed with its own database. Public idle and initial
@@ -469,7 +469,7 @@ V1 uses our daemon as the user-side executor. Deploy daemon, selected harness,
 local tools and protected `/workspace` together using the shared Runtime. For this caller-managed path, the user owns local or E2B allocation, renewal
 and destruction; use the official E2B SDK through the
 [E2B guide](deploy/e2b/README.md). Deployment-managed E2B, Docker and microsandbox
-are separate hosted choices in the [nodes and sandbox backends reference](HOSTED-SANDBOX-MANAGER.md).
+are separate hosted choices in the [nodes guide](../../docs/getting-started/nodes.md).
 
 Create a Session with `environment={"type":"self_hosted",
 "workspace_directory":"/workspace"}` and empty/default capability directories.
@@ -678,9 +678,8 @@ success alone establishes neither native readiness nor filesystem isolation.
 ## Hosted sandbox nodes
 
 The release includes `oac-node` for local and remote hosts. Add nodes with
-Web's one-command flow in the [nodes guide](../../docs/getting-started/nodes.md); the
-[operator reference](HOSTED-SANDBOX-MANAGER.md) covers provider selection, manual
-registration, administrator credentials, fixed Session placement and reset.
+Web's one-command flow in the [nodes guide](../../docs/getting-started/nodes.md), which
+also covers provider selection, manual registration and reset.
 
 Implementation rules for hosted sandbox nodes and optional suspension are in
 [Agents API implementation constraints](IMPLEMENTATION.md#hosted-sandbox-nodes-and-optional-suspension).

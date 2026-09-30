@@ -313,7 +313,7 @@ Environment provides isolation.
 
 | Kind | Adapter | Helper | Operator guide |
 | --- | --- | --- | --- |
-| Docker (node) | [`sandbox/docker`](../services/agents-api/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/agents-api/internal/sandbox/node) | [Hosted sandbox manager](../services/agents-api/HOSTED-SANDBOX-MANAGER.md) |
+| Docker (node) | [`sandbox/docker`](../services/agents-api/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/agents-api/internal/sandbox/node) | [Nodes](getting-started/nodes.md) |
 | microsandbox (node) | [`sandbox/microsandbox`](../services/agents-api/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](../services/agents-api/tools/microsandbox-provider) | [`deploy/microsandbox`](../services/agents-api/deploy/microsandbox/README.md) |
 | E2B (direct) | [`sandbox/e2b`](../services/agents-api/internal/sandbox/e2b) | [`tools/e2b-provider`](../services/agents-api/tools/e2b-provider/README.md) | [`deploy/e2b`](../services/agents-api/deploy/e2b/README.md) |
 

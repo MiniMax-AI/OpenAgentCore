@@ -13,9 +13,8 @@ files and configuration. Native harness startup and shutdown retain their existi
 behavior. This profile uses microsandbox v0.7.2; the helper performs one finite
 operation and exits.
 
-Start with the [installation guide](../../../../docs/getting-started/install.md),
-the [nodes guide](../../../../docs/getting-started/nodes.md) and the
-[nodes operator reference](../../HOSTED-SANDBOX-MANAGER.md). The
+Start with the [installation guide](../../../../docs/getting-started/install.md)
+and the [nodes guide](../../../../docs/getting-started/nodes.md). The
 [deployment configuration contract](../../../../contracts/agents-api/sandbox-deployment.md)
 defines the saved selection, resources, Runtime identity and node authorization.
 The [provider contract](../../tools/microsandbox-provider/README.md) describes
@@ -35,7 +34,7 @@ microsandbox; Docker and E2B retain their own supported lifecycle.
 Same-provider resource and Runtime edits currently require no active reset,
 the current generation and verified zero held allocations or pending Environments.
 A backend change requires explicit reset and confirmed cleanup, then a new setup.
-See the [reset procedure](../../HOSTED-SANDBOX-MANAGER.md#removal-and-reset).
+See the [reset procedure](../../../../docs/getting-started/nodes.md#change-the-sandbox-configuration).
 Stopped compute, snapshots and unknown operations remain blockers. Keep the original
 node identity, paths and credentials until cleanup is confirmed. Explicit archive
 preserves history and persisted Files/Artifacts but discards unpersisted workspace;

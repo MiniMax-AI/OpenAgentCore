@@ -46,7 +46,6 @@ BUNDLED_DOCS = (
     "docs/getting-started/operations.md",
     "docs/getting-started/quickstart.md",
     "docs/getting-started/self-hosted.md",
-    "services/agents-api/HOSTED-SANDBOX-MANAGER.md",
     "contracts/agents-api/environment-executor-credentials.md",
 )
 # Files the bundled docs show, copied as they are, so they work offline.

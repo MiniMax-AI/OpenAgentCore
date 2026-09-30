@@ -65,7 +65,7 @@ still differ. See the [accepted scope and evidence](#accepted-milestone-and-evid
 The same three harnesses passed historical Core-managed E2B V1 qualification in
 PR #705. That original route is historical evidence; it does not qualify the later
 user-managed enrollment or current deployment-level E2B configuration. See the
-[current hosted provider contract](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md). The [user-managed V1 qualification](user-managed-runtime-v1.md)
+[current hosted provider contract](sandbox-deployment.md). The [user-managed V1 qualification](user-managed-runtime-v1.md)
 records separate real deployment acceptance and its exact scope.
 Select further work only within current user authorization. Parsar cutover and
 business Team orchestration are separate from protocol coverage.
@@ -168,7 +168,7 @@ new model-issued command after a recovery prompt, not automatic API replay.
 
 This is historical evidence for the original Core-managed E2B route. Current
 deployment-level E2B configuration is documented in the
-[Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md).
+[sandbox deployment contract](sandbox-deployment.md).
 This older run does not qualify later enrollment/configuration changes or transfer
 caller-owned compute to Core.
 

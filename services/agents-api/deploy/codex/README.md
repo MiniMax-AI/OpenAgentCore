@@ -96,7 +96,7 @@ Core host joins through the same command as any other host.
 Same-provider resource and Runtime edits currently require no active reset,
 the current generation and verified zero held allocations or pending Environments.
 A backend change requires explicit reset and confirmed cleanup, then a new setup.
-See the [reset procedure](../../HOSTED-SANDBOX-MANAGER.md#removal-and-reset).
+See the [reset procedure](../../../../docs/getting-started/nodes.md#change-the-sandbox-configuration).
 Stopped compute, snapshots and unknown operations remain blockers. Keep the original
 node identity, paths and credentials until cleanup is confirmed. Explicit archive
 preserves history and persisted Files/Artifacts but discards unpersisted workspace;

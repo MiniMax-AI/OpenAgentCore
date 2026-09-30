@@ -8,7 +8,7 @@ Session may instead select its exact canonical physical directory. The
 [recorded deployment qualification](user-managed-runtime-v1.md) retains its historical
 source, paths and tested capability scope.
 For hosted compute, the deployment selects E2B, Docker or microsandbox through
-[Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md).
+[sandbox deployment](sandbox-deployment.md).
 For the separate caller-managed E2B path, the user owns allocation, renewal and
 cleanup through the official SDK and [Runtime packaging](../../services/agents-api/deploy/e2b/README.md).
 [Templates](environment-templates.md) provide reusable preparation; the Core extension also applies their execution configuration to user-managed machines;

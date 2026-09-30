@@ -21,13 +21,13 @@
     "slug": "install",
     "source": "docs/getting-started/install.md",
     "title": "Install Core and Web",
-    "description": "Current distribution, host prerequisites, HTTPS, first sign-in and installation options."
+    "description": "Host prerequisites, installation, HTTPS, first sign-in, a default model and the first Project API key."
   },
   {
     "slug": "install-options",
     "source": "docs/getting-started/install-options.md",
-    "title": "Installation options",
-    "description": "Listener addresses, ports and initial installation choices."
+    "title": "Installation options and advanced deployments",
+    "description": "Installer flags, sandbox backends, listeners, reverse proxies, split and native deployments and offline hosts."
   },
   {
     "slug": "configure",

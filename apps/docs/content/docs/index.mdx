@@ -3,40 +3,34 @@ title: "OpenAgentCore documentation"
 description: "Install Core and Web, create a Project API key, and add execution capacity."
 ---
 
-OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents
-API. Pick the path that matches your role. New here? Read the
-[architecture overview](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/architecture.md) first.
+OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents API. The [architecture overview](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/architecture.md) explains its parts. Pick the guides for your role.
 
-## Operators: install and run
+## Operators
 
-1. [Install Core and Web](/install) and sign in.
-2. Add execution capacity: [managed nodes or E2B](/hosted-providers), or
-   [your own machine](/self-hosted-execution).
-3. Issue a Project API key and hand it to the application developer.
+Operators install Core and Web, add sandbox capacity and issue Project API keys.
 
 | Guide | Covers |
 | --- | --- |
-| [Installation](/install) | Prerequisites, HTTPS, first sign-in, advanced options |
-| [Configuration](/configure) | `config.json`, default models, sandbox deployment |
-| [Nodes](/hosted-providers) | Adding, checking and removing managed nodes |
-| [Self-hosted execution](/self-hosted-execution) | Connecting your own machine to a Session |
-| [Operations](/troubleshooting) | Services, backups, keys, repair and troubleshooting |
+| [Install Core and Web](/install) | The default installation, from an empty host to the first Project API key |
+| [Installation options](/install-options) | Installer flags, existing reverse proxies, split and native deployments, offline hosts |
+| [Nodes](/hosted-providers) | Adding, changing, removing and troubleshooting sandbox nodes |
+| [Operations](/troubleshooting) | The `oac` command, the Core key, backups, upgrades and troubleshooting |
+| [Configuration reference](/configure) | Every setting, file and environment variable |
 | [Web console](/console) | What the console shows and manages |
 
-## Application developers: build on the API
+## Application developers
+
+Application developers call the API with a Project API key, and can run Sessions on machines they own.
 
 | Guide | Covers |
 | --- | --- |
 | [Quickstart](/quickstart) | From a Project API key to a finished Session |
 | [User guide](/user-guide) | Common tasks: harness and model choice, follow-ups, capabilities, files, cancel |
 | [Agents API guide](/sessions) | Every resource, with SDK and HTTP examples |
+| [Self-hosted execution](/self-hosted-execution) | Running a Session on your own machine |
 | [Examples](/examples) | Complete applications built on the API |
 | [API index](/public-api) | All three namespaces and their credentials |
 
-## Contributors: extend Core
-
-Start with the [developer guide](/development): repository map, local setup,
-and how to add a Sandbox Provider, a harness or a Runtime feature. Repository rules
-are in [CONTRIBUTING.md](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md).
+Contributors start with the [developer guide](/development) and [CONTRIBUTING.md](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md).
 
 [Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/README.md)

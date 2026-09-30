@@ -465,11 +465,6 @@
     "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
   },
   {
-    "path": ".env.example",
-    "regex": "(?:AGENTS_API_|AGENTS_CORE_WEB_)[A-Z0-9_]*\\*?",
-    "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
-  },
-  {
     "path": "apps/web/PRODUCT.md",
     "regex": "(?:AGENTS_API_|AGENTS_CORE_WEB_)[A-Z0-9_]*\\*?",
     "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
@@ -580,11 +575,6 @@
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
   },
   {
-    "path": "docs/configuration.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
     "path": "contracts/agents-api/environment-templates.md",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
@@ -610,11 +600,6 @@
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
   },
   {
-    "path": "services/agents-api/HOSTED-SANDBOX-MANAGER.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
     "path": "services/agents-api/deploy/codex/README.md",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
@@ -630,24 +615,9 @@
     "reason": "Documents the one old stored reference prefix rewritten by the guarded database migration."
   },
   {
-    "path": "docs/getting-started/install.md",
-    "regex": "~?/\\.parsar/core",
-    "reason": "The installer refuses the old default installation and directs the operator to conversion."
-  },
-  {
-    "path": "docs/getting-started/nodes.md",
-    "regex": "parsar-node(?:-[A-Za-z0-9<>_.-]*)?|\\.parsar/nodes",
-    "reason": "The legacy-node section gives scoped uninstall instructions; new installation and enrollment examples use oac-node."
-  },
-  {
     "path": "docs/getting-started/operations.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|parsar(?:[A-Za-z0-9_.*/-]*)|agents-api(?:-[a-z0-9*-]+)?|core-console|agents-runtime-",
-    "reason": "The conversion and retirement table must name the exact old commands, paths, labels, settings and retained backups that operators migrate."
-  },
-  {
-    "path": "docs/getting-started/operations.md",
-    "regex": "Parsar-product hooks",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
+    "regex": "~/\\.parsar/core",
+    "reason": "A default install refuses while this path holds an installation of an earlier release; the troubleshooting row names it."
   },
   {
     "path": "scripts/verify-source-copy.py",
@@ -695,29 +665,9 @@
     "reason": "Generated copy of docs/web/architecture.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
-    "path": "apps/docs/content/docs/install.mdx",
-    "regex": "~?/\\.parsar/core",
-    "reason": "Generated copy of docs/getting-started/install.md: The installer refuses the old default installation and directs the operator to conversion."
-  },
-  {
-    "path": "apps/docs/content/docs/configure.mdx",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "Generated copy of docs/configuration.md: These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
-    "path": "apps/docs/content/docs/hosted-providers.mdx",
-    "regex": "parsar-node(?:-[A-Za-z0-9<>_.-]*)?|\\.parsar/nodes",
-    "reason": "Generated copy of docs/getting-started/nodes.md: The legacy-node section gives scoped uninstall instructions; new installation and enrollment examples use oac-node."
-  },
-  {
     "path": "apps/docs/content/docs/troubleshooting.mdx",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|parsar(?:[A-Za-z0-9_.*/-]*)|agents-api(?:-[a-z0-9*-]+)?|core-console|agents-runtime-",
-    "reason": "Generated copy of docs/getting-started/operations.md: The conversion and retirement table must name the exact old commands, paths, labels, settings and retained backups that operators migrate."
-  },
-  {
-    "path": "apps/docs/content/docs/troubleshooting.mdx",
-    "regex": "Parsar-product hooks",
-    "reason": "Generated copy of docs/getting-started/operations.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
+    "regex": "~/\\.parsar/core",
+    "reason": "Generated copy of docs/getting-started/operations.md: A default install refuses while this path holds an installation of an earlier release; the troubleshooting row names it."
   },
   {
     "path": "apps/docs/lib/legacy-redirects.ts",

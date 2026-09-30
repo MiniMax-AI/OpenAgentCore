@@ -23,9 +23,8 @@ container or native, is independent of the provider.
 PostgreSQL owns the provider, per-sandbox resources and immutable Runtime release.
 The node installs that specification and retains its generation and digest; local
 provider files cannot override it. See the
-[deployment contract](../../../../contracts/agents-api/sandbox-deployment.md),
-[nodes guide](../../../../docs/getting-started/nodes.md) and
-[nodes operator reference](../../HOSTED-SANDBOX-MANAGER.md). Core no longer accepts a
+[deployment contract](../../../../contracts/agents-api/sandbox-deployment.md)
+and [nodes guide](../../../../docs/getting-started/nodes.md). Core no longer accepts a
 file-managed startup selection or automatically adopts an older file-managed
 database.
 

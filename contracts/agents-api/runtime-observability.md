@@ -148,7 +148,7 @@ Core restart and browser reload without replaying execution.
 
 See the [design](runtime-observability-design.md),
 [current API](runtime-observability-api.md), [history API](runtime-history-api.md)
-and [configuration](../../services/agents-api/runtime-history/README.md).
+and [configuration](../../docs/configuration.md#settings).
 Additional provider telemetry and idle-policy authority remain separate work.
 
 The OTLP resource identifies Core with `service.name=oac-core` and

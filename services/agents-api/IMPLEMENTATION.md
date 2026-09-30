@@ -1345,7 +1345,7 @@ Web exposes one root/sudo command; do not retain a user-service alternative. Thi
 boundary is specific to Sandbox Provider nodes, not native self-hosted daemons.
 
 Node management (Web's **Nodes** page; see the
-[operator reference](HOSTED-SANDBOX-MANAGER.md)) is a
+[nodes guide](../../docs/getting-started/nodes.md)) is a
 deployment-level admin surface, separate from Project credentials. The paired
 console's Core key stays on its server. Enrollment credentials authorize
 initial node configuration reads and registration; durable node credentials authorize

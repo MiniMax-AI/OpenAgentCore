@@ -47,7 +47,7 @@ Most boundaries still span several files; the listed file or directory is the en
 - Each setting and each piece of data is written in one place and read from that place, with no second copy, no environment-variable or file fallback and no alias.
 - Configuration files are grouped by category, never scattered. A new setting joins its category and lives beside its peers.
 
-The categories are [process settings](docs/configuration.md#process-settings-configjson), [derived files](docs/configuration.md#how-oac-apply-works), [secrets](docs/configuration.md#secrets-and-identity), and Core's database for [runtime settings](docs/configuration.md#runtime-settings-web) and execution data. [Configuration](docs/configuration.md) owns the installation layout and the settings themselves.
+The categories are [process settings](docs/configuration.md#process-settings-configjson), [derived files](docs/configuration.md#how-oac-apply-works), [secrets](docs/configuration.md#installation-directory), and Core's database for [runtime settings](docs/configuration.md#runtime-settings-web) and execution data. [Configuration](docs/configuration.md) owns the installation layout and the settings themselves.
 
 ### Pre-release: no compatibility layers
 
