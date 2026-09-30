@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"sync/atomic"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/obs/log"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
@@ -106,6 +106,8 @@ func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (e
 		if err != nil {
 			return execution.PreparedRuntimeDeployment{}, err
 		}
+	} else if !errors.Is(err, providercontract.ErrUnsupported) {
+		return execution.PreparedRuntimeDeployment{}, err
 	}
 	candidate.Selection = &selection
 	return s.routeGenerations(candidate, setup)
