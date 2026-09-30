@@ -86,7 +86,7 @@ class NativeServiceTests(unittest.TestCase):
         self.assertNotIn("DATABASE_URL", self.unit_path().read_text())
         self.run.assert_not_called()
 
-    def test_repeat_keeps_binary_inodes_and_only_a_conversion_replaces_them(self):
+    def test_repeat_keeps_binary_inodes(self):
         self.prepare()
         paths = [self.root / "native" / name for name in service.REQUIRED]
         for path in (self.root / "native", *paths):
@@ -94,9 +94,6 @@ class NativeServiceTests(unittest.TestCase):
         original = [(path.stat().st_ino, path.stat().st_mtime_ns, path.read_bytes()) for path in paths]
         self.prepare()
         self.assertEqual(original, [(path.stat().st_ino, path.stat().st_mtime_ns, path.read_bytes()) for path in paths])
-        (self.bundle / "native/bin/oac-core").write_bytes(b"\x7fELFnewer release")
-        service.prepare(self.root, self.state, self.bundle, replace=True)
-        self.assertEqual((self.root / "native/bin/oac-core").read_bytes(), b"\x7fELFnewer release")
         self.assertEqual(sorted(path.name for path in self.root.iterdir()), ["generated", "native"])
 
     def test_changed_payload_refuses_without_overwriting_installed_binary(self):

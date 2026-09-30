@@ -239,7 +239,10 @@ affect a later reservation or Turn. Evaluate deadlines after acquiring the Sessi
 lock, and return terminal storage outcomes without rolling their transaction back.
 
 A validated Runtime `failed` response with `preparation_failed` and no Run settles
-the pending input immediately with `runtime_preparation_failed`. It records a
+the pending input immediately with `runtime_preparation_failed`. Before admission,
+a rejection of the current `execution_prepare` request with no Run and code
+`invalid_configuration`, `unsupported_configuration` or `unsupported_preparation`
+settles through that same failure path. It records a
 safe Session failure before any Turn exists and releases the input gate; fixing
 the local cause allows new input. Transport loss, capacity rejection and
 unconfirmed cleanup remain retryable within the original deadline. Core uses

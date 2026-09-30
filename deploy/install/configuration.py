@@ -200,11 +200,6 @@ def settings_document(root, config, applied_at):
             "applied_at": applied_at, "settings": config_model.settings(config)}
 
 
-
-def conversion_labels(state):
-    return {"io.oac.installation": state["installation_id"], "io.oac.conversion": state["renamed_from"]["at"]}
-
-
 def compose_config(root, config, state):
     root = Path(root)
     mode, native = config["mode"], config.get("native_core", False)
@@ -227,10 +222,6 @@ def compose_config(root, config, state):
                             "interval": "2s", "timeout": "5s", "retries": 30},
         }
         doc["volumes"] = {"database": {}}
-        if state.get("renamed_from"):
-            # Keep the exact copied-volume definition: Compose must never offer
-            # to replace a populated conversion volume because its labels differ.
-            doc["volumes"]["database"]["labels"] = conversion_labels(state)
         if native:
             services["database"]["ports"] = [f'127.0.0.1:{config["ports"]["database"]}:5432']
         else:

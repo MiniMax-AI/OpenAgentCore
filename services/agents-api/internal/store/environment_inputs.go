@@ -185,6 +185,9 @@ func (s *Store) FailEnvironmentInput(ctx context.Context, tenantID, sessionID, r
 		return err
 	}
 	return s.withEnvironmentInputSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
+		if err := q.ExpireEnvironmentInputReservation(ctx, sqlc.ExpireEnvironmentInputReservationParams{SessionID: session, ID: id}); err != nil {
+			return err
+		}
 		_, err := q.FailEnvironmentInput(ctx, sqlc.FailEnvironmentInputParams{SessionID: session, ID: id, FailureCode: pgtype.Text{String: code, Valid: true}})
 		return err
 	})

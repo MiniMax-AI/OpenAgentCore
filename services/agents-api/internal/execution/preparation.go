@@ -107,6 +107,13 @@ func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session strin
 			}
 			status, err := prepared.observation(env)
 			if err != nil {
+				var rejection *preparationRejection
+				if status.RunID == "" && errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionPrepare {
+					switch rejection.code {
+					case "invalid_configuration", "unsupported_configuration", "unsupported_preparation":
+						return pending, errPreparationFailed
+					}
+				}
 				return pending, err
 			}
 			if status.State == "ready" && status.RunID == "" && status.ExecutorID != "" {

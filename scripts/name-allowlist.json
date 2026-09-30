@@ -35,11 +35,6 @@
     "reason": "This directory is the immutable source-copy audit trail, not current installation guidance."
   },
   {
-    "path": "deploy/install/testdata/*",
-    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b",
-    "reason": "Historical configuration generators intentionally reproduce the exact old input layouts used by conversion tests."
-  },
-  {
     "path": "packages/agents-client/src/*",
     "regex": "(?:\\./)?fixtures/parsar-[0-9a-f]+/[A-Za-z0-9_./-]+",
     "reason": "Fixture directory paths identify historical product protocol snapshots."
@@ -123,16 +118,6 @@
     "path": "services/agents-api/migrations/000078_oac_runtime_names.sql",
     "regex": "parsar-core-runtime@",
     "reason": "The guarded up/down data migration must recognize and restore the historical stored Runtime reference prefix."
-  },
-  {
-    "path": "deploy/install/convert.py",
-    "regex": "AGENTS_API_[A-Z0-9_]+|CORE_CONSOLE_[A-Z0-9_]+|PARSAR_[A-Z0-9_]+",
-    "reason": "Historical environment keys are conversion inputs used to reconstruct and validate the old generated files."
-  },
-  {
-    "path": "deploy/install/test_convert.py",
-    "regex": "AGENTS_API_[A-Z0-9_]+|CORE_CONSOLE_[A-Z0-9_]+|PARSAR_[A-Z0-9_]+",
-    "reason": "Conversion fixtures exercise historical input settings and refusal of incompatible old installations."
   },
   {
     "path": "*",
@@ -358,36 +343,6 @@
     "path": "services/agents-api/migrations/000075_public_url_binding.sql",
     "regex": "AGENTS_API_PUBLIC_URL",
     "reason": "Historical migration commentary records the environment name used when this migration was written."
-  },
-  {
-    "path": "deploy/install/convert.py",
-    "regex": "(?i:parsar)(?:[A-Za-z0-9_.*/-]*)|\\bagents-api(?:-(?:migrate|e2b-provider))?\\b|\\bAGENTS_API_[A-Z0-9_]+",
-    "reason": "These matched legacy identifiers identify and validate old installation inputs, ownership, service files, backups or resumable conversion fixtures."
-  },
-  {
-    "path": "deploy/install/rename.py",
-    "regex": "(?i:parsar)(?:[A-Za-z0-9_.*/-]*)|\\bagents-api(?:-(?:migrate|e2b-provider))?\\b|\\bAGENTS_API_[A-Z0-9_]+",
-    "reason": "These matched legacy identifiers identify and validate old installation inputs, ownership, service files, backups or resumable conversion fixtures."
-  },
-  {
-    "path": "deploy/install/test_convert.py",
-    "regex": "(?i:parsar)(?:[A-Za-z0-9_.*/-]*)|\\bagents-api(?:-(?:migrate|e2b-provider))?\\b|\\bAGENTS_API_[A-Z0-9_]+",
-    "reason": "These matched legacy identifiers identify and validate old installation inputs, ownership, service files, backups or resumable conversion fixtures."
-  },
-  {
-    "path": "deploy/install/test_rename.py",
-    "regex": "(?i:parsar)(?:[A-Za-z0-9_.*/-]*)|\\bagents-api(?:-(?:migrate|e2b-provider))?\\b|\\bAGENTS_API_[A-Z0-9_]+",
-    "reason": "These matched legacy identifiers identify and validate old installation inputs, ownership, service files, backups or resumable conversion fixtures."
-  },
-  {
-    "path": "deploy/install/installer_fakes.py",
-    "regex": "(?i:parsar)(?:[A-Za-z0-9_.*/-]*)|\\bagents-api(?:-(?:migrate|e2b-provider))?\\b|\\bAGENTS_API_[A-Z0-9_]+",
-    "reason": "These matched legacy identifiers identify and validate old installation inputs, ownership, service files, backups or resumable conversion fixtures."
-  },
-  {
-    "path": "deploy/install/native_service.py",
-    "regex": "(?i:parsar)(?:[A-Za-z0-9_.*/-]*)|\\bagents-api(?:-(?:migrate|e2b-provider))?\\b|\\bAGENTS_API_[A-Z0-9_]+",
-    "reason": "These matched legacy identifiers identify and validate old installation inputs, ownership, service files, backups or resumable conversion fixtures."
   },
   {
     "path": "deploy/install/node_install.py",
