@@ -325,13 +325,13 @@ func (f *computeLifecycleFixture) create() (string, store.Session, store.Environ
 	tenant, session, environment := managedSession(t, f.store)
 	owner, err := f.worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, f.key)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("provision environment: %v", err)
 	}
 	f.provider.mu.Lock()
 	b := f.provider.bootstraps[owner.ID]
 	f.provider.mu.Unlock()
 	if err := f.provider.connect(t.Context(), b); err != nil {
-		t.Fatal(err)
+		t.Fatalf("connect runtime: %v", err)
 	}
 	owner = f.phase(tenant, environment.ID, "running")
 	return tenant, session, environment, owner
