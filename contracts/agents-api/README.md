@@ -33,7 +33,7 @@ with official observations separated from Core acceptance.
 
 Adapter and persistence design follows the
 [design rules](../../AGENTS.md#complexity-stays-in-the-adapter).
-The [harness contract and parity baseline](harnesses.md) describes equal-engine
+The [harness contract and parity baseline](harness-capabilities.md) describes equal-engine
 registration, qualification and shared acceptance.
 Verify configuration against actual execution: response defaults must not merely
 describe values the adapter never applied.
@@ -65,7 +65,7 @@ still differ. See the [accepted scope and evidence](#accepted-milestone-and-evid
 The same three harnesses passed historical Core-managed E2B V1 qualification in
 PR #705. That original route is historical evidence; it does not qualify the later
 user-managed enrollment or current deployment-level E2B configuration. See the
-[current hosted provider contract](sandbox-deployment.md). The [user-managed V1 qualification](user-managed-runtime-v1.md)
+[current hosted provider contract](sandbox-deployment.md). The [user-managed qualification](harness-capabilities.md)
 records separate real deployment acceptance and its exact scope.
 Select further work only within current user authorization. Parsar cutover and
 business Team orchestration are separate from protocol coverage.
@@ -96,19 +96,19 @@ paths start at `/vaults`, not `/agents/vaults`.
 | Resource | Upstream operations | Current coverage |
 | --- | --- | --- |
 | Root reusable Agents | create, retrieve, update, list, delete | Partial create/retrieve/update/list/delete and Session references; configuration/error gaps remain |
-| Skills and Versions | create, retrieve, update default, list, delete, content | [Tenant-owned encrypted bundles and hosted references](environment-templates.md); [default metadata/content and deletion evidence](file-resource-semantics.md), qualified upload limits and unresolved semantics |
+| Skills and Versions | create, retrieve, update default, list, delete, content | [Tenant-owned encrypted bundles and hosted references](environments.md#skills); [default metadata/content and deletion evidence](file-resource-semantics.md), qualified upload limits and unresolved semantics |
 | sessions | create, retrieve, update, list, delete | Create (ordinary/live), retrieve, list with root-Agent filter, metadata-only update, [idle-only public deletion](official-semantics-alignment.md#session-deletion-lifecycle--september-23) with idempotent owner repeat and owned Docker cleanup; user-managed compute stays caller-owned; general physical cleanup and exact hosted semantics remain open |
 | sessions.events | create, stream | Text/cancel/function-result admission and live events; function-action state snapshots supported |
 | sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
 | sessions.items | list | Partial Item variants |
-| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](user-managed-runtime-v1.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss. [Aligned](official-semantics-alignment.md#artifact-capture-and-listing--september-23) output symlink skipping, unchanged-path non-republication, the list envelope and malformed filters; exact upstream defaults/errors, hard-link/special-file capture and cancellation-edge parity remain unverified |
+| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](harness-capabilities.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss. [Aligned](official-semantics-alignment.md#artifact-capture-and-listing--september-23) output symlink skipping, unchanged-path non-republication, the list envelope and malformed filters; exact upstream defaults/errors, hard-link/special-file capture and cancellation-edge parity remain unverified |
 | sessions.subagents | retrieve, list | [Three-harness Docker reads, native lifecycle limits and real evidence](subagents.md); full multi-agent semantics remain partial |
-| sessions.subagents.items | list | Qualified own-child history reads; [limit clamping and the list envelope](subagents.md#subagent-visibility--september-23-2026) aligned; full Item variants remain partial. Child work is not streamed on the Session, as observed officially |
+| sessions.subagents.items | list | Qualified own-child history reads; [limit clamping and the list envelope](subagents.md#subagent-visibility) aligned; full Item variants remain partial. Child work is not streamed on the Session, as observed officially |
 | sessions.subagents.turns | retrieve, list | Implemented; child Turns carry the Session's Agent ID and are not Session Turns |
 | sessions.subagents.turns.items | list | Implemented; scoped persisted reads |
 | environments | retrieve | Three-harness colocated self-hosted implementation and qualified Docker hosted profiles: durable status and safe initial-file metadata; other installation inventory and full lifecycle parity remain gaps |
-| environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker workspaces; [user-managed enrollment](user-managed-runtime-v1.md) reuses the local implementation with separate real public acceptance. [Aligned](environment-files.md#wire-alignment--september-23-2026) the 201 status, page envelope, query keys, empty pages for non-directory paths on local workspace readers, sampled path/token errors and pending hosted rejection; [aligned](environment-files.md#write-semantics--september-23-2026) parent creation, no-replacement and the 5 MiB inline bound; recursion and other errors remain partial |
-| environments.templates | create, retrieve, update, list, delete | [Reusable network, files, env/setup/packages, inline/referenced Skills and Session snapshots](environment-templates.md); other initialization and full semantics remain gaps |
+| environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker workspaces; [user-managed enrollment](harness-capabilities.md) reuses the local implementation with separate real public acceptance. [Aligned](environment-files.md#wire-alignment--september-23-2026) the 201 status, page envelope, query keys, empty pages for non-directory paths on local workspace readers, sampled path/token errors and pending hosted rejection; [aligned](environment-files.md#write-semantics--september-23-2026) parent creation, no-replacement and the 5 MiB inline bound; recursion and other errors remain partial |
+| environments.templates | create, retrieve, update, list, delete | [Reusable network, files, env/setup/packages, inline/referenced Skills and Session snapshots](environments.md#templates); other initialization and full semantics remain gaps |
 | vaults | create, retrieve, list, delete | Create/retrieve/list/delete with independent tenant persistence, stored status filtering, atomic Credential cascade and frozen Session attachments; archive semantics and full hosted lifecycle parity remain missing |
 | vaults.credentials | create, retrieve, update, list, delete | Static-bearer and OAuth create/retrieve/list/replacement/deletion with scoped encrypted storage and dispatch-time refresh; Session attachment and exact-URL HTTPS MCP binding; archive semantics and full hosted lifecycle parity remain missing |
 
@@ -195,9 +195,9 @@ user-managed enrollment remain outside this qualification.
 | Area | Missing or unverified scope |
 | --- | --- |
 | Subagents / multi_agent | Six reads and same-child recovery have three-harness Docker evidence; optional native operations, live child progress, full lifecycle/interactions and tool combinations remain explicit gaps |
-| Environment Templates | Unsupported restricted hostname forms and exact hosted errors remain gaps. Referenced null network and capability-list selection follow [qualified inheritance rules](template-null-selection.md). Template-reference env/files/commands/packages composition follows [qualified field rules](environment-templates.md#template-and-inline-configuration-composition). CRUD/list, files, env/setup/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. System-package and inner-isolation evidence is historical; current `packages.system` rejects and the daemon adds no sandbox. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
-| Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](structured-output.md) has qualified Claude function profiles on none and Core-managed Docker openai_hosted, with other combinations remaining gaps |
-| Tools and interactions | [Deferred discovery qualification](tool-search.md), other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
+| Environment Templates | Unsupported restricted hostname forms and exact hosted errors remain gaps. Referenced null network and capability-list selection follow [qualified inheritance rules](environments.md#inheritance). Template-reference env/files/commands/packages composition follows [qualified field rules](environments.md#inheritance). CRUD/list, files, env/setup/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. System-package and inner-isolation evidence is historical; current `packages.system` rejects and the daemon adds no sandbox. Environment Plugin MCP transport and placement limits are [listed separately](environments.md#plugin-mcp) |
+| Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](execution-tools.md#structured-output) has qualified Claude function profiles on none and Core-managed Docker openai_hosted, with other combinations remaining gaps |
+| Tools and interactions | [Deferred discovery qualification](execution-tools.md#deferred-function-discovery), other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
 | Vault and Credentials | Archive semantics, in-flight token withdrawal and exact hosted selection/error behavior; static/OAuth CRUD, replacement and scoped dispatch-time refresh are implemented (see credential guide for qualification) |
 | Existing resources | Full Item/SSE/Usage variants, omitted/null/default/error semantics, pagination and overlapping lifecycle behavior beyond recorded cases |
 
@@ -290,7 +290,7 @@ upgrade the protocol.
   multi-agent settings default to six concurrent subagents. Function defer-loading
   defaults to false and programmatic tool calling to true. Saving these values
   does not itself admit a native execution. Session references are admitted separately.
-- [Explicit disabled tools](tool-policy.md) can be saved, used inline or resolved from saved Agents:
+- [Explicit disabled tools](execution-tools.md#web-search-and-programmatic-tool-calling) can be saved, used inline or resolved from saved Agents:
   `web_search.mode=disabled` and `programmatic_tool_calling.enabled=false`. Search
   responses include `context_size=medium` for omitted/null size, nullable domains
   and location; an empty domain list stays empty. Saved Agents keep every pinned
@@ -434,13 +434,13 @@ upgrade the protocol.
   Remaining unsupported installation configuration, full hosted lifecycle and
   exact hosted error semantics remain gaps.
 
-[Environment Templates](environment-templates.md) provide tenant-owned CRUD/list
+[Environment Templates](environments.md#templates) provide tenant-owned CRUD/list
 and immutable Session resolution through common Environment preparation.
 The `x_agents_core.environment` extension supplies that configuration to either
 placement; self-hosted machines never need a managed allocation. See
-[shared preparation qualification](environment-preparation-qualification.md). They do not
+[shared preparation qualification](harness-capabilities.md#environment-preparation). They do not
 select an E2B image or make unsupported initialization executable.
-The supported Docker configuration has [composed real acceptance](environment-templates.md#composed-initialization-acceptance)
+The supported Docker configuration has [composed real acceptance](harness-capabilities.md#environment-preparation)
 across the three harnesses, including frozen source deletion, cold continuation
 and cancellation. This does not close the remaining protocol/transport gaps.
 
@@ -461,12 +461,12 @@ and cancellation. This does not close the remaining protocol/transport gaps.
 ### Public engine profiles
 
 `OAC_DEFAULT_HARNESS` supplies the default for new Sessions. The optional
-[Core harness extension](harness-selection.md) explicitly selects an enabled engine;
+[Core harness extension](model-execution.md#harness-selection) explicitly selects an enabled engine;
 existing Sessions retain their immutable choice. `OAC_HARNESSES` explicitly
 adds installed deployment profiles without requiring a managed Provider. Model
 identity is independent.
 All three profiles require implicit reasoning and service tier `auto`. Ordinary
-text output is the baseline; [structured output](structured-output.md) has a
+text output is the baseline; [structured output](execution-tools.md#structured-output) has a
 separately qualified Claude profile. Enabled `multi_agent` qualification is tracked separately in
 [Subagents](subagents.md); other profiles continue to reject unsupported execution. Optional tools/configuration are qualified per
 operation and placement; native support is not public admission by itself.
@@ -478,14 +478,14 @@ operation and placement; native support is not public admission by itself.
 | `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; Environment-origin HTTP MCP with null/omitted allowlist and optional initialization; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
 
 All three profiles implement user-managed `self_hosted` enrollment at `/workspace`
-through our private daemon transport; [separate real acceptance](user-managed-runtime-v1.md)
+through our private daemon transport; [separate real acceptance](harness-capabilities.md)
 records qualified deployments and limits. A `self_hosted` Session supplies its own
 model provider in the request or through a saved Agent; deployment defaults apply
 to `openai_hosted` and `none`, never to `self_hosted` ([model execution](model-execution.md)). Service-origin HTTP MCP is rejected on `self_hosted` and hosted local
 placements. Explicit Environment-origin HTTP declarations use the same Runtime
 binding path as Plugin MCP; see the [origin matrix](environments.md#public-mcp-connection-origin)
-and [public qualification](public-mcp-qualification.md).
-The [Docker lifecycle](environments.md#basic-public-docker-hosted-profile) retains
+and [public qualification](harness-capabilities.md#tools).
+The [Docker lifecycle](environments.md#hosted-openai_hosted) retains
 workspace Files/Artifacts, cancellation and recovery. Managed isolation belongs to
 the outer Environment; native tools use the starting account's permissions.
 Configure immutable Runtime images explicitly: [Codex](../../services/core/deploy/codex/README.md),
@@ -496,16 +496,16 @@ with the official SDK; the user owns provisioning, renewal and destruction.
 
 The shared initialization path supports env/setup and user-directory npm/Python packages;
 `packages.system` rejects explicitly and system dependencies must be preinstalled.
-See the [evidence and limits](environment-templates.md#verification). Remaining
+See the [evidence and limits](harness-capabilities.md#environment-preparation). Remaining
 unsupported startup installations, unqualified restricted hostname forms and hosted
 service-origin HTTP MCP remain outside these accepted profiles. Environment-origin
-MCP Plugins have a separate [Docker qualification and transport matrix](environment-templates.md#environment-origin-mcp-plugins):
+MCP Plugins have a separate [Docker qualification and transport matrix](environments.md#plugin-mcp):
 stdio on all three harnesses, Codex HTTP with literal headers or HTTPS bearer,
 and Claude/MiniMax anonymous HTTP or HTTPS bearer without literal headers. This batch
 does not qualify those new Plugin paths on E2B. MiniMax's private workspace MCP
 bridge remains internal transport, distinct from installed Environment MCP servers.
 
-The [self-hosted profile](environments.md#initial-public-self-hosted-profile) uses
+The [self-hosted profile](environments.md#self-hosted-self_hosted) uses
 user-managed Runtime enrollment and remains distinct from Core-managed Docker. Product `claude_code`
 is likewise a separate integration from the API's `claude_sdk` engine key.
 Unsupported configurations fail before Session creation; unsupported results fail
@@ -727,7 +727,7 @@ required name, description and JSON Schema parameter object. Missing
 `defer_loading` resolves to `false`; null and other types are rejected. Omitted,
 null and empty tool lists resolve to an empty list. The resolved tools are part of
 the immutable Session configuration and creation retry identity. Saved-Agent
-inheritance uses the same resolved tools. The bounded [deferred discovery path](tool-search.md)
+inheritance uses the same resolved tools. The bounded [deferred discovery path](execution-tools.md#deferred-function-discovery)
 adds type-only `tool_search` for its qualified profile. Other discovery combinations, other tool kinds,
 the native 64-definition cap and nonblank names of at most 512 bytes remain
 compatibility gaps; repeated names and explicit non-object root types reject as
@@ -841,7 +841,7 @@ up to the cursor read with a settled projection in one snapshot; another client'
 work drained before that read can still be sent. Observe later Turns with the GET
 event stream, which does not end on settlement or a Turn failure; it ends only
 after the terminal `agent.session.failed` of a hosted provisioning failure, as
-officially observed ([initialization failure](environment-templates.md#initialization-failure--september-23)),
+officially observed ([initialization failure](environments.md#initialization-state-and-failure)),
 or when the Session is deleted. Terminal Turn events carry the Turn
 snapshot's `usage` at the top level, null when unknown.
 
@@ -914,7 +914,7 @@ executor-specific prerequisite does not open public Environment admission or
 establish complete ownership, hosted key lifecycle or error compatibility. See the
 [standalone configuration](../../services/core/README.md#standalone-http-service).
 
-Core documents its optional [harness selection extension](harness-selection.md) separately from the pinned upstream contract.
+Core documents its optional [harness selection extension](model-execution.md#harness-selection) separately from the pinned upstream contract.
 
 The former Core startup configuration read is removed; the [installation read](installation.md) reports the public URL and installer process settings.
 

@@ -532,13 +532,13 @@ template = client.beta.agents.environments.templates.create(
 
 | Field | Meaning |
 | --- | --- |
-| `network` | `access`: `enabled` (default), `disabled`, or `restricted` to 1–100 exact hosts in `allowed_domains`. A Session can only narrow it. Current Runtimes don't enforce `disabled` or `restricted`, so a Session that needs them is rejected; see [restricted network policy](../../contracts/agents-api/environment-templates.md#restricted-network-policy) |
+| `network` | `access`: `enabled` (default), `disabled`, or `restricted` to 1–100 exact hosts in `allowed_domains`. A Session can only narrow it. Current Runtimes don't enforce `disabled` or `restricted`, so a Session that needs them is rejected; see [restricted network policy](../../contracts/agents-api/environments.md#restricted-network) |
 | `packages` | `npm` and `python` packages. `system` packages are rejected: preinstall them in the image or on the machine |
 | `setup_commands`, `env` | Run and set at preparation. Never returned by reads |
 | `files`, `skills`, `plugins` | Initial content. Up to 50 files, 10 MiB inline in total |
 
 A Session freezes the template when it starts. Details:
-[Environment Templates](../../contracts/agents-api/environment-templates.md).
+[Environment Templates](../../contracts/agents-api/environments.md#templates).
 
 ## Vaults
 

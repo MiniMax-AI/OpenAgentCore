@@ -9,7 +9,7 @@ hosted provisioning and shared Artifacts are accepted within the
 [recorded Docker MVP scope](README.md#accepted-milestone-and-evidence) and separate
 historical Core-managed [E2B qualification](README.md#e2b-v1-qualification). The
 new user-managed enrollment chain reuses local Files with separate
-[real public acceptance](user-managed-runtime-v1.md); complete Files/Environment
+[real public acceptance](harness-capabilities.md); complete Files/Environment
 semantics and other providers are not implied.
 
 ## Pinned contract

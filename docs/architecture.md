@@ -64,7 +64,7 @@ The numbers below match the overview. Each protocol defines behavior, ownership,
 
 The [bootstrap contract](runtime-bootstrap.md) carries the Runtime's startup input across the provisioning boundary. After connection, capability preparation belongs to Runtime; the Provider does not become a second execution path.
 
-Not every combination of Harness, model and Environment works. The supported ones are recorded in [Harness selection](../contracts/agents-api/harness-selection.md) and the [coverage record](../contracts/agents-api/README.md).
+Not every combination of Harness, model and Environment works. The supported ones are recorded in [Harness capabilities](../contracts/agents-api/harness-capabilities.md) and the [coverage record](../contracts/agents-api/README.md).
 
 ## A Session, end to end
 

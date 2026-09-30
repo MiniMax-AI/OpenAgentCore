@@ -7,7 +7,7 @@ It owns reusable Agents, durable Sessions/Turns/Items, live events, function act
 and a daemon execution worker. Public execution supports qualified Codex, Claude Code
 (`claude_sdk`) and MiniMax Code (`mcode`) profiles through the shared Runtime contract.
 The three-harness Linux amd64 Docker V1 MVP has accepted evidence. V1 user-managed
-Runtime enrollment has [recorded real acceptance](../../contracts/agents-api/user-managed-runtime-v1.md)
+Runtime enrollment has [recorded real acceptance](../../contracts/agents-api/harness-capabilities.md)
 with explicit deployment coverage. [E2B](deploy/e2b/README.md) can back Core-managed
 hosted sandboxes, selected in Web's sandbox setup, or application-managed
 `self_hosted` Environments.
@@ -263,12 +263,12 @@ text Sessions share the existing preparation, execution, Files and recovery path
 Networking defaults to enabled; disabled and exact-domain restricted policy are
 supported after setup. System/npm/Python packages use the shared initializer;
 remaining unsupported combinations are explicit gaps. Initial inline/file_id files, confidential env, npm/Python packages,
-ordered setup and [public Environment Templates](../../contracts/agents-api/environment-templates.md)
+ordered setup and [public Environment Templates](../../contracts/agents-api/environments.md#templates)
 resolve to the same immutable hosted configuration, independently of provider templates. Additional harnesses
 require separate integration and qualification.
 Connected describes the authenticated Runtime connection, not native readiness.
 A provisioning failure fails the Session with a safe step and exit-status reason
-([initialization failure](../../contracts/agents-api/environment-templates.md#initialization-failure--september-23));
+([initialization failure](../../contracts/agents-api/environments.md#initialization-state-and-failure));
 other exact hosted failure and expiry semantics remain unverified.
 
 The independent Docker Provider consumes an immutable Runtime image and retains
@@ -325,7 +325,7 @@ connections alone do not start a Turn. Submit text, cancellation or function res
 through the official Session events endpoint; the worker assigns a same-tenant host and preserves that
 binding. Managed Docker has three-harness evidence. This generic device provisioning path
 is for `none`; self-hosted Sessions require the dedicated enrollment below.
-User-managed enrollment has a separate [qualification record](../../contracts/agents-api/user-managed-runtime-v1.md); complete protocol semantics remain partial. See the [ownership rules](../../AGENTS.md#public-api).
+User-managed enrollment has a separate [qualification record](../../contracts/agents-api/harness-capabilities.md); complete protocol semantics remain partial. See the [ownership rules](../../AGENTS.md#public-api).
 
 ### Enable Claude SDK execution
 
@@ -536,7 +536,7 @@ and reads. Exact upstream failure/error timing remains unverified.
 
 The Runtime's shared Go workspace implementation owns directory reads, writes and
 output export; Harness adapters use the same authorized workspace binding.
-The [qualification record](../../contracts/agents-api/user-managed-runtime-v1.md)
+The [qualification record](../../contracts/agents-api/harness-capabilities.md)
 identifies fixed-SDK/raw HTTP, real-model, Files/Artifacts, cancellation,
 restart/history and credential lifecycle evidence, with its recorded revision limits.
 

@@ -40,7 +40,7 @@ The harness is the agent program that runs your Session. Set it in
   settings; see [native model configuration](../contracts/agents-api/harness-onboarding.md#native-model-configuration).
 
 Selecting a harness doesn't make an unsupported model or operation work; see
-[harness selection](../contracts/agents-api/harness-selection.md).
+[harness selection](../contracts/agents-api/model-execution.md#harness-selection).
 
 ### Which model provider a Session uses
 

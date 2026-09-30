@@ -832,7 +832,7 @@ replaced; do not carry obsolete compatibility code forward to satisfy this secti
   unsupported non-default levels remain an explicit implementation gap.
   Product requests that omit the native option retain their existing defaults.
   Structured output has a separately qualified profile described in
-  [Structured output execution](../../contracts/agents-api/structured-output.md#core-and-runtime-boundary).
+  [Structured output execution](../../contracts/agents-api/execution-tools.md#structured-output).
 - `subagent_control` advertises native subagent tool control. Agents API requires
   it when resolved `multi_agent.enabled` is false and sends the typed internal
   `disable_subagents` policy on both new and resumed Turns. Native translation

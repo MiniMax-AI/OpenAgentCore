@@ -32,7 +32,7 @@ Native tool schemas are retained. Text and image results use standard MCP conten
 
 ## Tests
 
-`make check-mcode-harness` runs the package's Node tests and syntax checks. Qualify changes with the [Harness acceptance checklist](../../contracts/agents-api/harnesses.md#acceptance-checklist); synthetic probes and native model runs do not complete public Files/Artifacts or independent Core acceptance.
+`make check-mcode-harness` runs the package's Node tests and syntax checks. Qualify changes with the [Harness acceptance checklist](../../contracts/agents-api/harness-onboarding.md#qualify-the-adapter); synthetic probes and native model runs do not complete public Files/Artifacts or independent Core acceptance.
 
 For the packaged Linux regression, provide an operator-owned private profile and artifact directory, then run `native.test.mjs` inside the qualified Docker Runtime:
 

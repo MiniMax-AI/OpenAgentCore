@@ -185,7 +185,7 @@ python -m unittest discover -s services/core/deploy/e2b -p '*_test.py' -v
 These are controlled startup-contract tests: input binding, protected key output,
 unchanged URL, no secret in argv/environment/record, one-shot claim, and retained
 provider ID on unknown outcomes. They do not create billable resources or qualify
-E2B security, enrollment or model execution. The [qualification record](../../../../contracts/agents-api/user-managed-runtime-v1.md)
+E2B security, enrollment or model execution. The [qualification record](../../../../contracts/agents-api/harness-capabilities.md)
 records historical three-harness deployment results and their verification limits,
 including shared Core credential lifecycle checks and explicit application-owned
 cleanup. `tests/official_user_runtime.py` supplies the shared

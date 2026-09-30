@@ -62,7 +62,7 @@ await client.updateAgent(agent.id, { model: "another-model" });
 await client.updateAgent(agent.id, { x_agents_core: { model_provider: null } });
 ```
 
-Reads return `ModelProviderView`, which has `api_key_configured` and never `api_key`; writes take `ModelProviderInput`, so a read cannot be resubmitted as an update. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) defines what omission and `null` mean on each field, which provider a Session uses and which protocols each harness accepts. [Harness selection](../../contracts/agents-api/harness-selection.md) defines the `harness` field.
+Reads return `ModelProviderView`, which has `api_key_configured` and never `api_key`; writes take `ModelProviderInput`, so a read cannot be resubmitted as an update. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) defines what omission and `null` mean on each field, which provider a Session uses and which protocols each harness accepts. [Harness selection](../../contracts/agents-api/model-execution.md#harness-selection) defines the `harness` field.
 
 With the Core key, `AdminClient` reads the configuration a Session froze at creation and sets each harness's deployment default:
 

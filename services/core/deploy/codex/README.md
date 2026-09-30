@@ -124,7 +124,7 @@ deletion revokes authority before owned container/volume cleanup. The daemon doe
 not enforce `disabled` or `restricted` networking; combinations without matching
 outer enforcement are unsupported. Templates and inline configuration share
 initial files, env, npm/Python packages, ordered setup and capabilities; see the
-[supported fields and limits](../../../../contracts/agents-api/environment-templates.md).
+[supported fields and limits](../../../../contracts/agents-api/environments.md#templates).
 
 ### Environment initialization
 
@@ -142,4 +142,4 @@ daemon never runs apt, sudo or another privilege escalation, and
 operation requiring it. The image no longer contains a system-root seed or
 system-package launcher. Native self-hosted users prepare their own dependencies
 before starting the daemon. See
-[initialization contract and limits](../../../../contracts/agents-api/environment-templates.md).
+[initialization contract and limits](../../../../contracts/agents-api/environments.md#runtime-capability-preparation).

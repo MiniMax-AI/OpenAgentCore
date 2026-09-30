@@ -745,7 +745,7 @@ package; both were deleted. The batch plan is
 | H1 | Hosted initialization fails in any step | One transaction records the Environment failure, `agent.session.environment.failed`, `error` and one `agent.session.failed`. The Session reads `status: failed`, the stored safe reason as `error`, `required_actions: []` and the failure time as `last_active_at`; retrieve, list and the event snapshot agree. Pending input reserved for the Environment settles as failed exactly as before, captured in the same snapshot. |
 | H2 | `environment.failed` payload | `error` is `{type: environment_error, code: environment_connection_failed, message: "The environment failed to connect."}`. |
 | H3 | `error` event | `{type: environment_error, code: sandbox_error, message: <reason>, param: null}`. |
-| H4 | Reason | `Failed to provision environment: script "setup_commands[i]" failed with exit code N`, and `script "Python package installation"` for Python packages; the official Python reason also appends raw pip output, which Core never copies. npm, system package, initial file and Skill labels are unverified. Other failures use `Failed to provision environment: initialization did not complete`; see the [initialization lifecycle](environment-templates.md#initialization-failure--september-23). |
+| H4 | Reason | `Failed to provision environment: script "setup_commands[i]" failed with exit code N`, and `script "Python package installation"` for Python packages; the official Python reason also appends raw pip output, which Core never copies. npm, system package, initial file and Skill labels are unverified. Other failures use `Failed to provision environment: initialization did not complete`; see the [initialization lifecycle](environments.md#initialization-state-and-failure). |
 | H5 | Live SSE | GET and creation streams end right after that `agent.session.failed`. |
 | H6 | Later `events.create` | 409 `conflict_error`/`conflict_error` "the hosted environment failed to provision", param null. Expired Environments, and input already waiting when the Environment failed, keep 409 `environment_unavailable`. |
 | H7 | Delete | 200 `agent.session.deleted`, as officially, then 404. Deletion while provisioning is unchanged (HI-05 awaits a decision). |
@@ -755,7 +755,7 @@ Historical implementation decisions at the September 23 revision follow. The
 current daemon uses shared Go preparation and process settlement, with no bwrap,
 Python receipt decoder or old-image compatibility. System packages now reject
 before initialization. Safe fixed labels and bounded exit statuses remain the
-current public failure policy; see the [current initialization contract](environment-templates.md#packaged-runtime-initialization-contract).
+current public failure policy; see the [current initialization contract](environments.md#runtime-capability-preparation).
 
 Recorded decisions:
 

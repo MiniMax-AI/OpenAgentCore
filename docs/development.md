@@ -121,7 +121,7 @@ Implement the shared `ExecutorFactory`, `Executor` and `Turn` interfaces in
 [`agent/harness.go`](../apps/daemon/internal/agent/harness.go), register
 the adapter and add its profile/configuration entry to the shared catalog. Follow the numbered steps in
 [Harness onboarding](../contracts/agents-api/harness-onboarding.md); qualification
-evidence belongs in [Harness integration](../contracts/agents-api/harnesses.md).
+evidence belongs in [Harness capabilities](../contracts/agents-api/harness-capabilities.md).
 
 ### Add a Sandbox Provider
 

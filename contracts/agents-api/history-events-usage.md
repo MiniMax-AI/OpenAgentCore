@@ -30,7 +30,7 @@ Use response cursors to page history in the requested direction. Session Turn
 lists contain root Turns only; a child Turn ID on the Session Turn routes is not
 found. Root Items and child Items have separate query resources; use the Subagent
 resources for child Turns and history. See
-[Subagent visibility](subagents.md#subagent-visibility--september-23-2026).
+[Subagent visibility](subagents.md#subagent-visibility).
 Tenant ownership is enforced by Core for both queries and streams.
 
 ## Measurement boundary
@@ -182,7 +182,7 @@ stream differences EVT-01..04; the plan is
   `cancelled`) now carry `usage` copied from the rendered Turn snapshot, with
   explicit null when unknown; other events omit it. This batch applied it to
   root and child Turn events; the
-  [Subagent visibility batch](subagents.md#subagent-visibility--september-23-2026)
+  [Subagent visibility batch](subagents.md#subagent-visibility)
   later stopped publishing child Turn events on the Session stream. Codex can
   therefore publish measured counters at settlement, while Claude and MiniMax
   stay null; no counter is derived or summed. The TypeScript client accepts the

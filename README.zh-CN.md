@@ -68,7 +68,7 @@ Core 对外提供两组 API：
 | 基于 API 开发应用 | [快速开始](docs/getting-started/quickstart.md)，然后看 [Agents API 指南](docs/api/public-agent-api.md) |
 | 看一个完整的应用 | [示例](docs/examples.md) |
 | 在自己的机器上运行 Agent | [自托管执行](docs/getting-started/self-hosted.md) |
-| 查看 Runtime 能力和验收范围 | [能力验收记录](contracts/agents-api/environment-capabilities-qualification.md) |
+| 查看 Runtime 能力和验收范围 | [Harness 能力](contracts/agents-api/harness-capabilities.md) |
 | 了解设计 | [架构说明](docs/architecture.md) |
 | 接入新的沙箱、Harness 或其他组件 | [开发指南](docs/development.md) |
 

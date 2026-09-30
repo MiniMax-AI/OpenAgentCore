@@ -180,6 +180,6 @@ Function-result image support has its own [coverage record](function-result-imag
 compatibility or support for arbitrary vision-model/provider combinations is claimed.
 
 User-managed Linux image execution follows the same native workspace path. See
-[current qualification](environment-capabilities-qualification.md) for the tested
+[current qualification](harness-capabilities.md) for the tested
 Harnesses, formats, continuation and remaining boundaries. Historical evidence
 above retains its original deployment scope.

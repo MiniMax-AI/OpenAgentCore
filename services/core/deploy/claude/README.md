@@ -89,4 +89,4 @@ it implements the shared `agent.ExecutorFactory`, `Executor` and `Turn`
 interfaces and registers them in
 [`cli/claude_sdk.go`](../../../../apps/daemon/internal/cli/claude_sdk.go).
 Acceptance requirements are in
-[Harness integration](../../../../contracts/agents-api/harnesses.md#acceptance-checklist).
+[Harness onboarding](../../../../contracts/agents-api/harness-onboarding.md#qualify-the-adapter).
