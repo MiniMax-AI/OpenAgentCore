@@ -16,14 +16,10 @@ An open-source, self-hosted implementation of the OpenAI Agents API with multipl
 
 OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents API.
 
-- **Same API as OpenAI.** Point the official OpenAI SDK, or plain HTTP, at your
-  installation. No new client to learn.
-- **Your choice of agent.** Each Session runs a native harness: Codex, Claude Code or
-  MiniMax Code, with the model provider you configure.
-- **Your choice of machine.** Agents work in a managed sandbox (Docker, microsandbox
-  or E2B), or on your own Linux, macOS or Windows machine.
-- **Every part is replaceable.** Sandboxes, harnesses and model providers plug in
-  through defined protocols.
+- **Same API as OpenAI.** Point the official OpenAI SDK, or plain HTTP, at your installation. No new client to learn.
+- **Your choice of agent.** Each Session runs a native harness: Codex, Claude Code or MiniMax Code, with the model provider you configure.
+- **Your choice of machine.** Agents work in a managed sandbox (Docker, microsandbox or E2B), or on your own Linux, macOS or Windows machine.
+- **Every part is replaceable.** Sandboxes, harnesses and model providers plug in through defined protocols.
 
 ## Screenshots
 
@@ -46,8 +42,7 @@ Then:
 3. **Add execution capacity:** a node, E2B, or your own machine.
 4. **[Run your first Session](docs/getting-started/quickstart.md)** with the OpenAI SDK.
 
-The [installation guide](docs/getting-started/install.md) covers each step, HTTPS
-and a quick local trial. Listen addresses, ports and other options: [installation options](docs/getting-started/install-options.md).
+The [installation guide](docs/getting-started/install.md) covers each step, HTTPS and a quick local trial. Listen addresses, ports and other options: [installation options](docs/getting-started/install-options.md).
 
 ## How it fits together
 
@@ -60,9 +55,7 @@ Applications and operators use these Core APIs:
 | **[Agents API](docs/api/public-agent-api.md)** | `/v1` | Your applications. Same protocol as [OpenAI's Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview) |
 | **[Core API](contracts/agents-api/admin-api.md)** | `/core/v1` | Operators, through Web |
 
-Core keeps durable execution state. The Runtime runs the chosen harness inside the Environment.
-Each connection is a defined protocol, so any part can be replaced on its own. See
-the [architecture guide](docs/architecture.md).
+Core keeps durable execution state. The Runtime runs the chosen harness inside the Environment. Each connection is a defined protocol, so any part can be replaced on its own. See the [architecture guide](docs/architecture.md).
 
 ## Documentation
 
@@ -76,5 +69,4 @@ the [architecture guide](docs/architecture.md).
 | Understand the design | [Architecture](docs/architecture.md) |
 | Add a sandbox, harness or other component | [Developer guide](docs/development.md) |
 
-All pages: [documentation index](docs/getting-started/README.md). Before changing
-code, read the [contributor rules](CONTRIBUTING.md).
+All pages: [documentation index](docs/getting-started/README.md). Before changing code, read the [contributor rules](CONTRIBUTING.md).

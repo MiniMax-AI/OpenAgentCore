@@ -1,25 +1,19 @@
 # Develop OpenAgentCore
 
-Set up a checkout, build a component and validate your changes. To use an installation, start with the [getting started guide](getting-started/README.md). Read the
-[contributor rules](../CONTRIBUTING.md) before changing code.
+Set up a checkout, build a component and validate your changes. To use an installation, start with the [getting started guide](getting-started/README.md). Read the [contributor rules](../CONTRIBUTING.md) before changing code.
 
 For component responsibilities and execution flow, read [Architecture](architecture.md).
 
 ## Set up a checkout
 
-Work from an isolated worktree so experiments and validation do not disturb
-another checkout. From an existing clone with an up-to-date `main`:
+Work from an isolated worktree so experiments and validation do not disturb another checkout. From an existing clone with an up-to-date `main`:
 
 ```sh
 git worktree add ../openagentcore-change -b codex/my-change main
 cd ../openagentcore-change
 ```
 
-Install Go at the version in [go.mod](../go.mod), Node 22.13 or newer, pnpm at the version
-in [package.json](../package.json), and Python 3.9 or newer. The complete gate
-runs on Linux and needs a dedicated PostgreSQL database, OpenSSL development
-libraries for the microsandbox helper, and a Playwright browser. Provider and
-Runtime builds have additional prerequisites in their component guides.
+Install Go at the version in [go.mod](../go.mod), Node 22.13 or newer, pnpm at the version in [package.json](../package.json), and Python 3.9 or newer. The complete gate runs on Linux and needs a dedicated PostgreSQL database, OpenSSL development libraries for the microsandbox helper, and a Playwright browser. Provider and Runtime builds have additional prerequisites in their component guides.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -40,10 +34,7 @@ pnpm exec playwright install --with-deps chrome
 export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 ```
 
-Set `OAC_TEST_DATABASE_URL` privately to a dedicated PostgreSQL test database.
-Never point the test suite at an installation or product database. The
-[test database rules](../CONTRIBUTING.md#test-database) list the required role
-permission.
+Set `OAC_TEST_DATABASE_URL` privately to a dedicated PostgreSQL test database. Never point the test suite at an installation or product database. The [test database rules](../CONTRIBUTING.md#test-database) list the required role permission.
 
 For native package pin changes, follow the [live acceptance rules](../CONTRIBUTING.md#live-acceptance).
 
@@ -58,12 +49,7 @@ make build-daemon
 
 Core build outputs and output-directory settings are in [Standalone Core builds](maintainers.md#standalone-core-builds). The daemon is written to `${OAC_DEV_HOME:-$HOME/.oac}/build/daemon/oac-daemon`.
 
-Use the [service guide](../services/core/README.md#run-from-source)
-to run the Core migrator and server with a separate development database. The
-[configuration appendix](configuration.md#appendix-core-environment-without-the-installer)
-owns standalone process settings. For a complete operator installation, use the
-[installation guide](getting-started/install.md); building Core alone is a
-separate contributor workflow.
+Use the [service guide](../services/core/README.md#run-from-source) to run the Core migrator and server with a separate development database. The [configuration appendix](configuration.md#appendix-core-environment-without-the-installer) owns standalone process settings. For a complete operator installation, use the [installation guide](getting-started/install.md); building Core alone is a separate contributor workflow.
 
 For frontend development, run `pnpm dev:web` using the fixture or Core connection in the [Web package guide](../apps/web/README.md).
 
@@ -91,9 +77,7 @@ Use the [protocol map](../AGENTS.md#protocols-at-every-boundary) to find the cod
 
 ## Validate a change
 
-Run checks for the affected boundary while developing. The repository
-[required checks](../CONTRIBUTING.md#required-checks) define completion, including
-`make check` and any changed native component's real acceptance.
+Run checks for the affected boundary while developing. The repository [required checks](../CONTRIBUTING.md#required-checks) define completion, including `make check` and any changed native component's real acceptance.
 
 | Change | Focused validation |
 | --- | --- |
@@ -107,13 +91,7 @@ Run checks for the affected boundary while developing. The repository
 | Distribution or installer | `make check-distribution` |
 | Documentation | `make check-names`; `make check-distribution` validates Markdown links and bundled docs |
 
-Fixture browser acceptance uses loopback ports 18092 and 4174. Select unused ports
-with `AGENTS_FIXTURE_PORT` and `AGENTS_WEB_PORT` when running parallel validation.
-Keep databases, ports and containers separate between validation workers.
-Compilation, fixture success and live model/provider acceptance establish different
-facts; report skipped or unavailable checks explicitly. Follow the
-[independent blind review workflow](../CONTRIBUTING.md#review)
-after validation.
+Fixture browser acceptance uses loopback ports 18092 and 4174. Select unused ports with `AGENTS_FIXTURE_PORT` and `AGENTS_WEB_PORT` when running parallel validation. Keep databases, ports and containers separate between validation workers. Compilation, fixture success and live model/provider acceptance establish different facts; report skipped or unavailable checks explicitly. Follow the [independent blind review workflow](../CONTRIBUTING.md#review) after validation.
 
 ## Change documentation
 

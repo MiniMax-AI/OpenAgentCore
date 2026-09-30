@@ -1,7 +1,6 @@
 # Examples
 
-Complete applications built on the [Agents API](api/public-agent-api.md). Each one
-runs against a real Core installation with a Project API key.
+Complete applications built on the [Agents API](api/public-agent-api.md). Each one runs against a real Core installation with a Project API key.
 
 | Example | What it shows |
 | --- | --- |
@@ -9,9 +8,7 @@ runs against a real Core installation with a Project API key.
 
 ## Parsar Agent workbench
 
-A small single-user product built on Core. You save model providers, Skills and MCP
-servers, combine them into Agents, then start Sessions in a managed sandbox, with
-no workspace, or on your own machine.
+A small single-user product built on Core. You save model providers, Skills and MCP servers, combine them into Agents, then start Sessions in a managed sandbox, with no workspace, or on your own machine.
 
 Source: [`example/parsar`](../example/parsar/README.md).
 
