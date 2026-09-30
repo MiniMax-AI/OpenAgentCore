@@ -72,7 +72,7 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 		fakeCheckpointProvider: f.provider, sentinel: sentinel.owner.ID,
 		release: make(chan struct{}), scans: make(chan int, 16),
 	}
-	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{
+	worker := startWorker(t, t.Context(), f.db, &execution.Dispatcher{
 		Store: f.store, Registry: f.provider.registry,
 		ManagedRuntimes: &execution.RuntimeProvider{
 			CoreURL: "http://core.invalid/api/v1", InstallationID: f.key,
@@ -80,9 +80,6 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 			Provider:           provider, Suspension: &f.policy,
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	var once sync.Once
@@ -123,7 +120,7 @@ func (f *wakeHintIntegration) pending(t *testing.T, target wakeHintIntegrationTa
 	t.Helper()
 	var id string
 	awaitDaemonRemoteCondition(t, t.Context(), 2*time.Second, "committed wake input", func() bool {
-		return f.fixture.pool.QueryRow(t.Context(),
+		return f.fixture.db.pool.QueryRow(t.Context(),
 			"SELECT id::text FROM environment_input_reservations WHERE session_id=$1 AND idempotency_key=$2",
 			target.session.ID, key).Scan(&id) == nil
 	})
@@ -181,7 +178,7 @@ func TestRuntimeWakeHintCommittedSubmitResumesBeforeNormalTick(t *testing.T) {
 		t.Fatal("wake replayed creation/restoration or sent native input", restores, creates, f.provider.promptFrames.Load())
 	}
 	var reservations, turns int
-	if err := f.fixture.pool.QueryRow(t.Context(),
+	if err := f.fixture.db.pool.QueryRow(t.Context(),
 		"SELECT (SELECT count(*) FROM environment_input_reservations WHERE session_id=$1), (SELECT count(*) FROM turns WHERE session_id=$1)",
 		f.target.session.ID).Scan(&reservations, &turns); err != nil || reservations != 1 || turns != 1 {
 		t.Fatal("retry duplicated input or started a Turn before preparation", reservations, turns, err)

@@ -9,6 +9,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -101,9 +103,9 @@ func TestPreparedDispatchHandlesStartRejectionAndPendingStartCancellation(t *tes
 				h.write(start.RunID, proto.TypeInteractionDecisionAck, ack)
 			}
 			got := awaitPreparedDispatch(t, result)
-			want := store.TurnFailed
+			want := sessions.TurnFailed
 			if action == "cancel" {
-				want = store.TurnCancelled
+				want = sessions.TurnCancelled
 			}
 			if got.err != nil || got.run.Turn.Status != want || got.run.Turn.ID != start.RunID {
 				t.Fatal("Start control did not settle through ordinary completion", got)
@@ -121,12 +123,14 @@ func TestPreparedDispatchHandlesStartRejectionAndPendingStartCancellation(t *tes
 	}
 }
 
-func TestPreparedDispatchRejectsPooledWriterBeforePreparation(t *testing.T) {
+func TestPreparedDispatchRejectsClosedLeaseBeforePreparation(t *testing.T) {
 	h, pending := preparedDispatchHarness(t)
-	h.d.Store = h.s
-	got, err := h.d.RunEnvironmentInput(context.Background(), h.tenant, h.session.ID, pending.ID)
-	if err == nil || got.Turn.ID != "" {
-		t.Fatal("pooled writer reached native preparation", got, err)
+	if err := h.lease.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := h.d.RunEnvironmentInput(context.Background(), h.lease, h.tenant, h.session.ID, pending.ID)
+	if !errors.Is(err, pgunit.ErrLeaseClosed) || got.Turn.ID != "" {
+		t.Fatal("closed lease reached native preparation", got, err)
 	}
 }
 
@@ -165,9 +169,9 @@ func TestPreparedDispatchCancellationReceiptSurvivesStartFailure(t *testing.T) {
 			if json.Unmarshal(got.run.Turn.Outcome, &outcome) != nil {
 				t.Fatal("invalid stored cancellation outcome")
 			}
-			want, code := store.TurnFailed, "cancel_outcome_unavailable"
+			want, code := sessions.TurnFailed, "cancel_outcome_unavailable"
 			if withOutcome {
-				want, code = store.TurnCancelled, ""
+				want, code = sessions.TurnCancelled, ""
 			}
 			if got.err != nil || got.run.Turn.Status != want || outcome.ErrorCode != code {
 				t.Fatal("preparation failure replaced the cancellation receipt", got)

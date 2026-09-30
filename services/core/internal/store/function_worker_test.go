@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -65,10 +66,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				input := h.message("queued", "Look up ticket")
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
-				worker, err := execution.StartWorker(ctx, h.d)
-				if err != nil {
-					t.Fatal(err)
-				}
+				worker := startWorker(t, ctx, h.db, h.d)
 				done := make(chan error, 1)
 				go func() { done <- worker.Run(ctx) }()
 				defer func() {
@@ -81,7 +79,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				}()
 				time.Sleep(650 * time.Millisecond)
 				current, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
-				if err != nil || current.Status != store.TurnQueued {
+				if err != nil || current.Status != sessions.TurnQueued {
 					t.Fatal(current, err)
 				}
 				if !prebound {
@@ -112,7 +110,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 					t.Fatal(prompt)
 				}
 				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
-				waitTurn(t, h, input.TurnID, store.TurnCompleted)
+				waitTurn(t, h, input.TurnID, sessions.TurnCompleted)
 			})
 		}
 	}
@@ -127,7 +125,7 @@ func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, str
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.s = store.NewWithCredentialCipher(pool, cipher)
+	h.s, h.db = store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	h.d.Store = h.s
 	vault, err := h.s.CreateVault(t.Context(), h.tenant, store.CreateVaultInput{})
 	if err != nil {

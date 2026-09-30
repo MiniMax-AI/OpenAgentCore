@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -25,7 +26,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	event := func(kind, raw string) store.ExecutionEvent {
@@ -69,7 +70,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if err := s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, final); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, store.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence); err != nil {
+	if _, err := s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	// Reopening the Store recovers committed Items without creating events.
@@ -143,7 +144,7 @@ func TestExecutionJournalsCommandOutputBeforeCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})
-	h.finished(result, store.TurnCancelled)
+	h.finished(result, sessions.TurnCancelled)
 	page, err := h.s.ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 2 || page.Items[1].Status != "incomplete" || page.Items[1].Output != "partial" {
 		t.Fatalf("journal/cancellation lost partial output: %+v %v", page, err)

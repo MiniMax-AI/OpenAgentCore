@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestEngineClassificationSurvivesDrainWithoutChangingSettlement(t *testing.T) {
@@ -68,7 +68,7 @@ func TestClassifiedErrorCannotOverrideCancellationReceipt(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if status != store.TurnCancelled || result.Done.Usage.InputTokens != 9 || result.Done.Metadata[proto.DoneMetaAgentSessionID] != "native" || result.EngineErrorCode != "rate_limit_exceeded" {
+		if status != sessions.TurnCancelled || result.Done.Usage.InputTokens != 9 || result.Done.Metadata[proto.DoneMetaAgentSessionID] != "native" || result.EngineErrorCode != "rate_limit_exceeded" {
 			t.Fatalf("receipt lost authority: %s %+v", status, result)
 		}
 	}

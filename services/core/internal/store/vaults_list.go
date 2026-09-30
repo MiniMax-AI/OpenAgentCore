@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -32,7 +33,7 @@ func (s *Store) ListVaults(ctx context.Context, tenantID, cursor string, limit i
 	}
 	params := sqlc.ListVaultsParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending, Statuses: statuses}
 	if cursor != "" {
-		after, err := s.GetVault(ctx, tenantID, lookupCursor(cursor))
+		after, err := s.GetVault(ctx, tenantID, pgunit.LookupCursor(cursor))
 		if err != nil {
 			return VaultPage{}, err
 		}

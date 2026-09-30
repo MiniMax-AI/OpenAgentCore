@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -84,7 +85,7 @@ func TestManagedIdleClockIgnoresRootHostSkew(t *testing.T) {
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			outcome := json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source))
 			before := runtimeDatabaseTime(t, s)
-			completed, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, TurnCompleted, outcome, "", 0)
+			completed, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, outcome, "", 0)
 			after := runtimeDatabaseTime(t, s)
 			if err != nil || completed.CompletedAt.UnixMilli() != source {
 				t.Fatal("native completion changed or rejected", completed, err)
@@ -93,7 +94,7 @@ func TestManagedIdleClockIgnoresRootHostSkew(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, TurnCompleted, outcome, "", 0); !errors.Is(err, ErrTurnConflict) {
+			if _, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, outcome, "", 0); !errors.Is(err, ErrTurnConflict) {
 				t.Fatal("terminal replay accepted", err)
 			}
 			unchanged, err := w.RuntimeActivity(t.Context(), owner)
@@ -118,7 +119,7 @@ func TestManagedIdleClockIgnoresChildHostSkewAndReplay(t *testing.T) {
 			runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal,public_visible) VALUES($1,$2,$3,'codex','child','root',1,$4,1,true)`, child, owner.SessionID, owner.DeviceID, root)
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			created := source - 1000
-			payload, _ := json.Marshal(proto.SubagentTurnPayload{NativeID: "child", TurnID: "remote-turn", Status: TurnCompleted, CreatedAtMS: created, StartedAtMS: &created, CompletedAtMS: &source})
+			payload, _ := json.Marshal(proto.SubagentTurnPayload{NativeID: "child", TurnID: "remote-turn", Status: sessions.TurnCompleted, CreatedAtMS: created, StartedAtMS: &created, CompletedAtMS: &source})
 			project := func() error {
 				return w.withSession(t.Context(), owner.TenantID, owner.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 					return projectSubagentTurn(ctx, q, session, payload)
@@ -171,18 +172,18 @@ func TestUnmanagedRootCompletionPreservesHostSkew(t *testing.T) {
 					t.Fatal(err)
 				}
 				input := submitMessage(t, s, tenant, session.ID, "host-clock")
-				current := transition(t, s, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+				current := transition(t, s, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 				source := current.CreatedAt.Add(skew).UnixMilli()
 				outcome := json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source))
-				completed, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, TurnCompleted, outcome, "", input.Sequence)
+				completed, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, sessions.TurnCompleted, outcome, "", input.Sequence)
 				if err != nil || completed.CompletedAt.UnixMilli() != source {
 					t.Fatal("native completion changed or rejected", completed, err)
 				}
 				read, err := s.GetTurn(t.Context(), tenant, session.ID, input.TurnID)
-				if err != nil || read.Status != TurnCompleted || read.CompletedAt.UnixMilli() != source {
+				if err != nil || read.Status != sessions.TurnCompleted || read.CompletedAt.UnixMilli() != source {
 					t.Fatal("public native timestamp rewritten", read, err)
 				}
-				if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, TurnCompleted, outcome, "", input.Sequence); !errors.Is(err, ErrTurnConflict) {
+				if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, sessions.TurnCompleted, outcome, "", input.Sequence); !errors.Is(err, ErrTurnConflict) {
 					t.Fatal("terminal replay accepted", err)
 				}
 			})
@@ -196,9 +197,9 @@ func TestRootCompletionRejectsNonpositiveSourceTime(t *testing.T) {
 			s, _ := testStore(t)
 			tenant, session := newTurnSession(t, s)
 			input := submitMessage(t, s, tenant, session.ID, "invalid-clock")
-			transition(t, s, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+			transition(t, s, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 			outcome := json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source))
-			if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, TurnCompleted, outcome, "", input.Sequence); !errors.Is(err, ErrInvalidInput) {
+			if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, sessions.TurnCompleted, outcome, "", input.Sequence); !errors.Is(err, ErrInvalidInput) {
 				t.Fatal("invalid native timestamp accepted", err)
 			}
 		})

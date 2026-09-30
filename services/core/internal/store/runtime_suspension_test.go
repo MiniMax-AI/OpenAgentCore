@@ -359,7 +359,7 @@ func TestRuntimeSuspensionExpiredRunningAndLostWriterAreFenced(t *testing.T) {
 	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("expired running allocation entered checkpoint", err)
 	}
-	if err := w.CloseExecution(t.Context()); err != nil {
+	if err := w.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.RuntimeActivity(t.Context(), owner); err == nil {

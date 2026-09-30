@@ -8,6 +8,8 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -127,7 +129,7 @@ func recordEnvironmentState(ctx context.Context, q *sqlc.Queries, row sqlc.GetSe
 	if status == "failed" {
 		state.Error = &v1.StreamError{Type: "environment_error", Code: "environment_connection_failed", Message: "The environment failed to connect."}
 	}
-	return recordSessionChange(ctx, q, row.Environment.SessionID, SessionChange{Event: v1.SessionEvent{
+	return sessionpg.AppendChanges(ctx, q, row.Environment.SessionID, sessions.SessionChange{Event: v1.SessionEvent{
 		Type:        "agent.session.environment." + status,
 		Environment: state,
 	}})

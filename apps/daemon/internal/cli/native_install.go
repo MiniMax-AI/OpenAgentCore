@@ -9,7 +9,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -98,7 +97,7 @@ func runInstall(rc *runContext, args []string) error {
 	ctx, stop := daemonize.NotifyContext(context.Background())
 	defer stop()
 	if err := installNativeOptions(ctx, rc, &o); err != nil {
-		return err
+		return nativeInstallError(err)
 	}
 	if o.OnboardURL != "" {
 		return finishOnboarding(ctx, rc, o)
@@ -130,6 +129,9 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 		return err
 	}
 	defer unlock()
+	if err = cleanNativeTemporaryFiles(o.Directory); err != nil {
+		return err
+	}
 	if o.OnboardURL != "" {
 		if runtimefs.ValidateLocalPath(o.Workspace) != nil {
 			return errors.New("install: Session workspace is invalid on this platform")
@@ -172,19 +174,19 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	// Verify existing components before adding any new one; never repair or
 	// upgrade an installed dependency as a side effect of adding a Harness.
 	if len(previous.Harnesses) > 0 {
-		if err = verifyNativeComponents(o.Directory, previous.Harnesses); err != nil {
+		if err = nativeInstallPhase(rc.stdout, "Verifying installed components", func() error { return verifyNativeComponents(ctx, o.Directory, previous.Harnesses) }); err != nil {
 			return err
 		}
 	}
-	if err = installNativeBinary(o.Directory, len(previous.Harnesses) > 0); err != nil {
+	if err = nativeInstallPhase(rc.stdout, "Installing Runtime", func() error { return installNativeBinary(ctx, o.Directory, len(previous.Harnesses) > 0) }); err != nil {
 		return err
 	}
 	for _, name := range append([]string{"node"}, selected...) {
-		if err = installNativeComponent(ctx, o.Bundle, o.Directory, name, bundle.Components[name]); err != nil {
+		if err = nativeInstallPhase(rc.stdout, "Installing "+name, func() error { return installNativeComponent(ctx, o.Bundle, o.Directory, name, bundle.Components[name]) }); err != nil {
 			return err
 		}
 	}
-	if err = probeNativeInstallation(ctx, o.Directory, all); err != nil {
+	if err = nativeInstallPhase(rc.stdout, "Checking installed programs", func() error { return probeNativeInstallation(ctx, o.Directory, all) }); err != nil {
 		return err
 	}
 	if err = ctx.Err(); err != nil {
@@ -203,20 +205,26 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	return nil
 }
 
-func verifyNativeComponents(root string, selected []string) error {
+func verifyNativeComponents(ctx context.Context, root string, selected []string) error {
 	for _, name := range append([]string{"node"}, selected...) {
 		if _, ok := nativePins[name]; !ok {
 			return errors.New("installation contains an unsupported Harness")
 		}
 		c, err := componentReceipt(nativeComponentRoot(root, name))
-		if err != nil || c.Version != nativePins[name] || len(c.Files) == 0 || checkComponentFiles(nativeComponentRoot(root, name), c) != nil {
+		if err != nil || c.Version != nativePins[name] || len(c.Files) == 0 {
 			return fmt.Errorf("installed %s is missing, modified or incompatible; reinstall separately (no automatic repair or upgrade)", name)
+		}
+		if err = checkComponentFiles(ctx, nativeComponentRoot(root, name), c); err != nil {
+			if errors.Is(err, errNativeComponentMismatch) || errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("installed %s is missing or modified; reinstall separately", name)
+			}
+			return fmt.Errorf("install: cannot verify installed %s: %w", name, err)
 		}
 	}
 	return nil
 }
 
-func installNativeBinary(root string, existing bool) error {
+func installNativeBinary(ctx context.Context, root string, existing bool) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -233,7 +241,7 @@ func installNativeBinary(root string, existing bool) error {
 		}
 		defer f.Close()
 		h := sha256.New()
-		_, e = io.Copy(h, f)
+		_, e = nativeCopy(ctx, h, f)
 		return hex.EncodeToString(h.Sum(nil)), e
 	}
 	want, err := digest(exe)
@@ -256,12 +264,19 @@ func installNativeBinary(root string, existing bool) error {
 		return err
 	}
 	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	if err = requireNativeSpace(dir, uint64(info.Size())); err != nil {
+		return err
+	}
 	out, err := os.CreateTemp(dir, ".oac-daemon-")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(out.Name())
-	_, err = io.Copy(out, in)
+	_, err = nativeCopy(ctx, out, in)
 	if err == nil {
 		err = out.Chmod(0700)
 	}
@@ -309,7 +324,7 @@ func runStart(rc *runContext, args []string) error {
 		err = errors.New("start: no installed Harnesses; rerun install with --harness")
 	}
 	if err == nil {
-		err = verifyNativeComponents(root, config.Harnesses)
+		err = verifyNativeComponents(ctx, root, config.Harnesses)
 	}
 	if err == nil {
 		err = probeNativeInstallation(ctx, root, config.Harnesses)

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 )
 
 func TestWorkerMetricsUnknownAndDetached(t *testing.T) {
@@ -39,11 +39,19 @@ func TestWorkerMetricsUnknownAndDetached(t *testing.T) {
 	}
 }
 
+// lostLease is an execution lease that no longer owns the database.
+type lostLease struct{}
+
+func (lostLease) CheckOwnership(context.Context) error { return pgunit.ErrLeaseClosed }
+func (lostLease) CancelOperations(context.Context, context.CancelFunc) error {
+	return pgunit.ErrLeaseClosed
+}
+func (lostLease) Close(context.Context) error { return nil }
+
 func TestWorkerMetricsFailuresAndClosure(t *testing.T) {
-	// A pooled Store has no execution lease, so its ownership check fails.
-	worker := &Worker{dispatcher: &Dispatcher{Store: &store.Store{}}}
+	worker := &Worker{lease: lostLease{}}
 	worker.observeOwnership(nil)
-	if err := worker.CheckOwnership(t.Context()); !errors.Is(err, store.ErrExecutionAuthority) {
+	if err := worker.CheckOwnership(t.Context()); !errors.Is(err, pgunit.ErrLeaseClosed) {
 		t.Fatalf("ownership error changed: %v", err)
 	}
 	if worker.MetricsSnapshot().ExecutionOwner != nil {

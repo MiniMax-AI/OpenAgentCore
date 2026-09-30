@@ -5,12 +5,14 @@ import (
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type TurnPage struct {
-	Turns      []Turn
+	Turns      []sessions.Turn
 	NextCursor string
 }
 
@@ -28,7 +30,7 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 	params := sqlc.ListRootTurnsParams{TenantID: tenant, SessionID: session, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	if cursor != "" {
 		// A child Turn is not a Session Turn, so its ID is a missing cursor here.
-		after, err := s.GetTurn(ctx, tenantID, sessionID, lookupCursor(cursor))
+		after, err := s.GetTurn(ctx, tenantID, sessionID, pgunit.LookupCursor(cursor))
 		if err != nil {
 			return TurnPage{}, err
 		}
@@ -39,7 +41,7 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 	if err != nil {
 		return TurnPage{}, fmt.Errorf("list turns: %w", err)
 	}
-	page := TurnPage{Turns: make([]Turn, 0, min(limit, len(rows)))}
+	page := TurnPage{Turns: make([]sessions.Turn, 0, min(limit, len(rows)))}
 	if len(rows) > limit {
 		page.NextCursor = uuid.UUID(rows[limit-1].ID.Bytes).String()
 		rows = rows[:limit]

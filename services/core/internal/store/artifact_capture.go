@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -66,7 +67,7 @@ func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, tur
 		if err != nil {
 			return err
 		}
-		if turn.Status != TurnInProgress || turn.CancelRequestedAt.Valid {
+		if turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.Valid {
 			return ErrTurnConflict
 		}
 		for _, row := range rows {

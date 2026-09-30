@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -35,7 +36,7 @@ func submitMessage(t *testing.T, s *Store, tenant, session, key string) InputRec
 	return receipt
 }
 
-func transition(t *testing.T, s *Store, tenant, session, turn, from, to string) Turn {
+func transition(t *testing.T, s *Store, tenant, session, turn, from, to string) sessions.Turn {
 	t.Helper()
 	got, err := s.TransitionTurn(context.Background(), tenant, session, turn, TurnTransition{ExpectedStatus: from, Status: to})
 	if err != nil {
@@ -109,7 +110,7 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
 	first := submitMessage(t, s, tenant, session.ID, "first")
-	transition(t, s, tenant, session.ID, first.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	steer := submitMessage(t, s, tenant, session.ID, "steer")
 	if steer.TurnID != first.TurnID || steer.Sequence <= first.Sequence {
 		t.Fatalf("active message did not steer: %+v", steer)
@@ -125,7 +126,7 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 	if _, err := s.RequestCancel(ctx, tenant, session.ID, "first"); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatalf("changed input kind accepted: %v", err)
 	}
-	completed := transition(t, s, tenant, session.ID, first.TurnID, TurnInProgress, TurnCompleted)
+	completed := transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	next := submitMessage(t, s, tenant, session.ID, "next")
 	if next.TurnID == first.TurnID {
 		t.Fatal("idle message did not start a new Turn")
@@ -160,7 +161,7 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 		t.Fatalf("recovered inputs = %+v", all)
 	}
 	snapshot, err := recovered.GetSession(ctx, tenant, session.ID)
-	if err != nil || snapshot.LastTurn == nil || snapshot.LastTurn.ID != next.TurnID || snapshot.LastTurn.Status != TurnQueued {
+	if err != nil || snapshot.LastTurn == nil || snapshot.LastTurn.ID != next.TurnID || snapshot.LastTurn.Status != sessions.TurnQueued {
 		t.Fatal("latest Session activity did not survive restart", err)
 	}
 	snapshot.LastTurn = nil
@@ -188,7 +189,7 @@ func TestTurnOperationsAreTenantAndSessionScoped(t *testing.T) {
 				return err
 			},
 			"transition": func() error {
-				_, err := s.TransitionTurn(ctx, scope.tenant, scope.session, first.TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnFailed})
+				_, err := s.TransitionTurn(ctx, scope.tenant, scope.session, first.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed})
 				return err
 			},
 		} {
@@ -205,7 +206,7 @@ func TestTurnOperationsAreTenantAndSessionScoped(t *testing.T) {
 	if _, err := s.GetTurn(ctx, tenant, second.ID, first.TurnID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-session turn read: %v", err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, second.ID, first.TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnFailed}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.TransitionTurn(ctx, tenant, second.ID, first.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-session turn write: %v", err)
 	}
 	otherInput := submitMessage(t, s, otherTenant, other.ID, "input")

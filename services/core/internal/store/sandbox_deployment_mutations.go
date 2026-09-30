@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
 )
@@ -213,7 +214,7 @@ func (s *Store) UpdateSandboxDeployment(ctx context.Context, installation string
 				if input.ReplacesCredential() {
 					action = "replace_credential"
 				}
-				if err := recordDeploymentMutation(ctx, q, action, "sandbox_deployment", installation); err != nil {
+				if err := auditpg.RecordDeploymentMutation(ctx, q, action, "sandbox_deployment", installation); err != nil {
 					return err
 				}
 			}

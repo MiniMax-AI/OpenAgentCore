@@ -99,7 +99,7 @@ func TestEnvironmentInputPromotionUsesCurrentExecutionWriter(t *testing.T) {
 		t.Fatal("pooled Store promoted input without execution ownership")
 	}
 	closed := executionWriter(t, s)
-	if err := closed.CloseExecution(t.Context()); err != nil {
+	if err := closed.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := closed.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); err == nil {

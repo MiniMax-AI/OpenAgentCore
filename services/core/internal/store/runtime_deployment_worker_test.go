@@ -7,15 +7,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
 func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	key := uuid.NewString()
 	old := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	worker, stop := managedWorker(t, s, key, old)
+	worker, stop := managedWorker(t, s, db, key, old)
 	tenant, _, environment := managedSession(t, s)
 	owner, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 	if err != nil {
@@ -25,13 +24,13 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 	replacement := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	config := &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("b", 64), Provider: replacement, AdmissionPaused: true}
 	start := func(config *execution.RuntimeProvider) error {
-		_, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: config})
+		_, err := startWorkerErr(t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: config})
 		return err
 	}
 	if err := start(config); err == nil || !strings.Contains(err.Error(), "maintenance") {
 		t.Fatal("startup switched active deployment", err)
 	}
-	worker, stop = managedWorkerMode(t, s, key, old, true)
+	worker, stop = managedWorkerMode(t, s, db, key, old, true)
 	replay, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 	if err != nil || !replay.Replayed || replay.ID != owner.ID {
 		t.Fatal("maintenance interrupted existing allocation", replay, err)
@@ -51,6 +50,6 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 		t.Fatal("rejected startup rewrote resource owner", got, err)
 	}
 	// Failed startup relinquishes its lease, so the original backend can resume.
-	_, stop = managedWorker(t, s, key, old)
+	_, stop = managedWorker(t, s, db, key, old)
 	stop()
 }

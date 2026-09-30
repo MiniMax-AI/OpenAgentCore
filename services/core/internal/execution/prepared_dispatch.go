@@ -8,17 +8,19 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type EnvironmentRun struct {
 	Reservation store.EnvironmentInputReservation
-	Turn        store.Turn
+	Turn        sessions.Turn
 }
 
-// RunEnvironmentInput reserves a Turn on the Session-owned Runtime Executor.
-func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID string) (run EnvironmentRun, err error) {
-	if err = d.Store.CheckExecutionOwnership(ctx); err != nil {
+// RunEnvironmentInput reserves a Turn on the Session-owned Runtime Executor. It
+// checks lease, the lease d.Store was built on, before any Runtime preparation.
+func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, tenantID, sessionID, reservationID string) (run EnvironmentRun, err error) {
+	if err = lease.CheckOwnership(ctx); err != nil {
 		return run, err
 	}
 	run.Reservation, err = d.Store.ExpireEnvironmentInput(ctx, tenantID, sessionID, reservationID)
@@ -111,7 +113,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionI
 	through := run.Reservation.Receipts[len(run.Reservation.Receipts)-1].Sequence
 	releaseDelivery, err := peer.TrackExecutionDelivery(req.RunID)
 	if err != nil {
-		run.Turn, err = d.finishRun(tenantID, sessionID, req.RunID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, store.TurnFailed)
+		run.Turn, err = d.finishRun(tenantID, sessionID, req.RunID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
 		return run, err
 	}
 	defer releaseDelivery()

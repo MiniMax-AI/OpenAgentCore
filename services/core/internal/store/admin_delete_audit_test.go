@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -105,7 +106,7 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 	rejectAdminAuditInsert(t, s)
 	archive := skillArchive(t, "admin-private-archive")
 	tables := []string{"agents", "agent_model_execution", "environment_templates", "skills", "skill_versions", "source_files", "vaults", "vault_credentials", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
-	for _, name := range []string{"agent_delete", "template_delete", "skill_delete", "version_delete", "version_delete_last", "file_delete", "vault_delete", "credential_delete", "oauth_delete", "session_delete", "artifact_delete"} {
+	for _, name := range []string{"template_delete", "skill_delete", "version_delete", "version_delete_last", "file_delete", "vault_delete", "credential_delete", "oauth_delete", "session_delete", "artifact_delete"} {
 		t.Run(name, func(t *testing.T) {
 			tenant := uuid.NewString()
 			var mutation resourceAuditMutation
@@ -117,16 +118,6 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 				mutation = prepareResourceAuditMutation(t, s, tenant, name, archive)
 				if name == "file_delete" {
 					removedObjects = 1
-				}
-				if name == "agent_delete" {
-					var id string
-					if err := pool.QueryRow(t.Context(), "SELECT id FROM agents WHERE tenant_id=$1", tenant).Scan(&id); err != nil {
-						t.Fatal(err)
-					}
-					provider := agentProviderFixture(94)
-					if _, err := s.UpdateAgent(t.Context(), tenant, id, UpdateAgentInput{Configuration: agentProviderConfiguration(t, provider, "codex"), ModelProvider: provider, ModelProviderSet: true}); err != nil {
-						t.Fatal(err)
-					}
 				}
 				if name == "template_delete" {
 					var id string
@@ -176,7 +167,7 @@ func prepareAdminHistoryDelete(t *testing.T, s *Store, name string) (string, res
 	if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(archive)); err != nil {
 		t.Fatal(err)
 	}
-	transition(t, s, tenant, session, turn, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
 	page, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 	if err != nil || len(page.Artifacts) != 2 {
 		t.Fatal("artifact fixture", err)
@@ -214,8 +205,6 @@ func assertAdminDeletedResource(t *testing.T, s *Store, tenant string, mutation 
 	t.Helper()
 	var err error
 	switch mutation.kind {
-	case "agent":
-		_, err = s.GetAgent(t.Context(), tenant, id)
 	case "environment_template":
 		_, err = s.GetEnvironmentTemplate(t.Context(), tenant, id)
 	case "skill":

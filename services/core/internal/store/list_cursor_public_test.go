@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -63,7 +64,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 	f.session = client.created(token, "/v1/agents/sessions", newSession)
 	f.turn = first("/v1/agents/sessions/" + f.session + "/turns")
 	f.item = first("/v1/agents/sessions/" + f.session + "/items")
-	if _, err := s.TransitionTurn(ctx, tenant, f.session, f.turn, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnCancelled}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, f.session, f.turn, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCancelled}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.SubmitMessage(ctx, tenant, f.session, label+"-second", json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"second"}]}]}`)); err != nil {
@@ -99,7 +100,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 		if err = writer.BindSessionDevice(ctx, tenant, created.ID, host.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = writer.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+		if _, err = writer.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
 		opened := int64(1700000001000)
@@ -108,7 +109,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 		}
 		// Distinct creation times keep child-turn before later-child-turn.
 		turn := func(child, id string, created int64) store.ExecutionEvent {
-			return subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: child, TurnID: id, Status: store.TurnInProgress, CreatedAtMS: created, StartedAtMS: &created})
+			return subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: child, TurnID: id, Status: sessions.TurnInProgress, CreatedAtMS: created, StartedAtMS: &created})
 		}
 		message := func(child, turn, id string, position int32) store.ExecutionEvent {
 			text := "answer " + id
@@ -221,25 +222,21 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	writer, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = writer.CloseExecution(t.Context()) }()
+	writer := executionOwner(t, db, s).Store
 	a := seedCursorFixture(t, s, writer, client, owner, ownerTenant, "a")
 	b := seedCursorFixture(t, s, writer, client, foreign, foreignTenant, "b")
 

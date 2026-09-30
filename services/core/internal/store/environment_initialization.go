@@ -16,7 +16,7 @@ type EnvironmentInitialization struct {
 }
 
 func (s *Store) ListEnvironmentInitializations(ctx context.Context, after string) ([]EnvironmentInitialization, error) {
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	id := pgtype.UUID{Valid: true}

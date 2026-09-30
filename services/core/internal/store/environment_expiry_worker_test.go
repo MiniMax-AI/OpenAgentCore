@@ -39,12 +39,9 @@ func makeEnvironmentExpiryDue(t *testing.T, pool *pgxpool.Pool, pending *store.E
 	}
 }
 
-func startEnvironmentExpiryWorker(t *testing.T, d *execution.Dispatcher) (*execution.Worker, func()) {
+func startEnvironmentExpiryWorker(t *testing.T, db fixtureDB, d *execution.Dispatcher) (*execution.Worker, func()) {
 	t.Helper()
-	worker, err := execution.StartWorker(t.Context(), d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), db, d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
@@ -102,22 +99,22 @@ func assertEnvironmentExpiryHasNoHistory(t *testing.T, pool *pgxpool.Pool, sessi
 }
 
 func TestWorkerEnvironmentExpiryWithoutDevicesAndAfterRestart(t *testing.T) {
-	s, pool := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	dueTenant, due := newEnvironmentExpiryReservation(t, s)
 	futureTenant, future := newEnvironmentExpiryReservation(t, s)
-	makeEnvironmentExpiryDue(t, pool, &due)
+	makeEnvironmentExpiryDue(t, db.pool, &due)
 	d := &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}
-	_, stop := startEnvironmentExpiryWorker(t, d)
+	_, stop := startEnvironmentExpiryWorker(t, db, d)
 	waitEnvironmentExpiry(t, s, dueTenant, due)
 	got, err := s.GetEnvironmentInputReservation(t.Context(), futureTenant, future.SessionID, future.ID)
 	if err != nil || got.State != store.EnvironmentInputPending || !got.Deadline.Equal(future.Deadline) {
 		t.Fatal("future input changed", got, err)
 	}
 	stop()
-	makeEnvironmentExpiryDue(t, pool, &future)
-	_, stop = startEnvironmentExpiryWorker(t, d)
+	makeEnvironmentExpiryDue(t, db.pool, &future)
+	_, stop = startEnvironmentExpiryWorker(t, db, d)
 	waitEnvironmentExpiry(t, s, futureTenant, future)
 	stop()
-	assertEnvironmentExpiryHasNoHistory(t, pool, due.SessionID)
-	assertEnvironmentExpiryHasNoHistory(t, pool, future.SessionID)
+	assertEnvironmentExpiryHasNoHistory(t, db.pool, due.SessionID)
+	assertEnvironmentExpiryHasNoHistory(t, db.pool, future.SessionID)
 }

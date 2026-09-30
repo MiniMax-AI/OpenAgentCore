@@ -7,14 +7,14 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // Observation is strictly after terminal commit. Its pool/lock timeout cannot
 // cancel the execution lease or change the already committed public outcome.
-func (d *Dispatcher) observeDeploymentProvider(tenantID, sessionID string, turn store.Turn) {
-	if turn.Status != store.TurnCompleted {
-		if turn.Status != store.TurnFailed {
+func (d *Dispatcher) observeDeploymentProvider(tenantID, sessionID string, turn sessions.Turn) {
+	if turn.Status != sessions.TurnCompleted {
+		if turn.Status != sessions.TurnFailed {
 			return
 		}
 		var result Result

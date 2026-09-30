@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -29,16 +30,22 @@ func (s *missingResourceStore) missing(tenant string) error {
 	return store.ErrNotFound
 }
 
-func (s *missingResourceStore) GetAgent(_ context.Context, tenant, _ string) (store.SavedAgent, error) {
-	return store.SavedAgent{}, s.missing(tenant)
+// missingAgent records the tenant and reports the Agent as missing.
+func (s *missingResourceStore) missingAgent(tenant string) error {
+	s.tenants = append(s.tenants, tenant)
+	return agents.ErrNotFound
 }
 
-func (s *missingResourceStore) DeleteAgent(_ context.Context, tenant, _ string) (string, error) {
-	return "", s.missing(tenant)
+func (s *missingResourceStore) GetAgent(_ context.Context, tenant, _ string) (agents.Agent, error) {
+	return agents.Agent{}, s.missingAgent(tenant)
 }
 
-func (s *missingResourceStore) UpdateAgent(_ context.Context, tenant, _ string, _ store.UpdateAgentInput) (store.SavedAgent, error) {
-	return store.SavedAgent{}, s.missing(tenant)
+func (s *missingResourceStore) DeleteAgent(_ context.Context, command agents.DeleteCommand) (string, error) {
+	return "", s.missingAgent(command.TenantID)
+}
+
+func (s *missingResourceStore) UpdateAgent(_ context.Context, command agents.UpdateCommand) (agents.Agent, error) {
+	return agents.Agent{}, s.missingAgent(command.TenantID)
 }
 
 func (s *missingResourceStore) GetSession(_ context.Context, tenant, _ string) (store.Session, error) {
@@ -67,7 +74,7 @@ func (s *missingResourceStore) DeleteEnvironmentTemplate(_ context.Context, tena
 
 // wire serves the Agent, Session and Environment template lookups from s.
 func (s *missingResourceStore) wire(_ *Dependencies, f *testFakes) {
-	f.agents.getAgent, f.agents.deleteAgent, f.agents.updateAgent = s.GetAgent, s.DeleteAgent, s.UpdateAgent
+	f.agentsReader.getAgent, f.agents.delete, f.agents.update = s.GetAgent, s.DeleteAgent, s.UpdateAgent
 	f.sessions.getSession, f.sessions.deleteSession, f.sessions.updateSessionMetadata = s.GetSession, s.DeleteSession, s.UpdateSessionMetadata
 	f.environmentTemplates.getEnvironmentTemplate, f.environmentTemplates.updateEnvironmentTemplate, f.environmentTemplates.deleteEnvironmentTemplate = s.GetEnvironmentTemplate, s.UpdateEnvironmentTemplate, s.DeleteEnvironmentTemplate
 }

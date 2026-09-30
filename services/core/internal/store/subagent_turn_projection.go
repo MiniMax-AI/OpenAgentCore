@@ -11,6 +11,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -27,10 +29,10 @@ func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 	if json.Unmarshal(raw, &p) != nil || !validNativeIdentity(p.NativeID) || !validNativeIdentity(p.TurnID) || p.CreatedAtMS <= 0 {
 		return ErrInvalidInput
 	}
-	if p.Status != TurnQueued && p.Status != TurnInProgress && p.Status != TurnWaiting && !terminalStatus(p.Status) {
+	if p.Status != sessions.TurnQueued && p.Status != sessions.TurnInProgress && p.Status != sessions.TurnWaiting && !sessions.TerminalStatus(p.Status) {
 		return ErrInvalidInput
 	}
-	if terminalStatus(p.Status) != (p.CompletedAtMS != nil) {
+	if sessions.TerminalStatus(p.Status) != (p.CompletedAtMS != nil) {
 		return ErrInvalidInput
 	}
 	if (p.StartedAtMS != nil && *p.StartedAtMS < p.CreatedAtMS) || (p.CompletedAtMS != nil && (*p.CompletedAtMS < p.CreatedAtMS || (p.StartedAtMS != nil && *p.CompletedAtMS < *p.StartedAtMS))) {
@@ -52,15 +54,15 @@ func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 	usage := []byte(nil)
 	if p.Usage != nil {
 		value, _ := json.Marshal(p.Usage)
-		if measured := measuredUsage("usage", value); measured != nil {
+		if measured := sessions.MeasuredUsage("usage", value); measured != nil {
 			usage, _ = json.Marshal(measured)
 		} else {
 			return ErrInvalidInput
 		}
 	}
 	// Re-reading native history cannot reopen or mutate a completed child Turn.
-	if !fresh && terminalStatus(old.Status) {
-		if !terminalStatus(p.Status) {
+	if !fresh && sessions.TerminalStatus(old.Status) {
+		if !sessions.TerminalStatus(p.Status) {
 			return nil
 		}
 		var previousUsage, nextUsage *v1.TokenUsage
@@ -84,8 +86,8 @@ func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 	// Terminal replays returned above; they must not restart the managed idle timer.
 	// Child Turns publish no Session events: the Session stream carries root work,
 	// and child state is read through the Subagent routes.
-	if terminalStatus(row.Status) {
-		return q.RecordRuntimeTerminalActivity(ctx, session)
+	if sessions.TerminalStatus(row.Status) {
+		return sessionpg.RecordTerminalActivity(ctx, q, session)
 	}
 	return nil
 }

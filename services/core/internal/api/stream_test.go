@@ -14,6 +14,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -22,7 +23,7 @@ import (
 type streamFixture struct {
 	session store.Session
 	mu      sync.Mutex
-	changes []store.SessionChange
+	changes []sessions.SessionChange
 	gap     bool
 	cursors []int64
 }
@@ -47,7 +48,7 @@ func (f *streamFixture) SessionStreamSnapshot(_ context.Context, tenant, id stri
 	return f.session, 10, nil
 }
 
-func (f *streamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor int64) ([]store.SessionChange, error) {
+func (f *streamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor int64) ([]sessions.SessionChange, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.cursors = append(f.cursors, cursor)
@@ -141,7 +142,7 @@ func TestLiveStreamAuthDisconnectRecoveryAndServerDeadline(t *testing.T) {
 	response = request("key")
 	f.mu.Lock()
 	text := strings.Repeat("x", 16*1024*1024)
-	f.changes = []store.SessionChange{{Sequence: 11, Event: v1.SessionEvent{Type: "agent.session.turn.output_text.delta", EventID: "large", SessionID: f.session.ID, Delta: &text}}}
+	f.changes = []sessions.SessionChange{{Sequence: 11, Event: v1.SessionEvent{Type: "agent.session.turn.output_text.delta", EventID: "large", SessionID: f.session.ID, Delta: &text}}}
 	f.mu.Unlock()
 	select {
 	case <-done:
@@ -156,15 +157,15 @@ func TestTerminalTurnEventsMirrorTurnUsage(t *testing.T) {
 	measured := json.RawMessage(`{"input_tokens":7,"input_tokens_details":{"cached_tokens":2},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":10}`)
 	child := &v1.Turn{ID: "child", Status: "cancelled"}
 	for _, test := range []struct {
-		change store.SessionChange
+		change sessions.SessionChange
 		want   string
 	}{
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.completed"}, Turn: &store.Turn{ID: "turn", Status: store.TurnCompleted, Usage: measured}}, string(measured)},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.failed"}, Turn: &store.Turn{ID: "turn", Status: store.TurnFailed}}, "null"},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.completed"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnCompleted, Usage: measured}}, string(measured)},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.failed"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnFailed}}, "null"},
 		// Child Turn snapshots are rendered when recorded.
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.cancelled", Turn: child}}, "null"},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.in_progress"}, Turn: &store.Turn{ID: "turn", Status: store.TurnInProgress, Usage: measured}}, ""},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &store.Turn{ID: "turn", Status: store.TurnCompleted, Usage: measured}, SessionUsage: measured}, ""},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.cancelled", Turn: child}}, "null"},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.in_progress"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnInProgress, Usage: measured}}, ""},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnCompleted, Usage: measured}, SessionUsage: measured}, ""},
 	} {
 		event, err := streamResponse(session, test.change, "")
 		if err != nil {
@@ -200,13 +201,13 @@ func TestStreamEventsCarryExplicitNullFields(t *testing.T) {
 	result := &v1.Item{ID: "result", TurnID: "turn", Type: "function_call_output", Status: "completed", CallID: "call", Output: "value"}
 	index := int32(0)
 	for _, test := range []struct {
-		change store.SessionChange
+		change sessions.SessionChange
 		want   map[string]string
 	}{
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: user}}, map[string]string{"output_index": "null"}},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: result}}, map[string]string{"output_index": "null"}},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.done", TurnID: "turn", OutputIndex: &index, Item: &v1.Item{ID: "answer", TurnID: "turn", Type: "message", Status: "completed", Role: "assistant", Content: []v1.ItemContent{{Type: "output_text", Text: &text}}}}}, map[string]string{"output_index": "0"}},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &store.Turn{ID: "turn", Status: store.TurnCompleted}}, map[string]string{"output_index": ""}},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: user}}, map[string]string{"output_index": "null"}},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: result}}, map[string]string{"output_index": "null"}},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.done", TurnID: "turn", OutputIndex: &index, Item: &v1.Item{ID: "answer", TurnID: "turn", Type: "message", Status: "completed", Role: "assistant", Content: []v1.ItemContent{{Type: "output_text", Text: &text}}}}}, map[string]string{"output_index": "0"}},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnCompleted}}, map[string]string{"output_index": ""}},
 	} {
 		event, err := streamResponse(session, test.change, "")
 		if err != nil {

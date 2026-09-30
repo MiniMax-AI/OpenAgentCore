@@ -19,6 +19,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -31,13 +32,11 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 	for _, scenario := range []string{"receipt_without_heartbeat", "heartbeat_before_receipt", "done_heartbeat_ack", "ack_commit_blocked", "rotated", "expired", "transport_lost", "negative_ack", "missing_outcome", "revoke_before_archive", "cancel_revoke_archive", "revoke_after_archive", "revoke_concurrent_archive"} {
 		t.Run(scenario, func(t *testing.T) {
 			heartbeat := scenario != "receipt_without_heartbeat"
-			s, pool := store.NewManagedTestStore(t)
-			writer, err := store.NewExecution(t.Context(), s)
-			if err != nil {
-				t.Fatal(err)
-			}
+			s, db := newManagedTestStoreDB(t)
+			leased := executionOwner(t, db, s)
+			writer := leased.Store
 			t.Cleanup(func() {
-				if err := writer.CloseExecution(context.Background()); err != nil {
+				if err := leased.Lease.Close(context.Background()); err != nil {
 					t.Error(err)
 				}
 			})
@@ -96,7 +95,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { conn.Close() })
-			h := &dispatchHarness{t: t, s: s, tenant: project.TenantID, session: session, conn: conn, registry: registry, d: &execution.Dispatcher{Store: writer, Registry: registry}}
+			h := &dispatchHarness{t: t, s: s, db: db, lease: leased.Lease, tenant: project.TenantID, session: session, conn: conn, registry: registry, d: &execution.Dispatcher{Store: writer, Registry: registry}}
 			capabilities := workerEnvironmentCapabilities()
 			capabilities.FunctionTools = proto.CapabilitySupported
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: capabilities}}})
@@ -128,7 +127,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			input := store.InputReceipt{TurnID: start.RunID}
 			h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "pending", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)})
 			state := functionState(t, h, 1)
-			if state.LastTurn.Status != store.TurnWaiting {
+			if state.LastTurn.Status != sessions.TurnWaiting {
 				t.Fatal(state.LastTurn)
 			}
 
@@ -173,7 +172,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 
 			current, err := s.GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
-			if err != nil || current.Status != store.TurnWaiting || current.CancelRequestedAt.IsZero() {
+			if err != nil || current.Status != sessions.TurnWaiting || current.CancelRequestedAt.IsZero() {
 				t.Fatal("archive must request rather than invent cancellation", current, err)
 			}
 			if _, err := runtimegateway.NewAuthenticator(s).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
@@ -210,18 +209,18 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal("missing cancel delivery identity")
 			}
 			if scenario == "rotated" {
-				if _, err := pool.Exec(t.Context(), "UPDATE devices SET credential_hash=$2 WHERE id=$1", owner.DeviceID, runtimedevice.HashCredential(uuid.NewString())); err != nil {
+				if _, err := db.pool.Exec(t.Context(), "UPDATE devices SET credential_hash=$2 WHERE id=$1", owner.DeviceID, runtimedevice.HashCredential(uuid.NewString())); err != nil {
 					t.Fatal(err)
 				}
 			}
 			if scenario == "expired" {
-				if _, err := pool.Exec(t.Context(), "UPDATE turns SET cancel_requested_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", input.TurnID); err != nil {
+				if _, err := db.pool.Exec(t.Context(), "UPDATE turns SET cancel_requested_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", input.TurnID); err != nil {
 					t.Fatal(err)
 				}
 			}
 			var unlockCommit func()
 			if scenario == "ack_commit_blocked" {
-				tx, err := pool.Begin(t.Context())
+				tx, err := db.pool.Begin(t.Context())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -261,7 +260,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				// Observe actual SQL lock contention, not an assumed timing delay.
 				for deadline := time.Now().Add(3 * time.Second); ; {
 					var blocked bool
-					if err := pool.QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query ILIKE '%session_devices%')").Scan(&blocked); err != nil {
+					if err := db.pool.QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query ILIKE '%session_devices%')").Scan(&blocked); err != nil {
 						t.Fatal(err)
 					}
 					if blocked {
@@ -281,20 +280,20 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 
 			got := awaitPreparedDispatch(t, result)
-			wantStatus := store.TurnCancelled
+			wantStatus := sessions.TurnCancelled
 			if closedCase || scenario == "negative_ack" || scenario == "missing_outcome" {
-				wantStatus = store.TurnFailed
+				wantStatus = sessions.TurnFailed
 			}
 			if got.err != nil || got.run.Turn.Status != wantStatus {
 				t.Fatal(got.run.Turn.Status, got.err, string(got.run.Turn.Outcome))
 			}
 			var outcome execution.Result
-			if err := json.Unmarshal(got.run.Turn.Outcome, &outcome); err != nil || (wantStatus == store.TurnCancelled && outcome.Done.Usage.InputTokens != 17) {
+			if err := json.Unmarshal(got.run.Turn.Outcome, &outcome); err != nil || (wantStatus == sessions.TurnCancelled && outcome.Done.Usage.InputTokens != 17) {
 				t.Fatal("receipt lost usage", string(got.run.Turn.Outcome), err)
 			}
 
 			var receipts int
-			if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM turn_events WHERE turn_id=$1 AND kind='cancel_receipt'", input.TurnID).Scan(&receipts); err != nil {
+			if err := db.pool.QueryRow(t.Context(), "SELECT count(*) FROM turn_events WHERE turn_id=$1 AND kind='cancel_receipt'", input.TurnID).Scan(&receipts); err != nil {
 				t.Fatal(err)
 			}
 			wantReceipts := 1
@@ -311,7 +310,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(allocation, err)
 			}
 			var revoked bool
-			if err := pool.QueryRow(t.Context(), "SELECT revoked_at IS NOT NULL FROM devices WHERE id=$1", owner.DeviceID).Scan(&revoked); err != nil || !revoked {
+			if err := db.pool.QueryRow(t.Context(), "SELECT revoked_at IS NOT NULL FROM devices WHERE id=$1", owner.DeviceID).Scan(&revoked); err != nil || !revoked {
 				t.Fatal(revoked, err)
 			}
 		})

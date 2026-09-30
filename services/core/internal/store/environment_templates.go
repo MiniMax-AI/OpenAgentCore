@@ -4,15 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"time"
 	"unicode/utf8"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -113,7 +117,7 @@ func (s *Store) CreateEnvironmentTemplate(ctx context.Context, tenantID string, 
 		if err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "create", "environment_template", result.ID, "", AuditResource{Type: "environment_template", ID: result.ID})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "create", "environment_template", result.ID, "", writeaudit.Resource{Type: "environment_template", ID: result.ID})
 	})
 	return result, err
 }
@@ -141,7 +145,7 @@ func (s *Store) UpdateEnvironmentTemplate(ctx context.Context, tenantID, templat
 		return EnvironmentTemplate{}, err
 	}
 	// Sealing runs before the update lookup, so a malformed ID must take the same path.
-	id := parsePathID(templateID)
+	id := pgunit.PathID(templateID)
 	var name pgtype.Text
 	if in.Name != nil {
 		name = pgtype.Text{String: *in.Name, Valid: true}
@@ -170,7 +174,7 @@ func (s *Store) UpdateEnvironmentTemplate(ctx context.Context, tenantID, templat
 		if err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "update", "environment_template", result.ID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update", "environment_template", result.ID, "")
 	})
 	return result, err
 }
@@ -192,7 +196,7 @@ func (s *Store) DeleteEnvironmentTemplate(ctx context.Context, tenantID, templat
 			return err
 		}
 		deletedID = uuid.UUID(result.Bytes).String()
-		return recordWriteAudit(ctx, q, tenantID, "delete", "environment_template", deletedID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "environment_template", deletedID, "")
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
@@ -218,7 +222,7 @@ func (s *Store) ListEnvironmentTemplates(ctx context.Context, tenantID, cursor s
 	}
 	params := sqlc.ListEnvironmentTemplatesParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	if cursor != "" {
-		after, err := s.GetEnvironmentTemplate(ctx, tenantID, lookupCursor(cursor))
+		after, err := s.GetEnvironmentTemplate(ctx, tenantID, pgunit.LookupCursor(cursor))
 		if err != nil {
 			return EnvironmentTemplatePage{}, err
 		}

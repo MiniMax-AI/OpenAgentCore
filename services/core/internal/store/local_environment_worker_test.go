@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -41,10 +42,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.LocalEnvironment
 	})
-	w, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := startWorker(t, t.Context(), h.db, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- w.Run(ctx) }()
@@ -144,7 +142,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 	completeLocalArtifactExport(t, h, worker, environment)
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "local completion", func() bool {
 		turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
-		return err == nil && turn.Status == store.TurnCompleted
+		return err == nil && turn.Status == sessions.TurnCompleted
 	})
 	settled, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, reservation.ID)
 	if err != nil || settled.State != store.EnvironmentInputAdmitted || len(settled.Receipts) != 1 {

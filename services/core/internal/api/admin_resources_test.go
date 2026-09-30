@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -58,23 +60,23 @@ type adminReadFixture struct {
 	administrative, impersonated bool
 }
 
-func (s *adminReadFixture) ListAgents(ctx context.Context, tenant, after string, limit int, ascending bool) (store.AgentPage, error) {
-	s.seenTenant = tenant
+func (s *adminReadFixture) ListAgents(ctx context.Context, query agents.ListQuery) (agents.Page, error) {
+	s.seenTenant = query.TenantID
 	_, s.administrative = adminaudit.FromContext(ctx)
 	s.impersonated = ctx.Value(principalContextKey{}) != nil
-	return store.AgentPage{Agents: []store.SavedAgent{}}, nil
+	return agents.Page{Agents: []agents.Agent{}}, nil
 }
-func (s *adminReadFixture) DeleteAgent(ctx context.Context, tenant, id string) (string, error) {
-	s.seenTenant = tenant
+func (s *adminReadFixture) DeleteAgent(ctx context.Context, command agents.DeleteCommand) (string, error) {
+	s.seenTenant = command.TenantID
 	_, s.administrative = adminaudit.FromContext(ctx)
 	s.impersonated = ctx.Value(principalContextKey{}) != nil
-	return id, nil
+	return command.AgentID, nil
 }
 func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T) {
 	key := callerBinding()
 	deps, fakes := managementFakes(t, key)
 	resources := &adminReadFixture{}
-	fakes.agents.listAgents, fakes.agents.deleteAgent = resources.ListAgents, resources.DeleteAgent
+	fakes.agentsReader.listAgents, fakes.agents.delete = resources.ListAgents, resources.DeleteAgent
 	h := newTestHandler(t, deps)
 	base := "/core/v1/projects/" + managementProjectID
 	for _, test := range []struct {
@@ -122,7 +124,7 @@ func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filt
 	for i, usage := range []json.RawMessage{nil, json.RawMessage(`{"input_tokens":3,"output_tokens":5,"total_tokens":8,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":1}}`)} {
 		session := store.Session{ID: "session", TenantID: tenant, Configuration: json.RawMessage(`{"agent":{"id":"agent","model":"model","tools":[]},"environment":{"type":"none"}}`), CreatedAt: time.Unix(100+int64(i), 0), Usage: usage}
 		if i == 0 {
-			session.LastTurn = &store.Turn{Status: store.TurnInProgress, CreatedAt: time.Unix(110, 0)}
+			session.LastTurn = &sessions.Turn{Status: sessions.TurnInProgress, CreatedAt: time.Unix(110, 0)}
 		}
 		if err := visit(session, nil); err != nil {
 			return store.AdminAssetCounts{}, err

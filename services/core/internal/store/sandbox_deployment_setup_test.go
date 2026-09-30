@@ -70,7 +70,7 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT (SELECT count(*) FROM sessions)+(SELECT count(*) FROM runtime_nodes)+(SELECT count(*) FROM runtime_allocations)+(SELECT count(*) FROM runtime_placements)").Scan(&sideEffects); err != nil || sideEffects != 0 {
 		t.Fatal("setup or rejected admission created execution state", sideEffects, err)
 	}
-	if err := w.CloseExecution(context.Background()); err != nil {
+	if err := w.lease.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	restarted := executionWriter(t, s)

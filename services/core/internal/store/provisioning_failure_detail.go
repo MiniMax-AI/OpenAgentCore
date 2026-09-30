@@ -1,22 +1,16 @@
 package store
 
-// ProvisioningFailureDetail is private, fixed-category evidence from a confirmed
-// initialization receipt. It never contains command text, paths or Runtime output.
-type ProvisioningFailureDetail struct {
-	Step     *string `json:"step"`
-	Index    *int    `json:"index"`
-	ExitCode *int    `json:"exit_code"`
+import "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+
+func (f ProvisioningFailure) detail() *sessions.ProvisioningFailureDetail {
+	return sanitizedProvisioningDetail(sessions.ProvisioningFailureDetail{Step: &f.Step, Index: &f.Index, ExitCode: &f.ExitCode})
 }
 
-func (f ProvisioningFailure) detail() *ProvisioningFailureDetail {
-	return (ProvisioningFailureDetail{Step: &f.Step, Index: &f.Index, ExitCode: &f.ExitCode}).sanitized()
-}
-
-func (f ProvisioningFailureDetail) sanitized() *ProvisioningFailureDetail {
+func sanitizedProvisioningDetail(f sessions.ProvisioningFailureDetail) *sessions.ProvisioningFailureDetail {
 	if f.Step == nil {
 		return nil
 	}
-	result := &ProvisioningFailureDetail{}
+	result := &sessions.ProvisioningFailureDetail{}
 	switch *f.Step {
 	case ProvisioningSetupCommand:
 		// JSON clients can represent these integer positions exactly.

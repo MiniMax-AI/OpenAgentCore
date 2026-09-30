@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -37,14 +38,14 @@ const (
 // and every rejection leaves the database and the pending action unchanged.
 func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	ctx := t.Context()
 	tenant, owner, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "conflict-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "conflict-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +73,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+		if _, err := s.TransitionTurn(ctx, tenant, session, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.RecordFunctionCall(ctx, tenant, session, receipt.TurnID, store.FunctionCall{CallID: call, ExecutorCallID: "native-" + call, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
@@ -85,7 +86,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		if err := s.ConfirmFunctionResult(ctx, tenant, session, receipt.TurnID, call); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.CompleteExecution(ctx, tenant, session, receipt.TurnID, store.TurnCompleted, nil, "", receipt.Sequence); err != nil {
+		if _, err := s.CompleteExecution(ctx, tenant, session, receipt.TurnID, sessions.TurnCompleted, nil, "", receipt.Sequence); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -132,7 +133,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	// reject checks each response body and that no rejection wrote anything.
 	reject := func(cases []rejection, watched ...string) {
 		t.Helper()
-		digest := databaseDigest(t, pool)
+		digest := databaseDigest(t, db.pool)
 		before := make([]string, len(watched))
 		for i, session := range watched {
 			before[i] = read(session)
@@ -146,7 +147,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 				t.Errorf("%s: %d %s", tc.name, status, body)
 			}
 		}
-		if after := databaseDigest(t, pool); !reflect.DeepEqual(after, digest) {
+		if after := databaseDigest(t, db.pool); !reflect.DeepEqual(after, digest) {
 			t.Error("rejected input changed the database")
 		}
 		for i, session := range watched {
@@ -271,7 +272,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	if status, body := createSession("first"); status != http.StatusCreated {
 		t.Fatal(status, body)
 	}
-	digest := databaseDigest(t, pool)
+	digest := databaseDigest(t, db.pool)
 	status, body := createSession("changed")
 	var creation struct {
 		Error struct {
@@ -284,7 +285,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		creation.Error.Type != "conflict_error" || creation.Error.Code != "idempotency_conflict" || creation.Error.Param != nil {
 		t.Fatalf("creation key reuse: %d %s", status, body)
 	}
-	if after := databaseDigest(t, pool); !reflect.DeepEqual(after, digest) {
+	if after := databaseDigest(t, db.pool); !reflect.DeepEqual(after, digest) {
 		t.Error("creation key reuse changed the database")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -49,7 +50,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := t.Context()
 	tenant := uuid.NewString()
-	for _, status := range []string{TurnQueued, TurnInProgress, TurnCompleted, TurnFailed} {
+	for _, status := range []string{sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnCompleted, sessions.TurnFailed} {
 		t.Run(status, func(t *testing.T) {
 			input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: status}
 			session, err := s.CreateSession(ctx, tenant, input)
@@ -60,13 +61,13 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if status != TurnQueued {
-				_, err = s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnInProgress})
+			if status != sessions.TurnQueued {
+				_, err = s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
-			if status == TurnCompleted || status == TurnFailed {
+			if status == sessions.TurnCompleted || status == sessions.TurnFailed {
 				if _, err = s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, status, nil, "", receipt.Sequence); err != nil {
 					t.Fatal(err)
 				}
@@ -74,7 +75,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
 				t.Fatal(err)
 			}
-			if status == TurnQueued || status == TurnInProgress {
+			if status == sessions.TurnQueued || status == sessions.TurnInProgress {
 				// Deletion leaves active work untouched: no cancellation, marker or event.
 				cursor, err := s.SessionEventCursor(ctx, tenant, session.ID)
 				if err != nil {
@@ -98,11 +99,11 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				if _, err := s.RequestCancel(ctx, tenant, session.ID, "cancel"); err != nil {
 					t.Fatal(err)
 				}
-				if status == TurnInProgress {
+				if status == sessions.TurnInProgress {
 					if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
 						t.Fatal("cancelling Session deleted", err)
 					}
-					if _, err := s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, TurnCancelled, nil, "", receipt.Sequence); err != nil {
+					if _, err := s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnCancelled, nil, "", receipt.Sequence); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -147,13 +148,13 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := status
-			if status == TurnQueued || status == TurnInProgress {
-				want = TurnCancelled
+			if status == sessions.TurnQueued || status == sessions.TurnInProgress {
+				want = sessions.TurnCancelled
 			}
 			if turn.Status != want {
 				t.Fatal(turn)
 			}
-			if _, err := fresh.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnInProgress}); !errors.Is(err, ErrTurnConflict) {
+			if _, err := fresh.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); !errors.Is(err, ErrTurnConflict) {
 				t.Fatal(err)
 			}
 			inputs, err := fresh.ListTurnInputs(ctx, tenant, session.ID, receipt.TurnID, 0, 20)
@@ -300,7 +301,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if kind.name == "turn" && (current.LastTurn == nil || current.LastTurn.Status != TurnQueued || !current.LastTurn.CancelRequestedAt.IsZero()) {
+			if kind.name == "turn" && (current.LastTurn == nil || current.LastTurn.Status != sessions.TurnQueued || !current.LastTurn.CancelRequestedAt.IsZero()) {
 				t.Fatal("rejected deletion changed admitted work", current.LastTurn)
 			}
 			if kind.name == "environment_input" && !current.PendingInput {

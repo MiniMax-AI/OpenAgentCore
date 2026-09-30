@@ -9,6 +9,8 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -22,7 +24,7 @@ func recordSubagentChange(ctx context.Context, q *sqlc.Queries, session, id pgty
 	if err != nil {
 		return err
 	}
-	return recordSessionChange(ctx, q, session, SessionChange{Event: v1.SessionEvent{Type: "agent.session.subagent." + kind, Subagent: &value}})
+	return sessionpg.AppendChanges(ctx, q, session, sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.subagent." + kind, Subagent: &value}})
 }
 func publishSubagent(ctx context.Context, q *sqlc.Queries, session, id pgtype.UUID, identity proto.SubagentIdentityPayload) error {
 	previous, err := q.GetNativeSubagent(ctx, sqlc.GetNativeSubagentParams{SessionID: session, NativeID: identity.NativeID})

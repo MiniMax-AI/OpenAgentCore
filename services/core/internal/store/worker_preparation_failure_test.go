@@ -19,7 +19,7 @@ func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, stop := startEnvironmentExpiryWorker(t, h.d)
+			_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 			defer stop()
 			prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 			if code == "preparation_failed" {
@@ -102,7 +102,7 @@ func TestWorkerRetriesUncertainPreparationFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, stop := startEnvironmentExpiryWorker(t, h.d)
+			_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 			defer stop()
 			prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 			status := proto.PreparationStatusPayload{State: response.state, Operation: response.operation, ErrorCode: response.code, RunID: response.runID}
@@ -134,7 +134,7 @@ func TestWorkerPreparationRejectionPreservesCancellationAndNewerInput(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	defer stop()
 	old := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	if _, err := h.s.CancelEnvironmentInput(t.Context(), h.tenant, h.session.ID, first.ID); err != nil {

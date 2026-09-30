@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -21,7 +22,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 	h.session = publicSession(t, h, "scan-barrier")
 	receipt := h.message("barrier", "ordinary work")
 	scanned := time.Now()
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	// Dispatch starts only after selectWork has examined the pending input on
 	// the same pass, while its exact Runtime is still incapable of preparation.
 	barrier := nextWorkerFrame(t, frames, testExecutionRequest)
@@ -30,7 +31,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 	}
 	awaitFixtureCapabilities(t, runtime, workerEnvironmentCapabilities())
 	h.write(barrier.ID, proto.TypeDone, proto.DonePayload{Content: "complete"})
-	waitTurn(t, h, barrier.ID, store.TurnCompleted)
+	waitTurn(t, h, barrier.ID, sessions.TurnCompleted)
 
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	if elapsed := time.Since(scanned); elapsed < 750*time.Millisecond || elapsed > 3*time.Second {
@@ -69,13 +70,13 @@ func TestWorkerEnvironmentPaginationReachesReadyTail(t *testing.T) {
 	h.session = publicSession(t, h, "page-barrier")
 	receipt := h.message("barrier", "ordinary work")
 	scanned := time.Now()
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	barrier := nextWorkerFrame(t, frames, testExecutionRequest)
 	if barrier.ID != receipt.TurnID {
 		t.Fatal("unexpected page barrier")
 	}
 	h.write(barrier.ID, proto.TypeDone, proto.DonePayload{Content: "complete"})
-	waitTurn(t, h, barrier.ID, store.TurnCompleted)
+	waitTurn(t, h, barrier.ID, sessions.TurnCompleted)
 	// The first 100 unbound inputs must not pin the cursor, and the ready
 	// tail must wait for its own bounded page rather than an unbounded drain.
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -22,8 +23,8 @@ func TestFunctionCallsPersistCompleteResultsAndReceipts(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-	transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
-	transition(t, s, tenant, session.ID, turn, TurnInProgress, TurnWaiting)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnInProgress, sessions.TurnWaiting)
 	results := []string{
 		`{"success":true,"output":"answer"}`,
 		`{"success":true,"output":""}`,
@@ -101,7 +102,7 @@ func TestFunctionCallsAreScopedAndImmutable(t *testing.T) {
 	if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, call); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("queued turn accepted callback", err)
 	}
-	transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 	if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, call); err != nil {
 		t.Fatal(err)
 	}
@@ -147,12 +148,12 @@ func TestFunctionCallsAreScopedAndImmutable(t *testing.T) {
 }
 
 func TestFunctionResultsCannotApplyAfterCancellationOrCompletion(t *testing.T) {
-	for _, terminal := range []string{TurnCancelled, TurnCompleted, TurnFailed} {
+	for _, terminal := range []string{sessions.TurnCancelled, sessions.TurnCompleted, sessions.TurnFailed} {
 		t.Run(terminal, func(t *testing.T) {
 			s, _ := testStore(t)
 			tenant, session := newTurnSession(t, s)
 			turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-			transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+			transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 			for _, id := range []string{"submitted", "pending"} {
 				if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture(id)); err != nil {
 					t.Fatal(err)
@@ -162,7 +163,7 @@ func TestFunctionResultsCannotApplyAfterCancellationOrCompletion(t *testing.T) {
 			if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "submitted", result); err != nil {
 				t.Fatal(err)
 			}
-			if terminal == TurnCancelled {
+			if terminal == sessions.TurnCancelled {
 				if _, err := s.RequestCancel(t.Context(), tenant, session.ID, "cancel"); err != nil {
 					t.Fatal(err)
 				}
@@ -174,7 +175,7 @@ func TestFunctionResultsCannotApplyAfterCancellationOrCompletion(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			transition(t, s, tenant, session.ID, turn, TurnWaiting, terminal)
+			transition(t, s, tenant, session.ID, turn, sessions.TurnWaiting, terminal)
 			assertNoPendingFunctions(t, s, tenant, session.ID, turn)
 			if err := s.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, "submitted"); !errors.Is(err, ErrTurnConflict) {
 				t.Fatal(err)
@@ -193,7 +194,7 @@ func TestFunctionResultsCannotApplyAfterCancellationOrCompletion(t *testing.T) {
 				t.Fatal("historical result lost or falsely applied", row, err)
 			}
 			next := submitMessage(t, s, tenant, session.ID, "next").TurnID
-			transition(t, s, tenant, session.ID, next, TurnQueued, TurnInProgress)
+			transition(t, s, tenant, session.ID, next, sessions.TurnQueued, sessions.TurnInProgress)
 			if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, next, functionCallFixture("pending")); err != nil {
 				t.Fatal("call identity leaked across Turns", err)
 			}
@@ -214,7 +215,7 @@ func TestFunctionResultConcurrentSubmissionsChooseOneValue(t *testing.T) {
 	other, _ := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-	transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 	if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture("call")); err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +250,7 @@ func TestFunctionResultInvalidStorageInputDoesNotConsumeCall(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-	transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 	if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture("call")); err != nil {
 		t.Fatal(err)
 	}

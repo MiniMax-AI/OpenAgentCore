@@ -6,19 +6,26 @@ import (
 	"errors"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/google/uuid"
 )
 
+// sessionAgentDefaults reads the Session's saved Agent. A Session that
+// inherits the Agent's model provider reads the opened bundle with it.
 func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input sessionRequest) (*v1.SavedAgent, *v1.ModelProviderInput, error) {
 	if input.AgentID == nil {
 		return nil, nil, nil
 	}
-	if !validAgentID(*input.AgentID) {
-		return nil, nil, store.ErrNotFound
-	}
 	inherit := input.XAgentsCore == nil || input.XAgentsCore.ModelProvider == nil
-	resource, provider, err := h.Agents.GetAgentForSession(ctx, tenant, *input.AgentID, inherit)
+	var resource agents.Agent
+	var provider *v1.ModelProviderInput
+	var err error
+	if inherit {
+		resource, provider, err = h.AgentsReader.GetAgentWithModelProvider(ctx, tenant, *input.AgentID)
+	} else {
+		resource, err = h.AgentsReader.GetAgent(ctx, tenant, *input.AgentID)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -27,7 +34,7 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 		return nil, nil, err
 	}
 	if inherit && saved.XAgentsCore != nil && saved.XAgentsCore.ModelProvider != nil && provider == nil {
-		return nil, nil, store.ErrCredentialStorageUnavailable
+		return nil, nil, credentialcrypto.ErrUnavailable
 	}
 	return saved, provider, nil
 }

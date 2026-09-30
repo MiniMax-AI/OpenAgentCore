@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -39,32 +40,32 @@ var requestIDPattern = regexp.MustCompile(`^req_[0-9a-f]{32}$`)
 // routingStore serves one saved Agent and records Agent lookups.
 type routingStore struct {
 	tenant           string
-	agent            store.SavedAgent
+	agent            agents.Agent
 	lookups, updates []string
 }
 
-func (s *routingStore) GetAgent(_ context.Context, tenant, id string) (store.SavedAgent, error) {
+func (s *routingStore) GetAgent(_ context.Context, tenant, id string) (agents.Agent, error) {
 	s.lookups = append(s.lookups, id)
 	if tenant != s.tenant || id != s.agent.ID {
-		return store.SavedAgent{}, store.ErrNotFound
+		return agents.Agent{}, agents.ErrNotFound
 	}
 	return s.agent, nil
 }
 
-func (s *routingStore) ListAgents(_ context.Context, tenant, _ string, _ int, _ bool) (store.AgentPage, error) {
-	if tenant != s.tenant {
-		return store.AgentPage{}, nil
+func (s *routingStore) ListAgents(_ context.Context, query agents.ListQuery) (agents.Page, error) {
+	if query.TenantID != s.tenant {
+		return agents.Page{}, nil
 	}
-	return store.AgentPage{Agents: []store.SavedAgent{s.agent}}, nil
+	return agents.Page{Agents: []agents.Agent{s.agent}}, nil
 }
 
-func (s *routingStore) UpdateAgent(_ context.Context, tenant, id string, input store.UpdateAgentInput) (store.SavedAgent, error) {
-	s.updates = append(s.updates, id)
-	if tenant != s.tenant || id != s.agent.ID {
-		return store.SavedAgent{}, store.ErrNotFound
+func (s *routingStore) Update(_ context.Context, command agents.UpdateCommand) (agents.Agent, error) {
+	s.updates = append(s.updates, command.AgentID)
+	if command.TenantID != s.tenant || command.AgentID != s.agent.ID {
+		return agents.Agent{}, agents.ErrNotFound
 	}
-	if input.Metadata != nil {
-		s.agent.Metadata = *input.Metadata
+	if command.Metadata != nil {
+		s.agent.Metadata = *command.Metadata
 	}
 	return s.agent, nil
 }
@@ -86,11 +87,11 @@ func routingFixture(t *testing.T) (http.Handler, *chi.Mux, *routingStore) {
 	tenant := uuid.NewString()
 	keys := projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: "test-project", SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(routingKey), TenantID: tenant})
 	keys[runtimedevice.HashCredential(routingDerivedKey)] = keys[runtimedevice.HashCredential(routingKey)]
-	s := &routingStore{tenant: tenant, agent: store.SavedAgent{ID: uuid.NewString(), TenantID: tenant, Metadata: map[string]string{},
+	s := &routingStore{tenant: tenant, agent: agents.Agent{ID: uuid.NewString(), TenantID: tenant, Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"model":"fixture"}`), CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}}
 	deps, fakes := testDependencies(trapTB{t})
 	fakes.projects.resolveProjectAPIKey = keys.ResolveProjectAPIKey
-	fakes.agents.getAgent, fakes.agents.listAgents, fakes.agents.updateAgent = s.GetAgent, s.ListAgents, s.UpdateAgent
+	fakes.agentsReader.getAgent, fakes.agentsReader.listAgents, fakes.agents.update = s.GetAgent, s.ListAgents, s.Update
 	fakes.files.getSourceFile = func(context.Context, string, string) (store.SourceFile, error) {
 		return store.SourceFile{}, store.ErrNotFound
 	}

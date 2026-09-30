@@ -22,7 +22,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewModelTestStore(t)
+	s, db := newModelTestStoreDB(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	principal := store.FixtureExecutorPrincipal(t, s, tenant)
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
@@ -48,7 +48,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 			}
 		}
 	}()
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://private-registry.example"))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://private-registry.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,9 +85,9 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	}
 	revoked = true
 	server.Close()
-	pool.Close()
-	reopened, reopenedPool := store.NewModelTestStore(t)
-	handler, err = publicHandler(t, reopened, auth, "codex")
+	db.pool.Close()
+	reopened, reopenedDB := newModelTestStoreDB(t)
+	handler, err = publicHandler(t, reopened, reopenedDB, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		t.Fatal("public retrieval changed durable Environment state", err)
 	}
 	var history int
-	if err := reopenedPool.QueryRow(t.Context(), `SELECT
+	if err := reopenedDB.pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM turns WHERE session_id=$1) +
 		(SELECT count(*) FROM environment_input_reservations WHERE session_id=$1) +
 		(SELECT count(*) FROM session_events WHERE session_id=$1)`, before.SessionID).Scan(&history); err != nil || history != 0 {

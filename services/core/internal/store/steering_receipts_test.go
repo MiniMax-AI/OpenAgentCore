@@ -8,7 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestExecutionDurableInputReceiptLifetime(t *testing.T) {
@@ -26,7 +26,7 @@ func TestExecutionDurableInputReceiptLifetime(t *testing.T) {
 				t.Fatal("durable receipt was not requested", err)
 			}
 			h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, Written: true})
-			status := store.TurnFailed
+			status := sessions.TurnFailed
 			switch mode {
 			case "delayed-acceptance":
 				select {
@@ -36,7 +36,7 @@ func TestExecutionDurableInputReceiptLifetime(t *testing.T) {
 				}
 				h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, Accepted: true})
 				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "completed"})
-				status = store.TurnCompleted
+				status = sessions.TurnCompleted
 			case "missing-at-done":
 				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "unconfirmed input"})
 			case "retry-after-write":
@@ -56,7 +56,7 @@ func TestExecutionDurableInputReceiptLifetime(t *testing.T) {
 				case <-time.After(300 * time.Millisecond):
 				}
 				h.write(first.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Content: "partial"}})
-				status = store.TurnCancelled
+				status = sessions.TurnCancelled
 			}
 			done := h.finished(result, status)
 			var outcome execution.Result

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,8 +10,12 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 func TestResourceNotFoundErrorSurfaces(t *testing.T) {
@@ -152,5 +157,37 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 	writeError(response, http.StatusConflict, "runtime_history_unsupported", "Runtime history is not supported for this Session.")
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"type":"conflict_error","code":"runtime_history_unsupported"`) {
 		t.Fatal(response.Body)
+	}
+}
+
+// The shared persistence errors keep the responses the store errors had: an
+// audit source or query that cannot be used answers like invalid input.
+func TestSharedPersistenceErrors(t *testing.T) {
+	storeError := func(w http.ResponseWriter, r *http.Request, err error) { writeStoreError(w, r, err) }
+	respond := func(write func(http.ResponseWriter, *http.Request, error), err error) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		write(response, httptest.NewRequest(http.MethodPost, "/v1/agents", nil), err)
+		return response
+	}
+	invalid := respond(storeError, store.ErrInvalidInput).Body.String()
+	for _, test := range []struct {
+		write  func(http.ResponseWriter, *http.Request, error)
+		err    error
+		status int
+		body   string
+	}{
+		{storeError, fmt.Errorf("write: %w", writeaudit.ErrInvalidSource), 400, invalid},
+		{storeError, fmt.Errorf("write: %w", adminaudit.ErrInvalidSource), 400, invalid},
+		{writeAuditError, writeaudit.ErrInvalidQuery, 400, invalid},
+		{writeAuditError, adminaudit.ErrInvalidQuery, 400, invalid},
+		{storeError, fmt.Errorf("write: %w", textvalue.ErrUnstorable), 400, unstorableTextMessage},
+		{writeAuditError, textvalue.ErrUnstorable, 400, unstorableTextMessage},
+		{storeError, credentialcrypto.ErrUnavailable, 503, "credential_storage_unavailable"},
+		{writeAuditError, errors.New("canary"), 500, "internal_error"},
+	} {
+		response := respond(test.write, test.err)
+		if response.Code != test.status || !strings.Contains(response.Body.String(), test.body) {
+			t.Errorf("%v: %d %s", test.err, response.Code, response.Body)
+		}
 	}
 }

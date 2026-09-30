@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -39,8 +40,8 @@ func (f *vaultResourceFixture) GetVault(_ context.Context, tenant, id string) (s
 
 // Vaults are not Agents: /v1/agents/vaults updates an unknown Agent ID, which
 // resolves as a missing Agent after body validation.
-func (f *vaultResourceFixture) UpdateAgent(context.Context, string, string, store.UpdateAgentInput) (store.SavedAgent, error) {
-	return store.SavedAgent{}, store.ErrNotFound
+func (f *vaultResourceFixture) UpdateAgent(context.Context, agents.UpdateCommand) (agents.Agent, error) {
+	return agents.Agent{}, agents.ErrNotFound
 }
 
 func vaultResourceHandler(t *testing.T) (http.Handler, *vaultResourceFixture) {
@@ -50,7 +51,7 @@ func vaultResourceHandler(t *testing.T) (http.Handler, *vaultResourceFixture) {
 	deps.Engine = "fake_alpha"
 	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "vault-org", ProjectID: "vault-project", SubjectKind: "user", SubjectID: "vault-owner", TokenSHA256: runtimedevice.HashCredential("vault-key"), TenantID: f.vault.TenantID}).ResolveProjectAPIKey
 	fakes.vaults.createVault, fakes.vaults.getVault, fakes.vaults.listVaults, fakes.vaults.deleteVault = f.CreateVault, f.GetVault, f.ListVaults, f.DeleteVault
-	fakes.agents.updateAgent = f.UpdateAgent
+	fakes.agents.update = f.UpdateAgent
 	return newTestHandler(t, deps), f
 }
 

@@ -9,6 +9,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -16,17 +18,17 @@ import (
 var ErrUnappliedInputs = errors.New("turn has messages without an executor receipt")
 
 // CompleteExecution commits the outcome and native continuity under the admission lock.
-func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turnID, status string, outcome json.RawMessage, nativeID string, appliedThrough int64) (Turn, error) {
+func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turnID, status string, outcome json.RawMessage, nativeID string, appliedThrough int64) (sessions.Turn, error) {
 	p, err := turnLookup(tenantID, sessionID, turnID)
 	if err != nil {
-		return Turn{}, err
+		return sessions.Turn{}, err
 	}
-	if !terminalStatus(status) || len(outcome) > 512*1024 || len(nativeID) > 512 || appliedThrough < 0 {
-		return Turn{}, ErrInvalidInput
+	if !sessions.TerminalStatus(status) || len(outcome) > 512*1024 || len(nativeID) > 512 || appliedThrough < 0 {
+		return sessions.Turn{}, ErrInvalidInput
 	}
 	outcome, err = jsonobject.Normalize(outcome)
 	if err != nil {
-		return Turn{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		return sessions.Turn{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	var row sqlc.Turn
 	err = s.withSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
@@ -36,10 +38,10 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 		} else if err != nil {
 			return err
 		}
-		if current.Status != TurnInProgress && (current.Status != TurnWaiting || status == TurnCompleted) {
+		if current.Status != sessions.TurnInProgress && (current.Status != sessions.TurnWaiting || status == sessions.TurnCompleted) {
 			return ErrTurnConflict
 		}
-		if status == TurnCompleted {
+		if status == sessions.TurnCompleted {
 			pending, err := q.HasUnappliedMessages(ctx, sqlc.HasUnappliedMessagesParams{SessionID: session, TurnID: p.ID, Sequence: appliedThrough})
 			if err != nil {
 				return err
@@ -49,7 +51,7 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 			}
 		}
 		sourceCompleted := pgtype.Timestamptz{}
-		if status == TurnCompleted {
+		if status == sessions.TurnCompleted {
 			var snapshot struct {
 				Done *struct {
 					SourceCompletedAtMS *int64 `json:"source_completed_at_ms"`
@@ -91,10 +93,14 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 		if err != nil {
 			return err
 		}
-		return recordTurnChange(ctx, q, row, false)
+		ending, err := sessionpg.LoadEnding(ctx, q, session, row.ID)
+		if err != nil {
+			return err
+		}
+		return sessionpg.ApplyTurnEnd(ctx, q, session, row.ID, sessions.EndTurn(turnFromRow(row), ending))
 	})
 	if err != nil {
-		return Turn{}, err
+		return sessions.Turn{}, err
 	}
 	return turnFromRow(row), nil
 }

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -112,15 +113,15 @@ func TestSessionMetadataPreservesTerminalActivity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, status := range []string{TurnCompleted, TurnFailed, TurnCancelled} {
+	for _, status := range []string{sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled} {
 		receipt, err := s.SubmitMessage(ctx, tenant, session.ID, uuid.NewString(), []byte(`{"text":"metadata fixture"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnInProgress}); err != nil {
+		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: TurnInProgress, Status: status}); err != nil {
+		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status}); err != nil {
 			t.Fatal(err)
 		}
 		before, err := s.GetSession(ctx, tenant, session.ID)

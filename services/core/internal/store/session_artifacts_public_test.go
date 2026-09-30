@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -46,7 +47,7 @@ func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environ
 			t.Fatal(err)
 		}
 	}
-	transition(store.TurnQueued, store.TurnInProgress)
+	transition(sessions.TurnQueued, sessions.TurnInProgress)
 	var archive bytes.Buffer
 	w := tar.NewWriter(&archive)
 	for name, body := range outputs {
@@ -63,12 +64,12 @@ func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environ
 	if err := s.StageTurnArtifacts(t.Context(), tenant, session, receipt.TurnID, environment, &archive); err != nil {
 		t.Fatal(err)
 	}
-	transition(store.TurnInProgress, store.TurnCompleted)
+	transition(sessions.TurnInProgress, sessions.TurnCompleted)
 	return receipt.TurnID
 }
 
 // artifactHTTPServer serves Artifact routes for an owner and a foreign tenant.
-func artifactHTTPServer(t *testing.T, s *store.Store) (server *httptest.Server, owner, ownerTenant, foreign, foreignTenant string) {
+func artifactHTTPServer(t *testing.T, s *store.Store, db fixtureDB) (server *httptest.Server, owner, ownerTenant, foreign, foreignTenant string) {
 	t.Helper()
 	owner, foreign = uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant = uuid.NewString(), uuid.NewString()
@@ -76,7 +77,7 @@ func artifactHTTPServer(t *testing.T, s *store.Store) (server *httptest.Server, 
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "artifact-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "artifact-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	h, err := publicHandler(t, s, auth, "codex")
+	h, err := publicHandler(t, s, db, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,8 +90,8 @@ func artifactHTTPServer(t *testing.T, s *store.Store) (server *httptest.Server, 
 // environment_id filter matches nothing like another Environment's ID (HE-56),
 // without weakening tenant or Session scoping.
 func TestSessionArtifactListEnvelopeAndEnvironmentFilterPostgres(t *testing.T) {
-	s, _ := store.NewTestStore(t)
-	server, owner, ownerTenant, foreign, foreignTenant := artifactHTTPServer(t, s)
+	s, db := newTestStoreDB(t)
+	server, owner, ownerTenant, foreign, foreignTenant := artifactHTTPServer(t, s, db)
 	client := pathIDClient{t: t, server: server}
 
 	session, environment := hostedArtifactSession(t, s, ownerTenant, "artifact-list")
@@ -209,8 +210,8 @@ func TestSessionArtifactsOfficialClientPostgres(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, _ := store.NewTestStore(t)
-	server, owner, ownerTenant, foreign, _ := artifactHTTPServer(t, s)
+	s, db := newTestStoreDB(t)
+	server, owner, ownerTenant, foreign, _ := artifactHTTPServer(t, s, db)
 	session, environment := hostedArtifactSession(t, s, ownerTenant, "artifact-sdk")
 	outputs := map[string]string{"a.txt": "alpha", "sub/b.txt": "bravo", "empty.txt": ""}
 	first := completeArtifactTurn(t, s, ownerTenant, session, environment, "artifact-sdk-1", outputs)

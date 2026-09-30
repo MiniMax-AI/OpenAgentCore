@@ -14,6 +14,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 // Vault is a tenant-owned resource, independent of Sessions and engine execution.
@@ -62,7 +64,7 @@ func (s *Store) CreateVault(ctx context.Context, tenantID string, input CreateVa
 		if err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "create", "vault", created.ID, "", AuditResource{Type: "vault", ID: created.ID, ParentID: ""})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "create", "vault", created.ID, "", writeaudit.Resource{Type: "vault", ID: created.ID, ParentID: ""})
 	})
 	if err != nil {
 		return Vault{}, fmt.Errorf("create vault: %w", err)

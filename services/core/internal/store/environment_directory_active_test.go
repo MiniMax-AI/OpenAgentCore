@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -37,7 +38,7 @@ func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "finished"})
 	completeEmptyArtifactExport(t, h)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
-	if run.Turn.Status != store.TurnCompleted {
+	if run.Turn.Status != sessions.TurnCompleted {
 		t.Fatal("active read changed Turn outcome")
 	}
 	assertPreparationReleased(t, h, prepare.ID, handle)

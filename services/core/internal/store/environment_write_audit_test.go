@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
@@ -21,7 +22,7 @@ func TestEnvironmentUploadWriteAuditSurvivesRequestAndLeaseContext(t *testing.T)
 	cancel()
 	sessionAuditCount(t, f.s, f.tenant, 0)
 	// Neither the settlement caller nor the newly acquired execution lease owns the request context.
-	if err := f.writer.CloseExecution(context.Background()); err != nil {
+	if err := f.writer.lease.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	next := executionWriter(t, f.s)
@@ -80,7 +81,7 @@ func TestArtifactDeleteWriteAuditAndRollback(t *testing.T) {
 			if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, env, bytes.NewReader(archive)); err != nil {
 				t.Fatal(err)
 			}
-			transition(t, s, tenant, session, turn, TurnInProgress, TurnCompleted)
+			transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
 			page, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 			if err != nil || len(page.Artifacts) != 1 {
 				t.Fatal(page, err)

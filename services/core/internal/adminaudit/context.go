@@ -1,4 +1,6 @@
-// Package adminaudit carries non-secret administrator provenance into business transactions.
+// Package adminaudit carries non-secret administrator provenance into business
+// transactions, and owns the rules for recording it and the audit log's read
+// models. persistence/postgres/auditpg stores it.
 package adminaudit
 
 import "context"

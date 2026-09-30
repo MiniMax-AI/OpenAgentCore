@@ -31,7 +31,7 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(secret)); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatalf("provider target changed: %v", err)
 	}
-	if err := w.CloseExecution(t.Context()); err != nil {
+	if err := w.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.ObserveRuntimeRunning(t.Context(), owner); err == nil {

@@ -9,23 +9,24 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 // WriteAudit reads public write provenance as safe read models, never request
 // bodies or credentials.
 type WriteAudit interface {
-	GetResourceOwners(context.Context, string, string, []string) ([]store.ResourceOwner, error)
-	ListWriteOperations(context.Context, string, store.WriteOperationFilter) (store.WriteOperationPage, error)
+	GetResourceOwners(context.Context, string, string, []string) ([]writeaudit.ResourceOwner, error)
+	ListWriteOperations(context.Context, string, writeaudit.Filter) (writeaudit.Page, error)
 }
 
 type ResourceOwnerList struct {
-	Data []store.ResourceOwner `json:"data"`
+	Data []writeaudit.ResourceOwner `json:"data"`
 }
 
 func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowed ...string) (url.Values, string, bool) {
 	values, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 		return nil, "", false
 	}
 	for name, entries := range values {
@@ -36,7 +37,7 @@ func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowe
 			}
 		}
 		if !recognized || len(entries) != 1 || entries[0] == "" {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 			return nil, "", false
 		}
 	}
@@ -65,23 +66,23 @@ func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ids := strings.Split(values.Get("resource_ids"), ",")
-	if !store.ValidAuditResourceType(values.Get("resource_type")) || len(ids) > 100 {
-		writeStoreError(w, r, store.ErrInvalidInput)
+	if !writeaudit.ValidResourceType(values.Get("resource_type")) || len(ids) > 100 {
+		writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 		return
 	}
 	for _, id := range ids {
 		if id == "" || len(id) > 256 || strings.TrimSpace(id) != id {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 			return
 		}
 	}
 	owners, err := h.WriteAudit.GetResourceOwners(r.Context(), tenant, values.Get("resource_type"), ids)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeAuditError(w, r, err)
 		return
 	}
 	if owners == nil {
-		owners = []store.ResourceOwner{}
+		owners = []writeaudit.ResourceOwner{}
 	}
 	writeJSON(w, http.StatusOK, ResourceOwnerList{Data: owners})
 }
@@ -99,7 +100,7 @@ func (h *Handler) getResourceOwners(w http.ResponseWriter, r *http.Request) {
 // @Param created_before query string false "Exclusive RFC3339 timestamp"
 // @Param limit query int false "Page size, 1-100, default 50"
 // @Param after query string false "Opaque next_cursor from the preceding page"
-// @Success 200 {object} store.WriteOperationPage
+// @Success 200 {object} writeaudit.Page
 // @Failure 400,401,404,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/write-operations [get]
 func (h *Handler) listWriteOperations(w http.ResponseWriter, r *http.Request) {
@@ -107,25 +108,25 @@ func (h *Handler) listWriteOperations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	filter := store.WriteOperationFilter{KeyID: values.Get("key_id"), ResourceType: values.Get("resource_type"), ResourceID: values.Get("resource_id"), After: values.Get("after"), Limit: 50}
-	if filter.ResourceType != "" && !store.ValidAuditResourceType(filter.ResourceType) {
-		writeStoreError(w, r, store.ErrInvalidInput)
+	filter := writeaudit.Filter{KeyID: values.Get("key_id"), ResourceType: values.Get("resource_type"), ResourceID: values.Get("resource_id"), After: values.Get("after"), Limit: 50}
+	if filter.ResourceType != "" && !writeaudit.ValidResourceType(filter.ResourceType) {
+		writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 		return
 	}
 	for _, value := range []string{filter.KeyID, filter.ResourceID} {
 		if len(value) > 256 {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 			return
 		}
 	}
 	if len(filter.After) > 2048 {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 		return
 	}
 	if value := values.Get("limit"); value != "" {
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 1 || n > 100 {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 			return
 		}
 		filter.Limit = n
@@ -134,23 +135,23 @@ func (h *Handler) listWriteOperations(w http.ResponseWriter, r *http.Request) {
 		if value := values.Get(key); value != "" {
 			parsed, err := time.Parse(time.RFC3339Nano, value)
 			if err != nil {
-				writeStoreError(w, r, store.ErrInvalidInput)
+				writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 				return
 			}
 			*target = &parsed
 		}
 	}
 	if filter.CreatedAfter != nil && filter.CreatedBefore != nil && !filter.CreatedAfter.Before(*filter.CreatedBefore) {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeAuditError(w, r, writeaudit.ErrInvalidQuery)
 		return
 	}
 	page, err := h.WriteAudit.ListWriteOperations(r.Context(), tenant, filter)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeAuditError(w, r, err)
 		return
 	}
 	if page.Data == nil {
-		page.Data = []store.WriteOperation{}
+		page.Data = []writeaudit.Operation{}
 	}
 	writeJSON(w, http.StatusOK, page)
 }

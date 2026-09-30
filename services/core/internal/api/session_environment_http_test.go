@@ -12,6 +12,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -35,10 +36,10 @@ func TestSelfHostedSessionHTTPReadListMetadataAndLiveStream(t *testing.T) {
 	session := environmentSession()
 	session.TenantID = uuid.NewString()
 	session.Environment.TenantID = session.TenantID
-	session.EnvironmentInputActivity = &store.EnvironmentInputActivity{
+	session.EnvironmentInputActivity = &sessions.EnvironmentInputActivity{
 		Status: "requires_action", EnvironmentID: session.Environment.ID, LastActiveAt: time.Unix(1700000100, 0),
 	}
-	fixture := &environmentHTTPFixture{streamFixture{session: session, changes: []store.SessionChange{{
+	fixture := &environmentHTTPFixture{streamFixture{session: session, changes: []sessions.SessionChange{{
 		Sequence: 11, Event: v1.SessionEvent{Type: "agent.session.requires_action", EventID: "activity", SessionID: session.ID},
 		EnvironmentInputActivity: session.EnvironmentInputActivity,
 	}}}}

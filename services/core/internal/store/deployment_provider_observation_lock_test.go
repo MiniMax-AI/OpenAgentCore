@@ -7,11 +7,12 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestDeploymentObservationClockSampleFollowsRowLock(t *testing.T) {
 	f := newProviderObservationFixture(t)
-	turn := f.terminal(t, TurnCompleted, "", "")
+	turn := f.terminal(t, sessions.TurnCompleted, "", "")
 	tx, err := f.pool.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +61,7 @@ func TestDeploymentObservationClockSampleFollowsRowLock(t *testing.T) {
 
 func TestDeploymentObservationWinningLockIsClearedByPUT(t *testing.T) {
 	f := newProviderObservationFixture(t)
-	turn := f.terminal(t, TurnCompleted, "", "")
+	turn := f.terminal(t, sessions.TurnCompleted, "", "")
 	tx, err := f.pool.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -109,11 +110,11 @@ func TestDeploymentObservationWinningLockIsClearedByPUT(t *testing.T) {
 func TestDeploymentObservationWaitingAndNonRootTurnCannotWrite(t *testing.T) {
 	f := newProviderObservationFixture(t)
 	receipt := submitMessage(t, f.s, f.tenant, f.session.ID, "waiting")
-	f.observe(t, Turn{ID: receipt.TurnID}, 0)
-	transition(t, f.s, f.tenant, f.session.ID, receipt.TurnID, TurnQueued, TurnInProgress)
-	transition(t, f.s, f.tenant, f.session.ID, receipt.TurnID, TurnInProgress, TurnWaiting)
-	f.observe(t, Turn{ID: receipt.TurnID}, 0)
+	f.observe(t, sessions.Turn{ID: receipt.TurnID}, 0)
+	transition(t, f.s, f.tenant, f.session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, f.s, f.tenant, f.session.ID, receipt.TurnID, sessions.TurnInProgress, sessions.TurnWaiting)
+	f.observe(t, sessions.Turn{ID: receipt.TurnID}, 0)
 	// Child Turn identifiers live outside turns. An absent root identifier is
 	// rejected by the same SQL ownership join, without a child-history lookup.
-	f.observe(t, Turn{ID: "ffffffff-ffff-4fff-bfff-ffffffffffff"}, 0)
+	f.observe(t, sessions.Turn{ID: "ffffffff-ffff-4fff-bfff-ffffffffffff"}, 0)
 }

@@ -180,7 +180,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	saved, inheritedProvider, err := h.sessionAgentDefaults(r.Context(), tenantID(r), input)
 	if err != nil {
 		if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			writeStoreError(w, r, err)
+			writeAgentsError(w, r, err)
 		}
 		return
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -15,7 +16,7 @@ func observeItems(ctx context.Context, s *store.Store, tenant, session, turn, st
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"patch","stage":"after","observation":{"status":"completed","kind":"function","name":"apply_patch","arguments":{"changes":[{"path":"/workspace/sample","diff":"+example"}]}}}`)},
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"search","stage":"after","observation":{"status":"completed","kind":"web_search","action":{"type":"search","query":"reference"}}}`)},
 	}
-	if status == store.TurnCompleted || status == store.TurnFailed {
+	if status == sessions.TurnCompleted || status == sessions.TurnFailed {
 		events = append(events, store.ExecutionEvent{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"final answer","phase":"final_answer"}`)})
 	}
 	return s.AppendTurnEvents(ctx, tenant, session, turn, 1, events)

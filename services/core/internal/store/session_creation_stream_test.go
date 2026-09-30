@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -48,7 +49,7 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 	}
 	// The snapshot is the committed post-admission projection; the cursor still
 	// precedes the initial input's events.
-	if !created.Created || created.Cursor != 0 || created.Session.LastTurn == nil || created.Session.LastTurn.Status != TurnQueued || len(retries) != 7 {
+	if !created.Created || created.Cursor != 0 || created.Session.LastTurn == nil || created.Session.LastTurn.Status != sessions.TurnQueued || len(retries) != 7 {
 		t.Fatal("invalid post-admission creation snapshot", created, retries)
 	}
 	id := created.Session.ID
@@ -61,7 +62,7 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 			t.Fatal("new Turn events are out of order", i, initial[i].Event.Type)
 		}
 	}
-	if initial[1].Event.Item == nil || initial[1].Event.Item.Role != "user" || initial[2].Turn == nil || initial[2].Turn.Status != TurnQueued {
+	if initial[1].Event.Item == nil || initial[1].Event.Item.Role != "user" || initial[2].Turn == nil || initial[2].Turn.Status != sessions.TurnQueued {
 		t.Fatal("invalid initial input or activity snapshot", initial)
 	}
 	encoded := func(value Session) string {
@@ -99,8 +100,8 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 	if err != nil || encoded(snapshot) != encoded(read) || cursor != initial[len(initial)-1].Sequence || initial[2].Settled {
 		t.Fatal("stream snapshot differs from the Session read and its cursor", cursor, err)
 	}
-	transition(t, s, tenant, id, ordinary.LastTurn.ID, TurnQueued, TurnInProgress)
-	transition(t, s, tenant, id, ordinary.LastTurn.ID, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, id, ordinary.LastTurn.ID, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, s, tenant, id, ordinary.LastTurn.ID, sessions.TurnInProgress, sessions.TurnCompleted)
 	// Completing before the HTTP observer drains does not change its start point.
 	all, err := s.ListSessionEvents(ctx, tenant, id, created.Cursor)
 	if err != nil || len(all) <= len(initial) || all[0].Event.EventID != initial[0].Event.EventID {

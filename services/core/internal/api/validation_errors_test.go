@@ -11,6 +11,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -22,14 +23,14 @@ type validationStore struct {
 	writes int
 }
 
-func (s *validationStore) CreateAgent(_ context.Context, tenant string, input store.CreateAgentInput) (store.SavedAgent, error) {
+func (s *validationStore) CreateAgent(_ context.Context, command agents.CreateCommand) (agents.Agent, error) {
 	s.writes++
-	return store.SavedAgent{ID: uuid.NewString(), TenantID: tenant, Configuration: input.Configuration, Metadata: input.Metadata, CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}, nil
+	return agents.Agent{ID: uuid.NewString(), TenantID: command.TenantID, Configuration: command.Configuration, Metadata: command.Metadata, CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}, nil
 }
 
-func (s *validationStore) UpdateAgent(_ context.Context, tenant, id string, input store.UpdateAgentInput) (store.SavedAgent, error) {
+func (s *validationStore) UpdateAgent(_ context.Context, command agents.UpdateCommand) (agents.Agent, error) {
 	s.writes++
-	return store.SavedAgent{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"model":"validation-model"}`), Metadata: map[string]string{}}, nil
+	return agents.Agent{ID: command.AgentID, TenantID: command.TenantID, Configuration: json.RawMessage(`{"model":"validation-model"}`), Metadata: map[string]string{}}, nil
 }
 
 func (s *validationStore) CreateVault(_ context.Context, tenant string, input store.CreateVaultInput) (store.Vault, error) {
@@ -62,7 +63,7 @@ func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, _, id str
 func (s *validationStore) serve(d *Dependencies, f *testFakes) {
 	d.Execution = f.execution()
 	f.admission.createSession = s.CreateSession
-	f.agents.createAgent, f.agents.updateAgent = s.CreateAgent, s.UpdateAgent
+	f.agents.create, f.agents.update = s.CreateAgent, s.UpdateAgent
 	f.vaults.createVault = s.CreateVault
 	f.sessions.getSession, f.sessions.updateSessionMetadata = nil, s.UpdateSessionMetadata
 	f.environmentTemplates.createEnvironmentTemplate, f.environmentTemplates.updateEnvironmentTemplate = s.CreateEnvironmentTemplate, s.UpdateEnvironmentTemplate

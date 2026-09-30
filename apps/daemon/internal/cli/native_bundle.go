@@ -92,7 +92,9 @@ func componentReceipt(root string) (nativeComponent, error) {
 	return c, err
 }
 
-func checkComponentFiles(directory string, c nativeComponent) error {
+var errNativeComponentMismatch = errors.New("installed files do not match the verified release")
+
+func checkComponentFiles(ctx context.Context, directory string, c nativeComponent) error {
 	root, err := os.OpenRoot(directory)
 	if err != nil {
 		return err
@@ -106,12 +108,23 @@ func checkComponentFiles(directory string, c nativeComponent) error {
 		if err != nil {
 			return err
 		}
-		info, e := f.Stat()
+		info, statErr := f.Stat()
+		if statErr != nil {
+			f.Close()
+			return statErr
+		}
+		if !info.Mode().IsRegular() {
+			f.Close()
+			return errNativeComponentMismatch
+		}
 		h := sha256.New()
-		_, copyErr := io.Copy(h, f)
+		_, copyErr := nativeCopy(ctx, h, f)
 		f.Close()
-		if e != nil || !info.Mode().IsRegular() || copyErr != nil || hex.EncodeToString(h.Sum(nil)) != expected.SHA256 || (runtime.GOOS != "windows" && expected.Executable && info.Mode().Perm()&0100 == 0) {
-			return errors.New("installed files do not match the verified release")
+		if copyErr != nil {
+			return copyErr
+		}
+		if hex.EncodeToString(h.Sum(nil)) != expected.SHA256 || (runtime.GOOS != "windows" && expected.Executable && info.Mode().Perm()&0100 == 0) {
+			return errNativeComponentMismatch
 		}
 	}
 	return nil
@@ -126,8 +139,11 @@ func installNativeComponent(ctx context.Context, source, root, name string, expe
 		if e != nil || !reflect.DeepEqual(got, expected) {
 			return fmt.Errorf("install: existing %s is incompatible; preserve it and use a separate installation directory", name)
 		}
-		if checkComponentFiles(dest, got) != nil {
-			return fmt.Errorf("install: existing %s is incomplete or modified; reinstall separately", name)
+		if err := checkComponentFiles(ctx, dest, got); err != nil {
+			if errors.Is(err, errNativeComponentMismatch) || errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("install: existing %s is incomplete or modified; reinstall separately", name)
+			}
+			return fmt.Errorf("install: cannot verify existing %s: %w", name, err)
 		}
 		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -147,6 +163,23 @@ func installNativeComponent(ctx context.Context, source, root, name string, expe
 		return err
 	}
 	defer src.Close()
+	var required uint64
+	for name := range expected.Files {
+		if !validBundlePath(name) {
+			return errors.New("install: invalid component path")
+		}
+		info, err := src.Stat(filepath.FromSlash(name))
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() || info.Size() < 0 || uint64(info.Size()) > ^uint64(0)-required {
+			return errors.New("install: invalid component size")
+		}
+		required += uint64(info.Size())
+	}
+	if err = requireNativeSpace(parent, required); err != nil {
+		return err
+	}
 	for name, expectedFile := range expected.Files {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -184,7 +217,13 @@ func installNativeComponent(ctx context.Context, source, root, name string, expe
 			err = out.Sync()
 		}
 		closeErr := out.Close()
-		if err != nil || closeErr != nil || hex.EncodeToString(h.Sum(nil)) != expectedFile.SHA256 {
+		if err != nil {
+			return fmt.Errorf("install: component copy failed: %w", err)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("install: component write failed: %w", closeErr)
+		}
+		if hex.EncodeToString(h.Sum(nil)) != expectedFile.SHA256 {
 			return errors.New("install: component checksum failed")
 		}
 	}

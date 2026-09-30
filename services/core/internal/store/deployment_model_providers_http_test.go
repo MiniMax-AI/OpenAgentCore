@@ -15,6 +15,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -29,14 +31,14 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{53}, 32))
-	st := store.NewWithCredentialCipher(pool, cipher)
+	st, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	tenant, projectKey, coreKey := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-http", TokenSHA256: runtimedevice.HashCredential(projectKey), TenantID: tenant}})
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +220,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	if providerOf(hostedID) != "deployment-canary" {
 		t.Fatal("removing the default changed an existing Session")
 	}
-	page, err := st.ListAdminAudit(t.Context(), store.AdminAuditFilter{ResourceType: "deployment_model_provider", ResourceID: "codex"})
+	page, err := auditpg.New(pgunit.NewPool(pool)).ListAdminAudit(t.Context(), adminaudit.Filter{ResourceType: "deployment_model_provider", ResourceID: "codex"})
 	if err != nil || len(page.Data) < 4 || page.Data[0].Action != "delete" || page.Data[0].ProjectID != nil {
 		t.Fatal("deployment writes not audited", page, err)
 	}
@@ -240,7 +242,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	worker, stop := startEnvironmentExpiryWorker(t, h.d)
+	worker, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	defer stop()
 	_, pool := store.NewTestStore(t)
 	reservations := func() int {
@@ -283,13 +285,13 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 // recorded first: a same-key retry returns the committed Session after the
 // default was replaced or removed.
 func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
-	st, pool := store.NewModelTestStore(t)
-	if _, err := pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
+	st, db := newModelTestStoreDB(t)
+	if _, err := db.pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
 		t.Fatal(err)
 	}
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "none-retry", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st))
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,13 +345,13 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 		t.Fatal("retry changed the frozen provider", err)
 	}
 	var revision uuid.UUID
-	if err := pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", original).Scan(&revision); err != nil || revision != snapshot.Revision {
+	if err := db.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", original).Scan(&revision); err != nil || revision != snapshot.Revision {
 		t.Fatal("API retry changed frozen revision", err)
 	}
 }
 
 func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T) {
-	st, pool := store.NewManagedTestStore(t)
+	st, db := newManagedTestStoreDB(t)
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tuple-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	admin := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()})
@@ -373,7 +375,7 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 		_, err = st.SetDeploymentModelProvider(admin, harness, v1.ModelConfigurationInput{ModelProvider: replacement, Model: "fixture"})
 		return snapshot, err
 	}
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), modelProviderDefaults(st, resolver))
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), modelProviderDefaults(st, resolver))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +390,7 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 		t.Fatalf("creation failed: %d %s", w.Code, w.Body)
 	}
 	var revision uuid.UUID
-	if err = pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", session.ID).Scan(&revision); err != nil || revision != original.Revision {
+	if err = db.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", session.ID).Scan(&revision); err != nil || revision != original.Revision {
 		t.Fatal("tuple revision changed", err)
 	}
 	frozen, err := st.SessionModelExecution(t.Context(), tenant, session.ID)

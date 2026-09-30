@@ -6,21 +6,23 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
-// Agents manages saved Agents. GetAgentForSession reads a saved Agent for
-// Session creation together with its decrypted model provider when the
-// Session inherits it.
+// Agents runs the saved Agent writes.
 type Agents interface {
-	DeleteAgent(context.Context, string, string) (string, error)
-	UpdateAgent(context.Context, string, string, store.UpdateAgentInput) (store.SavedAgent, error)
-	ListAgents(context.Context, string, string, int, bool) (store.AgentPage, error)
-	CreateAgent(context.Context, string, store.CreateAgentInput) (store.SavedAgent, error)
-	GetAgent(context.Context, string, string) (store.SavedAgent, error)
-	GetAgentForSession(context.Context, string, string, bool) (store.SavedAgent, *v1.ModelProviderInput, error)
+	Create(context.Context, agents.CreateCommand) (agents.Agent, error)
+	Update(context.Context, agents.UpdateCommand) (agents.Agent, error)
+	Delete(context.Context, agents.DeleteCommand) (string, error)
+}
+
+// AgentsReader reads saved Agents. Session creation reads an Agent with
+// GetAgentWithModelProvider when the Session inherits its model provider.
+type AgentsReader interface {
+	GetAgent(ctx context.Context, tenantID, agentID string) (agents.Agent, error)
+	ListAgents(context.Context, agents.ListQuery) (agents.Page, error)
+	GetAgentWithModelProvider(ctx context.Context, tenantID, agentID string) (agents.Agent, *v1.ModelProviderInput, error)
 }
 
 // @Summary Create a reusable Agent
@@ -51,16 +53,17 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Request must be a JSON object containing supported fields.")
 		return
 	}
-	input, err := resolveSavedAgent(request)
+	command, err := resolveSavedAgent(request)
 	if err != nil {
 		if !writeFieldError(w, err) {
 			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
 		}
 		return
 	}
-	agent, err := h.Agents.CreateAgent(r.Context(), tenantID(r), input)
+	command.TenantID = tenantID(r)
+	agent, err := h.Agents.Create(r.Context(), command)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeAgentsError(w, r, err)
 		return
 	}
 	h.respondAgentStatus(w, r, agent, http.StatusCreated)
@@ -77,33 +80,28 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/{agent_id} [get]
 func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "agent_id")
-	if !validAgentID(id) {
-		writeStoreError(w, r, store.ErrNotFound)
-		return
-	}
-	agent, err := h.Agents.GetAgent(r.Context(), tenantID(r), id)
+	agent, err := h.AgentsReader.GetAgent(r.Context(), tenantID(r), chi.URLParam(r, "agent_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeAgentsError(w, r, err)
 		return
 	}
 	h.respondAgent(w, r, agent)
 }
 
-func (h *Handler) respondAgent(w http.ResponseWriter, r *http.Request, agent store.SavedAgent) {
+func (h *Handler) respondAgent(w http.ResponseWriter, r *http.Request, agent agents.Agent) {
 	h.respondAgentStatus(w, r, agent, http.StatusOK)
 }
 
-func (h *Handler) respondAgentStatus(w http.ResponseWriter, r *http.Request, agent store.SavedAgent, status int) {
+func (h *Handler) respondAgentStatus(w http.ResponseWriter, r *http.Request, agent agents.Agent, status int) {
 	response, err := agentResponse(agent)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeAgentsError(w, r, err)
 		return
 	}
 	writeJSON(w, status, response)
 }
 
-func agentResponse(agent store.SavedAgent) (v1.SavedAgent, error) {
+func agentResponse(agent agents.Agent) (v1.SavedAgent, error) {
 	var response v1.SavedAgent
 	if err := json.Unmarshal(agent.Configuration, &response.SavedAgentConfiguration); err != nil {
 		return response, err
@@ -112,9 +110,4 @@ func agentResponse(agent store.SavedAgent) (v1.SavedAgent, error) {
 	response.Metadata = agent.Metadata
 	response.CreatedAt, response.UpdatedAt = agent.CreatedAt.Unix(), agent.UpdatedAt.Unix()
 	return response, nil
-}
-
-func validAgentID(id string) bool {
-	parsed, err := uuid.Parse(id)
-	return err == nil && parsed != uuid.Nil
 }

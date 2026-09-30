@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -23,7 +24,7 @@ func (w *Worker) bind(ctx context.Context, item store.ExecutionWork) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	if turn.Status != store.TurnQueued || !turn.CancelRequestedAt.IsZero() {
+	if turn.Status != sessions.TurnQueued || !turn.CancelRequestedAt.IsZero() {
 		return false, nil
 	}
 	if inputErr != nil {
@@ -36,7 +37,7 @@ func (w *Worker) bind(ctx context.Context, item store.ExecutionWork) (bool, erro
 	if !errors.Is(err, store.ErrDeviceBindingConflict) {
 		return ready, err
 	}
-	_, err = w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_device_unavailable"}`)})
+	_, err = w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_device_unavailable"}`)})
 	if errors.Is(err, store.ErrTurnConflict) {
 		err = nil
 	}

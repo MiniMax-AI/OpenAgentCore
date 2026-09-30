@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type scanProvider struct {
@@ -27,10 +26,10 @@ func (p *scanProvider) GetInfo(ctx context.Context, ref sandbox.Reference) (sand
 func TestManagedRuntimeScanWrapServicesNextPage(t *testing.T) {
 	for _, count := range []int{0, 1, 31, 32, 33, 65} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
-			s, _ := store.NewManagedTestStore(t)
+			s, db := newManagedTestStoreDB(t)
 			p := &scanProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
 			key := uuid.NewString()
-			w, _ := managedWorker(t, s, key, p)
+			w, _ := managedWorker(t, s, db, key, p)
 			var ids []string
 			for range count {
 				tenant, _, env := managedSession(t, s)
@@ -66,10 +65,10 @@ func TestManagedRuntimeScanWrapServicesNextPage(t *testing.T) {
 }
 
 func TestManagedRuntimeScanEmptyAfterCleanupAndCanceledCall(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	p := &scanProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
 	key := uuid.NewString()
-	w, _ := managedWorker(t, s, key, p)
+	w, _ := managedWorker(t, s, db, key, p)
 	tenant, session, env := managedSession(t, s)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err != nil {

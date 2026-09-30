@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -46,7 +47,7 @@ func TestExecutionNegotiatesAndPersistsToolObservations(t *testing.T) {
 	var cancel proto.PromptCancelPayload
 	_ = env.DecodePayload(&cancel)
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})
-	h.finished(result, store.TurnCancelled)
+	h.finished(result, sessions.TurnCancelled)
 	reopened, pool := store.NewTestStore(t)
 	defer pool.Close()
 	events, err := reopened.ListTurnEvents(ctx, h.tenant, h.session.ID, input.TurnID, 0, 100)

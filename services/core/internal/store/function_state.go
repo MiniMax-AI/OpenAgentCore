@@ -6,6 +6,8 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -29,42 +31,22 @@ func recordFunctionState(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn) e
 	if err != nil {
 		return err
 	}
-	status := TurnInProgress
+	status := sessions.TurnInProgress
 	if len(actions) > 0 {
-		status = TurnWaiting
+		status = sessions.TurnWaiting
 	}
 	if turn.Status != status {
 		turn, err = q.TransitionTurn(ctx, sqlc.TransitionTurnParams{ID: turn.ID, SessionID: turn.SessionID, ExpectedStatus: turn.Status, NewStatus: status, Outcome: []byte(`{}`)})
 		if err != nil {
 			return err
 		}
-		if err := recordTurnChange(ctx, q, turn, false); err != nil {
+		if err := sessionpg.AppendChanges(ctx, q, turn.SessionID, sessions.TurnChanges(turnFromRow(turn), false)...); err != nil {
 			return err
 		}
 	}
-	return recordSessionActivity(ctx, q, turn, actions)
-}
-
-func recordSessionActivity(ctx context.Context, q *sqlc.Queries, row sqlc.Turn, actions []v1.FunctionCallAction) error {
-	turn := turnFromRow(row)
-	turn.Outcome = nil
-	status := "in_progress"
-	if terminalStatus(row.Status) {
-		status = "idle"
-		if row.Status == TurnFailed {
-			status = "failed"
-		}
-	} else if len(actions) > 0 {
-		status = "requires_action"
-	}
-	usage, err := q.SessionTokenUsage(ctx, row.SessionID)
+	usage, err := sessionpg.LoadUsage(ctx, q, turn.SessionID)
 	if err != nil {
 		return err
 	}
-	// Mark the idle or failure of an ending Turn; a reservation made during its
-	// Artifact capture is newer work.
-	return recordSessionChange(ctx, q, row.SessionID, SessionChange{
-		Event: v1.SessionEvent{Type: "agent.session." + status}, Turn: &turn,
-		SessionUsage: usage, RequiredActions: actions, Settled: terminalStatus(row.Status),
-	})
+	return sessionpg.AppendChanges(ctx, q, turn.SessionID, sessions.ActivityChange(turnFromRow(turn), usage, actions))
 }

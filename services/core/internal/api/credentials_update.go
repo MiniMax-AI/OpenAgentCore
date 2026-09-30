@@ -6,6 +6,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 // @Summary Replace Vault Credential authentication secrets
@@ -22,7 +23,7 @@ import (
 // @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials/{credential_id} [post]
 func (h *Handler) updateCredential(w http.ResponseWriter, r *http.Request) {
-	vaultID, id := credentialPathID(r, "vault_id"), credentialPathID(r, "credential_id")
+	vaultID, id := chi.URLParam(r, "vault_id"), chi.URLParam(r, "credential_id")
 	raw, ok := readJSONObject(w, r)
 	if !ok {
 		return

@@ -7,6 +7,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -16,7 +18,7 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID s
 	if err != nil {
 		return Session{}, err
 	}
-	id := parsePathID(sessionID)
+	id := pgunit.PathID(sessionID)
 	encoded, err := metadata.Encode(values)
 	if err != nil {
 		return Session{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
@@ -29,7 +31,7 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID s
 		if err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "update", "session", uuid.UUID(row.ID.Bytes).String(), "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update", "session", uuid.UUID(row.ID.Bytes).String(), "")
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Session{}, ErrNotFound

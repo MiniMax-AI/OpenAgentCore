@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"testing"
 	"time"
 )
@@ -18,7 +19,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 			writer := executionWriter(t, s)
 			tenant, session := environmentInputSession(t, s)
 			original := submitMessage(t, s, tenant, session.ID, "original")
-			transition(t, s, tenant, session.ID, original.TurnID, TurnQueued, TurnInProgress)
+			transition(t, s, tenant, session.ID, original.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			blocker, err := pool.Begin(ctx)
@@ -54,7 +55,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 				admitted <- admission{value, err}
 			}
 			complete := func() {
-				_, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, TurnCompleted, nil, "", original.Sequence)
+				_, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, sessions.TurnCompleted, nil, "", original.Sequence)
 				completed <- err
 			}
 			first, second := input, complete
@@ -85,7 +86,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 				if err != nil || retry.ID != got.value.ID || !retry.Deadline.Equal(got.value.Deadline) || len(retry.Receipts) != 2 || !retry.Receipts[0].Replayed || retry.Receipts[0].TurnID != prepared.Receipts[0].TurnID {
 					t.Fatal("active retry replaced its original reservation", retry, err)
 				}
-				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, prepared.Receipts[0].TurnID, TurnCompleted, nil, "", prepared.Receipts[1].Sequence); err != nil {
+				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, prepared.Receipts[0].TurnID, sessions.TurnCompleted, nil, "", prepared.Receipts[1].Sequence); err != nil {
 					t.Fatal(err)
 				}
 			} else {
@@ -93,7 +94,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 					t.Fatal("admitted input escaped the original Turn or application fence", completionErr, got.value)
 				}
 				environmentInputHistory(t, pool, session.ID, 1, 3)
-				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, TurnCompleted, nil, "", got.value.Receipts[1].Sequence); err != nil {
+				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, sessions.TurnCompleted, nil, "", got.value.Receipts[1].Sequence); err != nil {
 					t.Fatal("completion after controlled application failed", err)
 				}
 			}

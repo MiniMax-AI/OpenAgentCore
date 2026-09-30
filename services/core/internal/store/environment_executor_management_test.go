@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/google/uuid"
 )
 
@@ -46,7 +47,7 @@ func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 	keyID := uuid.NewString()
 
 	// The audit entry commits with the write: without an audit source nothing is issued.
-	if _, err := s.IssueProjectExecutorCredential(ctx, p, one.ID, keyID, false); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.IssueProjectExecutorCredential(ctx, p, one.ID, keyID, false); !errors.Is(err, adminaudit.ErrInvalidSource) {
 		t.Fatal("unaudited issue", err)
 	}
 	issued, err := s.IssueProjectExecutorCredential(admin(), p, one.ID, keyID, false)

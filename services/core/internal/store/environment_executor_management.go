@@ -8,6 +8,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -58,7 +60,7 @@ func (s *Store) ProjectExecutorCredentialState(ctx context.Context, project iden
 	if err != nil {
 		return ExecutorCredentialState{}, err
 	}
-	environmentID := parsePathID(environment)
+	environmentID := pgunit.PathID(environment)
 	result := ExecutorCredentialState{Credentials: []ExecutorCredential{}}
 	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
@@ -159,7 +161,7 @@ func (s *Store) RevokeProjectExecutorCredential(ctx context.Context, project ide
 
 func executorCredentialAudit(project identity.Principal, action, keyID string) func(context.Context, *sqlc.Queries) error {
 	return func(ctx context.Context, q *sqlc.Queries) error {
-		return recordAdminMutation(ctx, q, project.TenantID, action, "executor_credential", keyID)
+		return auditpg.RecordAdminMutation(ctx, q, project.TenantID, action, "executor_credential", keyID)
 	}
 }
 
@@ -217,7 +219,7 @@ func (s *Store) exactExecutorRestriction(ctx context.Context, principal identity
 	if err != nil {
 		return err
 	}
-	want := parsePathID(environment)
+	want := pgunit.PathID(environment)
 	actual, err := s.executorCredentialRestriction(ctx, principal, tenant, id)
 	if err != nil {
 		return err

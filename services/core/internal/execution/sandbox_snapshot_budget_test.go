@@ -60,10 +60,11 @@ func (d *snapshotBudget) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pg
 
 func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	budget := &snapshotBudget{t: t}
-	s, w := resetManagerStoreConfig(t, func(cfg *pgxpool.Config) {
+	s, owner := resetManagerStoreConfig(t, func(cfg *pgxpool.Config) {
 		cfg.ConnConfig.RuntimeParams["jit"] = "on"
 		cfg.ConnConfig.Tracer = budget
 	})
+	w := owner.Store
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -83,7 +84,7 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 		}
 		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", 1)}, nil
 	})
-	m, err := newRuntimeManager(w, runtimegateway.NewRegistry(), configuration)
+	m, err := newRuntimeManager(owner, runtimegateway.NewRegistry(), configuration)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,7 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	budget.armed.Store(true)
 	started := time.Now()
 	err = m.resetStep(t.Context())
-	ping := w.CheckExecutionOwnership(t.Context())
+	ping := owner.Lease.CheckOwnership(t.Context())
 	t.Logf("reset_elapsed=%s reset_error=%v lease_ping=%v", time.Since(started), err, ping)
 	if err != nil || ping != nil {
 		t.Fatal("bounded snapshot lost execution ownership", err, ping)

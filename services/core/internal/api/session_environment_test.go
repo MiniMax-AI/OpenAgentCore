@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -71,16 +72,16 @@ func TestSessionEnvironmentUsesSafeStoredAssociation(t *testing.T) {
 
 func TestEnvironmentInputActivitySnapshotsIgnoreCurrentTurnAndActivity(t *testing.T) {
 	session := environmentSession()
-	session.LastTurn = &store.Turn{ID: "old-failure", Status: store.TurnFailed, CompletedAt: time.Unix(1700000200, 0)}
-	session.EnvironmentInputActivity = &store.EnvironmentInputActivity{Status: "requires_action", EnvironmentID: "environment", LastActiveAt: time.Unix(1700000300, 0)}
+	session.LastTurn = &sessions.Turn{ID: "old-failure", Status: sessions.TurnFailed, CompletedAt: time.Unix(1700000200, 0)}
+	session.EnvironmentInputActivity = &sessions.EnvironmentInputActivity{Status: "requires_action", EnvironmentID: "environment", LastActiveAt: time.Unix(1700000300, 0)}
 	session.RequiredActions = []v1.FunctionCallAction{{Type: "function_call", CallID: "stale"}}
 	session.Usage = json.RawMessage(`{"input_tokens":999,"output_tokens":0,"total_tokens":999}`)
 	for _, status := range []string{"requires_action", "idle", "failed"} {
-		activity := &store.EnvironmentInputActivity{Status: status, LastActiveAt: time.Unix(1700000100, 0)}
+		activity := &sessions.EnvironmentInputActivity{Status: status, LastActiveAt: time.Unix(1700000100, 0)}
 		if status == "requires_action" {
 			activity.EnvironmentID = "environment"
 		}
-		change := store.SessionChange{
+		change := sessions.SessionChange{
 			Event:                    v1.SessionEvent{Type: "agent.session." + status, EventID: "event", SessionID: session.ID},
 			EnvironmentInputActivity: activity,
 		}
@@ -111,9 +112,9 @@ func TestEnvironmentInputActivitySnapshotsIgnoreCurrentTurnAndActivity(t *testin
 			t.Fatal("unsafe or missing initial failure message", value.Error)
 		}
 	}
-	change := store.SessionChange{
+	change := sessions.SessionChange{
 		Event: v1.SessionEvent{Type: "agent.session.in_progress", EventID: "promotion"},
-		Turn:  &store.Turn{ID: "promoted", Status: store.TurnInProgress, CreatedAt: time.Unix(1700000400, 0)},
+		Turn:  &sessions.Turn{ID: "promoted", Status: sessions.TurnInProgress, CreatedAt: time.Unix(1700000400, 0)},
 	}
 	event, err := streamResponse(session, change, environmentOrigin)
 	if err != nil || event.Session.Status != "in_progress" || len(event.Session.RequiredActions) != 0 || event.Session.LastActiveAt != 1700000400 {

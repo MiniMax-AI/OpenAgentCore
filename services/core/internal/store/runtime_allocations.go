@@ -148,7 +148,7 @@ func (s *Store) GetRuntimeAllocation(ctx context.Context, tenant, environment st
 
 // ListRuntimeAllocations retains unresolved cleanup in bounded recovery scans.
 func (s *Store) ListRuntimeAllocations(ctx context.Context, after string) ([]RuntimeAllocation, error) {
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	id := pgtype.UUID{Valid: true}
@@ -228,7 +228,7 @@ type UnallocatedHostedEnvironment struct {
 }
 
 func (s *Store) ListUnallocatedHostedEnvironments(ctx context.Context, after string) ([]UnallocatedHostedEnvironment, error) {
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	id := pgtype.UUID{Valid: true}

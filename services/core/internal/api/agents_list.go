@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 )
 
 // @Summary List reusable Agents
@@ -23,16 +24,16 @@ func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, err := h.Agents.ListAgents(r.Context(), tenantID(r), options.after, options.limit, options.ascending)
+	page, err := h.AgentsReader.ListAgents(r.Context(), agents.ListQuery{TenantID: tenantID(r), After: options.after, Limit: options.limit, Ascending: options.ascending})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeAgentsError(w, r, err)
 		return
 	}
 	response := v1.SavedAgentList{Object: "list", Data: make([]v1.SavedAgent, 0, len(page.Agents)), HasMore: page.NextCursor != ""}
 	for _, agent := range page.Agents {
 		item, err := agentResponse(agent)
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeAgentsError(w, r, err)
 			return
 		}
 		response.Data = append(response.Data, item)

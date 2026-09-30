@@ -17,19 +17,19 @@ import (
 // authenticate first: a missing or invalid credential gets 401, and only a
 // recognized credential learns that the deployment is unavailable.
 func TestSandboxNodeRoutesAuthenticateBeforeDeploymentState(t *testing.T) {
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(uuid.NewString())})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s), withCoreKeys(admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Recognized, unconsumed enrollment tokens; no deployment has been initialized.
 	enrollment := func(token, installation string) {
 		t.Helper()
-		if _, err := pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VALUES(encode(sha256($1::bytea),'hex'),$2,clock_timestamp()+interval '10 minutes')", token, installation); err != nil {
+		if _, err := db.pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VALUES(encode(sha256($1::bytea),'hex'),$2,clock_timestamp()+interval '10 minutes')", token, installation); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -75,7 +75,7 @@ func TestSandboxNodeRoutesAuthenticateBeforeDeploymentState(t *testing.T) {
 
 	// Once Web claims an installation, still before initialization, another
 	// installation's token gets the same 401 it gets after initialization.
-	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET installation_id=$1, web_managed=true WHERE singleton=true", claimed); err != nil {
+	if _, err := db.pool.Exec(t.Context(), "UPDATE runtime_deployment SET installation_id=$1, web_managed=true WHERE singleton=true", claimed); err != nil {
 		t.Fatal(err)
 	}
 	run([]check{

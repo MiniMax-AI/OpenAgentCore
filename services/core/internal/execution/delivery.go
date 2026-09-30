@@ -9,7 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type pendingInput struct {
@@ -53,7 +53,7 @@ func abort(peer *runtimegateway.Session, runID string) {
 func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, peer *runtimegateway.Session, request proto.PromptRequestPayload, first int64, prepared *preparedStart) (result Result, status string) {
 	changed, unsubscribeChanges := d.notifications.subscribe(tenantID, sessionID)
 	defer unsubscribeChanges()
-	status = store.TurnFailed
+	status = sessions.TurnFailed
 	result.AppliedThrough = first
 	subscription, err := peer.SubscribeDurable(request.RunID)
 	if err != nil {
@@ -63,7 +63,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	upstream := subscription.Events
 	defer peer.Unsubscribe(request.RunID)
 	defer func() {
-		if status == store.TurnFailed {
+		if status == sessions.TurnFailed {
 			abort(peer, request.RunID)
 		}
 	}()
@@ -73,13 +73,13 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 		finishCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := journal.drain(upstream, &result); err != nil {
-			result.ErrorCode, status = "event_persistence_failed", store.TurnFailed
+			result.ErrorCode, status = "event_persistence_failed", sessions.TurnFailed
 		}
 		if err := journal.flush(finishCtx); err != nil {
-			result.ErrorCode, status = "event_persistence_failed", store.TurnFailed
+			result.ErrorCode, status = "event_persistence_failed", sessions.TurnFailed
 		}
 		if subscription.Err() != nil {
-			result.ErrorCode, status = "event_stream_incomplete", store.TurnFailed
+			result.ErrorCode, status = "event_stream_incomplete", sessions.TurnFailed
 		}
 	}()
 	var preparationEvents <-chan proto.Envelope
@@ -137,7 +137,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 						result.ErrorCode = "device_disconnected"
 						return
 					}
-					replacement, prepareErr := d.prepareTurnExecutor(ctx, peer, tenantID, sessionID, request.RunID, request, store.TurnInProgress)
+					replacement, prepareErr := d.prepareTurnExecutor(ctx, peer, tenantID, sessionID, request.RunID, request, sessions.TurnInProgress)
 					if prepareErr != nil {
 						result.ErrorCode = "executor_recovery_failed"
 						return
@@ -185,7 +185,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 					result.ErrorCode = "cancel_outcome_unavailable"
 					return
 				}
-				status = store.TurnCancelled
+				status = sessions.TurnCancelled
 			} else {
 				result.ErrorCode = "cancel_unconfirmed"
 			}
@@ -286,7 +286,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				}
 				return
 			}
-			if turn.Status != store.TurnInProgress && turn.Status != store.TurnWaiting {
+			if turn.Status != sessions.TurnInProgress && turn.Status != sessions.TurnWaiting {
 				result.ErrorCode = "execution_state_changed"
 				return
 			}

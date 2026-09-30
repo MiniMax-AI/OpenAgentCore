@@ -45,7 +45,7 @@ func oauthBinding(tenantID string, credential Credential) credentialcrypto.Bindi
 
 func (s *Store) sealOAuth(tenantID string, credential Credential, secret oauthSecret) ([]byte, []byte, error) {
 	if s.credentialCipher == nil {
-		return nil, nil, ErrCredentialStorageUnavailable
+		return nil, nil, credentialcrypto.ErrUnavailable
 	}
 	if !validOAuthMetadata(secret.Metadata) {
 		return nil, nil, ErrInvalidInput
@@ -67,7 +67,7 @@ func (s *Store) sealOAuth(tenantID string, credential Credential, secret oauthSe
 
 func (s *Store) openOAuth(tenantID string, credential Credential, ciphertext []byte) (oauthSecret, error) {
 	if s.credentialCipher == nil {
-		return oauthSecret{}, ErrCredentialStorageUnavailable
+		return oauthSecret{}, credentialcrypto.ErrUnavailable
 	}
 	plaintext, err := s.credentialCipher.Open(ciphertext, oauthBinding(tenantID, credential))
 	if err != nil {

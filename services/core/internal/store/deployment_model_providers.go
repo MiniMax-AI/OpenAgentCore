@@ -8,7 +8,9 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -67,7 +69,7 @@ func (s *Store) SetDeploymentModelProvider(ctx context.Context, harness string, 
 	}
 	encrypted, err := s.credentialCipher.SealDeploymentModelProvider(raw, harness)
 	if err != nil {
-		return DeploymentModelProvider{}, ErrCredentialStorageUnavailable
+		return DeploymentModelProvider{}, credentialcrypto.ErrUnavailable
 	}
 	var result DeploymentModelProvider
 	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
@@ -80,7 +82,7 @@ func (s *Store) SetDeploymentModelProvider(ctx context.Context, harness string, 
 			return err
 		}
 		result = deploymentModelProvider(row.Harness, row.Protocol, row.BaseUrl, row.ContextWindow, row.MaxOutputTokens, row.Model, row.HarnessConfig, row.UpdatedAt.Time, row.LastUsedAt, row.LastErrorAt, row.LastErrorCode)
-		return recordDeploymentMutation(ctx, q, "set", "deployment_model_provider", harness)
+		return auditpg.RecordDeploymentMutation(ctx, q, "set", "deployment_model_provider", harness)
 	})
 	return result, err
 }
@@ -93,7 +95,7 @@ func (s *Store) DeleteDeploymentModelProvider(ctx context.Context, harness strin
 		if _, err := q.DeleteDeploymentModelProvider(ctx, harness); err != nil {
 			return err
 		}
-		return recordDeploymentMutation(ctx, q, "delete", "deployment_model_provider", harness)
+		return auditpg.RecordDeploymentMutation(ctx, q, "delete", "deployment_model_provider", harness)
 	})
 }
 
@@ -110,11 +112,11 @@ func (s *Store) DeploymentModelProvider(ctx context.Context, harness string) (*D
 	}
 	raw, err := s.credentialCipher.OpenDeploymentModelProvider(snapshot.EncryptedConfig, harness)
 	if err != nil {
-		return nil, ErrCredentialStorageUnavailable
+		return nil, credentialcrypto.ErrUnavailable
 	}
 	var configuration v1.ModelConfigurationInput
 	if json.Unmarshal(raw, &configuration) != nil {
-		return nil, ErrCredentialStorageUnavailable
+		return nil, credentialcrypto.ErrUnavailable
 	}
 	// A decrypted but unsupported configuration is not a credential failure.
 	// Keep its stored snapshot intact so the operator can inspect and replace it.

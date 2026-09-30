@@ -12,7 +12,7 @@ import (
 )
 
 func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	tenant, session, _ := managedSession(t, s)
 	inputs := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"accepted work"}`)}}
 	accepted, err := s.SubmitInputs(t.Context(), tenant, session.ID, "work", inputs)
@@ -20,7 +20,7 @@ func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w, stop := managedWorkerMode(t, s, uuid.NewString(), p, true)
+	w, stop := managedWorkerMode(t, s, db, uuid.NewString(), p, true)
 	defer stop()
 	if _, err := w.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: session.Configuration}); !errors.Is(err, store.ErrEnvironmentUnavailable) {
 		t.Fatal("maintenance accepted new hosted Session", err)

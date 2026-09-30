@@ -1,4 +1,3 @@
-// Package items projects execution observations to the supported public Item variants.
 package items
 
 import (

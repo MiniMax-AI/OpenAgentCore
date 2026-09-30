@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 const MaxSourceFileBytes int64 = 512 << 20
@@ -79,7 +81,7 @@ func (s *Store) CreateSourceFile(ctx context.Context, tenantID string, upload fu
 			return fmt.Errorf("create source file: %w", err)
 		}
 		resource := sourceFileFromRow(row)
-		if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "create", "file", resource.ID, "", AuditResource{Type: "file", ID: resource.ID}); err != nil {
+		if err := auditpg.RecordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "create", "file", resource.ID, "", writeaudit.Resource{Type: "file", ID: resource.ID}); err != nil {
 			return err
 		}
 		created = resource
@@ -197,7 +199,7 @@ func (s *Store) DeleteSourceFile(ctx context.Context, tenantID, fileID string) e
 		if err := objects.Unlink(ctx, oid.Uint32); err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "delete", "file", fileID, "")
+		return auditpg.RecordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "delete", "file", fileID, "")
 	})
 }
 

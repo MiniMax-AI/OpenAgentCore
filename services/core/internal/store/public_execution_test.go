@@ -8,7 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -28,10 +28,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	h.session = publicSession(t, h, "public")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	t.Cleanup(func() {
@@ -42,7 +39,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 			t.Error("worker did not stop")
 		}
 	})
-	if second, err := execution.StartWorker(ctx, h.d); err == nil {
+	if second, err := startWorkerErr(ctx, h.db, h.d); err == nil {
 		cancel()
 		go second.Run(ctx)
 		t.Fatal("second service acquired database")
@@ -72,11 +69,11 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 		t.Fatal(bound, err)
 	}
 	active, err := h.s.GetSession(ctx, h.tenant, h.session.ID)
-	if err != nil || active.LastTurn == nil || active.LastTurn.Status != store.TurnInProgress {
+	if err != nil || active.LastTurn == nil || active.LastTurn.Status != sessions.TurnInProgress {
 		t.Fatal(active, err)
 	}
 	h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "Answer", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "worker-native"}})
-	waitTurn(t, h, receipts[0].TurnID, store.TurnCompleted)
+	waitTurn(t, h, receipts[0].TurnID, sessions.TurnCompleted)
 	items, err := h.s.ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 	if err != nil || len(items.Items) != 3 {
 		t.Fatal(items, err)
@@ -91,7 +88,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 		t.Fatal(prompt)
 	}
 	cancel()
-	waitTurn(t, h, next[0].TurnID, store.TurnFailed)
+	waitTurn(t, h, next[0].TurnID, sessions.TurnFailed)
 }
 
 func waitTurn(t *testing.T, h *dispatchHarness, id, status string) {
@@ -115,7 +112,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	h.session = publicSession(t, h, "interrupted")
 	first := h.message("first", "Already sent")
 	ctx := context.Background()
-	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	// A native measurement committed before process loss must survive startup
@@ -151,31 +148,28 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if _, err := h.s.SubmitMessage(ctx, h.tenant, queued.ID, "first", json.RawMessage(`{"text":"Not sent"}`)); err != nil {
 		t.Fatal(err)
 	}
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	stopped, cancel := context.WithCancel(ctx)
 	cancel()
 	if err := worker.Run(stopped); err != context.Canceled {
 		t.Fatal(err)
 	}
 	interrupted, err := h.s.GetSession(ctx, h.tenant, h.session.ID)
-	if err != nil || interrupted.LastTurn.Status != store.TurnFailed {
+	if err != nil || interrupted.LastTurn.Status != sessions.TurnFailed {
 		t.Fatal(interrupted, err)
 	}
 	pending, err := h.s.GetSession(ctx, h.tenant, queued.ID)
-	if err != nil || pending.LastTurn.Status != store.TurnQueued {
+	if err != nil || pending.LastTurn.Status != sessions.TurnQueued {
 		t.Fatal(pending, err)
 	}
 	if _, err := h.s.RequestCancel(ctx, h.tenant, queued.ID, "stop-before-dispatch"); err != nil {
 		t.Fatal(err)
 	}
 	pending, err = h.s.GetSession(ctx, h.tenant, queued.ID)
-	if err != nil || pending.LastTurn.Status != store.TurnCancelled {
+	if err != nil || pending.LastTurn.Status != sessions.TurnCancelled {
 		t.Fatal(pending, err)
 	}
-	restarted, err := execution.StartWorker(ctx, h.d)
+	restarted, err := startWorkerErr(ctx, h.db, h.d)
 	if err != nil {
 		t.Fatal("lease not released", err)
 	}

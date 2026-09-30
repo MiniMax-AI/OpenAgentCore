@@ -31,11 +31,15 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -105,6 +109,13 @@ func run() error {
 	}
 	executionStore := store.NewWithCredentialCipherAndOAuthRefresh(pool, credentialKey, oauthClient)
 	executionStore.SetPublicURL(public)
+	units := pgunit.NewPool(pool)
+	auditStore := auditpg.New(units)
+	agentStore := agentpg.New(units, credentialKey)
+	agentService, err := agents.NewService(agentStore)
+	if err != nil {
+		return err
+	}
 	installation, err := installationFacts(public)
 	if err != nil {
 		return err
@@ -119,7 +130,7 @@ func run() error {
 	auditCleanupDone := make(chan struct{})
 	go func() {
 		defer close(auditCleanupDone)
-		runWriteAuditCleanup(auditCleanupCtx, executionStore, auditRetention, metrics)
+		runWriteAuditCleanup(auditCleanupCtx, auditStore, auditRetention, metrics)
 	}()
 	defer func() { cancelAuditCleanup(); <-auditCleanupDone }()
 	var workerDone chan error
@@ -226,8 +237,12 @@ func run() error {
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
-
-		worker, err = execution.StartWorker(ctx, dispatcher)
+		lease, err := pgunit.AcquireLease(ctx, pool)
+		if err != nil {
+			return err
+		}
+		// From this call on the Worker closes the lease, even when it fails to start.
+		worker, err = execution.StartWorker(ctx, dispatcher, execution.Owner{Lease: lease, Store: store.NewExecution(executionStore, lease)})
 		if err != nil {
 			return err
 		}
@@ -288,11 +303,11 @@ func run() error {
 		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
 		Installation: installation, InstallationBindings: executionStore,
 		Projects: executionStore, Vaults: executionStore, ModelProviders: executionStore, Files: executionStore,
-		Skills: executionStore, EnvironmentTemplates: executionStore, Agents: executionStore,
+		Skills: executionStore, EnvironmentTemplates: executionStore, Agents: agentService, AgentsReader: agentStore,
 		Sessions: executionStore, SessionEvents: executionStore, SessionHistory: executionStore,
 		Subagents: executionStore, Artifacts: executionStore, SessionAdmin: executionStore,
 		Environments: executionStore, ExecutorConnections: executorConnections{store: executionStore, registry: registry},
-		Admin: executionStore, WriteAudit: executionStore, Metrics: metrics,
+		Admin: executionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
 	}
 	if worker != nil {

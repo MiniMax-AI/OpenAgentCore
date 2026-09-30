@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -184,7 +185,7 @@ func TestSandboxResetAutoRechecksTurnStartedAfterListing(t *testing.T) {
 	// Existing live input remains admitted; Turn transition takes the same
 	// Session lock that the later conditional archive must reacquire.
 	turn := submitMessage(t, s, tenant, session.ID, "after-list")
-	transition(t, w, tenant, session.ID, turn.TurnID, TurnQueued, TurnInProgress)
+	transition(t, w, tenant, session.ID, turn.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	if _, err := w.ArchiveSandboxResetSession(t.Context(), tenant, session.ID, 1, reset.Reset.RequestedAt); !errors.Is(err, ErrSandboxResetSessionBusy) {
 		t.Fatal("listed idle candidate cut a new Turn", err)
 	}

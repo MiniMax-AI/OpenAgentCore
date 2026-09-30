@@ -3,7 +3,7 @@ package execution
 import (
 	"context"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func finishDelivery(ctx context.Context, journal *journal, result *Result, cancelReply <-chan cancellationResult, pendingInput bool, functions *functionExchange) string {
@@ -12,18 +12,18 @@ func finishDelivery(ctx context.Context, journal *journal, result *Result, cance
 		case reply := <-cancelReply:
 			if recordCancellation(ctx, journal, reply, result) != nil {
 				result.ErrorCode = "event_persistence_failed"
-				return store.TurnFailed
+				return sessions.TurnFailed
 			}
 			if reply.err == nil && reply.ack.Applied {
-				return store.TurnCancelled
+				return sessions.TurnCancelled
 			}
 			if reply.err != nil || reply.ack.ErrorCode != "run_inactive" {
 				result.ErrorCode = "cancel_unconfirmed"
-				return store.TurnFailed
+				return sessions.TurnFailed
 			}
 		case <-ctx.Done():
 			result.ErrorCode = "cancel_unconfirmed"
-			return store.TurnFailed
+			return sessions.TurnFailed
 		}
 	}
 	if result.ErrorCode == "" {
@@ -32,8 +32,8 @@ func finishDelivery(ctx context.Context, journal *journal, result *Result, cance
 		} else if functions.complete(ctx) != nil {
 			result.ErrorCode = "function_result_unconfirmed"
 		} else {
-			return store.TurnCompleted
+			return sessions.TurnCompleted
 		}
 	}
-	return store.TurnFailed
+	return sessions.TurnFailed
 }

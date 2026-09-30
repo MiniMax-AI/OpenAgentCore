@@ -49,7 +49,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			s := store.NewWithCredentialCipher(pool, cipher)
+			s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 			tenant := uuid.NewString()
 			input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte("first")}, {Type: "inline", Path: "/workspace/b", Data: []byte("second")}}}
 			if setupOnly {
@@ -84,7 +84,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				return completedInitialization(proto.RuntimePreparePayload{}, nil)
 			}
 			key := uuid.NewString()
-			w, stop := managedWorkerMode(t, s, key, p, false, true)
+			w, stop := managedWorkerMode(t, s, db, key, p, false, true)
 			if mode == "restart" {
 				awaitInitialization(t, s, tenant, env.ID, "failed")
 				if p.writes.Load() != 0 {
@@ -120,7 +120,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 					t.Fatal("completed preparation blocked", err)
 				}
 				stop()
-				_, _ = managedWorkerMode(t, s, key, p, false, true)
+				_, _ = managedWorkerMode(t, s, db, key, p, false, true)
 				time.Sleep(350 * time.Millisecond)
 				if int(p.writes.Load()) != expectedSteps {
 					t.Fatal("completed preparation replayed")
@@ -139,7 +139,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 }
 
 func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
-	s := hostedFailureStore(t)
+	s, db := hostedFailureStore(t)
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	for path, body := range map[string]string{"proof/.codex-plugin/plugin.json": `{"name":"plugin","description":"A plugin.","skills":"./skills"}`, "proof/skills/example/SKILL.md": "---\nname: plugin-proof\ndescription: A plugin Skill.\n---\nProof."} {
@@ -180,7 +180,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 		return completedInitialization(request, data)
 	}
 	key := uuid.NewString()
-	worker, _ := managedWorkerMode(t, s, key, provider, false, true)
+	worker, _ := managedWorkerMode(t, s, db, key, provider, false, true)
 	if _, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}

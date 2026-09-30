@@ -15,8 +15,8 @@ import (
 )
 
 func TestSelfHostedServiceMCPRejectedWithoutWrites(t *testing.T) {
-	s, pool, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
-	handler := selfHostedMCPAdmissionHandler(t, s, tenant)
+	s, db, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
+	handler := selfHostedMCPAdmissionHandler(t, s, db, tenant)
 
 	for _, mode := range []string{"unattached", "missing", "wrong URL", "foreign Vault", "anonymous", "implicit", "explicit", "required anonymous", "required bearer"} {
 		for _, initial := range []bool{false, true} {
@@ -67,19 +67,19 @@ func TestSelfHostedServiceMCPRejectedWithoutWrites(t *testing.T) {
 				t.Fatal("rejected request exposed private authentication")
 			}
 
-			assertSelfHostedMCPRejectionHasNoWrites(t, pool, tenant)
+			assertSelfHostedMCPRejectionHasNoWrites(t, db.pool, tenant)
 		}
 	}
 }
 
-func selfHostedMCPAdmissionFixture(t *testing.T) (*store.Store, *pgxpool.Pool, string, store.Vault, store.Credential) {
+func selfHostedMCPAdmissionFixture(t *testing.T) (*store.Store, fixtureDB, string, store.Vault, store.Credential) {
 	t.Helper()
 	_, pool := store.NewTestStore(t)
 	cipher, err := credentialcrypto.New([]byte(strings.Repeat("k", 32)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	tenant := uuid.NewString()
 	vault, err := s.CreateVault(t.Context(), tenant, store.CreateVaultInput{})
 	if err != nil {
@@ -89,13 +89,13 @@ func selfHostedMCPAdmissionFixture(t *testing.T) (*store.Store, *pgxpool.Pool, s
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s, pool, tenant, vault, credential
+	return s, db, tenant, vault, credential
 }
 
-func selfHostedMCPAdmissionHandler(t *testing.T, s *store.Store, tenant string) http.Handler {
+func selfHostedMCPAdmissionHandler(t *testing.T, s *store.Store, db fixtureDB, tenant string) http.Handler {
 	t.Helper()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: runtimedevice.HashCredential("test-token")}})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}

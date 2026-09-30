@@ -28,10 +28,7 @@ func TestUnqualifiedImageAdmissionIsAtomic(t *testing.T) {
 			profile, _ := (engine.Catalog{}).Lookup("codex")
 			profile.MessageImages = proto.CapabilityUnsupported
 			h.d.Policy = execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"codex": profile})}
-			worker, err := execution.StartWorker(t.Context(), h.d)
-			if err != nil {
-				t.Fatal(err)
-			}
+			worker := startWorker(t, t.Context(), h.db, h.d)
 			defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 			configuration := json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"` + placement + `","workspace_directory":"/workspace"}}`)
 			create := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "image-create", Configuration: configuration, InitialInputs: imageAdmissionBatch()}

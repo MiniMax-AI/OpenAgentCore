@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 )
 
 // All Turn admission and lifecycle writes lock the tenant-scoped Session first.
@@ -37,7 +39,7 @@ func (s *Store) withLockedSession(ctx context.Context, tenantID, sessionID strin
 		return err
 	}
 	// Public paths resolve malformed IDs as missing; internal callers keep parseID.
-	id := parsePathID(sessionID)
+	id := pgunit.PathID(sessionID)
 	if !public {
 		if id, err = parseID(sessionID); err != nil {
 			return err
@@ -54,6 +56,6 @@ func (s *Store) withLockedSession(ctx context.Context, tenantID, sessionID strin
 		if err := apply(ctx, q, session); err != nil {
 			return err
 		}
-		return q.PruneSessionEvents(ctx, id)
+		return sessionpg.PruneChanges(ctx, q, id)
 	})
 }

@@ -21,7 +21,7 @@ func TestLiveStreamClosesAfterKeyRevocationOrProjectArchive(t *testing.T) {
 			name = "project-archive"
 		}
 		t.Run(name, func(t *testing.T) {
-			s, _ := store.NewTestStore(t)
+			s, db := newTestStoreDB(t)
 			projectID := uuid.NewString()
 			ctx := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "12345678", ActorLabel: "test", RequestID: uuid.NewString(), TraceID: uuid.NewString(), ProjectID: projectID})
 			project, err := s.CreateProject(ctx, projectID, "Stream authority")
@@ -40,7 +40,7 @@ func TestLiveStreamClosesAfterKeyRevocationOrProjectArchive(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			h, err := publicHandler(t, s, nil, "codex", storeKeys(s), storeExecution(t, s))
+			h, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s))
 			if err != nil {
 				t.Fatal(err)
 			}

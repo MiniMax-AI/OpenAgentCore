@@ -7,6 +7,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -39,8 +41,8 @@ func (s *Store) CreateSkillVersion(ctx context.Context, tenantID, skillID string
 		if err := q.AdvanceSkillVersion(ctx, sqlc.AdvanceSkillVersionParams{TenantID: tenant, ID: id, MakeDefault: makeDefault, Name: metadata.Name, Description: metadata.Description}); err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "upload_version", "skill_version", result.ID, result.SkillID,
-			AuditResource{Type: "skill_version", ID: result.ID, ParentID: result.SkillID})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "upload_version", "skill_version", result.ID, result.SkillID,
+			writeaudit.Resource{Type: "skill_version", ID: result.ID, ParentID: result.SkillID})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
@@ -119,7 +121,7 @@ func (s *Store) DeleteSkillVersion(ctx context.Context, tenantID, skillID, versi
 			if _, err = q.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: id}); err != nil {
 				return err
 			}
-			return recordWriteAudit(ctx, q, tenantID, "delete", "skill_version", result.ID, result.SkillID)
+			return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "skill_version", result.ID, result.SkillID)
 		}
 		row, err := q.DeleteSkillVersion(ctx, sqlc.DeleteSkillVersionParams{TenantID: tenant, SkillID: id, Version: number})
 		if err != nil {
@@ -131,7 +133,7 @@ func (s *Store) DeleteSkillVersion(ctx context.Context, tenantID, skillID, versi
 				return err
 			}
 		}
-		return recordWriteAudit(ctx, q, tenantID, "delete", "skill_version", result.ID, result.SkillID)
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "skill_version", result.ID, result.SkillID)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound

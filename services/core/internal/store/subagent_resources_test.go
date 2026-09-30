@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -39,7 +40,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := submitMessage(t, s, tenant, session.ID, "first")
-	transition(t, owner, tenant, session.ID, root.TurnID, TurnQueued, TurnInProgress)
+	transition(t, owner, tenant, session.ID, root.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	ordinal := int32(1)
 	appendFacts := func(facts ...ExecutionEvent) {
 		t.Helper()
@@ -64,13 +65,13 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	}
 	opened := int64(101000)
 	finished := int64(102000)
-	turn := proto.SubagentTurnPayload{NativeID: "child", TurnID: "native-turn-1", Status: TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}
+	turn := proto.SubagentTurnPayload{NativeID: "child", TurnID: "native-turn-1", Status: sessions.TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}
 	appendFacts(subagentFact(proto.TypeSubagentTurn, turn))
 	text := "child-owned-result"
 	message, _ := json.Marshal(proto.OutputMessagePayload{ID: "native-message", Status: "completed", Text: &text})
 	item := proto.SubagentItemPayload{NativeID: "child", TurnID: turn.TurnID, ItemID: "native-message", Position: 0, Kind: proto.TypeOutputMessage, Payload: message}
 	appendFacts(subagentFact(proto.TypeSubagentItem, item))
-	turn.Status = TurnCompleted
+	turn.Status = sessions.TurnCompleted
 	turn.CompletedAtMS = &finished
 	appendFacts(subagentFact(proto.TypeSubagentTurn, turn))
 	// Later history reads preserve the terminal Turn and all existing Items.
@@ -99,7 +100,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		t.Fatal(allTurns, err)
 	}
 	// Nested children follow the same agent_id rule (unobserved officially).
-	nestedTurn := proto.SubagentTurnPayload{NativeID: "nested", TurnID: "native-nested-turn", Status: TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}
+	nestedTurn := proto.SubagentTurnPayload{NativeID: "nested", TurnID: "native-nested-turn", Status: sessions.TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}
 	appendFacts(subagentFact(proto.TypeSubagentTurn, nestedTurn))
 	nestedTurns, err := s.ListSubagentTurns(ctx, tenant, session.ID, nested.ID, "", 20, true)
 	if err != nil || len(nestedTurns.Data) != 1 || nestedTurns.Data[0].AgentID != "agent_root" || *nestedTurns.Data[0].SubagentID != nested.ID {
@@ -184,7 +185,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		t.Fatal("non-atomic batch", err)
 	}
 	// Reads do not invoke native processes, including after the root finishes.
-	transition(t, owner, tenant, session.ID, root.TurnID, TurnInProgress, TurnCompleted)
+	transition(t, owner, tenant, session.ID, root.TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	if _, err = reopened.GetSubagentTurn(context.Background(), tenant, session.ID, child.ID, tid); err != nil {
 		t.Fatal(err)
 	}

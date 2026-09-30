@@ -113,10 +113,10 @@ func (s sseLines) open(t *testing.T) {
 // creation stream whose initial reservation is cancelled without a Session event
 // ends through the committed projection, while GET stays open.
 func TestCreationStreamPublicLifetimes(t *testing.T) {
-	s, pool := store.NewModelTestStore(t)
+	s, db := newModelTestStoreDB(t)
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://offline-executor.example"))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://offline-executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,11 +127,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 		handler.ServeHTTP(w, r)
 	}))
 	defer server.Close()
-	writer, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = writer.CloseExecution(context.Background()) }()
+	writer := executionOwner(t, db, s).Store
 	connect := func(environment string) {
 		t.Helper()
 		generation := uuid.NewString()
@@ -207,7 +203,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	}
 	fresh.open(t)
 	var reservation string
-	if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", session).Scan(&reservation); err != nil {
+	if err := db.pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", session).Scan(&reservation); err != nil {
 		t.Fatal(err)
 	}
 	cursor, err := s.SessionEventCursor(t.Context(), tenant, session)

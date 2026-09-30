@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -69,24 +70,20 @@ func subagentFixture(kind string, value any) store.ExecutionEvent {
 // routes with the Session's Agent ID, Subagent lists use the common envelope and
 // child Item lists clamp their limit. Tenant B sees none of it.
 func TestSubagentVisibilityPublic(t *testing.T) {
-	s, _ := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	writer, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = writer.CloseExecution(t.Context()) }()
+	writer := executionOwner(t, db, s).Store
 	ctx := t.Context()
 
 	created := openStream(t, server, token, http.MethodPost, "/v1/agents/sessions",
@@ -130,7 +127,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	if err = writer.BindSessionDevice(ctx, tenant, session, host.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	identity := func(child, parent string, created int64) store.ExecutionEvent {
@@ -145,16 +142,16 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	facts := []store.ExecutionEvent{
 		identity("child", "root", 1700000001), identity("nested", "child", 1700000001),
 		subagentFixture(proto.TypeSubagentCoordination, proto.SubagentCoordinationPayload{ID: "spawn", Kind: "create_subagent_call", Status: "completed"}),
-		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: store.TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}),
+		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}),
 		message("child", "child-turn", "first", 0), message("child", "child-turn", "second", 1),
-		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: store.TurnCompleted, CreatedAtMS: opened, StartedAtMS: &opened, CompletedAtMS: &finished}),
-		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "nested", TurnID: "nested-turn", Status: store.TurnCompleted, CreatedAtMS: opened, StartedAtMS: &opened, CompletedAtMS: &finished}),
+		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnCompleted, CreatedAtMS: opened, StartedAtMS: &opened, CompletedAtMS: &finished}),
+		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "nested", TurnID: "nested-turn", Status: sessions.TurnCompleted, CreatedAtMS: opened, StartedAtMS: &opened, CompletedAtMS: &finished}),
 		subagentFixture(proto.TypeSubagentCoordination, proto.SubagentCoordinationPayload{ID: "wait", Kind: "wait_for_subagents_call", Status: "completed", Recipients: []string{"child"}}),
 	}
 	if err = writer.AppendTurnEvents(ctx, tenant, session, root, 1, facts); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: store.TurnInProgress, Status: store.TurnCompleted}); err != nil {
+	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
 		t.Fatal(err)
 	}
 

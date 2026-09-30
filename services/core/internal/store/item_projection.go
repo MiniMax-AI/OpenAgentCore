@@ -3,14 +3,13 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -20,48 +19,22 @@ func projectItemSource(ctx context.Context, q *sqlc.Queries, session, turn pgtyp
 		return fmt.Errorf("project execution item: %w", err)
 	}
 	for _, update := range updates {
-		id, _ := parseID(update.Item.ID)
-		if update.LegacyFinal {
-			native, err := q.HasNativeMessageItem(ctx, sqlc.HasNativeMessageItemParams{TurnID: turn, ID: id})
-			if err != nil {
-				return err
-			}
-			if native {
-				continue
-			}
-		}
-		old, err := q.GetSessionItem(ctx, sqlc.GetSessionItemParams{SessionID: session, ID: id})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		}
-		var previous v1.Item
-		if err == nil {
-			if err = json.Unmarshal(old.Payload, &previous); err != nil {
-				return err
-			}
-		}
-		item, err := items.Merge(update, previous)
+		stored, err := sessionpg.LoadItem(ctx, q, session, turn, update)
 		if err != nil {
 			return err
 		}
-		if err := restoreFunctionItemResult(ctx, q, session, turn, &item); err != nil {
-			return err
-		}
-		payload, err := item.MarshalStored()
+		change, ok, err := items.Observe(kind, update, stored)
 		if err != nil {
 			return err
 		}
-		stored, err := q.PutSessionItem(ctx, sqlc.PutSessionItemParams{ID: id, SessionID: session, TurnID: turn, CreatedAt: created, Payload: payload, IsOutput: kind != "message" && item.Type != "function_call_output"})
+		if !ok {
+			continue
+		}
+		index, err := sessionpg.PutItem(ctx, q, session, turn, created, change)
 		if err != nil {
 			return err
 		}
-		var delta *string
-		if kind == "delta" {
-			delta = update.Item.Content[0].Text
-		} else if kind == "command_output" {
-			delta = update.CommandOutputDelta
-		}
-		if err := recordItemChange(ctx, q, session, stored.OutputIndex, previous, item, delta); err != nil {
+		if err := sessionpg.AppendChanges(ctx, q, session, sessions.ItemChanges(change, index)...); err != nil {
 			return err
 		}
 	}
@@ -88,35 +61,6 @@ func indexEvents(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID
 		if err = projectSource(ctx, q, session, turn, row.Kind, int64(row.Ordinal), row.Payload, row.CreatedAt); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func restoreFunctionItemResult(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID, item *v1.Item) error {
-	if item.Type != "function_call_output" {
-		return nil
-	}
-	result, err := q.FunctionItemResult(ctx, sqlc.FunctionItemResultParams{SessionID: session, TurnID: turn, CallID: item.CallID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if len(result) == 0 {
-		return nil
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(result, &fields); err != nil {
-		return err
-	}
-	// Native results may normalize content; public Items retain the saved submission.
-	item.Output, item.Error = nil, nil
-	if value, ok := fields["output"]; ok {
-		item.Output = value
-	}
-	if value, ok := fields["error"]; ok {
-		item.Error = value
 	}
 	return nil
 }

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
@@ -61,10 +60,7 @@ func TestNativePublicFunctionExecution(t *testing.T) {
 
 func nativePublicFunctionServer(t *testing.T, h *dispatchHarness, ctx context.Context, provider *v1.ModelProviderInput) (string, string) {
 	t.Helper()
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	ctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
@@ -79,7 +75,7 @@ func nativePublicFunctionServer(t *testing.T, h *dispatchHarness, ctx context.Co
 	})
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
-	handler, err := publicHandler(t, h.s, auth, "codex", workerExecution(worker), nativeDeploymentDefaults(h.s, "gpt-5.5", provider))
+	handler, err := publicHandler(t, h.s, h.db, auth, "codex", workerExecution(worker), nativeDeploymentDefaults(h.s, "gpt-5.5", provider))
 	if err != nil {
 		t.Fatal(err)
 	}

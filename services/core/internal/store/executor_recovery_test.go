@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -34,7 +34,7 @@ func TestExecutorRecoveryRetriesOnlyConfirmedUnsubmittedInput(t *testing.T) {
 			first, start := readyExecutorAttempt(t, h)
 			h.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{State: "rejected", Operation: proto.TypeExecutionStart, ErrorCode: code})
 			if code != "executor_unavailable" {
-				h.finished(result, store.TurnFailed)
+				h.finished(result, sessions.TurnFailed)
 				return
 			}
 			next, replacement := readyExecutorAttempt(t, h)
@@ -43,7 +43,7 @@ func TestExecutorRecoveryRetriesOnlyConfirmedUnsubmittedInput(t *testing.T) {
 			}
 			h.write(next.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: replacement.Handle, ExecutorID: replacement.ExecutorID, Revision: 2, State: "started", RunID: replacement.RunID})
 			h.write(replacement.RunID, proto.TypeDone, proto.DonePayload{Content: "once"})
-			h.finished(result, store.TurnCompleted)
+			h.finished(result, sessions.TurnCompleted)
 		})
 	}
 }
@@ -54,5 +54,5 @@ func TestExecutorReadinessRejectsChangedOwner(t *testing.T) {
 	result := h.run(t.Context(), receipt.TurnID)
 	frame, start := readyExecutorAttempt(t, h)
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: start.Handle, ExecutorID: uuid.NewString(), Revision: 2, State: "started", RunID: start.RunID})
-	h.finished(result, store.TurnFailed)
+	h.finished(result, sessions.TurnFailed)
 }

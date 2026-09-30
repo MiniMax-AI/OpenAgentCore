@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -85,11 +86,12 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	adapter.Configuration = regionalCodec{}
 	providers.RegisterFixture(t, kind, adapter)
 	s := store.New(pool)
-	w, err := store.NewExecution(t.Context(), s)
+	lease, err := pgunit.AcquireLease(t.Context(), pool)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer w.CloseExecution(context.Background())
+	defer lease.Close(context.Background())
+	w := store.NewExecution(s, lease)
 	installation := uuid.NewString()
 	if err = w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 		t.Fatal(err)
@@ -102,9 +104,10 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	// other dependency panics if called.
 	h, err := api.NewHandler(api.Dependencies{
 		Engine: "codex", CoreKeys: auth, InstallationBindings: s, Projects: s, Vaults: s, ModelProviders: s, Files: s, Skills: s,
-		EnvironmentTemplates: s, Agents: s, Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s, Artifacts: s,
-		SessionAdmin: s, Environments: s, Admin: s, WriteAudit: s, ExecutorConnections: struct{ api.ExecutorConnections }{},
-		Metrics: struct{ api.Metrics }{}, RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
+		EnvironmentTemplates: s, Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{}, Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s, Artifacts: s,
+		SessionAdmin: s, Environments: s, Admin: s, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{},
+		ExecutorConnections: struct{ api.ExecutorConnections }{},
+		Metrics:             struct{ api.Metrics }{}, RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
 		Execution: &api.Execution{ExecutorURL: "wss://core.example/api/v1/agent-daemon/ws", Admission: s, SessionArchive: s, Workspaces: struct{ api.EnvironmentWorkspaces }{}},
 		Sandboxes: &api.Sandboxes{Deployment: s, DeploymentChanges: leaseSetup{t: t, store: w, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})

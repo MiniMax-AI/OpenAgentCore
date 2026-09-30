@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -159,7 +160,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 				t.Fatal("initial batch did not promote", promoted, err)
 			}
 			active := requireEnvironmentInputActivity(t, s, tenant, session.ID, "", "")
-			if active.LastTurn == nil || active.LastTurn.Status != TurnInProgress || active.PendingInput {
+			if active.LastTurn == nil || active.LastTurn.Status != sessions.TurnInProgress || active.PendingInput {
 				t.Fatal("promotion did not claim its Turn", active.LastTurn)
 			}
 			replay, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
@@ -227,7 +228,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if err != nil || len(events) != expectedEvents || events[len(events)-1].Event.Type != "agent.session.failed" || events[len(events)-1].Turn != nil || events[len(events)-1].EnvironmentInputActivity.Status != "failed" {
 				t.Fatal("missing pre-Turn failure snapshot", events, err)
 			}
-			if err := writer.CloseExecution(t.Context()); err != nil {
+			if err := writer.lease.Close(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			pool.Close()

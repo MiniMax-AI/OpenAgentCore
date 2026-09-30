@@ -28,7 +28,7 @@ func (r *runtimeLifecycle) provisionPending(ctx context.Context) error {
 		_, err := r.provision(operation, environment.TenantID, environment.ID, provider)
 		cancel()
 		if err != nil {
-			if ownership := r.store.CheckExecutionOwnership(ctx); ownership != nil {
+			if ownership := r.lease.CheckOwnership(ctx); ownership != nil {
 				return ownership
 			}
 			log.Ctx(ctx).Warn("managed Runtime bootstrap incomplete", "environment_id", environment.ID)

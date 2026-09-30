@@ -11,6 +11,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -38,10 +40,6 @@ type ProjectAPIKeyPage struct {
 	HasMore bool            `json:"has_more"`
 }
 
-func validProjectKeyDigest(digest string) bool {
-	decoded, err := hex.DecodeString(digest)
-	return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == digest
-}
 func projectKeyMetadata(row sqlc.ProjectApiKey) ProjectAPIKey {
 	key := ProjectAPIKey{ID: uuid.UUID(row.ID.Bytes).String(), ProjectID: uuid.UUID(row.ProjectID.Bytes).String(), Name: row.Name, Prefix: row.Prefix, CreatedAt: row.CreatedAt.Time}
 	if row.RevokedAt.Valid {
@@ -97,7 +95,7 @@ func (s *Store) CreateProjectAPIKey(ctx context.Context, project, id, name strin
 			return err
 		}
 		result = IssuedProjectAPIKey{ProjectAPIKey: projectKeyMetadata(row), Key: token}
-		return recordAdminMutation(ctx, q, uuid.UUID(p.TenantID.Bytes).String(), "create", "api_key", id)
+		return auditpg.RecordAdminMutation(ctx, q, uuid.UUID(p.TenantID.Bytes).String(), "create", "api_key", id)
 	})
 	if err != nil {
 		return IssuedProjectAPIKey{}, err
@@ -163,11 +161,11 @@ func (s *Store) RevokeProjectAPIKey(ctx context.Context, project, id string) err
 		if err != nil {
 			return err
 		}
-		return recordAdminMutation(ctx, q, uuid.UUID(p.TenantID.Bytes).String(), "revoke", "api_key", id)
+		return auditpg.RecordAdminMutation(ctx, q, uuid.UUID(p.TenantID.Bytes).String(), "revoke", "api_key", id)
 	})
 }
 func (s *Store) ResolveProjectAPIKey(ctx context.Context, digest string) (ProjectAPIKeyBinding, error) {
-	if !validProjectKeyDigest(digest) {
+	if !writeaudit.ValidKeyDigest(digest) {
 		return ProjectAPIKeyBinding{}, ErrNotFound
 	}
 	row, err := s.queries.ResolveProjectAPIKey(ctx, digest)

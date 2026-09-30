@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"testing"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/google/uuid"
-	"testing"
 )
 
 func TestSessionModelExecutionEncryptedAndBound(t *testing.T) {
@@ -54,7 +55,7 @@ func TestSessionModelExecutionEncryptedAndBound(t *testing.T) {
 		t.Fatal("missing cipher succeeded")
 	}
 	input.IdempotencyKey = uuid.NewString()
-	if _, err := New(pool).CreateSession(ctx, tenant, input); !errors.Is(err, ErrCredentialStorageUnavailable) {
+	if _, err := New(pool).CreateSession(ctx, tenant, input); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("unencrypted create", err)
 	}
 	var count int

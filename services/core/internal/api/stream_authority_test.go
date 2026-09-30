@@ -13,6 +13,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -36,12 +37,12 @@ type busyAuthorityStream struct {
 	sequence int64
 }
 
-func (s *busyAuthorityStream) ListSessionEvents(ctx context.Context, _, _ string, _ int64) ([]store.SessionChange, error) {
+func (s *busyAuthorityStream) ListSessionEvents(ctx context.Context, _, _ string, _ int64) ([]sessions.SessionChange, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 	s.sequence++
-	return []store.SessionChange{{Sequence: s.sequence + 10, Event: v1.SessionEvent{Type: "agent.session.idle", EventID: "busy"}}}, nil
+	return []sessions.SessionChange{{Sequence: s.sequence + 10, Event: v1.SessionEvent{Type: "agent.session.idle", EventID: "busy"}}}, nil
 }
 
 func TestBusyStreamRechecksAuthorityAndFailsClosed(t *testing.T) {

@@ -1,5 +1,7 @@
 // Package writeaudit carries authenticated, non-secret request provenance to
-// business transactions. It does not authorize requests or replace principals.
+// business transactions, and owns the rules for recording it and its read
+// models. It does not authorize requests or replace principals.
+// persistence/postgres/auditpg stores it.
 package writeaudit
 
 import "context"

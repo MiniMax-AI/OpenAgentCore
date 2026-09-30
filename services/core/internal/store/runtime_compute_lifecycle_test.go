@@ -21,7 +21,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // The controlled provider records external effects independently of DB phases.
@@ -259,7 +258,7 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 type computeLifecycleFixture struct {
 	t        *testing.T
 	store    *store.Store
-	pool     *pgxpool.Pool
+	db       fixtureDB
 	provider *fakeCheckpointProvider
 	worker   *execution.Worker
 	stop     func()
@@ -269,7 +268,7 @@ type computeLifecycleFixture struct {
 
 func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *computeLifecycleFixture {
 	t.Helper()
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	registry := runtimegateway.NewRegistry()
 	p := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
 	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
@@ -283,17 +282,14 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 		}
 		server.Close()
 	})
-	f := &computeLifecycleFixture{t: t, store: s, pool: pool, provider: p, key: uuid.NewString(), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour, MaxActive: maxActive, MaxRetained: maxRetained}}
+	f := &computeLifecycleFixture{t: t, store: s, db: db, provider: p, key: uuid.NewString(), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour, MaxActive: maxActive, MaxRetained: maxRetained}}
 	f.start()
 	return f
 }
 func (f *computeLifecycleFixture) start() {
 	t := f.t
 	t.Helper()
-	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.provider, Suspension: &f.policy}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := startWorker(t, t.Context(), f.db, &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.provider, Suspension: &f.policy}})
 	var once sync.Once
 	stop := func() {
 		once.Do(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })
@@ -303,7 +299,7 @@ func (f *computeLifecycleFixture) start() {
 }
 func (f *computeLifecycleFixture) sql(query string, args ...any) {
 	f.t.Helper()
-	if _, err := f.pool.Exec(f.t.Context(), query, args...); err != nil {
+	if _, err := f.db.pool.Exec(f.t.Context(), query, args...); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -377,7 +373,7 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 		t.Fatal("wake replaced Session or replayed allocation")
 	}
 	var completedCount, queuedCount int
-	if err := f.pool.QueryRow(t.Context(), `SELECT count(*) FILTER(WHERE id=$2 AND status='completed'),count(*) FILTER(WHERE id=$3 AND status='queued') FROM turns WHERE session_id=$1`, session.ID, completed, queued).Scan(&completedCount, &queuedCount); err != nil || completedCount != 1 || queuedCount != 1 {
+	if err := f.db.pool.QueryRow(t.Context(), `SELECT count(*) FILTER(WHERE id=$2 AND status='completed'),count(*) FILTER(WHERE id=$3 AND status='queued') FROM turns WHERE session_id=$1`, session.ID, completed, queued).Scan(&completedCount, &queuedCount); err != nil || completedCount != 1 || queuedCount != 1 {
 		t.Fatal("wake replayed/consumed prior or next Turn", err)
 	}
 	if got, err := f.store.GetSession(t.Context(), tenant, session.ID); err != nil || string(got.Configuration) != string(session.Configuration) {

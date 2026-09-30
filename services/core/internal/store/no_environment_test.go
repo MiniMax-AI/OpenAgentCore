@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -23,7 +24,7 @@ func TestNoEnvironmentRejectsUnadvertisedDeviceBeforeClaim(t *testing.T) {
 		t.Fatal("unsupported environment admitted")
 	}
 	turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnQueued {
+	if err != nil || turn.Status != sessions.TurnQueued {
 		t.Fatal(turn, err)
 	}
 }

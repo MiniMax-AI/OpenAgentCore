@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -69,8 +70,8 @@ func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 		h, f, _ := credentialHandler(t)
 		path := "/v1/vaults/" + f.credential.VaultID + "/credentials/" + f.credential.ID
 		method, status := "POST", http.StatusBadRequest
-		// Malformed identifiers reach storage only as the never-assigned ID,
-		// after body validation, exactly like a well-formed missing identifier.
+		// Malformed identifiers reach storage unchanged, after body validation,
+		// and storage reports them like a well-formed missing identifier.
 		malformed := strings.Contains(mode, "invalid") || strings.Contains(mode, "zero")
 		if malformed {
 			f.err = store.ErrNotFound
@@ -99,14 +100,14 @@ func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != status || !malformed && f.calls != 0 || malformed && (f.calls != 1 || f.vault != store.UnknownResourceID && f.id != store.UnknownResourceID) {
+		if w.Code != status || !malformed && f.calls != 0 || malformed && (f.calls != 1 || !strings.Contains(path, "/vaults/"+f.vault+"/credentials/"+f.id)) {
 			t.Fatal("update boundary changed", mode, w.Code, f.vault, f.id)
 		}
 	}
 	for _, tc := range []struct {
 		err    error
 		status int
-	}{{store.ErrNotFound, 404}, {store.ErrCredentialStorageUnavailable, 503}, {errors.New("credential-canary"), 500}} {
+	}{{store.ErrNotFound, 404}, {credentialcrypto.ErrUnavailable, 503}, {errors.New("credential-canary"), 500}} {
 		h, f, _ := credentialHandler(t)
 		f.err = tc.err
 		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID, body)

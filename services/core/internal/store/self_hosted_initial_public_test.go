@@ -29,7 +29,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewModelTestStore(t)
+	s, db := newModelTestStoreDB(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
@@ -38,7 +38,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "initial-creator", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
 	const origin = "https://offline-executor.example"
-	serve := func(s *store.Store, worker *execution.Worker) *httptest.Server {
+	serve := func(s *store.Store, db fixtureDB, worker *execution.Worker) *httptest.Server {
 		t.Helper()
 		enabled := []func(*api.Dependencies){acceptUnavailable(t)}
 		if worker != nil {
@@ -49,7 +49,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 				d.Execution = &api.Execution{ExecutorURL: origin, Admission: unavailableAdmission{}, SessionArchive: strictStandIn{t}, Workspaces: strictStandIn{t}}
 			})
 		}
-		handler, err := publicHandler(t, s, auth, "codex", enabled...)
+		handler, err := publicHandler(t, s, db, auth, "codex", enabled...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -57,8 +57,8 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		t.Cleanup(server.Close)
 		return server
 	}
-	worker, stop := publicInitialWorker(t, s)
-	server := serve(s, worker)
+	worker, stop := publicInitialWorker(t, s, db)
+	server := serve(s, db, worker)
 	settings := map[string]any{"base": server.URL, "token": token, "peer_token": peer, "foreign_token": foreign, "remote_url": origin}
 	run := func(phase string) json.RawMessage {
 		t.Helper()
@@ -137,7 +137,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		}
 		return result
 	}
-	before := reservations(s, pool)
+	before := reservations(s, db.pool)
 	for _, reservation := range before {
 		if reservation.State != store.EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute {
 			t.Fatal("public initial creation did not retain its database deadline")
@@ -145,13 +145,13 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	}
 	stop(false)
 	server.Close()
-	pool.Close()
-	reopened, reopenedPool := store.NewModelTestStore(t)
-	worker, stop = publicInitialWorker(t, reopened)
-	server = serve(reopened, worker)
+	db.pool.Close()
+	reopened, reopenedDB := newModelTestStoreDB(t)
+	worker, stop = publicInitialWorker(t, reopened, reopenedDB)
+	server = serve(reopened, reopenedDB, worker)
 	settings["base"], settings["accepted"] = server.URL, accepted
 	run("reopen")
-	if !reflect.DeepEqual(before, reservations(reopened, reopenedPool)) {
+	if !reflect.DeepEqual(before, reservations(reopened, reopenedDB.pool)) {
 		t.Fatal("reopened public retry changed reservation identity or deadline")
 	}
 	failureID := created.Cases[0].ID
@@ -161,7 +161,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			return
 		}
 		// Advance one known deadline; the running Worker still owns settlement and events.
-		tag, err := reopenedPool.Exec(r.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial AND state='pending'", failureID)
+		tag, err := reopenedDB.pool.Exec(r.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial AND state='pending'", failureID)
 		if err != nil || tag.RowsAffected() != 1 {
 			t.Error("controlled initial deadline update failed", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -172,7 +172,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	defer control.Close()
 	settings["expiry_control"] = control.URL
 	run("expire")
-	after := reservations(reopened, reopenedPool)
+	after := reservations(reopened, reopenedDB.pool)
 	for id, reservation := range after {
 		if id == failureID {
 			if reservation.ID != before[id].ID || reservation.State != store.EnvironmentInputExpired || reservation.SettledAt == nil {
@@ -183,7 +183,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		}
 	}
 	var pid uint32
-	err := reopenedPool.QueryRow(t.Context(), `SELECT pid FROM pg_locks WHERE locktype='advisory'
+	err := reopenedDB.pool.QueryRow(t.Context(), `SELECT pid FROM pg_locks WHERE locktype='advisory'
 		AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
 		AND classid=(706172736172::bigint >> 32)::oid
 		AND objid=(706172736172::bigint & 4294967295)::oid AND objsubid=1 AND granted`).Scan(&pid)
@@ -191,24 +191,20 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	var killed bool
-	if err := reopenedPool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", pid).Scan(&killed); err != nil || !killed {
+	if err := reopenedDB.pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", pid).Scan(&killed); err != nil || !killed {
 		t.Fatal("could not end the fixture Worker's execution lease", err)
 	}
 	stop(true)
-	settings["disabled_base"] = serve(reopened, nil).URL
+	settings["disabled_base"] = serve(reopened, reopenedDB, nil).URL
 	run("unavailable")
-	if !reflect.DeepEqual(after, reservations(reopened, reopenedPool)) {
+	if !reflect.DeepEqual(after, reservations(reopened, reopenedDB.pool)) {
 		t.Fatal("unavailable execution or recorded retry changed initial work")
 	}
 }
 
-func publicInitialWorker(t *testing.T, s *store.Store) (*execution.Worker, func(bool)) {
+func publicInitialWorker(t *testing.T, s *store.Store, db fixtureDB) (*execution.Worker, func(bool)) {
 	t.Helper()
-	dispatcher := &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}
-	worker, err := execution.StartWorker(t.Context(), dispatcher)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()

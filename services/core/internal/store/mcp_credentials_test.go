@@ -93,7 +93,7 @@ func TestMCPCredentialSelectionAndScopedDecryption(t *testing.T) {
 	if err != nil || got != token {
 		t.Fatal("frozen selection or opaque bytes changed across restart", err)
 	}
-	if got, err := public.MCPBearerToken(t.Context(), tenant, attached, bindings[0]); !errors.Is(err, ErrCredentialStorageUnavailable) || got != "" {
+	if got, err := public.MCPBearerToken(t.Context(), tenant, attached, bindings[0]); !errors.Is(err, credentialcrypto.ErrUnavailable) || got != "" {
 		t.Fatal("missing key did not fail execution closed")
 	}
 	key[0] ^= 1

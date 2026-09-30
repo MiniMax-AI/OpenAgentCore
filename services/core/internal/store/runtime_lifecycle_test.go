@@ -71,12 +71,12 @@ func (p *lifecycleProvider) RunCommand(context.Context, sandbox.Reference, sandb
 	return sandbox.CommandResult{}, errors.New("not used")
 }
 
-func managedWorker(t *testing.T, s *store.Store, key string, p sandbox.SandboxProvider) (*execution.Worker, func()) {
+func managedWorker(t *testing.T, s *store.Store, db fixtureDB, key string, p sandbox.SandboxProvider) (*execution.Worker, func()) {
 	t.Helper()
-	return managedWorkerMode(t, s, key, p, false)
+	return managedWorkerMode(t, s, db, key, p, false)
 }
 
-func managedWorkerMode(t *testing.T, s *store.Store, key string, p sandbox.SandboxProvider, maintenance bool, run ...bool) (*execution.Worker, func()) {
+func managedWorkerMode(t *testing.T, s *store.Store, db fixtureDB, key string, p sandbox.SandboxProvider, maintenance bool, run ...bool) (*execution.Worker, func()) {
 	t.Helper()
 	registry := runtimegateway.NewRegistry()
 	if peer, ok := p.(interface {
@@ -87,10 +87,7 @@ func managedWorkerMode(t *testing.T, s *store.Store, key string, p sandbox.Sandb
 		t.Cleanup(server.Close)
 		peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry)
 	}
-	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, AdmissionPaused: maintenance}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, AdmissionPaused: maintenance}})
 	if len(run) > 0 && run[0] {
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
@@ -147,11 +144,11 @@ func reconcileManagedState(t *testing.T, w *execution.Worker, s *store.Store, te
 }
 
 func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	tenant, session, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true}
-	w, stop := managedWorker(t, s, key, p)
+	w, stop := managedWorker(t, s, db, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err == nil || owner.ID == "" {
 		t.Fatal("fault did not retain allocation")
@@ -161,7 +158,7 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 		t.Fatal("provider received unbound credential")
 	}
 	stop()
-	next, _ := managedWorker(t, s, key, p)
+	next, _ := managedWorker(t, s, db, key, p)
 	reconcileManagedState(t, next, s, tenant, env.ID, "running")
 	recovered, err := s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
 	if err != nil || recovered.ID != owner.ID || !recovered.CreateSettled || recovered.State != "running" {
@@ -186,11 +183,11 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 }
 
 func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	tenant, session, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true, absent: true}
-	w, _ := managedWorker(t, s, key, p)
+	w, _ := managedWorker(t, s, db, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err == nil {
 		t.Fatal("expected uncertain creation")
@@ -216,16 +213,16 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 }
 
 func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	tenant, _, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w, _ := managedWorker(t, s, key, p)
+	w, _ := managedWorker(t, s, db, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '61 minutes' WHERE id=$1", owner.ID); err != nil {
+	if _, err := db.pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '61 minutes' WHERE id=$1", owner.ID); err != nil {
 		t.Fatal(err)
 	}
 	p.unavailable = true
@@ -243,11 +240,11 @@ func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
 }
 
 func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	tenant, _, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w, _ := managedWorker(t, s, key, p)
+	w, _ := managedWorker(t, s, db, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err != nil {
 		t.Fatal(err)

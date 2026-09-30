@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -25,7 +26,7 @@ func functionInputFixture(t *testing.T, s *Store) (string, Session, string) {
 	t.Helper()
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-	transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 	for _, id := range []string{"a", "b"} {
 		if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture(id)); err != nil {
 			t.Fatal(err)
@@ -55,7 +56,7 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 		t.Fatal(call, err)
 	}
 	// A result retry and its messages stay attached to their first Turn after restart.
-	transition(t, s, tenant, session.ID, turn, TurnWaiting, TurnFailed)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnWaiting, sessions.TurnFailed)
 	next := submitMessage(t, s, tenant, session.ID, "next").TurnID
 	pool.Close()
 	s, _ = testStore(t)
@@ -81,7 +82,7 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 		t.Fatal(future, err)
 	}
 	current, err := s.GetTurn(t.Context(), tenant, session.ID, next)
-	if err != nil || !current.CancelRequestedAt.IsZero() || current.Status != TurnQueued {
+	if err != nil || !current.CancelRequestedAt.IsZero() || current.Status != sessions.TurnQueued {
 		t.Fatal(current, err)
 	}
 	changed := []Input{batch[1], batch[0], batch[2], batch[3]}
@@ -121,7 +122,7 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 					t.Fatal(err)
 				}
 				otherTurn := submitMessage(t, s, otherTenant, other.ID, "start").TurnID
-				transition(t, s, otherTenant, other.ID, otherTurn, TurnQueued, TurnInProgress)
+				transition(t, s, otherTenant, other.ID, otherTurn, sessions.TurnQueued, sessions.TurnInProgress)
 				if err := s.RecordFunctionCall(t.Context(), otherTenant, other.ID, otherTurn, functionCallFixture("a")); err != nil {
 					t.Fatal(err)
 				}
@@ -142,7 +143,7 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 				t.Fatal(call, err)
 			}
 			state, err := s.GetTurn(t.Context(), tenant, session.ID, turn)
-			if err != nil || !state.CancelRequestedAt.IsZero() || state.Status != TurnWaiting {
+			if err != nil || !state.CancelRequestedAt.IsZero() || state.Status != sessions.TurnWaiting {
 				t.Fatal(state, err)
 			}
 			history, err := s.ListTurnInputs(t.Context(), tenant, session.ID, turn, 0, 100)
@@ -223,12 +224,12 @@ func TestFunctionInputsRejectInvalidTargetsAndStorageObjects(t *testing.T) {
 			t.Fatal(target, err)
 		}
 	}
-	transition(t, s, tenant, session.ID, turn, TurnWaiting, TurnFailed)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnWaiting, sessions.TurnFailed)
 	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "late", []Input{input}); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal(err)
 	}
 	current, err := s.GetSession(t.Context(), tenant, session.ID)
-	if err != nil || current.LastTurn.ID != turn || current.LastTurn.Status != TurnFailed {
+	if err != nil || current.LastTurn.ID != turn || current.LastTurn.Status != sessions.TurnFailed {
 		t.Fatal(current, err)
 	}
 }

@@ -98,14 +98,14 @@ func (p *hostedFailureProvider) prepare(request proto.RuntimePreparePayload, _ [
 	return completedInitialization(request, nil)
 }
 
-func hostedFailureStore(t *testing.T) *store.Store {
+func hostedFailureStore(t *testing.T) (*store.Store, fixtureDB) {
 	t.Helper()
 	_, pool := store.NewManagedTestStore(t)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return store.NewWithCredentialCipher(pool, cipher)
+	return store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 }
 
 func hostedFailureSession(t *testing.T, s *store.Store, tenant string, input store.CreateSessionInput) (store.Session, store.Environment) {
@@ -126,10 +126,10 @@ func hostedFailureSession(t *testing.T, s *store.Store, tenant string, input sto
 	return session, environment
 }
 
-func failHostedInitialization(t *testing.T, s *store.Store, tenant string, environment store.Environment, p *hostedFailureProvider) {
+func failHostedInitialization(t *testing.T, s *store.Store, db fixtureDB, tenant string, environment store.Environment, p *hostedFailureProvider) {
 	t.Helper()
 	key := uuid.NewString()
-	w, _ := managedWorkerMode(t, s, key, p, false, true)
+	w, _ := managedWorkerMode(t, s, db, key, p, false, true)
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}
@@ -180,12 +180,12 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 			"Failed to provision environment: Skill installation failed", []string{"configure", "skill"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			s := hostedFailureStore(t)
+			s, db := hostedFailureStore(t)
 			tenant := uuid.NewString()
 			session, environment := hostedFailureSession(t, s, tenant, test.input)
 			p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}},
 				fail: test.p.fail, skip: test.p.skip, result: test.p.result, err: test.p.err}
-			failHostedInitialization(t, s, tenant, environment, p)
+			failHostedInitialization(t, s, db, tenant, environment, p)
 			if !reflect.DeepEqual(p.steps, test.steps) || p.kills != 0 || p.commandCalls.Load() != 0 {
 				t.Fatal("failed initialization continued or reclaimed compute", p.steps, p.kills)
 			}
@@ -245,7 +245,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 // A pending initial input settles exactly as before; the one failed snapshot
 // carries both that settlement and the provisioning failure.
 func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
-	s := hostedFailureStore(t)
+	s, db := hostedFailureStore(t)
 	tenant := uuid.NewString()
 	session, environment := hostedFailureSession(t, s, tenant, store.CreateSessionInput{
 		Initialization: environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "exit 3"}}},
@@ -253,7 +253,7 @@ func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
 	})
 	p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, fail: "setup",
 		result: failedInitialization(3)}
-	failHostedInitialization(t, s, tenant, environment, p)
+	failHostedInitialization(t, s, db, tenant, environment, p)
 	read, err := s.GetSession(t.Context(), tenant, session.ID)
 	if err != nil || read.PendingInput || read.EnvironmentInputActivity == nil || read.EnvironmentInputActivity.Status != "failed" ||
 		read.EnvironmentInputActivity.Failure != "environment_unavailable" || read.EnvironmentFailure == nil {
@@ -279,7 +279,7 @@ func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
 // stream ends after agent.session.failed; later input gets the observed 409;
 // delete succeeds; tenant B sees nothing; the canary never appears.
 func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
-	s := hostedFailureStore(t)
+	s, db := hostedFailureStore(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	session, environment := hostedFailureSession(t, s, tenant, store.CreateSessionInput{
 		Initialization: environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "echo " + hostedFailureCanary + "; exit 3"}}},
@@ -292,12 +292,12 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
-	w, _ := managedWorkerMode(t, s, key, p, false, true)
+	w, _ := managedWorkerMode(t, s, db, key, p, false, true)
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, s, auth, "codex", workerExecution(w))
+	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(w))
 	if err != nil {
 		t.Fatal(err)
 	}

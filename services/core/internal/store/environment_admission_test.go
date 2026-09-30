@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -23,22 +24,20 @@ func newEnvironmentAdmission(t *testing.T) (*dispatchHarness, *execution.Worker)
 	t.Helper()
 	h := newDispatchHarness(t)
 	enableWorkerEnvironment(t, h)
-	worker, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), h.db, h.d)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		_ = worker.Run(ctx)
 	})
-	h.session, err = worker.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{
+	session, err := worker.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{
 		Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.session = session
 	h = connectFixtureRuntime(t, h, h.session)
 	return h, worker
 }
@@ -155,7 +154,7 @@ func TestEnvironmentAdmissionWaitsForPreparedClaimAndRetainsRetry(t *testing.T) 
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "done", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "admitted-native"}})
 	completeEmptyArtifactExport(t, h)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
-	if run.Turn.Status != store.TurnCompleted {
+	if run.Turn.Status != sessions.TurnCompleted {
 		t.Fatal("completion", run.Turn)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)

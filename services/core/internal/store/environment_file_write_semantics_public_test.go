@@ -59,7 +59,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: runtimedevice.HashCredential(other), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, h.s, auth, "codex", workerExecution(w))
+	handler, err := publicHandler(t, h.s, h.db, auth, "codex", workerExecution(w))
 	if err != nil {
 		t.Fatal(err)
 	}
