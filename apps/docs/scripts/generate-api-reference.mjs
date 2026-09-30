@@ -12,7 +12,7 @@ import yaml from 'js-yaml'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { appRoot, repoRoot, surfaces, sourcePath, normalise, methods, splitDescription, mdxText, plainText, fullPath } from './contracts.mjs'
+import { appRoot, repoRoot, surfaces, sourcePath, normalise, methods, splitDescription, detailsBlock, plainText, fullPath } from './contracts.mjs'
 const root = path.join(appRoot, 'content/docs/api-reference')
 fs.rmSync(root, { recursive: true, force: true })
 fs.mkdirSync(root, { recursive: true })
@@ -41,7 +41,7 @@ function withSplitDescription(content) {
   const body = content.slice(match[0].length)
   const at = body.indexOf('<APIPage')
   if (at < 0) throw new Error('Generated page without APIPage')
-  const inserted = details ? mdxText(details) + '\n\n' : ''
+  const inserted = detailsBlock(details)
   return `---\n${yaml.dump(frontmatter, { lineWidth: 100 })}---\n${body.slice(0, at)}${inserted}${body.slice(at)}`
 }
 for (const surface of surfaces) {

@@ -6,7 +6,7 @@ import path from 'node:path'
 import yaml from 'js-yaml'
 import { createOpenAPI } from 'fumadocs-openapi/server'
 import { schemaToString } from '../node_modules/fumadocs-openapi/dist/utils/schema-to-string.js'
-import { appRoot, normalise, surfaces, splitDescription, mdxText, plainText, fullPath } from './contracts.mjs'
+import { appRoot, normalise, surfaces, splitDescription, detailsBlock, mdxText, plainText, fullPath } from './contracts.mjs'
 
 test('overview paths carry the namespace a caller sends', () => {
   const [publicApi, coreApi] = surfaces
@@ -23,6 +23,24 @@ test('operation descriptions split into a lead and details', () => {
   // Abbreviations and paths do not end a sentence; a short description stays whole.
   assert.deepEqual(splitDescription('Returns metadata, e.g. the ID, for /v1.x files.'), { lead: 'Returns metadata, e.g. the ID, for /v1.x files.', details: '' })
   assert.deepEqual(splitDescription(undefined), { lead: '', details: '' })
+})
+
+test('a long description folds into paragraphs that keep every sentence', () => {
+  const text = Array.from({ length: 12 }, (_, i) => `Fact number ${i + 1} is stated in this description.`).join(' ')
+  assert.ok(text.length > 400, 'the fixture must be long enough to fold')
+  const block = detailsBlock(text)
+  assert.match(block, /^<details className="api-details">\n<summary>Full description<\/summary>\n\n/)
+  assert.match(block, /\n\n<\/details>\n\n$/)
+  const inner = block.replace(/^<details[^\n]*>\n<summary>[^\n]*<\/summary>\n\n/, '').replace(/\n\n<\/details>\n\n$/, '')
+  const paragraphs = inner.split('\n\n')
+  assert.ok(paragraphs.length > 1, 'a folded description is regrouped into paragraphs')
+  assert.equal(paragraphs.join(' ').replace(/\s+/g, ' '), text.replace(/\s+/g, ' '))
+})
+
+test('short details and authored structure stay in place', () => {
+  assert.equal(detailsBlock('Keys are never returned.'), 'Keys are never returned.\n\n')
+  assert.equal(detailsBlock('Saves an Agent.\n\n- Limit one.\n- Limit two.'), 'Saves an Agent.\n\n- Limit one.\n- Limit two.\n\n')
+  assert.equal(detailsBlock(''), '')
 })
 
 test('a lead loses inline markdown because page descriptions are plain text', () => {

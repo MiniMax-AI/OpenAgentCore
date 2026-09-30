@@ -38,6 +38,48 @@ export function splitDescription(text = '') {
   return { lead: trimmed.slice(0, end), details: trimmed.slice(end).trim() }
 }
 
+// Contract prose is one long paragraph, so a page would open with a wall of
+// text that pushes the request section below the fold. The site instead keeps
+// the lead under the title and folds the rest into a collapsed block, regrouped
+// into short paragraphs. The contract text itself stays verbatim.
+export function detailsBlock(details = '') {
+  const text = details.trim()
+  if (!text) return ''
+  const body = mdxText(paragraphise(text))
+  // A short remainder reads better in place than behind a summary.
+  if (text.length <= 400) return body + '\n\n'
+  return `<details className="api-details">\n<summary>Full description</summary>\n\n${body}\n\n</details>\n\n`
+}
+
+// Sentence boundaries are the ones splitDescription uses: a terminator followed
+// by a new sentence starting with a capital, backtick or quote. Abbreviations
+// and paths such as "e.g. the ID" or "/v1.x files" stay in one sentence.
+function sentences(text) {
+  const boundary = /[.!?](?=\s+[A-Z`"(])/g
+  const found = []
+  let start = 0
+  for (let match; (match = boundary.exec(text));) {
+    found.push(text.slice(start, match.index + 1))
+    start = match.index + 1
+  }
+  found.push(text.slice(start))
+  return found.map(sentence => sentence.trim()).filter(Boolean)
+}
+
+// Prose a contract already laid out as list items, tables or hard-wrapped lines
+// is kept exactly as written; only a single long paragraph is regrouped.
+function paragraphise(text, per = 3) {
+  return text.split(/\n{2,}/).map(block => {
+    const trimmed = block.trim()
+    if (!trimmed) return ''
+    if (/[\n|]/.test(trimmed) || /^([-*+]|\d+\.)\s/.test(trimmed)) return trimmed
+    const parts = sentences(trimmed)
+    const grouped = []
+    for (let i = 0; i < parts.length; i += per) grouped.push(parts.slice(i, i + per).join(' '))
+    return grouped.join('\n\n')
+  }).filter(Boolean).join('\n\n')
+}
+
 // Markdown from a contract, made safe for MDX: braces and angle brackets stay
 // literal text outside code spans.
 // Page descriptions render as plain text, so the lead drops inline markdown.

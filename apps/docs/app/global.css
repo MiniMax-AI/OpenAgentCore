@@ -101,3 +101,21 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--color-fd-primary) 22%, transparent);
 }
+
+/* A folded operation description: the contract's full prose stays on the page
+   without pushing the request and response sections below the fold. */
+.prose details.api-details {
+  margin: 1rem 0;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-fd-muted) 35%, transparent);
+}
+
+.prose details.api-details > summary {
+  padding: 0.35rem 0;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
