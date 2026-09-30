@@ -52,7 +52,7 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 			registry := agent.NewRegistry()
 			var session *fakeSession
 			var calls atomic.Int32
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
 				return &steeringSession{fakeSession: session, steer: func(context.Context, proto.PromptSteerPayload) error {
 					calls.Add(1)
@@ -125,7 +125,7 @@ func TestShutdownReleasesSteeringWorkerAndCompletionBarrier(t *testing.T) {
 			registry := agent.NewRegistry()
 			entered, exited := make(chan struct{}), make(chan struct{})
 			var session *fakeSession
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
 				return &steeringSession{fakeSession: session, steer: func(ctx context.Context, _ proto.PromptSteerPayload) error {
 					close(entered)

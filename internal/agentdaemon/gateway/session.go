@@ -465,7 +465,9 @@ func (s *Session) markOfflineOnClose() {
 func (s *Session) handleHeartbeat(env proto.Envelope) {
 	var p proto.HeartbeatPayload
 	if err := env.DecodePayload(&p); err != nil {
-		s.log("agentdaemon gateway: decode heartbeat payload device=%s: %v", s.DeviceID, err)
+		s.log("agentdaemon gateway: invalid heartbeat declaration device=%s", s.DeviceID)
+		s.setSupportedAgentKinds(nil)
+		s.Close("invalid heartbeat declaration")
 		return
 	}
 	kinds := deviceKindsFromHeartbeat(p)

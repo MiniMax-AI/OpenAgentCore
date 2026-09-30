@@ -50,11 +50,20 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 		ctx, stop = r.shutdownContext(ctx)
 		defer stop()
 	}
+	if state != nil && !state.capabilities.FunctionTools.IsSupported() {
+		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "unsupported", "The runtime declaration does not support function results.")
+	}
+	if ready && submitter == nil {
+		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "contract_violation", "Declared function capability has no implementation.")
+	}
 	if submitter == nil {
 		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "not_pending", "function call is no longer pending")
 	}
 	if err := submitter.SubmitFunctionResult(ctx, result); err != nil {
 		code := "runtime_error"
+		if errors.Is(err, agent.ErrUnsupportedOperation) {
+			code = "contract_violation"
+		}
 		if errors.Is(err, agent.ErrUnknownFunctionCall) {
 			code = "not_pending"
 		}

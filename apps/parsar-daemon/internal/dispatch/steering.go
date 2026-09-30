@@ -91,6 +91,11 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 	if state.session == nil {
 		return &ack
 	}
+	// The admitted declaration is immutable even if discovery changes later.
+	if input.DurableReceipt && !state.capabilities.DurableInputReceipts.IsSupported() || !input.DurableReceipt && !state.capabilities.Steering.IsSupported() {
+		ack.ErrorCode, ack.Error = "unsupported", "The runtime declaration does not support this input operation."
+		return &ack
+	}
 	session := state.session
 	steerer, supportsSteering := session.(agent.Steerer)
 	if input.DurableReceipt {
@@ -145,6 +150,8 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 func steeringResult(inputID string, err error) proto.PromptSteerAckPayload {
 	ack := proto.PromptSteerAckPayload{InputID: inputID}
 	switch {
+	case errors.Is(err, agent.ErrUnsupportedOperation):
+		ack.ErrorCode, ack.Error = "contract_violation", "Declared input capability has no implementation."
 	case errors.Is(err, agent.ErrSteeringNotReady):
 		ack.ErrorCode, ack.Error = "not_ready", err.Error()
 	case errors.Is(err, agent.ErrSteeringInactive):
