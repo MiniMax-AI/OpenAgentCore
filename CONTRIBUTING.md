@@ -1,32 +1,33 @@
 # Contributing to OpenAgentCore
 
 Start with [Develop OpenAgentCore](docs/development.md) for checkout, toolchains,
-the repository map and focused checks. This guide owns repository-wide rules only:
-documentation ownership, the repository boundary, the decoupling principle,
-workflow and review, required checks and naming.
+the repository map and focused checks. [AGENTS.md](AGENTS.md) owns the design
+principles and documentation rules. This guide owns how to work in the repository:
+documentation ownership, the repository boundary, workflow and review, required
+checks and naming.
 
-Every other rule has one canonical owner, listed below. Change that owner, not a
-copy, when a contract changes.
+Every other subject has one canonical owner, listed below.
 
 ## Documentation ownership
 
 | Subject | Canonical source |
 | --- | --- |
+| Design principles, protocol boundaries, storage layout and documentation rules | [AGENTS.md](AGENTS.md) |
 | User concepts and authority | [Design principles](docs/design-principles.md) |
 | Architecture overview and diagrams (a map that links to the owners below) | [Architecture](docs/architecture.md) |
 | Developer setup, repository map and extension boundaries | [Develop OpenAgentCore](docs/development.md) |
 | API callers, credentials and route inventory | [API index](docs/api/README.md) |
 | Public wire types and qualified behavior | [Agents API contracts](contracts/agents-api/README.md), [pinned upstream](contracts/agents-api/upstream.json), and linked operation contracts |
 | Core service implementation constraints | [Agents API implementation constraints](services/agents-api/IMPLEMENTATION.md) and [service README](services/agents-api/README.md) |
-| Provider-to-Runtime startup input | [Runtime bootstrap](docs/runtime-bootstrap.md) and `internal/runtimebootstrap` |
-| Runtime messages, Executor/Turn lifetimes, receipts and failure ownership | [Core–Runtime protocol](docs/runtime-protocol.md) and `internal/agentdaemon/proto` |
+| Provider-to-Runtime startup input | [Runtime bootstrap](docs/runtime-bootstrap.md) |
+| Runtime messages, Executor/Turn lifetimes, receipts and failure ownership | [Core–Runtime protocol](docs/runtime-protocol.md) |
 | Environment ownership and capability preparation (Skills, Plugins, MCP, `packages.system`) | [Environments](contracts/agents-api/environments.md) |
-| Adding a Harness (steps) | [Harness onboarding](contracts/agents-api/harness-onboarding.md), `apps/parsar-daemon/internal/agent/harness.go` and `internal/harnessconfig/harness.go` |
+| Adding a Harness (steps) | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
 | Built-in Harness identifiers, configuration/profile bindings and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
 | Effective MCP bindings and credential authority | [Environment MCP](contracts/agents-api/environments.md#skills-plugins-and-environment-mcp) and `apps/parsar-daemon/internal/agent/mcp_binding.go` |
 | Harness qualification and acceptance | [Harness integration](contracts/agents-api/harnesses.md) |
 | Harness selection and Agent defaults | [Harness selection](contracts/agents-api/harness-selection.md) |
-| Adding a Sandbox Provider | [Sandbox Provider guide](docs/sandbox-provider.md) and `services/agents-api/internal/sandbox/sandbox_provider.go` |
+| Adding a Sandbox Provider | [Sandbox Provider guide](docs/sandbox-provider.md) |
 | Provider selection, sandbox deployment and E2B setup | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
 | Hosted sandbox nodes | [Hosted sandbox manager](services/agents-api/HOSTED-SANDBOX-MANAGER.md) |
 | Claude private bridge and Runtime artifact | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |
@@ -36,21 +37,6 @@ copy, when a contract changes.
 | Core Web console server and sign-in | [Web README](apps/web/README.md) |
 | Web components, interaction and visual rules | [Web design](apps/web/DESIGN.md) and [Web architecture](docs/web/architecture.md) |
 | Documentation website generation | [Docs app](apps/docs/README.md) |
-
-### Documentation rules
-
-- English Markdown in `docs/`, component guides and `contracts/` is authored
-  source. The docs app generates guide pages and API references from it. Never
-  edit generated copies to establish a different rule.
-- Keep documentation and code comments in English. The root README is provided
-  in English and Chinese; user-facing product copy may be bilingual.
-- Historical acceptance records keep their original revisions and limits. They
-  are evidence, not current instructions or authority to restore a retired
-  implementation. Keep task chronology and rollout reports out of contributor rules.
-- Keep current integration guidance separate from historical qualification evidence.
-- A guide may summarize a workflow but must link to the owning contract for
-  versions, accepted values, precedence and lifecycle rules. Do not maintain
-  another normative copy. Generated references are projections, not new owners.
 
 ## Repository boundary
 
@@ -109,25 +95,14 @@ databases, credentials and migrations. The product uses Core exclusively; it has
   coverage in `contracts/agents-api/README.md` until the complete target is verified.
   Reconcile current coverage summaries with merged routes and recorded acceptance;
   distinguish accepted profiles, partial implementation, missing operations and
-  unverified semantics. Retain historical evidence with its original scope. Handler
+  unverified semantics. Keep each evidence record at its original scope. Handler
   counts are not compatibility percentages, and an active provider probe is not
   deployment qualification.
-- No legacy Agents API compatibility requirement takes precedence over this
-  design. Replace an unsuitable implementation instead of growing compatibility
-  branches. Preserve reusable, verified infrastructure rather than rewriting it
-  merely for new names or directories. Replacements may retire obsolete private
-  interfaces and history backfills in bounded PRs; this does not authorize deleting
-  product data or changing unrelated product behavior.
-- Every concrete harness interaction goes through the common Runtime contract
-  and its adapter. Extend that contract minimally when a current operation cannot
-  be expressed; never put native capability logic or transport conversion into
-  Core handlers, storage or scheduling. Qualify public workflows through the same
-  shared chain; direct native probes establish feasibility only.
-- Keep engine-specific types, process management and protocol translation inside
-  execution adapters. Native workspace execution must use the declared Environment
-  directory; a separate native history/configuration directory is not a workspace.
-  The public API and persistence/application core must not
-  interpret Parsar product payloads or depend on one engine's native item types.
+- Qualify public workflows through the common Runtime contract and Harness
+  adapter; direct native probes establish feasibility only.
+- Native workspace execution must use the declared Environment directory; a
+  separate native history/configuration directory is not a workspace. The public
+  API and persistence/application core must not interpret Parsar product payloads.
   Prefer maintained upstream SDKs and native execution protocols over a second
   hand-written model/tool loop or a general-purpose compatibility framework.
 - Verify an independent official-client workflow before a Parsar integration.
@@ -174,88 +149,6 @@ databases, credentials and migrations. The product uses Core exclusively; it has
 - Product resources use `/app/` and never become Core API or database conventions.
 - It is excluded from Core distributions and cannot become a service dependency.
 
-## Decoupling principle
-
-Core orchestrates protocol-defined operations. Sandbox Providers, Runtime
-implementations, Harnesses and model providers are replaceable components.
-User-owned machines, E2B, Docker and other Environments expose the same
-execution protocol.
-
-Two lifetimes stay separate:
-
-| Component | Owns |
-| --- | --- |
-| Resource management (Sandbox Provider) | Selecting machines and capacity; creating, bootstrapping, renewing and reclaiming Environments |
-| Runtime | Initializing files, tool configuration, packages and capabilities; executing work and recovering inside an Environment |
-
-Closing a Session Executor does not release its allocation, destroy its
-Environment or delete its workspace; see
-[Executor and Turn lifetimes](docs/runtime-protocol.md#executor-and-turn-lifetimes).
-Environment preparation state belongs to the Environment, independently of any
-managed allocation. Both user-owned and managed machines use the same frozen
-preparation input and initializer; resource managers never run installation steps.
-Capability preparation follows [Environments](contracts/agents-api/environments.md#runtime-capability-preparation).
-The Runtime is not a sandbox; see
-[Runtime and outer isolation](docs/design-principles.md#runtime-and-outer-isolation).
-
-- Keep component boundaries explicit through shared interfaces and versioned
-  protocols. Register implementations behind those interfaces. Adding an
-  implementation must not require a new orchestration path selected by its name.
-  Sandbox registration, configuration adaptation and persistence boundaries follow
-  the [Sandbox Provider guide](docs/sandbox-provider.md#register-the-provider-kind).
-  Resource operation declarations are exhaustive and validated against the existing
-  small interfaces; support is never inferred from method presence. See the
-  [explicit operation contract](docs/sandbox-provider.md#explicit-operation-contracts).
-- Core owns durable Session/Turn state and scheduling. Runtime owns local
-  execution resources. Harness adapters translate the common execution contract
-  into native operations; model and sandbox provider details stay behind their
-  interfaces.
-- Fix shared lifecycle, admission, cancellation, reuse and performance problems
-  in the common protocol or flow, not with Harness-, Runtime- or vendor-specific
-  branches in Core. Adapters may differ natively but keep shared semantics.
-- Public Harnesses explicitly implement every extension interface, returning the
-  shared Unsupported error when unqualified; required lifecycle obligations cannot
-  be skipped. Capability declarations must be complete. Follow the single
-  [Harness onboarding contract](contracts/agents-api/harness-onboarding.md).
-- Express compatibility through declared capabilities and validate selected
-  combinations explicitly. Public MCP origin and credential authority follow the
-  [Environment MCP contract](contracts/agents-api/environments.md#public-mcp-connection-origin);
-  changing an input source must not change outbound network or credential scope. Replaceability does not mean every model, Harness and
-  Environment combination is supported. Never silently substitute another
-  implementation or give a capability different meanings per vendor.
-- Core preparation and execution never branch on operating system or
-  Environment source. Platform support requires native CI builds and automated
-  tests; cross-compilation alone is insufficient.
-- Evolve shared contracts and their implementations together, document
-  ownership and validate the same contract across implementations. Each rule has
-  one authored definition; cross-language projections are generated from it or
-  checked against common fixtures. Bootstrap credentials use the Runtime-owned
-  launch input, never a Provider-authored private auth file. This rule
-  does not claim every implementation already meets every target, change the
-  pinned public API, or authorize unrelated refactors.
-
-### Extension contracts
-
-| Boundary | Canonical guide | Code entry point |
-| --- | --- | --- |
-| Provider–Runtime startup | [Runtime bootstrap](docs/runtime-bootstrap.md) | `internal/runtimebootstrap` |
-| Core–Runtime wire | [Core–Runtime protocol](docs/runtime-protocol.md) | `internal/agentdaemon/proto` |
-| Harness | [Harness onboarding](contracts/agents-api/harness-onboarding.md) | `apps/parsar-daemon/internal/agent/harness.go`, `internal/harnessconfig/harness.go` |
-| Sandbox Provider | [Sandbox Provider guide](docs/sandbox-provider.md) | `services/agents-api/internal/sandbox/sandbox_provider.go` |
-
-Shared wire types and validators live only in `internal/agentdaemon/proto`.
-Change both peers together with an exact wire-version check; do not add a
-parallel schema or a historical wire fallback. Capability completeness and
-interface coverage are mandatory extension gates under the
-[explicit declaration contract](docs/runtime-protocol.md#explicit-capability-declarations).
-
-### Pre-release policy
-
-OpenAgentCore is pre-release. Replace superseded internal interfaces and
-execution paths cleanly; do not retain version fallbacks, compatibility shims,
-aliases or migrations without an explicit upgrade contract. Preserve the pinned
-official public protocol, valid data and still-used infrastructure.
-
 ## Workflow and review
 
 ### Before you start
@@ -288,11 +181,8 @@ broader compatibility target is complete from one merged batch.
   Harness profiles must not copy Runtime tool environment values; see the
   [environment contract](contracts/agents-api/environments.md#explicit-local-tool-environment).
 - Require absolute user-supplied working directories.
-- Keep test artifacts under `~/.oac/` and build output under
-  `${OAC_DEV_HOME:-$HOME/.oac}`. Runtime state uses `${OAC_RUNTIME_HOME:-$HOME/.oac}`.
 - New or changed routes identify their caller and credential in the
   [API index](docs/api/README.md) and link their detailed contract.
-- Update the owning guide when architecture, ownership or generated contracts change.
 
 ### Review
 
@@ -376,7 +266,6 @@ probes are not current validation entry points.
 | Runtime binary | `oac-daemon` |
 | Filesystem and initialization helpers | `oac-*` |
 | Runtime settings | `OAC_RUNTIME_*` |
-| Runtime state | `~/.oac/daemon` |
 | Reserved Environment `env` prefix | `OAC_` |
 | Provider ownership labels | `io.oac.*` |
 | E2B metadata | `oac_*` |

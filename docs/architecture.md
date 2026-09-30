@@ -70,30 +70,30 @@ starting work.
 Core does not isolate tools, run a model or talk to a vendor SDK directly. It
 selects implementations through interfaces and never branches on a harness,
 operating system or provider name. See
-[the decoupling principle](../CONTRIBUTING.md#decoupling-principle) and the
+[Complexity stays in the adapter](../AGENTS.md#complexity-stays-in-the-adapter) and the
 [repository map](development.md#repository-map).
 
 ## Protocol boundaries
 
-The numbers below match the overview. Each contract defines behavior, ownership,
-errors and completion semantics as well as types or method signatures.
+The numbers below match the overview. Each protocol defines behavior, ownership,
+errors and completion semantics as well as types or method signatures. Its code
+and document are listed in [Protocols at every boundary](../AGENTS.md#protocols-at-every-boundary).
 
-| Boundary | Contract | Responsibility | Canonical guide |
-| --- | --- | --- | --- |
-| 1. Application / Core | Agents API over HTTP / SSE | Sessions, Turns, inputs, Items, files and events | [Public API](api/public-agent-api.md) |
-| 2. Core / Sandbox Provider | `SandboxProvider` interface | Compute creation, observation, renewal, bootstrap and reclamation | [Sandbox Provider guide](sandbox-provider.md) |
-| 3. Core / Runtime | Typed Core-Runtime messages | Capability declarations, preparation, execution, cancellation, recovery and receipts | [Core-Runtime protocol](runtime-protocol.md) |
-| 4. Runtime / Harness | `ExecutorFactory`, `Executor`, `Turn` and separate optional interfaces | Native configuration, execution, event translation and confirmed cleanup | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
-| Harness / Model Provider | Model API | Model inference through a protocol supported by the selected Harness | [Model execution](../contracts/agents-api/model-execution.md) |
+| Boundary | Responsibility |
+| --- | --- |
+| 1. Application / Core | Sessions, Turns, inputs, Items, files and events over HTTP / SSE |
+| 2. Core / Sandbox Provider | Compute creation, observation, renewal, bootstrap and reclamation |
+| 3. Core / Runtime | Capability declarations, preparation, execution, cancellation, recovery and receipts |
+| 4. Runtime / Harness | Native configuration, execution, event translation and confirmed cleanup |
+| Harness / Model Provider | Model inference through a protocol supported by the selected Harness |
 
-The [bootstrap contract](runtime-bootstrap.md) carries the Runtime's startup
-input across the provisioning boundary. After connection, capability preparation
-belongs to Runtime; the Provider does not become a second execution path.
+The Runtime's startup input crosses the provisioning boundary. After connection,
+capability preparation belongs to Runtime; the Provider does not become a second
+execution path.
 
-Replaceability does not mean every combination works. Supported combinations are
-declared as capabilities and validated explicitly; see
-[Harness selection](../contracts/agents-api/harness-selection.md) and the
-[coverage record](../contracts/agents-api/README.md).
+Not every combination of Harness, model and Environment works. The supported ones
+are recorded in [Harness selection](../contracts/agents-api/harness-selection.md)
+and the [coverage record](../contracts/agents-api/README.md).
 
 ## A Session, end to end
 
