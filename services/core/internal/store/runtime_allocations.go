@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 )
 
 // RuntimeAllocation retains compute ownership, not public readiness. It survives
@@ -96,18 +97,18 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 			return ErrInvalidInput
 		}
 		var nodeID pgtype.UUID
-		deployment, err := q.GetRuntimeDeployment(ctx)
+		active, err := q.GetRuntimeDeployment(ctx)
 		if err != nil {
 			return err
 		}
-		generation := pgtype.Int8{Int64: deployment.Generation, Valid: true}
-		if deployment.Mode == "nodes" {
+		generation := pgtype.Int8{Int64: active.Generation, Valid: true}
+		if active.Mode == "nodes" {
 			placement, err := q.GetRuntimePlacement(ctx, lookup.ID)
 			if err != nil {
 				return err
 			}
 			if placement.ReleasedAt.Valid || !placement.Available {
-				return ErrRuntimeNodeUnavailable
+				return deployment.ErrNodeUnavailable
 			}
 			nodeID = placement.NodeID
 			generation = placement.DeploymentGeneration

@@ -6,6 +6,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -18,16 +19,20 @@ func writeCoreValidationError(w http.ResponseWriter, err error) bool {
 		return false
 	}
 	var field *store.AdminValidationError
-	var configuration *store.SandboxConfigurationError
+	var node *deployment.NodeValidationError
+	var configuration *deployment.ConfigurationError
 	switch {
-	case errors.As(err, &field):
-		details := CoreErrorDetails{"max_length": CoreErrorNumber(float64(field.MaxLength))}
+	case errors.As(err, &node):
+		details := CoreErrorDetails{"max_length": CoreErrorNumber(float64(node.MaxLength))}
 		message := invalidNameMessage
-		if field.Code == "invalid_node_capacity" {
+		if node.Code == "invalid_node_capacity" {
 			details = CoreErrorDetails{"min": CoreErrorNumber(1), "max": CoreErrorNumber(1000000)}
 			message = "Node capacity must be positive, at most 1000000, and max_retained must be at least max_active."
 		}
-		writeCoreError(w, http.StatusBadRequest, field.Code, message, details, field.Param)
+		writeCoreError(w, http.StatusBadRequest, node.Code, message, details, node.Param)
+		return true
+	case errors.As(err, &field):
+		writeCoreError(w, http.StatusBadRequest, field.Code, invalidNameMessage, CoreErrorDetails{"max_length": CoreErrorNumber(float64(field.MaxLength))}, field.Param)
 		return true
 	case errors.As(err, &configuration) && configuration.Validation != nil:
 		field := configuration.Validation

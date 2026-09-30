@@ -47,7 +47,9 @@ type testFakes struct {
 	sessionArchive         *fakeSessionArchive
 	workspaces             *fakeEnvironmentWorkspaces
 	deployment             *fakeDeployment
+	nodeAllocations        *fakeNodeAllocations
 	deploymentChanges      *fakeDeploymentChanges
+	deploymentReset        *fakeDeploymentReset
 	configurationDiscovery *fakeConfigurationDiscovery
 
 	environmentTemplatesReader *fakeEnvironmentTemplatesReader
@@ -74,7 +76,9 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		admin: &fakeAdmin{t: t}, adminAudit: &fakeAdminAudit{t: t}, writeAudit: &fakeWriteAudit{t: t}, metrics: &fakeMetrics{t: t},
 		runtimeObservations: &fakeRuntimeObservations{t: t}, runtimeHistory: &fakeRuntimeHistory{t: t}, installationBindings: &fakeInstallationBindings{t: t},
 		admission: &fakeAdmission{t: t}, sessionArchive: &fakeSessionArchive{t: t}, workspaces: &fakeEnvironmentWorkspaces{t: t},
-		deployment: &fakeDeployment{t: t}, deploymentChanges: &fakeDeploymentChanges{t: t}, configurationDiscovery: &fakeConfigurationDiscovery{t: t},
+		deployment: &fakeDeployment{t: t}, nodeAllocations: &fakeNodeAllocations{t: t},
+		deploymentChanges: &fakeDeploymentChanges{t: t}, deploymentReset: &fakeDeploymentReset{t: t},
+		configurationDiscovery: &fakeConfigurationDiscovery{t: t},
 	}
 	return Dependencies{
 		Engine: "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
@@ -101,7 +105,13 @@ func (f *testFakes) execution() *Execution {
 // sandboxes is a Sandboxes group backed by f's strict fakes. It requires
 // Execution.
 func (f *testFakes) sandboxes() *Sandboxes {
-	return &Sandboxes{Deployment: f.deployment, DeploymentChanges: f.deploymentChanges, ConfigurationDiscovery: f.configurationDiscovery}
+	return &Sandboxes{
+		Deployment:             f.deployment,
+		NodeAllocations:        f.nodeAllocations,
+		DeploymentChanges:      f.deploymentChanges,
+		DeploymentReset:        f.deploymentReset,
+		ConfigurationDiscovery: f.configurationDiscovery,
+	}
 }
 
 // coreKeys accepts each token as a Core key.

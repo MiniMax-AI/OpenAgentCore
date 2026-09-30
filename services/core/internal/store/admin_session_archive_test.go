@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -25,10 +26,11 @@ func managedArchiveFixture(t *testing.T) (*Store, *Store, string) {
 	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	installation := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
+	changes := deploymentExecution(t, w)
+	if err := changes.Claim(t.Context(), installation); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.InitializeSandboxDeployment(t.Context(), installation, e2bSelection()); err != nil {
+	if _, err := changes.Initialize(t.Context(), installation, e2bSelection()); err != nil {
 		t.Fatal(err)
 	}
 	return s, w, installation
@@ -70,7 +72,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 		t.Fatal("unallocated Session status", active, err)
 	}
 	for _, generation := range []uint64{0, 2, ^uint64(0)} {
-		if _, err := w.ArchiveManagedSession(ctx, tenant, session.ID, generation); !errors.Is(err, ErrSandboxDeploymentConflict) {
+		if _, err := w.ArchiveManagedSession(ctx, tenant, session.ID, generation); !errors.Is(err, deployment.ErrConflict) {
 			t.Fatal("archive accepted wrong generation", generation, err)
 		}
 	}
@@ -117,7 +119,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, ErrEnvironmentUnavailable) {
 		t.Fatal("archived Environment accepted new input", err)
 	}
-	view, err := s.GetRuntimeDeployment(t.Context())
+	view, err := deploymentService(t, s).View(t.Context())
 	if err != nil || view.Resources.Pending != 0 || view.Resources.Allocations != 0 {
 		t.Fatal("unallocated archive still blocks switching", view, err)
 	}

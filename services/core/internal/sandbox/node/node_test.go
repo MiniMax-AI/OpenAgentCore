@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -122,7 +124,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 		t.Fatal("running node did not retain lifetime identity lock")
 	}
 	r := reference()
-	proxy := hub.Proxy(id.NodeID, "docker", 1)
+	proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
 	createCtx, stopCreate := context.WithTimeout(ctx, 150*time.Millisecond)
 	defer stopCreate()
 	createDone := make(chan error, 1)
@@ -165,7 +167,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 
 func TestOfflineIsUnknownAndDockerDoesNotAdvertiseCheckpoint(t *testing.T) {
 	h := NewHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
-	p := h.Proxy(uuid.NewString(), "docker", 1)
+	p := h.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)
 	if sandbox.SupportsCheckpoint(p) {
 		t.Fatal("docker advertised checkpoint")
 	}

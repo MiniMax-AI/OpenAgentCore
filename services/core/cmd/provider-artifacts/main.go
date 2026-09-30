@@ -14,7 +14,7 @@ import (
 func main() {
 	write := flag.Bool("write", false, "write generated declarations from the repository root")
 	flag.Parse()
-	catalog, err := providers.ArtifactCatalog()
+	catalog, err := providers.Builtin().ArtifactCatalog()
 	if err != nil {
 		panic(err)
 	}

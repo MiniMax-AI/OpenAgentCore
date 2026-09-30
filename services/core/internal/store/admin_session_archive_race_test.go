@@ -8,24 +8,29 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 	s, _ := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	installation := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
+	changes := deploymentExecution(t, w)
+	if err := changes.Claim(t.Context(), installation); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.InitializeSandboxDeployment(t.Context(), installation, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
+	if _, err := changes.Initialize(t.Context(), installation, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 1, MaxRetained: 1}))
+	nodes := deploymentService(t, s)
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	nodeID := uuid.NewString()
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Archive fixture", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64)}); err != nil {
+	if _, err := nodes.Enroll(t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Archive fixture", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.publicURL}); err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, nodeID)
@@ -34,11 +39,11 @@ func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 	if err != nil || result.State != "released" {
 		t.Fatal(result, err)
 	}
-	nodes, err := s.ListRuntimeNodes(t.Context())
-	if err != nil || len(nodes) != 1 || nodes[0].Active != 0 || nodes[0].Retained != 0 || nodes[0].Reserved != 0 {
-		t.Fatal("unallocated archive retained placement capacity", nodes, err)
+	listed, err := nodes.ListNodes(t.Context())
+	if err != nil || len(listed) != 1 || listed[0].Active != 0 || listed[0].Retained != 0 || listed[0].Reserved != 0 {
+		t.Fatal("unallocated archive retained placement capacity", listed, err)
 	}
-	if err := s.RemoveRuntimeNode(t.Context(), nodeID); err != nil {
+	if err := nodes.RemoveNode(t.Context(), nodeID); err != nil {
 		t.Fatal("released placement prevented node removal", err)
 	}
 }
@@ -81,7 +86,7 @@ func TestManagedSessionArchiveOrdersConcurrentInput(t *testing.T) {
 func TestManagedSessionArchiveRejectsFileManagedDeployment(t *testing.T) {
 	s, w, _ := managerFixture(t, 1, 1)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 0); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 0); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("archive accepted file-managed deployment", err)
 	}
 }

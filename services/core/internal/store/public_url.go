@@ -2,16 +2,10 @@ package store
 
 import (
 	"context"
-	"errors"
 )
 
-// ErrSandboxPublicURLUnreachable rejects selection and admission when the provider
-// requires a reachable public origin and the installation is loopback.
-var ErrSandboxPublicURLUnreachable = errors.New("This sandbox provider needs a reachable HTTPS public URL before they can connect to Core.")
-
-// SetPublicURL records OAC_PUBLIC_URL, validated by the caller. Core
-// reports it as the deployment and node configuration core_url and records it
-// on each node it enrolls. Call it once, before serving requests.
+// SetPublicURL records OAC_PUBLIC_URL, validated by the caller. Placement
+// admits only nodes enrolled with it. Call it once, before serving requests.
 func (s *Store) SetPublicURL(value string) { s.publicURL = value }
 
 // AddressBindings counts what is bound to an installation address: nodes

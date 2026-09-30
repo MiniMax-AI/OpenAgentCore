@@ -41,7 +41,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, st, db), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
 	if err != nil {
 		t.Fatal(err)
 	}

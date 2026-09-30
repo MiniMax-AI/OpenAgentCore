@@ -4,7 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
@@ -13,9 +19,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 type regionalConfiguration struct {
@@ -79,21 +82,35 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	// The deployment identity and execution lease are database-wide.
 	pool := pgtest.OpenIsolated(t, nil)
 	kind := "regional-fixture"
-	adapter, err := providers.Lookup("docker")
+	adapter, err := providers.Builtin().Lookup("docker")
 	if err != nil {
 		t.Fatal(err)
 	}
 	adapter.Configuration = regionalCodec{}
-	providers.RegisterFixture(t, kind, adapter)
+	registry := providers.FixtureRegistry(t, kind, adapter)
 	s := store.New(pool)
+	// The deployment reaches the registered configuration only through the
+	// registry it is built with.
+	deployments := func() *deployment.Service {
+		storage := deploymentpg.New(pgunit.NewPool(pool), nil)
+		service, err := deployment.NewService(storage, storage, registry, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return service
+	}
+	service := deployments()
 	lease, err := pgunit.AcquireLease(t.Context(), pool)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer lease.Close(context.Background())
-	w := store.NewExecution(s, lease)
+	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
 	installation := uuid.NewString()
-	if err = w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
+	if err = changes.Claim(t.Context(), installation); err != nil {
 		t.Fatal(err)
 	}
 	auth, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("fixture-admin")})
@@ -116,7 +133,8 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		ExecutorConnections: struct{ api.ExecutorConnections }{},
 		Metrics:             struct{ api.Metrics }{}, RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
 		Execution: &api.Execution{ExecutorURL: "wss://core.example/api/v1/agent-daemon/ws", Admission: s, SessionArchive: s, Workspaces: struct{ api.EnvironmentWorkspaces }{}},
-		Sandboxes: &api.Sandboxes{Deployment: s, DeploymentChanges: leaseSetup{t: t, store: w, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
+		Sandboxes: &api.Sandboxes{Deployment: service, NodeAllocations: s, DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
+			DeploymentReset: leaseSetup{t: t, changes: changes, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -130,8 +148,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	if response.Code != 200 || !strings.Contains(response.Body.String(), `"zone":"west"`) {
 		t.Fatal(response.Code, response.Body.String())
 	}
-	reopened := store.New(pool)
-	saved, err := reopened.GetSandboxSetup(t.Context())
+	saved, err := deployments().Setup(t.Context())
 	if err != nil || saved.Configuration.(regionalConfiguration).Zone != "west" {
 		t.Fatal("configuration did not roundtrip", err)
 	}
@@ -145,25 +162,25 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 // The flow makes no other deployment change.
 type leaseSetup struct {
 	t            *testing.T
-	store        *store.Store
+	changes      *deployment.ExecutionOperations
 	installation string
 }
 
-func (l leaseSetup) InitializeSandboxDeployment(ctx context.Context, in store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
-	return l.store.InitializeSandboxDeployment(ctx, l.installation, in)
+func (l leaseSetup) InitializeSandboxDeployment(ctx context.Context, in sandbox.Selection) (deployment.View, error) {
+	return l.changes.Initialize(ctx, l.installation, in)
 }
 
-func (l leaseSetup) UpdateSandboxDeployment(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
+func (l leaseSetup) UpdateSandboxDeployment(context.Context, sandbox.Selection) (deployment.View, error) {
 	l.t.Fatal("unexpected call to UpdateSandboxDeployment")
-	return store.RuntimeDeploymentView{}, nil
+	return deployment.View{}, nil
 }
 
-func (l leaseSetup) StartSandboxReset(context.Context, store.SandboxResetRequest) (store.RuntimeDeploymentView, error) {
+func (l leaseSetup) StartSandboxReset(context.Context, store.SandboxResetRequest) (deployment.View, error) {
 	l.t.Fatal("unexpected call to StartSandboxReset")
-	return store.RuntimeDeploymentView{}, nil
+	return deployment.View{}, nil
 }
 
-func (l leaseSetup) CancelSandboxReset(context.Context, uint64) (store.RuntimeDeploymentView, error) {
+func (l leaseSetup) CancelSandboxReset(context.Context, uint64) (deployment.View, error) {
 	l.t.Fatal("unexpected call to CancelSandboxReset")
-	return store.RuntimeDeploymentView{}, nil
+	return deployment.View{}, nil
 }

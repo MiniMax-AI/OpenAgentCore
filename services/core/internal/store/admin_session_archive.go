@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -48,18 +50,18 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 	var result ManagedSessionArchive
 	err = s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		// Session precedes deployment, matching Turn, allocation and input admission.
-		deployment, err := q.LockRuntimeDeployment(ctx)
+		current, err := q.LockRuntimeDeployment(ctx)
 		if err != nil {
 			return err
 		}
-		if uint64(deployment.Generation) != expectedGeneration {
-			return &SandboxGenerationStaleError{uint64(deployment.Generation)}
+		if uint64(current.Generation) != expectedGeneration {
+			return &deployment.GenerationStaleError{CurrentGeneration: uint64(current.Generation)}
 		}
-		if !deployment.WebManaged || !deployment.InstallationID.Valid {
-			return ErrSandboxDeploymentConflict
+		if !current.WebManaged || !current.InstallationID.Valid {
+			return deployment.ErrConflict
 		}
-		if deployment.ProviderKind == "" {
-			return ErrSandboxNotConfigured
+		if current.ProviderKind == "" {
+			return deployment.ErrNotConfigured
 		}
 		environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: session})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -73,10 +75,10 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 			return ErrInvalidInput
 		}
 		if resetRequestedAt != nil {
-			if !deployment.ResetClear.Valid || !deployment.ResetRequestedAt.Time.Equal(*resetRequestedAt) {
-				return ErrSandboxDeploymentConflict
+			if !current.ResetClear.Valid || !current.ResetRequestedAt.Time.Equal(*resetRequestedAt) {
+				return deployment.ErrConflict
 			}
-			if deployment.ResetClear.String == "auto" {
+			if current.ResetClear.String == "auto" {
 				busy, err := q.SessionBlocksAutoReset(ctx, session)
 				if err != nil {
 					return err
@@ -89,7 +91,7 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 				result, err = getManagedSessionArchive(ctx, q, tenant, session)
 				return err
 			}
-			source, err := sandboxResetAudit(deployment)
+			source, err := sandboxResetAudit(current)
 			if err != nil {
 				return err
 			}
@@ -105,8 +107,8 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		if allocated && allocation.RuntimeAllocation.State != "released" && allocation.RuntimeAllocation.ProviderKey != deployment.InstallationID {
-			return ErrSandboxDeploymentConflict
+		if allocated && allocation.RuntimeAllocation.State != "released" && allocation.RuntimeAllocation.ProviderKey != current.InstallationID {
+			return deployment.ErrConflict
 		}
 		if err := withEnvironmentInputActivity(ctx, q, session, func() error {
 			if environment.Environment.Status != "failed" && environment.Environment.Status != "expired" {

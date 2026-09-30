@@ -32,6 +32,7 @@ func generationConfig(t *testing.T) Config {
 }
 
 func TestMicrosandboxGenerationDirectoryOwnership(t *testing.T) {
+	registry := Builtin()
 	for _, mode := range []string{"private", "public", "symlink", "file"} {
 		t.Run(mode, func(t *testing.T) {
 			state := t.TempDir()
@@ -53,7 +54,7 @@ func TestMicrosandboxGenerationDirectoryOwnership(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			built, closeProvider, err := Build(generationConfig(t), LocalOptions{GenerationStateDirectory: state})
+			built, closeProvider, err := registry.Build(generationConfig(t), LocalOptions{GenerationStateDirectory: state})
 			closeProvider()
 			if mode == "private" {
 				info, statErr := os.Lstat(directory)
@@ -72,9 +73,10 @@ func TestMicrosandboxGenerationDirectoryOwnership(t *testing.T) {
 // Exercise the actual ProcessCaller boundary to prove the constructor binds the
 // lease to this generation, installation and specification before any helper runs.
 func TestMicrosandboxGenerationBindsLeaseIdentity(t *testing.T) {
+	registry := Builtin()
 	config := generationConfig(t)
 	state := t.TempDir()
-	built, closeProvider, err := Build(config, LocalOptions{GenerationStateDirectory: state})
+	built, closeProvider, err := registry.Build(config, LocalOptions{GenerationStateDirectory: state})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,12 +146,13 @@ func TestMicrosandboxGenerationBindsLeaseIdentity(t *testing.T) {
 }
 
 func TestMicrosandboxGenerationRejectsUnpinnedImage(t *testing.T) {
+	registry := Builtin()
 	for _, image := range []string{"latest", "oac-runtime@sha256:bad", "oac-runtime@sha256:"} {
 		t.Run(image, func(t *testing.T) {
 			config := generationConfig(t)
 			config.Microsandbox.Image = image
 			config.Specification.Runtime.MicrosandboxRef = image
-			built, closeProvider, err := Build(config, LocalOptions{GenerationStateDirectory: t.TempDir()})
+			built, closeProvider, err := registry.Build(config, LocalOptions{GenerationStateDirectory: t.TempDir()})
 			closeProvider()
 			if err == nil || built != nil {
 				t.Fatalf("accepted image %q", image)
@@ -159,6 +162,7 @@ func TestMicrosandboxGenerationRejectsUnpinnedImage(t *testing.T) {
 }
 
 func TestLocalConstructionRequiresExplicitContext(t *testing.T) {
+	registry := Builtin()
 	state := t.TempDir()
 	for _, options := range []LocalOptions{
 		{},
@@ -166,13 +170,13 @@ func TestLocalConstructionRequiresExplicitContext(t *testing.T) {
 		{GenerationStateDirectory: "relative"},
 		{GenerationStateDirectory: state + "/../node"},
 	} {
-		built, closeProvider, err := Build(generationConfig(t), options)
+		built, closeProvider, err := registry.Build(generationConfig(t), options)
 		closeProvider()
 		if !errors.Is(err, sandbox.ErrInvalid) || built != nil {
 			t.Fatalf("accepted construction context %+v: %v", options, err)
 		}
 	}
-	built, closeProvider, err := Build(generationConfig(t), LocalOptions{Standalone: true})
+	built, closeProvider, err := registry.Build(generationConfig(t), LocalOptions{Standalone: true})
 	closeProvider()
 	if err != nil || built == nil {
 		t.Fatalf("standalone construction: %v", err)
@@ -180,6 +184,7 @@ func TestLocalConstructionRequiresExplicitContext(t *testing.T) {
 }
 
 func TestMicrosandboxConstructionSelectsGenerationReadiness(t *testing.T) {
+	registry := Builtin()
 	if runtime.GOOS != "linux" {
 		t.Skip("microsandbox requires Linux")
 	}
@@ -200,7 +205,7 @@ func TestMicrosandboxConstructionSelectsGenerationReadiness(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, options := range []LocalOptions{{Standalone: true}, {GenerationStateDirectory: t.TempDir()}} {
-		built, closeProvider, err := Build(config, options)
+		built, closeProvider, err := registry.Build(config, options)
 		if err != nil {
 			t.Fatal(err)
 		}

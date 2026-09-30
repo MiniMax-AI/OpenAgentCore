@@ -3,8 +3,6 @@
 package providers
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/providerassets"
@@ -31,96 +29,117 @@ type Adapter struct {
 	ValidateResources             func(sandbox.Resources) error
 }
 
-var adapters = map[string]Adapter{
-	"docker": {
-		NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
-		Policy:        docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: buildDocker,
-		ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
-		Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
-	},
-	"microsandbox": {
-		NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy,
-			{Path: "native/bin/oac-microsandbox-provider", Suffix: "microsandbox-provider", Role: "runtime"},
-			{Path: "native/microsandbox/msb", Suffix: "msb", Role: "runtime"},
-			{Path: "native/microsandbox/libkrunfw.so.5.6.1", Suffix: "libkrunfw.so.5.6.1", Role: "runtime"}},
-		Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: buildMicrosandbox,
-		IdleSeconds: 300, RetentionSeconds: 86400,
-		ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
-		Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
-	},
-	"e2b": {
-		Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: buildE2B,
-		Configuration:         e2b.ConfigurationAdapter{},
-		ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
-	},
+// Registry holds the registered adapters. Core and the node program each build
+// one with Builtin and pass it explicitly; there is no package-level lookup.
+type Registry struct{ adapters map[string]Adapter }
+
+// ErrUnknownProvider reports a provider kind that no adapter registers.
+var ErrUnknownProvider = fmt.Errorf("%w: unsupported sandbox provider", sandbox.ErrInvalid)
+
+// Builtin returns a registry of the adapters built into this program.
+func Builtin() *Registry {
+	return &Registry{adapters: map[string]Adapter{
+		"docker": {
+			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
+			Policy:        docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: buildDocker,
+			ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
+			Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
+		},
+		"microsandbox": {
+			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy,
+				{Path: "native/bin/oac-microsandbox-provider", Suffix: "microsandbox-provider", Role: "runtime"},
+				{Path: "native/microsandbox/msb", Suffix: "msb", Role: "runtime"},
+				{Path: "native/microsandbox/libkrunfw.so.5.6.1", Suffix: "libkrunfw.so.5.6.1", Role: "runtime"}},
+			Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: buildMicrosandbox,
+			IdleSeconds: 300, RetentionSeconds: 86400,
+			ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
+			Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
+		},
+		"e2b": {
+			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: buildE2B,
+			Configuration:         e2b.ConfigurationAdapter{},
+			ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
+		},
+	}}
 }
 
-func Lookup(kind string) (Adapter, error) {
-	a, ok := adapters[kind]
+// Lookup returns a registered adapter after validating its registration.
+func (r *Registry) Lookup(kind string) (Adapter, error) {
+	a, ok := r.adapters[kind]
 	if !ok {
-		return Adapter{}, fmt.Errorf("%w: unsupported sandbox provider", sandbox.ErrInvalid)
+		return Adapter{}, ErrUnknownProvider
 	}
 	if err := ValidateRegistration(a); err != nil {
 		return Adapter{}, err
 	}
 	return a, nil
 }
-func IsNode(kind string) bool { a, e := Lookup(kind); return e == nil && a.Mode == "nodes" }
-func SupportsCheckpoint(kind string) bool {
-	a, e := Lookup(kind)
-	return e == nil && a.Operations()["Initial"].State == providercontract.Supported
+
+// IsNode reports whether the provider runs on enrolled sandbox nodes.
+func (r *Registry) IsNode(kind string) (bool, error) {
+	a, err := r.Lookup(kind)
+	if err != nil {
+		return false, err
+	}
+	return a.Mode == "nodes", nil
+}
+
+// SupportsCheckpoint reports whether the provider declares checkpoint suspension.
+func (r *Registry) SupportsCheckpoint(kind string) (bool, error) {
+	a, err := r.Lookup(kind)
+	if err != nil {
+		return false, err
+	}
+	return a.Operations()["Initial"].State == providercontract.Supported, nil
 }
 
 // RetainedLimit keeps nodes without checkpoint support within their active capacity.
-func RetainedLimit(kind string, active, retained int) int {
-	a, err := Lookup(kind)
-	if err == nil && a.Mode == "nodes" && !SupportsCheckpoint(kind) {
-		return active
+func (r *Registry) RetainedLimit(kind string, active, retained int) (int, error) {
+	a, err := r.Lookup(kind)
+	if err != nil {
+		return 0, err
 	}
-	return retained
+	if a.Mode == "nodes" && a.Operations()["Initial"].State != providercontract.Supported {
+		return active, nil
+	}
+	return retained, nil
 }
 
-func ValidateSpecification(kind string, s sandbox.DeploymentSpec) error {
-	a, e := Lookup(kind)
+func (r *Registry) ValidateSpecification(kind string, s sandbox.DeploymentSpec) error {
+	a, e := r.Lookup(kind)
 	if e != nil {
 		return e
 	}
 	return a.ValidateSpecification(s)
 }
-func ValidateResources(kind string, s sandbox.Resources) error {
-	a, e := Lookup(kind)
+func (r *Registry) ValidateResources(kind string, s sandbox.Resources) error {
+	a, e := r.Lookup(kind)
 	if e != nil {
 		return e
 	}
 	return a.ValidateResources(s)
 }
 
-// Description is derived once for both preview and persistence. Its fingerprint
-// identifies a namespace, never mutable capacity or a credential.
-type Description struct {
-	Mode, BackendFingerprint      string
-	IdleSeconds, RetentionSeconds int64
-}
-
-func Describe(kind, installation string) (Description, error) {
-	a, e := Lookup(kind)
+// Describe derives the description once for both preview and persistence.
+// Its fingerprint identifies a namespace, never mutable capacity or a credential.
+func (r *Registry) Describe(kind, installation string) (sandbox.Description, error) {
+	a, e := r.Lookup(kind)
 	if e != nil {
-		return Description{}, e
+		return sandbox.Description{}, e
 	}
 	namespace := a.Mode
 	if a.Mode == "direct" {
 		namespace = kind
 	}
-	digest := sha256.Sum256([]byte(kind + "\x00" + namespace + ":" + installation))
-	return Description{a.Mode, hex.EncodeToString(digest[:]), a.IdleSeconds, a.RetentionSeconds}, nil
+	return sandbox.Description{Mode: a.Mode, BackendFingerprint: BackendFingerprint(kind, namespace+":"+installation), IdleSeconds: a.IdleSeconds, RetentionSeconds: a.RetentionSeconds}, nil
 }
 
 // PythonDeploymentContract projects the same registered adapter policies into
 // the node installer; no second provider list exists in another language.
-func PythonDeploymentContract() (string, error) {
-	policies := make(map[string]sandbox.DeploymentPolicy, len(adapters))
-	for kind := range adapters {
-		a, err := Lookup(kind)
+func (r *Registry) PythonDeploymentContract() (string, error) {
+	policies := make(map[string]sandbox.DeploymentPolicy, len(r.adapters))
+	for kind := range r.adapters {
+		a, err := r.Lookup(kind)
 		if err != nil {
 			return "", err
 		}

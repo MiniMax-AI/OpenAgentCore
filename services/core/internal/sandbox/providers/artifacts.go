@@ -14,12 +14,12 @@ var runtimeImage = providerassets.Artifact{Path: "images/runtime.tar.gz", Suffix
 var runtimePolicy = providerassets.Artifact{Path: "runtime/seccomp.json", Suffix: "seccomp.json", Role: "policy"}
 
 // ArtifactCatalog projects registered node requirements for Web and installers.
-func ArtifactCatalog() (map[string][]providerassets.Artifact, error) {
+func (r *Registry) ArtifactCatalog() (map[string][]providerassets.Artifact, error) {
 	result := map[string][]providerassets.Artifact{}
 	paths := map[string]providerassets.Artifact{}
 	suffixes := map[string]string{}
-	for kind := range adapters {
-		a, err := Lookup(kind)
+	for kind := range r.adapters {
+		a, err := r.Lookup(kind)
 		if err != nil {
 			return nil, err
 		}

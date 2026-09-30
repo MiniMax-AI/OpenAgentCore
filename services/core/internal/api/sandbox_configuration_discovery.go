@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -35,14 +35,14 @@ func (h *Handler) discoverSandboxConfiguration(w http.ResponseWriter, r *http.Re
 	}
 	var input sandbox.ConfigurationDiscoveryInput
 	if decodeInputObject(raw, &input, "configuration", "credential", "query") != nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	result, err := h.Sandboxes.ConfigurationDiscovery.DiscoverConfiguration(ctx, chi.URLParam(r, "provider"), input)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeDeploymentError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)

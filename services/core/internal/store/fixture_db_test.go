@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,8 +17,9 @@ import (
 // fixtureDB is the database and credential key that built the test's Store.
 // Cutovers build their adapters from it; add fields here, never parameters.
 type fixtureDB struct {
-	pool   *pgxpool.Pool
-	cipher *credentialcrypto.Cipher // nil for a keyless Store
+	pool      *pgxpool.Pool
+	cipher    *credentialcrypto.Cipher // nil for a keyless Store
+	publicURL string                   // the value given to the Store's SetPublicURL, if any
 }
 
 // newTestStoreDB is store.NewTestStore with the fixtureDB that built it.
@@ -62,10 +64,19 @@ func startWorkerErr(ctx context.Context, db fixtureDB, dispatcher *execution.Dis
 	if err != nil {
 		return nil, err
 	}
+	deployments, changes, err := fixtureDeploymentExecution(db, lease)
+	if err != nil {
+		return nil, errors.Join(err, lease.Close(ctx))
+	}
 	owned := *dispatcher
 	owned.Credentials = credentials
 	owned.Observer = modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher)
-	return execution.StartWorker(ctx, &owned, execution.Owner{Lease: lease, Store: store.NewExecution(dispatcher.Store, lease)})
+	owned.Deployment = deployments
+	return execution.StartWorker(ctx, &owned, execution.Owner{
+		Lease:      lease,
+		Store:      store.NewExecution(dispatcher.Store, lease),
+		Deployment: changes,
+	})
 }
 
 // executionOwner acquires the execution lease on db and builds s's execution
@@ -78,5 +89,13 @@ func executionOwner(t testing.TB, db fixtureDB, s *store.Store) execution.Owner 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	return execution.Owner{Lease: lease, Store: store.NewExecution(s, lease)}
+	_, changes, err := fixtureDeploymentExecution(db, lease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return execution.Owner{
+		Lease:      lease,
+		Store:      store.NewExecution(s, lease),
+		Deployment: changes,
+	}
 }

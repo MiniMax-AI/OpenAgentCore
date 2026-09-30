@@ -2,10 +2,11 @@ package execution
 
 import (
 	"encoding/json"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"slices"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSelfHostedCapabilitySourcesAreFrozenAndStrict(t *testing.T) {

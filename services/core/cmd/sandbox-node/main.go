@@ -65,13 +65,14 @@ func run(ctx context.Context, args []string) error {
 	if !filepath.IsAbs(*configFile) || !filepath.IsAbs(*stateDir) {
 		return errors.New("config and state-dir must be absolute paths")
 	}
+	registry := providerconfig.Builtin()
 	if args[0] == "run" {
 		helper := filepath.Join(filepath.Dir(*configFile), "generation-preparer.pyz")
 		if info, err := os.Lstat(helper); err == nil {
 			if !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
 				return errors.New("generation preparer must be a private regular file")
 			}
-			return runGenerations(ctx, *configFile, *stateDir)
+			return runGenerations(ctx, registry, *configFile, *stateDir)
 		} else if !os.IsNotExist(err) {
 			return err
 		}
@@ -80,7 +81,7 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	built, closeProvider, err := providerconfig.Build(config, providerconfig.LocalOptions{Standalone: true})
+	built, closeProvider, err := registry.Build(config, providerconfig.LocalOptions{Standalone: true})
 	if err != nil {
 		return err
 	}

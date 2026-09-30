@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
@@ -205,119 +206,135 @@ func (f *fakeConfigurationDiscovery) DiscoverConfiguration(a0 context.Context, a
 }
 
 type fakeDeployment struct {
-	t                                  testing.TB
-	getRuntimeDeployment               func(context.Context) (store.RuntimeDeploymentView, error)
-	listRuntimeNodes                   func(context.Context) ([]store.RuntimeNode, error)
-	getRuntimeNodeDetail               func(context.Context, string, string) (store.RuntimeNodeDetail, error)
-	updateRuntimeNode                  func(context.Context, string, store.RuntimeNodeUpdate) error
-	removeRuntimeNode                  func(context.Context, string) error
-	listNodeRuntimeAllocations         func(context.Context, string) ([]store.RuntimeNodeAllocation, error)
-	createRuntimeEnrollment            func(context.Context, store.RuntimeNodeCapacity) (store.RuntimeNodeEnrollmentToken, error)
-	enrollRuntimeNode                  func(context.Context, string, store.RuntimeNodeEnrollment) (store.RuntimeNodeIdentity, error)
-	runtimeNodeGenerationConfiguration func(context.Context, string, string, uint64) (store.RuntimeNodeConfiguration, error)
-	runtimeNodeStatus                  func(context.Context, string, string) (store.RuntimeNodeStatus, error)
+	t                   testing.TB
+	view                func(context.Context) (deployment.View, error)
+	listNodes           func(context.Context) ([]deployment.Node, error)
+	nodeDetail          func(context.Context, string, string) (deployment.NodeDetail, error)
+	updateNode          func(context.Context, string, deployment.NodeUpdate) error
+	removeNode          func(context.Context, string) error
+	createEnrollment    func(context.Context, deployment.Capacity) (deployment.EnrollmentToken, error)
+	enroll              func(context.Context, string, deployment.Enrollment) (deployment.NodeIdentity, error)
+	nodeConfiguration   func(context.Context, string, string, uint64) (deployment.NodeConfiguration, error)
+	nodeStatus          func(context.Context, string, string) (deployment.NodeStatus, error)
+	decodeConfiguration func(string, json.RawMessage, json.RawMessage) (sandbox.Configuration, error)
 }
 
-func (f *fakeDeployment) GetRuntimeDeployment(a0 context.Context) (store.RuntimeDeploymentView, error) {
-	if f.getRuntimeDeployment == nil {
-		unexpectedCall(f.t, "GetRuntimeDeployment")
+func (f *fakeDeployment) View(a0 context.Context) (deployment.View, error) {
+	if f.view == nil {
+		unexpectedCall(f.t, "View")
 	}
-	return f.getRuntimeDeployment(a0)
+	return f.view(a0)
 }
 
-func (f *fakeDeployment) ListRuntimeNodes(a0 context.Context) ([]store.RuntimeNode, error) {
-	if f.listRuntimeNodes == nil {
-		unexpectedCall(f.t, "ListRuntimeNodes")
+func (f *fakeDeployment) ListNodes(a0 context.Context) ([]deployment.Node, error) {
+	if f.listNodes == nil {
+		unexpectedCall(f.t, "ListNodes")
 	}
-	return f.listRuntimeNodes(a0)
+	return f.listNodes(a0)
 }
 
-func (f *fakeDeployment) GetRuntimeNodeDetail(a0 context.Context, a1 string, a2 string) (store.RuntimeNodeDetail, error) {
-	if f.getRuntimeNodeDetail == nil {
-		unexpectedCall(f.t, "GetRuntimeNodeDetail")
+func (f *fakeDeployment) NodeDetail(a0 context.Context, a1 string, a2 string) (deployment.NodeDetail, error) {
+	if f.nodeDetail == nil {
+		unexpectedCall(f.t, "NodeDetail")
 	}
-	return f.getRuntimeNodeDetail(a0, a1, a2)
+	return f.nodeDetail(a0, a1, a2)
 }
 
-func (f *fakeDeployment) UpdateRuntimeNode(a0 context.Context, a1 string, a2 store.RuntimeNodeUpdate) error {
-	if f.updateRuntimeNode == nil {
-		unexpectedCall(f.t, "UpdateRuntimeNode")
+func (f *fakeDeployment) UpdateNode(a0 context.Context, a1 string, a2 deployment.NodeUpdate) error {
+	if f.updateNode == nil {
+		unexpectedCall(f.t, "UpdateNode")
 	}
-	return f.updateRuntimeNode(a0, a1, a2)
+	return f.updateNode(a0, a1, a2)
 }
 
-func (f *fakeDeployment) RemoveRuntimeNode(a0 context.Context, a1 string) error {
-	if f.removeRuntimeNode == nil {
-		unexpectedCall(f.t, "RemoveRuntimeNode")
+func (f *fakeDeployment) RemoveNode(a0 context.Context, a1 string) error {
+	if f.removeNode == nil {
+		unexpectedCall(f.t, "RemoveNode")
 	}
-	return f.removeRuntimeNode(a0, a1)
+	return f.removeNode(a0, a1)
 }
 
-func (f *fakeDeployment) ListNodeRuntimeAllocations(a0 context.Context, a1 string) ([]store.RuntimeNodeAllocation, error) {
+func (f *fakeDeployment) CreateEnrollment(a0 context.Context, a1 deployment.Capacity) (deployment.EnrollmentToken, error) {
+	if f.createEnrollment == nil {
+		unexpectedCall(f.t, "CreateEnrollment")
+	}
+	return f.createEnrollment(a0, a1)
+}
+
+func (f *fakeDeployment) Enroll(a0 context.Context, a1 string, a2 deployment.Enrollment) (deployment.NodeIdentity, error) {
+	if f.enroll == nil {
+		unexpectedCall(f.t, "Enroll")
+	}
+	return f.enroll(a0, a1, a2)
+}
+
+func (f *fakeDeployment) NodeConfiguration(a0 context.Context, a1 string, a2 string, a3 uint64) (deployment.NodeConfiguration, error) {
+	if f.nodeConfiguration == nil {
+		unexpectedCall(f.t, "NodeConfiguration")
+	}
+	return f.nodeConfiguration(a0, a1, a2, a3)
+}
+
+func (f *fakeDeployment) NodeStatus(a0 context.Context, a1 string, a2 string) (deployment.NodeStatus, error) {
+	if f.nodeStatus == nil {
+		unexpectedCall(f.t, "NodeStatus")
+	}
+	return f.nodeStatus(a0, a1, a2)
+}
+
+func (f *fakeDeployment) DecodeConfiguration(a0 string, a1 json.RawMessage, a2 json.RawMessage) (sandbox.Configuration, error) {
+	if f.decodeConfiguration == nil {
+		unexpectedCall(f.t, "DecodeConfiguration")
+	}
+	return f.decodeConfiguration(a0, a1, a2)
+}
+
+type fakeNodeAllocations struct {
+	t                          testing.TB
+	listNodeRuntimeAllocations func(context.Context, string) ([]store.RuntimeNodeAllocation, error)
+}
+
+func (f *fakeNodeAllocations) ListNodeRuntimeAllocations(a0 context.Context, a1 string) ([]store.RuntimeNodeAllocation, error) {
 	if f.listNodeRuntimeAllocations == nil {
 		unexpectedCall(f.t, "ListNodeRuntimeAllocations")
 	}
 	return f.listNodeRuntimeAllocations(a0, a1)
 }
 
-func (f *fakeDeployment) CreateRuntimeEnrollment(a0 context.Context, a1 store.RuntimeNodeCapacity) (store.RuntimeNodeEnrollmentToken, error) {
-	if f.createRuntimeEnrollment == nil {
-		unexpectedCall(f.t, "CreateRuntimeEnrollment")
-	}
-	return f.createRuntimeEnrollment(a0, a1)
-}
-
-func (f *fakeDeployment) EnrollRuntimeNode(a0 context.Context, a1 string, a2 store.RuntimeNodeEnrollment) (store.RuntimeNodeIdentity, error) {
-	if f.enrollRuntimeNode == nil {
-		unexpectedCall(f.t, "EnrollRuntimeNode")
-	}
-	return f.enrollRuntimeNode(a0, a1, a2)
-}
-
-func (f *fakeDeployment) RuntimeNodeGenerationConfiguration(a0 context.Context, a1 string, a2 string, a3 uint64) (store.RuntimeNodeConfiguration, error) {
-	if f.runtimeNodeGenerationConfiguration == nil {
-		unexpectedCall(f.t, "RuntimeNodeGenerationConfiguration")
-	}
-	return f.runtimeNodeGenerationConfiguration(a0, a1, a2, a3)
-}
-
-func (f *fakeDeployment) RuntimeNodeStatus(a0 context.Context, a1 string, a2 string) (store.RuntimeNodeStatus, error) {
-	if f.runtimeNodeStatus == nil {
-		unexpectedCall(f.t, "RuntimeNodeStatus")
-	}
-	return f.runtimeNodeStatus(a0, a1, a2)
-}
-
 type fakeDeploymentChanges struct {
 	t                           testing.TB
-	initializeSandboxDeployment func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)
-	updateSandboxDeployment     func(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error)
-	startSandboxReset           func(context.Context, store.SandboxResetRequest) (store.RuntimeDeploymentView, error)
-	cancelSandboxReset          func(context.Context, uint64) (store.RuntimeDeploymentView, error)
+	initializeSandboxDeployment func(context.Context, sandbox.Selection) (deployment.View, error)
+	updateSandboxDeployment     func(context.Context, sandbox.Selection) (deployment.View, error)
 }
 
-func (f *fakeDeploymentChanges) InitializeSandboxDeployment(a0 context.Context, a1 store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
+func (f *fakeDeploymentChanges) InitializeSandboxDeployment(a0 context.Context, a1 sandbox.Selection) (deployment.View, error) {
 	if f.initializeSandboxDeployment == nil {
 		unexpectedCall(f.t, "InitializeSandboxDeployment")
 	}
 	return f.initializeSandboxDeployment(a0, a1)
 }
 
-func (f *fakeDeploymentChanges) UpdateSandboxDeployment(a0 context.Context, a1 store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
+func (f *fakeDeploymentChanges) UpdateSandboxDeployment(a0 context.Context, a1 sandbox.Selection) (deployment.View, error) {
 	if f.updateSandboxDeployment == nil {
 		unexpectedCall(f.t, "UpdateSandboxDeployment")
 	}
 	return f.updateSandboxDeployment(a0, a1)
 }
 
-func (f *fakeDeploymentChanges) StartSandboxReset(a0 context.Context, a1 store.SandboxResetRequest) (store.RuntimeDeploymentView, error) {
+type fakeDeploymentReset struct {
+	t                  testing.TB
+	startSandboxReset  func(context.Context, store.SandboxResetRequest) (deployment.View, error)
+	cancelSandboxReset func(context.Context, uint64) (deployment.View, error)
+}
+
+func (f *fakeDeploymentReset) StartSandboxReset(a0 context.Context, a1 store.SandboxResetRequest) (deployment.View, error) {
 	if f.startSandboxReset == nil {
 		unexpectedCall(f.t, "StartSandboxReset")
 	}
 	return f.startSandboxReset(a0, a1)
 }
 
-func (f *fakeDeploymentChanges) CancelSandboxReset(a0 context.Context, a1 uint64) (store.RuntimeDeploymentView, error) {
+func (f *fakeDeploymentReset) CancelSandboxReset(a0 context.Context, a1 uint64) (deployment.View, error) {
 	if f.cancelSandboxReset == nil {
 		unexpectedCall(f.t, "CancelSandboxReset")
 	}

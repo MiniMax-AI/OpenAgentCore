@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/google/uuid"
 )
 
@@ -129,7 +128,7 @@ func initIdentity(dir, coreURL string, identity Identity) (StoredIdentity, error
 	if identity.NodeID == "" {
 		identity.NodeID = uuid.NewString()
 	}
-	if !validID(identity.NodeID) || !validID(identity.InstallationID) || !providers.IsNode(identity.Provider) || len(identity.BackendFingerprint) != 64 {
+	if !validID(identity.NodeID) || !validID(identity.InstallationID) || identity.Provider == "" || len(identity.BackendFingerprint) != 64 {
 		return StoredIdentity{}, errors.New("invalid node configuration")
 	}
 	secret := make([]byte, 32)

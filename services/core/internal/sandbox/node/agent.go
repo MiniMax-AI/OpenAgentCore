@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
@@ -83,9 +82,6 @@ func Run(ctx context.Context, config AgentConfig) error {
 	if config.Generations == nil {
 		if err := sandbox.ValidateProvider(config.Provider); err != nil {
 			return err
-		}
-		if sandbox.SupportsCheckpoint(config.Provider) != providers.SupportsCheckpoint(config.Identity.Provider) {
-			return sandbox.ErrInvalid
 		}
 	}
 	release, err := lockDirectory(config.StateDirectory)

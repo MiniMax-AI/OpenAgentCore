@@ -76,16 +76,16 @@ type LocalOptions struct {
 	GenerationStateDirectory string
 }
 
-func Build(config Config, options LocalOptions) (*Built, func(), error) {
+func (r *Registry) Build(config Config, options LocalOptions) (*Built, func(), error) {
 	closeProvider := func() {}
-	if err := validateSpecification(config); err != nil {
+	if err := r.validateSpecification(config); err != nil {
 		return nil, closeProvider, err
 	}
 	id, err := uuid.Parse(config.InstallationID)
 	if err != nil || id == uuid.Nil || id.String() != config.InstallationID {
 		return nil, closeProvider, errors.New("sandbox requires a canonical installation_id UUID")
 	}
-	adapter, err := Lookup(config.Provider)
+	adapter, err := r.Lookup(config.Provider)
 	if err != nil || adapter.BuildLocal == nil {
 		return nil, closeProvider, errors.New("sandbox provider is not node-local")
 	}

@@ -1,8 +1,10 @@
 package store
 
 import (
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"strings"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 func SandboxDeploymentTestSpec(provider string) sandbox.DeploymentSpec {
@@ -19,6 +21,6 @@ func SandboxDeploymentTestSpec(provider string) sandbox.DeploymentSpec {
 }
 
 // EnrollmentTestToken keeps only the secret token of an issued node enrollment.
-func EnrollmentTestToken(issued RuntimeNodeEnrollmentToken, err error) (string, error) {
+func EnrollmentTestToken(issued deployment.EnrollmentToken, err error) (string, error) {
 	return issued.Token, err
 }

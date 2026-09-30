@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -17,15 +18,16 @@ import (
 
 func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
+	deployments := fixtureDeployment(t, db)
 	id := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	configuration := execution.NewDeferredRuntimeProvider(id, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := s.GetSandboxSetup(ctx)
+		setup, err := deployments.Setup(ctx)
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
 		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, BackendFingerprint: setup.BackendFingerprint, CoreURL: "https://core.example/api/v1", Provider: p}, nil
-	}, func(ctx context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+	}, func(ctx context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 
 		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p}}, nil
 	})
@@ -44,31 +46,28 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	if _, err := w.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("uninitialized worker admitted hosted Session", err)
 	}
-	if _, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
+	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: store.SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, store.ErrRuntimeNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, deployment.ErrNodeUnavailable) {
 		t.Fatal("zero-node deployment admitted Session", err)
 	}
-	token, err := store.EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), store.RuntimeNodeCapacity{MaxActive: 4, MaxRetained: 16}))
+	token, err := store.EnrollmentTestToken(deployments.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 4, MaxRetained: 16}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	nodeID := uuid.NewString()
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, store.RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Remote", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64)}); err != nil {
+	if _, err := deployments.Enroll(t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Remote", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64)}); err != nil {
 		t.Fatal(err)
 	}
 	connect := func() {
 		t.Helper()
-		epoch, err := s.RuntimeOwnerEpoch(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
+		epoch := fixtureOwnerEpoch(t, db)
 		connection := uuid.NewString()
-		if err := s.ConnectRuntimeNode(t.Context(), nodeID, connection, epoch); err != nil {
+		if err := deployments.ConnectNode(t.Context(), nodeID, connection, epoch); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.HeartbeatRuntimeNode(t.Context(), nodeID, connection, epoch, store.RuntimeNodeHealth{ProviderReady: true}); err != nil {
+		if err := deployments.Heartbeat(t.Context(), nodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 			t.Fatal(err)
 		}
 	}

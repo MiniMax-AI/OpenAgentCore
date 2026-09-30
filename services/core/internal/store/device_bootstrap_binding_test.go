@@ -5,25 +5,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/google/uuid"
 )
 
 func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
-	s, writer, deployment := managerFixture(t, 4, 8)
-	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 4, MaxRetained: 8}))
+	s, writer, d := managerFixture(t, 4, 8)
+	nodes := deploymentService(t, s)
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 4, MaxRetained: 8}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	remote := uuid.NewString()
-	_, err = s.EnrollRuntimeNode(t.Context(), token, RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: remote, Credential: strings.Repeat("x", 64),
-		Name: "remote", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64)})
+	_, err = nodes.Enroll(t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: remote, Credential: strings.Repeat("x", 64),
+		Name: "remote", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.publicURL})
 	if err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, remote)
-	for _, nodeID := range []string{deployment.LocalNodeID, remote} {
+	for _, nodeID := range []string{d.LocalNodeID, remote} {
 		t.Run(nodeID, func(t *testing.T) {
 			tenant, bearer := uuid.NewString(), uuid.NewString()
 			session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), nodeID)
@@ -34,7 +36,7 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			allocation, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, deployment.InstallationID, runtimedevice.HashCredential(bearer))
+			allocation, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, d.InstallationID, runtimedevice.HashCredential(bearer))
 			if err != nil {
 				t.Fatal(err)
 			}

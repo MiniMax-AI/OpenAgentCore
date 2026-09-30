@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
@@ -30,7 +31,7 @@ func TestRuntimeNodeObservationRetainsResourcesAndFencesStaleResults(t *testing.
 	if err != nil || retained.State != "running" || retained.ID != owner.ID || retained.ObservationError != "node_unavailable" {
 		t.Fatal(retained, err)
 	}
-	if err := s.RemoveRuntimeNode(t.Context(), d.LocalNodeID); !errors.Is(err, ErrRuntimeNodeInUse) {
+	if err := deploymentService(t, s).RemoveNode(t.Context(), d.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("diagnostic released resource", err)
 	}
 	// A new lifecycle observation must not be erased by an earlier result.
@@ -56,24 +57,5 @@ func TestRuntimeNodeObservationRetainsResourcesAndFencesStaleResults(t *testing.
 	}
 	if err := w.RecordRuntimeObservation(t.Context(), current, "secret provider exception"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("raw diagnostics accepted", err)
-	}
-}
-func TestRuntimeNodeStaleEpochCannotReplaceCurrentConnection(t *testing.T) {
-	s, w, d := managerFixture(t, 1, 4)
-	epoch := managerEpoch(t, s)
-	deploymentConfigure(t, w, &d)
-	connection := onlineManagerNode(t, s, d.LocalNodeID)
-	if err := s.ConnectRuntimeNode(t.Context(), d.LocalNodeID, uuid.NewString(), epoch); !errors.Is(err, ErrRuntimeNodeCredential) {
-		t.Fatal("old Core replaced new connection", err)
-	}
-	if err := s.DisconnectRuntimeNode(t.Context(), d.LocalNodeID, connection, epoch); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.HeartbeatRuntimeNode(t.Context(), d.LocalNodeID, connection, epoch, RuntimeNodeHealth{ProviderReady: false}); !errors.Is(err, ErrRuntimeNodeCredential) {
-		t.Fatal("old Core rewrote health", err)
-	}
-	nodes, err := s.ListRuntimeNodes(t.Context())
-	if err != nil || !nodes[0].Online || !nodes[0].ProviderReady {
-		t.Fatal("stale callback changed current epoch", nodes, err)
 	}
 }

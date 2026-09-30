@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // sandboxFakes authenticates callerBinding() as a Project key and
@@ -72,24 +72,25 @@ func TestSandboxEnrollmentDoesNotAcceptProjectAsAdmin(t *testing.T) {
 func TestSandboxLocalNodeRemovalExplainsDeploymentBinding(t *testing.T) {
 	request := httptest.NewRequest(http.MethodDelete, "/core/v1/sandbox/nodes/local", nil)
 	response := httptest.NewRecorder()
-	writeStoreError(response, request, store.ErrRuntimeLocalNodeConfigured)
+	writeStoreError(response, request, deployment.ErrLocalNodeConfigured)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "runtime_local_node_configured") || !strings.Contains(response.Body.String(), "previous release") {
 		t.Fatal(response.Code, response.Body.String())
 	}
 }
 
-// storeCapacity rejects max_active outside the store's node capacity bounds.
-func storeCapacity(active int) error {
+// nodeCapacity rejects max_active outside the deployment's node capacity
+// bounds.
+func nodeCapacity(active int) error {
 	if active < 1 || active > 1000000 {
-		return &store.AdminValidationError{Code: "invalid_node_capacity", Param: "max_active"}
+		return &deployment.NodeValidationError{Code: "invalid_node_capacity", Param: "max_active"}
 	}
 	return nil
 }
 
 func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 	deps, fakes := sandboxFakes(t)
-	fakes.deployment.createRuntimeEnrollment = func(_ context.Context, capacity store.RuntimeNodeCapacity) (store.RuntimeNodeEnrollmentToken, error) {
-		return store.RuntimeNodeEnrollmentToken{}, storeCapacity(capacity.MaxActive)
+	fakes.deployment.createEnrollment = func(_ context.Context, capacity deployment.Capacity) (deployment.EnrollmentToken, error) {
+		return deployment.EnrollmentToken{}, nodeCapacity(capacity.MaxActive)
 	}
 	h := newTestHandler(t, deps)
 	for _, test := range []struct{ path, token, body string }{

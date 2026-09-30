@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -71,7 +73,7 @@ func TestNodeCarriesCreationSettlementWithoutConvertingFailureToSuccess(t *testi
 				}
 			}()
 			wait(t, func() bool { return hub.Online(id.NodeID) })
-			proxy := hub.Proxy(id.NodeID, "docker", 1)
+			proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
 			for _, operation := range []func(context.Context) (sandbox.Info, error){
 				func(ctx context.Context) (sandbox.Info, error) {
 					return proxy.Create(ctx, sandbox.Bootstrap{Reference: ref})

@@ -85,16 +85,26 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}}, Owner{Lease: lease})
 			return err
 		},
-		"missing Store": func(t *testing.T, lease *closeCountingLease) error {
+		"missing deployment service": func(t *testing.T, lease *closeCountingLease) error {
 			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}}, Owner{Lease: lease})
 			return err
 		},
+		"missing Store": func(t *testing.T, lease *closeCountingLease) error {
+			_, _, deployments := resetManagerStore(t)
+			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments}, Owner{Lease: lease})
+			return err
+		},
+		"missing deployment": func(t *testing.T, lease *closeCountingLease) error {
+			_, owner, deployments := resetManagerStore(t)
+			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments}, Owner{Lease: lease, Store: owner.Store})
+			return err
+		},
 		"deployment claim": func(t *testing.T, lease *closeCountingLease) error {
-			s, owner := resetManagerStore(t)
+			s, owner, deployments := resetManagerStore(t)
 			lease.inner = owner.Lease
 			id := uuid.NewString()
-			dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
-			_, err := StartWorker(canceled, dispatcher, Owner{Lease: lease, Store: owner.Store})
+			dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+			_, err := StartWorker(canceled, dispatcher, Owner{Lease: lease, Store: owner.Store, Deployment: owner.Deployment})
 			if ping := owner.Lease.CheckOwnership(t.Context()); !errors.Is(ping, pgunit.ErrLeaseClosed) {
 				t.Error("failed start kept the database lease", ping)
 			}
@@ -114,12 +124,41 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 	}
 }
 
+func TestStartWorkerChecksDeploymentAfterItsDependencies(t *testing.T) {
+	_, owner, deployments := resetManagerStore(t)
+	credentials, observer := &recordingCredentials{}, unusedObserver{t}
+	for _, test := range []struct {
+		name       string
+		dispatcher Dispatcher
+		store      bool
+		want       string
+	}{
+		{"missing Credentials", Dispatcher{Observer: observer}, true, "execution worker requires MCP Credentials"},
+		{"missing observer", Dispatcher{Credentials: credentials}, true, "execution requires a model configuration observer"},
+		{"missing deployment service", Dispatcher{Credentials: credentials, Observer: observer}, true, "execution worker requires the deployment service"},
+		{"missing Store", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments}, false, "execution worker requires the execution Store"},
+		{"missing deployment", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments}, true, "execution worker requires the deployment execution operations"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			lease := &closeCountingLease{t: t}
+			lease.closable.Store(true)
+			started := Owner{Lease: lease}
+			if test.store {
+				started.Store = owner.Store
+			}
+			if _, err := StartWorker(t.Context(), &test.dispatcher, started); err == nil || err.Error() != test.want {
+				t.Fatalf("StartWorker without deployment operations = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestWorkerRunClosesLeaseAfterDrain(t *testing.T) {
-	s, owner := resetManagerStore(t)
+	s, owner, deployments := resetManagerStore(t)
 	lease := &closeCountingLease{t: t, inner: owner.Lease}
 	id := uuid.NewString()
-	dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
-	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Store: owner.Store})
+	dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Store: owner.Store, Deployment: owner.Deployment})
 	if err != nil {
 		t.Fatal(err)
 	}

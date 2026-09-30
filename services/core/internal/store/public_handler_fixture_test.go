@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
@@ -151,12 +152,19 @@ func executorURL(url string) func(*api.Dependencies) {
 	return func(d *api.Dependencies) { d.Execution.ExecutorURL = url }
 }
 
-// managedSandboxes enables the Store's managed sandbox deployment: its
-// administration routes and openai_hosted Environments. It follows the option
-// that enables Execution.
-func managedSandboxes(t testing.TB, s *store.Store) func(*api.Dependencies) {
+// managedSandboxes enables the managed sandbox deployment on db: its
+// administration and node routes and openai_hosted Environments. Deployment
+// changes, reset and discovery need the Worker and are strict stand-ins. It
+// follows the option that enables Execution.
+func managedSandboxes(t testing.TB, s *store.Store, db fixtureDB) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
-		d.Sandboxes = &api.Sandboxes{Deployment: s, DeploymentChanges: strictStandIn{t}, ConfigurationDiscovery: strictStandIn{t}}
+		d.Sandboxes = &api.Sandboxes{
+			Deployment:             fixtureDeployment(t, db),
+			NodeAllocations:        s,
+			DeploymentChanges:      strictStandIn{t},
+			DeploymentReset:        strictStandIn{t},
+			ConfigurationDiscovery: strictStandIn{t},
+		}
 	}
 }
 
@@ -248,22 +256,22 @@ func (s strictStandIn) DiscoverConfiguration(context.Context, string, sandbox.Co
 	return nil, nil
 }
 
-func (s strictStandIn) InitializeSandboxDeployment(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
+func (s strictStandIn) InitializeSandboxDeployment(context.Context, sandbox.Selection) (deployment.View, error) {
 	s.unexpected("InitializeSandboxDeployment")
-	return store.RuntimeDeploymentView{}, nil
+	return deployment.View{}, nil
 }
 
-func (s strictStandIn) UpdateSandboxDeployment(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
+func (s strictStandIn) UpdateSandboxDeployment(context.Context, sandbox.Selection) (deployment.View, error) {
 	s.unexpected("UpdateSandboxDeployment")
-	return store.RuntimeDeploymentView{}, nil
+	return deployment.View{}, nil
 }
 
-func (s strictStandIn) StartSandboxReset(context.Context, store.SandboxResetRequest) (store.RuntimeDeploymentView, error) {
+func (s strictStandIn) StartSandboxReset(context.Context, store.SandboxResetRequest) (deployment.View, error) {
 	s.unexpected("StartSandboxReset")
-	return store.RuntimeDeploymentView{}, nil
+	return deployment.View{}, nil
 }
 
-func (s strictStandIn) CancelSandboxReset(context.Context, uint64) (store.RuntimeDeploymentView, error) {
+func (s strictStandIn) CancelSandboxReset(context.Context, uint64) (deployment.View, error) {
 	s.unexpected("CancelSandboxReset")
-	return store.RuntimeDeploymentView{}, nil
+	return deployment.View{}, nil
 }

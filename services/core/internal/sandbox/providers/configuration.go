@@ -8,36 +8,36 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-func DecodeInput(kind string, public, credential json.RawMessage) (sandbox.Configuration, error) {
-	a, err := Lookup(kind)
+func (r *Registry) DecodeInput(kind string, public, credential json.RawMessage) (sandbox.Configuration, error) {
+	a, err := r.Lookup(kind)
 	if err != nil {
 		return nil, err
 	}
 	return a.Configuration.DecodeInput(public, credential)
 }
-func Encode(kind string, c sandbox.Configuration) (sandbox.ConfigurationRecord, error) {
-	a, err := Lookup(kind)
+func (r *Registry) Encode(kind string, c sandbox.Configuration) (sandbox.ConfigurationRecord, error) {
+	a, err := r.Lookup(kind)
 	if err != nil {
 		return sandbox.ConfigurationRecord{}, err
 	}
 	return a.Configuration.Encode(c)
 }
-func Decode(kind string, r sandbox.ConfigurationRecord) (sandbox.Configuration, error) {
-	a, err := Lookup(kind)
+func (r *Registry) Decode(kind string, record sandbox.ConfigurationRecord) (sandbox.Configuration, error) {
+	a, err := r.Lookup(kind)
 	if err != nil {
 		return nil, err
 	}
-	return a.Configuration.Decode(r)
+	return a.Configuration.Decode(record)
 }
-func Equal(kind string, a, b sandbox.Configuration) (bool, error) {
-	adapter, err := Lookup(kind)
+func (r *Registry) Equal(kind string, a, b sandbox.Configuration) (bool, error) {
+	adapter, err := r.Lookup(kind)
 	if err != nil {
 		return false, err
 	}
 	return adapter.Configuration.Equal(a, b)
 }
-func UsesCredential(kind string) (bool, error) {
-	a, err := Lookup(kind)
+func (r *Registry) UsesCredential(kind string) (bool, error) {
+	a, err := r.Lookup(kind)
 	if err != nil {
 		return false, err
 	}
@@ -46,8 +46,8 @@ func UsesCredential(kind string) (bool, error) {
 	}
 	return required(a.Configuration.Requirements().Credential)
 }
-func RequiresPublicOrigin(kind string) (bool, error) {
-	a, err := Lookup(kind)
+func (r *Registry) RequiresPublicOrigin(kind string) (bool, error) {
+	a, err := r.Lookup(kind)
 	if err != nil {
 		return false, err
 	}
@@ -66,29 +66,29 @@ func required(value sandbox.Requirement) (bool, error) {
 		return false, providercontract.ErrContract
 	}
 }
-func Normalize(s sandbox.Selection) (sandbox.Selection, error) {
-	a, e := Lookup(s.Provider)
+func (r *Registry) Normalize(s sandbox.Selection) (sandbox.Selection, error) {
+	a, e := r.Lookup(s.Provider)
 	if e != nil {
 		return s, e
 	}
 	return a.Configuration.Normalize(s)
 }
-func ResolveChange(next, previous sandbox.Selection) (sandbox.Selection, error) {
-	a, e := Lookup(next.Provider)
+func (r *Registry) ResolveChange(next, previous sandbox.Selection) (sandbox.Selection, error) {
+	a, e := r.Lookup(next.Provider)
 	if e != nil {
 		return next, e
 	}
 	return a.Configuration.ResolveChange(next, previous)
 }
-func WithCredential(owner, candidate sandbox.Selection) (sandbox.Selection, error) {
+func (r *Registry) WithCredential(owner, candidate sandbox.Selection) (sandbox.Selection, error) {
 	if owner.Provider != candidate.Provider {
 		return owner, sandbox.ErrInvalid
 	}
-	a, e := Lookup(owner.Provider)
+	a, e := r.Lookup(owner.Provider)
 	if e != nil {
 		return owner, e
 	}
-	needsCredential, e := UsesCredential(owner.Provider)
+	needsCredential, e := r.UsesCredential(owner.Provider)
 	if e != nil {
 		return owner, e
 	}
@@ -98,8 +98,8 @@ func WithCredential(owner, candidate sandbox.Selection) (sandbox.Selection, erro
 	owner.Configuration, e = a.Configuration.WithCredential(owner.Configuration, candidate.Configuration)
 	return owner, e
 }
-func DiscoverConfiguration(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput, paths sandbox.ProcessPaths) (json.RawMessage, error) {
-	a, err := Lookup(kind)
+func (r *Registry) DiscoverConfiguration(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput, paths sandbox.ProcessPaths) (json.RawMessage, error) {
+	a, err := r.Lookup(kind)
 	if err != nil {
 		return nil, err
 	}

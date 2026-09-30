@@ -240,7 +240,6 @@ func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 		"ownership check":   s.checkExecutionOwnership(t.Context()),
 		"archive":           archiveErr,
 		"input expiry":      expiryErr,
-		"deployment":        s.ConfigureRuntimeDeployment(t.Context(), nil),
 		"reconciliation":    s.ReconcileEnvironmentConnections(t.Context()),
 		"mixed batch":       s.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, subagent),
 		"subagent only":     s.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, subagent[1:]),

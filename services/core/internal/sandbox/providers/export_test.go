@@ -2,12 +2,14 @@ package providers
 
 import "testing"
 
-// RegisterFixture exists only in this package's test binary, never in Core.
-func RegisterFixture(t *testing.T, kind string, adapter Adapter) {
+// FixtureRegistry returns the built-in registry with one more adapter. It
+// exists only in this package's test binary, never in Core.
+func FixtureRegistry(t *testing.T, kind string, adapter Adapter) *Registry {
 	t.Helper()
-	if _, ok := adapters[kind]; ok {
+	registry := Builtin()
+	if _, ok := registry.adapters[kind]; ok {
 		t.Fatal("fixture replaces existing registration")
 	}
-	adapters[kind] = adapter
-	t.Cleanup(func() { delete(adapters, kind) })
+	registry.adapters[kind] = adapter
+	return registry
 }

@@ -390,7 +390,7 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 			WHERE s.id=$1 AND p.node_id=$2`, session.ID, d.LocalNodeID).Scan(&current.deleted, &current.released); err != nil {
 			t.Fatal("missing placement", err)
 		}
-		nodes, err := s.ListRuntimeNodes(ctx)
+		nodes, err := deploymentService(t, s).ListNodes(ctx)
 		if err != nil || len(nodes) != 1 {
 			t.Fatal(nodes, err)
 		}

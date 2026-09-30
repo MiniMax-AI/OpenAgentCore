@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -55,14 +56,20 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if dispatcher.Observer == nil {
 		return nil, errors.New("execution requires a model configuration observer")
 	}
+	if dispatcher.Deployment == nil {
+		return nil, errors.New("execution worker requires the deployment service")
+	}
 	if owner.Store == nil {
 		return nil, errors.New("execution worker requires the execution Store")
+	}
+	if owner.Deployment == nil {
+		return nil, errors.New("execution worker requires the deployment execution operations")
 	}
 	owned := *dispatcher
 	owned.Store = owner.Store
 	owned.notifications = &executionNotifications{}
 	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: &owned, admission: dispatcher.Store, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
-	worker.runtimes, err = newRuntimeManager(owner, owned.Registry, owned.ManagedRuntimes)
+	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
 		return nil, err
 	}
@@ -73,18 +80,18 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 			}
 		}()
 	}
-	var deployment *store.RuntimeDeployment
+	var process *deployment.ProcessDeployment
 	if worker.runtimes != nil && worker.runtimes.loadDeployment == nil {
 		config := worker.runtimes.config
-		deployment = &store.RuntimeDeployment{ProviderKind: config.ProviderKind, LocalNodeID: config.LocalNodeID, LocalCredentialSHA256: config.LocalCredentialSHA256, LocalMaxActive: config.LocalMaxActive, LocalMaxRetained: config.LocalMaxRetained, InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, AdmissionPaused: config.AdmissionPaused}
+		process = &deployment.ProcessDeployment{ProviderKind: config.ProviderKind, LocalNodeID: config.LocalNodeID, LocalCredentialSHA256: config.LocalCredentialSHA256, LocalMaxActive: config.LocalMaxActive, LocalMaxRetained: config.LocalMaxRetained, InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, AdmissionPaused: config.AdmissionPaused}
 	}
 	if worker.runtimes != nil && worker.runtimes.loadDeployment != nil {
-		err = owned.Store.ClaimWebSandboxDeployment(ctx, worker.runtimes.setupInstallationID)
+		err = owner.Deployment.Claim(ctx, worker.runtimes.setupInstallationID)
 		if err == nil {
 			_, err = worker.runtimes.ensureDeployment(ctx)
 		}
 	} else {
-		err = owned.Store.ConfigureRuntimeDeployment(ctx, deployment)
+		err = owner.Deployment.ConfigureProcess(ctx, process)
 	}
 	if err != nil {
 		return nil, err

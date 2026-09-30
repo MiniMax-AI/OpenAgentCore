@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
@@ -29,13 +30,14 @@ import (
 func TestCredentialNamespaceMatrix(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
 	s.SetPublicURL("https://core.example")
+	db.publicURL = "https://core.example"
 	ctx := t.Context()
 	coreKey := uuid.NewString()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s), withCoreKeys(admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s, db), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,15 +88,16 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	created("POST", "/core/v1/projects/"+project.ID+"/environments/"+environment.ID+"/executor-credentials", coreKey, `{"key_id":"`+uuid.NewString()+`"}`, &executor)
 
 	// A node credential: a Docker deployment, an enrollment token issued with the Core key, and an enrolled node.
+	deployments := fixtureDeployment(t, db)
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	runtimes := execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := s.GetSandboxSetup(ctx)
+		setup, err := deployments.Setup(ctx)
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
 		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, BackendFingerprint: setup.BackendFingerprint, CoreURL: "https://core.example/api/v1", Provider: provider}, nil
-	}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+	}, func(_ context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
 	})
 	worker := startWorker(t, ctx, db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
@@ -107,15 +110,15 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 		})
 	})
 	specification := store.SandboxDeploymentTestSpec("docker")
-	if _, err := worker.InitializeSandboxDeployment(ctx, store.SandboxDeploymentSetupRequest{DeploymentSpec: specification, Provider: "docker"}); err != nil {
+	if _, err := worker.InitializeSandboxDeployment(ctx, sandbox.Selection{DeploymentSpec: specification, Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
 	var enrollment api.SandboxEnrollmentToken
 	created("POST", "/core/v1/sandbox/enrollment-tokens", coreKey, `{}`, &enrollment)
 	nodeID, nodeCredential := uuid.NewString(), strings.Repeat("n", 64)
-	enroll, _ := json.Marshal(store.RuntimeNodeEnrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
+	enroll, _ := json.Marshal(deployment.Enrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		DeploymentGeneration: 1, SpecificationDigest: specification.Digest("docker"), CoreURL: "https://core.example"})
-	var node store.RuntimeNodeIdentity
+	var node deployment.NodeIdentity
 	created("POST", "/api/v1/sandbox-node/enroll", enrollment.Token, string(enroll), &node)
 
 	// A second, unconsumed enrollment token; its only uses are enroll and configuration.

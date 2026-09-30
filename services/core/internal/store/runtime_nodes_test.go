@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
-func managerFixture(t *testing.T, active, retained int) (*Store, *Store, RuntimeDeployment) {
+func managerFixture(t *testing.T, active, retained int) (*Store, *Store, deployment.ProcessDeployment) {
 	t.Helper()
 	s, _ := newManagedTestStore(t)
 	w := executionWriter(t, s)
@@ -31,10 +32,11 @@ func managerFixture(t *testing.T, active, retained int) (*Store, *Store, Runtime
 func onlineManagerNode(t *testing.T, s *Store, id string) string {
 	t.Helper()
 	connection := uuid.NewString()
-	if err := s.ConnectRuntimeNode(t.Context(), id, connection, managerEpoch(t, s)); err != nil {
+	nodes := deploymentService(t, s)
+	if err := nodes.ConnectNode(t.Context(), id, connection, managerEpoch(t, s)); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.HeartbeatRuntimeNode(t.Context(), id, connection, managerEpoch(t, s), RuntimeNodeHealth{ProviderReady: true}); err != nil {
+	if err := nodes.Heartbeat(t.Context(), id, connection, managerEpoch(t, s), deployment.NodeHealth{ProviderReady: true}); err != nil {
 		t.Fatal(err)
 	}
 	return connection
@@ -70,14 +72,15 @@ func createSessionOnNode(t *testing.T, s *Store, tenant string, input CreateSess
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
+	nodes := deploymentService(t, s)
 	for _, value := range others {
-		if err := s.HeartbeatRuntimeNode(t.Context(), value.id, value.connection, value.epoch, RuntimeNodeHealth{ProviderReady: false}); err != nil {
+		if err := nodes.Heartbeat(t.Context(), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	defer func() {
 		for _, value := range others {
-			if err := s.HeartbeatRuntimeNode(context.WithoutCancel(t.Context()), value.id, value.connection, value.epoch, RuntimeNodeHealth{ProviderReady: true}); err != nil {
+			if err := nodes.Heartbeat(context.WithoutCancel(t.Context()), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -131,7 +134,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	for err := range failures {
 		if err == nil {
 			successes++
-		} else if !errors.Is(err, ErrRuntimeNodeUnavailable) {
+		} else if !errors.Is(err, deployment.ErrNodeUnavailable) {
 			t.Fatal(err)
 		}
 	}
@@ -144,11 +147,12 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 			retained = session
 		}
 	}
-	nodes, err := s.ListRuntimeNodes(t.Context())
+	service := deploymentService(t, s)
+	nodes, err := service.ListNodes(t.Context())
 	if err != nil || len(nodes) != 1 || nodes[0].Active != 1 || nodes[0].Retained != 1 || nodes[0].Reserved != 1 {
 		t.Fatal(nodes, err)
 	}
-	if err := s.RemoveRuntimeNode(t.Context(), d.LocalNodeID); !errors.Is(err, ErrRuntimeNodeInUse) {
+	if err := service.RemoveNode(t.Context(), d.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("removed pending placement", err)
 	}
 	if err := s.DeleteSession(t.Context(), tenant, retained.ID); err != nil {
@@ -176,30 +180,31 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 }
 func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	s, w, d := managerFixture(t, 2, 4)
-	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}))
+	nodes := deploymentService(t, s)
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64)}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); !errors.Is(err, ErrInvalidInput) {
+	input := deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.publicURL}
+	if _, err := nodes.Enroll(t.Context(), token, input); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("mixed provider accepted", err)
 	}
 	input.Provider = "docker"
-	enrolled, err := s.EnrollRuntimeNode(t.Context(), token, input)
+	enrolled, err := nodes.Enroll(t.Context(), token, input)
 	if err != nil || enrolled.InstallationID != d.InstallationID {
 		t.Fatal(enrolled, err)
 	}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := nodes.Enroll(t.Context(), token, input); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("enrollment token reused", err)
 	}
-	if _, err := s.AuthenticateRuntimeNode(t.Context(), input.NodeID, input.Credential); err != nil {
+	if _, err := nodes.AuthenticateNode(t.Context(), input.NodeID, input.Credential); err != nil {
 		t.Fatal("lost response cannot recover", err)
 	}
 	connection := onlineManagerNode(t, s, input.NodeID)
-	if err := s.DisconnectRuntimeNode(t.Context(), input.NodeID, uuid.NewString(), managerEpoch(t, s)); err != nil {
+	if err := nodes.DisconnectNode(t.Context(), input.NodeID, uuid.NewString(), managerEpoch(t, s)); err != nil {
 		t.Fatal(err)
 	}
-	current, err := s.ListRuntimeNodes(t.Context())
+	current, err := nodes.ListNodes(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,31 +213,28 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 			t.Fatal("stale disconnect fenced current connection")
 		}
 	}
-	epoch, err := s.RuntimeOwnerEpoch(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
+	epoch := managerEpoch(t, s)
 	deploymentConfigure(t, w, &d)
-	next, err := s.RuntimeOwnerEpoch(t.Context())
-	if err != nil || next != epoch+1 {
-		t.Fatal(next, err)
+	if next := managerEpoch(t, s); next != epoch+1 {
+		t.Fatal(next)
 	}
-	if err := s.HeartbeatRuntimeNode(t.Context(), input.NodeID, connection, epoch, RuntimeNodeHealth{ProviderReady: true}); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if err := nodes.Heartbeat(t.Context(), input.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old epoch heartbeat revived node", err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale")); !errors.Is(err, ErrRuntimeNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale")); !errors.Is(err, deployment.ErrNodeUnavailable) {
 		t.Fatal("stale node admitted", err)
 	}
 	onlineManagerNode(t, s, d.LocalNodeID)
-	if err := s.RemoveRuntimeNode(t.Context(), input.NodeID); err != nil {
+	if err := nodes.RemoveNode(t.Context(), input.NodeID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AuthenticateRuntimeNode(t.Context(), input.NodeID, input.Credential); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := nodes.AuthenticateNode(t.Context(), input.NodeID, input.Credential); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("removed node credential accepted", err)
 	}
 }
 func TestRuntimeNodesRetention(t *testing.T) {
 	s, w, next := managerFixture(t, 2, 2)
+	nodes := deploymentService(t, s)
 	tenant := uuid.NewString()
 	first, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
 	if err != nil {
@@ -246,7 +248,7 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemoveRuntimeNode(t.Context(), next.LocalNodeID); !errors.Is(err, ErrRuntimeNodeInUse) {
+	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal(err)
 	}
 	if err := s.DeleteSession(t.Context(), tenant, pending.ID); err != nil {
@@ -259,7 +261,7 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemoveRuntimeNode(t.Context(), next.LocalNodeID); !errors.Is(err, ErrRuntimeNodeInUse) {
+	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("unknown cleanup released node", err)
 	}
 	retained, err = w.SettleRuntimeCreation(t.Context(), retained)
@@ -269,10 +271,10 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if _, err := w.ReleaseRuntimeAllocation(t.Context(), retained); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemoveRuntimeNode(t.Context(), next.LocalNodeID); !errors.Is(err, ErrRuntimeLocalNodeConfigured) {
+	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); !errors.Is(err, deployment.ErrLocalNodeConfigured) {
 		t.Fatal("configured local node was removed", err)
 	}
-	if _, err := s.AuthenticateRuntimeNode(t.Context(), next.LocalNodeID, "local-node-credential"); err != nil {
+	if _, err := nodes.AuthenticateNode(t.Context(), next.LocalNodeID, "local-node-credential"); err != nil {
 		t.Fatal("rejected removal changed local credentials", err)
 	}
 	next.AdmissionPaused = true
@@ -283,7 +285,7 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	detached.LocalMaxActive, detached.LocalMaxRetained = 0, 0
 	detached.BackendFingerprint = strings.Repeat("b", 64)
 	deploymentConfigure(t, w, &detached)
-	if err := s.RemoveRuntimeNode(t.Context(), next.LocalNodeID); err != nil {
+	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); err != nil {
 		t.Fatal("detached resolved node cannot be removed", err)
 	}
 }
@@ -324,14 +326,14 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 		err := <-results
 		if err == nil {
 			success++
-		} else if !errors.Is(err, ErrRuntimeNodeUnavailable) {
+		} else if !errors.Is(err, deployment.ErrNodeUnavailable) {
 			t.Fatal(err)
 		}
 	}
 	if success != 1 {
 		t.Fatal("restore and creation overbooked", success)
 	}
-	nodes, err := s.ListRuntimeNodes(t.Context())
+	nodes, err := deploymentService(t, s).ListNodes(t.Context())
 	if err != nil || nodes[0].Active != 1 {
 		t.Fatal(nodes, err)
 	}
@@ -339,7 +341,7 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 
 func managerEpoch(t *testing.T, s *Store) uint64 {
 	t.Helper()
-	epoch, err := s.RuntimeOwnerEpoch(t.Context())
+	epoch, err := deploymentStore(s).OwnerEpoch(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,12 +372,12 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if err != nil || offline.Expired || offline.State != "running" {
 		t.Fatal("offline treated as destructive expiry", offline, err)
 	}
-	if err := s.RemoveRuntimeNode(t.Context(), d.LocalNodeID); !errors.Is(err, ErrRuntimeNodeInUse) {
+	if err := deploymentService(t, s).RemoveNode(t.Context(), d.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("offline ownership discarded", err)
 	}
 	changed := d
 	changed.LocalNodeID = uuid.NewString()
-	if err := w.ConfigureRuntimeDeployment(t.Context(), &changed); err == nil {
+	if err := deploymentExecution(t, w).ConfigureProcess(t.Context(), &changed); err == nil {
 		t.Fatal("lost local state created replacement identity")
 	}
 	onlineManagerNode(t, s, d.LocalNodeID)

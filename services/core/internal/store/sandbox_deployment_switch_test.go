@@ -2,53 +2,32 @@ package store
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
-func e2bSelection() SandboxDeploymentSetupRequest {
-	return SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-private-api-key", Template: "runtime:" + uuid.NewString()}}
+func e2bSelection() sandbox.Selection {
+	return sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-private-api-key", Template: "runtime:" + uuid.NewString()}}
 }
 
-func TestSandboxE2BEndpointPersistenceAndOnlineSwitch(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
-	w := executionWriter(t, s)
-	id := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
-		t.Fatal(err)
-	}
-	input := e2bSelection()
-	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "https://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai"
-	view, err := w.InitializeSandboxDeployment(t.Context(), id, input)
-	if err != nil || view.Configuration == nil || e2bPublicConfiguration(t, view).APIURL != input.Configuration.(*e2b.DeploymentConfiguration).APIURL || e2bPublicConfiguration(t, view).Domain != input.Configuration.(*e2b.DeploymentConfiguration).Domain {
-		t.Fatal("custom endpoint was not returned", view, err)
-	}
-	setup, err := s.GetSandboxSetup(t.Context())
-	if err != nil || setup.Configuration == nil || setup.Configuration.(*e2b.DeploymentConfiguration).APIURL != input.Configuration.(*e2b.DeploymentConfiguration).APIURL || setup.Configuration.(*e2b.DeploymentConfiguration).Domain != input.Configuration.(*e2b.DeploymentConfiguration).Domain {
-		t.Fatal("custom endpoint was not persisted", setup, err)
-	}
-	change := e2bSelection()
-	change.Configuration.(*e2b.DeploymentConfiguration).Template = input.Configuration.(*e2b.DeploymentConfiguration).Template
-	update := SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: change, ExpectedGeneration: view.Generation}
-	changed, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), id, update)
-	if err != nil || changed.Generation != view.Generation+1 || changed.Configuration == nil || e2bPublicConfiguration(t, changed).APIURL != "https://api.e2b.app" || e2bPublicConfiguration(t, changed).Domain != "e2b.app" {
-		t.Fatal("online endpoint switch failed", changed, err)
-	}
+// enrollmentTokenDigest is the stored form of an enrollment token.
+func enrollmentTokenDigest(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(digest[:])
 }
 
 func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
@@ -59,22 +38,30 @@ func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
 	}
 	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
+	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
+	if err := changes.Claim(t.Context(), installation); err != nil {
 		t.Fatal(err)
 	}
 	input := e2bSelection()
 	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "https://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai"
-	configured, err := w.InitializeSandboxDeployment(t.Context(), installation, input)
+	configured, err := changes.Initialize(t.Context(), installation, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := SandboxResetTestContext(t.Context())
-	reset, err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: configured.Generation, Clear: "force"})
-	if err != nil {
+	if err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: configured.Generation, Clear: "force"}); err != nil {
 		t.Fatal(err)
 	}
-	empty, err := w.CompleteSandboxReset(ctx, installation, configured.Generation, reset.Reset.RequestedAt)
+	reset, err := deploymentService(t, s).View(ctx)
+	if err != nil || reset.Reset == nil {
+		t.Fatal("reset did not start", reset, err)
+	}
+	generation, err := w.CompleteSandboxReset(ctx, installation, configured.Generation, reset.Reset.RequestedAt)
+	if err != nil || generation != configured.Generation+1 {
+		t.Fatal("custom endpoint blocked reset completion", generation, err)
+	}
+	empty, err := deploymentService(t, s).View(ctx)
 	if err != nil || empty.Provider != "" || empty.Reset != nil || empty.Generation != configured.Generation+1 {
 		t.Fatal("custom endpoint blocked reset completion", empty, err)
 	}
@@ -92,12 +79,13 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	}
 	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
+	changes := deploymentExecution(t, w)
 	id := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
+	if err := changes.Claim(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
 	input := e2bSelection()
-	view, err := w.InitializeSandboxDeployment(t.Context(), id, input)
+	view, err := changes.Initialize(t.Context(), id, input)
 	if err != nil || view.Generation != 1 || view.Mode != "direct" || view.Configuration == nil || !view.CredentialConfigured {
 		t.Fatal("direct setup", view, err)
 	}
@@ -109,11 +97,11 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT provider_credential FROM runtime_deployment").Scan(&ciphertext); err != nil || bytes.Contains(ciphertext, []byte(input.Configuration.(*e2b.DeploymentConfiguration).APIKey)) {
 		t.Fatal("credential not encrypted", err)
 	}
-	setup, err := s.GetSandboxSetup(t.Context())
+	setup, err := deploymentService(t, s).Setup(t.Context())
 	if err != nil || setup.Configuration.(*e2b.DeploymentConfiguration).APIKey != input.Configuration.(*e2b.DeploymentConfiguration).APIKey {
 		t.Fatal("internal credential unavailable", err)
 	}
-	if _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8}); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if _, err := deploymentService(t, s).CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 8}); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("cloud enrolled a machine", err)
 	}
 	tenant := uuid.NewString()
@@ -141,11 +129,11 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || observed.Expired {
 		t.Fatal("cloud inherited legacy node-less expiry", err)
 	}
-	if _, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
+	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
-	update := SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}, ExpectedGeneration: 1}
-	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), id, update); !errors.Is(err, ErrSandboxResetInProgress) {
+	update := sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", ExpectedGeneration: 1}
+	if _, err := changes.Update(SandboxResetTestContext(t.Context()), id, update); !errors.Is(err, deployment.ErrResetInProgress) {
 		t.Fatal("reset allowed switch", err)
 	}
 	if _, err := w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
@@ -160,11 +148,11 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := resetAndSelect(t, w, id, update.ExpectedGeneration, update.SandboxDeploymentSetupRequest)
-	if err != nil || changed.Generation != 3 || changed.Mode != "nodes" || changed.Reset != nil || string(changed.Configuration) != "{}" || changed.Resources != (SandboxDeploymentResources{}) {
+	changed, err := resetAndSelect(t, w, id, update.ExpectedGeneration, update)
+	if err != nil || changed.Generation != 3 || changed.Mode != "nodes" || changed.Reset != nil || string(changed.Configuration) != "{}" || changed.Resources != (deployment.Resources{}) {
 		t.Fatal("clean switch", changed, err)
 	}
-	if _, err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), id, 1); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), id, 1); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("stale resume accepted", err)
 	}
 	if _, err := s.GetSession(t.Context(), tenant, session.ID); err != nil {
@@ -177,41 +165,43 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{5}, 32))
 	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
+	changes := deploymentExecution(t, w)
+	nodes := deploymentService(t, s)
 	id := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
+	if err := changes.Claim(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.InitializeSandboxDeployment(t.Context(), id, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
+	if _, err := changes.Initialize(t.Context(), id, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Name: "Machine", Provider: "docker", Credential: strings.Repeat("c", 64), BackendFingerprint: strings.Repeat("b", 64)}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, node); err != nil {
+	node := deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Name: "Machine", Provider: "docker", Credential: strings.Repeat("c", 64), BackendFingerprint: strings.Repeat("b", 64)}
+	if _, err := nodes.Enroll(t.Context(), token, node); err != nil {
 		t.Fatal(err)
 	}
-	unused, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8}))
+	unused, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 8}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
+	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
 	// AdmissionPaused rejects a valid enrollment without consuming it. Authentication
 	// still precedes deployment details for invalid or retired credentials.
 	spareNode := node
 	spareNode.NodeID = uuid.NewString()
-	if _, err := s.EnrollRuntimeNode(t.Context(), unused, spareNode); !errors.Is(err, ErrSandboxResetInProgress) {
+	if _, err := nodes.Enroll(t.Context(), unused, spareNode); !errors.Is(err, deployment.ErrResetInProgress) {
 		t.Fatal("reset accepted enrollment", err)
 	}
 	var consumed bool
-	if err := pool.QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM runtime_node_enrollments WHERE token_sha256=$1", runtimeTokenDigest(unused)).Scan(&consumed); err != nil || consumed {
+	if err := pool.QueryRow(t.Context(), "SELECT consumed_at IS NOT NULL FROM runtime_node_enrollments WHERE token_sha256=$1", enrollmentTokenDigest(unused)).Scan(&consumed); err != nil || consumed {
 		t.Fatal("maintenance consumed enrollment", err)
 	}
 	spareNode.Provider = "microsandbox"
-	if _, err := s.EnrollRuntimeNode(t.Context(), strings.Repeat("invalid", 8), spareNode); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := nodes.Enroll(t.Context(), strings.Repeat("invalid", 8), spareNode); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("invalid token disclosed deployment validation", err)
 	}
 	spareNode.Provider = "docker"
@@ -220,27 +210,27 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := s.EnrollRuntimeNode(t.Context(), unused, spareNode); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := nodes.Enroll(t.Context(), unused, spareNode); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("retired token did not reject before cloud deployment validation", err)
 	}
-	if _, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := nodes.AuthenticateNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old node credential survived", err)
 	}
-	if _, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 3}); err != nil {
+	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 3}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := resetAndSelect(t, w, id, 3, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
+	if _, err := resetAndSelect(t, w, id, 3, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), id, 5); err != nil {
+	if err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), id, 5); err != nil {
 		t.Fatal(err)
 	}
 	node.NodeID = uuid.NewString()
-	if _, err := s.EnrollRuntimeNode(t.Context(), unused, node); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := nodes.Enroll(t.Context(), unused, node); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old enrollment survived roundtrip", err)
 	}
-	nodes, err := s.ListRuntimeNodes(t.Context())
-	if err != nil || len(nodes) != 0 {
+	listed, err := nodes.ListNodes(t.Context())
+	if err != nil || len(listed) != 0 {
 		t.Fatal("retired nodes reappeared", err)
 	}
 }
@@ -250,12 +240,13 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{6}, 32))
 	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
+	changes := deploymentExecution(t, w)
 	id := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
+	if err := changes.Claim(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
 	input := e2bSelection()
-	if _, err := w.InitializeSandboxDeployment(t.Context(), id, input); err != nil {
+	if _, err := changes.Initialize(t.Context(), id, input); err != nil {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup
@@ -264,12 +255,12 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString()))
-			if err != nil && !errors.Is(err, ErrSandboxResetAdmission) && !errors.Is(err, ErrRuntimeNodeUnavailable) {
+			if err != nil && !errors.Is(err, ErrSandboxResetAdmission) && !errors.Is(err, deployment.ErrNodeUnavailable) {
 				t.Error(err)
 			}
 		}()
 	}
-	if _, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
+	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
 	wg.Wait()
@@ -278,12 +269,12 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 			t.Fatal("fresh creation bypassed reset", err)
 		}
 	}
-	view, err := s.GetRuntimeDeployment(t.Context())
+	view, err := deploymentService(t, s).View(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), id, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}, ExpectedGeneration: 1})
-	if view.Resources.Pending > 0 && !errors.Is(err, ErrSandboxResetInProgress) {
+	_, err = changes.Update(SandboxResetTestContext(t.Context()), id, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", ExpectedGeneration: 1})
+	if view.Resources.Pending > 0 && !errors.Is(err, deployment.ErrResetInProgress) {
 		t.Fatal("committed pending Session bypassed switch guard", err)
 	}
 }
@@ -293,12 +284,13 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
 	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
+	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
+	if err := changes.Claim(t.Context(), installation); err != nil {
 		t.Fatal(err)
 	}
 	selection := e2bSelection()
-	if _, err := w.InitializeSandboxDeployment(t.Context(), installation, selection); err != nil {
+	if _, err := changes.Initialize(t.Context(), installation, selection); err != nil {
 		t.Fatal(err)
 	}
 	tenant := uuid.NewString()
@@ -340,10 +332,10 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT to_jsonb(a) FROM runtime_allocations a WHERE id=$1", owner.ID).Scan(&allocationBefore); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
+	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := resetAndSelect(t, w, installation, 1, SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
+	if _, err := resetAndSelect(t, w, installation, 1, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
 	items, err = s.ListItems(t.Context(), tenant, history.ID, "", 100, true)
@@ -377,21 +369,23 @@ func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
 	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
+	changes := deploymentExecution(t, w)
+	nodes := deploymentService(t, s)
 	id := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
+	if err := changes.Claim(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
 	spec := SandboxDeploymentTestSpec("docker")
-	selection := SandboxDeploymentSetupRequest{DeploymentSpec: spec, Provider: "docker"}
-	if _, err := w.InitializeSandboxDeployment(t.Context(), id, selection); err != nil {
+	selection := sandbox.Selection{DeploymentSpec: spec, Provider: "docker"}
+	if _, err := changes.Initialize(t.Context(), id, selection); err != nil {
 		t.Fatal(err)
 	}
-	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: spec.Digest("docker"), NodeID: uuid.NewString(), Name: "Legacy", Provider: "docker", Credential: strings.Repeat("l", 64), BackendFingerprint: strings.Repeat("b", 64)}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, node); err != nil {
+	node := deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: spec.Digest("docker"), NodeID: uuid.NewString(), Name: "Legacy", Provider: "docker", Credential: strings.Repeat("l", 64), BackendFingerprint: strings.Repeat("b", 64)}
+	if _, err := nodes.Enroll(t.Context(), token, node); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET specification='{}'"); err != nil {
@@ -401,24 +395,24 @@ func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := s.GetSandboxSetup(t.Context()); err == nil {
+	if _, err := nodes.Setup(t.Context()); err == nil {
 		t.Fatal("missing deployment specification accepted")
 	}
-	if _, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
+	if _, err := nodes.AuthenticateNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, deployment.ErrSpecificationMismatch) {
 		t.Fatal("unspecified node authenticated", err)
 	}
-	if _, err := s.RuntimeNodeConfiguration(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
+	if _, err := nodes.NodeConfiguration(t.Context(), node.NodeID, node.Credential, 0); !errors.Is(err, deployment.ErrSpecificationMismatch) {
 		t.Fatal("node configuration served without a specification", err)
 	}
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
 		t.Fatal("unspecified deployment admitted a fresh sandbox", err)
 	}
-	if _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if _, err := nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("unspecified deployment issued an enrollment token", err)
 	}
 
 	epoch := managerEpoch(t, s)
-	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err == nil {
+	if err := changes.Claim(t.Context(), id); err == nil {
 		t.Fatal("unsupported installation claimed")
 	}
 	if managerEpoch(t, s) != epoch {

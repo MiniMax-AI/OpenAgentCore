@@ -18,13 +18,15 @@ func TestProviderRegistrationDowngradePreservesCustomEndpoints(t *testing.T) {
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	archiveAllocation(t, w, tenant, session, view.InstallationID)
 	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "https://api.example.test", "example.test"
-	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: view.Generation}); err != nil {
+	input.ExpectedGeneration = view.Generation
+	if _, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, input); err != nil {
 		t.Fatal(err)
 	}
 	tenant, session = managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	archiveAllocation(t, w, tenant, session, view.InstallationID)
 	input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
-	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 2}); err != nil {
+	input.ExpectedGeneration = 2
+	if _, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, input); err != nil {
 		t.Fatal(err)
 	}
 	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))

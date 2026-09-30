@@ -12,8 +12,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
@@ -105,64 +103,22 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 }
 
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
-	// Adapter discovery and persisted configuration share the same public error.
-	var validation *sandbox.ValidationError
-	if errors.As(err, &validation) {
-		err = &store.SandboxConfigurationError{Message: validation.Message, Validation: validation}
-	}
-	if writeCoreValidationError(w, err) {
-		return
-	}
-	var configuration *sandbox.ConfigurationError
-	var unsupported *providercontract.UnsupportedError
-	var cursor *store.InvalidCursorError
-	var sandboxConfiguration *store.SandboxConfigurationError
-	var stale *store.SandboxGenerationStaleError
-	var resetRequired *store.SandboxResetRequiredError
+	// A reset's resource check unwraps to deployment.ErrConflict and admission
+	// paused by a reset is Session admission's, so both precede the deployment errors.
 	var inUse *store.SandboxInUseError
 	switch {
-	case errors.As(err, &configuration):
-		status := http.StatusInternalServerError
-		switch configuration.Class {
-		case sandbox.ConfigurationInvalid:
-			status = http.StatusBadRequest
-		case sandbox.ConfigurationConflict:
-			status = http.StatusConflict
-		case sandbox.ConfigurationUnconfirmed:
-			status = http.StatusServiceUnavailable
-		default:
-			writeError(w, status, "internal_error", "The operation could not be completed.")
-			return
-		}
-		if configuration.Param == "" {
-			writeError(w, status, configuration.Code, configuration.Message)
-		} else {
-			writeError(w, status, configuration.Code, configuration.Message, configuration.Param)
-		}
-	case errors.As(err, &unsupported):
-		writeError(w, http.StatusBadRequest, "sandbox_operation_unsupported", "The selected sandbox provider does not support this operation.")
-	case errors.Is(err, sandbox.ErrInvalid):
-		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", "Invalid sandbox provider configuration.", "configuration")
-	case errors.As(err, &stale):
-		writeCoreError(w, http.StatusConflict, "sandbox_generation_stale", "The sandbox deployment generation changed. Refresh before submitting again.", CoreErrorDetails{"current_generation": CoreErrorNumber(float64(stale.CurrentGeneration))})
-	case errors.As(err, &resetRequired):
-		writeCoreError(w, http.StatusConflict, "sandbox_reset_required", "Reset the sandbox deployment before changing this configuration.", CoreErrorDetails{"current_provider": CoreErrorString(resetRequired.CurrentProvider), "requested_provider": CoreErrorString(resetRequired.RequestedProvider)})
 	case errors.As(err, &inUse):
 		writeCoreError(w, http.StatusConflict, "sandbox_in_use", "Hosted sandbox resources still belong to this deployment.", CoreErrorDetails{"allocations": CoreErrorNumber(float64(inUse.Resources.Allocations)), "pending": CoreErrorNumber(float64(inUse.Resources.Pending))})
+		return
 	case errors.Is(err, store.ErrSandboxResetAdmission):
 		writeError(w, http.StatusServiceUnavailable, "sandbox_reset_in_progress", "A sandbox reset is in progress.")
-	case errors.Is(err, store.ErrSandboxResetInProgress):
-		writeError(w, http.StatusConflict, "sandbox_reset_in_progress", "A sandbox reset is in progress.")
-	case errors.Is(err, store.ErrSandboxNotConfigured):
-		writeError(w, http.StatusConflict, "sandbox_not_configured", "The sandbox deployment is not configured.")
-	case errors.As(err, &sandboxConfiguration):
-		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", sandboxConfiguration.Message)
-	case errors.Is(err, store.ErrSandboxPublicURLUnreachable):
-		writeError(w, http.StatusConflict, "sandbox_configuration_error", err.Error())
-	case errors.Is(err, store.ErrRuntimeNodeAddressMismatch):
-		writeError(w, http.StatusConflict, "sandbox_node_address_mismatch", "This node uses a different Core address than the installation public URL. Generate a new command on the Nodes page and run it on the host.")
-	case errors.Is(err, store.ErrRuntimeSpecificationMismatch):
-		writeError(w, http.StatusConflict, "sandbox_specification_mismatch", "The node resource limits or Runtime release do not match the active deployment. Restore its installed configuration or remove and enroll the node again after a drained deployment change.")
+		return
+	}
+	if writeSandboxError(w, err) {
+		return
+	}
+	var cursor *store.InvalidCursorError
+	switch {
 	case errors.Is(err, projects.ErrArchived):
 		// Executor credential management checks the Project in its own
 		// transaction.
@@ -171,21 +127,6 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusUnauthorized, "installation_authorization_invalid", store.ErrInstallationAuthorization.Error())
 	case errors.Is(err, store.ErrExecutorCredentialExists):
 		writeError(w, http.StatusConflict, "executor_credential_exists", "This executor key ID already exists. Explicitly rotate it to replace the secret.")
-	case errors.Is(err, store.ErrSandboxCredentialUnavailable):
-		writeError(w, http.StatusServiceUnavailable, "sandbox_credential_unavailable", "Sandbox credentials are unavailable. Check the service credential encryption configuration.")
-	case errors.Is(err, store.ErrSandboxDeploymentConflict):
-		writeError(w, http.StatusConflict, "sandbox_deployment_conflict", "The sandbox deployment cannot change in its current state. Refresh the configuration and inspect its reset and resource state.")
-	case errors.Is(err, store.ErrRuntimeNodeCredential):
-		writeError(w, http.StatusUnauthorized, "invalid_node_credential", "A valid sandbox node enrollment or node credential is required.")
-	case errors.Is(err, store.ErrRuntimeNodeInUse):
-		writeError(w, http.StatusConflict, "runtime_node_in_use", "The sandbox node retains allocations, snapshots, reservations or pending cleanup.")
-	case errors.Is(err, store.ErrRuntimeLocalNodeConfigured):
-		writeError(w, http.StatusConflict, "runtime_local_node_configured", "The local sandbox node is enabled in deployment configuration. Drain it with the previous release and remove its file-managed configuration before replacing it.")
-	case errors.Is(err, store.ErrSandboxNodesPreparing):
-		writeError(w, http.StatusServiceUnavailable, "sandbox_nodes_preparing", "Sandbox nodes are preparing the requested Runtime.")
-	case errors.Is(err, store.ErrRuntimeNodeUnavailable):
-		writeError(w, http.StatusServiceUnavailable, "runtime_node_unavailable", "The selected sandbox node is unavailable or has no capacity.")
-
 	case errors.Is(err, execution.ErrModelProviderRequired):
 		writeError(w, http.StatusBadRequest, "model_provider_required", "This Session was created without a model provider and cannot run. Create a new Session with x_agents_core.model_provider or an Agent that has one saved.")
 	case errors.Is(err, store.ErrHostedEnvironmentFailed):

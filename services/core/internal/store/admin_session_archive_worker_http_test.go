@@ -17,6 +17,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -37,16 +38,17 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	providerConfig := func(setup store.SandboxSetup) *execution.RuntimeProvider {
+	deployments := fixtureDeployment(t, db)
+	providerConfig := func(setup deployment.Setup) *execution.RuntimeProvider {
 		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	}
 	configuration := execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := s.GetSandboxSetup(ctx)
+		setup, err := deployments.Setup(ctx)
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
 		return providerConfig(setup), nil
-	}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+	}, func(_ context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: providerConfig(setup)}, nil
 	})
 	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
@@ -59,7 +61,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		})
 	}
 	t.Cleanup(stop)
-	selection := store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
+	selection := sandbox.Selection{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
 	if _, err := worker.InitializeSandboxDeployment(t.Context(), selection); err != nil {
 		t.Fatal(err)
 	}

@@ -216,7 +216,7 @@ Some fields keep one name across providers but differ in meaning, or do not appl
 | 409 | `sandbox_deployment_conflict` | Another state the change cannot apply to |
 | 409 | `runtime_node_in_use` | Node removal while it holds resources |
 | 503 | `execution_unavailable` | Provider preparation is unavailable |
-| 503 | `sandbox_credential_unavailable` | The credential encryption key is unavailable |
+| 503 | `credential_storage_unavailable` | Core has no credential encryption key |
 
 Storage and credential failures stay errors: an empty or failed read never proves cleanup. The [machine connection API](machine-api.md#node-route-errors) lists the errors of the node routes.
 

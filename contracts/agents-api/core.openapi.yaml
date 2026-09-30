@@ -622,7 +622,7 @@ definitions:
     properties:
       data:
         items:
-          $ref: '#/definitions/store.RuntimeNode'
+          $ref: '#/definitions/deployment.Node'
         type: array
     type: object
   api.SessionDiagnosticFailure:
@@ -902,6 +902,334 @@ definitions:
       service:
         $ref: '#/definitions/coremetrics.ServiceState'
     type: object
+  deployment.HostHistory:
+    properties:
+      points:
+        items:
+          $ref: '#/definitions/deployment.HostHistoryPoint'
+        type: array
+      resolution_seconds:
+        type: integer
+    type: object
+  deployment.HostHistoryPoint:
+    properties:
+      available_disk_bytes_min:
+        type: integer
+        x-nullable: true
+      cpu_utilization_max:
+        type: number
+        x-nullable: true
+      memory_used_bytes_max:
+        type: integer
+        x-nullable: true
+      start:
+        type: string
+    type: object
+  deployment.Node:
+    properties:
+      active:
+        type: integer
+      available_disk_bytes:
+        type: integer
+      available_memory_bytes:
+        type: integer
+      cleanup_pending:
+        type: integer
+      core_url:
+        description: |-
+          The Core address this node enrolled with. A node whose address differs
+          from the installation public URL receives no new sandboxes; re-add it.
+        type: string
+      cpu_count:
+        type: integer
+      created_at:
+        type: string
+      diagnostic:
+        description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
+        enum:
+          - provider_unavailable
+          - docker_unavailable
+          - docker_limits_unsupported
+          - runtime_download_failed
+          - runtime_image_unavailable
+          - kvm_unavailable
+          - microsandbox_artifacts_unavailable
+          - capacity_insufficient
+        type: string
+      enrollment_id:
+        description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
+        type: string
+        x-nullable: true
+      id:
+        type: string
+      last_seen_at:
+        type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
+      name:
+        type: string
+      online:
+        type: boolean
+      provider:
+        type: string
+      provider_ready:
+        type: boolean
+      reserved:
+        type: integer
+      retained:
+        type: integer
+      rollout:
+        $ref: '#/definitions/deployment.NodeRollout'
+      running:
+        type: integer
+      snapshots:
+        type: integer
+    type: object
+  deployment.NodeDetail:
+    properties:
+      active:
+        type: integer
+      available_disk_bytes:
+        type: integer
+      available_memory_bytes:
+        type: integer
+      cleanup_pending:
+        type: integer
+      core_url:
+        description: |-
+          The Core address this node enrolled with. A node whose address differs
+          from the installation public URL receives no new sandboxes; re-add it.
+        type: string
+      cpu_count:
+        type: integer
+      created_at:
+        type: string
+      diagnostic:
+        description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
+        enum:
+          - provider_unavailable
+          - docker_unavailable
+          - docker_limits_unsupported
+          - runtime_download_failed
+          - runtime_image_unavailable
+          - kvm_unavailable
+          - microsandbox_artifacts_unavailable
+          - capacity_insufficient
+        type: string
+      enrollment_id:
+        description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
+        type: string
+        x-nullable: true
+      history:
+        $ref: '#/definitions/deployment.HostHistory'
+      host:
+        $ref: '#/definitions/deployment.NodeHost'
+      id:
+        type: string
+      last_seen_at:
+        type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
+      name:
+        type: string
+      online:
+        type: boolean
+      provider:
+        type: string
+      provider_ready:
+        type: boolean
+      reserved:
+        type: integer
+      retained:
+        type: integer
+      rollout:
+        $ref: '#/definitions/deployment.NodeRollout'
+      running:
+        type: integer
+      snapshots:
+        type: integer
+    type: object
+  deployment.NodeHost:
+    properties:
+      available_disk_bytes:
+        type: integer
+        x-nullable: true
+      available_memory_bytes:
+        type: integer
+        x-nullable: true
+      cpu_utilization:
+        type: number
+        x-nullable: true
+      effective_cpu_cores:
+        type: number
+        x-nullable: true
+      observed_at:
+        type: string
+        x-nullable: true
+      total_memory_bytes:
+        type: integer
+        x-nullable: true
+    type: object
+  deployment.NodeRollout:
+    properties:
+      diagnostic:
+        enum:
+          - provider_unavailable
+          - docker_unavailable
+          - docker_limits_unsupported
+          - runtime_download_failed
+          - runtime_image_unavailable
+          - kvm_unavailable
+          - microsandbox_artifacts_unavailable
+          - capacity_insufficient
+        type: string
+      ready_generation:
+        description: Durable serving-generation pin; online and provider_ready still gate placement.
+        type: integer
+        x-nullable: true
+      state:
+        description: Target preparation, independent of an old pin's serving readiness.
+        enum:
+          - ready
+          - preparing
+          - failed
+          - update_required
+          - unknown
+        type: string
+    type: object
+  deployment.NodeUpdate:
+    properties:
+      max_active:
+        type: integer
+      max_retained:
+        description: Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
+        type: integer
+      name:
+        type: string
+    type: object
+  deployment.Reset:
+    properties:
+      clear:
+        type: string
+      deadline_at:
+        type: string
+        x-nullable: true
+      forced_at:
+        type: string
+        x-nullable: true
+      remaining:
+        $ref: '#/definitions/deployment.ResetRemaining'
+      requested_at:
+        type: string
+    type: object
+  deployment.ResetOfflineNode:
+    properties:
+      name:
+        type: string
+      node_id:
+        type: string
+      resources:
+        type: integer
+    type: object
+  deployment.ResetRemaining:
+    properties:
+      busy:
+        type: integer
+      cleanup:
+        type: integer
+      idle:
+        type: integer
+      offline_nodes:
+        items:
+          $ref: '#/definitions/deployment.ResetOfflineNode'
+        type: array
+      on_offline_nodes:
+        type: integer
+    type: object
+  deployment.Resources:
+    properties:
+      allocations:
+        type: integer
+      pending:
+        type: integer
+    type: object
+  deployment.Rollout:
+    properties:
+      nodes:
+        allOf:
+          - $ref: '#/definitions/deployment.RolloutNodes'
+        x-nullable: true
+      previous_generation_sandboxes:
+        type: integer
+      state:
+        enum:
+          - settled
+          - preparing
+        type: string
+    type: object
+  deployment.RolloutNodes:
+    properties:
+      failed:
+        type: integer
+      preparing:
+        type: integer
+      ready:
+        type: integer
+      unknown:
+        type: integer
+      update_required:
+        type: integer
+    type: object
+  deployment.Suspension:
+    properties:
+      idle_seconds:
+        type: integer
+      retention_seconds:
+        type: integer
+    type: object
+  deployment.View:
+    properties:
+      configuration:
+        type: object
+      core_url:
+        description: 'Read-only: the installation public URL (OAC_PUBLIC_URL), which nodes and sandboxes use to reach Core. The deployment API does not accept it.'
+        type: string
+      credential_configured:
+        type: boolean
+      generation:
+        type: integer
+      installation_id:
+        type: string
+      metadata:
+        type: object
+      mode:
+        type: string
+      owner_epoch:
+        type: integer
+      provider:
+        type: string
+      reset:
+        allOf:
+          - $ref: '#/definitions/deployment.Reset'
+        x-nullable: true
+      resources:
+        $ref: '#/definitions/deployment.Resources'
+      rollout:
+        $ref: '#/definitions/deployment.Rollout'
+      specification:
+        $ref: '#/definitions/sandbox.DeploymentSpec'
+      specification_digest:
+        type: string
+      suspension:
+        allOf:
+          - $ref: '#/definitions/deployment.Suspension'
+        description: Idle suspension policy; microsandbox only, otherwise null.
+        x-nullable: true
+    type: object
   projects.APIKey:
     properties:
       created_at:
@@ -1062,130 +1390,6 @@ definitions:
       state:
         type: string
     type: object
-  store.NodeHostHistory:
-    properties:
-      points:
-        items:
-          $ref: '#/definitions/store.NodeHostHistoryPoint'
-        type: array
-      resolution_seconds:
-        type: integer
-    type: object
-  store.NodeHostHistoryPoint:
-    properties:
-      available_disk_bytes_min:
-        type: integer
-        x-nullable: true
-      cpu_utilization_max:
-        type: number
-        x-nullable: true
-      memory_used_bytes_max:
-        type: integer
-        x-nullable: true
-      start:
-        type: string
-    type: object
-  store.RuntimeDeploymentView:
-    properties:
-      configuration:
-        type: object
-      core_url:
-        description: 'Read-only: the installation public URL (OAC_PUBLIC_URL), which nodes and sandboxes use to reach Core. The deployment API does not accept it.'
-        type: string
-      credential_configured:
-        type: boolean
-      generation:
-        type: integer
-      installation_id:
-        type: string
-      metadata:
-        type: object
-      mode:
-        type: string
-      owner_epoch:
-        type: integer
-      provider:
-        type: string
-      reset:
-        allOf:
-          - $ref: '#/definitions/store.SandboxResetView'
-        x-nullable: true
-      resources:
-        $ref: '#/definitions/store.SandboxDeploymentResources'
-      rollout:
-        $ref: '#/definitions/store.SandboxRollout'
-      specification:
-        $ref: '#/definitions/sandbox.DeploymentSpec'
-      specification_digest:
-        type: string
-      suspension:
-        allOf:
-          - $ref: '#/definitions/store.SandboxSuspensionView'
-        description: Idle suspension policy; microsandbox only, otherwise null.
-        x-nullable: true
-    type: object
-  store.RuntimeNode:
-    properties:
-      active:
-        type: integer
-      available_disk_bytes:
-        type: integer
-      available_memory_bytes:
-        type: integer
-      cleanup_pending:
-        type: integer
-      core_url:
-        description: |-
-          The Core address this node enrolled with. A node whose address differs
-          from the installation public URL receives no new sandboxes; re-add it.
-        type: string
-      cpu_count:
-        type: integer
-      created_at:
-        type: string
-      diagnostic:
-        description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
-        enum:
-          - provider_unavailable
-          - docker_unavailable
-          - docker_limits_unsupported
-          - runtime_download_failed
-          - runtime_image_unavailable
-          - kvm_unavailable
-          - microsandbox_artifacts_unavailable
-          - capacity_insufficient
-        type: string
-      enrollment_id:
-        description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
-        type: string
-        x-nullable: true
-      id:
-        type: string
-      last_seen_at:
-        type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
-      name:
-        type: string
-      online:
-        type: boolean
-      provider:
-        type: string
-      provider_ready:
-        type: boolean
-      reserved:
-        type: integer
-      retained:
-        type: integer
-      rollout:
-        $ref: '#/definitions/store.SandboxNodeRollout'
-      running:
-        type: integer
-      snapshots:
-        type: integer
-    type: object
   store.RuntimeNodeAllocation:
     properties:
       compute_phase:
@@ -1215,161 +1419,6 @@ definitions:
       tenant_id:
         type: string
     type: object
-  store.RuntimeNodeDetail:
-    properties:
-      active:
-        type: integer
-      available_disk_bytes:
-        type: integer
-      available_memory_bytes:
-        type: integer
-      cleanup_pending:
-        type: integer
-      core_url:
-        description: |-
-          The Core address this node enrolled with. A node whose address differs
-          from the installation public URL receives no new sandboxes; re-add it.
-        type: string
-      cpu_count:
-        type: integer
-      created_at:
-        type: string
-      diagnostic:
-        description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
-        enum:
-          - provider_unavailable
-          - docker_unavailable
-          - docker_limits_unsupported
-          - runtime_download_failed
-          - runtime_image_unavailable
-          - kvm_unavailable
-          - microsandbox_artifacts_unavailable
-          - capacity_insufficient
-        type: string
-      enrollment_id:
-        description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
-        type: string
-        x-nullable: true
-      history:
-        $ref: '#/definitions/store.NodeHostHistory'
-      host:
-        $ref: '#/definitions/store.RuntimeNodeHost'
-      id:
-        type: string
-      last_seen_at:
-        type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
-      name:
-        type: string
-      online:
-        type: boolean
-      provider:
-        type: string
-      provider_ready:
-        type: boolean
-      reserved:
-        type: integer
-      retained:
-        type: integer
-      rollout:
-        $ref: '#/definitions/store.SandboxNodeRollout'
-      running:
-        type: integer
-      snapshots:
-        type: integer
-    type: object
-  store.RuntimeNodeHost:
-    properties:
-      available_disk_bytes:
-        type: integer
-        x-nullable: true
-      available_memory_bytes:
-        type: integer
-        x-nullable: true
-      cpu_utilization:
-        type: number
-        x-nullable: true
-      effective_cpu_cores:
-        type: number
-        x-nullable: true
-      observed_at:
-        type: string
-        x-nullable: true
-      total_memory_bytes:
-        type: integer
-        x-nullable: true
-    type: object
-  store.RuntimeNodeUpdate:
-    properties:
-      max_active:
-        type: integer
-      max_retained:
-        description: Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
-        type: integer
-      name:
-        type: string
-    type: object
-  store.SandboxDeploymentResources:
-    properties:
-      allocations:
-        type: integer
-      pending:
-        type: integer
-    type: object
-  store.SandboxNodeRollout:
-    properties:
-      diagnostic:
-        enum:
-          - provider_unavailable
-          - docker_unavailable
-          - docker_limits_unsupported
-          - runtime_download_failed
-          - runtime_image_unavailable
-          - kvm_unavailable
-          - microsandbox_artifacts_unavailable
-          - capacity_insufficient
-        type: string
-      ready_generation:
-        description: Durable serving-generation pin; online and provider_ready still gate placement.
-        type: integer
-        x-nullable: true
-      state:
-        description: Target preparation, independent of an old pin's serving readiness.
-        enum:
-          - ready
-          - preparing
-          - failed
-          - update_required
-          - unknown
-        type: string
-    type: object
-  store.SandboxResetOfflineNode:
-    properties:
-      name:
-        type: string
-      node_id:
-        type: string
-      resources:
-        type: integer
-    type: object
-  store.SandboxResetRemaining:
-    properties:
-      busy:
-        type: integer
-      cleanup:
-        type: integer
-      idle:
-        type: integer
-      offline_nodes:
-        items:
-          $ref: '#/definitions/store.SandboxResetOfflineNode'
-        type: array
-      on_offline_nodes:
-        type: integer
-    type: object
   store.SandboxResetRequest:
     properties:
       clear:
@@ -1387,55 +1436,6 @@ definitions:
     required:
       - clear
       - expected_generation
-    type: object
-  store.SandboxResetView:
-    properties:
-      clear:
-        type: string
-      deadline_at:
-        type: string
-        x-nullable: true
-      forced_at:
-        type: string
-        x-nullable: true
-      remaining:
-        $ref: '#/definitions/store.SandboxResetRemaining'
-      requested_at:
-        type: string
-    type: object
-  store.SandboxRollout:
-    properties:
-      nodes:
-        allOf:
-          - $ref: '#/definitions/store.SandboxRolloutNodes'
-        x-nullable: true
-      previous_generation_sandboxes:
-        type: integer
-      state:
-        enum:
-          - settled
-          - preparing
-        type: string
-    type: object
-  store.SandboxRolloutNodes:
-    properties:
-      failed:
-        type: integer
-      preparing:
-        type: integer
-      ready:
-        type: integer
-      unknown:
-        type: integer
-      update_required:
-        type: integer
-    type: object
-  store.SandboxSuspensionView:
-    properties:
-      idle_seconds:
-        type: integer
-      retention_seconds:
-        type: integer
     type: object
   v1.Agent:
     properties:
@@ -6159,7 +6159,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.RuntimeDeploymentView'
+            $ref: '#/definitions/deployment.View'
         "400":
           description: Bad Request
           schema:
@@ -6206,7 +6206,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.RuntimeDeploymentView'
+            $ref: '#/definitions/deployment.View'
         "400":
           description: Bad Request
           schema:
@@ -6249,7 +6249,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.RuntimeDeploymentView'
+            $ref: '#/definitions/deployment.View'
         "400":
           description: Bad Request
           schema:
@@ -6277,7 +6277,7 @@ paths:
         - Sandbox Manager
   /core/v1/sandbox/deployment/reset:
     delete:
-      description: Restores admission but never restores Sessions already archived. With no reset running this is an idempotent read, provided the generation still matches.
+      description: Restores admission but never restores Sessions already archived. With no reset running this is an idempotent read, provided the generation still matches. The response is the current deployment read after the cancellation commits.
       parameters:
         - description: Current deployment generation
           in: query
@@ -6290,7 +6290,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.RuntimeDeploymentView'
+            $ref: '#/definitions/deployment.View'
         "400":
           description: Bad Request
           schema:
@@ -6319,7 +6319,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Archives hosted Sessions and waits for confirmed provider cleanup, preserving history and Files/Artifacts. Auto waits for started or waiting Turns and file writes until the durable deadline; force cancels them. The same clear is idempotent; force escalates auto. Requires the current generation. Self-hosted Sessions are unchanged.
+      description: Archives hosted Sessions and waits for confirmed provider cleanup, preserving history and Files/Artifacts. Auto waits for started or waiting Turns and file writes until the durable deadline; force cancels them. The same clear is idempotent; force escalates auto. Requires the current generation. Self-hosted Sessions are unchanged. The response is the current deployment read after the reset commits; resource counts are live and may already differ.
       parameters:
         - description: Reset mode and current deployment generation
           in: body
@@ -6333,7 +6333,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.RuntimeDeploymentView'
+            $ref: '#/definitions/deployment.View'
         "400":
           description: Bad Request
           schema:
@@ -6513,7 +6513,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.RuntimeNodeDetail'
+            $ref: '#/definitions/deployment.NodeDetail'
         "400":
           description: Bad Request
           schema:
@@ -6554,7 +6554,7 @@ paths:
           name: body
           required: true
           schema:
-            $ref: '#/definitions/store.RuntimeNodeUpdate'
+            $ref: '#/definitions/deployment.NodeUpdate'
       produces:
         - application/json
       responses:

@@ -2,14 +2,12 @@ package store
 
 import (
 	"database/sql"
-	"errors"
 	"os"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
@@ -21,38 +19,41 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "e2b")
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, view.InstallationID)
+	changes, deployments := deploymentExecution(t, w), deploymentService(t, s)
 	ctx := SandboxResetTestContext(t.Context())
 	oldTemplate := input.Configuration.(*e2b.DeploymentConfiguration).Template
 	input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
 	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "https://sandbox.example.com", "sandbox.example.com"
 	input.Resources.CPUs++
-	changed, err := w.UpdateSandboxDeployment(ctx, view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1})
+	input.ExpectedGeneration = 1
+	changed, err := changes.Update(ctx, view.InstallationID, input)
 	if err != nil || changed.Generation != 2 || changed.OwnerEpoch != view.OwnerEpoch || changed.Rollout.PreviousGenerationSandboxes != 1 || changed.Rollout.State != "settled" {
 		t.Fatal(changed, err)
 	}
 	assertSandboxSnapshotEquivalent(t, s.pool)
 	ref := sandbox.Reference{TenantID: tenant, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID}
-	retained, err := s.GetSandboxAllocationSetup(t.Context(), ref)
+	retained, err := deployments.AllocationSetup(t.Context(), ref)
 	if err != nil || retained.Generation != 1 || retained.Configuration.(*e2b.DeploymentConfiguration).Template != oldTemplate || retained.Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://api.e2b.app" || retained.Specification.Resources.CPUs == input.Resources.CPUs {
 		t.Fatal(retained, err)
 	}
 	input.Configuration.(*e2b.DeploymentConfiguration).APIKey = "replacement-secret"
 	input.Configuration.(*e2b.DeploymentConfiguration).CredentialSupplied = true
-	changed, err = w.UpdateSandboxDeployment(ctx, view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 2})
+	input.ExpectedGeneration = 2
+	changed, err = changes.Update(ctx, view.InstallationID, input)
 	if err != nil || changed.Generation != 3 || changed.OwnerEpoch != view.OwnerEpoch {
 		t.Fatal(changed, err)
 	}
-	retained, err = s.GetSandboxAllocationSetup(t.Context(), ref)
+	retained, err = deployments.AllocationSetup(t.Context(), ref)
 	if err != nil || retained.Generation != 1 || retained.Configuration.(*e2b.DeploymentConfiguration).APIKey != input.Configuration.(*e2b.DeploymentConfiguration).APIKey || retained.Configuration.(*e2b.DeploymentConfiguration).Template != oldTemplate || retained.Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://api.e2b.app" {
 		t.Fatal("old generation did not use committed key", err)
 	}
 	if _, err = s.pool.Exec(t.Context(), `UPDATE runtime_allocations SET deployment_generation=3 WHERE id=$1`, owner.ID); err == nil {
 		t.Fatal("ownership generation was mutable")
 	}
-	if err = w.CollectSandboxGenerations(t.Context()); err != nil {
+	if err = changes.CollectGenerations(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	generations, err := s.SandboxGenerationPage(t.Context(), -1)
+	generations, err := deployments.GenerationPage(t.Context(), -1)
 	if err != nil || len(generations) != 1 || generations[0].Generation != 1 || generations[0].Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://api.e2b.app" {
 		t.Fatal(generations, err)
 	}
@@ -65,10 +66,10 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 	if _, err = w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if err = w.CollectSandboxGenerations(t.Context()); err != nil {
+	if err = changes.CollectGenerations(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	generations, err = s.SandboxGenerationPage(t.Context(), -1)
+	generations, err = deployments.GenerationPage(t.Context(), -1)
 	if err != nil || len(generations) != 0 {
 		t.Fatal(generations, err)
 	}
@@ -80,103 +81,30 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 
 func TestE2BRetainedCustomEndpointAfterOnlineSwitch(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "e2b")
+	changes, deployments := deploymentExecution(t, w), deploymentService(t, s)
 	ctx := SandboxResetTestContext(t.Context())
 	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "https://sandbox.example.com", "sandbox.example.com"
-	custom, err := w.UpdateSandboxDeployment(ctx, view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: view.Generation})
+	input.ExpectedGeneration = view.Generation
+	custom, err := changes.Update(ctx, view.InstallationID, input)
 	if err != nil || custom.Generation != 2 {
 		t.Fatal(custom, err)
 	}
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, view.InstallationID)
 	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "", ""
-	current, err := w.UpdateSandboxDeployment(ctx, view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: custom.Generation})
+	input.ExpectedGeneration = custom.Generation
+	current, err := changes.Update(ctx, view.InstallationID, input)
 	if err != nil || current.Generation != 3 || e2bPublicConfiguration(t, current).APIURL != "https://api.e2b.app" {
 		t.Fatal(current, err)
 	}
 	ref := sandbox.Reference{TenantID: tenant, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID}
-	retained, err := s.GetSandboxAllocationSetup(t.Context(), ref)
+	retained, err := deployments.AllocationSetup(t.Context(), ref)
 	if err != nil || retained.Generation != 2 || retained.Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://sandbox.example.com" || retained.Configuration.(*e2b.DeploymentConfiguration).Domain != "sandbox.example.com" {
 		t.Fatal(retained, err)
 	}
-	generations, err := s.SandboxGenerationPage(t.Context(), -1)
+	generations, err := deployments.GenerationPage(t.Context(), -1)
 	if err != nil || len(generations) != 1 || generations[0].Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://sandbox.example.com" {
 		t.Fatal(generations, err)
-	}
-}
-
-func TestE2BChangeClassifierOmittedKeyAndExplicitSameKey(t *testing.T) {
-	_, w, view, input := webSpecificationFixture(t, "e2b")
-	key := input.Configuration.(*e2b.DeploymentConfiguration).APIKey
-	input.Configuration.(*e2b.DeploymentConfiguration).APIKey = ""
-	input.Resources = sandbox.Resources{}
-	resolved, noOp, err := w.ClassifySandboxDeploymentChange(t.Context(), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1})
-	if err != nil || !noOp || resolved.Configuration.(*e2b.DeploymentConfiguration).APIKey != key || resolved.Resources.CPUs == 0 {
-		t.Fatal(noOp, err)
-	}
-	input.Configuration.(*e2b.DeploymentConfiguration).APIKey = key
-	input.Configuration.(*e2b.DeploymentConfiguration).CredentialSupplied = true
-	_, noOp, err = w.ClassifySandboxDeploymentChange(t.Context(), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1})
-	if err != nil || noOp {
-		t.Fatal("explicit same key skipped verification", err)
-	}
-	invalid := input
-	invalid.Runtime = &sandbox.RuntimeRelease{}
-	if _, _, err := w.ClassifySandboxDeploymentChange(t.Context(), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: invalid, ExpectedGeneration: 1}); err == nil {
-		t.Fatal("omitted resources erased forbidden Runtime input")
-	}
-	_, _, err = w.ClassifySandboxDeploymentChange(t.Context(), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 0})
-	var stale *SandboxGenerationStaleError
-	if !errors.As(err, &stale) {
-		t.Fatal("stale did not precede no-op", err)
-	}
-}
-
-func TestGenerationPinRetainsOfflineZeroResourceFallback(t *testing.T) {
-	s, w, view, _ := webSpecificationFixture(t, "docker")
-	node := specificationNode(t, s, view)
-	if _, err := s.pool.Exec(t.Context(), `UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1`, node.NodeID); err != nil {
-		t.Fatal(err)
-	}
-	// PR-N will make this transition through its generation protocol. This fixture
-	// isolates the persistence invariant without enabling node online PUT in PR-G.
-	tx, err := s.pool.Begin(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback(t.Context())
-	q := s.queries.WithTx(tx)
-	if _, err = q.LockRuntimeDeployment(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if err = q.RetainSandboxGeneration(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = tx.Exec(t.Context(), `UPDATE runtime_deployment SET generation=2`); err != nil {
-		t.Fatal(err)
-	}
-	if err = tx.Commit(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if err = w.CollectSandboxGenerations(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	rows, err := s.SandboxGenerationPage(t.Context(), -1)
-	if err != nil || len(rows) != 1 {
-		t.Fatal("offline pin was collected", rows, err)
-	}
-	nodes, err := s.ListRuntimeNodes(t.Context())
-	if err != nil || len(nodes) != 1 || nodes[0].Rollout.State != "unknown" || nodes[0].Rollout.ReadyGeneration == nil || *nodes[0].Rollout.ReadyGeneration != 1 {
-		t.Fatal(nodes, err)
-	}
-	if _, err = s.pool.Exec(t.Context(), `UPDATE runtime_nodes SET removed_at=clock_timestamp(),ready_generation=NULL WHERE id=$1`, node.NodeID); err != nil {
-		t.Fatal(err)
-	}
-	if err = w.CollectSandboxGenerations(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	rows, err = s.SandboxGenerationPage(t.Context(), -1)
-	if err != nil || len(rows) != 0 {
-		t.Fatal(rows, err)
 	}
 }
 
@@ -208,10 +136,10 @@ func TestPendingPlacementGenerationSurvivesRepeatedUpdates(t *testing.T) {
 	if owner.DeploymentGeneration != 1 || owner.NodeID != node.NodeID {
 		t.Fatal("pending allocation rebound to newest generation", owner)
 	}
-	if err := w.CollectSandboxGenerations(t.Context()); err != nil {
+	if err := deploymentExecution(t, w).CollectGenerations(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := s.SandboxGenerationPage(t.Context(), -1)
+	rows, err := deploymentService(t, s).GenerationPage(t.Context(), -1)
 	if err != nil || len(rows) != 1 || rows[0].Generation != 1 {
 		t.Fatal(rows, err)
 	}
@@ -285,7 +213,8 @@ func TestGenerationDowngradeRefusesOldAllocation(t *testing.T) {
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, view.InstallationID)
 	input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
-	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1}); err != nil {
+	input.ExpectedGeneration = 1
+	if _, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, input); err != nil {
 		t.Fatal(err)
 	}
 	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))
@@ -318,14 +247,16 @@ func TestGenerationDowngradeRefusesOldAllocation(t *testing.T) {
 
 func TestGenerationUpdateSerializesWithAllocationAdmission(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "e2b")
+	changes, deployments := deploymentExecution(t, w), deploymentService(t, s)
 	for generation := uint64(1); generation <= 6; generation++ {
 		tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 		input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
+		input.ExpectedGeneration = generation
 		start := make(chan struct{})
 		changed := make(chan error, 1)
 		go func() {
 			<-start
-			_, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: generation})
+			_, err := changes.Update(SandboxResetTestContext(t.Context()), view.InstallationID, input)
 			changed <- err
 		}()
 		close(start)
@@ -336,62 +267,47 @@ func TestGenerationUpdateSerializesWithAllocationAdmission(t *testing.T) {
 		if owner.DeploymentGeneration != generation && owner.DeploymentGeneration != generation+1 {
 			t.Fatal("allocation bound unrelated generation", owner.DeploymentGeneration)
 		}
-		if err := w.CollectSandboxGenerations(t.Context()); err != nil {
+		if err := changes.CollectGenerations(t.Context()); err != nil {
 			t.Fatal(err)
 		}
-		setup, err := s.GetSandboxAllocationSetup(t.Context(), sandbox.Reference{TenantID: tenant, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID})
+		setup, err := deployments.AllocationSetup(t.Context(), sandbox.Reference{TenantID: tenant, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID})
 		if err != nil || setup.Generation != owner.DeploymentGeneration {
 			t.Fatal("committed allocation lost immutable routing", err)
 		}
 	}
 }
 
-func TestNodeRolloutSeparatesOfflinePinAndTargetReadiness(t *testing.T) {
-	for _, tc := range []struct {
-		name                           string
-		online, ready                  bool
-		enrolled, pin, target          int64
-		targetState, diagnostic, state string
-	}{
-		{"offline pin", false, true, 1, 1, 2, "ready", "", "unknown"},
-		{"old serving", true, true, 1, 1, 2, "ready", "", "update_required"},
-		{"current serving", true, true, 2, 2, 2, "ready", "", "ready"},
-		{"current failed", true, false, 2, 2, 2, "failed", "kvm_unavailable", "failed"},
-		{"current unknown", true, false, 2, 2, 2, "", "", "unknown"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := nodeRollout(sqlc.ListRuntimeNodesRow{Online: tc.online, ProviderReady: tc.ready, DeploymentGeneration: tc.enrolled, ReadyGeneration: pgtype.Int8{Int64: tc.pin, Valid: true}, TargetGeneration: tc.target, ProtocolVersion: 1, TargetState: tc.targetState, TargetDiagnostic: tc.diagnostic})
-			if got.State != tc.state || got.Diagnostic != tc.diagnostic || got.ReadyGeneration == nil || *got.ReadyGeneration != uint64(tc.pin) {
-				t.Fatal(got)
-			}
-		})
-	}
-}
-
 func TestSandboxSnapshotRolloutEquivalence(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "docker")
 	node := specificationNode(t, s, view)
+	deployments := deploymentService(t, s)
+	heartbeat := func(connection, state string) {
+		t.Helper()
+		if err := deployments.HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: state}}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, state := range []string{"ready", "preparing", "failed", "unconfirmed", "offline", "update_required"} {
 		t.Run(state, func(t *testing.T) {
 			connection := onlineManagerNode(t, s, node.NodeID)
-			want := SandboxRolloutNodes{}
+			want := deployment.RolloutNodes{}
 			wantState := "settled"
 			switch state {
 			case "ready":
 				want.Ready = 1
 			case "preparing":
-				generationHeartbeat(t, s, node, connection, view, "preparing")
+				heartbeat(connection, "preparing")
 				want.Preparing = 1
 				wantState = "preparing"
 			case "failed":
-				generationHeartbeat(t, s, node, connection, view, "failed")
+				heartbeat(connection, "failed")
 				want.Failed = 1
 			case "unconfirmed":
 				connection = uuid.NewString()
-				if err := s.ConnectRuntimeNode(t.Context(), node.NodeID, connection, view.OwnerEpoch); err != nil {
+				if err := deployments.ConnectNode(t.Context(), node.NodeID, connection, view.OwnerEpoch); err != nil {
 					t.Fatal(err)
 				}
-				if err := s.HeartbeatRuntimeNodeGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, RuntimeNodeHealth{}, nil); err != nil {
+				if err := deployments.HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, nil); err != nil {
 					t.Fatal(err)
 				}
 				want.Unknown = 1
@@ -399,11 +315,19 @@ func TestSandboxSnapshotRolloutEquivalence(t *testing.T) {
 				runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET last_seen_at=clock_timestamp()-interval '46 seconds',health='{"diagnostic":"provider_unavailable"}' WHERE id=$1`, node.NodeID)
 				want.Unknown = 1
 			case "update_required":
-				changeNodeTarget(t, w, view, input)
+				// Change the target on the same backend so the node's enrolled
+				// generation falls behind.
+				change := input
+				change.Resources.CPUs++
+				change.ExpectedGeneration = view.Generation
+				next, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, change)
+				if err != nil || next.Generation != view.Generation+1 || next.OwnerEpoch != view.OwnerEpoch {
+					t.Fatal("target change replaced execution ownership", next, err)
+				}
 				want.UpdateRequired = 1
 			}
 			assertSandboxSnapshotEquivalent(t, s.pool)
-			got, err := s.GetRuntimeDeployment(t.Context())
+			got, err := deployments.View(t.Context())
 			if err != nil || got.Rollout.Nodes == nil || *got.Rollout.Nodes != want || got.Rollout.State != wantState {
 				t.Fatal("rollout classification changed", got.Rollout, err)
 			}

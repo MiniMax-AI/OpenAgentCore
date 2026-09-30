@@ -7,20 +7,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
 func TestSandboxDeploymentSetupRequiresAdministratorAndStrictBody(t *testing.T) {
 	deps, fakes := sandboxFakes(t)
 	calls := 0
-	initialize := func(_ context.Context, input store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
+	initialize := func(_ context.Context, input sandbox.Selection) (deployment.View, error) {
 		calls++
 		if input.Provider == "microsandbox" {
-			return store.RuntimeDeploymentView{}, store.ErrSandboxDeploymentConflict
+			return deployment.View{}, deployment.ErrConflict
 		}
-		return store.RuntimeDeploymentView{Provider: input.Provider}, nil
+		return deployment.View{Provider: input.Provider}, nil
 	}
 	fakes.deploymentChanges.initializeSandboxDeployment = initialize
+	fakes.deployment.decodeConfiguration = providers.Builtin().DecodeInput
 	h := newTestHandler(t, deps)
 	for _, test := range []struct {
 		token, body   string

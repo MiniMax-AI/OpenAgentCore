@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -72,7 +73,7 @@ func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
 	for _, failure := range []struct {
 		err    error
 		status int
-	}{{store.ErrSandboxDeploymentConflict, 409}, {store.ErrNotFound, 404}, {store.ErrInvalidInput, 400}} {
+	}{{deployment.ErrConflict, 409}, {store.ErrNotFound, 404}, {store.ErrInvalidInput, 400}} {
 		fixture.err = failure.err
 		if w := projectKeyHTTP(h, http.MethodPost, path, "admin", `{"expected_generation":2}`); w.Code != failure.status {
 			t.Fatalf("archive error: %d %s", w.Code, w.Body)

@@ -3,9 +3,6 @@ package node
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +11,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
 func TestCoreRestartFencesOldConnectionAndNodeRestartKeepsIdentity(t *testing.T) {
@@ -55,10 +57,10 @@ func TestCoreRestartFencesOldConnectionAndNodeRestartKeepsIdentity(t *testing.T)
 	if first.Online(id.NodeID) {
 		t.Fatal("old owner remained online")
 	}
-	if _, err = first.Proxy(id.NodeID, "docker", 1).GetInfo(context.Background(), reference()); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
+	if _, err = first.Proxy(id.NodeID, "docker", docker.Operations(), 1).GetInfo(context.Background(), reference()); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
 		t.Fatalf("old owner request = %v", err)
 	}
-	if _, err = second.Proxy(id.NodeID, "docker", 1).GetInfo(context.Background(), reference()); err != nil {
+	if _, err = second.Proxy(id.NodeID, "docker", docker.Operations(), 1).GetInfo(context.Background(), reference()); err != nil {
 		t.Fatal(err)
 	}
 	stop()
@@ -154,7 +156,7 @@ func TestHeartbeatAcknowledgementKeepsIdleConnectionAlive(t *testing.T) {
 	if !hub.Online(id.NodeID) {
 		t.Fatal("idle node disconnected")
 	}
-	if _, err = hub.Proxy(id.NodeID, "docker", 1).GetInfo(ctx, reference()); err != nil {
+	if _, err = hub.Proxy(id.NodeID, "docker", docker.Operations(), 1).GetInfo(ctx, reference()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -232,7 +234,7 @@ func TestDegradedNodeRetainsObservationAndCleanup(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("missing health")
 	}
-	proxy := hub.Proxy(id.NodeID, "docker", 1)
+	proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
 	r := reference()
 	if _, err = proxy.Create(ctx, sandbox.Bootstrap{Reference: r}); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
 		t.Fatalf("create = %v", err)

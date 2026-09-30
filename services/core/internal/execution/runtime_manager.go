@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -17,6 +18,8 @@ var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", E
 
 type runtimeManager struct {
 	store               *store.Store
+	deployment          *deployment.ExecutionOperations
+	deploymentService   *deployment.Service
 	lease               Ownership
 	registry            *runtimegateway.Registry
 	config              RuntimeProvider
@@ -235,7 +238,7 @@ func (m *runtimeManager) run(ctx context.Context) error {
 	m.running = true
 	m.mu.Unlock()
 	if m.loadDeployment != nil {
-		if err := m.store.CollectSandboxGenerations(ctx); err != nil {
+		if err := m.deployment.CollectGenerations(ctx); err != nil {
 			return err
 		}
 	}
@@ -257,7 +260,7 @@ func (m *runtimeManager) run(ctx context.Context) error {
 			return err
 		case <-ticker.C:
 			if m.loadDeployment != nil {
-				if err := m.store.CollectSandboxGenerations(ctx); err != nil {
+				if err := m.deployment.CollectGenerations(ctx); err != nil {
 					return err
 				}
 			}

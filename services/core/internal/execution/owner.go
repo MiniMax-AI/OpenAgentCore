@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -17,8 +18,9 @@ type Ownership interface {
 // Owner is everything bound to one execution lease. Later cutovers add one explicit
 // field per domain's execution operations and delete the matching store calls.
 type Owner struct {
-	Lease Ownership
-	Store *store.Store // the remaining store execution operations, built by store.NewExecution(s, lease)
+	Lease      Ownership
+	Store      *store.Store                    // the remaining store execution operations, built by store.NewExecution(s, lease)
+	Deployment *deployment.ExecutionOperations // sandbox deployment changes on the lease-bound deploymentpg storage
 }
 
 // leaseCloseTimeout bounds releasing the lease once the Worker owns it.

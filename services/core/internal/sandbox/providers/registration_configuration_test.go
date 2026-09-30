@@ -26,11 +26,12 @@ func (a registrationConfiguration) Requirements() sandbox.ConfigurationRequireme
 type missingConfigurationDiscovery struct{ sandbox.ConfigurationAdapter }
 
 func TestConfigurationRegistrationRejectsNilAndMissingDiscovery(t *testing.T) {
-	a := adapters["docker"]
+	registry := Builtin()
+	a := registry.adapters["docker"]
 	var typedNil *registrationConfiguration
 	for _, configuration := range []sandbox.ConfigurationAdapter{
 		nil, typedNil, missingConfigurationDiscovery{a.Configuration},
-		missingConfigurationDiscovery{adapters["e2b"].Configuration},
+		missingConfigurationDiscovery{registry.adapters["e2b"].Configuration},
 	} {
 		a.Configuration = configuration
 		if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) {
@@ -40,7 +41,8 @@ func TestConfigurationRegistrationRejectsNilAndMissingDiscovery(t *testing.T) {
 }
 
 func TestConfigurationRequirementsRejectEachOmission(t *testing.T) {
-	a := adapters["docker"]
+	registry := Builtin()
+	a := registry.adapters["docker"]
 	original := a.Configuration.Requirements()
 	typ := reflect.TypeOf(original)
 	for i := 0; i < typ.NumField(); i++ {
@@ -56,6 +58,7 @@ func TestConfigurationRequirementsRejectEachOmission(t *testing.T) {
 }
 
 func TestConfigurationRequirementsRejectInvalidDeclarations(t *testing.T) {
+	registry := Builtin()
 	for _, change := range []func(*sandbox.ConfigurationRequirements){
 		func(r *sandbox.ConfigurationRequirements) { r.Credential = "automatic" },
 		func(r *sandbox.ConfigurationRequirements) { r.PublicOrigin = "private" },
@@ -64,7 +67,7 @@ func TestConfigurationRequirementsRejectInvalidDeclarations(t *testing.T) {
 		func(r *sandbox.ConfigurationRequirements) { r.Discovery.Reason = "https://private:key@host" },
 		func(r *sandbox.ConfigurationRequirements) { r.Discovery.State = providercontract.Supported },
 	} {
-		a := adapters["docker"]
+		a := registry.adapters["docker"]
 		requirements := a.Configuration.Requirements()
 		change(&requirements)
 		a.Configuration = registrationConfiguration{requirements: requirements}
@@ -75,25 +78,25 @@ func TestConfigurationRequirementsRejectInvalidDeclarations(t *testing.T) {
 }
 
 func TestConfigurationRequirementsDoNotInventDependencies(t *testing.T) {
+	registry := Builtin()
 	const kind = "configuration-requirement-test"
-	defer delete(adapters, kind)
 	// Required credentials are input policy. VerifyCredential is a separate
 	// resource operation that may be Unsupported for this provider.
 	for _, credential := range []sandbox.Requirement{sandbox.Required, sandbox.NotRequired} {
 		for _, public := range []sandbox.Requirement{sandbox.Required, sandbox.NotRequired} {
-			a := adapters["docker"]
+			a := registry.adapters["docker"]
 			requirements := a.Configuration.Requirements()
 			requirements.Credential, requirements.PublicOrigin = credential, public
 			a.Configuration = registrationConfiguration{requirements: requirements}
 			if err := ValidateRegistration(a); err != nil {
 				t.Fatal(err)
 			}
-			adapters[kind] = a
-			gotCredential, err := UsesCredential(kind)
+			registry.adapters[kind] = a
+			gotCredential, err := registry.UsesCredential(kind)
 			if err != nil || gotCredential != (credential == sandbox.Required) {
 				t.Fatalf("credential %s: value=%v error=%v", credential, gotCredential, err)
 			}
-			gotPublic, err := RequiresPublicOrigin(kind)
+			gotPublic, err := registry.RequiresPublicOrigin(kind)
 			if err != nil || gotPublic != (public == sandbox.Required) {
 				t.Fatalf("public origin %s: value=%v error=%v", public, gotPublic, err)
 			}
@@ -107,7 +110,8 @@ type futureConfigurationDiscovery interface {
 }
 
 func TestFutureConfigurationRequirementAndMethodNeedExplicitHandling(t *testing.T) {
-	original := adapters["docker"].Configuration.Requirements()
+	registry := Builtin()
+	original := registry.adapters["docker"].Configuration.Requirements()
 	fields := make([]reflect.StructField, 0, 4)
 	typ := reflect.TypeOf(original)
 	for i := 0; i < typ.NumField(); i++ {
@@ -128,7 +132,8 @@ func TestFutureConfigurationRequirementAndMethodNeedExplicitHandling(t *testing.
 }
 
 func TestUnsupportedConfigurationDiscoveryMatchesAuthoredReason(t *testing.T) {
-	for kind, a := range adapters {
+	registry := Builtin()
+	for kind, a := range registry.adapters {
 		support := a.Configuration.Requirements().Discovery
 		if support.State != providercontract.Unsupported {
 			continue
@@ -139,7 +144,7 @@ func TestUnsupportedConfigurationDiscoveryMatchesAuthoredReason(t *testing.T) {
 				return native.DiscoverConfiguration(t.Context(), sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
 			},
 			func() ([]byte, error) {
-				return DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
+				return registry.DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
 			},
 		} {
 			result, err := read()

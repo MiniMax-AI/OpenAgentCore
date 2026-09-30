@@ -142,7 +142,7 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 				owner, err := f.store.GetRuntimeAllocation(t.Context(), ct, ce.ID)
 				return err == nil && owner.State == "released", fmt.Sprintf("new node allocation=%s/%s err=%v", owner.State, owner.ComputePhase, err)
 			})
-			if err := f.store.RemoveRuntimeNode(t.Context(), nodeC); err != nil {
+			if err := f.nodes.RemoveNode(t.Context(), nodeC); err != nil {
 				t.Fatal(err)
 			}
 			f.stop()

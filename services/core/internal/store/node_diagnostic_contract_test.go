@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 )
 
 func TestNodeDiagnosticSchemaContract(t *testing.T) {
@@ -28,7 +30,7 @@ func TestNodeDiagnosticSchemaContract(t *testing.T) {
 			t.Errorf("%s diagnostic enum = %v, want shared fixture %v", name, values, codes)
 		}
 	}
-	for _, model := range []reflect.Type{reflect.TypeFor[RuntimeNodeHealth](), reflect.TypeFor[SandboxNodeRollout]()} {
+	for _, model := range []reflect.Type{reflect.TypeFor[deployment.NodeHealth](), reflect.TypeFor[deployment.NodeRollout]()} {
 		field, ok := model.FieldByName("Diagnostic")
 		if !ok {
 			t.Fatalf("%s has no Diagnostic field", model.Name())
@@ -49,7 +51,7 @@ func TestNodeDiagnosticSchemaContract(t *testing.T) {
 	if err := yaml.Unmarshal(raw, &document); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"store.RuntimeNode", "store.RuntimeNodeDetail", "store.SandboxNodeRollout"} {
+	for _, name := range []string{"deployment.Node", "deployment.NodeDetail", "deployment.NodeRollout"} {
 		check(name, document.Definitions[name].Properties["diagnostic"].Enum)
 	}
 }

@@ -1,22 +1,21 @@
 package store
 
 import (
-	"database/sql"
 	"errors"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
-	"os"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
 
-func changeNodeTarget(t *testing.T, w *Store, view RuntimeDeploymentView, input SandboxDeploymentSetupRequest) (RuntimeDeploymentView, SandboxDeploymentSetupRequest) {
+func changeNodeTarget(t *testing.T, w *Store, view deployment.View, input sandbox.Selection) (deployment.View, sandbox.Selection) {
 	t.Helper()
 	input.Resources.CPUs++
-	next, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: view.Generation})
+	request := input
+	request.ExpectedGeneration = view.Generation
+	next, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,9 +25,9 @@ func changeNodeTarget(t *testing.T, w *Store, view RuntimeDeploymentView, input 
 	return next, input
 }
 
-func generationHeartbeat(t *testing.T, s *Store, node RuntimeNodeEnrollment, connection string, view RuntimeDeploymentView, state string) {
+func generationHeartbeat(t *testing.T, s *Store, node deployment.Enrollment, connection string, view deployment.View, state string) {
 	t.Helper()
-	err := s.HeartbeatRuntimeNodeGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, RuntimeNodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: state}})
+	err := deploymentService(t, s).HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: state}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,6 +47,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 	for _, provider := range []string{"microsandbox", "docker"} {
 		t.Run(provider, func(t *testing.T) {
 			s, w, first, input := webSpecificationFixture(t, provider)
+			nodes := deploymentService(t, s)
 			a := specificationNode(t, s, first)
 			b := specificationNode(t, s, first)
 			ca := onlineManagerNode(t, s, a.NodeID)
@@ -58,15 +58,15 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 				t.Fatal(err)
 			}
 			pendingNode, pendingGeneration := placedGeneration(t, s, pending)
-			token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 1, MaxRetained: 2}))
+			token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 2}))
 			if err != nil {
 				t.Fatal(err)
 			}
 			second, input := changeNodeTarget(t, w, first, input)
-			if _, err = s.RuntimeNodeConfiguration(t.Context(), "", token); err != nil {
+			if _, err = nodes.NodeConfiguration(t.Context(), "", token, 0); err != nil {
 				t.Fatal("update retired enrollment", err)
 			}
-			if _, err = s.AuthenticateRuntimeNode(t.Context(), a.NodeID, a.Credential); err != nil {
+			if _, err = nodes.AuthenticateNode(t.Context(), a.NodeID, a.Credential); err != nil {
 				t.Fatal("update retired node", err)
 			}
 			generationHeartbeat(t, s, a, ca, second, "preparing")
@@ -99,11 +99,11 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 			third, _ := changeNodeTarget(t, w, second, input)
 			// B finishes a superseded target late: it may describe ownership but cannot adopt it.
 			generationHeartbeat(t, s, b, cb, second, "ready")
-			nodes, err := s.ListRuntimeNodes(t.Context())
+			list, err := nodes.ListNodes(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, n := range nodes {
+			for _, n := range list {
 				want := uint64(1)
 				if n.ID == a.NodeID {
 					want = 2
@@ -123,12 +123,12 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 			if err != nil || n != pendingNode || g != 1 {
 				t.Fatal(n, g, err)
 			}
-			for _, v := range []RuntimeDeploymentView{first, second, third} {
+			for _, v := range []deployment.View{first, second, third} {
 				target := a
 				if v.Generation == 1 {
 					target = b
 				}
-				got, err := s.RuntimeNodeGenerationConfiguration(t.Context(), target.NodeID, target.Credential, v.Generation)
+				got, err := nodes.NodeConfiguration(t.Context(), target.NodeID, target.Credential, v.Generation)
 				if err != nil || got.SpecificationDigest != v.SpecificationDigest {
 					t.Fatal("kept generation unrecoverable", v.Generation, err)
 				}
@@ -139,10 +139,11 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 
 func TestNodeGenerationsReconnectAndV1Fallback(t *testing.T) {
 	s, w, first, input := webSpecificationFixture(t, "docker")
+	service := deploymentService(t, s)
 	node := specificationNode(t, s, first)
 	old := onlineManagerNode(t, s, node.NodeID)
 	second, _ := changeNodeTarget(t, w, first, input)
-	nodes, err := s.ListRuntimeNodes(t.Context())
+	nodes, err := service.ListNodes(t.Context())
 	if err != nil || !nodes[0].ProviderReady || nodes[0].Rollout.State != "update_required" {
 		t.Fatal(nodes, err)
 	}
@@ -150,20 +151,20 @@ func TestNodeGenerationsReconnectAndV1Fallback(t *testing.T) {
 		t.Fatal("v1 lost fallback", err)
 	}
 	connection := uuid.NewString()
-	if err = s.ConnectRuntimeNode(t.Context(), node.NodeID, connection, first.OwnerEpoch); err != nil {
+	if err = service.ConnectNode(t.Context(), node.NodeID, connection, first.OwnerEpoch); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.HeartbeatRuntimeNodeGenerations(t.Context(), node.NodeID, old, first.OwnerEpoch, RuntimeNodeHealth{}, []sandbox.GenerationStatus{{Generation: second.Generation, SpecificationDigest: second.SpecificationDigest, State: "ready"}}); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if err = service.HeartbeatGenerations(t.Context(), node.NodeID, old, first.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: second.Generation, SpecificationDigest: second.SpecificationDigest, State: "ready"}}); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old connection qualified", err)
 	}
-	nodes, err = s.ListRuntimeNodes(t.Context())
+	nodes, err = service.ListNodes(t.Context())
 	if err != nil || nodes[0].ProviderReady || *nodes[0].Rollout.ReadyGeneration != 1 {
 		t.Fatal("reconnect inherited readiness or lost pin", nodes, err)
 	}
-	if _, err = s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrRuntimeNodeUnavailable) {
+	if _, err = s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodeUnavailable) {
 		t.Fatal("unconfirmed connection admitted", err)
 	}
-	if err = s.HeartbeatRuntimeNode(t.Context(), node.NodeID, connection, first.OwnerEpoch, RuntimeNodeHealth{ProviderReady: true}); err != nil {
+	if err = service.Heartbeat(t.Context(), node.NodeID, connection, first.OwnerEpoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
@@ -171,65 +172,16 @@ func TestNodeGenerationsReconnectAndV1Fallback(t *testing.T) {
 	}
 }
 
-func TestNodeGenerationDowngradePreservesServingProtocol(t *testing.T) {
-	for _, mode := range []string{"v2", "old_v1", "current_v1"} {
-		t.Run(mode, func(t *testing.T) {
-			s, w, first, input := webSpecificationFixture(t, "docker")
-			node := specificationNode(t, s, first)
-			switch mode {
-			case "v2":
-				generationHeartbeat(t, s, node, onlineManagerNode(t, s, node.NodeID), first, "ready")
-			case "old_v1":
-				changeNodeTarget(t, w, first, input)
-			}
-			db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))
-			defer db.Close()
-			migration, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../migrations"), goose.WithTableName("agents_api_schema_version"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, err = migration.DownTo(t.Context(), 81)
-			if mode == "current_v1" {
-				if err != nil {
-					t.Fatal("safe v1 downgrade refused", err)
-				}
-			} else {
-				if err == nil {
-					t.Fatal("downgrade discarded required node protocol")
-				}
-				// DownTo may have removed later, reversible migrations before the
-				// node protocol migration refused the downgrade. Restore the current
-				// schema before using this version of the Store to verify recovery.
-				if _, err = migration.Up(t.Context()); err != nil {
-					t.Fatal("refused downgrade could not restore current schema", err)
-				}
-				if _, err = s.RuntimeNodeGenerationConfiguration(t.Context(), node.NodeID, node.Credential, 1); err != nil {
-					t.Fatal("refused downgrade damaged retained recovery", err)
-				}
-				if err = s.RemoveRuntimeNode(t.Context(), node.NodeID); err != nil {
-					t.Fatal(err)
-				}
-				if _, err = migration.DownTo(t.Context(), 81); err != nil {
-					t.Fatal("removed node blocked downgrade", err)
-				}
-			}
-			if _, err = migration.Up(t.Context()); err != nil {
-				t.Fatal("node schema could not upgrade again", err)
-			}
-		})
-	}
-}
-
 func TestNodeGenerationPreparationRefusalCreatesNoProvisionalOwnership(t *testing.T) {
 	s, _, first, _ := webSpecificationFixture(t, "docker")
 	node := specificationNode(t, s, first)
 	connection := uuid.NewString()
-	if err := s.ConnectRuntimeNode(t.Context(), node.NodeID, connection, first.OwnerEpoch); err != nil {
+	if err := deploymentService(t, s).ConnectNode(t.Context(), node.NodeID, connection, first.OwnerEpoch); err != nil {
 		t.Fatal(err)
 	}
 	generationHeartbeat(t, s, node, connection, first, "preparing")
 	tenant := uuid.NewString()
-	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, ErrSandboxNodesPreparing) {
+	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodesPreparing) {
 		t.Fatal("actual preparation was not identified", err)
 	}
 	var sessions, placements int
@@ -237,7 +189,7 @@ func TestNodeGenerationPreparationRefusalCreatesNoProvisionalOwnership(t *testin
 		t.Fatal("refusal left provisional ownership", sessions, placements, err)
 	}
 	generationHeartbeat(t, s, node, connection, first, "failed")
-	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, ErrRuntimeNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodeUnavailable) {
 		t.Fatal("failed preparation advertised active work", err)
 	}
 }

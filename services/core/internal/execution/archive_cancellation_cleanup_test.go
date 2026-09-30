@@ -13,7 +13,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -66,18 +65,9 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 	}{{"Kill_no_delivery", false, false}, {"KillCompute_no_delivery", true, false}, {"Kill_live_delivery", false, true}, {"KillCompute_live_delivery", true, true}} {
 		t.Run(scenario.name, func(t *testing.T) {
 			checkpoint := scenario.checkpoint
-			s, leased, pool := resetManagerStoreDB(t, nil)
+			s, leased, _, pool := resetManagerStoreDB(t, nil)
 			writer := leased.Store
-			installation := uuid.NewString()
-			if err := writer.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
-				t.Fatal(err)
-			}
-			selection := store.SandboxDeploymentSetupRequest{Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}}
-			selection.Resources.CPUs = 2
-			selection.Resources.MemoryMiB = 2048
-			if _, err := writer.InitializeSandboxDeployment(t.Context(), installation, selection); err != nil {
-				t.Fatal(err)
-			}
+			installation := initializeE2BDeployment(t, leased)
 			projectID := uuid.NewString()
 			audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
 			management, err := projects.NewService(projectpg.New(pgunit.NewPool(pool)))

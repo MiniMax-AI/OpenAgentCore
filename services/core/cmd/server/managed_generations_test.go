@@ -10,28 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
-type routingSetupStore struct {
-	setupStore
-	old   store.SandboxSetup
-	oldID string
-}
-
-func (s *routingSetupStore) GetSandboxAllocationSetup(_ context.Context, ref sandbox.Reference) (store.SandboxSetup, error) {
-	value := s.value
-	if ref.AllocationID == s.oldID {
-		value = s.old
-		key := *value.Configuration.(*e2b.DeploymentConfiguration)
-		key.APIKey = s.value.Configuration.(*e2b.DeploymentConfiguration).APIKey
-		value.Configuration = &key
-	}
-	return value, nil
-}
 func TestE2BRouterKeepsOldSpecificationWithCommittedCredential(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "e2b")
 	if err := os.MkdirAll(state, 0700); err != nil {
@@ -51,16 +37,27 @@ print(json.dumps({'Version':1,'Info':info}))
 	}
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	old := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "old-key", Template: "old:" + uuid.NewString()}}
+	old := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, UsesCredential: true, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "old-key", Template: "old:" + uuid.NewString()}}
 	current := old
 	current.Generation = 2
 	current.Specification.Resources.CPUs = 4
 	current.Configuration = &e2b.DeploymentConfiguration{APIKey: "new-key", Template: "new:" + uuid.NewString()}
 	ref := sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
-	db := &routingSetupStore{setupStore: setupStore{value: current}, old: old, oldID: ref.AllocationID}
-	setup := &managedSetup{processPaths: paths, store: db, installationID: id}
+	// The deployment returns an allocation's own generation with the current
+	// credential.
+	allocation := func(_ context.Context, r sandbox.Reference) (deployment.Setup, error) {
+		if r.AllocationID != ref.AllocationID {
+			return current, nil
+		}
+		value := old
+		key := *old.Configuration.(*e2b.DeploymentConfiguration)
+		key.APIKey = current.Configuration.(*e2b.DeploymentConfiguration).APIKey
+		value.Configuration = &key
+		return value, nil
+	}
+	setup := &managedSetup{processPaths: paths, registry: providers.Builtin(), deployment: &fakeDeploymentSetups{t: t, allocationSetup: allocation}, installationID: id}
 	// A facade retained by a generation-one lifecycle still reads current credentials.
-	router := &generationRouter{setup: setup, store: db}
+	router := &generationRouter{setup: setup}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if _, err := router.GetInfo(ctx, ref); err != nil {
@@ -148,11 +145,14 @@ print(json.dumps(result))
 			}
 			paths := testProviderPaths(t, helper, state)
 			id, build := uuid.NewString(), ":"+uuid.NewString()
-			current := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
+			current := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, UsesCredential: true,
 				Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
 				Configuration: &e2b.DeploymentConfiguration{APIKey: tc.committedKey, Template: tc.committedTemplate + build}}
-			db := &setupStore{value: current}
-			s := &managedSetup{processPaths: paths, installationID: id, store: db}
+			committed := current
+			setups := &fakeDeploymentSetups{t: t, setup: committedSetup(&committed), withCredential: credentialService(t),
+				generationPage: func(context.Context, int64) ([]deployment.Setup, error) { return nil, nil }}
+			allocations := &fakeGenerationAllocations{t: t, sandboxCredentialAllocationPage: func(context.Context, string) ([]store.RuntimeAllocation, error) { return nil, nil }}
+			s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: setups, allocations: allocations}
 			loaded, err := s.load(t.Context())
 			if err != nil {
 				t.Fatal(err)
@@ -164,7 +164,7 @@ print(json.dumps(result))
 				t.Fatal(err)
 			}
 			err = candidate.VerifyCredential(t.Context())
-			var reset *store.SandboxResetRequiredError
+			var reset *deployment.ResetRequiredError
 			if tc.reset {
 				if !errors.As(err, &reset) || errors.Is(err, sandbox.ErrCredentialRejected) || errors.Is(err, sandbox.ErrCredentialOwnership) {
 					t.Fatalf("unanchored ownership misattributed: %v", err)
@@ -172,7 +172,7 @@ print(json.dumps(result))
 			} else if !errors.Is(err, tc.want) {
 				t.Fatalf("got %v; want %v", err, tc.want)
 			}
-			if db.value.Generation != 1 || db.value.Configuration.(*e2b.DeploymentConfiguration).APIKey != tc.committedKey || s.selected.Load().Config != loaded {
+			if committed.Generation != 1 || committed.Configuration.(*e2b.DeploymentConfiguration).APIKey != tc.committedKey || s.selected.Load().Config != loaded {
 				t.Fatal("verification mutated committed selection")
 			}
 			raw, err := os.ReadFile(filepath.Join(state, "requests"))

@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -63,15 +66,16 @@ func TestInstallationSnapshotCannotCarryASensitiveValue(t *testing.T) {
 func TestDeploymentAddressIsNotInput(t *testing.T) {
 	deps, fakes := sandboxFakes(t)
 	initializations := 0
-	initialize := func(_ context.Context, input store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
+	initialize := func(_ context.Context, input sandbox.Selection) (deployment.View, error) {
 		initializations++
 		if input.Provider != "e2b" || input.ExpectedGeneration != 0 {
 			t.Fatal("invalid selection reached initialization", input.Provider, input.ExpectedGeneration)
 		}
-		return store.RuntimeDeploymentView{}, store.ErrSandboxPublicURLUnreachable
+		return deployment.View{}, deployment.ErrPublicURLUnreachable
 	}
 	// The strict fake fails the test if core_url reaches the update.
 	fakes.deploymentChanges.initializeSandboxDeployment = initialize
+	fakes.deployment.decodeConfiguration = providers.Builtin().DecodeInput
 	h := newTestHandler(t, deps)
 	for _, test := range []struct {
 		method, body, code string

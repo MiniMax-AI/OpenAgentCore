@@ -24,8 +24,8 @@ func validRegistrationSpec() sandbox.DeploymentSpec {
 }
 
 func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
+	registry := Builtin()
 	const kind = "registration-test-provider"
-	defer delete(adapters, kind)
 	for _, tc := range []struct {
 		name   string
 		mutate func(*Adapter)
@@ -64,7 +64,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 		{"incomplete operations", func(a *Adapter) { a.Operations = func() providercontract.Operations { return nil } }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := adapters["docker"]
+			a := registry.adapters["docker"]
 			a.BuildLocal = func(Config, LocalOptions, *Built) (func(), error) {
 				t.Fatal("called local constructor")
 				return nil, nil
@@ -73,37 +73,37 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 			a.ValidateResources = func(sandbox.Resources) error { t.Fatal("called resource validator"); return nil }
 			a.Configuration = registrationConfiguration{requirements: a.Configuration.Requirements()}
 			tc.mutate(&a)
-			adapters[kind] = a
+			registry.adapters[kind] = a
 			selection := sandbox.Selection{Provider: kind, DeploymentSpec: validRegistrationSpec()}
 			for _, entry := range []struct {
 				name string
 				call func() error
 			}{
-				{"lookup", func() error { _, err := Lookup(kind); return err }},
-				{"credential requirement", func() error { _, err := UsesCredential(kind); return err }},
-				{"public origin requirement", func() error { _, err := RequiresPublicOrigin(kind); return err }},
-				{"normalize", func() error { _, err := Normalize(selection); return err }},
-				{"specification", func() error { return ValidateSpecification(kind, selection.DeploymentSpec) }},
-				{"resources", func() error { return ValidateResources(kind, selection.Resources) }},
-				{"description", func() error { _, err := Describe(kind, uuid.NewString()); return err }},
-				{"decode input", func() error { _, err := DecodeInput(kind, nil, nil); return err }},
-				{"encode", func() error { _, err := Encode(kind, nil); return err }},
-				{"decode", func() error { _, err := Decode(kind, sandbox.ConfigurationRecord{}); return err }},
-				{"equal", func() error { _, err := Equal(kind, nil, nil); return err }},
+				{"lookup", func() error { _, err := registry.Lookup(kind); return err }},
+				{"credential requirement", func() error { _, err := registry.UsesCredential(kind); return err }},
+				{"public origin requirement", func() error { _, err := registry.RequiresPublicOrigin(kind); return err }},
+				{"normalize", func() error { _, err := registry.Normalize(selection); return err }},
+				{"specification", func() error { return registry.ValidateSpecification(kind, selection.DeploymentSpec) }},
+				{"resources", func() error { return registry.ValidateResources(kind, selection.Resources) }},
+				{"description", func() error { _, err := registry.Describe(kind, uuid.NewString()); return err }},
+				{"decode input", func() error { _, err := registry.DecodeInput(kind, nil, nil); return err }},
+				{"encode", func() error { _, err := registry.Encode(kind, nil); return err }},
+				{"decode", func() error { _, err := registry.Decode(kind, sandbox.ConfigurationRecord{}); return err }},
+				{"equal", func() error { _, err := registry.Equal(kind, nil, nil); return err }},
 				{"discovery", func() error {
-					_, err := DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
+					_, err := registry.DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
 					return err
 				}},
-				{"resolve change", func() error { _, err := ResolveChange(selection, selection); return err }},
-				{"credential", func() error { _, err := WithCredential(selection, selection); return err }},
+				{"resolve change", func() error { _, err := registry.ResolveChange(selection, selection); return err }},
+				{"credential", func() error { _, err := registry.WithCredential(selection, selection); return err }},
 				{"local build", func() error {
-					_, _, err := Build(Config{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: selection.DeploymentSpec}, LocalOptions{Standalone: true})
+					_, _, err := registry.Build(Config{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: selection.DeploymentSpec}, LocalOptions{Standalone: true})
 					return err
 				}},
-				{"direct build", func() error { _, err := BuildDirect(DirectConfig{Selection: selection}); return err }},
+				{"direct build", func() error { _, err := registry.BuildDirect(DirectConfig{Selection: selection}); return err }},
 				{"binding", func() error { return ValidateBinding(a, &docker.Provider{}) }},
 				{"projection", func() error {
-					text, err := PythonDeploymentContract()
+					text, err := registry.PythonDeploymentContract()
 					if text != "" {
 						t.Fatal("partial invalid projection")
 					}
@@ -122,16 +122,16 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 }
 
 func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
-	for kind, a := range adapters {
+	registry := Builtin()
+	for kind, a := range registry.adapters {
 		if err := ValidateRegistration(a); err != nil {
 			t.Fatalf("%s: %v", kind, err)
 		}
 	}
 	const kind = "new-test-provider"
-	defer delete(adapters, kind)
 	calls, closes := 0, 0
 	options := LocalOptions{GenerationStateDirectory: t.TempDir()}
-	a := adapters["docker"]
+	a := registry.adapters["docker"]
 	a.BuildLocal = func(_ Config, got LocalOptions, built *Built) (func(), error) {
 		calls++
 		if got != options {
@@ -140,8 +140,8 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 		built.Provider = &docker.Provider{}
 		return func() { closes++ }, nil
 	}
-	adapters[kind] = a
-	built, closeProvider, err := Build(Config{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: validRegistrationSpec()}, options)
+	registry.adapters[kind] = a
+	built, closeProvider, err := registry.Build(Config{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: validRegistrationSpec()}, options)
 	if err != nil || built.Provider == nil || calls != 1 {
 		t.Fatalf("node build: %v calls=%d", err, calls)
 	}
@@ -156,12 +156,12 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 		calls++
 		return &docker.Provider{}, nil
 	}
-	adapters[kind] = a
-	p, err := BuildDirect(DirectConfig{Selection: sandbox.Selection{Provider: kind}})
+	registry.adapters[kind] = a
+	p, err := registry.BuildDirect(DirectConfig{Selection: sandbox.Selection{Provider: kind}})
 	if err != nil || p == nil || calls != 2 {
 		t.Fatalf("credential-free direct build: %v calls=%d", err, calls)
 	}
-	if _, err := PythonDeploymentContract(); err != nil {
+	if _, err := registry.PythonDeploymentContract(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -169,6 +169,7 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 // Idle time is measured before suspension, retention after suspension. Neither
 // duration needs to be greater than the other.
 func TestRegistrationCheckpointPolicy(t *testing.T) {
+	registry := Builtin()
 	for _, tc := range []struct {
 		name            string
 		kind            string
@@ -185,10 +186,10 @@ func TestRegistrationCheckpointPolicy(t *testing.T) {
 		{"no suspension", "docker", 0, 0, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := adapters[tc.kind]
+			a := registry.adapters[tc.kind]
 			a.IdleSeconds, a.RetentionSeconds = tc.idle, tc.retention
 			if tc.direct {
-				a.Mode, a.BuildLocal, a.BuildDirect = "direct", nil, adapters["e2b"].BuildDirect
+				a.Mode, a.BuildLocal, a.BuildDirect = "direct", nil, registry.adapters["e2b"].BuildDirect
 			}
 			err := ValidateRegistration(a)
 			if (err == nil) != tc.valid || err != nil && !errors.Is(err, providercontract.ErrContract) {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	sandboxdocker "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/google/uuid"
 	"github.com/moby/moby/client"
@@ -75,7 +76,7 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 		}
 	}()
 	wait(t, func() bool { return hub.Online(id.NodeID) })
-	proxy := hub.Proxy(id.NodeID, "docker", 1)
+	proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
 	r := reference()
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

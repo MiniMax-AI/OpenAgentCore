@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
@@ -17,22 +19,25 @@ import (
 func SandboxResetTestContext(ctx context.Context) context.Context {
 	return adminaudit.WithSource(ctx, adminaudit.Source{CredentialID: "reset-fixture", ActorLabel: "operator", RequestID: "reset-request", TraceID: "reset-trace"})
 }
-func resetAndSelect(t *testing.T, w *Store, installation string, generation uint64, input SandboxDeploymentSetupRequest) (RuntimeDeploymentView, error) {
+func resetAndSelect(t *testing.T, w *Store, installation string, generation uint64, input sandbox.Selection) (deployment.View, error) {
 	t.Helper()
 	ctx := SandboxResetTestContext(t.Context())
-	reset, err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{Clear: "auto", ExpectedGeneration: generation})
+	if err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{Clear: "auto", ExpectedGeneration: generation}); err != nil {
+		return deployment.View{}, err
+	}
+	reset, err := deploymentService(t, w).View(ctx)
 	if err != nil {
-		return RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	empty, err := w.CompleteSandboxReset(ctx, installation, generation, reset.Reset.RequestedAt)
 	if err != nil {
-		return RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
-	input.ExpectedGeneration = empty.Generation
-	return w.InitializeSandboxDeployment(ctx, installation, input)
+	input.ExpectedGeneration = empty
+	return deploymentExecution(t, w).Initialize(ctx, installation, input)
 }
 
-func assertResetPartition(t *testing.T, view RuntimeDeploymentView) {
+func assertResetPartition(t *testing.T, view deployment.View) {
 	t.Helper()
 	if view.Reset == nil {
 		t.Fatal("missing reset")
@@ -48,6 +53,16 @@ func assertResetPartition(t *testing.T, view RuntimeDeploymentView) {
 	if offline != remaining.OnOfflineNodes || offline > view.Resources.Allocations+view.Resources.Pending {
 		t.Fatalf("inconsistent offline subset: %+v", remaining)
 	}
+}
+
+// startReset starts or escalates the reset and returns the deployment view
+// read after it commits.
+func startReset(t *testing.T, ctx context.Context, w *Store, installation string, input SandboxResetRequest) (deployment.View, error) {
+	t.Helper()
+	if err := w.StartSandboxReset(ctx, installation, input); err != nil {
+		return deployment.View{}, err
+	}
+	return deploymentService(t, w).View(ctx)
 }
 
 func TestSandboxResetAutoUsesStartedWorkAndLockedRecheck(t *testing.T) {
@@ -74,7 +89,7 @@ func TestSandboxResetAutoUsesStartedWorkAndLockedRecheck(t *testing.T) {
 			case "suspended":
 				runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_allocations SET compute_phase='suspended', compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, owner.ID)
 			}
-			reset, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
+			reset, err := startReset(t, SandboxResetTestContext(t.Context()), w, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -92,7 +107,7 @@ func TestSandboxResetAutoUsesStartedWorkAndLockedRecheck(t *testing.T) {
 				if !errors.Is(err, ErrSandboxResetSessionBusy) {
 					t.Fatal("auto cut active work", err)
 				}
-				if _, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err != nil {
+				if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err != nil {
 					t.Fatal(err)
 				}
 				_, err = w.ArchiveSandboxResetSession(t.Context(), tenant, session.ID, 1, reset.Reset.RequestedAt)
@@ -116,7 +131,7 @@ func TestSandboxResetCancellationABADeadlineAndGeneration(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	ctx := SandboxResetTestContext(t.Context())
-	first, err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
+	first, err := startReset(t, ctx, w, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,48 +139,52 @@ func TestSandboxResetCancellationABADeadlineAndGeneration(t *testing.T) {
 		t.Fatal("default deadline", first)
 	}
 	shorter := int32(300)
-	replay, err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto", DeadlineSeconds: &shorter})
+	replay, err := startReset(t, ctx, w, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto", DeadlineSeconds: &shorter})
 	if err != nil || !replay.Reset.RequestedAt.Equal(first.Reset.RequestedAt) || !replay.Reset.DeadlineAt.Equal(*first.Reset.DeadlineAt) {
 		t.Fatal("retry moved durable deadline", replay, err)
 	}
-	if _, err = w.CancelSandboxReset(ctx, installation, 1); err != nil {
+	if err = w.CancelSandboxReset(ctx, installation, 1); err != nil {
 		t.Fatal(err)
 	}
-	second, err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
+	second, err := startReset(t, ctx, w, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = w.ArchiveSandboxResetSession(t.Context(), tenant, session.ID, 1, first.Reset.RequestedAt); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if _, err = w.ArchiveSandboxResetSession(t.Context(), tenant, session.ID, 1, first.Reset.RequestedAt); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("cancelled reset archived successor work", err)
 	}
 	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_deployment SET reset_deadline_at=clock_timestamp()-interval '1 second'`)
 	if err := w.AdvanceSandboxResetDeadline(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	forced, err := s.GetRuntimeDeployment(t.Context())
+	forced, err := deploymentService(t, s).View(t.Context())
 	if err != nil || forced.Reset.Clear != "force" || forced.Reset.ForcedAt == nil || !forced.Reset.RequestedAt.Equal(second.Reset.RequestedAt) {
 		t.Fatal("deadline not durable", forced, err)
 	}
-	if _, err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"}); !errors.Is(err, ErrSandboxResetInProgress) {
+	if err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"}); !errors.Is(err, deployment.ErrResetInProgress) {
 		t.Fatal("force downgraded", err)
 	}
-	if _, err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: 0, Clear: "force"}); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: 0, Clear: "force"}); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("stale reset precedence", err)
 	}
 	if _, err := w.ArchiveSandboxResetSession(t.Context(), tenant, session.ID, 1, second.Reset.RequestedAt); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.CompleteSandboxReset(ctx, installation, 1, first.Reset.RequestedAt); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if _, err := w.CompleteSandboxReset(ctx, installation, 1, first.Reset.RequestedAt); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("cancelled reset finalized successor", err)
 	}
-	empty, err := w.CompleteSandboxReset(ctx, installation, 1, second.Reset.RequestedAt)
+	committed, err := w.CompleteSandboxReset(ctx, installation, 1, second.Reset.RequestedAt)
+	if err != nil || committed != 2 {
+		t.Fatal("reset commit", committed, err)
+	}
+	empty, err := deploymentService(t, s).View(t.Context())
 	if err != nil || empty.Provider != "" || empty.Generation != 2 || empty.Reset != nil || empty.InstallationID != installation || empty.Configuration != nil || empty.Specification != nil {
 		t.Fatal("reset commit", empty, err)
 	}
-	if _, err := w.CancelSandboxReset(ctx, installation, 1); !errors.Is(err, ErrSandboxDeploymentConflict) {
+	if err := w.CancelSandboxReset(ctx, installation, 1); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("stale cancel", err)
 	}
-	if _, err := w.CancelSandboxReset(ctx, installation, 2); err != nil {
+	if err := w.CancelSandboxReset(ctx, installation, 2); err != nil {
 		t.Fatal("cancel without reset", err)
 	}
 }
@@ -174,7 +193,7 @@ func TestSandboxResetAutoRechecksTurnStartedAfterListing(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	archiveAllocation(t, w, tenant, session, installation)
-	reset, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
+	reset, err := startReset(t, SandboxResetTestContext(t.Context()), w, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +216,7 @@ func TestSandboxResetAutoRechecksTurnStartedAfterListing(t *testing.T) {
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("rejected admission left provisional rows")
 	}
-	if _, err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), installation, 1); err != nil {
+	if err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), installation, 1); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); err != nil {
@@ -209,14 +228,14 @@ func TestSandboxResetAuditFailureRollsBackPauseAndCompletion(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
 	rejectAdminAuditInsert(t, s)
 	rejected := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "reset-fixture", ActorLabel: "operator", RequestID: rejectedAdminRequest, TraceID: "reset-trace"})
-	if _, err := w.StartSandboxReset(rejected, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err == nil {
+	if err := w.StartSandboxReset(rejected, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err == nil {
 		t.Fatal("reset committed without audit")
 	}
-	view, err := s.GetRuntimeDeployment(t.Context())
+	view, err := deploymentService(t, s).View(t.Context())
 	if err != nil || view.Reset != nil || view.Generation != 1 {
 		t.Fatal("failed audit left reset state", view, err)
 	}
-	reset, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"})
+	reset, err := startReset(t, SandboxResetTestContext(t.Context()), w, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,37 +243,37 @@ func TestSandboxResetAuditFailureRollsBackPauseAndCompletion(t *testing.T) {
 	if _, err := w.CompleteSandboxReset(t.Context(), installation, 1, reset.Reset.RequestedAt); err == nil {
 		t.Fatal("completion committed without audit")
 	}
-	view, err = s.GetRuntimeDeployment(t.Context())
+	view, err = deploymentService(t, s).View(t.Context())
 	if err != nil || view.Reset == nil || view.Provider != "e2b" || view.Generation != 1 || view.OwnerEpoch != reset.OwnerEpoch {
 		t.Fatal("failed completion destroyed committed provider", view, err)
 	}
 }
 
 func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
-	s, w, deployment := managerFixture(t, 10, 10)
+	s, w, process := managerFixture(t, 10, 10)
 	// Reuse the real placement fixture, then adopt its selection as Web-managed.
 	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_deployment SET web_managed=true,local_node_id=NULL`)
 	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET deployment_generation=1,specification_digest=$1`, SandboxDeploymentTestSpec("docker").Digest("docker"))
 	_, pending := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	tenant, suspended := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	allocation := archiveAllocation(t, w, tenant, suspended, deployment.InstallationID)
+	allocation := archiveAllocation(t, w, tenant, suspended, process.InstallationID)
 	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_allocations SET compute_phase='suspended',compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, allocation.ID)
 	tenant, deleted := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	archiveAllocation(t, w, tenant, deleted, deployment.InstallationID)
+	archiveAllocation(t, w, tenant, deleted, process.InstallationID)
 	if err := s.DeleteSession(t.Context(), tenant, deleted.ID); err != nil {
 		t.Fatal(err)
 	}
-	reset, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), deployment.InstallationID, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
+	reset, err := startReset(t, SandboxResetTestContext(t.Context()), w, process.InstallationID, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertResetPartition(t, reset)
-	if reset.Resources != (SandboxDeploymentResources{Allocations: 2, Pending: 1}) || reset.Reset.Remaining.Idle != 2 || reset.Reset.Remaining.Cleanup != 1 {
+	if reset.Resources != (deployment.Resources{Allocations: 2, Pending: 1}) || reset.Reset.Remaining.Idle != 2 || reset.Reset.Remaining.Cleanup != 1 {
 		t.Fatal("duplicated placement or missing deleted receipt", reset)
 	}
 	for _, state := range []string{"preparing", "stale", "epoch", "disconnected"} {
 		runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET connected_epoch=(SELECT owner_epoch FROM runtime_deployment)`)
-		onlineManagerNode(t, s, deployment.LocalNodeID)
+		onlineManagerNode(t, s, process.LocalNodeID)
 		switch state {
 		case "preparing":
 			runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET provider_ready=false`)
@@ -265,7 +284,7 @@ func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
 		case "disconnected":
 			runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET connection_id=NULL`)
 		}
-		view, err := s.GetRuntimeDeployment(t.Context())
+		view, err := deploymentService(t, s).View(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -278,14 +297,14 @@ func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
 		if view.Reset.Remaining.OnOfflineNodes != want {
 			t.Fatalf("%s presence: %+v", state, view.Reset.Remaining)
 		}
-		if want > 0 && (len(view.Reset.Remaining.OfflineNodes) != 1 || view.Reset.Remaining.OfflineNodes[0].NodeID != deployment.LocalNodeID || view.Reset.Remaining.OfflineNodes[0].Resources != 3) {
+		if want > 0 && (len(view.Reset.Remaining.OfflineNodes) != 1 || view.Reset.Remaining.OfflineNodes[0].NodeID != process.LocalNodeID || view.Reset.Remaining.OfflineNodes[0].Resources != 3) {
 			t.Fatal("offline ownership projection", view.Reset.Remaining)
 		}
 	}
-	if _, err := w.CompleteSandboxReset(t.Context(), deployment.InstallationID, 1, reset.Reset.RequestedAt); err == nil {
+	if _, err := w.CompleteSandboxReset(t.Context(), process.InstallationID, 1, reset.Reset.RequestedAt); err == nil {
 		t.Fatal("offline resources were treated as cleaned")
 	}
-	if err := s.RemoveRuntimeNode(t.Context(), deployment.LocalNodeID); !errors.Is(err, ErrRuntimeNodeInUse) {
+	if err := deploymentService(t, s).RemoveNode(t.Context(), process.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("removed node with reset resources", err)
 	}
 	if row, err := s.GetEnvironment(t.Context(), pending.TenantID, pending.Environment.ID); err == nil && row.Status == "expired" {
@@ -312,7 +331,7 @@ func TestSandboxResetPaginationSkipsBusyPrefixAndPreservesSelfHosted(t *testing.
 		}
 	}
 	selfTenant, self := managedArchiveSession(t, s, environmentInput(uuid.NewString(), "self_hosted", "/workspace"))
-	reset, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
+	reset, err := startReset(t, SandboxResetTestContext(t.Context()), w, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +342,7 @@ func TestSandboxResetPaginationSkipsBusyPrefixAndPreservesSelfHosted(t *testing.
 	if _, err := w.ArchiveSandboxResetSession(t.Context(), page[0].TenantID, page[0].SessionID, 1, reset.Reset.RequestedAt); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err != nil {
+	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err != nil {
 		t.Fatal(err)
 	}
 	first, err := w.ListSandboxResetSessions(t.Context(), "", true)
@@ -346,7 +365,7 @@ func TestSandboxResetPaginationSkipsBusyPrefixAndPreservesSelfHosted(t *testing.
 func TestSandboxResetOwnerRestartRetainsDeadlineAndProvenance(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	reset, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
+	reset, err := startReset(t, SandboxResetTestContext(t.Context()), w, installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,11 +376,11 @@ func TestSandboxResetOwnerRestartRetainsDeadlineAndProvenance(t *testing.T) {
 		t.Fatal(stopped, err)
 	}
 	successor := executionWriter(t, s)
-	current, err := s.GetRuntimeDeployment(t.Context())
+	current, err := deploymentService(t, s).View(t.Context())
 	if err != nil || !current.Reset.RequestedAt.Equal(reset.Reset.RequestedAt) || !current.Reset.DeadlineAt.Equal(*reset.Reset.DeadlineAt) {
 		t.Fatal("restart moved reset deadline", current, err)
 	}
-	if _, err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), installation, 1); err == nil {
+	if err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), installation, 1); err == nil {
 		t.Fatal("detached writer cancelled successor reset")
 	}
 	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_deployment SET reset_deadline_at=clock_timestamp()-interval '1 second'`)
@@ -371,7 +390,11 @@ func TestSandboxResetOwnerRestartRetainsDeadlineAndProvenance(t *testing.T) {
 	if _, err := successor.ArchiveSandboxResetSession(t.Context(), tenant, session.ID, 1, reset.Reset.RequestedAt); err != nil {
 		t.Fatal(err)
 	}
-	empty, err := successor.CompleteSandboxReset(t.Context(), installation, 1, reset.Reset.RequestedAt)
+	committed, err := successor.CompleteSandboxReset(t.Context(), installation, 1, reset.Reset.RequestedAt)
+	if err != nil || committed != 2 {
+		t.Fatal(committed, err)
+	}
+	empty, err := deploymentService(t, s).View(t.Context())
 	if err != nil || empty.Generation != 2 || empty.Provider != "" {
 		t.Fatal(empty, err)
 	}

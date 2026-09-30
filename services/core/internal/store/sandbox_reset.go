@@ -7,6 +7,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
@@ -15,29 +17,14 @@ import (
 )
 
 var ErrSandboxResetAdmission = errors.New("hosted admission is paused for a sandbox reset")
-var ErrSandboxResetInProgress = errors.New("a sandbox reset is in progress")
-var ErrSandboxNotConfigured = errors.New("the sandbox deployment is not configured")
 
-type SandboxGenerationStaleError struct{ CurrentGeneration uint64 }
-
-func (e *SandboxGenerationStaleError) Error() string {
-	return "the sandbox deployment generation changed"
-}
-func (e *SandboxGenerationStaleError) Unwrap() error { return ErrSandboxDeploymentConflict }
-
-type SandboxResetRequiredError struct{ CurrentProvider, RequestedProvider string }
-
-func (e *SandboxResetRequiredError) Error() string {
-	return "reset the sandbox deployment before changing its backend"
-}
-func (e *SandboxResetRequiredError) Unwrap() error { return ErrSandboxDeploymentConflict }
-
-type SandboxInUseError struct{ Resources SandboxDeploymentResources }
+// SandboxInUseError rejects reset completion while hosted resources remain.
+type SandboxInUseError struct{ Resources deployment.Resources }
 
 func (e *SandboxInUseError) Error() string {
 	return "hosted sandbox resources still belong to this deployment"
 }
-func (e *SandboxInUseError) Unwrap() error { return ErrSandboxDeploymentConflict }
+func (e *SandboxInUseError) Unwrap() error { return deployment.ErrConflict }
 
 type SandboxResetRequest struct {
 	ExpectedGeneration uint64 `json:"expected_generation" binding:"required" minimum:"0"`
@@ -47,10 +34,10 @@ type SandboxResetRequest struct {
 
 func checkSandboxGeneration(d sqlc.RuntimeDeployment, installation string, generation uint64) error {
 	if uint64(d.Generation) != generation {
-		return &SandboxGenerationStaleError{uint64(d.Generation)}
+		return &deployment.GenerationStaleError{CurrentGeneration: uint64(d.Generation)}
 	}
 	if !d.WebManaged || runtimeUUID(d.InstallationID) != installation {
-		return ErrSandboxDeploymentConflict
+		return deployment.ErrConflict
 	}
 	return nil
 }
@@ -69,29 +56,30 @@ func (s *Store) resetTransaction(ctx context.Context, apply func(context.Context
 	})
 }
 
-func (s *Store) StartSandboxReset(ctx context.Context, installation string, input SandboxResetRequest) (RuntimeDeploymentView, error) {
+// StartSandboxReset starts or escalates the reset. It returns no view: the
+// caller reads the deployment after commit.
+func (s *Store) StartSandboxReset(ctx context.Context, installation string, input SandboxResetRequest) error {
 	if input.Clear != "auto" && input.Clear != "force" {
-		return RuntimeDeploymentView{}, ErrInvalidInput
+		return ErrInvalidInput
 	}
 	deadline := int32(3600)
 	if input.DeadlineSeconds != nil {
 		if input.Clear != "auto" || *input.DeadlineSeconds < 300 || *input.DeadlineSeconds > 86400 {
-			return RuntimeDeploymentView{}, ErrInvalidInput
+			return ErrInvalidInput
 		}
 		deadline = *input.DeadlineSeconds
 	}
-	var result RuntimeDeploymentView
-	err := s.resetTransaction(ctx, func(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
+	return s.resetTransaction(ctx, func(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
 		if err := checkSandboxGeneration(d, installation, input.ExpectedGeneration); err != nil {
 			return err
 		}
 		if d.ProviderKind == "" {
-			return ErrSandboxNotConfigured
+			return deployment.ErrNotConfigured
 		}
 		if d.ResetClear.Valid {
 			if d.ResetClear.String != input.Clear {
 				if input.Clear != "force" {
-					return ErrSandboxResetInProgress
+					return deployment.ErrResetInProgress
 				}
 				if err := q.ForceSandboxReset(ctx); err != nil {
 					return err
@@ -114,20 +102,16 @@ func (s *Store) StartSandboxReset(ctx context.Context, installation string, inpu
 			if err := q.StartSandboxReset(ctx, sqlc.StartSandboxResetParams{Clear: pgtype.Text{String: input.Clear, Valid: true}, DeadlineSeconds: deadline, Audit: audit}); err != nil {
 				return err
 			}
-			if err := auditpg.RecordDeploymentMutation(ctx, q, "reset_start", "sandbox_deployment", installation); err != nil {
-				return err
-			}
+			return auditpg.RecordDeploymentMutation(ctx, q, "reset_start", "sandbox_deployment", installation)
 		}
-		var err error
-		result, err = s.deploymentView(ctx, q)
-		return err
+		return nil
 	})
-	return result, err
 }
 
-func (s *Store) CancelSandboxReset(ctx context.Context, installation string, generation uint64) (RuntimeDeploymentView, error) {
-	var result RuntimeDeploymentView
-	err := s.resetTransaction(ctx, func(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
+// CancelSandboxReset cancels a running reset. It returns no view: the caller
+// reads the deployment after commit.
+func (s *Store) CancelSandboxReset(ctx context.Context, installation string, generation uint64) error {
+	return s.resetTransaction(ctx, func(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
 		if err := checkSandboxGeneration(d, installation, generation); err != nil {
 			return err
 		}
@@ -135,15 +119,10 @@ func (s *Store) CancelSandboxReset(ctx context.Context, installation string, gen
 			if err := q.CancelSandboxReset(ctx); err != nil {
 				return err
 			}
-			if err := auditpg.RecordDeploymentMutation(ctx, q, "reset_cancel", "sandbox_deployment", installation); err != nil {
-				return err
-			}
+			return auditpg.RecordDeploymentMutation(ctx, q, "reset_cancel", "sandbox_deployment", installation)
 		}
-		var err error
-		result, err = s.deploymentView(ctx, q)
-		return err
+		return nil
 	})
-	return result, err
 }
 
 // AdvanceSandboxResetDeadline makes force escalation durable before selecting
@@ -174,24 +153,25 @@ func sandboxResetAudit(d sqlc.RuntimeDeployment) (adminaudit.Source, error) {
 
 // CompleteSandboxReset must run after the manager has drained. It does not take
 // Session locks: archive and admission always lock Session before deployment.
-func (s *Store) CompleteSandboxReset(ctx context.Context, installation string, generation uint64, requestedAt time.Time) (RuntimeDeploymentView, error) {
-	var result RuntimeDeploymentView
+// It returns the committed, unconfigured generation.
+func (s *Store) CompleteSandboxReset(ctx context.Context, installation string, generation uint64, requestedAt time.Time) (uint64, error) {
+	var committed uint64
 	err := s.resetTransaction(ctx, func(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
 		if err := checkSandboxGeneration(d, installation, generation); err != nil {
 			return err
 		}
 		if !d.ResetClear.Valid || !d.ResetRequestedAt.Time.Equal(requestedAt) {
-			return ErrSandboxDeploymentConflict
+			return deployment.ErrConflict
 		}
 		if d.Generation == math.MaxInt64 || d.OwnerEpoch == math.MaxInt64 {
-			return ErrSandboxDeploymentConflict
+			return deployment.ErrConflict
 		}
 		resources, err := q.CountRuntimeDeploymentResources(ctx)
 		if err != nil {
 			return err
 		}
 		if resources.Allocations != 0 || resources.Pending != 0 {
-			return &SandboxInUseError{SandboxDeploymentResources{Allocations: resources.Allocations, Pending: resources.Pending}}
+			return &SandboxInUseError{deployment.Resources{Allocations: resources.Allocations, Pending: resources.Pending}}
 		}
 		source, err := sandboxResetAudit(d)
 		if err != nil {
@@ -200,6 +180,8 @@ func (s *Store) CompleteSandboxReset(ctx context.Context, installation string, g
 		if err := q.CompleteSandboxReset(ctx); err != nil {
 			return err
 		}
+		// The locked row advances by exactly one generation.
+		committed = uint64(d.Generation) + 1
 		if err := q.RetireSandboxNodes(ctx); err != nil {
 			return err
 		}
@@ -209,41 +191,12 @@ func (s *Store) CompleteSandboxReset(ctx context.Context, installation string, g
 		if err := q.ClearSandboxGenerations(ctx); err != nil {
 			return err
 		}
-		if err := auditpg.RecordDeploymentMutation(adminaudit.WithSource(ctx, source), q, "reset_complete", "sandbox_deployment", installation); err != nil {
-			return err
-		}
-		result, err = s.deploymentView(ctx, q)
-		return err
+		return auditpg.RecordDeploymentMutation(adminaudit.WithSource(ctx, source), q, "reset_complete", "sandbox_deployment", installation)
 	})
-	return result, err
-}
-
-// SandboxResetView contains only durable state and a single-snapshot resource partition.
-type SandboxResetView struct {
-	Clear       string                `json:"clear"`
-	RequestedAt time.Time             `json:"requested_at"`
-	DeadlineAt  *time.Time            `json:"deadline_at" extensions:"x-nullable"`
-	ForcedAt    *time.Time            `json:"forced_at" extensions:"x-nullable"`
-	Remaining   SandboxResetRemaining `json:"remaining"`
-}
-type SandboxResetRemaining struct {
-	Busy           int64                     `json:"busy"`
-	Idle           int64                     `json:"idle"`
-	Cleanup        int64                     `json:"cleanup"`
-	OnOfflineNodes int64                     `json:"on_offline_nodes"`
-	OfflineNodes   []SandboxResetOfflineNode `json:"offline_nodes"`
-}
-type SandboxResetOfflineNode struct {
-	NodeID    string `json:"node_id"`
-	Name      string `json:"name"`
-	Resources int64  `json:"resources"`
-}
-
-func resetTimestamp(value pgtype.Timestamptz) *time.Time {
-	if !value.Valid {
-		return nil
+	if err != nil {
+		return 0, err
 	}
-	return &value.Time
+	return committed, nil
 }
 
 type SandboxResetSession struct{ SessionID, TenantID string }

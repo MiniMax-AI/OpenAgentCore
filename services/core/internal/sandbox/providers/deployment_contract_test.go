@@ -10,11 +10,12 @@ import (
 )
 
 func TestInstallerDeploymentProjectionIsCurrent(t *testing.T) {
+	registry := Builtin()
 	raw, err := os.ReadFile("../../../../../deploy/install/node_spec.py")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected, err := PythonDeploymentContract()
+	expected, err := registry.PythonDeploymentContract()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,6 +24,7 @@ func TestInstallerDeploymentProjectionIsCurrent(t *testing.T) {
 	}
 }
 func TestDeploymentContractFixtures(t *testing.T) {
+	registry := Builtin()
 	raw, err := os.ReadFile("../testdata/deployment-contract.json")
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +44,7 @@ func TestDeploymentContractFixtures(t *testing.T) {
 			decoder.DisallowUnknownFields()
 			err := decoder.Decode(&spec)
 			if err == nil {
-				err = ValidateSpecification(fixture.Provider, spec)
+				err = registry.ValidateSpecification(fixture.Provider, spec)
 			}
 			if (err == nil) != fixture.Valid {
 				t.Fatalf("validation differs: %v", err)

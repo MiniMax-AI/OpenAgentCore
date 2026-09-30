@@ -10,17 +10,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
 func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
-	s := &store.Store{}
-	upperCapacityErr := s.UpdateRuntimeNode(context.Background(), managementProjectID, store.RuntimeNodeUpdate{Name: "node", MaxActive: 1000001, MaxRetained: 8})
-	capacityErr := s.UpdateRuntimeNode(context.Background(), managementProjectID, store.RuntimeNodeUpdate{Name: "node", MaxActive: 0})
-	_, resourceErr := store.SandboxSetupForSelection(managementProjectID, store.SandboxDeploymentSetupRequest{Provider: "docker", DeploymentSpec: sandbox.DeploymentSpec{}})
-	_, runtimeErr := store.SandboxSetupForSelection(managementProjectID, store.SandboxDeploymentSetupRequest{Provider: "docker", DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 1, MemoryMiB: 512}}})
+	// The deployment validates these inputs before it reaches storage, so
+	// storage without a database is enough.
+	nodes, err := deployment.NewService(deploymentpg.New(nil, nil), deploymentpg.New(nil, nil), providers.Builtin(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	upperCapacityErr := nodes.UpdateNode(context.Background(), managementProjectID, deployment.NodeUpdate{Name: "node", MaxActive: 1000001, MaxRetained: 8})
+	capacityErr := nodes.UpdateNode(context.Background(), managementProjectID, deployment.NodeUpdate{Name: "node", MaxActive: 0})
+	_, resourceErr := nodes.SetupForSelection(managementProjectID, sandbox.Selection{Provider: "docker", DeploymentSpec: sandbox.DeploymentSpec{}})
+	_, runtimeErr := nodes.SetupForSelection(managementProjectID, sandbox.Selection{Provider: "docker", DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 1, MemoryMiB: 512}}})
 	for _, tc := range []struct {
 		err                       error
 		code, param               string
@@ -30,10 +37,10 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 	}{
 		{&sandbox.ValidationError{Param: "resources", Message: "E2B template build resources are outside the supported sandbox limits; select another build"}, "invalid_sandbox_configuration", "resources", nil, "E2B template build resources are outside the supported sandbox limits; select another build", "invalid_sandbox_configuration", nil},
 		{&projects.NameError{MaxLength: projects.ProjectNameMaxLength}, "invalid_name", "name", map[string]any{"max_length": float64(128)}, "Invalid resource identifier or request limits.", "invalid_request", writeProjectsError},
-		{upperCapacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", nil},
-		{capacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", nil},
-		{resourceErr, "invalid_sandbox_configuration", "resources.cpus", map[string]any{"min": float64(1), "max": float64(255)}, "invalid sandbox configuration: cpus must be 1..255 and memory_mib must be 512..1048576", "invalid_sandbox_configuration", nil},
-		{runtimeErr, "invalid_sandbox_configuration", "runtime", nil, "invalid sandbox configuration: managed nodes require a pinned Runtime release", "invalid_sandbox_configuration", nil},
+		{upperCapacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
+		{capacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
+		{resourceErr, "invalid_sandbox_configuration", "resources.cpus", map[string]any{"min": float64(1), "max": float64(255)}, "invalid sandbox configuration: cpus must be 1..255 and memory_mib must be 512..1048576", "invalid_sandbox_configuration", writeDeploymentError},
+		{runtimeErr, "invalid_sandbox_configuration", "runtime", nil, "invalid sandbox configuration: managed nodes require a pinned Runtime release", "invalid_sandbox_configuration", writeDeploymentError},
 	} {
 		if tc.err == nil {
 			t.Fatal("missing validator error")
@@ -77,11 +84,11 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 
 func TestCoreActiveCapacityUpperBoundNamesSubmittedField(t *testing.T) {
 	deps, fakes := sandboxFakes(t)
-	fakes.deployment.createRuntimeEnrollment = func(_ context.Context, capacity store.RuntimeNodeCapacity) (store.RuntimeNodeEnrollmentToken, error) {
-		return store.RuntimeNodeEnrollmentToken{}, storeCapacity(capacity.MaxActive)
+	fakes.deployment.createEnrollment = func(_ context.Context, capacity deployment.Capacity) (deployment.EnrollmentToken, error) {
+		return deployment.EnrollmentToken{}, nodeCapacity(capacity.MaxActive)
 	}
-	fakes.deployment.updateRuntimeNode = func(_ context.Context, _ string, input store.RuntimeNodeUpdate) error {
-		return storeCapacity(input.MaxActive)
+	fakes.deployment.updateNode = func(_ context.Context, _ string, input deployment.NodeUpdate) error {
+		return nodeCapacity(input.MaxActive)
 	}
 	h := newTestHandler(t, deps)
 	for _, tc := range []struct{ method, path, body string }{

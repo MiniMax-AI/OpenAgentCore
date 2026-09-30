@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -43,8 +42,9 @@ func (d *snapshotBudget) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pg
 		return
 	}
 	d.t.Logf("snapshot=%d query_elapsed=%s err=%v ctx=%v", q.ordinal, time.Since(q.started), data.Err, ctx.Err())
-	// Model scheduling pressure on the first two reads without changing the real
-	// five-second page deadline. The final snapshot uses the lease connection.
+	// Model scheduling pressure on both page reads without changing the real
+	// five-second page deadline. Completion publishes the committed generation
+	// without a third read.
 	if q.ordinal <= 2 && data.Err == nil {
 		delay := 2200*time.Millisecond - time.Since(q.started)
 		if delay > 0 {
@@ -60,31 +60,22 @@ func (d *snapshotBudget) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pg
 
 func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	budget := &snapshotBudget{t: t}
-	s, owner := resetManagerStoreConfig(t, func(cfg *pgxpool.Config) {
+	_, owner, deployments := resetManagerStoreConfig(t, func(cfg *pgxpool.Config) {
 		cfg.ConnConfig.RuntimeParams["jit"] = "on"
 		cfg.ConnConfig.Tracer = budget
 	})
 	w := owner.Store
-	id := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
-		t.Fatal(err)
-	}
-	selection := store.SandboxDeploymentSetupRequest{Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}}
-	selection.Resources.CPUs = 2
-	selection.Resources.MemoryMiB = 2048
-	if _, err := w.InitializeSandboxDeployment(t.Context(), id, selection); err != nil {
-		t.Fatal(err)
-	}
+	id := initializeE2BDeployment(t, owner)
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	configuration := NewDeferredRuntimeProvider(id, func(ctx context.Context) (*RuntimeProvider, error) {
-		setup, err := s.GetSandboxSetup(ctx)
+		setup, err := deployments.Setup(ctx)
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
-		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", 1)}, nil
+		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}, nil
 	})
-	m, err := newRuntimeManager(owner, runtimegateway.NewRegistry(), configuration)
+	m, err := newRuntimeManager(owner, deployments, runtimegateway.NewRegistry(), configuration)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +83,7 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	if _, err = m.ensureDeployment(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = w.StartSandboxReset(adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "reset-test", ActorLabel: "operator", RequestID: "request", TraceID: "trace"}), id, store.SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err != nil {
+	if err = w.StartSandboxReset(adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "reset-test", ActorLabel: "operator", RequestID: "request", TraceID: "trace"}), id, store.SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err != nil {
 		t.Fatal(err)
 	}
 	budget.armed.Store(true)
@@ -103,13 +94,13 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	if err != nil || ping != nil {
 		t.Fatal("bounded snapshot lost execution ownership", err, ping)
 	}
-	if budget.reads.Load() < 3 {
-		t.Fatal("did not exercise final leased snapshot")
+	if reads := budget.reads.Load(); reads != 2 {
+		t.Fatal("reset page read the deployment", reads, "times, want the two bounded reads before completion")
 	}
-	if err := w.CollectSandboxGenerations(t.Context()); err != nil {
+	if err := owner.Deployment.CollectGenerations(t.Context()); err != nil {
 		t.Fatal("next generation collection lost ownership", err)
 	}
-	view, err := s.GetRuntimeDeployment(t.Context())
+	view, err := deployments.View(t.Context())
 	if err != nil || view.Generation != 2 || view.Provider != "" || view.Reset != nil {
 		t.Fatal("reset did not commit", view, err)
 	}

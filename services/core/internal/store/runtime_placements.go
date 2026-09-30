@@ -3,8 +3,9 @@ package store
 import (
 	"context"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -24,30 +25,30 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 	// A changed installation address cannot admit guests that require a public
 	// origin. Existing owned resources remain available for cleanup.
 	if d.ProviderKind != "" {
-		publicOrigin, err := providers.RequiresPublicOrigin(d.ProviderKind)
+		publicOrigin, err := sandboxProviders.RequiresPublicOrigin(d.ProviderKind)
 		if err != nil {
 			return err
 		}
-		if publicOrigin && LoopbackOrigin(publicURL) {
-			return ErrSandboxPublicURLUnreachable
+		if publicOrigin && deployment.LoopbackOrigin(publicURL) {
+			return deployment.ErrPublicURLUnreachable
 		}
 	}
 
 	if d.Mode == "direct" {
 		if d.AdmissionPaused {
-			return ErrRuntimeNodeUnavailable
+			return deployment.ErrNodeUnavailable
 		}
 
 		return nil
 	}
 	if d.ProviderKind == "" {
 		if d.WebManaged {
-			return ErrRuntimeNodeUnavailable
+			return deployment.ErrNodeUnavailable
 		}
 		return nil
 	}
 	if d.AdmissionPaused {
-		return ErrRuntimeNodeUnavailable
+		return deployment.ErrNodeUnavailable
 	}
 	rows, err := q.ListRuntimeNodes(ctx, pgtype.UUID{})
 	if err != nil {
@@ -69,9 +70,9 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 	}
 	if chosen == nil {
 		if preparing {
-			return ErrSandboxNodesPreparing
+			return deployment.ErrNodesPreparing
 		}
-		return ErrRuntimeNodeUnavailable
+		return deployment.ErrNodeUnavailable
 	}
 	return q.CreateSessionRuntimePlacement(ctx, sqlc.CreateSessionRuntimePlacementParams{SessionID: session, NodeID: chosen.ID, Generation: chosen.ReadyGeneration.Int64})
 }
@@ -83,7 +84,7 @@ func (s *Store) ResolveRuntimeNode(ctx context.Context, tenant, environment stri
 		return "", err
 	}
 	if allocation.NodeID == "" {
-		return "", ErrRuntimeNodeUnavailable
+		return "", deployment.ErrNodeUnavailable
 	}
 	return allocation.NodeID, nil
 }
@@ -105,12 +106,12 @@ func reserveRuntimeRestore(ctx context.Context, q *sqlc.Queries, node pgtype.UUI
 				return err
 			}
 			if !generation.Valid || !n.Online || !ready || n.Active >= int64(n.MaxActive) {
-				return ErrRuntimeNodeUnavailable
+				return deployment.ErrNodeUnavailable
 			}
 			return nil
 		}
 	}
-	return ErrRuntimeNodeUnavailable
+	return deployment.ErrNodeUnavailable
 }
 
 // ResolveRuntimeGeneration includes deleted Sessions and never substitutes the target.
@@ -120,7 +121,7 @@ func (s *Store) ResolveRuntimeGeneration(ctx context.Context, ref sandbox.Refere
 		return "", 0, err
 	}
 	if a.State == "released" || a.ID != ref.AllocationID || a.NodeID == "" || a.DeploymentGeneration == 0 {
-		return "", 0, ErrRuntimeNodeUnavailable
+		return "", 0, deployment.ErrNodeUnavailable
 	}
 	return a.NodeID, a.DeploymentGeneration, nil
 }

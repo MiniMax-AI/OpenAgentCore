@@ -87,7 +87,9 @@ type Execution struct {
 // required.
 type Sandboxes struct {
 	Deployment             Deployment
+	NodeAllocations        NodeAllocations
 	DeploymentChanges      DeploymentChanges
+	DeploymentReset        DeploymentReset
 	ConfigurationDiscovery ConfigurationDiscovery
 }
 
@@ -148,7 +150,13 @@ func (d Dependencies) validate() error {
 		if d.Execution == nil {
 			return errors.New("api: Sandboxes requires Execution")
 		}
-		return required(field{"Sandboxes.Deployment", s.Deployment}, field{"Sandboxes.DeploymentChanges", s.DeploymentChanges}, field{"Sandboxes.ConfigurationDiscovery", s.ConfigurationDiscovery})
+		return required(
+			field{"Sandboxes.Deployment", s.Deployment},
+			field{"Sandboxes.NodeAllocations", s.NodeAllocations},
+			field{"Sandboxes.DeploymentChanges", s.DeploymentChanges},
+			field{"Sandboxes.DeploymentReset", s.DeploymentReset},
+			field{"Sandboxes.ConfigurationDiscovery", s.ConfigurationDiscovery},
+		)
 	}
 	return nil
 }

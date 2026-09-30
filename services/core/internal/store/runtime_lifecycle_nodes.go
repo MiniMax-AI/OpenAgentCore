@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/jackc/pgx/v5"
@@ -111,12 +113,12 @@ func (s *Store) ResolveRuntimeLifecycleNode(ctx context.Context, tenant, environ
 	}
 	if row.ProviderKind == "" || row.Mode == "direct" {
 		if row.PlacementNodeID.Valid || row.AllocationNodeID.Valid {
-			return "", ErrRuntimeNodeUnavailable
+			return "", deployment.ErrNodeUnavailable
 		}
 		return "", nil
 	}
 	if !row.PlacementNodeID.Valid || (row.AllocationID.Valid && row.AllocationNodeID != row.PlacementNodeID) || (!row.AllocationID.Valid && row.ReleasedAt.Valid) {
-		return "", ErrRuntimeNodeUnavailable
+		return "", deployment.ErrNodeUnavailable
 	}
 	return runtimeUUID(row.PlacementNodeID), nil
 }

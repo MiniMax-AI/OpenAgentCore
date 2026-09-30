@@ -7,9 +7,9 @@ import (
 	"strconv"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func executionConcurrency() (int, error) {
@@ -39,7 +39,7 @@ func publicURL() (string, error) {
 	if value == "" {
 		return "", nil
 	}
-	if store.ValidateSandboxCoreURL(value) != nil {
+	if deployment.ValidateCoreURL(value) != nil {
 		return "", errors.New("OAC_PUBLIC_URL must be a canonical HTTPS origin without path, credentials, query or fragment, such as https://core.example; plain HTTP is accepted only for a loopback host")
 	}
 	return value, nil

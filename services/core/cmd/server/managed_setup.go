@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
@@ -22,10 +23,11 @@ import (
 // observation. The database owns the selection; this cache is never a writer.
 type managedSetup struct {
 	processPaths sandbox.ProcessPaths
-	store        interface {
-		GetSandboxSetup(context.Context) (store.SandboxSetup, error)
-		ResolveRuntimeGeneration(context.Context, sandbox.Reference) (string, uint64, error)
-	}
+	// registry builds the selected direct provider and discovers configuration;
+	// the deployment setup reports what the registration declares.
+	registry       *providers.Registry
+	deployment     deploymentSetups
+	allocations    generationAllocations
 	hub            *node.Hub
 	installationID string
 	// publicURL is OAC_PUBLIC_URL; every sandbox reaches Core through it.
@@ -34,10 +36,26 @@ type managedSetup struct {
 	providerCalls sandbox.CallFence
 }
 
+// deploymentSetups reads the committed deployment setup and its retained
+// generations. *deployment.Service implements it.
+type deploymentSetups interface {
+	Setup(context.Context) (deployment.Setup, error)
+	AllocationSetup(context.Context, sandbox.Reference) (deployment.Setup, error)
+	GenerationPage(context.Context, int64) ([]deployment.Setup, error)
+	WithCredential(owner, candidate deployment.Setup) (deployment.Setup, error)
+}
+
+// generationAllocations resolves the generation that owns each allocation.
+// *store.Store implements it.
+type generationAllocations interface {
+	ResolveRuntimeGeneration(context.Context, sandbox.Reference) (string, uint64, error)
+	SandboxCredentialAllocationPage(context.Context, string) ([]store.RuntimeAllocation, error)
+}
+
 // DiscoverConfiguration asks a Provider which configuration values its
 // credential can use, with this installation's process paths.
 func (s *managedSetup) DiscoverConfiguration(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
-	return providers.DiscoverConfiguration(ctx, provider, input, s.processPaths)
+	return s.registry.DiscoverConfiguration(ctx, provider, input, s.processPaths)
 }
 
 // Empty selections retain their generation so a delayed provider load cannot
@@ -65,7 +83,7 @@ func (s *managedSetup) publish(config *execution.RuntimeProvider) {
 func (s *managedSetup) publishUnconfigured(generation uint64) { s.publishSelection(generation, nil) }
 
 func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, error) {
-	setup, err := s.store.GetSandboxSetup(ctx)
+	setup, err := s.deployment.Setup(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -89,15 +107,9 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 	return s.publishSelection(setup.Generation, candidate.Config), nil
 }
 
-func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
-	// Adapters declare whether their guests require a public Core origin.
-	requiresPublicOrigin, err := providers.RequiresPublicOrigin(setup.Provider)
-	if err != nil {
-		return execution.PreparedRuntimeDeployment{}, err
-	}
-	if requiresPublicOrigin && store.LoopbackOrigin(s.publicURL) {
-		return execution.PreparedRuntimeDeployment{}, store.ErrSandboxPublicURLUnreachable
-	}
+// prepare validates a setup the deployment prepared for a selection, which has
+// already rejected a provider whose guests cannot reach the public URL.
+func (s *managedSetup) prepare(ctx context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 	candidate, err := s.configuration(setup)
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
@@ -123,7 +135,7 @@ func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (e
 
 // Loading an already committed selection must retain provider access to its
 // owned resources, even when a new-template validation would now fail.
-func (s *managedSetup) configuration(setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+func (s *managedSetup) configuration(setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 	if setup.InstallationID != s.installationID {
 		return execution.PreparedRuntimeDeployment{}, errors.New("sandbox installation does not match setup")
 	}
@@ -133,9 +145,9 @@ func (s *managedSetup) configuration(setup store.SandboxSetup) (execution.Prepar
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused,
 		CoreURL: s.publicURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
-	if sandbox.SupportsCheckpoint(provider) {
-		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.IdleSeconds) * time.Second,
-			Retention: time.Duration(setup.RetentionSeconds) * time.Second, MaxActive: 4, MaxRetained: 16}
+	if setup.Suspension != nil {
+		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.Suspension.IdleSeconds) * time.Second,
+			Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second, MaxActive: 4, MaxRetained: 16}
 	}
 	return execution.PreparedRuntimeDeployment{Config: selected, Publish: s.publish}, nil
 }
@@ -159,16 +171,14 @@ func (s *managedSetup) ResolveObservationSource(ctx context.Context) (runtimeobs
 	return source, nil
 }
 
-func (s *managedSetup) provider(setup store.SandboxSetup) (sandbox.SandboxProvider, error) {
-	adapter, err := providers.Lookup(setup.Provider)
-	if err != nil {
-		return nil, err
-	}
-	if adapter.Mode == "nodes" {
+// provider builds the setup's provider. The setup carries the mode and
+// declared operations that deployment read from the provider's registration.
+func (s *managedSetup) provider(setup deployment.Setup) (sandbox.SandboxProvider, error) {
+	if setup.Mode == "nodes" {
 		if s.hub == nil {
 			return nil, errors.New("sandbox node transport is unavailable")
 		}
-		return s.hub.GenerationProvider(setup.Provider, s.store.ResolveRuntimeGeneration), nil
+		return s.hub.GenerationProvider(setup.Provider, setup.Operations, s.allocations.ResolveRuntimeGeneration), nil
 	}
-	return providers.BuildDirect(providers.DirectConfig{ProcessPaths: s.processPaths, InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}, Fence: &s.providerCalls})
+	return s.registry.BuildDirect(providers.DirectConfig{ProcessPaths: s.processPaths, InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}, Fence: &s.providerCalls})
 }

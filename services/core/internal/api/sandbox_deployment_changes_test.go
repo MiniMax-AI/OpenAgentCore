@@ -7,31 +7,34 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
-
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 	deps, fakes := sandboxFakes(t)
 	updates, resets := 0, 0
-	update := func(_ context.Context, in store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
+	update := func(_ context.Context, in sandbox.Selection) (deployment.View, error) {
 		updates++
 		if in.Provider != "e2b" || in.ExpectedGeneration != 2 || in.Configuration == nil || in.Configuration.(*e2b.DeploymentConfiguration).APIKey != "synthetic-private-key" {
 			t.Fatal("write-only fields were lost")
 		}
-		return store.RuntimeDeploymentView{Provider: in.Provider}, nil
+		return deployment.View{Provider: in.Provider}, nil
 	}
-	maintain := func(_ context.Context, in store.SandboxResetRequest) (store.RuntimeDeploymentView, error) {
+	maintain := func(_ context.Context, in store.SandboxResetRequest) (deployment.View, error) {
 		resets++
 		if in.ExpectedGeneration != 2 {
 			t.Fatal("generation was lost")
 		}
-		return store.RuntimeDeploymentView{Reset: &store.SandboxResetView{Clear: in.Clear}}, nil
+		return deployment.View{Reset: &deployment.Reset{Clear: in.Clear}}, nil
 	}
-	fakes.deploymentChanges.updateSandboxDeployment, fakes.deploymentChanges.startSandboxReset = update, maintain
-	fakes.deploymentChanges.cancelSandboxReset = func(context.Context, uint64) (store.RuntimeDeploymentView, error) {
-		return store.RuntimeDeploymentView{}, nil
+	fakes.deploymentChanges.updateSandboxDeployment, fakes.deploymentReset.startSandboxReset = update, maintain
+	fakes.deployment.decodeConfiguration = providers.Builtin().DecodeInput
+	fakes.deploymentReset.cancelSandboxReset = func(context.Context, uint64) (deployment.View, error) {
+		return deployment.View{}, nil
 	}
 	h := newTestHandler(t, deps)
 	const selection = `{"provider":"e2b","expected_generation":2,"credential":{"api_key":"synthetic-private-key"},"configuration":{"template":"qualified:build"}}`
@@ -77,11 +80,11 @@ func TestSandboxMutationErrorsExposeOnlyTypedCoreFacts(t *testing.T) {
 		status  int
 		details string
 	}{
-		{&store.SandboxGenerationStaleError{CurrentGeneration: 8}, "sandbox_generation_stale", 409, `"current_generation":8`},
-		{&store.SandboxResetRequiredError{CurrentProvider: "docker", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"requested_provider":"e2b"`},
-		{&store.SandboxResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"current_provider":"e2b"`},
-		{&store.SandboxInUseError{Resources: store.SandboxDeploymentResources{Allocations: 2, Pending: 1}}, "sandbox_in_use", 409, `"allocations":2`},
-		{store.ErrSandboxResetInProgress, "sandbox_reset_in_progress", 409, ""},
+		{&deployment.GenerationStaleError{CurrentGeneration: 8}, "sandbox_generation_stale", 409, `"current_generation":8`},
+		{&deployment.ResetRequiredError{CurrentProvider: "docker", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"requested_provider":"e2b"`},
+		{&deployment.ResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"current_provider":"e2b"`},
+		{&store.SandboxInUseError{Resources: deployment.Resources{Allocations: 2, Pending: 1}}, "sandbox_in_use", 409, `"allocations":2`},
+		{deployment.ErrResetInProgress, "sandbox_reset_in_progress", 409, ""},
 		{store.ErrSandboxResetAdmission, "sandbox_reset_in_progress", 503, ""},
 	} {
 		for _, core := range []bool{false, true} {

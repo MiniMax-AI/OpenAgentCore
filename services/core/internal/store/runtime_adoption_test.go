@@ -5,11 +5,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
-func legacyAdoptionFixture(t *testing.T) (*Store, *Store, RuntimeDeployment, RuntimeAllocation) {
+func legacyAdoptionFixture(t *testing.T) (*Store, *Store, deployment.ProcessDeployment, RuntimeAllocation) {
 	t.Helper()
 	s, _ := newManagedTestStore(t)
 	w := executionWriter(t, s)
@@ -51,7 +52,7 @@ func TestHistoricalRuntimeResourcesCannotBeAdopted(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				err = w.ConfigureRuntimeDeployment(t.Context(), &d)
+				err = deploymentExecution(t, w).ConfigureProcess(t.Context(), &d)
 				if state == "released" && !pending {
 					if err != nil {
 						t.Fatal("released history blocked fresh configuration", err)

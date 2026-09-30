@@ -12,6 +12,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -132,10 +133,10 @@ func TestSessionDeletionConflictError(t *testing.T) {
 // turn_conflict because the official behavior there is unobserved.
 func TestConflictErrorsUseConflictType(t *testing.T) {
 	for err, code := range map[error]string{
-		store.ErrSandboxDeploymentConflict:     "sandbox_deployment_conflict",
-		store.ErrRuntimeNodeInUse:              "runtime_node_in_use",
-		store.ErrRuntimeLocalNodeConfigured:    "runtime_local_node_configured",
-		store.ErrRuntimeNodeAddressMismatch:    "sandbox_node_address_mismatch",
+		deployment.ErrConflict:                 "sandbox_deployment_conflict",
+		deployment.ErrNodeInUse:                "runtime_node_in_use",
+		deployment.ErrLocalNodeConfigured:      "runtime_local_node_configured",
+		deployment.ErrNodeAddressMismatch:      "sandbox_node_address_mismatch",
 		store.ErrEnvironmentUnavailable:        "environment_unavailable",
 		execution.ErrEnvironmentInputExpired:   "environment_input_expired",
 		execution.ErrEnvironmentInputCancelled: "environment_input_cancelled",

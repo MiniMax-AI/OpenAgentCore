@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
-	"testing"
 )
 
 type capabilityFixture struct {

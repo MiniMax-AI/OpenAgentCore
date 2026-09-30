@@ -2,20 +2,20 @@ package store
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
-func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, RuntimeDeploymentView, SandboxDeploymentSetupRequest) {
+func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, deployment.View, sandbox.Selection) {
 	t.Helper()
 	_, pool := newManagedTestStore(t)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{13}, 32))
@@ -25,111 +25,78 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, Run
 	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	id := uuid.NewString()
-	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
+	changes := deploymentExecution(t, w)
+	if err := changes.Claim(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
-	input := SandboxDeploymentSetupRequest{Provider: provider, DeploymentSpec: SandboxDeploymentTestSpec(provider)}
+	input := sandbox.Selection{Provider: provider, DeploymentSpec: SandboxDeploymentTestSpec(provider)}
 	if provider == "e2b" {
 		input = e2bSelection()
 	}
-	view, err := w.InitializeSandboxDeployment(t.Context(), id, input)
+	view, err := changes.Initialize(t.Context(), id, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s, w, view, input
 }
 
-func specificationNode(t *testing.T, s *Store, view RuntimeDeploymentView) RuntimeNodeEnrollment {
+func specificationNode(t *testing.T, s *Store, view deployment.View) deployment.Enrollment {
 	t.Helper()
-	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 4, MaxRetained: 16}))
+	nodes := deploymentService(t, s)
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 4, MaxRetained: 16}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "specification fixture", Credential: strings.Repeat("n", 64), Provider: view.Provider,
+	input := deployment.Enrollment{NodeID: uuid.NewString(), Name: "specification fixture", Credential: strings.Repeat("n", 64), Provider: view.Provider,
 		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: s.publicURL}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, input); err != nil {
+	if _, err := nodes.Enroll(t.Context(), token, input); err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, input.NodeID)
 	return input
 }
 
-func TestSandboxSpecificationRoundTripAndFileConfigurationCannotOverride(t *testing.T) {
-	for _, provider := range []string{"docker", "microsandbox", "e2b"} {
-		t.Run(provider, func(t *testing.T) {
-			s, w, view, input := webSpecificationFixture(t, provider)
-			setup, err := s.GetSandboxSetup(t.Context())
-			if err != nil || !reflect.DeepEqual(setup.Specification, input.DeploymentSpec) || view.Specification == nil || !reflect.DeepEqual(*view.Specification, input.DeploymentSpec) || view.SpecificationDigest != input.DeploymentSpec.Digest(provider) {
-				t.Fatal("saved deployment lost its resources or Runtime provenance", err)
-			}
-			preview, err := SandboxSetupForSelection(view.InstallationID, input)
-			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || preview.IdleSeconds != setup.IdleSeconds || preview.RetentionSeconds != setup.RetentionSeconds || !reflect.DeepEqual(preview.Configuration, setup.Configuration) {
-				t.Fatal("preview and persisted normalized deployment disagree", err)
-			}
-			input.ExpectedGeneration = view.Generation
-			retry, err := w.InitializeSandboxDeployment(t.Context(), view.InstallationID, input)
-			if err != nil || !reflect.DeepEqual(retry, view) {
-				t.Fatal("identical specification changed the generation", err)
-			}
-			changed := input
-			changed.Resources.CPUs++
-			if _, err := w.InitializeSandboxDeployment(t.Context(), view.InstallationID, changed); !errors.Is(err, ErrSandboxDeploymentConflict) {
-				t.Fatal("initial setup silently resized a configured deployment", err)
-			}
-			file := RuntimeDeployment{InstallationID: view.InstallationID, BackendFingerprint: setup.BackendFingerprint, ProviderKind: provider, AdmissionPaused: true}
-			for _, candidate := range []*RuntimeDeployment{nil, &file} {
-				if err := w.ConfigureRuntimeDeployment(t.Context(), candidate); !errors.Is(err, ErrSandboxDeploymentConflict) {
-					t.Fatal("file configuration replaced database ownership", err)
-				}
-			}
-			after, err := s.GetRuntimeDeployment(t.Context())
-			if err != nil || !reflect.DeepEqual(after, view) {
-				t.Fatal("rejected writes changed the committed specification", err)
-			}
-		})
-	}
-}
-
 func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "docker")
-	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 4}))
+	nodes := deploymentService(t, s)
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for range 2 {
-		config, err := s.RuntimeNodeConfiguration(t.Context(), "", token)
+		config, err := nodes.NodeConfiguration(t.Context(), "", token, 0)
 		if err != nil || config.Generation != view.Generation || config.InstallationID != view.InstallationID || !reflect.DeepEqual(config.Specification, input.DeploymentSpec) || config.SpecificationDigest != view.SpecificationDigest {
 			t.Fatal("bootstrap did not return the saved configuration", err)
 		}
 	}
-	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", "invalid-token"); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := nodes.NodeConfiguration(t.Context(), "", "invalid-token", 0); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("unauthenticated configuration read", err)
 	}
-	node := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "bootstrap", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest}
-	for _, change := range []func(*RuntimeNodeEnrollment){
-		func(n *RuntimeNodeEnrollment) { n.DeploymentGeneration++ },
-		func(n *RuntimeNodeEnrollment) { n.SpecificationDigest = strings.Repeat("c", 64) },
+	node := deployment.Enrollment{NodeID: uuid.NewString(), Name: "bootstrap", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest}
+	for _, change := range []func(*deployment.Enrollment){
+		func(n *deployment.Enrollment) { n.DeploymentGeneration++ },
+		func(n *deployment.Enrollment) { n.SpecificationDigest = strings.Repeat("c", 64) },
 	} {
 		wrong := node
 		change(&wrong)
-		if _, err := s.EnrollRuntimeNode(t.Context(), token, wrong); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
+		if _, err := nodes.Enroll(t.Context(), token, wrong); !errors.Is(err, deployment.ErrSpecificationMismatch) {
 			t.Fatal("mismatched node configuration enrolled", err)
 		}
 	}
-	if _, err := s.EnrollRuntimeNode(t.Context(), token, node); err != nil {
+	if _, err := nodes.Enroll(t.Context(), token, node); err != nil {
 		t.Fatal("read or mismatch consumed the enrollment", err)
 	}
-	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", token); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := nodes.NodeConfiguration(t.Context(), "", token, 0); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("consumed enrollment still authorized bootstrap", err)
 	}
-	if _, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxResetRequest{Clear: "auto", ExpectedGeneration: view.Generation}); err != nil {
+	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxResetRequest{Clear: "auto", ExpectedGeneration: view.Generation}); err != nil {
 		t.Fatal(err)
 	}
-	config, err := s.RuntimeNodeConfiguration(t.Context(), node.NodeID, node.Credential)
+	config, err := nodes.NodeConfiguration(t.Context(), node.NodeID, node.Credential, 0)
 	if err != nil || config.SpecificationDigest != view.SpecificationDigest {
 		t.Fatal("retained node identity could not recover configuration in maintenance", err)
 	}
-	if _, err := s.RuntimeNodeConfiguration(t.Context(), node.NodeID, "invalid-credential"); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := nodes.NodeConfiguration(t.Context(), node.NodeID, "invalid-credential", 0); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("retained identity bypassed credential validation", err)
 	}
 	for _, field := range []string{"deployment_generation", "specification_digest"} {
@@ -144,10 +111,10 @@ func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T)
 		if _, err := s.pool.Exec(t.Context(), query, args...); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
+		if _, err := nodes.AuthenticateNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, deployment.ErrSpecificationMismatch) {
 			t.Fatal("stale persisted node authenticated", field, err)
 		}
-		if _, err := s.RuntimeNodeConfiguration(t.Context(), node.NodeID, node.Credential); !errors.Is(err, ErrRuntimeSpecificationMismatch) {
+		if _, err := nodes.NodeConfiguration(t.Context(), node.NodeID, node.Credential, 0); !errors.Is(err, deployment.ErrSpecificationMismatch) {
 			t.Fatal("stale persisted node received configuration", field, err)
 		}
 		if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET deployment_generation=$2,specification_digest=$3 WHERE id=$1", node.NodeID, view.Generation, view.SpecificationDigest); err != nil {
@@ -160,6 +127,7 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 	for _, state := range []string{"pending", "creating", "running", "stopped", "snapshot", "cleanup_pending"} {
 		t.Run(state, func(t *testing.T) {
 			s, w, view, input := webSpecificationFixture(t, "microsandbox")
+			changes, deployments := deploymentExecution(t, w), deploymentService(t, s)
 			node := specificationNode(t, s, view)
 			tenant := uuid.NewString()
 			session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), node.NodeID)
@@ -198,7 +166,7 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 					}
 				}
 			}
-			before, err := s.GetRuntimeDeployment(t.Context())
+			before, err := deployments.View(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -220,17 +188,17 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 					runtime.SourceCommit = strings.Repeat("1", 40)
 					changed.Runtime = &runtime
 				}
-				update := SandboxDeploymentUpdateRequest{ExpectedGeneration: view.Generation, SandboxDeploymentSetupRequest: changed}
-				if err := w.CheckSandboxDeploymentSwitch(t.Context(), view.InstallationID, update); err != nil {
+				changed.ExpectedGeneration = view.Generation
+				if _, _, err := changes.ClassifyChange(t.Context(), view.InstallationID, changed); err != nil {
 					t.Fatal(field, err)
 				}
-				next, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, update)
+				next, err := changes.Update(SandboxResetTestContext(t.Context()), view.InstallationID, changed)
 				if err != nil || next.Generation != view.Generation+1 || next.OwnerEpoch != view.OwnerEpoch {
 					t.Fatal(field, next, err)
 				}
 				view = next
 			}
-			after, err := s.GetRuntimeDeployment(t.Context())
+			after, err := deployments.View(t.Context())
 			if err != nil || before.Resources != after.Resources {
 				t.Fatal("online specification change altered ownership", err)
 			}
@@ -261,30 +229,15 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 			runtime := *input.Runtime
 			runtime.SourceCommit = strings.Repeat("2", 40)
 			changed.Runtime = &runtime
-			committed, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxDeploymentUpdateRequest{ExpectedGeneration: view.Generation, SandboxDeploymentSetupRequest: changed})
-			if err != nil || committed.Generation != view.Generation+1 || committed.Reset != nil || committed.Resources != (SandboxDeploymentResources{}) || committed.Specification == nil || !reflect.DeepEqual(*committed.Specification, changed.DeploymentSpec) {
+			changed.ExpectedGeneration = view.Generation
+			committed, err := changes.Update(SandboxResetTestContext(t.Context()), view.InstallationID, changed)
+			if err != nil || committed.Generation != view.Generation+1 || committed.Reset != nil || committed.Resources != (deployment.Resources{}) || committed.Specification == nil || !reflect.DeepEqual(*committed.Specification, changed.DeploymentSpec) {
 				t.Fatal("completed cleanup did not permit the replacement", err)
 			}
-			if _, err := s.AuthenticateRuntimeNode(t.Context(), node.NodeID, node.Credential); err != nil {
+			if _, err := deployments.AuthenticateNode(t.Context(), node.NodeID, node.Credential); err != nil {
 				t.Fatal("online change retired serving identity", err)
 			}
 		})
-	}
-}
-
-func TestSandboxSpecificationInitialCredentialRemainsPrivate(t *testing.T) {
-	s, _, view, input := webSpecificationFixture(t, "e2b")
-	raw, err := json.Marshal(view)
-	if err != nil || bytes.Contains(raw, []byte(input.Configuration.(*e2b.DeploymentConfiguration).APIKey)) || bytes.Contains(raw, []byte("api_key")) {
-		t.Fatal("public deployment serialized a private credential", err)
-	}
-	var stored []byte
-	if err := s.pool.QueryRow(t.Context(), "SELECT provider_credential FROM runtime_deployment").Scan(&stored); err != nil || len(stored) == 0 || bytes.Contains(stored, []byte(input.Configuration.(*e2b.DeploymentConfiguration).APIKey)) {
-		t.Fatal("private credential was not encrypted", err)
-	}
-	// The credential is rejected before the cloud deployment mode is reported.
-	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", input.Configuration.(*e2b.DeploymentConfiguration).APIKey); !errors.Is(err, ErrRuntimeNodeCredential) {
-		t.Fatal("cloud key authorized node bootstrap", err)
 	}
 }
 
@@ -316,8 +269,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 	}
 	go func() {
 		<-start
-		_, err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxResetRequest{Clear: "auto", ExpectedGeneration: view.Generation})
-		maintenance <- err
+		maintenance <- w.StartSandboxReset(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxResetRequest{Clear: "auto", ExpectedGeneration: view.Generation})
 	}()
 	close(start)
 	if err := <-maintenance; err != nil {
@@ -341,12 +293,13 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 			}
 		}
 	}
-	after, err := s.GetRuntimeDeployment(t.Context())
+	after, err := deploymentService(t, s).View(t.Context())
 	if err != nil || after.Reset == nil || after.Generation != view.Generation || after.Resources.Allocations != allocated || after.Resources.Pending != int64(len(sessions))-allocated {
 		t.Fatal("concurrent maintenance lost resource accounting", after.Resources, err)
 	}
 	input.Resources.CPUs++
-	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxDeploymentUpdateRequest{ExpectedGeneration: view.Generation, SandboxDeploymentSetupRequest: input}); !errors.Is(err, ErrSandboxResetInProgress) {
+	input.ExpectedGeneration = view.Generation
+	if _, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, input); !errors.Is(err, deployment.ErrResetInProgress) {
 		t.Fatal("allocation race bypassed replacement guard", err)
 	}
 }
@@ -357,12 +310,12 @@ func TestNodeBoundToAnotherPublicURLGetsNoNewSandboxes(t *testing.T) {
 	s, _, view, _ := webSpecificationFixture(t, "docker")
 	s.SetPublicURL("https://old.example")
 	node := specificationNode(t, s, view)
-	nodes, err := s.ListRuntimeNodes(t.Context())
+	nodes, err := deploymentService(t, s).ListNodes(t.Context())
 	if err != nil || len(nodes) != 1 || nodes[0].ID != node.NodeID || nodes[0].CoreURL != "https://old.example" {
 		t.Fatal("enrollment did not record the node's address", nodes, err)
 	}
 	s.SetPublicURL("https://new.example")
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrRuntimeNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodeUnavailable) {
 		t.Fatal("placed a new sandbox on a node bound to the old address", err)
 	}
 	bindings, err := s.AddressBindings(t.Context())
@@ -375,88 +328,19 @@ func TestNodeBoundToAnotherPublicURLGetsNoNewSandboxes(t *testing.T) {
 	}
 }
 
-// Enrollment records the command's public ID and the node's Core address. A node
-// using another address is refused without consuming the token, and a node
-// enrolled with a token issued before Core recorded IDs reports none.
-func TestEnrollmentRecordsItsIDAndRefusesAnotherAddress(t *testing.T) {
-	s, _, view, _ := webSpecificationFixture(t, "docker")
-	s.SetPublicURL("https://core.example")
-	issued, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 2})
-	if err != nil || uuid.Validate(issued.ID) != nil || issued.Token == "" {
-		t.Fatal(issued.ID, err)
-	}
-	input := RuntimeNodeEnrollment{NodeID: uuid.NewString(), Name: "addressed", Credential: strings.Repeat("a", 64), Provider: "docker",
-		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: "https://other.example"}
-	if _, err := s.EnrollRuntimeNode(t.Context(), issued.Token, input); !errors.Is(err, ErrRuntimeNodeAddressMismatch) {
-		t.Fatal("enrolled a node that uses another Core address", err)
-	}
-	input.CoreURL = "https://core.example"
-	if _, err := s.EnrollRuntimeNode(t.Context(), issued.Token, input); err != nil {
-		t.Fatal("the refused enrollment consumed its token", err)
-	}
-	earlier := strings.Repeat("e", 64)
-	if _, err := s.pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VALUES($1,$2,clock_timestamp()+interval '10 minutes')",
-		runtimeTokenDigest(earlier), view.InstallationID); err != nil {
-		t.Fatal(err)
-	}
-	older := input
-	older.NodeID, older.Credential = uuid.NewString(), strings.Repeat("o", 64)
-	if _, err := s.EnrollRuntimeNode(t.Context(), earlier, older); err != nil {
-		t.Fatal(err)
-	}
-	nodes, err := s.ListRuntimeNodes(t.Context())
-	if err != nil || len(nodes) != 2 {
-		t.Fatal(nodes, err)
-	}
-	for _, node := range nodes {
-		switch node.ID {
-		case input.NodeID:
-			if node.EnrollmentID == nil || *node.EnrollmentID != issued.ID || node.CoreURL != "https://core.example" {
-				t.Fatal("the node did not record its enrollment", node.EnrollmentID, node.CoreURL)
-			}
-		case older.NodeID:
-			if node.EnrollmentID != nil {
-				t.Fatal("a token without an ID reported one", *node.EnrollmentID)
-			}
-		}
-	}
-}
-
 // An E2B selection saved before the public URL became loopback admits no new
 // Session, and its configuration stays readable for cleanup.
 func TestE2BAdmitsNothingWhileThePublicURLIsLoopback(t *testing.T) {
 	s, _, _, _ := webSpecificationFixture(t, "e2b")
 	s.SetPublicURL("http://127.0.0.1:8091")
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrSandboxPublicURLUnreachable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrPublicURLUnreachable) {
 		t.Fatal("admitted an E2B Session that could not reach Core", err)
 	}
-	if setup, err := s.GetSandboxSetup(t.Context()); err != nil || setup.Provider != "e2b" {
+	if setup, err := deploymentService(t, s).Setup(t.Context()); err != nil || setup.Provider != "e2b" {
 		t.Fatal("the saved E2B selection became unreadable", err)
 	}
 	s.SetPublicURL("https://core.example")
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestDatabaseDoesNotEnumerateProviderRegistrations(t *testing.T) {
-	s, w, view, input := webSpecificationFixture(t, "docker")
-	tx, err := s.pool.Begin(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback(t.Context())
-	if _, err = tx.Exec(t.Context(), "UPDATE runtime_deployment SET provider_kind='new-adapter' WHERE singleton=true"); err != nil {
-		t.Fatal("database enumerated provider implementations", err)
-	}
-	// Roll back before calling the serialized Store, which still rejects unknown
-	// registrations even though persistence can represent a new adapter.
-	if err = tx.Rollback(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	input.Provider = "new-adapter"
-	input.ExpectedGeneration = view.Generation
-	if _, err = w.InitializeSandboxDeployment(t.Context(), view.InstallationID, input); !errors.Is(err, ErrInvalidInput) {
-		t.Fatal("unknown adapter reached persistence", err)
 	}
 }

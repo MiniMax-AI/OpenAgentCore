@@ -101,8 +101,8 @@ func daemonComposition(t testing.TB) http.Handler {
 		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
 		Execution: &api.Execution{ExecutorURL: "wss://core.example/api/v1/agent-daemon/ws", Admission: struct{ api.Admission }{},
 			SessionArchive: struct{ api.SessionArchive }{}, Workspaces: struct{ api.EnvironmentWorkspaces }{}},
-		Sandboxes: &api.Sandboxes{Deployment: struct{ api.Deployment }{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
-			ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
+		Sandboxes: &api.Sandboxes{Deployment: struct{ api.Deployment }{}, NodeAllocations: struct{ api.NodeAllocations }{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
+			DeploymentReset: struct{ api.DeploymentReset }{}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})
 	if err != nil {
 		t.Fatal(err)
