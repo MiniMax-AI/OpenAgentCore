@@ -355,10 +355,11 @@ func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 	if _, err := keylessStore.GetAgent(ctx, tenant, agent.ID); err != nil {
 		t.Fatal("plain read required Agent decryption", err)
 	}
-	for name, s := range map[string]*agentpg.Store{"missing key": keylessStore, "wrong key": agentpg.New(pgunit.NewPool(pool), testCipher(t, 99))} {
-		if _, _, err := s.GetAgentWithModelProvider(ctx, tenant, agent.ID); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-			t.Fatalf("%s opened the bundle: %v", name, err)
-		}
+	if _, _, err := keylessStore.GetAgentWithModelProvider(ctx, tenant, agent.ID); !errors.Is(err, credentialcrypto.ErrUnavailable) {
+		t.Fatal("missing key opened the bundle", err)
+	}
+	if _, _, err := agentpg.New(pgunit.NewPool(pool), testCipher(t, 99)).GetAgentWithModelProvider(ctx, tenant, agent.ID); err == nil || err.Error() != "agent model provider decryption failed" {
+		t.Fatal("wrong key was not a decryption failure", err)
 	}
 	if _, err := keyless.Create(ctx, create); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("unencrypted Agent create accepted", err)
@@ -427,6 +428,34 @@ func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 	}
 	if n := count(t, pool, "SELECT count(*) FROM agent_model_execution WHERE agent_id=$1", agent.ID); n != 0 {
 		t.Fatal("Agent delete retained secret")
+	}
+}
+
+// A bundle sealed to another Agent is a decryption failure, never a missing
+// key or a missing bundle.
+func TestAgentBundleSealedToAnotherAgentDoesNotOpen(t *testing.T) {
+	pool := pgtest.Open(t)
+	c := testCipher(t, 32)
+	store, service := open(t, pool, c)
+	ctx, tenant := t.Context(), uuid.NewString()
+	provider := providerFixture(0)
+	agent, err := service.Create(ctx, agents.CreateCommand{TenantID: tenant, Configuration: providerConfiguration(t, provider, "codex"), ModelProvider: provider})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := c.SealAgentModelExecution(raw, tenant, uuid.NewString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, "UPDATE agent_model_execution SET encrypted_config=$2 WHERE agent_id=$1", agent.ID, sealed); err != nil {
+		t.Fatal(err)
+	}
+	if _, inherited, err := store.GetAgentWithModelProvider(ctx, tenant, agent.ID); err == nil || err.Error() != "agent model provider decryption failed" || inherited != nil {
+		t.Fatal("a wrong binding was not a decryption failure", err)
 	}
 }
 

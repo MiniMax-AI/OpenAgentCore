@@ -56,7 +56,8 @@ type Reader interface {
 	GetAgent(ctx context.Context, tenantID, agentID string) (Agent, error)
 	ListAgents(context.Context, ListQuery) (Page, error)
 	// GetAgentWithModelProvider reads the Agent and its opened model provider
-	// bundle from one snapshot. The bundle is nil when the Agent has none; a
-	// bundle that cannot be opened is credentialcrypto.ErrUnavailable.
+	// bundle from one snapshot. The bundle is nil when the Agent has none.
+	// Opening one without a credential key is credentialcrypto.ErrUnavailable;
+	// a bundle that fails to open is an internal error.
 	GetAgentWithModelProvider(ctx context.Context, tenantID, agentID string) (Agent, *v1.ModelProviderInput, error)
 }
