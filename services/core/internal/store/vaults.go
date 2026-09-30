@@ -48,7 +48,7 @@ func (s *Store) CreateVault(ctx context.Context, tenantID string, input CreateVa
 		return Vault{}, err
 	}
 	var created Vault
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.CreateVault(ctx, sqlc.CreateVaultParams{
 			ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant,

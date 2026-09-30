@@ -47,7 +47,7 @@ func issuedExecutorCredential(id, environment pgtype.UUID, token string) IssuedE
 
 func (s *Store) withExecutorCredentialTarget(ctx context.Context, principal identity.Principal, environment pgtype.UUID, apply func(context.Context, *sqlc.Queries) error) error {
 	if !environment.Valid {
-		return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error { return apply(ctx, s.queries.WithTx(tx)) })
+		return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error { return apply(ctx, s.queries.WithTx(tx)) })
 	}
 	owned, err := s.GetEnvironment(ctx, principal.TenantID, uuid.UUID(environment.Bytes).String())
 	if err != nil {

@@ -43,16 +43,7 @@ func (s *Store) withLockedSession(ctx context.Context, tenantID, sessionID strin
 			return err
 		}
 	}
-	begin := func(ctx context.Context, apply func(pgx.Tx) error) error {
-		return pgx.BeginFunc(ctx, s.pool, apply)
-	}
-	if s.executionLease != nil {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, executionTransactionTimeout)
-		defer cancel()
-		begin = s.executionLease.transaction
-	}
-	return begin(ctx, func(tx pgx.Tx) error {
+	return s.writer.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		session, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: tenant, ID: id})
 		if errors.Is(err, pgx.ErrNoRows) {

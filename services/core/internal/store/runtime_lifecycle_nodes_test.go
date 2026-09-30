@@ -230,7 +230,7 @@ func TestRuntimeLifecycleLegacyLaneAndOwnerLoss(t *testing.T) {
 	if _, err := w.ListUnallocatedHostedEnvironmentsForNode(t.Context(), "", "bad"); err == nil {
 		t.Fatal("invalid cursor accepted")
 	}
-	if err := w.executionLease.Close(t.Context()); err != nil {
+	if err := w.CloseExecution(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.ListRuntimeLifecycleNodes(t.Context()); err == nil {

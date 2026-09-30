@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -12,7 +13,7 @@ import (
 // ListRuntimeLifecycleNodes includes offline nodes: loss of connectivity never
 // releases their resources. The empty identity is the single legacy lifecycle.
 func (s *Store) ListRuntimeLifecycleNodes(ctx context.Context) ([]string, error) {
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
+	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
 	if err := s.CheckExecutionOwnership(ctx); err != nil {
 		return nil, err
@@ -50,7 +51,7 @@ func (s *Store) ListRuntimeAllocationsForNode(ctx context.Context, node, after s
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
+	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
 	if err := s.CheckExecutionOwnership(ctx); err != nil {
 		return nil, err
@@ -73,7 +74,7 @@ func (s *Store) ListUnallocatedHostedEnvironmentsForNode(ctx context.Context, no
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
+	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
 	if err := s.CheckExecutionOwnership(ctx); err != nil {
 		return nil, err
@@ -96,7 +97,7 @@ func (s *Store) ResolveRuntimeLifecycleNode(ctx context.Context, tenant, environ
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
+	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
 	if err := s.CheckExecutionOwnership(ctx); err != nil {
 		return "", err

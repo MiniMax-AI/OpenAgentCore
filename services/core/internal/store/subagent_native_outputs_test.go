@@ -13,7 +13,7 @@ import (
 
 func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	s, pool := testStore(t)
-	owner := executionLease(t, s).Store()
+	owner := executionWriter(t, s)
 	tenant, session := newSubagentSession(t, s)
 	host, err := s.CreateDevice(t.Context(), tenant, "child outputs", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
@@ -87,7 +87,7 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 
 func TestSubagentCancelledPartialMessageSurvivesHistoryReplay(t *testing.T) {
 	s, _ := testStore(t)
-	owner := executionLease(t, s).Store()
+	owner := executionWriter(t, s)
 	tenant, session := newSubagentSession(t, s)
 	host, err := s.CreateDevice(t.Context(), tenant, "cancelled child", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {

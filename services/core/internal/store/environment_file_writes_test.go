@@ -12,7 +12,6 @@ import (
 
 type fileWriteFixture struct {
 	s, writer *Store
-	lease     *ExecutionLease
 	tenant    string
 	session   Session
 	env       Environment
@@ -22,14 +21,14 @@ type fileWriteFixture struct {
 func newFileWriteFixture(t *testing.T) fileWriteFixture {
 	t.Helper()
 	s, _ := testStore(t)
-	lease := executionLease(t, s)
+	writer := executionWriter(t, s)
 	tenant := uuid.NewString()
 	session, env := localEnvironment(t, s, tenant)
 	host, err := s.CreateEnvironmentDevice(t.Context(), tenant, env.ID, "file owner", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fileWriteFixture{s: s, writer: lease.Store(), lease: lease, tenant: tenant, session: session, env: env,
+	return fileWriteFixture{s: s, writer: writer, tenant: tenant, session: session, env: env,
 		key: FileWriteIdentity{ID: uuid.NewString(), DeviceID: host.ID, RequestSHA256: strings.Repeat("a", 64)}}
 }
 
@@ -41,14 +40,14 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 		t.Fatal(first, err)
 	}
 	var killed bool
-	if err := f.s.pool.QueryRow(ctx, "SELECT pg_terminate_backend($1, 1000)", f.lease.conn.Conn().PgConn().PID()).Scan(&killed); err != nil || !killed {
+	if err := f.s.pool.QueryRow(ctx, "SELECT pg_terminate_backend($1, 1000)", executionOwnerPID(t, f.s.pool)).Scan(&killed); err != nil || !killed {
 		t.Fatal(killed, err)
 	}
 	if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, "committed"); err == nil {
 		t.Fatal("lost writer settled an upload")
 	}
 	reopened, _ := testStore(t)
-	next := executionLease(t, reopened).Store()
+	next := executionWriter(t, reopened)
 	got, err := next.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key)
 	if err != nil || !got.Replayed || got.State != "pending" || !got.CreatedAt.Equal(first.CreatedAt) || got.Identity != f.key {
 		t.Fatal("restart lost unknown write identity", got, err)

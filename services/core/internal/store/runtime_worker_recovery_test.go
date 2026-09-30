@@ -34,12 +34,12 @@ func runtimeWorkerHarness(t *testing.T) (*dispatchHarness, *pgxpool.Pool) {
 
 func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.T) {
 	h, _ := runtimeWorkerHarness(t)
-	lease, err := h.s.AcquireExecutionLease(t.Context())
+	writer, err := store.NewExecution(t.Context(), h.s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	h.d.Store = lease.Store()
+	t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
+	h.d.Store = writer
 	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)

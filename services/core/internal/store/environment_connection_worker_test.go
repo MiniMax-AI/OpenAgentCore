@@ -23,19 +23,19 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lease, err := s.AcquireExecutionLease(t.Context())
+	writer, err := store.NewExecution(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	generation := uuid.NewString()
-	if err := lease.Store().ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
+	if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 		t.Fatal(err)
 	}
-	if err := lease.Store().ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
+	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
 	awaitRelease := observeExecutionLeaseRelease(t, pool)
-	if err := lease.Close(t.Context()); err != nil {
+	if err := writer.CloseExecution(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	awaitRelease()

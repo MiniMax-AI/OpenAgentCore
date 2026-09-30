@@ -40,11 +40,10 @@ func TestWorkerMetricsUnknownAndDetached(t *testing.T) {
 }
 
 func TestWorkerMetricsFailuresAndClosure(t *testing.T) {
-	worker := &Worker{lease: &store.ExecutionLease{}}
+	// A pooled Store has no execution lease, so its ownership check fails.
+	worker := &Worker{dispatcher: &Dispatcher{Store: &store.Store{}}}
 	worker.observeOwnership(nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := worker.CheckOwnership(ctx); !errors.Is(err, context.Canceled) {
+	if err := worker.CheckOwnership(t.Context()); !errors.Is(err, store.ErrExecutionAuthority) {
 		t.Fatalf("ownership error changed: %v", err)
 	}
 	if worker.MetricsSnapshot().ExecutionOwner != nil {

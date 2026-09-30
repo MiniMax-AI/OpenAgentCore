@@ -3,21 +3,16 @@ package providers_test
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
@@ -80,41 +75,8 @@ func (regionalCodec) DiscoverConfiguration(context.Context, sandbox.Configuratio
 // A registered native configuration reaches the ordinary API and Store without
 // adding its fields or kind to either Core package.
 func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
-	dsn := os.Getenv("OAC_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("dedicated PostgreSQL required")
-	}
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil || !strings.HasPrefix(cfg.ConnConfig.Database, "oac_") || !strings.HasSuffix(cfg.ConnConfig.Database, "_tests") {
-		t.Fatal("dedicated test database required")
-	}
-	admin, err := pgxpool.NewWithConfig(t.Context(), cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer admin.Close()
-	name := "oac_provider_" + uuid.NewString()[:8] + "_tests"
-	quoted := pgx.Identifier{name}.Sanitize()
-	if _, err = admin.Exec(t.Context(), "CREATE DATABASE "+quoted); err != nil {
-		t.Fatal(err)
-	}
-	defer admin.Exec(context.Background(), "DROP DATABASE "+quoted+" WITH (FORCE)")
-	cfg.ConnConfig.Database = name
-	db := sql.OpenDB(stdlib.GetConnector(*cfg.ConnConfig))
-	migration, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../../migrations"), goose.WithTableName("agents_api_schema_version"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = migration.Up(t.Context())
-	db.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	pool, err := pgxpool.NewWithConfig(t.Context(), cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pool.Close()
+	// The deployment identity and execution lease are database-wide.
+	pool := pgtest.OpenIsolated(t, nil)
 	kind := "regional-fixture"
 	adapter, err := providers.Lookup("docker")
 	if err != nil {
@@ -123,12 +85,11 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	adapter.Configuration = regionalCodec{}
 	providers.RegisterFixture(t, kind, adapter)
 	s := store.New(pool)
-	lease, err := s.AcquireExecutionLease(t.Context())
+	w, err := store.NewExecution(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lease.Close(context.Background())
-	w := lease.Store()
+	defer w.CloseExecution(context.Background())
 	installation := uuid.NewString()
 	if err = w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 		t.Fatal(err)

@@ -64,7 +64,7 @@ func TestDeviceCredentialWithoutManagedNodeRetainsPublicRouteIdentity(t *testing
 		t.Fatal(err)
 	}
 	_, environment := localEnvironment(t, s, tenant)
-	allocation, err := executionLease(t, s).Store().ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential("allocation-token"))
+	allocation, err := executionWriter(t, s).ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential("allocation-token"))
 	if err != nil {
 		t.Fatal(err)
 	}

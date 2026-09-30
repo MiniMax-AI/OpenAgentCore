@@ -65,7 +65,7 @@ func (s *Store) CreateProject(ctx context.Context, id, name string) (Project, er
 	}
 	tenantID, _ := parseID(uuid.NewString())
 	var result Project
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		_, err := q.EnsureProjectScope(ctx, sqlc.EnsureProjectScopeParams{TenantID: tenantID, OrganizationID: "core", ProjectID: "proj_" + id})
 		if err != nil {
@@ -144,7 +144,7 @@ func (s *Store) mutateProject(ctx context.Context, id, name string, archive bool
 		return Project{}, ErrNotFound
 	}
 	var result Project
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		_, err := q.LockProjectForUpdate(ctx, projectID)
 		if errors.Is(err, pgx.ErrNoRows) {

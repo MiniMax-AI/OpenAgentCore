@@ -70,7 +70,7 @@ func (s *Store) SetDeploymentModelProvider(ctx context.Context, harness string, 
 		return DeploymentModelProvider{}, ErrCredentialStorageUnavailable
 	}
 	var result DeploymentModelProvider
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.UpsertDeploymentModelProvider(ctx, sqlc.UpsertDeploymentModelProviderParams{
 			Harness: harness, Protocol: provider.Protocol, BaseUrl: provider.BaseURL, Model: configuration.Model, HarnessConfig: v1.ResolvedHarnessConfig(configuration.HarnessConfig),
@@ -88,7 +88,7 @@ func (s *Store) SetDeploymentModelProvider(ctx context.Context, harness string, 
 // DeleteDeploymentModelProvider is idempotent; each successful call is audited.
 // Sessions that already froze the default keep their snapshot.
 func (s *Store) DeleteDeploymentModelProvider(ctx context.Context, harness string) error {
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		if _, err := q.DeleteDeploymentModelProvider(ctx, harness); err != nil {
 			return err

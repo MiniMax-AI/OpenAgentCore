@@ -96,30 +96,24 @@ func (s *Store) ReadSessionArtifact(ctx context.Context, tenantID, sessionID, ar
 	if consume == nil {
 		return ErrInvalidInput
 	}
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(context.Background())
-	row, err := s.queries.WithTx(tx).GetSessionArtifact(ctx, lookup)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-	objects := tx.LargeObjects()
-	body, err := objects.Open(ctx, row.BodyOid.Uint32, pgx.LargeObjectModeRead)
-	if err != nil {
-		return err
-	}
-	if err := consume(artifactFromRow(row), body); err != nil {
-		return err
-	}
-	if err := body.Close(); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		row, err := s.queries.WithTx(tx).GetSessionArtifact(ctx, lookup)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		objects := tx.LargeObjects()
+		body, err := objects.Open(ctx, row.BodyOid.Uint32, pgx.LargeObjectModeRead)
+		if err != nil {
+			return err
+		}
+		if err := consume(artifactFromRow(row), body); err != nil {
+			return err
+		}
+		return body.Close()
+	})
 }
 
 func (s *Store) DeleteSessionArtifact(ctx context.Context, tenantID, sessionID, artifactID string) error {
@@ -127,35 +121,29 @@ func (s *Store) DeleteSessionArtifact(ctx context.Context, tenantID, sessionID, 
 	if err != nil {
 		return err
 	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(context.Background())
-	q := s.queries.WithTx(tx)
-	// Use the same lock order as whole-Session deletion and Turn publication.
-	locked, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID})
-	if errors.Is(err, pgx.ErrNoRows) || err == nil && locked.DeletedAt.Valid {
-		return ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-	oid, err := q.DeleteSessionArtifact(ctx, sqlc.DeleteSessionArtifactParams(lookup))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-	objects := tx.LargeObjects()
-	if err := objects.Unlink(ctx, oid.Uint32); err != nil {
-		return err
-	}
-	if err := recordWriteAudit(ctx, q, tenantID, "delete", "artifact", uuid.UUID(lookup.ID.Bytes).String(), uuid.UUID(lookup.SessionID.Bytes).String()); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+		// Use the same lock order as whole-Session deletion and Turn publication.
+		locked, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID})
+		if errors.Is(err, pgx.ErrNoRows) || err == nil && locked.DeletedAt.Valid {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		oid, err := q.DeleteSessionArtifact(ctx, sqlc.DeleteSessionArtifactParams(lookup))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		objects := tx.LargeObjects()
+		if err := objects.Unlink(ctx, oid.Uint32); err != nil {
+			return err
+		}
+		return recordWriteAudit(ctx, q, tenantID, "delete", "artifact", uuid.UUID(lookup.ID.Bytes).String(), uuid.UUID(lookup.SessionID.Bytes).String())
+	})
 }
 
 func artifactLookup(tenantID, sessionID, artifactID string) (sqlc.GetSessionArtifactParams, error) {

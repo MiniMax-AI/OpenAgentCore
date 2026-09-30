@@ -48,7 +48,7 @@ func (s *Store) UpdateStaticCredential(ctx context.Context, tenantID, vaultID, c
 		return Credential{}, errors.New("credential encryption failed")
 	}
 	var updated Credential
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.UpdateStaticCredential(ctx, sqlc.UpdateStaticCredentialParams{
 			TenantID: tenant, VaultID: vault, ID: id, McpServerUrl: current.MCPServerURL, TokenCiphertext: ciphertext,

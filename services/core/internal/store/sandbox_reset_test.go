@@ -352,10 +352,10 @@ func TestSandboxResetOwnerRestartRetainsDeadlineAndProvenance(t *testing.T) {
 	// Model an abrupt owner loss and wait for PostgreSQL to terminate that backend,
 	// rather than assuming local TCP cleanup acknowledges advisory-lock release.
 	var stopped bool
-	if err := s.pool.QueryRow(t.Context(), `SELECT pg_terminate_backend($1,1000)`, w.executionLease.conn.Conn().PgConn().PID()).Scan(&stopped); err != nil || !stopped {
+	if err := s.pool.QueryRow(t.Context(), `SELECT pg_terminate_backend($1,1000)`, executionOwnerPID(t, s.pool)).Scan(&stopped); err != nil || !stopped {
 		t.Fatal(stopped, err)
 	}
-	successor := executionLease(t, s).Store()
+	successor := executionWriter(t, s)
 	current, err := s.GetRuntimeDeployment(t.Context())
 	if err != nil || !current.Reset.RequestedAt.Equal(reset.Reset.RequestedAt) || !current.Reset.DeadlineAt.Equal(*reset.Reset.DeadlineAt) {
 		t.Fatal("restart moved reset deadline", current, err)

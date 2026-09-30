@@ -111,8 +111,7 @@ func TestEnvironmentInputReservationConcurrentIdentity(t *testing.T) {
 
 func TestEnvironmentInputReservationPromotionAndDirectRetries(t *testing.T) {
 	s, pool := testStore(t)
-	lease := executionLease(t, s)
-	writer := lease.Store()
+	writer := executionWriter(t, s)
 	tenant, session := environmentInputSession(t, s)
 	ctx := context.Background()
 	first := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
@@ -166,12 +165,12 @@ func TestEnvironmentInputReservationPromotionAndDirectRetries(t *testing.T) {
 	if err != nil || len(retry) != 2 || !retry[0].Replayed || retry[0].Sequence != promoted.Receipts[0].Sequence {
 		t.Fatal("direct retry after promotion", retry, err)
 	}
-	if err := lease.Close(ctx); err != nil {
+	if err := writer.CloseExecution(ctx); err != nil {
 		t.Fatal(err)
 	}
 	pool.Close()
 	restarted, pool := testStore(t)
-	after, err := executionLease(t, restarted).Store().PromoteEnvironmentInput(ctx, tenant, session.ID, first.ID)
+	after, err := executionWriter(t, restarted).PromoteEnvironmentInput(ctx, tenant, session.ID, first.ID)
 	if err != nil || after.State != EnvironmentInputAdmitted || after.Receipts[0].Sequence != promoted.Receipts[0].Sequence {
 		t.Fatal("restart repeated promotion", after, err)
 	}
@@ -209,8 +208,7 @@ func TestEnvironmentInputReservationKeepsEarlierDirectIdentity(t *testing.T) {
 
 func TestEnvironmentInputReservationRejectsUnsupportedOrForeignState(t *testing.T) {
 	s, _ := testStore(t)
-	lease := executionLease(t, s)
-	writer := lease.Store()
+	writer := executionWriter(t, s)
 	tenant, session := environmentInputSession(t, s)
 	ctx := context.Background()
 	pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")

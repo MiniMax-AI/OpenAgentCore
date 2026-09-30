@@ -27,8 +27,8 @@ type RuntimeDeployment struct {
 // AdmissionPaused must be committed for the old installation before any switch.
 // A nil selection never forgets the previous identity or unresolved resources.
 func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *RuntimeDeployment) error {
-	if s.executionLease == nil {
-		return ErrInvalidInput
+	if err := s.checkExecutionAuthority(); err != nil {
+		return err
 	}
 	if selected != nil {
 		copy := *selected
@@ -46,9 +46,7 @@ func (s *Store) ConfigureRuntimeDeployment(ctx context.Context, selected *Runtim
 		}
 		update = sqlc.SetRuntimeDeploymentParams{InstallationID: id, BackendFingerprint: selected.BackendFingerprint, AdmissionPaused: selected.AdmissionPaused}
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
-	defer cancel()
-	return s.executionLease.transaction(ctx, func(tx pgx.Tx) error {
+	return s.writer.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		previous, err := q.LockRuntimeDeployment(ctx)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
@@ -34,12 +35,16 @@ func (s *Store) AppendTurnEvents(ctx context.Context, tenantID, sessionID, turnI
 	if first < 1 || len(events) == 0 || len(events) > 64 {
 		return ErrInvalidInput
 	}
+	// Subagent observations are projected under the execution journal, so only
+	// the execution writer records a batch that contains one, replays included.
+	if slices.ContainsFunc(events, func(event ExecutionEvent) bool { return isSubagentObservation(event.Kind) }) {
+		if err := s.checkExecutionAuthority(); err != nil {
+			return err
+		}
+	}
 	normalized := make([]ExecutionEvent, len(events))
 	payloadBytes := 0
 	for i, event := range events {
-		if isSubagentObservation(event.Kind) && s.executionLease == nil {
-			return errors.New("subagent discovery requires a leased Store")
-		}
 		if len(event.Payload) > 512*1024 || !enginePattern.MatchString(event.Kind) {
 			return ErrInvalidInput
 		}

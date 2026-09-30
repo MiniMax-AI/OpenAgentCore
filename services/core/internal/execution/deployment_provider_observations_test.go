@@ -28,7 +28,7 @@ type finishObservationFixture struct {
 func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObservationFixture {
 	t.Helper()
 	var cfg *pgxpool.Config
-	s, lease := resetManagerStoreConfig(t, func(c *pgxpool.Config) {
+	s, writer := resetManagerStoreConfig(t, func(c *pgxpool.Config) {
 		if maxConnections > 0 {
 			c.MaxConns = maxConnections
 		}
@@ -56,7 +56,7 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	if err != nil {
 		t.Fatal(err)
 	}
-	return finishObservationFixture{s, lease.Store(), pool, tenant, session, Dispatcher{Store: lease.Store()}}
+	return finishObservationFixture{s, writer, pool, tenant, session, Dispatcher{Store: writer}}
 }
 func (f finishObservationFixture) start(t *testing.T) store.InputReceipt {
 	t.Helper()

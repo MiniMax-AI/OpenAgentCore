@@ -46,8 +46,8 @@ type RuntimeObservationSessionPage struct {
 // ReserveRuntimeAllocation commits the allocation and dedicated device together
 // before external Create. Only a fresh receipt authorizes that one Create call.
 func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environment, providerKey, credentialHash string) (RuntimeAllocation, error) {
-	if s.executionLease == nil {
-		return RuntimeAllocation{}, ErrInvalidInput
+	if err := s.checkExecutionAuthority(); err != nil {
+		return RuntimeAllocation{}, err
 	}
 	provider, err := parseConnectionGeneration(providerKey)
 	if err != nil {

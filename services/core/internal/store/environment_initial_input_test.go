@@ -46,7 +46,7 @@ func TestEnvironmentInitialExpiryRollsBackWithFailureEventAndSerializesPromotion
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), "ALTER TABLE session_events DROP CONSTRAINT IF EXISTS "+constraint)
 	})
-	writer := executionLease(t, s).Store()
+	writer := executionWriter(t, s)
 	if _, err := writer.ExpireEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID); err == nil {
 		t.Fatal("expiry committed without its failure event")
 	}
@@ -140,7 +140,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			if _, err := other.CreateSession(t.Context(), tenant, changed); !errors.Is(err, ErrIdempotencyConflict) {
 				t.Fatal("changed creator accepted", err)
 			}
-			writer := executionLease(t, s).Store()
+			writer := executionWriter(t, s)
 			generation := uuid.NewString()
 			if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation); err != nil {
 				t.Fatal(err)
@@ -207,8 +207,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if _, err := pool.Exec(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE id=$1", reservation.ID); err != nil {
 				t.Fatal(err)
 			}
-			lease := executionLease(t, s)
-			writer := lease.Store()
+			writer := executionWriter(t, s)
 			for reservation.State == EnvironmentInputPending {
 				count, err := writer.ExpireEnvironmentInputs(t.Context())
 				if err != nil || count < 1 || count > 32 {
@@ -228,12 +227,12 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if err != nil || len(events) != expectedEvents || events[len(events)-1].Event.Type != "agent.session.failed" || events[len(events)-1].Turn != nil || events[len(events)-1].EnvironmentInputActivity.Status != "failed" {
 				t.Fatal("missing pre-Turn failure snapshot", events, err)
 			}
-			if err := lease.Close(t.Context()); err != nil {
+			if err := writer.CloseExecution(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			pool.Close()
 			reopened, reopenedPool := testStore(t)
-			writer = executionLease(t, reopened).Store()
+			writer = executionWriter(t, reopened)
 			if _, err := reopened.CreateSession(t.Context(), tenant, input); err != nil {
 				t.Fatal(err)
 			}

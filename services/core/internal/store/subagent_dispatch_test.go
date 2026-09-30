@@ -27,12 +27,12 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			if err = h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
 				t.Fatal(err)
 			}
-			lease, err := h.s.AcquireExecutionLease(ctx)
+			writer, err := store.NewExecution(ctx, h.s)
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = lease.Close(context.Background()) })
-			h.d.Store = lease.Store()
+			t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
+			h.d.Store = writer
 			input := h.message("first", "root message")
 			running := h.run(ctx, input.TurnID)
 			var request proto.PromptRequestPayload

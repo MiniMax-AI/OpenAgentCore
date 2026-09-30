@@ -15,8 +15,7 @@ import (
 )
 
 func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) {
-	s, lease := resetManagerStore(t)
-	writer := lease.Store()
+	s, writer := resetManagerStore(t)
 	id := uuid.NewString()
 	if err := writer.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)

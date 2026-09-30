@@ -28,7 +28,7 @@ func subagentFact(kind string, value any) ExecutionEvent {
 }
 func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	s, pool := testStore(t)
-	owner := executionLease(t, s).Store()
+	owner := executionWriter(t, s)
 	ctx := t.Context()
 	tenant, session := newSubagentSession(t, s)
 	host, err := s.CreateDevice(ctx, tenant, "child resources", runtimedevice.HashCredential(uuid.NewString()))

@@ -110,8 +110,8 @@ func (s *Store) ReleaseRuntimeAllocation(ctx context.Context, owner RuntimeAlloc
 }
 
 func (s *Store) mutateRuntimeAllocation(ctx context.Context, owner RuntimeAllocation, live bool, apply func(context.Context, *sqlc.Queries, sqlc.RuntimeAllocation) (sqlc.RuntimeAllocation, error)) (RuntimeAllocation, error) {
-	if s.executionLease == nil {
-		return RuntimeAllocation{}, ErrInvalidInput
+	if err := s.checkExecutionAuthority(); err != nil {
+		return RuntimeAllocation{}, err
 	}
 	previous, err := s.GetRuntimeAllocation(ctx, owner.TenantID, owner.EnvironmentID)
 	if err != nil {

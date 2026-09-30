@@ -60,11 +60,10 @@ func (d *snapshotBudget) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pg
 
 func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	budget := &snapshotBudget{t: t}
-	s, lease := resetManagerStoreConfig(t, func(cfg *pgxpool.Config) {
+	s, w := resetManagerStoreConfig(t, func(cfg *pgxpool.Config) {
 		cfg.ConnConfig.RuntimeParams["jit"] = "on"
 		cfg.ConnConfig.Tracer = budget
 	})
-	w := lease.Store()
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -98,7 +97,7 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	budget.armed.Store(true)
 	started := time.Now()
 	err = m.resetStep(t.Context())
-	ping := lease.Ping(t.Context())
+	ping := w.CheckExecutionOwnership(t.Context())
 	t.Logf("reset_elapsed=%s reset_error=%v lease_ping=%v", time.Since(started), err, ping)
 	if err != nil || ping != nil {
 		t.Fatal("bounded snapshot lost execution ownership", err, ping)
