@@ -105,8 +105,9 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	h, err := api.NewHandler(api.Dependencies{
 		Engine: "codex", CoreKeys: auth, InstallationBindings: s, Projects: s, Vaults: s, ModelProviders: s, Files: s, Skills: s,
 		EnvironmentTemplates: s, Agents: s, Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s, Artifacts: s,
-		SessionAdmin: s, Environments: s, Admin: s, WriteAudit: s, ExecutorConnections: struct{ api.ExecutorConnections }{},
-		Metrics: struct{ api.Metrics }{}, RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
+		SessionAdmin: s, Environments: s, Admin: s, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{},
+		ExecutorConnections: struct{ api.ExecutorConnections }{},
+		Metrics:             struct{ api.Metrics }{}, RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
 		Execution: &api.Execution{ExecutorURL: "wss://core.example/api/v1/agent-daemon/ws", Admission: s, SessionArchive: s, Workspaces: struct{ api.EnvironmentWorkspaces }{}},
 		Sandboxes: &api.Sandboxes{Deployment: s, DeploymentChanges: leaseSetup{t: t, store: w, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})

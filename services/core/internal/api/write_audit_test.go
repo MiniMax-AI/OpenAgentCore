@@ -19,26 +19,26 @@ import (
 type auditQueryFixture struct {
 	tenant, resourceType string
 	ids                  []string
-	filter               store.WriteOperationFilter
+	filter               writeaudit.Filter
 	calls                int
 }
 
-func (s *auditQueryFixture) GetResourceOwners(_ context.Context, tenant, kind string, ids []string) ([]store.ResourceOwner, error) {
+func (s *auditQueryFixture) GetResourceOwners(_ context.Context, tenant, kind string, ids []string) ([]writeaudit.ResourceOwner, error) {
 	s.calls++
 	s.tenant = tenant
 	s.resourceType = kind
 	s.ids = ids
-	result := make([]store.ResourceOwner, len(ids))
+	result := make([]writeaudit.ResourceOwner, len(ids))
 	for i, id := range ids {
 		result[i].ResourceID = id
 	}
 	return result, nil
 }
-func (s *auditQueryFixture) ListWriteOperations(_ context.Context, tenant string, filter store.WriteOperationFilter) (store.WriteOperationPage, error) {
+func (s *auditQueryFixture) ListWriteOperations(_ context.Context, tenant string, filter writeaudit.Filter) (writeaudit.Page, error) {
 	s.calls++
 	s.tenant = tenant
 	s.filter = filter
-	return store.WriteOperationPage{}, nil
+	return writeaudit.Page{}, nil
 }
 func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 	key := callerBinding()
@@ -130,7 +130,7 @@ func TestAuthenticatedWriteProvenance(t *testing.T) {
 
 func TestAuditQueryJSONSafeFields(t *testing.T) {
 	now := time.Now().UTC()
-	raw, err := json.Marshal(ResourceOwnerList{Data: []store.ResourceOwner{{ResourceID: "r", APIKey: &store.AuditAPIKey{ID: "key", Name: "sdk", Prefix: "pc_prefix", Kind: "issued", RevokedAt: &now}}}})
+	raw, err := json.Marshal(ResourceOwnerList{Data: []writeaudit.ResourceOwner{{ResourceID: "r", APIKey: &writeaudit.APIKey{ID: "key", Name: "sdk", Prefix: "pc_prefix", Kind: "issued", RevokedAt: &now}}}})
 	if err != nil {
 		t.Fatal(err)
 	}

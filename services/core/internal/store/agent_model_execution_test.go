@@ -72,17 +72,17 @@ func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 	if _, _, err := withoutKey.GetAgentForSession(ctx, tenant, agent.ID, false); err != nil {
 		t.Fatal("explicit override required Agent decryption", err)
 	}
-	if _, _, err := withoutKey.GetAgentForSession(ctx, tenant, agent.ID, true); !errors.Is(err, ErrCredentialStorageUnavailable) {
+	if _, _, err := withoutKey.GetAgentForSession(ctx, tenant, agent.ID, true); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("missing cipher accepted", err)
 	}
-	if _, err := withoutKey.CreateAgent(ctx, tenant, input); !errors.Is(err, ErrCredentialStorageUnavailable) {
+	if _, err := withoutKey.CreateAgent(ctx, tenant, input); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("unencrypted Agent create accepted", err)
 	}
 	replacement := agentProviderFixture(1)
 	if _, err := s.UpdateAgent(ctx, uuid.NewString(), agent.ID, UpdateAgentInput{Configuration: agentProviderConfiguration(t, replacement, "codex"), ModelProvider: replacement, ModelProviderSet: true}); !errors.Is(err, ErrNotFound) {
 		t.Fatal("foreign tenant replacement accepted", err)
 	}
-	if _, err := withoutKey.UpdateAgent(ctx, tenant, agent.ID, UpdateAgentInput{Configuration: agentProviderConfiguration(t, replacement, "codex"), ModelProvider: replacement, ModelProviderSet: true}); !errors.Is(err, ErrCredentialStorageUnavailable) {
+	if _, err := withoutKey.UpdateAgent(ctx, tenant, agent.ID, UpdateAgentInput{Configuration: agentProviderConfiguration(t, replacement, "codex"), ModelProvider: replacement, ModelProviderSet: true}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("unencrypted replacement accepted", err)
 	}
 	current, inherited, err := s.GetAgentForSession(ctx, tenant, agent.ID, true)

@@ -45,6 +45,7 @@ type Dependencies struct {
 	Environments         Environments
 	ExecutorConnections  ExecutorConnections
 	Admin                Admin
+	AdminAudit           AdminAudit
 	WriteAudit           WriteAudit
 	Metrics              Metrics
 	RuntimeObservations  RuntimeObservations
@@ -113,7 +114,7 @@ func (d Dependencies) validate() error {
 		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"Agents", d.Agents}, field{"Sessions", d.Sessions},
 		field{"SessionEvents", d.SessionEvents}, field{"SessionHistory", d.SessionHistory}, field{"Subagents", d.Subagents},
 		field{"Artifacts", d.Artifacts}, field{"SessionAdmin", d.SessionAdmin}, field{"Environments", d.Environments},
-		field{"ExecutorConnections", d.ExecutorConnections}, field{"Admin", d.Admin}, field{"WriteAudit", d.WriteAudit},
+		field{"ExecutorConnections", d.ExecutorConnections}, field{"Admin", d.Admin}, field{"AdminAudit", d.AdminAudit}, field{"WriteAudit", d.WriteAudit},
 		field{"Metrics", d.Metrics}, field{"RuntimeObservations", d.RuntimeObservations}, field{"RuntimeHistory", d.RuntimeHistory},
 	); err != nil {
 		return err

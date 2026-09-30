@@ -133,10 +133,14 @@ func TestCredentialListFilteringOwnershipAndKeylessReconnect(t *testing.T) {
 		owner, vault, cursor string
 		limit                int
 		statuses             []string
-	}{{"invalid", vaults[0].ID, "", 20, nil}, {tenant, "invalid", "", 20, nil}, {tenant, vaults[0].ID, "", 0, nil}, {tenant, vaults[0].ID, "", 101, nil}, {tenant, vaults[0].ID, "", 20, []string{"deleted"}}} {
+	}{{"invalid", vaults[0].ID, "", 20, nil}, {tenant, vaults[0].ID, "", 0, nil}, {tenant, vaults[0].ID, "", 101, nil}, {tenant, vaults[0].ID, "", 20, []string{"deleted"}}} {
 		if _, err := reader.ListCredentials(ctx, tc.owner, tc.vault, tc.cursor, tc.limit, false, tc.statuses); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal("invalid internal query accepted", err)
 		}
+	}
+	// A malformed Vault path identifier follows the missing-Vault path.
+	if _, err := reader.ListCredentials(ctx, tenant, "invalid", "", 20, false, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatal("malformed Vault was not missing", err)
 	}
 	pool.Close()
 	reopened, _ := testStore(t)

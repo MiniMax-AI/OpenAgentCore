@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -67,7 +68,7 @@ func (s *Store) GetSessionExecutionConfiguration(ctx context.Context, tenantID, 
 	if err != nil {
 		return v1.SessionExecutionConfiguration{}, err
 	}
-	row, err := s.queries.GetSessionExecutionConfiguration(ctx, sqlc.GetSessionExecutionConfigurationParams{TenantID: tenant, SessionID: parsePathID(sessionID)})
+	row, err := s.queries.GetSessionExecutionConfiguration(ctx, sqlc.GetSessionExecutionConfigurationParams{TenantID: tenant, SessionID: pgunit.PathID(sessionID)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v1.SessionExecutionConfiguration{}, ErrNotFound
 	}

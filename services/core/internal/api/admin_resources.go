@@ -12,12 +12,11 @@ import (
 // Only Core-key-authenticated project resource handlers receive it.
 type adminTenantContextKey struct{}
 
-// Admin reads the administrator's cross-Project views: the asset summary, the
-// Sessions whose Runtime is observed and the administrator audit log.
+// Admin reads the administrator's cross-Project views: the asset summary and
+// the Sessions whose Runtime is observed.
 type Admin interface {
 	ReadAdminSummary(context.Context, string, store.AdminSummaryFilter, func(store.Session, *string) error) (store.AdminAssetCounts, error)
 	ListAdminRuntimeTargets(context.Context, []string, string, int, bool) (store.AdminRuntimeTargetPage, error)
-	ListAdminAudit(context.Context, store.AdminAuditFilter) (store.AdminAuditPage, error)
 }
 
 func (h *Handler) adminResourceScope(next http.Handler) http.Handler {

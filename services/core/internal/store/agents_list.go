@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -24,7 +25,7 @@ func (s *Store) ListAgents(ctx context.Context, tenantID, cursor string, limit i
 	}
 	params := sqlc.ListAgentsParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	if cursor != "" {
-		after, err := s.GetAgent(ctx, tenantID, lookupCursor(cursor))
+		after, err := s.GetAgent(ctx, tenantID, pgunit.LookupCursor(cursor))
 		if err != nil {
 			return AgentPage{}, err
 		}

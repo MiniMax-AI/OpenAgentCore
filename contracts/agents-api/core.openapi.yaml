@@ -1,5 +1,44 @@
 basePath: /
 definitions:
+  adminaudit.Operation:
+    properties:
+      action:
+        type: string
+      actor_label:
+        type: string
+      admin_credential_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      project_id:
+        type: string
+        x-nullable: true
+      request_id:
+        type: string
+      resource_id:
+        type: string
+      resource_type:
+        type: string
+      result_ids:
+        items:
+          type: object
+        type: array
+      trace_id:
+        type: string
+    type: object
+  adminaudit.Page:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/adminaudit.Operation'
+        type: array
+      has_more:
+        type: boolean
+      next_cursor:
+        type: string
+    type: object
   api.AdminRuntimeObservation:
     properties:
       observation:
@@ -486,7 +525,7 @@ definitions:
     properties:
       data:
         items:
-          $ref: '#/definitions/store.ResourceOwner'
+          $ref: '#/definitions/writeaudit.ResourceOwner'
         type: array
     type: object
   api.RuntimeDiskObservation:
@@ -931,58 +970,6 @@ definitions:
       vaults:
         type: integer
     type: object
-  store.AdminAuditOperation:
-    properties:
-      action:
-        type: string
-      actor_label:
-        type: string
-      admin_credential_id:
-        type: string
-      created_at:
-        type: string
-      id:
-        type: string
-      project_id:
-        type: string
-        x-nullable: true
-      request_id:
-        type: string
-      resource_id:
-        type: string
-      resource_type:
-        type: string
-      result_ids:
-        items:
-          type: object
-        type: array
-      trace_id:
-        type: string
-    type: object
-  store.AdminAuditPage:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/store.AdminAuditOperation'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
-    type: object
-  store.AuditAPIKey:
-    properties:
-      id:
-        type: string
-      kind:
-        type: string
-      name:
-        type: string
-      prefix:
-        type: string
-      revoked_at:
-        type: string
-    type: object
   store.ExecutorCredential:
     properties:
       created_at:
@@ -1097,17 +1084,6 @@ definitions:
         type: array
       has_more:
         type: boolean
-    type: object
-  store.ResourceOwner:
-    properties:
-      admin_audit_id:
-        type: string
-      api_key:
-        $ref: '#/definitions/store.AuditAPIKey'
-      resource_id:
-        type: string
-      source:
-        type: string
     type: object
   store.RuntimeDeploymentView:
     properties:
@@ -1460,38 +1436,6 @@ definitions:
         type: integer
       retention_seconds:
         type: integer
-    type: object
-  store.WriteOperation:
-    properties:
-      action:
-        type: string
-      api_key:
-        $ref: '#/definitions/store.AuditAPIKey'
-      created_at:
-        type: string
-      id:
-        type: string
-      parent_id:
-        type: string
-      request_id:
-        type: string
-      resource_id:
-        type: string
-      resource_type:
-        type: string
-      trace_id:
-        type: string
-    type: object
-  store.WriteOperationPage:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/store.WriteOperation'
-        type: array
-      has_more:
-        type: boolean
-      next_cursor:
-        type: string
     type: object
   v1.Agent:
     properties:
@@ -3372,6 +3316,62 @@ definitions:
     required:
       - type
     type: object
+  writeaudit.APIKey:
+    properties:
+      id:
+        type: string
+      kind:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      revoked_at:
+        type: string
+    type: object
+  writeaudit.Operation:
+    properties:
+      action:
+        type: string
+      api_key:
+        $ref: '#/definitions/writeaudit.APIKey'
+      created_at:
+        type: string
+      id:
+        type: string
+      parent_id:
+        type: string
+      request_id:
+        type: string
+      resource_id:
+        type: string
+      resource_type:
+        type: string
+      trace_id:
+        type: string
+    type: object
+  writeaudit.Page:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/writeaudit.Operation'
+        type: array
+      has_more:
+        type: boolean
+      next_cursor:
+        type: string
+    type: object
+  writeaudit.ResourceOwner:
+    properties:
+      admin_audit_id:
+        type: string
+      api_key:
+        $ref: '#/definitions/writeaudit.APIKey'
+      resource_id:
+        type: string
+      source:
+        type: string
+    type: object
 info:
   contact: {}
   description: Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted.
@@ -3426,7 +3426,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.AdminAuditPage'
+            $ref: '#/definitions/adminaudit.Page'
         "400":
           description: Bad Request
           schema:
@@ -6128,7 +6128,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.WriteOperationPage'
+            $ref: '#/definitions/writeaudit.Page'
         "400":
           description: Bad Request
           schema:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -15,6 +16,7 @@ type CredentialPage struct {
 }
 
 func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID, cursor string, limit int, ascending bool, statuses []string) (CredentialPage, error) {
+	vaultID = pathID(vaultID)
 	// An inaccessible parent is not an authorized empty collection.
 	vault, err := s.GetVault(ctx, tenantID, vaultID)
 	if err != nil {
@@ -35,7 +37,7 @@ func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID, cursor s
 	parent, _ := parseID(vault.ID)
 	params := sqlc.ListCredentialsParams{TenantID: tenant, VaultID: parent, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending, Statuses: statuses}
 	if cursor != "" {
-		after, err := s.GetCredential(ctx, tenantID, vaultID, lookupCursor(cursor))
+		after, err := s.GetCredential(ctx, tenantID, vaultID, pgunit.LookupCursor(cursor))
 		if err != nil {
 			return CredentialPage{}, err
 		}

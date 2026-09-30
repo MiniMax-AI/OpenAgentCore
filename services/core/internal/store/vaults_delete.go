@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -27,7 +28,7 @@ func (s *Store) DeleteVault(ctx context.Context, tenantID, vaultID string) (stri
 			return err
 		}
 		deletedID = uuid.UUID(deleted.Bytes).String()
-		return recordWriteAudit(ctx, q, tenantID, "delete", "vault", deletedID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "vault", deletedID, "")
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound

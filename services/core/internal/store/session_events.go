@@ -9,6 +9,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -96,7 +97,7 @@ func (s *Store) SessionEventCursor(ctx context.Context, tenantID, sessionID stri
 	if err != nil {
 		return 0, err
 	}
-	id := parsePathID(sessionID)
+	id := pgunit.PathID(sessionID)
 	cursor, err := s.queries.SessionEventCursor(ctx, sqlc.SessionEventCursorParams{TenantID: tenant, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, ErrNotFound

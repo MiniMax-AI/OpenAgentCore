@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 
 	"github.com/google/uuid"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 func validateInitialInputs(inputs []Input) ([]Input, json.RawMessage, error) {
@@ -107,14 +110,14 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 			return err
 		}
 		audit := func() error {
-			var created []AuditResource
+			var created []writeaudit.Resource
 			if row.ID == params.ID {
-				created = append(created, AuditResource{Type: "session", ID: uuid.UUID(row.ID.Bytes).String()})
+				created = append(created, writeaudit.Resource{Type: "session", ID: uuid.UUID(row.ID.Bytes).String()})
 				if environment != nil {
-					created = append(created, AuditResource{Type: "environment", ID: environment.ID, ParentID: uuid.UUID(row.ID.Bytes).String()})
+					created = append(created, writeaudit.Resource{Type: "environment", ID: environment.ID, ParentID: uuid.UUID(row.ID.Bytes).String()})
 				}
 			}
-			return recordWriteAudit(ctx, q, tenant, "create", "session", uuid.UUID(row.ID.Bytes).String(), "", created...)
+			return auditpg.RecordWriteAudit(ctx, q, tenant, "create", "session", uuid.UUID(row.ID.Bytes).String(), "", created...)
 		}
 		if row.ID != params.ID || len(inputs) == 0 {
 			return audit()

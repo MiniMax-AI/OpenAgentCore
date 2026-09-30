@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,7 +24,7 @@ func (s *Store) saveAgentModelExecution(ctx context.Context, q *sqlc.Queries, te
 	}
 	encrypted, err := s.credentialCipher.SealAgentModelExecution(raw, tenant, uuid.UUID(agent.Bytes).String())
 	if err != nil {
-		return ErrCredentialStorageUnavailable
+		return credentialcrypto.ErrUnavailable
 	}
 	return q.SaveAgentModelExecution(ctx, sqlc.SaveAgentModelExecutionParams{AgentID: agent, EncryptedConfig: encrypted})
 }
@@ -61,11 +62,11 @@ func (s *Store) GetAgentForSession(ctx context.Context, tenantID, agentID string
 	}
 	raw, err := s.credentialCipher.OpenAgentModelExecution(row.EncryptedConfig, uuid.UUID(tenant.Bytes).String(), uuid.UUID(id.Bytes).String())
 	if err != nil {
-		return SavedAgent{}, nil, ErrCredentialStorageUnavailable
+		return SavedAgent{}, nil, credentialcrypto.ErrUnavailable
 	}
 	var provider v1.ModelProviderInput
 	if json.Unmarshal(raw, &provider) != nil || provider.Validate() != nil {
-		return SavedAgent{}, nil, ErrCredentialStorageUnavailable
+		return SavedAgent{}, nil, credentialcrypto.ErrUnavailable
 	}
 	return agent, &provider, nil
 }

@@ -10,13 +10,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-var ErrCredentialStorageUnavailable = errors.New("credential encryption is not configured")
 
 // Credential contains only public metadata. Secret ciphertext is never selected
 // by resource reads; decryption belongs to scoped execution lookup only.
@@ -42,15 +43,12 @@ func (s *Store) CreateStaticCredential(ctx context.Context, tenantID, vaultID st
 	if err != nil {
 		return Credential{}, err
 	}
-	vault, err := parseID(vaultID)
-	if err != nil {
-		return Credential{}, err
-	}
+	vault := pgunit.PathID(vaultID)
 	if !validVaultName(input.Name) || input.MCPServerURL == "" {
 		return Credential{}, ErrInvalidInput
 	}
 	if s.credentialCipher == nil {
-		return Credential{}, ErrCredentialStorageUnavailable
+		return Credential{}, credentialcrypto.ErrUnavailable
 	}
 	id := uuid.New()
 	binding := credentialcrypto.Binding{TenantID: uuid.UUID(tenant.Bytes).String(), VaultID: uuid.UUID(vault.Bytes).String(), CredentialID: id.String(), AuthType: "static_bearer", Destination: input.MCPServerURL}
@@ -72,7 +70,7 @@ func (s *Store) CreateStaticCredential(ctx context.Context, tenantID, vaultID st
 		if err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "create", "credential", created.ID, created.VaultID, AuditResource{Type: "credential", ID: created.ID, ParentID: created.VaultID})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "create", "credential", created.ID, created.VaultID, writeaudit.Resource{Type: "credential", ID: created.ID, ParentID: created.VaultID})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Credential{}, ErrNotFound

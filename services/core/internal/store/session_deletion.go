@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,7 +24,7 @@ var ErrSessionNotIdle = errors.New("session must be durably idle or failed witho
 func (s *Store) DeleteSession(ctx context.Context, tenantID, sessionID string) error {
 	return s.withLockedSession(ctx, tenantID, sessionID, true, func(ctx context.Context, q *sqlc.Queries, session sqlc.LockSessionRow) error {
 		audit := func() error {
-			return recordWriteAudit(ctx, q, tenantID, "delete", "session", uuid.UUID(session.ID.Bytes).String(), "")
+			return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "session", uuid.UUID(session.ID.Bytes).String(), "")
 		}
 		if session.DeletedAt.Valid {
 			return audit()

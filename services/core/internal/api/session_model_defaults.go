@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -27,7 +28,7 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 		return nil, nil, err
 	}
 	if inherit && saved.XAgentsCore != nil && saved.XAgentsCore.ModelProvider != nil && provider == nil {
-		return nil, nil, store.ErrCredentialStorageUnavailable
+		return nil, nil, credentialcrypto.ErrUnavailable
 	}
 	return saved, provider, nil
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 )
 
 type InputReceipt struct {
@@ -73,7 +74,7 @@ func (s *Store) SubmitInputs(ctx context.Context, tenantID, sessionID, key strin
 		}
 		if len(previous) > 0 {
 			receipts = previous
-			return recordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
+			return auditpg.RecordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
 		}
 		if slices.ContainsFunc(batch, func(input Input) bool { return input.Kind == "message" }) {
 			if err := checkEnvironmentFileWriteGate(ctx, q, session); err != nil {
@@ -90,7 +91,7 @@ func (s *Store) SubmitInputs(ctx context.Context, tenantID, sessionID, key strin
 			}
 			receipts = append(receipts, receipt)
 		}
-		return recordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
 	})
 	if err != nil {
 		return nil, fmt.Errorf("submit turn inputs: %w", err)

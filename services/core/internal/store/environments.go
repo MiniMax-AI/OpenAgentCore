@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 )
 
 // Environment retains execution ownership; its configuration is an internal snapshot, not a public response.
@@ -53,7 +54,7 @@ func (s *Store) GetEnvironment(ctx context.Context, tenantID, environmentID stri
 	if err != nil {
 		return Environment{}, err
 	}
-	id := parsePathID(environmentID)
+	id := pgunit.PathID(environmentID)
 	row, err := s.queries.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: tenant, ID: id})
 	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
 }

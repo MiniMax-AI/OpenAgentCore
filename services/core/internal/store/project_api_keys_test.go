@@ -115,7 +115,7 @@ func TestProjectKeysShareIdentityAndArchiveRetainsAssets(t *testing.T) {
 func TestProjectManagementRequiresAtomicAudit(t *testing.T) {
 	s, _ := testStore(t)
 	id := uuid.NewString()
-	if _, err := s.CreateProject(t.Context(), id, "unaudited"); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.CreateProject(t.Context(), id, "unaudited"); !errors.Is(err, adminaudit.ErrInvalidSource) {
 		t.Fatal("unaudited Project accepted")
 	}
 	if _, err := s.GetProject(t.Context(), id); !errors.Is(err, ErrNotFound) {
@@ -123,17 +123,17 @@ func TestProjectManagementRequiresAtomicAudit(t *testing.T) {
 	}
 	p := createTestProject(t, s)
 	keyID := uuid.NewString()
-	if _, err := s.CreateProjectAPIKey(t.Context(), p.ID, keyID, "unaudited"); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.CreateProjectAPIKey(t.Context(), p.ID, keyID, "unaudited"); !errors.Is(err, adminaudit.ErrInvalidSource) {
 		t.Fatal("unaudited key accepted")
 	}
 	page, err := s.ListProjectAPIKeys(t.Context(), p.ID, "", 20, true)
 	if err != nil || len(page.Data) != 0 {
 		t.Fatal("unaudited key persisted")
 	}
-	if _, err := s.RenameProject(t.Context(), p.ID, "bad"); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.RenameProject(t.Context(), p.ID, "bad"); !errors.Is(err, adminaudit.ErrInvalidSource) {
 		t.Fatal("unaudited rename accepted")
 	}
-	if _, err := s.ArchiveProject(t.Context(), p.ID); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.ArchiveProject(t.Context(), p.ID); !errors.Is(err, adminaudit.ErrInvalidSource) {
 		t.Fatal("unaudited archive accepted")
 	}
 	current, err := s.GetProject(t.Context(), p.ID)

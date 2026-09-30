@@ -63,10 +63,11 @@ func TestCredentialListRejectsInvalidInputBeforeStorage(t *testing.T) {
 			t.Fatal("invalid query reached storage", suffix, w.Code)
 		}
 	}
-	// A malformed parent follows the missing-Vault path, after query validation.
+	// A malformed parent reaches storage unchanged after query validation, and
+	// storage reports it as a missing Vault.
 	h, f, _ := credentialHandler(t)
 	f.err = store.ErrNotFound
-	if w := credentialRequest(h, "GET", "/v1/vaults/invalid/credentials", ""); w.Code != 404 || f.vault != store.UnknownResourceID {
+	if w := credentialRequest(h, "GET", "/v1/vaults/invalid/credentials", ""); w.Code != 404 || f.vault != "invalid" {
 		t.Fatal("invalid parent was not resolved as a missing Vault", w.Code, f.vault)
 	}
 }

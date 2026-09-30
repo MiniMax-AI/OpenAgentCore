@@ -3,8 +3,11 @@ package store
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/jackc/pgx/v5"
@@ -127,7 +130,7 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 				return err
 			}
 		}
-		if err := recordAdminMutation(ctx, q, tenantID, "archive", "session", runtimeUUID(session)); err != nil {
+		if err := auditpg.RecordAdminMutation(ctx, q, tenantID, "archive", "session", runtimeUUID(session)); err != nil {
 			return err
 		}
 		result, err = getManagedSessionArchive(ctx, q, tenant, session)
@@ -142,7 +145,7 @@ func (s *Store) GetManagedSessionArchive(ctx context.Context, tenantID, sessionI
 	if err != nil {
 		return ManagedSessionArchive{}, err
 	}
-	return getManagedSessionArchive(ctx, s.queries, tenant, parsePathID(sessionID))
+	return getManagedSessionArchive(ctx, s.queries, tenant, pgunit.PathID(sessionID))
 }
 
 func getManagedSessionArchive(ctx context.Context, q *sqlc.Queries, tenant, session pgtype.UUID) (ManagedSessionArchive, error) {

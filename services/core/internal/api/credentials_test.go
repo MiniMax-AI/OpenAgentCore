@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -112,7 +113,7 @@ func TestCredentialStorageErrorsStaySafe(t *testing.T) {
 	for _, test := range []struct {
 		err    error
 		status int
-	}{{store.ErrNotFound, 404}, {store.ErrCredentialStorageUnavailable, 503}, {errors.New("credential-canary"), 500}} {
+	}{{store.ErrNotFound, 404}, {credentialcrypto.ErrUnavailable, 503}, {errors.New("credential-canary"), 500}} {
 		h, f, _ := credentialHandler(t)
 		f.err = test.err
 		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials", `{"name":"n","auth":{"type":"static_bearer","mcp_server_url":"https://example.invalid","token":"credential-canary"}}`)

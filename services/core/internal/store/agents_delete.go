@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -28,7 +29,7 @@ func (s *Store) DeleteAgent(ctx context.Context, tenantID, agentID string) (stri
 			return err
 		}
 		deletedID = uuid.UUID(deleted.Bytes).String()
-		return recordWriteAudit(ctx, q, tenantID, "delete", "agent", deletedID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "agent", deletedID, "")
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound

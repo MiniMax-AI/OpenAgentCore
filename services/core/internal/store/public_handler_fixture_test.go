@@ -10,6 +10,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
@@ -22,10 +24,11 @@ import (
 const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 
 // publicHandler serves s through api.NewHandler. s backs every area the Store
-// implements, and db is the database and credential key that built s. keys
-// authenticate as Project keys and "admin" as the Core key. Metrics, Runtime
-// observation and history, and executor connections are strict stand-ins.
-// Execution and Sandboxes stay disabled unless configure sets them.
+// implements, and db is the database and credential key that built s; the
+// audit reads come from db. keys authenticate as Project keys and "admin" as
+// the Core key. Metrics, Runtime observation and history, and executor
+// connections are strict stand-ins. Execution and Sandboxes stay disabled
+// unless configure sets them.
 func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyResolver, engine string, configure ...func(*api.Dependencies)) (http.Handler, error) {
 	t.Helper()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
@@ -33,11 +36,12 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 		return nil, err
 	}
 	strict := strictStandIn{t}
+	audit := auditpg.New(pgunit.NewPool(db.pool))
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: s,
 		Projects: fixtureProjects{Store: s, keys: keys}, Vaults: s, ModelProviders: s, Files: s, Skills: s,
 		EnvironmentTemplates: s, Agents: s, Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s,
-		Artifacts: s, SessionAdmin: s, Environments: s, Admin: s, WriteAudit: s,
+		Artifacts: s, SessionAdmin: s, Environments: s, Admin: s, AdminAudit: audit, WriteAudit: audit,
 		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
 	}
 	for _, c := range configure {

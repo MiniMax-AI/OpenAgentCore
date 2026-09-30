@@ -8,11 +8,15 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -183,8 +187,6 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusBadRequest, "invalid_value", "Cannot delete the default skill version.", "version")
 	case errors.Is(err, store.ErrSourceFileTooLarge):
 		writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "File exceeds this operation's content limit.")
-	case errors.Is(err, store.ErrCredentialStorageUnavailable):
-		writeError(w, http.StatusServiceUnavailable, "credential_storage_unavailable", "Credential encryption is not configured on this service.")
 	case errors.Is(err, store.ErrModelProviderRequired):
 		writeError(w, http.StatusBadRequest, "model_provider_required", "This Session was created without a model provider and cannot run. Create a new Session with x_agents_core.model_provider or an Agent that has one saved.")
 	case errors.Is(err, store.ErrHostedEnvironmentFailed):
@@ -237,14 +239,56 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	case errors.Is(err, store.ErrIdempotencyConflict):
 		writeError(w, http.StatusConflict, "idempotency_conflict", "This idempotency key was used with different input.")
 	case errors.Is(err, store.ErrInvalidInput), errors.Is(err, environmentconfig.ErrInvalid):
-		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid resource identifier or request limits.")
-	case store.UnstorableText(err):
-		// A documented local limit: PostgreSQL text and jsonb cannot store U+0000,
-		// and text parameters, including query filters, reject invalid UTF-8.
-		writeError(w, http.StatusBadRequest, "invalid_request_error", unstorableTextMessage)
+		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 	default:
-		// Driver errors can include submitted values; do not log the raw error.
-		log.Ctx(r.Context()).Error("oac-core persistence operation failed")
-		writeError(w, http.StatusInternalServerError, "internal_error", "The operation could not be completed.")
+		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+			return
+		}
+		writeInternalError(w, r)
 	}
+}
+
+// invalidInputMessage accompanies the 400 invalid_request for invalid
+// identifiers, limits, audit queries and audit provenance.
+const invalidInputMessage = "Invalid resource identifier or request limits."
+
+// writeInternalError reports an unmapped failure. Driver errors can include
+// submitted values, so the raw error is never logged.
+func writeInternalError(w http.ResponseWriter, r *http.Request) {
+	log.Ctx(r.Context()).Error("oac-core persistence operation failed")
+	writeError(w, http.StatusInternalServerError, "internal_error", "The operation could not be completed.")
+}
+
+// writeTextValueError reports request text that PostgreSQL cannot store and
+// returns false for any other error. It is a documented local limit: text and
+// jsonb cannot store U+0000, and text parameters, including query filters,
+// reject invalid UTF-8.
+func writeTextValueError(w http.ResponseWriter, r *http.Request, err error) bool {
+	if !errors.Is(err, textvalue.ErrUnstorable) && !store.UnstorableText(err) {
+		return false
+	}
+	writeError(w, http.StatusBadRequest, "invalid_request_error", unstorableTextMessage)
+	return true
+}
+
+// writeCredentialUnavailableError reports a request that needs credential
+// encryption on a service without a credential key, and returns false for any
+// other error.
+func writeCredentialUnavailableError(w http.ResponseWriter, r *http.Request, err error) bool {
+	if !errors.Is(err, credentialcrypto.ErrUnavailable) {
+		return false
+	}
+	writeError(w, http.StatusServiceUnavailable, "credential_storage_unavailable", "Credential encryption is not configured on this service.")
+	return true
+}
+
+// writeAuditSourceError reports write or administrator provenance that cannot
+// be recorded, so the write failed closed, and returns false for any other
+// error.
+func writeAuditSourceError(w http.ResponseWriter, r *http.Request, err error) bool {
+	if !errors.Is(err, writeaudit.ErrInvalidSource) && !errors.Is(err, adminaudit.ErrInvalidSource) {
+		return false
+	}
+	writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
+	return true
 }

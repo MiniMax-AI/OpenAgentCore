@@ -7,8 +7,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 )
 
@@ -21,6 +24,7 @@ const deletionAgent = `"agent":{"id":"agent_deletion","model":"fixture","tools":
 func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
 	s, db := newManagedTestStoreDB(t)
+	audit := auditpg.New(pgunit.NewPool(db.pool))
 	ctx := t.Context()
 	tenant, owner, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
@@ -199,8 +203,8 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 				t.Fatalf("settled Session deletion: %d %s", status, first)
 			}
 			digest := databaseDigest(t, db.pool)
-			filter := store.WriteOperationFilter{ResourceType: "session", ResourceID: id, Limit: 100}
-			beforeAudit, err := s.ListWriteOperations(ctx, tenant, filter)
+			filter := writeaudit.Filter{ResourceType: "session", ResourceID: id, Limit: 100}
+			beforeAudit, err := audit.ListWriteOperations(ctx, tenant, filter)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -209,7 +213,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 					t.Fatalf("repeated deletion: %d %s", status, again)
 				}
 			}
-			afterAudit, err := s.ListWriteOperations(ctx, tenant, filter)
+			afterAudit, err := audit.ListWriteOperations(ctx, tenant, filter)
 			if err != nil || len(afterAudit.Data) != len(beforeAudit.Data)+2 || !reflect.DeepEqual(afterAudit.Data[2:], beforeAudit.Data) {
 				t.Fatal("repeated deletion must append exactly two operation records", err)
 			}

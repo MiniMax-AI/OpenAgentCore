@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 )
 
 var ErrTurnConflict = errors.New("turn state changed or cancellation was requested")
@@ -164,7 +165,7 @@ func turnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) 
 // Turn-scoped resource. Unparsable values are indistinguishable from missing ones.
 func publicTurnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) {
 	tenant, err := parseID(tenantID)
-	return sqlc.GetTurnParams{TenantID: tenant, SessionID: parsePathID(sessionID), ID: parsePathID(turnID)}, err
+	return sqlc.GetTurnParams{TenantID: tenant, SessionID: pgunit.PathID(sessionID), ID: pgunit.PathID(turnID)}, err
 }
 
 func turnFromRow(row sqlc.Turn) Turn {

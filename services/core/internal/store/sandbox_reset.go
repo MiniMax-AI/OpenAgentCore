@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -95,7 +96,7 @@ func (s *Store) StartSandboxReset(ctx context.Context, installation string, inpu
 				if err := q.ForceSandboxReset(ctx); err != nil {
 					return err
 				}
-				if err := recordDeploymentMutation(ctx, q, "reset_force", "sandbox_deployment", installation); err != nil {
+				if err := auditpg.RecordDeploymentMutation(ctx, q, "reset_force", "sandbox_deployment", installation); err != nil {
 					return err
 				}
 			}
@@ -113,7 +114,7 @@ func (s *Store) StartSandboxReset(ctx context.Context, installation string, inpu
 			if err := q.StartSandboxReset(ctx, sqlc.StartSandboxResetParams{Clear: pgtype.Text{String: input.Clear, Valid: true}, DeadlineSeconds: deadline, Audit: audit}); err != nil {
 				return err
 			}
-			if err := recordDeploymentMutation(ctx, q, "reset_start", "sandbox_deployment", installation); err != nil {
+			if err := auditpg.RecordDeploymentMutation(ctx, q, "reset_start", "sandbox_deployment", installation); err != nil {
 				return err
 			}
 		}
@@ -134,7 +135,7 @@ func (s *Store) CancelSandboxReset(ctx context.Context, installation string, gen
 			if err := q.CancelSandboxReset(ctx); err != nil {
 				return err
 			}
-			if err := recordDeploymentMutation(ctx, q, "reset_cancel", "sandbox_deployment", installation); err != nil {
+			if err := auditpg.RecordDeploymentMutation(ctx, q, "reset_cancel", "sandbox_deployment", installation); err != nil {
 				return err
 			}
 		}
@@ -159,7 +160,7 @@ func (s *Store) AdvanceSandboxResetDeadline(ctx context.Context) error {
 		if err := q.ForceSandboxReset(ctx); err != nil {
 			return err
 		}
-		return recordDeploymentMutation(adminaudit.WithSource(ctx, source), q, "reset_deadline", "sandbox_deployment", runtimeUUID(d.InstallationID))
+		return auditpg.RecordDeploymentMutation(adminaudit.WithSource(ctx, source), q, "reset_deadline", "sandbox_deployment", runtimeUUID(d.InstallationID))
 	})
 }
 
@@ -208,7 +209,7 @@ func (s *Store) CompleteSandboxReset(ctx context.Context, installation string, g
 		if err := q.ClearSandboxGenerations(ctx); err != nil {
 			return err
 		}
-		if err := recordDeploymentMutation(adminaudit.WithSource(ctx, source), q, "reset_complete", "sandbox_deployment", installation); err != nil {
+		if err := auditpg.RecordDeploymentMutation(adminaudit.WithSource(ctx, source), q, "reset_complete", "sandbox_deployment", installation); err != nil {
 			return err
 		}
 		result, err = s.deploymentView(ctx, q)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -18,6 +19,7 @@ type UpdateStaticCredentialInput struct {
 // supplies immutable AAD; the mutation independently checks that same scope.
 // A subsequent dispatch reads the replacement through the existing frozen binding.
 func (s *Store) UpdateStaticCredential(ctx context.Context, tenantID, vaultID, credentialID string, input UpdateStaticCredentialInput) (Credential, error) {
+	vaultID, credentialID = pathID(vaultID), pathID(credentialID)
 	tenant, err := parseID(tenantID)
 	if err != nil {
 		return Credential{}, ErrNotFound
@@ -38,7 +40,7 @@ func (s *Store) UpdateStaticCredential(ctx context.Context, tenantID, vaultID, c
 		return Credential{}, ErrInvalidInput
 	}
 	if s.credentialCipher == nil {
-		return Credential{}, ErrCredentialStorageUnavailable
+		return Credential{}, credentialcrypto.ErrUnavailable
 	}
 	ciphertext, err := s.credentialCipher.Seal([]byte(input.Token), credentialcrypto.Binding{
 		TenantID: uuid.UUID(tenant.Bytes).String(), VaultID: current.VaultID,
@@ -60,7 +62,7 @@ func (s *Store) UpdateStaticCredential(ctx context.Context, tenantID, vaultID, c
 		if err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "update", "credential", updated.ID, updated.VaultID)
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update", "credential", updated.ID, updated.VaultID)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Credential{}, ErrNotFound

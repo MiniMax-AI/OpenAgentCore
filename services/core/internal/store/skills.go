@@ -10,7 +10,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -56,9 +58,9 @@ func (s *Store) CreateSkill(ctx context.Context, tenantID string, archive []byte
 			return err
 		}
 		result = skillFromRow(row)
-		return recordWriteAudit(ctx, q, tenantID, "create", "skill", result.ID, "",
-			AuditResource{Type: "skill", ID: result.ID},
-			AuditResource{Type: "skill_version", ID: initial.ID, ParentID: result.ID})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "create", "skill", result.ID, "",
+			writeaudit.Resource{Type: "skill", ID: result.ID},
+			writeaudit.Resource{Type: "skill_version", ID: initial.ID, ParentID: result.ID})
 	})
 	return result, err
 }
@@ -99,7 +101,7 @@ func (s *Store) UpdateSkillDefault(ctx context.Context, tenantID, skillID, versi
 			return err
 		}
 		result = skillFromRow(row)
-		return recordWriteAudit(ctx, q, tenantID, "update_default_version", "skill", result.ID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update_default_version", "skill", result.ID, "")
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
@@ -117,7 +119,7 @@ func (s *Store) DeleteSkill(ctx context.Context, tenantID, skillID string) error
 		if _, err := q.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: id}); err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "delete", "skill", skillID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "skill", skillID, "")
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
@@ -156,7 +158,7 @@ func skillResourceID(value, prefix string) (pgtype.UUID, error) {
 	return pgtype.UUID{Bytes: id, Valid: true}, nil
 }
 
-// skillPathIDs resolves a Skill path identifier. Like parsePathID, a malformed
+// skillPathIDs resolves a Skill path identifier. Like pgunit.PathID, a malformed
 // value resolves to an identifier that never exists, so the request follows the
 // missing-Skill path. Request-body references keep skillIDs.
 func skillPathIDs(tenantID, skillID string) (pgtype.UUID, pgtype.UUID, error) {

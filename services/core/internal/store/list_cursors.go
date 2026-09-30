@@ -47,14 +47,3 @@ func unresolvedCursor(err, cursor error) error {
 	}
 	return err
 }
-
-// lookupCursor resolves a cursor of a list whose unresolved cursor is a 404
-// (Agents, Sessions, Turns, Templates, Vaults and Credentials) like a path
-// identifier: a value that cannot name a resource becomes UnknownResourceID,
-// so the list follows exactly the missing-cursor path.
-func lookupCursor(value string) string {
-	if _, err := parseID(value); err != nil {
-		return UnknownResourceID
-	}
-	return value
-}

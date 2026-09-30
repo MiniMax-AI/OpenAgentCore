@@ -7,13 +7,14 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func publicSubagent(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, id string) (v1.Subagent, error) {
-	row, err := q.GetPublicSubagent(ctx, sqlc.GetPublicSubagentParams{SessionID: session, ID: parsePathID(id)})
+	row, err := q.GetPublicSubagent(ctx, sqlc.GetPublicSubagentParams{SessionID: session, ID: pgunit.PathID(id)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v1.Subagent{}, ErrNotFound
 	}
@@ -82,7 +83,7 @@ func (s *Store) ListSubagents(ctx context.Context, tenant, session, after string
 }
 
 func childTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, child, id string) (sqlc.SubagentTurn, error) {
-	row, err := q.GetChildTurn(ctx, sqlc.GetChildTurnParams{SessionID: session, ID: parsePathID(id)})
+	row, err := q.GetChildTurn(ctx, sqlc.GetChildTurnParams{SessionID: session, ID: pgunit.PathID(id)})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && uuid.UUID(row.SubagentID.Bytes).String() != child) {
 		return row, ErrNotFound
 	}

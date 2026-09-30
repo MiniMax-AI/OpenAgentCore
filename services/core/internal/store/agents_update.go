@@ -10,6 +10,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -30,10 +32,7 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 	if err != nil {
 		return SavedAgent{}, err
 	}
-	id, err := parseID(agentID)
-	if err != nil {
-		return SavedAgent{}, err
-	}
+	id := pgunit.PathID(agentID)
 	raw := input.Configuration
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
@@ -103,7 +102,7 @@ func (s *Store) UpdateAgent(ctx context.Context, tenantID, agentID string, input
 		if err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "update", "agent", updated.ID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update", "agent", updated.ID, "")
 	})
 	if err != nil {
 		return SavedAgent{}, fmt.Errorf("update agent: %w", err)

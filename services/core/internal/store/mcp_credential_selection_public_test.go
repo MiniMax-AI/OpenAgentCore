@@ -202,7 +202,7 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 		{"M4 foreign tenant", tokenA, inline(tool("records", url, reference(credentialB)), vaults(attachedA)), 400, notAttached(credentialB)},
 		{"M4 unattached", tokenA, inline(tool("records", url, reference(unattachedA)), vaults(attachedA)), 400, notAttached(unattachedA)},
 		{"M4 unattached B", tokenB, inline(tool("records", url, reference(credentialB)), vaults(otherVaultB)), 400, notAttached(credentialB)},
-		{"M4 missing", tokenA, inline(tool("records", url, reference(store.UnknownResourceID)), vaults(attachedA)), 400, notAttached(store.UnknownResourceID)},
+		{"M4 missing", tokenA, inline(tool("records", url, reference(uuid.Max.String())), vaults(attachedA)), 400, notAttached(uuid.Max.String())},
 		{"M4 malformed", tokenA, inline(tool("records", url, reference("not-a-credential")), vaults(attachedA)), 400, notAttached("not-a-credential")},
 		{"M4 unbounded", tokenA, inline(tool("records", url, reference(long)), vaults(attachedA)), 400, invalid("MCP credential_id was not found in an attached vault")},
 		{"M4 unprintable", tokenA, inline(tool("records", url, reference("bad\x01id")), vaults(attachedA)), 400, invalid("MCP credential_id was not found in an attached vault")},

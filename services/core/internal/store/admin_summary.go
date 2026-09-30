@@ -40,7 +40,7 @@ func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter Ad
 			return err
 		}
 		counts = AdminAssetCounts{Agents: raw.Agents, Skills: raw.Skills, EnvironmentTemplates: raw.EnvironmentTemplates, Files: raw.Files, Vaults: raw.Vaults, Credentials: raw.Credentials}
-		params := sqlc.AdminSummarySessionsParams{TenantID: tenant, CreatedAfter: auditTimestamp(filter.CreatedAfter), CreatedBefore: auditTimestamp(filter.CreatedBefore), AfterID: pgtype.UUID{Valid: true}}
+		params := sqlc.AdminSummarySessionsParams{TenantID: tenant, CreatedAfter: summaryTimestamp(filter.CreatedAfter), CreatedBefore: summaryTimestamp(filter.CreatedBefore), AfterID: pgtype.UUID{Valid: true}}
 		for {
 			rows, err := q.AdminSummarySessions(ctx, params)
 			if err != nil {
@@ -119,4 +119,11 @@ func (s *Store) ListAdminRuntimeTargets(ctx context.Context, tenantIDs []string,
 		page.Data = append(page.Data, AdminRuntimeTarget{SessionID: uuid.UUID(row.ID.Bytes).String(), TenantID: uuid.UUID(row.TenantID.Bytes).String()})
 	}
 	return page, nil
+}
+
+func summaryTimestamp(value *time.Time) pgtype.Timestamptz {
+	if value == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *value, Valid: true}
 }

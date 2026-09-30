@@ -66,7 +66,7 @@ func TestStaticCredentialsPersistEncryptedAndRemainScoped(t *testing.T) {
 		t.Fatal("separate creates reused a credential identity")
 	}
 	valid := CreateStaticCredentialInput{Name: "Rejected", MCPServerURL: "https://mcp.example/tools", Token: opaque}
-	if _, err := withoutKey.CreateStaticCredential(ctx, tenant, vaults[0].ID, valid); !errors.Is(err, ErrCredentialStorageUnavailable) {
+	if _, err := withoutKey.CreateStaticCredential(ctx, tenant, vaults[0].ID, valid); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("missing encryption key did not fail writes closed")
 	}
 	for _, target := range []struct{ tenant, vault string }{{tenant, vaults[2].ID}, {foreignTenant, vaults[0].ID}, {tenant, uuid.NewString()}} {

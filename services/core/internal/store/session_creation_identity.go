@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
@@ -30,7 +31,7 @@ func (s *Store) fingerprintedProvider(provider *v1.ModelProviderInput) (*v1.Mode
 	}
 	fingerprint, err := s.credentialCipher.Fingerprint(modelProviderKeyPurpose, provider.APIKey)
 	if err != nil {
-		return nil, ErrCredentialStorageUnavailable
+		return nil, credentialcrypto.ErrUnavailable
 	}
 	copy := *provider
 	copy.APIKey = "fingerprint:" + fingerprint
@@ -111,7 +112,7 @@ func (s *Store) FindSessionCreation(ctx context.Context, tenantID, key string, r
 		return SessionCreation{}, ErrInvalidInput
 	}
 	hash, err := s.creationRequestHash(request)
-	if errors.Is(err, ErrCredentialStorageUnavailable) {
+	if errors.Is(err, credentialcrypto.ErrUnavailable) {
 		// Without the credential key no Session with a provider bundle can have
 		// been committed or can be created; creation reports the missing key
 		// after request validation.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -84,7 +85,7 @@ func (s *Store) CreateProject(ctx context.Context, id, name string) (Project, er
 			return err
 		}
 		result = projectBinding(row).Project
-		return recordAdminMutation(ctx, q, result.TenantID, "create", "project", id)
+		return auditpg.RecordAdminMutation(ctx, q, result.TenantID, "create", "project", id)
 	})
 	if err != nil {
 		return Project{}, err
@@ -172,7 +173,7 @@ func (s *Store) mutateProject(ctx context.Context, id, name string, archive bool
 			return err
 		}
 		result = projectBinding(row).Project
-		return recordAdminMutation(ctx, q, result.TenantID, action, "project", id)
+		return auditpg.RecordAdminMutation(ctx, q, result.TenantID, action, "project", id)
 	})
 	if err != nil {
 		return Project{}, err

@@ -10,6 +10,8 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 )
 
@@ -30,7 +32,7 @@ func TestDeploymentModelProviderEncryptedAuditedAndReplaced(t *testing.T) {
 	if _, err := s.SetDeploymentModelProvider(ctx, "codex", v1.ModelConfigurationInput{ModelProvider: v1.ModelProviderInput{Protocol: "unknown", BaseURL: provider.BaseURL, APIKey: "k"}, Model: "fixture"}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("unknown upstream protocol accepted", err)
 	}
-	if _, err := New(pool).SetDeploymentModelProvider(ctx, "codex", v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"}); !errors.Is(err, ErrCredentialStorageUnavailable) {
+	if _, err := New(pool).SetDeploymentModelProvider(ctx, "codex", v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("key stored without encryption", err)
 	}
 	saved, err := s.SetDeploymentModelProvider(ctx, "codex", v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"})
@@ -52,7 +54,7 @@ func TestDeploymentModelProviderEncryptedAuditedAndReplaced(t *testing.T) {
 		t.Fatal("unset harness returned a default", err)
 	}
 	other, _ := credentialcrypto.New(bytes.Repeat([]byte{48}, 32))
-	if _, err := NewWithCredentialCipher(pool, other).DeploymentModelProvider(ctx, "codex"); !errors.Is(err, ErrCredentialStorageUnavailable) {
+	if _, err := NewWithCredentialCipher(pool, other).DeploymentModelProvider(ctx, "codex"); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("wrong encryption key did not fail closed", err)
 	}
 	replacement := v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://replacement.example/v1", APIKey: "replacement-key"}
@@ -71,7 +73,7 @@ func TestDeploymentModelProviderEncryptedAuditedAndReplaced(t *testing.T) {
 	if got, err := s.DeploymentModelProvider(ctx, "codex"); err != nil || got != nil {
 		t.Fatal("deleted default remained", err)
 	}
-	page, err := s.ListAdminAudit(ctx, AdminAuditFilter{ResourceType: "deployment_model_provider", CreatedAfter: &started})
+	page, err := auditpg.New(pgunit.NewPool(pool)).ListAdminAudit(ctx, adminaudit.Filter{ResourceType: "deployment_model_provider", CreatedAfter: &started})
 	if err != nil || len(page.Data) != 4 {
 		t.Fatal("deployment writes not audited", len(page.Data), err)
 	}
@@ -80,10 +82,10 @@ func TestDeploymentModelProviderEncryptedAuditedAndReplaced(t *testing.T) {
 			t.Fatal("unexpected deployment audit entry", entry)
 		}
 	}
-	if scoped, err := s.ListAdminAudit(ctx, AdminAuditFilter{ProjectID: "00000000-0000-4000-8000-000000000001"}); err != nil || len(scoped.Data) != 0 {
+	if scoped, err := auditpg.New(pgunit.NewPool(pool)).ListAdminAudit(ctx, adminaudit.Filter{ProjectID: "00000000-0000-4000-8000-000000000001"}); err != nil || len(scoped.Data) != 0 {
 		t.Fatal("Project filter returned deployment entries", err)
 	}
-	if _, err := s.SetDeploymentModelProvider(adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "abcd1234", RequestID: "r", TraceID: "t", ProjectID: "00000000-0000-4000-8000-000000000001"}), "codex", v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"}); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.SetDeploymentModelProvider(adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "abcd1234", RequestID: "r", TraceID: "t", ProjectID: "00000000-0000-4000-8000-000000000001"}), "codex", v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"}); !errors.Is(err, adminaudit.ErrInvalidSource) {
 		t.Fatal("Project-scoped audit source accepted for a deployment write", err)
 	}
 	if got, _ := s.DeploymentModelProvider(ctx, "codex"); got != nil {

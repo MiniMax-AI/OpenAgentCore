@@ -36,6 +36,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
@@ -106,6 +107,8 @@ func run() error {
 	}
 	executionStore := store.NewWithCredentialCipherAndOAuthRefresh(pool, credentialKey, oauthClient)
 	executionStore.SetPublicURL(public)
+	units := pgunit.NewPool(pool)
+	auditStore := auditpg.New(units)
 	installation, err := installationFacts(public)
 	if err != nil {
 		return err
@@ -120,7 +123,7 @@ func run() error {
 	auditCleanupDone := make(chan struct{})
 	go func() {
 		defer close(auditCleanupDone)
-		runWriteAuditCleanup(auditCleanupCtx, executionStore, auditRetention, metrics)
+		runWriteAuditCleanup(auditCleanupCtx, auditStore, auditRetention, metrics)
 	}()
 	defer func() { cancelAuditCleanup(); <-auditCleanupDone }()
 	var workerDone chan error
@@ -297,7 +300,7 @@ func run() error {
 		Sessions: executionStore, SessionEvents: executionStore, SessionHistory: executionStore,
 		Subagents: executionStore, Artifacts: executionStore, SessionAdmin: executionStore,
 		Environments: executionStore, ExecutorConnections: executorConnections{store: executionStore, registry: registry},
-		Admin: executionStore, WriteAudit: executionStore, Metrics: metrics,
+		Admin: executionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
 	}
 	if worker != nil {

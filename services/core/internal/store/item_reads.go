@@ -7,6 +7,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -26,7 +27,7 @@ func (s *Store) ListItems(ctx context.Context, tenantID, sessionID, cursor strin
 		if cursor != "" {
 			// Any cursor that is not an Item of this Session, including a
 			// malformed one, is an invalid cursor rather than a missing resource.
-			row, err := q.GetSessionItem(ctx, sqlc.GetSessionItemParams{SessionID: session, ID: parsePathID(cursor)})
+			row, err := q.GetSessionItem(ctx, sqlc.GetSessionItemParams{SessionID: session, ID: pgunit.PathID(cursor)})
 			if errors.Is(err, pgx.ErrNoRows) {
 				return errItemCursor
 			}

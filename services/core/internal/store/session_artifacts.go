@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -51,7 +53,7 @@ func (s *Store) ListSessionArtifacts(ctx context.Context, tenantID, sessionID, e
 	params := sqlc.ListSessionArtifactsParams{TenantID: tenant, SessionID: session, PageLimit: int32(limit + 1), Ascending: ascending, AfterID: pgtype.UUID{Valid: true}}
 	if environmentID != "" {
 		// A malformed filter matches nothing, like another Environment's ID (HE-56).
-		params.EnvironmentID = parsePathID(environmentID)
+		params.EnvironmentID = pgunit.PathID(environmentID)
 	}
 	if cursor != "" {
 		// Any cursor that is not an Artifact of this Session, including a
@@ -142,7 +144,7 @@ func (s *Store) DeleteSessionArtifact(ctx context.Context, tenantID, sessionID, 
 		if err := objects.Unlink(ctx, oid.Uint32); err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "delete", "artifact", uuid.UUID(lookup.ID.Bytes).String(), uuid.UUID(lookup.SessionID.Bytes).String())
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "artifact", uuid.UUID(lookup.ID.Bytes).String(), uuid.UUID(lookup.SessionID.Bytes).String())
 	})
 }
 

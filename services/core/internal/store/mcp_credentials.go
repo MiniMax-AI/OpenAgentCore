@@ -183,7 +183,7 @@ func (s *Store) MCPBearerToken(ctx context.Context, tenantID string, vaultIDs []
 		return "", errors.New("cannot read MCP credential")
 	}
 	if s.credentialCipher == nil {
-		return "", ErrCredentialStorageUnavailable
+		return "", credentialcrypto.ErrUnavailable
 	}
 	plaintext, err := s.credentialCipher.Open(ciphertext, credentialcrypto.Binding{
 		TenantID: uuid.UUID(tenant.Bytes).String(), VaultID: uuid.UUID(vault.Bytes).String(), CredentialID: uuid.UUID(id.Bytes).String(),

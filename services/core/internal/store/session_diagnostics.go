@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -35,7 +36,7 @@ func (s *Store) GetSessionDiagnosticsSnapshot(ctx context.Context, tenantID, ses
 	var session Session
 	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
-		row, err := q.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: parsePathID(sessionID)})
+		row, err := q.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: pgunit.PathID(sessionID)})
 		if err != nil {
 			return err
 		}

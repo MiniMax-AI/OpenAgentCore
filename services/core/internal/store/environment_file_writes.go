@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
@@ -61,7 +62,7 @@ func (s *Store) ReserveEnvironmentFileWrite(ctx context.Context, tenant, environ
 	}
 	var origin []byte
 	if source, ok := writeaudit.FromContext(ctx); ok {
-		if err := validateWriteAuditSource(source, tenant); err != nil {
+		if err := source.Validate(tenant); err != nil {
 			return EnvironmentFileWrite{}, err
 		}
 		origin, err = json.Marshal(source)
@@ -186,7 +187,7 @@ func (s *Store) SettleEnvironmentFileWrite(ctx context.Context, tenant, environm
 				return err
 			}
 			auditCtx := writeaudit.WithSource(ctx, source)
-			return recordWriteAudit(auditCtx, q, tenant, "upload_file", "environment", environment, uuid.UUID(session.Bytes).String())
+			return auditpg.RecordWriteAudit(auditCtx, q, tenant, "upload_file", "environment", environment, uuid.UUID(session.Bytes).String())
 		}
 		return nil
 	})

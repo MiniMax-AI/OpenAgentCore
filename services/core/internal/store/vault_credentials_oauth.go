@@ -5,6 +5,9 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,10 +18,7 @@ func (s *Store) CreateOAuthCredential(ctx context.Context, tenantID, vaultID str
 	if err != nil {
 		return Credential{}, ErrNotFound
 	}
-	vault, err := parseID(vaultID)
-	if err != nil {
-		return Credential{}, ErrNotFound
-	}
+	vault := pgunit.PathID(vaultID)
 	if !validVaultName(input.Name) || input.MCPServerURL == "" || !validOAuthMetadata(input.OAuth) {
 		return Credential{}, ErrInvalidInput
 	}
@@ -48,7 +48,7 @@ func (s *Store) CreateOAuthCredential(ctx context.Context, tenantID, vaultID str
 		if err != nil {
 			return err
 		}
-		return recordWriteAudit(ctx, q, tenantID, "create", "credential", created.ID, created.VaultID, AuditResource{Type: "credential", ID: created.ID, ParentID: created.VaultID})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, "create", "credential", created.ID, created.VaultID, writeaudit.Resource{Type: "credential", ID: created.ID, ParentID: created.VaultID})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Credential{}, ErrNotFound
@@ -60,6 +60,7 @@ func (s *Store) CreateOAuthCredential(ctx context.Context, tenantID, vaultID str
 }
 
 func (s *Store) UpdateOAuthCredential(ctx context.Context, tenantID, vaultID, credentialID string, input UpdateOAuthCredentialInput) (Credential, error) {
+	vaultID, credentialID = pathID(vaultID), pathID(credentialID)
 	current, err := s.GetCredential(ctx, tenantID, vaultID, credentialID)
 	if err != nil {
 		return Credential{}, err
@@ -102,7 +103,7 @@ func (s *Store) UpdateOAuthCredential(ctx context.Context, tenantID, vaultID, cr
 		if err != nil {
 			return err
 		}
-		if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "update", "credential", updated.ID, updated.VaultID); err != nil {
+		if err := auditpg.RecordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "update", "credential", updated.ID, updated.VaultID); err != nil {
 			return errors.New("credential update failed")
 		}
 		return nil

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -40,7 +42,7 @@ func (s *Store) listChildItems(ctx context.Context, tenant, session, child, turn
 		if after != "" {
 			// Any cursor outside this child (and Turn) scope, including a
 			// malformed one, uses the Session Item cursor error.
-			row, err := q.GetChildItem(ctx, sqlc.GetChildItemParams{SessionID: sid, SubagentID: childID, ID: parsePathID(after)})
+			row, err := q.GetChildItem(ctx, sqlc.GetChildItemParams{SessionID: sid, SubagentID: childID, ID: pgunit.PathID(after)})
 			if errors.Is(err, pgx.ErrNoRows) || (err == nil && p.TurnID.Valid && p.TurnID != row.TurnID) {
 				return errItemCursor
 			}

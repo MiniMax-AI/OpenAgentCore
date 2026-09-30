@@ -15,6 +15,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -218,7 +220,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	if providerOf(hostedID) != "deployment-canary" {
 		t.Fatal("removing the default changed an existing Session")
 	}
-	page, err := st.ListAdminAudit(t.Context(), store.AdminAuditFilter{ResourceType: "deployment_model_provider", ResourceID: "codex"})
+	page, err := auditpg.New(pgunit.NewPool(pool)).ListAdminAudit(t.Context(), adminaudit.Filter{ResourceType: "deployment_model_provider", ResourceID: "codex"})
 	if err != nil || len(page.Data) < 4 || page.Data[0].Action != "delete" || page.Data[0].ProjectID != nil {
 		t.Fatal("deployment writes not audited", page, err)
 	}

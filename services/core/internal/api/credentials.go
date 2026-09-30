@@ -23,7 +23,7 @@ import (
 // @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials [post]
 func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
-	vaultID := credentialPathID(r, "vault_id")
+	vaultID := chi.URLParam(r, "vault_id")
 	raw, ok := readJSONObject(w, r)
 	if !ok {
 		return
@@ -105,16 +105,6 @@ func credentialResourceID(w http.ResponseWriter, r *http.Request, param string) 
 		return "", false
 	}
 	return id.String(), true
-}
-
-// credentialPathID resolves a malformed identifier to one that never exists,
-// so body, query and storage checks run exactly as for a missing identifier.
-func credentialPathID(r *http.Request, param string) string {
-	id, err := uuid.Parse(chi.URLParam(r, param))
-	if err != nil || id == uuid.Nil {
-		return store.UnknownResourceID
-	}
-	return id.String()
 }
 
 func credentialResponse(c store.Credential) v1.Credential {

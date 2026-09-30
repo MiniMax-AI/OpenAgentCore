@@ -128,10 +128,10 @@ func TestOAuthCredentialMetadataEncryptionAndScope(t *testing.T) {
 	if _, err := s.CreateOAuthCredential(t.Context(), uuid.NewString(), vault.ID, input); !errors.Is(err, ErrNotFound) {
 		t.Fatal("foreign creation admitted")
 	}
-	if _, err := New(pool).CreateOAuthCredential(t.Context(), tenant, vault.ID, input); !errors.Is(err, ErrCredentialStorageUnavailable) {
+	if _, err := New(pool).CreateOAuthCredential(t.Context(), tenant, vault.ID, input); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("keyless creation admitted")
 	}
-	if token, err := New(pool).MCPBearerToken(t.Context(), tenant, []string{vault.ID}, binding); !errors.Is(err, ErrCredentialStorageUnavailable) || token != "" {
+	if token, err := New(pool).MCPBearerToken(t.Context(), tenant, []string{vault.ID}, binding); !errors.Is(err, credentialcrypto.ErrUnavailable) || token != "" {
 		t.Fatal("keyless execution admitted")
 	}
 	wrongCipher, _ := credentialcrypto.New(bytes.Repeat([]byte{18}, 32))

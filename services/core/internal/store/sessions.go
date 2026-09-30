@@ -227,7 +227,7 @@ func (s *Store) GetSession(ctx context.Context, tenantID, sessionID string) (Ses
 	if err != nil {
 		return Session{}, err
 	}
-	id := parsePathID(sessionID)
+	id := pgunit.PathID(sessionID)
 	row, err := s.queries.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Session{}, ErrNotFound
@@ -254,7 +254,7 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 		params.AgentID = pgtype.Text{String: *agentID, Valid: true}
 	}
 	if cursor != "" {
-		after, err := s.GetSession(ctx, tenantID, lookupCursor(cursor))
+		after, err := s.GetSession(ctx, tenantID, pgunit.LookupCursor(cursor))
 		if err != nil {
 			return SessionPage{}, err
 		}
@@ -281,29 +281,20 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 	return page, nil
 }
 
+// parseID translates pgunit's identifier rule into store's invalid-input
+// error. Path identifiers use pgunit.PathID and lookup cursors
+// pgunit.LookupCursor.
 func parseID(value string) (pgtype.UUID, error) {
-	id, err := uuid.Parse(value)
-	if err != nil || id == uuid.Nil {
-		return pgtype.UUID{}, fmt.Errorf("%w: nonzero UUID required", ErrInvalidInput)
-	}
-	return pgtype.UUID{Bytes: id, Valid: true}, nil
-}
-
-// UnknownResourceID never names a stored resource: Core assigns version 4 or 5
-// UUIDs, and the maximum UUID is neither.
-var UnknownResourceID = uuid.Max.String()
-
-// parsePathID parses a caller-supplied resource path identifier. A value that
-// cannot name a resource resolves to UnknownResourceID, so the request follows
-// exactly the path of a well-formed missing identifier, including validation
-// order. Request-body references keep parseID; see lookupCursor for cursors.
-func parsePathID(value string) pgtype.UUID {
-	id, err := parseID(value)
+	id, err := pgunit.ParseID(value)
 	if err != nil {
-		return pgtype.UUID{Bytes: uuid.Max, Valid: true}
+		return pgtype.UUID{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
-	return id
+	return id, nil
 }
+
+// pathID resolves a caller-supplied path identifier with pgunit.PathID for an
+// operation that passes it on as a string.
+func pathID(value string) string { return uuid.UUID(pgunit.PathID(value).Bytes).String() }
 
 func sessionFromRow(row sqlc.Session) (Session, error) {
 	session := Session{ID: uuid.UUID(row.ID.Bytes).String(), TenantID: uuid.UUID(row.TenantID.Bytes).String(), Engine: row.Engine, CreatedAt: row.CreatedAt.Time, RequiredActions: []v1.FunctionCallAction{}}

@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
@@ -15,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 // Strict fakes: one per Dependencies area, with a func field per method. A
@@ -33,7 +35,6 @@ type fakeAdmin struct {
 	t                       testing.TB
 	readAdminSummary        func(context.Context, string, store.AdminSummaryFilter, func(store.Session, *string) error) (store.AdminAssetCounts, error)
 	listAdminRuntimeTargets func(context.Context, []string, string, int, bool) (store.AdminRuntimeTargetPage, error)
-	listAdminAudit          func(context.Context, store.AdminAuditFilter) (store.AdminAuditPage, error)
 }
 
 func (f *fakeAdmin) ReadAdminSummary(a0 context.Context, a1 string, a2 store.AdminSummaryFilter, a3 func(store.Session, *string) error) (store.AdminAssetCounts, error) {
@@ -50,7 +51,12 @@ func (f *fakeAdmin) ListAdminRuntimeTargets(a0 context.Context, a1 []string, a2 
 	return f.listAdminRuntimeTargets(a0, a1, a2, a3, a4)
 }
 
-func (f *fakeAdmin) ListAdminAudit(a0 context.Context, a1 store.AdminAuditFilter) (store.AdminAuditPage, error) {
+type fakeAdminAudit struct {
+	t              testing.TB
+	listAdminAudit func(context.Context, adminaudit.Filter) (adminaudit.Page, error)
+}
+
+func (f *fakeAdminAudit) ListAdminAudit(a0 context.Context, a1 adminaudit.Filter) (adminaudit.Page, error) {
 	if f.listAdminAudit == nil {
 		unexpectedCall(f.t, "ListAdminAudit")
 	}
@@ -1095,18 +1101,18 @@ func (f *fakeVaults) ResolveMCPCredentials(a0 context.Context, a1 string, a2 []s
 
 type fakeWriteAudit struct {
 	t                   testing.TB
-	getResourceOwners   func(context.Context, string, string, []string) ([]store.ResourceOwner, error)
-	listWriteOperations func(context.Context, string, store.WriteOperationFilter) (store.WriteOperationPage, error)
+	getResourceOwners   func(context.Context, string, string, []string) ([]writeaudit.ResourceOwner, error)
+	listWriteOperations func(context.Context, string, writeaudit.Filter) (writeaudit.Page, error)
 }
 
-func (f *fakeWriteAudit) GetResourceOwners(a0 context.Context, a1 string, a2 string, a3 []string) ([]store.ResourceOwner, error) {
+func (f *fakeWriteAudit) GetResourceOwners(a0 context.Context, a1 string, a2 string, a3 []string) ([]writeaudit.ResourceOwner, error) {
 	if f.getResourceOwners == nil {
 		unexpectedCall(f.t, "GetResourceOwners")
 	}
 	return f.getResourceOwners(a0, a1, a2, a3)
 }
 
-func (f *fakeWriteAudit) ListWriteOperations(a0 context.Context, a1 string, a2 store.WriteOperationFilter) (store.WriteOperationPage, error) {
+func (f *fakeWriteAudit) ListWriteOperations(a0 context.Context, a1 string, a2 writeaudit.Filter) (writeaudit.Page, error) {
 	if f.listWriteOperations == nil {
 		unexpectedCall(f.t, "ListWriteOperations")
 	}

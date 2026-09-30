@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 )
 
 const (
@@ -61,7 +62,7 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 	var result EnvironmentInputReservation
 	err = s.withEnvironmentInputSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		audit := func() error {
-			return recordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
+			return auditpg.RecordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
 		}
 		previous, err := q.FindEnvironmentInputReservation(ctx, sqlc.FindEnvironmentInputReservationParams{
 			SessionID: session, IdempotencyKey: key, Batch: encoded,
