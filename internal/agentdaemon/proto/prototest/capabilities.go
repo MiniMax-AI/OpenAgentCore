@@ -1,4 +1,5 @@
-// Package prototest provides explicit capability fixtures for contract tests.
+// Package prototest provides explicit capability fixtures and the shared wire
+// scenarios for Core–Runtime contract tests.
 package prototest
 
 import (
