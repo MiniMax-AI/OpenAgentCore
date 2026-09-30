@@ -39,7 +39,7 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
 然后：
 
-1. 用安装器生成的 Core key **登录 Web**（管理控制台）。
+1. 用安装器生成的 Core key **登录 Web**（管理控制台），并**配置域名和 HTTPS**。
 2. **设置默认模型**，并**签发 Project API key**。
 3. **添加执行资源**：节点、E2B，或你自己的机器。
 4. 用 OpenAI SDK **[运行第一个 Session](docs/getting-started/quickstart.md)**。
@@ -50,14 +50,14 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
 ![OpenAgentCore 架构](docs/assets/architecture.png)
 
-Core 对外提供两组 API：
+应用和管理员使用以下 Core API：
 
 | API | 路径 | 调用方 |
 | --- | --- | --- |
 | **[Agents API](docs/api/public-agent-api.md)** | `/v1` | 你的应用，与 [OpenAI 的 Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview) 协议一致 |
 | **[Core API](contracts/agents-api/admin-api.md)** | `/core/v1` | 管理员，通过 Web 调用 |
 
-所有状态都由 Core 保存；Runtime 在 Environment 中运行所选 Harness。各部件之间都通过既定协议连接，
+持久化执行状态由 Core 保存；Runtime 在 Environment 中运行所选 Harness。各部件之间都通过既定协议连接，
 任何一个都可以单独替换。详见[架构说明](docs/architecture.md)。
 
 ## 文档
@@ -68,7 +68,7 @@ Core 对外提供两组 API：
 | 基于 API 开发应用 | [快速开始](docs/getting-started/quickstart.md)，然后看 [Agents API 指南](docs/api/public-agent-api.md) |
 | 看一个完整的应用 | [示例](docs/examples.md) |
 | 在自己的机器上运行 Agent | [自托管执行](docs/getting-started/self-hosted.md) |
-| 查看 Runtime 能力和验收范围 | [Harness 能力](contracts/agents-api/harness-capabilities.md) |
+| 查看 Harness 能力和限制 | [Harness 能力](contracts/agents-api/harness-capabilities.md) |
 | 了解设计 | [架构说明](docs/architecture.md) |
 | 接入新的沙箱、Harness 或其他组件 | [开发指南](docs/development.md) |
 

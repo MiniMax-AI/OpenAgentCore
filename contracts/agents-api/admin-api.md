@@ -39,7 +39,7 @@ Paths are relative to `/core/v1`.
 
 ## Projects and keys
 
-A Project owns one execution tenant; its keys share its principal and assets ([Projects own assets](../../docs/design-principles.md#projects-own-assets)). Web's **Projects and keys** page uses these routes.
+A Project owns one execution tenant; its keys share its principal and assets ([Projects own assets](../../docs/concepts.md#projects-own-assets)). Web's **Projects and keys** page uses these routes.
 
 | Operation | Route | Result |
 | --- | --- | --- |

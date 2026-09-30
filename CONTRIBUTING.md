@@ -6,47 +6,51 @@ This guide owns how to work in the repository: documentation ownership, the repo
 
 | Subject | Canonical source |
 | --- | --- |
-| Design principles, including public API fidelity and the storage rule, and documentation rules | [AGENTS.md](AGENTS.md) |
-| Protocol boundaries: each boundary's protocol code and document | [AGENTS.md](AGENTS.md#protocols-at-every-boundary) |
-| User concepts and authority | [Concepts and ownership](docs/design-principles.md) |
-| Architecture overview, component responsibilities and diagrams | [Architecture](docs/architecture.md) |
+| Design principles, public API fidelity, settings and data ownership, documentation rules | [AGENTS.md](AGENTS.md) |
+| Protocol code and documents at each component boundary | [Protocol map](AGENTS.md#protocols-at-every-boundary) |
+| Projects, keys, resource isolation, administrator authority, secrets and audit concepts | [Concepts and ownership](docs/concepts.md) |
+| Component responsibilities and Session flow | [Architecture](docs/architecture.md) |
 | Developer setup, repository map and focused checks | [Develop OpenAgentCore](docs/development.md) |
 | API callers, credentials and route inventory | [API index](docs/api/README.md) |
-| Public wire types and qualified behavior | [Agents API contracts](contracts/agents-api/README.md), [pinned upstream](contracts/agents-api/upstream.json), and linked operation contracts |
-| Core service implementation constraints | [Agents API implementation constraints](services/core/IMPLEMENTATION.md) and [service README](services/core/README.md) |
-| Environment ownership and capability preparation (Skills, Plugins, MCP, `packages.system`) | [Environments](contracts/agents-api/environments.md) |
-| Built-in Harness identifiers, configuration/profile bindings and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
-| Effective MCP bindings and credential authority | [Environment MCP](contracts/agents-api/environments.md#skills-plugins-and-environment-mcp) and `apps/daemon/internal/agent/mcp_binding.go` |
-| Harness qualification and acceptance | [Harness capabilities](contracts/agents-api/harness-capabilities.md) and [Harness onboarding](contracts/agents-api/harness-onboarding.md#qualify-the-adapter) |
-| Harness service qualification declarations and registration | [Explicit service qualification](contracts/agents-api/harness-onboarding.md#explicit-service-qualification) and `services/core/internal/engine/profile.go` |
-| Harness selection and Agent defaults | [Harness selection](contracts/agents-api/model-execution.md#harness-selection) |
-| Provider registration validation | [Sandbox Provider guide](docs/sandbox-provider.md#registration-validation) |
-| Provider selection, sandbox deployment and E2B setup | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
-| Hosted sandbox nodes | [Nodes guide](docs/getting-started/nodes.md) and [sandbox deployment contract](contracts/agents-api/sandbox-deployment.md) |
-| Claude private bridge and Runtime artifact | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |
-| MiniMax Code and Claude Runtime adapter rules | [MiniMax Code Runtime](services/core/deploy/mcode/README.md), [Claude Runtime](services/core/deploy/claude/README.md) |
-| CI, distribution builds, installer lifecycle and managed HTTPS, release publication | [Maintainer guide](docs/maintainers.md) |
-| Operator installation, installation layout and configuration | [Installation](docs/getting-started/install.md), [installation options](docs/getting-started/install-options.md), [configuration](docs/configuration.md), [operations](docs/getting-started/operations.md) |
-| Core Web console server and sign-in | [Console server](docs/web/console-server.md) |
-| Web components, interaction and visual rules | [Web design](apps/web/DESIGN.md) and [Web product](apps/web/PRODUCT.md) |
-| Documentation website generation | Docs app |
+| Public wire semantics and protocol coverage | [Agents API contracts](contracts/agents-api/README.md) |
+| Machine connection routes | [Machine connection API](docs/api/README.md#machine-connection-api) |
+| Core service setup, tests and generation | [Core service guide](services/core/README.md) |
+| Core implementation constraints beyond the public contracts | [Implementation constraints](services/core/IMPLEMENTATION.md) |
+| Environment ownership, preparation, Skills, Plugins, packages and MCP bindings | [Environments](contracts/agents-api/environments.md) |
+| Built-in Harness identifiers and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
+| Harness registration, service qualification and acceptance | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
+| Harness capabilities by placement | [Harness capabilities](contracts/agents-api/harness-capabilities.md) |
+| Harness selection, model providers and native parameters | [Model execution](contracts/agents-api/model-execution.md) |
+| Provider registration and lifecycle | [Sandbox Provider guide](docs/sandbox-provider.md) |
+| Sandbox deployment, selection and administrative transitions | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
+| Operator node tasks | [Nodes guide](docs/getting-started/nodes.md) |
+| Codex, Claude and MiniMax Runtime adapters and images | [Codex](services/core/deploy/codex/README.md), [Claude](services/core/deploy/claude/README.md), [MiniMax](services/core/deploy/mcode/README.md) |
+| Claude private SDK bridge | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |
+| E2B template construction | [E2B template builder](services/core/deploy/e2b/README.md) |
+| E2B and microsandbox Provider helper implementation | [E2B helper](services/core/tools/e2b-provider/README.md), [microsandbox helper](services/core/tools/microsandbox-provider/README.md) |
+| Runtime telemetry responses | [Runtime telemetry API](contracts/agents-api/runtime-observability-api.md) |
+| Runtime observation, sampling, retention and export | [Runtime observability](contracts/agents-api/runtime-observability.md) |
+| Distribution builds, Runtime image builds, CI and publication | [Maintainer guide](docs/maintainers.md) |
+| Installer lifecycle, locking, generated state, managed HTTPS and downloads | [Installer design rules](deploy/install/README.md) |
+| Operator installation and alternatives | [Installation](docs/getting-started/install.md), [installation options](docs/getting-started/install-options.md) |
+| Settings, defaults, files and installation layout | [Configuration](docs/configuration.md) |
+| Operator commands, keys, backup and version policy | [Operations](docs/getting-started/operations.md) |
+| Web console request boundary and sign-in | [Console server](docs/web/console-server.md) |
+| Web page behavior and visual rules | [Web product](apps/web/PRODUCT.md), [Web design](apps/web/DESIGN.md) |
+| Application example behavior and local operation | [Application example](example/parsar/README.md) |
 
 ## Repository boundary
 
-This repository is the standalone execution substrate, copied from the Parsar repository. It holds the API and its migrations, the Runtime protocol and daemon, Harness adapters, shared execution packages, the standalone Core Web console and build/test tools.
-
-Product users, workspaces, model catalogs, business assets, the Parsar product Web, product API and product migrations remain in Parsar. Do not import `server/`, `apps/parsar/`, product CLI/plugin packages or their deployment stack.
-
-Preserve copied Runtime and protocol behavior. Go import paths use this repository's module and do not require fetching the original repository. Do not automatically sync or delete the original repository's Core.
+This repository contains the Core API and database, Runtime daemon, Harness and Sandbox Provider adapters, shared protocol packages, Web administrator console and their build and test tools. Product applications stay outside that service boundary. Keep the external Parsar product's `server/`, `apps/parsar/`, CLI, plugins and deployment stack in its own repository; do not automatically sync or delete its Core copy. Go imports resolve through this repository's module.
 
 ### Product and execution service separation
 
-Agents API is the primary infrastructure deliverable. Parsar is an ordinary client and example application; its feature backlog must not dictate the execution service's public protocol or internal model. Agents API must build, deploy and run without the Parsar product service, frontend or database. An optional Compose deployment may install both services with one PostgreSQL instance, but separate databases, credentials and migrations. The product uses Core exclusively; it has no native daemon or HTTP Agent fallback.
+Core must build, deploy and run independently of product services, frontends and databases. Applications follow the [public API boundary](AGENTS.md#public-api); their feature backlogs do not define Core's public protocol or storage model. Applications that share a PostgreSQL server with Core must use separate databases, credentials and migrations.
 
-- Parsar owns users, workspaces, business authorization, Agent/Team definitions, capabilities, product conversations, IM/sharing, approval decisions and billing.
-- A product conversation may map to several execution sessions. An execution session is distinct from a live daemon socket, process or sandbox. Native engine session identifiers belong to the execution service.
-- Establish single-Agent execution, approval, cancellation, idempotent submission, persisted recovery queries before Team orchestration. The upstream SSE stream is live-only; recover through Session/Turn/Items reads. Any additional product cursor replay must be documented as an extension, not upstream semantics. Agents API establishes single-Agent execution first; business Team loops are deferred. This does not exclude upstream `multi_agent` configuration or subagent resources from protocol coverage. Future business Team orchestration directly depends on `openai/openai-agents-python` in Parsar.
-- Daemon Skill/SP authoring remains a product operation: forward through a scoped product callback with the original requester and workspace checks. A runtime credential alone must not grant business write permissions.
+- Parsar owns users, workspaces, business authorization, Agent/Team definitions, capabilities, product conversations, IM/sharing, approval decisions and billing. It uses Core for execution.
+- A product conversation may reference several execution Sessions. Core owns native engine session identities; an execution Session has its own lifetime, separate from a daemon connection, process or sandbox.
+- Build application orchestration on the [public Session and event contract](docs/api/public-agent-api.md). Product cursor replay must be an explicit product extension. Business Team orchestration belongs to the application; Core's pinned `multi_agent` and Subagent resources remain part of the public contract.
+- Daemon Skill/SP authoring is a product operation: forward it through a scoped product callback that checks the original requester and workspace. A Runtime credential alone must not authorize business writes.
 
 ### Optional application example
 
@@ -70,7 +74,7 @@ When documents conflict, apply the latest explicit user decision and update the 
 
 If requirements are unresolved, object ownership is unclear, or a design would need parallel compatibility paths, raise the issue with a concrete recommendation and tradeoffs before implementing it. Continue independent work meanwhile. Do not silently preserve obsolete private designs.
 
-Record unrelated findings without automatically starting them. Do not claim a broader compatibility target is complete from one merged batch.
+Record unrelated findings without automatically starting them. Scope compatibility claims to the operations and placements verified.
 
 ### Implementation conventions
 
@@ -97,17 +101,7 @@ Toolchain setup and focused commands are in [Develop OpenAgentCore](docs/develop
 
 ### Full gate
 
-Run `make check` before completion. It includes:
-
-- all daemon and shared Go tests, including native daemon filesystem tests;
-- Core contract, client and service tests and standalone API builds;
-- a real dedicated PostgreSQL test database and byte-for-byte sqlc checks;
-- Core Web and TypeScript client checks, including fixture-only Playwright acceptance;
-- Claude SDK tests and packaging, and MiniMax companion checks;
-- the Core distribution and installer gates;
-- `make check-example` for the optional application example (TypeScript, proxy/persistence tests, build and fixture browser acceptance). Its synthetic responses are not live model qualification.
-
-It excludes Parsar product Web and server gates.
+Run `make check` before completing code changes. The `check` target in the [Makefile](Makefile) is the authoritative list of gates. [Focused validation](docs/development.md#validate-a-change) selects checks for development; [live acceptance](#live-acceptance) qualifies native execution beyond fixtures and builds.
 
 ### Test database
 
@@ -127,17 +121,15 @@ The role needs `CREATE DATABASE`: managed-provider tests create and drop isolate
 
 ### Compatibility evidence
 
-- Use official SDKs for clients and reuse upstream types or schemas where suitable. SDK deserialization alone is not server validation or proof of compatibility: test raw HTTP payloads and observable workflows as well.
-- When changing API behavior, preserve the pinned types, coverage ledgers and official SDK and raw HTTP tests. Core changes keep the independent build and official-client workflow.
-- Verify an independent official-client workflow before a Parsar integration. An OpenAI endpoint is a possible client target only where the requested capabilities and credentials support it.
-- Qualify public workflows through the common Runtime contract and Harness adapter; direct native probes establish feasibility only.
-- Synthetic data and mock model responses may support controlled tests; live execution acceptance must call a real model API through the service, daemon and harness. A real daemon with a synthetic model does not constitute live model validation. Keep provider credentials in private test configuration, outside source, logs and task records.
-- Owned-resource live probes can qualify status codes and wire details left unspecified by the SDK; retain request evidence and distinguish observations from guaranteed or fully covered behavior.
-- Track partial coverage in `contracts/agents-api/README.md` until the complete target is verified. Reconcile current coverage summaries with merged routes and recorded acceptance; distinguish accepted profiles, partial implementation, missing operations and unverified semantics. Handler counts are not compatibility percentages, and an active provider probe is not deployment qualification.
+Use official SDKs and upstream types or schemas where suitable. Validate raw HTTP payloads and observable workflows alongside SDK behavior. API changes preserve the pinned contracts, coverage ledger, official-client tests and Core's independent build. Verify the official-client workflow before application integration; an OpenAI endpoint is a test target only when the required capabilities and credentials are available.
+
+Controlled fixtures and synthetic model responses qualify deterministic behavior. Live execution acceptance calls a real model API through Core, the daemon and the Harness adapter. Direct native probes establish feasibility. Keep provider credentials in private test configuration, outside source, logs and task records.
+
+For wire details unspecified by the pinned SDK, probe resources you own and retain request evidence. Distinguish observed behavior from guarantees, accepted profiles from complete coverage, and provider connectivity from deployment qualification. Maintain those distinctions in the [coverage ledger](contracts/agents-api/README.md).
 
 ### Live acceptance
 
-Native adapter changes require their build/check targets and live provider acceptance. Real execution checks need real models; omitted prerequisites or mocked responses do not count as live acceptance. Historical remote native probes are not current validation entry points.
+Native adapter changes require their build/check targets and live provider acceptance. Follow [Harness qualification](contracts/agents-api/harness-onboarding.md#qualify-the-adapter) for native model execution. State which checks ran, which used fixtures and which lacked prerequisites. Changes to native package pins require the same qualification; build the MiniMax companion from this revision's pinned patched sources.
 
 ## OpenAgentCore Runtime names
 
@@ -152,25 +144,23 @@ Native adapter changes require their build/check targets and live provider accep
 
 Provider bootstrap, Runtime images and Harness adapters must agree on these names. The separate Parsar product integration settings keep their own names.
 
-Historical Runtime and project-version upgrades are not supported. Do not ship retired installer conversion implementations; preserve rejection guards under the [installer lifecycle contract](deploy/install/README.md#versions-and-the-lock). Preserve older installations, Runtime files, provider resources and Session history; install the current release separately. Startup never verifies and rebinds historical allocations or accepts node deployments without a valid specification. Keep the original Core responsible for unresolved resources; see the [installation version policy](docs/getting-started/operations.md#installation-version-policy). Use this release's template builder for new E2B templates. Ordinary current-version database initialization uses the migration runner.
-
-Build the MiniMax companion from this revision's pinned patched native sources.
+The [installation version policy](docs/getting-started/operations.md#installation-version-policy) owns release changes and preservation of installed data and resources.
 
 ## Branding
 
-Public project branding uses OpenAgentCore. The canonical vector mark is `docs/assets/openagentcore-logo.svg`; Core Web, docs and landing-page assets use the same outline, with transparent margins cropped, theme-aware favicon colors and dark-surface inversion. The canonical SVG preserves the reference PNG canvas. The README hero uses the supplied `docs/assets/openagentcore-banner.jpeg`. The `example/parsar/` workbench retains its own name, logo and favicon. Historical provenance, external repository URLs and existing data identifiers retain their original spelling; do not rename those as display copy.
+Use OpenAgentCore for public project branding. The canonical mark is `docs/assets/openagentcore-logo.svg`; Web uses its outline with cropped transparent margins, theme-aware favicon colors and dark-surface inversion. The README banner is `docs/assets/openagentcore-banner.jpeg`. The `example/parsar/` workbench keeps its own name, logo and favicon. Preserve external repository URLs and data identifiers when changing display copy.
 
 ## OpenAgentCore name guard
 
 `make check-names` scans tracked text for retired branding, settings and installed command names. Each exception in `scripts/name-allowlist.json` names a path glob, a regular expression and a reason.
 
 - An exception covers only its matched text: an allowed repository import cannot hide a retired setting elsewhere on the line.
-- Keep exceptions narrow and explain the preserved contract or historical input.
-- The guard also fails on an exception that excuses no retired identifier. Remove an exception together with the last text it covered.
+- Keep exceptions narrow and explain the preserved contract or detection input.
+- The guard fails on an exception that excuses no retired identifier. Remove an exception together with the last text it covers.
 
 These identities stay unchanged:
 
 - public `AgentCoreError`, upstream contract fields and the separate Parsar product;
 - persisted credential encryption domains and native-session resume keys, so existing data can be decrypted and Sessions can resume.
 
-Conversion inputs, retirement diagnostics and evidence records must still name the identifiers they reject. Landed migrations keep their original identifiers; current examples use the new names.
+Detection inputs name the identifiers they reject. Landed migrations keep their original identifiers; application and operator examples use the current names.

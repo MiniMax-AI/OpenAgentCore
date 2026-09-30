@@ -107,7 +107,7 @@ A separate Web-only installation keeps its own copy of the key. After rotating, 
 
 ## Projects and API keys
 
-Create Projects and issue keys in Web, on **Projects and keys**, or through the [Core API](#script-the-core-api). How Projects and keys behave is in [Projects own assets](../design-principles.md#projects-own-assets).
+Create Projects and issue keys in Web, on **Projects and keys**, or through the [Core API](#script-the-core-api). How Projects and keys behave is in [Projects own assets](../concepts.md#projects-own-assets).
 
 To rotate an application key:
 
@@ -202,4 +202,4 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 
 Web signs administrators in with the Core key, checks the origin of every request, and forwards signed-in `/core/v1` requests to Core with the Core key, which stays on the server. It answers 404 on `/v1` and `/api/v1` whatever credential a request carries, serves only the non-secret node payload at `/node-install/`, and has no Docker or KVM access. Machine routes under `/api/v1` use their own enrollment and connection credentials. With managed ingress, the `installation` service applies domain changes through the Docker socket; Web reaches it only over a private Unix socket, and it checks the Core key on every request.
 
-Sandboxes are the isolation boundary ([Runtime and outer isolation](../design-principles.md#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and a Docker node is [root-equivalent](nodes.md#what-the-installer-sets-up) on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](nodes.md#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.
+Sandboxes are the isolation boundary ([Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and a Docker node is [root-equivalent](nodes.md#what-the-installer-sets-up) on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](nodes.md#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.

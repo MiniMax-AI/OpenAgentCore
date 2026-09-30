@@ -2,7 +2,7 @@
 
 A `self_hosted` Session runs on a machine your application owns: a workstation, a VM or a sandbox you manage. The application creates the Session through `/v1` and receives a command that installs `oac-daemon`, starts it and connects it to Core. Web shows the same command on the Session's page; it is optional. Core never creates, stops or reclaims the machine.
 
-**The daemon is not a sandbox.** Tools run with the permissions of the account that starts it and can reach whatever that account can. Use a container or VM when you need isolation; see [Runtime and outer isolation](../design-principles.md#runtime-and-outer-isolation). The daemon does not restrict network access, so a Template that requires a network policy is rejected for a self-hosted Session.
+**The daemon is not a sandbox.** Tools run with the permissions of the account that starts it and can reach whatever that account can. Use a container or VM when you need isolation; see [Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation). The daemon does not restrict network access, so a Template that requires a network policy is rejected for a self-hosted Session.
 
 The Session brings its own model provider; the installation default never applies ([why](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence)). The machine gets an executor credential that works for this one Environment and nothing else.
 

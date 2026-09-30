@@ -41,7 +41,7 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
 Then:
 
-1. **Sign in to Web**, the admin console, with the Core key the installer created.
+1. **Sign in to Web**, the admin console, with the Core key the installer created, and **configure the domain and HTTPS**.
 2. **Set a default model** and **issue a Project API key**.
 3. **Add execution capacity:** a node, E2B, or your own machine.
 4. **[Run your first Session](docs/getting-started/quickstart.md)** with the OpenAI SDK.
@@ -53,14 +53,14 @@ and a quick local trial. Listen addresses, ports and other options: [installatio
 
 ![OpenAgentCore architecture](docs/assets/architecture.png)
 
-Core exposes two APIs:
+Applications and operators use these Core APIs:
 
 | API | Path | Used by |
 | --- | --- | --- |
 | **[Agents API](docs/api/public-agent-api.md)** | `/v1` | Your applications. Same protocol as [OpenAI's Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview) |
 | **[Core API](contracts/agents-api/admin-api.md)** | `/core/v1` | Operators, through Web |
 
-Core keeps all state. The Runtime runs the chosen harness inside the Environment.
+Core keeps durable execution state. The Runtime runs the chosen harness inside the Environment.
 Each connection is a defined protocol, so any part can be replaced on its own. See
 the [architecture guide](docs/architecture.md).
 
@@ -72,7 +72,7 @@ the [architecture guide](docs/architecture.md).
 | Build an application on the API | [Quickstart](docs/getting-started/quickstart.md), then the [Agents API guide](docs/api/public-agent-api.md) |
 | See a complete application | [Examples](docs/examples.md) |
 | Run agents on my own machine | [Self-hosted execution](docs/getting-started/self-hosted.md) |
-| Check verified Runtime capabilities and limits | [Harness capabilities](contracts/agents-api/harness-capabilities.md) |
+| Check Harness capabilities and limits | [Harness capabilities](contracts/agents-api/harness-capabilities.md) |
 | Understand the design | [Architecture](docs/architecture.md) |
 | Add a sandbox, harness or other component | [Developer guide](docs/development.md) |
 
