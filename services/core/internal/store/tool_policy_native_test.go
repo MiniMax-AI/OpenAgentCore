@@ -13,7 +13,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -28,20 +27,8 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 	if kind != "codex" && kind != "claude_sdk" && kind != "mcode" {
 		t.Fatal("tool policy acceptance requires codex, claude_sdk or mcode")
 	}
-	raw, err := os.ReadFile(optionsFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var options map[string]any
-	if json.Unmarshal(raw, &options) != nil {
-		t.Fatal("invalid private options")
-	}
-	model, _ := options["model"].(string)
-	if model == "" {
-		t.Fatal("real model required")
-	}
+	model, provider := readNativeModelDefaults(t, optionsFile)
 	h := newDispatchHarness(t)
-	h.d.Options = func(context.Context, store.Session) (map[string]any, error) { return options, nil }
 	home, err := os.MkdirTemp(root, "tool-policy-"+kind+"-")
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +57,7 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(h.s, auth, kind, api.WithExecution(worker), api.WithExecutionPolicy(h.d.Policy))
+	handler, err := api.NewHandler(h.s, auth, kind, api.WithExecution(worker), api.WithExecutionPolicy(h.d.Policy), nativeDeploymentDefaults(model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +79,7 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 			FirstTurn string `json:"first_turn"`
 		} `json:"sessions"`
 	}
-	raw, err = os.ReadFile(evidence)
+	raw, err := os.ReadFile(evidence)
 	if err != nil || json.Unmarshal(raw, &proof) != nil || len(proof.Sessions) != 4 {
 		t.Fatal("invalid public evidence", err)
 	}

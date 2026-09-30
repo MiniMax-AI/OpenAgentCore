@@ -25,12 +25,12 @@ func mcodeProfile() Profile {
 		ConfigurationValidation:        AdditionalValidation,
 		ToolsValidation:                AdditionalValidation,
 		FunctionResultValidation:       CommonValidationOnly,
-		ValidateConfiguration: func(a v1.Agent, e *v1.Environment, daemon bool) error {
-			if e == nil || (e.Type != "none" && e.Type != "openai_hosted" && e.Type != "self_hosted") || daemon || strings.TrimSpace(a.Model) == "" || a.Reasoning.Effort != nil || a.Reasoning.Summary != nil || (a.ServiceTier != "" && a.ServiceTier != "auto") || (a.Text.Format.Type != "" && a.Text.Format.Type != "text") || (a.Text.Verbosity != "" && a.Text.Verbosity != "medium") {
+		ValidateConfiguration: func(a v1.Agent, e *v1.Environment) error {
+			if e == nil || (e.Type != "none" && e.Type != "openai_hosted" && e.Type != "self_hosted") || strings.TrimSpace(a.Model) == "" || a.Reasoning.Effort != nil || a.Reasoning.Summary != nil || (a.ServiceTier != "" && a.ServiceTier != "auto") || (a.Text.Format.Type != "" && a.Text.Format.Type != "text") || (a.Text.Verbosity != "" && a.Text.Verbosity != "medium") {
 				return ErrInvalidInput
 			}
 			return rejectSubagentTools(a, "mcp")
-		}, ValidateTools: func(_ *v1.Environment, _ bool, functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
+		}, ValidateTools: func(_ *v1.Environment, functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
 			if len(functions) > 0 {
 				return errors.New("The configured engine does not support public functions.")
 			}

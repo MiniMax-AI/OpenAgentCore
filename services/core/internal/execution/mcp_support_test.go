@@ -57,7 +57,7 @@ func TestMCPPublicBearerPolicyIsIndependentOfRuntimeCapabilities(t *testing.T) {
 
 func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
 	for _, placement := range []string{"none", "self_hosted"} {
-		for _, missing := range []string{"", "mcp", "bearer", "placement", "required", "preparation", "daemon", "environment"} {
+		for _, missing := range []string{"", "mcp", "bearer", "placement", "required", "preparation", "environment"} {
 			t.Run(placement+"/"+missing, func(t *testing.T) {
 				snapshot, servers, caps := mcpSupportFixture(t)
 				snapshot.Environment.Type = placement
@@ -80,8 +80,6 @@ func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
 					caps.MCPHTTPRequired = false
 				case "preparation":
 					caps.Preparation = false
-				case "daemon":
-					snapshot.Daemon = &DaemonConfig{WorkDir: "/work"}
 				case "environment":
 					snapshot.Environment = nil
 				}

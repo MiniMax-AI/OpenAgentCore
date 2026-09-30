@@ -31,13 +31,13 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	profile := enginetest.Profile(nil)
 	profile.ConfigurationValidation = engine.AdditionalValidation
 	profile.ToolsValidation = engine.AdditionalValidation
-	profile.ValidateConfiguration = func(a v1.Agent, _ *v1.Environment, _ bool) error {
+	profile.ValidateConfiguration = func(a v1.Agent, _ *v1.Environment) error {
 		if a.Text.Verbosity != "medium" || a.Text.Format.Type != "text" || a.MultiAgent.Enabled || a.Reasoning.Effort != nil || a.Reasoning.Summary != nil || a.ServiceTier != "auto" {
 			return engine.ErrInvalidInput
 		}
 		return nil
 	}
-	profile.ValidateTools = func(_ *v1.Environment, _ bool, f []proto.FunctionTool, m []proto.MCPHTTPServer) error {
+	profile.ValidateTools = func(_ *v1.Environment, f []proto.FunctionTool, m []proto.MCPHTTPServer) error {
 		if len(f)+len(m) > 0 {
 			return engine.ErrInvalidInput
 		}

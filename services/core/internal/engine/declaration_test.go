@@ -101,7 +101,7 @@ func TestCatalogRejectsInvalidCombinationsBeforeCallbacks(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p := enginetest.Profile(change)
 			p.ConfigurationValidation = engine.AdditionalValidation
-			p.ValidateConfiguration = func(v1.Agent, *v1.Environment, bool) error {
+			p.ValidateConfiguration = func(v1.Agent, *v1.Environment) error {
 				t.Fatal("registration invoked request validator")
 				return nil
 			}

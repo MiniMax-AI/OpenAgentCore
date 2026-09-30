@@ -16,8 +16,8 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			h := newDispatchHarness(t)
 			ctx := t.Context()
 			configuration, _ := json.Marshal(map[string]any{
-				"agent":  map[string]any{"id": "agent_root", "model": "test-model", "multi_agent": map[string]any{"enabled": enabled, "max_concurrent_subagents": 3}},
-				"daemon": map[string]string{"work_dir": "/tmp"},
+				"agent":       map[string]any{"id": "agent_root", "model": "test-model", "multi_agent": map[string]any{"enabled": enabled, "max_concurrent_subagents": 3}},
+				"environment": map[string]string{"type": "none"},
 			})
 			var err error
 			h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "identity-dispatch", Configuration: configuration})

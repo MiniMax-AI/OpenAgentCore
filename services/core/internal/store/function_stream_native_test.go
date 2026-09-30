@@ -1,14 +1,11 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
-
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestNativePublicFunctionStreamHelper(t *testing.T) {
@@ -24,10 +21,7 @@ func TestNativePublicFunctionStreamHelper(t *testing.T) {
 		"Tool handler failed.",
 	})
 	defer model.Close()
-	h.d.Options = func(context.Context, store.Session) (map[string]any, error) {
-		return map[string]any{"model_provider": map[string]any{"protocol": "responses", "base_url": model.URL + "/v1", "api_key": "synthetic-test-token"}}, nil
-	}
-	serverURL, token := nativePublicFunctionServer(t, h, ctx)
+	serverURL, token := nativePublicFunctionServer(t, h, ctx, nativeModelProvider(model))
 	proofPath := filepath.Join(home, "public-function-stream.json")
 	command := exec.CommandContext(ctx, python, "../../tests/official_function_stream.py", serverURL, token, proofPath)
 	if log, err := command.CombinedOutput(); err != nil {

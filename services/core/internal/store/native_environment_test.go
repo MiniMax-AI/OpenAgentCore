@@ -1,11 +1,9 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,24 +11,15 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestNativeNoExecutionEnvironment(t *testing.T) {
 	h, ctx, home := nativeDispatchHarness(t)
-	var err error
-	config, _ := json.Marshal(map[string]any{"agent": map[string]string{"model": "gpt-5.5", "instructions": "Keep this instruction."}, "environment": map[string]string{"type": "none"}})
-	h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "native-session", Configuration: config})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
-		t.Fatal(err)
-	}
-
 	var requests atomic.Int32
 	marker := filepath.Join(home, "must-not-exist")
-	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	model := nativeModelServer(t, home, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" || !strings.HasSuffix(r.URL.Path, "/responses") {
 			http.NotFound(w, r)
 			return
@@ -106,8 +95,15 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 		send("response.completed", map[string]any{"response": map[string]any{"id": fmt.Sprintf("response_%d", n), "object": "response", "created_at": time.Now().Unix(), "status": "completed", "model": "gpt-5.5", "output": []any{item}, "usage": map[string]any{"input_tokens": 10, "output_tokens": 3, "total_tokens": 13, "input_tokens_details": map[string]any{"cached_tokens": 4}, "output_tokens_details": map[string]any{"reasoning_tokens": 2}}}})
 	}))
 	defer model.Close()
-	h.d.Options = func(context.Context, store.Session) (map[string]any, error) {
-		return map[string]any{"enable_features": []any{"multi_agent", "multi_agent_v2"}, "model_verbosity": "high", "web_search": "live", "model_provider": map[string]any{"protocol": "responses", "base_url": model.URL + "/v1", "api_key": "synthetic-test-token"}}, nil
+	provider := nativeModelProvider(model)
+	config, _ := json.Marshal(map[string]any{"agent": map[string]string{"model": "gpt-5.5", "instructions": "Keep this instruction."}, "environment": map[string]string{"type": "none"}})
+	var err error
+	h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "native-session", Configuration: config, ModelProvider: provider, ModelProviderSource: v1.ModelProviderSourceDeployment})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
+		t.Fatal(err)
 	}
 	first := h.message("first", "Return an answer.")
 	h.finished(h.run(ctx, first.TurnID), store.TurnCompleted)
@@ -140,6 +136,6 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 	if answers != 2 {
 		t.Fatal(page)
 	}
-	verifyNativePublicExecution(t, h, ctx, home)
-	t.Logf("Native environment none: command rejected, caller override ignored, two Turns resumed and recovered. Evidence: %s", home)
+	verifyNativePublicExecution(t, h, ctx, home, provider)
+	t.Logf("Native environment none: command rejected, two Turns resumed and recovered. Evidence: %s", home)
 }

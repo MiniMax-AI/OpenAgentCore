@@ -13,7 +13,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -22,20 +21,8 @@ func TestNativeToolSearchPublicExecution(t *testing.T) {
 	if python == "" || binary == "" || root == "" || optionsFile == "" {
 		t.Skip("native daemon, fixed SDK, real model options and evidence directory required")
 	}
-	raw, err := os.ReadFile(optionsFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var options map[string]any
-	if json.Unmarshal(raw, &options) != nil {
-		t.Fatal("invalid private options")
-	}
-	model, _ := options["model"].(string)
-	if model == "" {
-		t.Fatal("real model required")
-	}
+	model, provider := readNativeModelDefaults(t, optionsFile)
 	h := newDispatchHarness(t)
-	h.d.Options = func(context.Context, store.Session) (map[string]any, error) { return options, nil }
 	home, err := os.MkdirTemp(root, "tool-search-public-")
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +51,7 @@ func TestNativeToolSearchPublicExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(h.s, auth, "claude_sdk", api.WithExecution(worker))
+	handler, err := api.NewHandler(h.s, auth, "claude_sdk", api.WithExecution(worker), nativeDeploymentDefaults(model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +72,7 @@ func TestNativeToolSearchPublicExecution(t *testing.T) {
 		Turn    string `json:"turn"`
 		Call    string `json:"call"`
 	}
-	raw, err = os.ReadFile(evidence)
+	raw, err := os.ReadFile(evidence)
 	if err != nil || json.Unmarshal(raw, &proof) != nil {
 		t.Fatal("invalid evidence", err)
 	}

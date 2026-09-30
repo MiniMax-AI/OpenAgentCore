@@ -17,7 +17,7 @@ func TestSubagentProfilesPreserveQualifiedOperationBoundaries(t *testing.T) {
 			agent := v1.Agent{Model: "real-model"}
 			agent.MultiAgent.Enabled = true
 			for _, placement := range []string{"none", "openai_hosted", "self_hosted"} {
-				if err := profile.ValidateConfiguration(agent, &v1.Environment{Type: placement}, false); err != nil {
+				if err := profile.ValidateConfiguration(agent, &v1.Environment{Type: placement}); err != nil {
 					t.Fatal(placement, err)
 				}
 			}
@@ -28,11 +28,11 @@ func TestSubagentProfilesPreserveQualifiedOperationBoundaries(t *testing.T) {
 			} // Its existing tool profile rejects both for every Session.
 			for _, tool := range []string{`{"type":"function","name":"f"}`, `{"type":"mcp","server_label":"s"}`} {
 				agent.Tools = []json.RawMessage{json.RawMessage(tool)}
-				if err := profile.ValidateConfiguration(agent, &v1.Environment{Type: "none"}, false); err == nil {
+				if err := profile.ValidateConfiguration(agent, &v1.Environment{Type: "none"}); err == nil {
 					t.Fatal("unqualified multi-agent combination accepted", tool)
 				}
 				agent.MultiAgent.Enabled = false
-				if err := profile.ValidateConfiguration(agent, &v1.Environment{Type: "none"}, false); err != nil {
+				if err := profile.ValidateConfiguration(agent, &v1.Environment{Type: "none"}); err != nil {
 					t.Fatal("single-agent profile changed", err)
 				}
 				agent.MultiAgent.Enabled = true
