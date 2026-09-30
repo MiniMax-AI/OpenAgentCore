@@ -89,25 +89,11 @@ Unconfirmed initialization commands require reclaiming the whole allocation.
 
 ## Build
 
-From the repository root:
-
-```sh
-E2B_PROVIDER_BUILD_DIR="$HOME/.oac/build/e2b-provider" scripts/build-e2b-provider.sh
-```
-
-Docker builds Linux amd64 output with the pinned CPython 3.12.12/Debian 12 image.
-The full Python dependency closure, including PyInstaller, has hashes in
-`requirements.lock`. Native `pyqwest` and `protobuf-py-ext` wheels are included.
-No account credential is needed for builds or `--check`. When building from an
-archived source tree, supply `E2B_SOURCE_REVISION` with its actual commit.
-
-The output is `oac-e2b-provider-linux-amd64.tar.gz` and its `.sha256` file.
-Extraction yields `oac-e2b-provider/oac-e2b-provider`, `_internal/`,
-`licenses/`, `requirements.lock` and `manifest.json`. The artifact contains only
-regular files/directories, with executable permissions preserved. Core's image
-and native installer use the same tree; the target needs compatible Linux/glibc
-and CA certificates, but no separately installed Python. The installation owns
-the durable receipt path independently of this immutable helper payload.
+The [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers)
+builds the helper. The artifact contains only regular files and directories, with
+executable permissions preserved, including the native `pyqwest` and
+`protobuf-py-ext` wheels. `--check` needs no account credential. The installation
+owns the durable receipt path independently of this immutable helper payload.
 
 `deploy/e2b/build-template.py` packages `init.py` and `managed_init.py` with the
 qualified Runtime image. Existing templates without these files must be rebuilt.

@@ -6,16 +6,8 @@ The SDK owns the model/tool loop. Public clients use the same Agents API contrac
 
 ## Build and configure
 
-On Linux amd64, build the existing shared workspace helpers, then run:
-
-```sh
-bash scripts/build-claude-sdk-runtime.sh
-bash scripts/build-claude-runtime.sh
-docker build --platform linux/amd64 -t agents-runtime:claude \
-  "${OAC_DEV_HOME:-$HOME/.oac}/build/claude-runtime"
-```
-
-The bundle pins SDK `0.3.269` and native Claude Code `2.1.269`. The Dockerfile pins
+The [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers)
+builds the image. The bundle pins SDK `0.3.269` and native Claude Code `2.1.269`. The Dockerfile pins
 Node's Linux amd64 manifest. Keep the exported SDK bundle immutable. Configure
 Core's database-owned managed deployment with the resulting immutable Runtime
 image. Existing Docker outer security settings are unchanged; the daemon and
@@ -28,7 +20,7 @@ has no automatic apt installation, sudo or elevated daemon permissions;
 npm/Python package and setup commands run directly with the existing user's
 permissions. The packaged image no longer needs bubblewrap or socat for an inner
 sandbox. For native self-hosting and platform limits, see the
-[native guide](../../../../docs/self-hosted-native.md).
+[self-hosted guide](../../../../docs/getting-started/self-hosted.md#platforms).
 
 Set `OAC_DEFAULT_HARNESS=claude_sdk`. Configure the deployment default model provider
 with the Core key, in Web or through Core's API:
@@ -57,9 +49,7 @@ protocol compatibility.
 
 ## Runtime and adapter rules
 
-Build the pinned SDK bundle with `scripts/build-claude-sdk-runtime.sh`, then use
-`scripts/build-claude-runtime.sh`. Native self-hosted installations use the same
-bundle and daemon protocol. See [Build and configure](#build-and-configure).
+Native self-hosted installations use the same bundle and daemon protocol.
 The shared local binding selects the actual workspace. SDK history, home and
 scratch remain under `OAC_RUNTIME_HOME/runtime/claude-sdk` for session ownership,
 without restricting tools. Authentication remains under `OAC_RUNTIME_HOME/daemon`.

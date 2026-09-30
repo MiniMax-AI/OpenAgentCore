@@ -50,35 +50,16 @@ removing an environment variable does not migrate its configuration ownership.
 
 ## Host and binaries
 
-Use a dedicated service account with access to `/dev/kvm`, a C compiler and the
-repository's Go version for source builds. The node's helper requires glibc and
-the standard Linux dynamic libraries. Core remains a CGO-disabled build. Its
-Debian slim container image does not run the helper; the standalone native node does.
-Use the matched distribution's ordinary node installer for an operator installation.
-
-Build from the repository root:
-
-```sh
-make build-agents-api build-daemon build-microsandbox-provider
-make check-microsandbox-provider
-```
-
-The helper is written to
-`~/.oac/build/microsandbox-provider/oac-microsandbox-provider`.
-Its separate Go module pins the published SDK and embeds its matching FFI library.
-`make check` runs the pure-Go provider tests on every supported host. On Linux it
-also runs the SDK helper module; other hosts print an explicit skip for that
-Linux-only module. A full Linux check is required before publishing this profile.
-
-Install the Linux x86_64 archive from the official
-[v0.7.2 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.2)
-into a fresh private directory under `~/.oac/runtime/`. Verify the release
-checksum before extraction. The qualified archive is
-`microsandbox-linux-x86_64.tar.gz`, SHA256
-`47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b`.
-It supplies `msb` and `libkrunfw.so.5.6.1`. Record each extracted file's SHA256 in
-the provider configuration. The helper verifies both files on every invocation;
-it does not install or upgrade them.
+Use a dedicated service account with access to `/dev/kvm`. The node's helper
+requires glibc and the standard Linux dynamic libraries. Core's container image
+does not run the helper; the standalone native node does. Use the matched
+distribution's ordinary node installer for an operator installation. The
+[maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers)
+builds the helper and names the checksum-verified `msb` and `libkrunfw.so.5.6.1`
+release archive. `make check` runs the pure-Go provider tests on every supported
+host. On Linux it also runs the SDK helper module; other hosts print an explicit
+skip for that Linux-only module. A full Linux check is required before publishing
+this profile.
 
 For a manual node installation, create a private, short runtime state path, for
 example `~/.oac/msb`, with mode 0700. The ordinary installer instead selects
@@ -95,7 +76,7 @@ Use the immutable Runtime release saved in the deployment specification. The
 ordinary node installer verifies the matched distribution manifest and imports
 its microsandbox image under the declared digest reference. The image must be
 available to the local microsandbox installation before provisioning. For source
-builds, the existing [Runtime image build](../codex/README.md#managed-runtime-image-and-docker-adapter)
+builds, the [Runtime image build](../../../../docs/maintainers.md#runtime-images-and-helpers)
 remains the image source; produce and select a matching distribution rather than
 substituting a local image for an already saved release.
 

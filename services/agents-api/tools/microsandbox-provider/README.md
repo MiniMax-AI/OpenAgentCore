@@ -31,17 +31,10 @@ database.
 
 ## Build and installation
 
-From this directory, using the repository Go version:
-
-```sh
-GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath -o "$HOME/.oac/bin/oac-microsandbox-provider" .
-GOWORK=off go test ./...
-```
-
-The relative replacement for the parent Core module refers to this checkout.
-The SDK is the real published module, pinned in go.mod and go.sum; it has no
-local-source replacement. The normal build embeds its matching FFI library.
-Do not build production with the SDK's development `microsandbox_ffi_path` tag.
+The [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers)
+builds and tests the helper. The relative replacement for the parent Core module
+refers to this checkout. The SDK is the real published module, pinned in go.mod
+and go.sum, with no local-source replacement.
 
 Install the matching v0.7.2 msb runtime and firmware from checksum-verified release
 artifacts. Supply absolute helper/runtime/firmware paths and expected SHA256

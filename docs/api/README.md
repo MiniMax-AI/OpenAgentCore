@@ -55,7 +55,7 @@ core() {  # core METHOD PATH [JSON body]
 | Archive a Project (revokes all keys) | `core POST /projects/$PROJECT_ID/archive` |
 | See harnesses and their default models | `core GET /harnesses` |
 | Set Codex's default model | `core PUT /harnesses/codex/model-configuration '{"model": "your-model-id", "model_provider": {"protocol": "responses", "base_url": "https://provider.example/v1", "api_key": "sk-..."}}'` |
-| Issue an executor credential | See [self-hosted execution](../getting-started/self-hosted.md#operator-credential-management) |
+| Issue an executor credential | See [executor credentials](../../contracts/agents-api/environment-executor-credentials.md#core-key-routes) |
 | Installation facts, including the API base URL | `core GET /installation` |
 
 Errors use the [Core error envelope](../../contracts/agents-api/core-errors.md).
@@ -125,9 +125,10 @@ Creating or reading a `self_hosted` Session returns short-lived install commands
 `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation`.
 Machine installers use `POST /api/v1/agent-daemon/installation` and its `/claim`
 subroute with the installation Bearer authorization. Qualified artifacts under
-`/api/v1/agent-daemon/install/{version}/` are public, immutable release content. See
-the [native Runtime guide](../self-hosted-native.md) for expiry, retry, credential
-ownership and platform rules.
+`/api/v1/agent-daemon/install/{version}/` are public, immutable release content. The
+[installation grant](../../contracts/agents-api/environment-executor-credentials.md#installation-grant)
+owns expiry, retry and credential ownership; the
+[self-hosted guide](../getting-started/self-hosted.md#platforms) lists platforms.
 
 The console-local `GET`/`POST /console/installation/domain` surface uses the signed-in
 browser session and same-origin checks. It delegates only domain setup to the

@@ -64,7 +64,10 @@ The builder preserves the existing image's binaries, native configuration and
 private workspace layout. Its `template` output is an immutable
 `templateID:build_UUID`; use that exact value. The build must qualify every harness it advertises; a combined Runtime image
 can include several harnesses. No E2B account key, executor key or model credential belongs in a
-build, template environment, metadata, command argument or log.
+build, template environment, metadata, command argument or log. The builder gives
+traversable modes only to the public archive ancestors it creates (`usr`,
+`usr/local`, `etc`). Runtime file and directory modes, private build contexts,
+key inputs and the umask of its output stay unchanged, including under umask 077.
 
 System dependencies must be installed when building the template. The builder may
 use root during image construction, but the running daemon remains UID/GID 1000

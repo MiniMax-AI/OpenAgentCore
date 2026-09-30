@@ -3,7 +3,7 @@
 A managed Session runs the daemon, Codex and workspace in a dedicated outer
 Environment. Core stays outside it. Use Codex 0.153.4 and its matching
 `codex-resources`. The same daemon supports native self-hosted installations; see
-[the native guide](../../../../docs/self-hosted-native.md) for platform status.
+[the self-hosted guide](../../../../docs/getting-started/self-hosted.md#platforms) for platform status.
 
 Codex tools run with the daemon user's existing permissions. There is no inner
 filesystem, permission or network sandbox, no immutable Codex requirements file,
@@ -41,13 +41,10 @@ is not acceptance.
 
 ## Managed Runtime image and Docker adapter
 
-Extract the official npm package `@openai/codex@0.153.4-linux-x64` beneath
-`~/.oac/`. Set `AGENTS_RUNTIME_CODEX_PACKAGE` to its extracted `package` directory
-and run `scripts/build-agents-runtime.sh`. It builds the existing daemon and
-prepares a binary-only Docker context at `~/.oac/build/agents-runtime`; build
-that context with the printed Docker command. This initial image is Linux amd64.
-The package includes the unmodified native executable and matching resources.
-It does not contain the product server, product CLI, credentials or workspace data.
+The [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers)
+builds the Linux amd64 image from the official `@openai/codex@0.153.4-linux-x64`
+package. It contains the unmodified native executable and matching resources, and
+no product server, product CLI, credentials or workspace data.
 
 The service's `internal/sandbox` interface has five operations. Its Docker adapter
 uses the official Moby Go client and an operator-selected immutable image digest,

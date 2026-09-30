@@ -56,7 +56,7 @@ failures retain the sign-in error shape above.
 Poll the same-origin GET while preparing. Applying the change restarts Web and
 ends its sign-in sessions; provide a link to the submitted HTTPS origin for a
 fresh login. A dropped request or cross-origin browser probe does not prove
-success. The [installer contract](../maintainers.md#managed-https-ownership) owns
+success. The [installer contract](../../deploy/install/README.md#managed-https) owns
 certificate verification, locking, retry and rollback.
 
 ## Console to Core

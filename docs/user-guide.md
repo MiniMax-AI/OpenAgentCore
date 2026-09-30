@@ -142,7 +142,7 @@ After a lost response or connection:
 3. Never resend without a key; you may run the work twice.
 
 On a self-hosted machine, restart the same installation to keep its workspace and
-history; see [operating the installation](self-hosted-native.md#add-harnesses-and-operate-the-installation).
+history; see [operating the installation](getting-started/self-hosted.md#operate-the-installation).
 
 ## Diagnose a failure
 

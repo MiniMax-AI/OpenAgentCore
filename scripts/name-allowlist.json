@@ -570,18 +570,8 @@
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
-    "path": "services/agents-api/CONTAINER.md",
-    "regex": "Parsar user identities",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
     "path": "services/agents-api/README.md",
-    "regex": "Parsar's product|Parsar\\nworkspace|Parsar Skill/SP",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "services/agents-api/RELEASE.md",
-    "regex": "Parsar's product execution path",
+    "regex": "Parsar's product|Parsar\\sworkspace|Parsar Skill/SP",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
@@ -665,11 +655,6 @@
     "reason": "The legacy-node section gives scoped uninstall instructions; new installation and enrollment examples use oac-node."
   },
   {
-    "path": "docs/getting-started/self-hosted.md",
-    "regex": "parsar-selfhost-\\*|\\.parsar/self-hosted",
-    "reason": "The legacy self-hosted section explains retained old resources and explicit refusal, not conversion or new defaults."
-  },
-  {
     "path": "docs/getting-started/operations.md",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|parsar(?:[A-Za-z0-9_.*/-]*)|agents-api(?:-[a-z0-9*-]+)?|core-console|agents-runtime-",
     "reason": "The conversion and retirement table must name the exact old commands, paths, labels, settings and retained backups that operators migrate."
@@ -738,11 +723,6 @@
     "path": "apps/docs/content/docs/hosted-providers.mdx",
     "regex": "parsar-node(?:-[A-Za-z0-9<>_.-]*)?|\\.parsar/nodes",
     "reason": "Generated copy of docs/getting-started/nodes.md: The legacy-node section gives scoped uninstall instructions; new installation and enrollment examples use oac-node."
-  },
-  {
-    "path": "apps/docs/content/docs/self-hosted-execution.mdx",
-    "regex": "parsar-selfhost-\\*|\\.parsar/self-hosted",
-    "reason": "Generated copy of docs/getting-started/self-hosted.md: The legacy self-hosted section explains retained old resources and explicit refusal, not conversion or new defaults."
   },
   {
     "path": "apps/docs/content/docs/troubleshooting.mdx",
