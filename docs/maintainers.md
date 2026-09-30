@@ -35,7 +35,7 @@ The build reuses the Core, Web, Runtime, SDK and helper builders. The manifest r
 
 The control archive carries no Runtime image or node execution artifacts; the offline archive carries them. The [download contract](../deploy/install/README.md#download-contract) describes how nodes obtain them.
 
-A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distribution-manifest.py`. Links between bundled docs stay relative; every other relative link is rewritten to the same file on GitHub at the bundle's commit. The build fails when a link or anchor does not resolve, and `make check-distribution` runs the same check on the repository. Update the list when you add or move a doc that the installer or its output refers to.
+A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distribution-manifest.py`. Links between bundled docs stay relative; every other relative link is rewritten to the same file on GitHub at the bundle's commit. The build fails when a link or anchor does not resolve, and `make check-distribution` runs the same check on every tracked Markdown file outside `example/` and `provenance/`. Update the list when you add or move a doc that the installer or its output refers to.
 
 ### Native installers
 
