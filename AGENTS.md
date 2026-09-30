@@ -21,6 +21,8 @@ OpenAgentCore is protocol-first and modular. Core orchestrates operations that p
 | Core–Sandbox Provider | `services/core/internal/sandbox/sandbox_provider.go` | [Sandbox Provider guide](docs/sandbox-provider.md) |
 | Core–sandbox node | `services/core/internal/sandbox/node/wire.go` | [Sandbox node protocol](contracts/agents-api/node-generation-protocol.md) |
 | Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |
+| Runtime and Sandbox I/O service–relay (Link) | `internal/sandboxlink/protocol.go` | [Sandbox link protocol](docs/sandbox-link-protocol.md) |
+| Provider–Sandbox I/O startup | `internal/sandboxbootstrap/bootstrap.go` | [Sandbox bootstrap](docs/sandbox-bootstrap.md) |
 | Core–Runtime wire | `internal/agentdaemon/proto/` | [Core–Runtime protocol](docs/runtime-protocol.md) |
 | Runtime–Harness | `apps/daemon/internal/agent/harness.go` | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
 | Harness–Model provider | `internal/modelprovider/config.go` | [Model execution](contracts/agents-api/model-execution.md) |

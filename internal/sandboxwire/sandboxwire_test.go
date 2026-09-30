@@ -198,6 +198,22 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+func TestRequestSequence(t *testing.T) {
+	var sender, receiver RequestSequence
+	first, second := sender.Next(), sender.Next()
+	if first != 1 || second != 2 {
+		t.Fatalf("Next returned %d, %d; want 1, 2", first, second)
+	}
+	if !receiver.Admit(first) || !receiver.Admit(5) {
+		t.Fatal("receiver refused an increasing ID")
+	}
+	for _, id := range []uint64{0, 3, 5} {
+		if receiver.Admit(id) {
+			t.Errorf("receiver admitted %d after 5", id)
+		}
+	}
+}
+
 // FuzzDecoder decodes a frame carrying the sample payload. Whatever decodes
 // must re-encode to the same bytes, every failure must be ErrMalformed, and no
 // allocation may exceed the input: the payload limit is the input length and

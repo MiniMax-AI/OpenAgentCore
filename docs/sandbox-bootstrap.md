@@ -1,0 +1,37 @@
+# Sandbox bootstrap
+
+A Sandbox Provider starts the Sandbox I/O service by handing it one bootstrap file. This document owns that Provider-to-service startup input. The type and validator live in [`internal/sandboxbootstrap`](../internal/sandboxbootstrap/bootstrap.go). With it, the service connects to the relay as the serve peer of the [Sandbox link protocol](sandbox-link-protocol.md).
+
+## Launch input
+
+Deliver one JSON object in a regular file that only the service's account and trusted provisioning processes can read (mode 0600 on Linux), and pass its absolute path to the service when starting it.
+
+| Field | Meaning |
+| --- | --- |
+| `version` | The exact bootstrap version, `sandboxbootstrap.Version` |
+| `link_url` | The relay's URL under the Link protocol's [URL rule](sandbox-link-protocol.md#handshake): `wss://`, or `ws://` only to a loopback host, without user, query or fragment |
+| `credential` | The serve credential Core issued for this resource: nonempty, at most 4 KiB, without whitespace or NUL |
+| `resource` | The resource the credential serves, an object with exactly the fields below |
+| `resource.tenant_id`, `resource.environment_id`, `resource.id` | Canonical nonzero UUIDs |
+| `resource.kind` | `allocation` or `enrollment`; it records provenance only |
+| `resource.generation` | The resource's generation, from 1; a recreated resource has a higher one |
+
+The decoder rejects unknown, duplicate, missing and case-aliased fields at every level, other versions and documents larger than `sandboxbootstrap.MaxBytes` (16 KiB). Errors never include submitted values. A missing or malformed file fails before the service connects.
+
+The file is the service's only authentication input. Credentials never go in command arguments, environment variables or the URL; the service sends the credential only in its `ServeHello`.
+
+## Identity
+
+The service runs as the account the Provider starts it with. The input names no user or group, and the service never changes identity. The Provider already creates the sandbox's accounts and launches its processes, so it chooses this account, and the service needs no privilege-dropping code.
+
+## Responsibilities
+
+The Provider creates the account and the sandbox, delivers this file and starts the service. It keeps the file for process restarts and removes it only during explicit cleanup of the resources it owns.
+
+The service validates the input and owns the link: it connects, serves bound streams and reconnects while the credential stays valid. `resource`, including its generation, must be the resource the credential serves, or the relay refuses the link.
+
+The File service serves the single export `world`, rooted at the sandbox's `/`, and the Provider's sandbox setup owns that topology's isolation.
+
+## Verification
+
+`go test ./internal/sandboxbootstrap` covers the input contract.

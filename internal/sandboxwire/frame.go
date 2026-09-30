@@ -98,6 +98,32 @@ func IsResponse(t uint16) bool { return t&responseBit != 0 }
 // for unsolicited events.
 func ValidRequestID(id uint64) bool { return id != 0 }
 
+// RequestSequence holds the request ID rule: each sender's RequestIDs on one
+// stream strictly increase in wire order, so uniqueness holds in constant
+// memory. A sender and a receiver each keep their own. The zero value starts
+// before 1.
+// It is not safe for concurrent use: the caller serializes it with the frame
+// writes or reads it orders.
+type RequestSequence struct{ last uint64 }
+
+// Next returns the next ID for a sender. Callers invoke it inside the same
+// critical section that writes the frame.
+func (s *RequestSequence) Next() uint64 {
+	s.last++
+	return s.last
+}
+
+// Admit reports whether id is valid and greater than the last admitted id.
+// A receiver rejects an ID it does not admit as a protocol violation, with no
+// dispatch.
+func (s *RequestSequence) Admit(id uint64) bool {
+	if !ValidRequestID(id) || id <= s.last {
+		return false
+	}
+	s.last = id
+	return true
+}
+
 // Kind is the role of a message type.
 type Kind uint8
 

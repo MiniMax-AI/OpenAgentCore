@@ -1,0 +1,106 @@
+# Link version 1 frames from goldenFrames in protocol_test.go, in order. Hex bytes; text after # is a comment.
+# IDs repeat one byte: 01 tenant, 02 environment, 03 resource, 04 peer, 05 server instance, 06 Runtime, 07 attachment, 08 Session, 09 assignment, 0a link.
+
+# ServeHello
+00000073 0001 0000 0000000000000001    # header: length 115, OpHello, flags, request 1
+0001                                   # Version 1
+0001                                   # Role RoleServe
+04040404040404040404040404040404       # PeerID
+00000005 7365727665                    # Credential "serve"
+01010101010101010101010101010101       # Resource.TenantID
+02020202020202020202020202020202       # Resource.EnvironmentID
+0001                                   # Resource.Kind ResourceAllocation
+03030303030303030303030303030303       # Resource.ID
+0000000000000002                       # Resource.Generation 2
+05050505050505050505050505050505       # ServerInstanceID
+00000002                               # Services count 2
+0001 0001                              # ServiceFile version 1
+0003 0001                              # ServiceNetwork version 1
+
+# AttachHello
+0000001f 0001 0000 0000000000000001    # header: length 31, OpHello, flags, request 1
+0001                                   # Version 1
+0002                                   # Role RoleAttach
+06060606060606060606060606060606       # RuntimeID
+00000007 72756e74696d65                # Credential "runtime"
+
+# HelloAccepted
+0000001a 8001 0000 0000000000000001    # header: length 26, response to OpHello, flags, request 1
+0001                                   # result success
+0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a       # LinkID
+00000100                               # MaxStreams 256
+00100000                               # MaxFrameBytes 1 MiB
+
+# Open
+00000090 0002 0000 0000000000000001    # header: length 144, OpOpen, flags, request 1
+0001                                   # Service ServiceFile
+0001                                   # Version 1
+01010101010101010101010101010101       # Resource.TenantID
+02020202020202020202020202020202       # Resource.EnvironmentID
+0001                                   # Resource.Kind ResourceAllocation
+03030303030303030303030303030303       # Resource.ID
+0000000000000002                       # Resource.Generation 2
+01                                     # ExpectedServerInstanceID present
+05050505050505050505050505050505       # ExpectedServerInstanceID
+07070707070707070707070707070707       # AttachmentID
+08080808080808080808080808080808       # SessionID
+09090909090909090909090909090909       # AssignmentID
+0000000000000003                       # AssignmentEpoch 3
+00000005 6772616e74                    # AttachGrant "grant"
+
+# Opened
+0000002e 8002 0000 0000000000000001    # header: length 46, response to OpOpen, flags, request 1
+0001                                   # result success
+07070707070707070707070707070707       # AttachmentID
+05050505050505050505050505050505       # ServerInstanceID
+000001a0c4506c00                       # LeaseExpiresAt 1790000000000 ms
+00100000                               # MaxFrameBytes 1 MiB
+
+# Failure answering Open
+00000006 8002 0000 0000000000000001    # header: length 6, response to OpOpen, flags, request 1
+0002                                   # result failure
+0006                                   # Code StaleGeneration
+0001                                   # Effect EffectNone
+
+# Bind for a File stream
+00000071 0003 0000 0000000000000001    # header: length 113, OpBind, flags, request 1
+07070707070707070707070707070707       # AttachmentID
+0001                                   # Service ServiceFile
+0001                                   # Version 1
+08080808080808080808080808080808       # SessionID
+09090909090909090909090909090909       # AssignmentID
+0000000000000003                       # AssignmentEpoch 3
+000001a0c4506c00                       # LeaseExpiresAt 1790000000000 ms
+05050505050505050505050505050505       # ExpectedServerInstanceID
+00100000                               # MaxFrameBytes 1 MiB
+01                                     # Exports present
+00000002                               # export count 2
+00000005 776f726c64 00                 # export "world", read-write
+00000004 6c6f6773 01                   # export "logs", read-only
+00                                     # Egress absent
+
+# Bind for a Network stream
+00000080 0003 0000 0000000000000001    # header: length 128, OpBind, flags, request 1
+07070707070707070707070707070707       # AttachmentID
+0003                                   # Service ServiceNetwork
+0001                                   # Version 1
+08080808080808080808080808080808       # SessionID
+09090909090909090909090909090909       # AssignmentID
+0000000000000003                       # AssignmentEpoch 3
+000001a0c4506c00                       # LeaseExpiresAt 1790000000000 ms
+05050505050505050505050505050505       # ExpectedServerInstanceID
+00100000                               # MaxFrameBytes 1 MiB
+00                                     # Exports absent
+01                                     # Egress present
+00000002                               # rule count 2
+0001 0a000000 08 01bb 01bb             # IPv4 10.0.0.0/8, ports 443-443
+0002 20010db8000000000000000000000000 20 0001 ffff  # IPv6 2001:db8::/32, ports 1-65535
+
+# Bound
+00000002 8003 0000 0000000000000001    # header: length 2, response to OpBind, flags, request 1
+0001                                   # result success
+
+# AttachmentClosed event
+00000012 4001 0000 0000000000000000    # header: length 18, EventAttachmentClosed, flags, request 0
+07070707070707070707070707070707       # AttachmentID
+0002                                   # Reason CloseLeaseExpired
