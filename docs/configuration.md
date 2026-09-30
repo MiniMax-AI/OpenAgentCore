@@ -108,6 +108,20 @@ Core approves a node's capacity when you generate its Add node command: **Sandbo
 
 Set a default in **System** → **Default model configuration**, or use `PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys with `secrets/credential.key` and never returns them. [Model execution](../contracts/agents-api/model-execution.md#deployment-defaults) owns the request fields and replacement rules, and [precedence](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which Sessions use a default.
 
+## Docker node configuration
+
+The node installer writes Docker’s provider configuration into the node’s configuration file; these fields are separate from Core’s `config.json`. Deployment resources, Runtime images and capacity remain in [Core’s database](#runtime-settings-web).
+
+| Field | Installer value | Meaning |
+| --- | --- | --- |
+| `host` | `unix:///var/run/docker.sock` | Explicit Docker Engine socket |
+| `network` | `oac-node-<installation-id>` | Runtime container network |
+| `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
+| `nested_sandbox` | `true` | Enables the Docker adapter’s init process and proc-mask configuration |
+| `extra_hosts` | Optional | Additional container host mappings |
+
+The [Docker adapter](sandbox-provider.md#docker-adapter) owns container isolation, volume layout and lifecycle behavior.
+
 ## Installation directory
 
 The installer creates the installation directory, `~/.oac/core` by default, with mode `0700`; the files in `secrets/` are `0600`.

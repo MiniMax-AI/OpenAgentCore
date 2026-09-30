@@ -13,7 +13,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Developer setup, repository map and focused checks | [Develop OpenAgentCore](docs/development.md) |
 | API callers, credentials and route inventory | [API index](docs/api/README.md) |
 | Public wire semantics and protocol coverage | [Agents API contracts](contracts/agents-api/README.md) |
-| Machine connection routes | [Machine connection API](docs/api/README.md#machine-connection-api) |
+| Machine connection routes | [Machine connection API](contracts/agents-api/machine-api.md) |
 | Core service setup, tests and generation | [Core service guide](services/core/README.md) |
 | Core implementation constraints beyond the public contracts | [Implementation constraints](services/core/IMPLEMENTATION.md) |
 | Environment ownership, preparation, Skills, Plugins, packages and MCP bindings | [Environments](contracts/agents-api/environments.md) |

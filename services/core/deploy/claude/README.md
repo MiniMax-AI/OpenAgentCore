@@ -2,7 +2,7 @@
 
 The Claude adapter runs Claude Code through the pinned Claude Agent SDK. The SDK owns the model and tool loop. Two parts make up the adapter: the private TypeScript bridge in [`packages/claude-sdk-adapter`](../../../../packages/claude-sdk-adapter/README.md), which owns the bridge protocol and native SDK configuration, and the Go adapter in [`agent/claudesdk`](../../../../apps/daemon/internal/agent/claudesdk), which owns the bridge process. This page holds the Runtime-level rules and the Claude Runtime image. [Harness onboarding](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
 
-Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/design-principles.md#runtime-and-outer-isolation)).
+Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)).
 
 ## Native pin and readiness
 
@@ -46,4 +46,4 @@ The bridge ([`native_failure.ts`](../../../../packages/claude-sdk-adapter/src/na
 | Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node`, `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
-The build runs the bundle's `runtime_check.js` against its entry point. The distribution copies `/opt/claude-sdk` into the combined Runtime image. Sandboxes run the image with the [Docker sandbox settings](../codex/README.md#docker-sandbox-settings).
+The build runs the bundle's `runtime_check.js` against its entry point. The distribution copies `/opt/claude-sdk` into the combined Runtime image. Sandboxes run the image with the [Docker sandbox settings](../../../../docs/sandbox-provider.md#docker-adapter).

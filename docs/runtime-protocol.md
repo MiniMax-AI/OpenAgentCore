@@ -6,7 +6,7 @@ Hosted and self-hosted Runtimes use the same protocol. A Harness joins through t
 
 ## Ownership and connection
 
-Core owns durable Session, Turn, input and Environment records, scheduling and reconciliation. Runtime owns native Executors, active Turns, transfer state and cleanup until settlement. A Sandbox Provider owns placement and the surrounding compute. Releasing an execution admission or closing an Executor never deletes, suspends or reclaims a sandbox. The daemon is not an isolation boundary; see [Runtime and outer isolation](design-principles.md#runtime-and-outer-isolation).
+Core owns durable Session, Turn, input and Environment records, scheduling and reconciliation. Runtime owns native Executors, active Turns, transfer state and cleanup until settlement. A Sandbox Provider owns placement and the surrounding compute. Releasing an execution admission or closing an Executor never deletes, suspends or reclaims a sandbox. The daemon is not an isolation boundary; see [Runtime and outer isolation](concepts.md#runtime-and-outer-isolation).
 
 A Runtime connects in this order:
 

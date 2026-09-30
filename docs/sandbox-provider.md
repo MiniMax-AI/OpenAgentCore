@@ -206,6 +206,24 @@ Native acceptance proves what fixtures cannot: creation, lease behavior, owned p
 
 | Kind | Adapter | Helper and adapter rules | Operator guide |
 | --- | --- | --- | --- |
-| Docker (node) | [`sandbox/docker`](../services/core/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/core/internal/sandbox/node); [Docker sandbox settings](../services/core/deploy/codex/README.md#docker-sandbox-settings) | [Nodes](getting-started/nodes.md) |
+| Docker (node) | [`sandbox/docker`](../services/core/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/core/internal/sandbox/node) | [Docker adapter](#docker-adapter) |
 | microsandbox (node) | [`sandbox/microsandbox`](../services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](../services/core/tools/microsandbox-provider/README.md) | [Nodes](getting-started/nodes.md) |
 | E2B (direct) | [`sandbox/e2b`](../services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](../services/core/tools/e2b-provider/README.md) | [Sandbox deployment](../contracts/agents-api/sandbox-deployment.md#e2b-configuration); application-managed templates in [`deploy/e2b`](../services/core/deploy/e2b/README.md) |
+
+## Docker adapter
+
+The Docker Sandbox Provider ([`sandbox/docker`](../services/core/internal/sandbox/docker)) runs every Runtime image, whichever Harness it serves, with the same container settings ([`container_options.go`](../services/core/internal/sandbox/docker/container_options.go)):
+
+- user 1000:1000, read-only root filesystem, all capabilities dropped, `no-new-privileges`, the [seccomp profile](#seccomp-profile) and AppArmor `unconfined`;
+- the node’s configured network and extra hosts ([node configuration](configuration.md#docker-node-configuration));
+- CPU and memory from the deployment specification, a 128-process limit and a 128 MiB `/tmp` tmpfs;
+- two named volumes labelled with the installation, tenant, Environment and allocation: `<name>-home` at `/home` and `<name>-environment` at `/environment`, whose `workspace` subdirectory is also mounted at `/workspace`. The Docker Engine must support volume subpath mounts;
+- with the configured `nested_sandbox` option, Docker's `/proc` masks are lifted (`/sys/firmware` and `/sys/devices/virtual/powercap` stay masked) and the container runs an init process.
+
+Create refuses to reuse retained volumes that have no container. It copies the [Runtime bootstrap](runtime-bootstrap.md) file to `/home/runtime/runtime-bootstrap.json` (mode 0600, UID 1000) and the `/environment` workspace, staging, initialization and package directories into the container, then starts `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json`. When the created container does not have the configured CPU, memory and exact image, Create returns the error with `CreateSettled`. Docker has no lease, so Renew only reads the container state. Kill checks the ownership labels of the container and both volumes before removing any of them, then confirms that all three are gone.
+
+The node uses the explicit Unix socket in its [provider configuration](configuration.md#docker-node-configuration) and ignores `DOCKER_HOST`. No Docker socket, host home or Core credential is mounted into a Runtime.
+
+### Seccomp profile
+
+[`seccomp.json`](../services/core/deploy/codex/seccomp.json) is the Moby default profile at [revision 65adc7e](https://github.com/moby/profiles/blob/65adc7e022c97f55e45c054ff012988027733b87/seccomp/default.json) (Apache-2.0, see [seccomp.LICENSE](../services/core/deploy/codex/seccomp.LICENSE); upstream file SHA-256 `785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334`) with one appended rule that allows `clone`, `unshare`, `setns`, `mount`, `umount2` and `pivot_root`. The distribution ships this file to every Docker node as `runtime/seccomp.json`.
