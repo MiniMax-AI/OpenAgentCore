@@ -1,0 +1,10 @@
+# Rename exchanging two entries.
+00000030                          # PayloadLength 48
+0016                              # MessageType: Rename (22)
+0000                              # Flags
+0000000000000006                  # RequestID 6
+0000000000000001 0000000000000007 # Parent: ID 1, Generation 7
+00000003 6f6c64                   # Name "old"
+0000000000000002 0000000000000009 # NewParent: ID 2, Generation 9
+00000003 6e6577                   # NewName "new"
+0003                              # Mode: RenameExchange

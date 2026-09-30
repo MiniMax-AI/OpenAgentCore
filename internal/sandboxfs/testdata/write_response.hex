@@ -1,0 +1,12 @@
+# Short write: 4096 bytes written, then the device filled.
+0000001b                          # PayloadLength 27
+800c                              # MessageType: response to Write (12)
+0000                              # Flags
+0000000000000004                  # RequestID 4
+0001                              # Result: success
+00001000                          # Written 4096
+01                                # Failure: present
+000b                              # Code: Errno
+01 000b                           # Errno: present, NoSpace
+0001                              # Effect: None
+00000009 6469736b2066756c6c       # Message "disk full"

@@ -1,0 +1,10 @@
+# Lookup failure: the entry does not exist.
+00000014                          # PayloadLength 20
+8004                              # MessageType: response to Lookup (4)
+0000                              # Flags
+0000000000000007                  # RequestID 7
+0002                              # Result: failure
+000b                              # Code: Errno
+01 0003                           # Errno: present, NotFound
+0001                              # Effect: None
+00000007 6d697373696e67           # Message "missing"

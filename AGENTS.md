@@ -23,6 +23,7 @@ OpenAgentCore is protocol-first and modular. Core orchestrates operations that p
 | Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |
 | Runtime and Sandbox I/O service–relay (Link) | `internal/sandboxlink/protocol.go` | [Sandbox link protocol](docs/sandbox-link-protocol.md) |
 | Provider–Sandbox I/O startup | `internal/sandboxbootstrap/bootstrap.go` | [Sandbox bootstrap](docs/sandbox-bootstrap.md) |
+| Runtime–file service | `internal/sandboxfs/protocol.go` | [File access protocol](docs/file-access-protocol.md) |
 | Core–Runtime wire | `internal/agentdaemon/proto/` | [Core–Runtime protocol](docs/runtime-protocol.md) |
 | Runtime–Harness | `apps/daemon/internal/agent/harness.go` | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
 | Harness–Model provider | `internal/modelprovider/config.go` | [Model execution](contracts/agents-api/model-execution.md) |

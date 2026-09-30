@@ -1,0 +1,20 @@
+# Walk response that stopped at the symlink "link": one entry, no failure.
+0000006f                          # PayloadLength 111
+8005                              # MessageType: response to Walk (5)
+0000                              # Flags
+0000000000000002                  # RequestID 2
+0001                              # Result: success
+00000001                          # Entries: count 1
+0000000000000002 0000000000000007 # Node: ID 2, Generation 7
+0000000000000102                  # Attr.Ino
+0000a1ff                          # Attr.Mode: symlink 0777
+00000001                          # Attr.Nlink
+000003e8 000003e8                 # Attr.UID, Attr.GID
+0000000000000000                  # Attr.Rdev
+0000000000000001                  # Attr.Size
+0000000000000000                  # Attr.Blocks
+00001000                          # Attr.Blksize
+0000000065000000 00000001         # Attr.Atime
+0000000065000000 00000002         # Attr.Mtime
+0000000065000000 00000003         # Attr.Ctime
+00                                # Failure: absent
