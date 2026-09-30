@@ -1,6 +1,6 @@
 # Parsar Agent workbench
 
-A small product application on OpenAgentCore, using Parsar UI. Manage models,
+An independently started small application on OpenAgentCore. Manage models,
 Skills, HTTP MCP services and runtime configurations; compose reusable Agent
 configurations and start independent Sessions. Continue the same Session to keep
 its history and live workspace. There is no task layer or shared workspace.
@@ -80,7 +80,7 @@ model availability or MCP connectivity. Skills require a hosted runtime.
 The loopback Node server has two small responsibilities: a fixed allowlist proxy
 for public Core resources, and `/app/` CRUD for product-owned configuration. One
 SQLite table stores typed JSON records. There is no ORM, background scheduler,
-execution database or imported Parsar backend.
+execution database.
 
 SQLite files live in `~/.oac/data/parsar-example/`. Set the absolute
 `OAC_EXAMPLE_DATA_DIR` to relocate them. A hash of the Core origin and Project key
@@ -148,16 +148,6 @@ It leaves sample resources for inspection and executes the configured model. It
 checks Skill/Plugin installation, same-Session file reuse, and workspace isolation
 between two Sessions. It asks the model to call DeepWiki; inspect the recorded
 tool activity to distinguish a successful call from an attempted call.
-
-## UI provenance
-
-The copied UI primitives, `src/lib/utils.ts`, `src/style.css`
-and `public/*` originate in [Parsar](https://github.com/MiniMax-AI-Dev/parsar)
-revision `90fafede`, under [MIT](LICENSE). The responsive body minimum width and
-application pages are local adaptations. Navigation animation adapts
-[Motion Primitives](https://github.com/ibelick/motion-primitives), with reduced-motion
-support and its [MIT notice](MOTION-PRIMITIVES-LICENSE). Multica's resource and
-Agent organization informs the product flow; no Multica code is copied.
 
 ## Connect a user machine
 
