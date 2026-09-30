@@ -1,5 +1,6 @@
 """Acceptance behavior of the oac command against a fake Docker/systemd host."""
 import hashlib
+import http.client
 import json
 from pathlib import Path
 import stat
@@ -500,6 +501,15 @@ class OacTests(unittest.TestCase):
         oac_cli.uninstall(self.root, yes=True, out=self.output.append)
         self.assertFalse(self.root.exists())
         self.assertEqual(self.host.missing_images, set(IMAGES.values()))
+
+    def test_uninstall_completes_when_core_returns_a_truncated_response(self):
+        self.install()
+        with mock.patch.object(oac_cli, "http", side_effect=http.client.IncompleteRead(b"{")):
+            oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        self.assertFalse(self.root.exists())
+        self.assertIn("Core did not answer, so its nodes and sandboxes can't be listed. Nodes stay on their hosts.",
+                      self.output)
+        self.assertTrue(any("node-install.pyz --uninstall" in line and "--force" in line for line in self.output))
 
     def test_uninstall_does_not_probe_core_through_private_file_or_directory_links(self):
         self.install()

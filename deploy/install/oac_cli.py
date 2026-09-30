@@ -12,6 +12,7 @@ import contextlib
 import datetime
 import errno
 import fcntl
+from http.client import HTTPException
 import ipaddress
 import json
 import os
@@ -1102,7 +1103,7 @@ def core_sandboxes(root, state):
         if any(status != 200 for status, _ in answers):
             return None
         return json.loads(answers[0][1])["data"], json.loads(answers[1][1])
-    except (OacError, RuntimeError, OSError, ValueError, KeyError, TypeError):
+    except (OacError, RuntimeError, OSError, ValueError, KeyError, TypeError, HTTPException):
         return None
 
 
