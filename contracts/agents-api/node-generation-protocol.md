@@ -196,6 +196,8 @@ native executable is missing and whose import may have started remains retained;
 missing files do not prove native absence. Receipt/store history is never
 erased using an empty native inventory.
 
+The diagnostic codes are authored in `services/core/internal/sandbox/node_diagnostic.go`. The shared `services/core/internal/sandbox/testdata/node-diagnostics.json` fixture checks the Go mapping, OpenAPI source annotations and generated enums, and the TypeScript client declaration. Web uses the client normalizer and checks localized messages for every declared code. Update these projections with a code change; unknown codes normalize to `provider_unavailable`.
+
 Preparation diagnostics preserve fixed typed causes. Only artifact transfer,
 checksum or release-provenance failures report `runtime_download_failed`. A private
 preparer exit category communicates that class without parsing stderr; provider,

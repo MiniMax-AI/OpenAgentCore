@@ -1,6 +1,8 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AgentCoreError, OpenAIAgentsClient } from "./client";
-import { SandboxAdminClient, type SandboxNode } from "./sandbox-client";
+import { SandboxAdminClient, normalizeSandboxNodeDiagnostic, sandboxNodeDiagnostics, type SandboxNode } from "./sandbox-client";
+
+import nodeDiagnosticFixture from "../../../services/core/internal/sandbox/testdata/node-diagnostics.json";
 
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
 
@@ -397,3 +399,17 @@ it.each(["unknown", "preparing", "failed", "update_required"])("does not erase o
  const client = new SandboxAdminClient({ fetch: async () => response({ data: [value] }) });
  expect((await client.listNodes()).data[0]).toEqual(value);
  });
+
+describe("shared node diagnostic contract", () => {
+  it("checks the client declaration against the Go diagnostic fixture", () => {
+    expect([...sandboxNodeDiagnostics].sort()).toEqual([...nodeDiagnosticFixture].sort());
+    expect(normalizeSandboxNodeDiagnostic("future_code")).toBe("provider_unavailable");
+  });
+  it.each(nodeDiagnosticFixture)("preserves %s through node and rollout projections", async (diagnostic) => {
+    const value = { ...node, provider_ready: false, diagnostic, rollout: { state: "failed", ready_generation: 1, diagnostic } };
+    const client = new SandboxAdminClient({ baseUrl: "https://core.example", token: "test", fetch: async () => response({ data: [value] }) });
+    const result = await client.listNodes();
+    expect(result.data[0]?.diagnostic).toBe(diagnostic);
+    expect(result.data[0]?.rollout.diagnostic).toBe(diagnostic);
+  });
+});

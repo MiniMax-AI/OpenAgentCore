@@ -4,17 +4,25 @@ import { hasOwn, isNonnegativeInteger, isRecord, onlyFields, sameResourceId } fr
 import type { ReadOptions } from "./types";
 
 export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "compute_unconfirmed" | "ownership_mismatch" | "provider_unavailable";
+/** Checked against Core's shared node-diagnostics.json fixture. */
+export const sandboxNodeDiagnostics = [
+  "provider_unavailable",
+  "docker_unavailable",
+  "docker_limits_unsupported",
+  "runtime_download_failed",
+  "runtime_image_unavailable",
+  "kvm_unavailable",
+  "microsandbox_artifacts_unavailable",
+  "capacity_insufficient",
+] as const;
 /** Fixed reason a node's provider is not ready. Core omits the field while the provider is ready, so read it as falsy (undefined) then. The client reads an unknown future value as provider_unavailable. */
-export type SandboxNodeDiagnostic =
-  | ""
-  | "provider_unavailable"
-  | "docker_unavailable"
-  | "docker_limits_unsupported"
-  | "runtime_download_failed"
-  | "runtime_image_unavailable"
-  | "kvm_unavailable"
-  | "microsandbox_artifacts_unavailable"
-  | "capacity_insufficient";
+export type SandboxNodeDiagnostic = "" | typeof sandboxNodeDiagnostics[number];
+const nodeDiagnostics: ReadonlySet<string> = new Set(sandboxNodeDiagnostics);
+
+/** Keep a known readiness cause; never expose unclassified node-supplied text. */
+export function normalizeSandboxNodeDiagnostic(value: string): Exclude<SandboxNodeDiagnostic, ""> {
+  return nodeDiagnostics.has(value) ? value as Exclude<SandboxNodeDiagnostic, ""> : "provider_unavailable";
+}
 
 export type SandboxProvider = "docker" | "microsandbox" | "e2b";
 /** CPU and MiB limits for each sandbox, not node concurrency. */
@@ -240,7 +248,7 @@ function projectNodeRollout(value: unknown, online: unknown): SandboxNodeRollout
   valid(["ready", "preparing", "failed", "update_required", "unknown"].includes(rollout.state as string) && nullable(isNonnegativeInteger)(rollout.ready_generation) &&
     (online !== false || rollout.state === "unknown") && (rollout.state !== "ready" || rollout.ready_generation !== null) &&
     (rollout.diagnostic === undefined || (typeof rollout.diagnostic === "string" && rollout.diagnostic !== "" && rollout.state === "failed")));
-  return { ...rollout, ...(rollout.diagnostic !== undefined ? { diagnostic: nodeDiagnostics.has(rollout.diagnostic as string) ? rollout.diagnostic : "provider_unavailable" } : {}) } as unknown as SandboxNodeRollout;
+  return { ...rollout, ...(rollout.diagnostic !== undefined ? { diagnostic: normalizeSandboxNodeDiagnostic(rollout.diagnostic as string) } : {}) } as unknown as SandboxNodeRollout;
 }
 /** Configured deployments carry a validated public configuration and observation object. */
 function projectDeployment(value: unknown): SandboxDeployment {
@@ -265,7 +273,6 @@ function projectDeployment(value: unknown): SandboxDeployment {
 
 const nodeFields = ["rollout", "id", "name", "provider", "online", "provider_ready", "cpu_count", "available_memory_bytes", "available_disk_bytes", "running", "snapshots",
   "last_seen_at", "max_active", "max_retained", "active", "reserved", "retained", "cleanup_pending", "created_at", "core_url", "enrollment_id"];
-const nodeDiagnostics = new Set(["provider_unavailable", "docker_unavailable", "docker_limits_unsupported", "runtime_download_failed", "runtime_image_unavailable", "kvm_unavailable", "microsandbox_artifacts_unavailable", "capacity_insufficient"]);
 /** Core omits an empty `diagnostic`, so a present one is a code; an unknown code reads as provider_unavailable. */
 function projectNode(node: Record<string, unknown>): SandboxNode {
   const { diagnostic, rollout, ...rest } = node;
@@ -276,7 +283,7 @@ function projectNode(node: Record<string, unknown>): SandboxNode {
     nullable(timestamp)(node.last_seen_at) && timestamp(node.created_at) && (node.enrollment_id === null || typeof node.enrollment_id === "string") &&
     (diagnostic === undefined || (typeof diagnostic === "string" && diagnostic !== "")));
   if (diagnostic === undefined) return { ...fields } as unknown as SandboxNode;
-  return { ...fields, diagnostic: nodeDiagnostics.has(diagnostic as string) ? diagnostic : "provider_unavailable" } as unknown as SandboxNode;
+  return { ...fields, diagnostic: normalizeSandboxNodeDiagnostic(diagnostic as string) } as unknown as SandboxNode;
 }
 function projectNodeList(value: unknown): { data: SandboxNode[] } {
   const list = members(value, ["data"]);
