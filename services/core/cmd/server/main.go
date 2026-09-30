@@ -36,9 +36,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
@@ -299,11 +301,18 @@ func run() error {
 	metricsDone := make(chan struct{})
 	go func() { defer close(metricsDone); metrics.Run(metricsCtx) }()
 	defer func() { cancelMetrics(); <-metricsDone }()
+	fileStore := filepg.New(units)
+	fileService, err := files.NewService(fileStore)
+	if err != nil {
+		return err
+	}
 	deps := api.Dependencies{
 		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
 		Installation: installation, InstallationBindings: executionStore,
-		Projects: executionStore, Vaults: executionStore, ModelProviders: executionStore, Files: executionStore,
-		Skills: executionStore, EnvironmentTemplates: executionStore, Agents: agentService, AgentsReader: agentStore,
+		Projects: executionStore, Vaults: executionStore, ModelProviders: executionStore,
+		Skills: executionStore, EnvironmentTemplates: executionStore,
+		Files: fileService, FilesReader: fileStore,
+		Agents: agentService, AgentsReader: agentStore,
 		Sessions: executionStore, SessionEvents: executionStore, SessionHistory: executionStore,
 		Subagents: executionStore, Artifacts: executionStore, SessionAdmin: executionStore,
 		Environments: executionStore, ExecutorConnections: executorConnections{store: executionStore, registry: registry},

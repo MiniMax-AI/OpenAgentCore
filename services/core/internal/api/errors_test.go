@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
@@ -27,7 +28,11 @@ func TestResourceNotFoundErrorSurfaces(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, path, nil)
-			writeStoreError(response, request, fmt.Errorf("lookup: %w", store.ErrNotFound))
+			if strings.HasPrefix(path, "/v1/files") {
+				writeFilesError(response, request, fmt.Errorf("lookup: %w", files.ErrNotFound))
+			} else {
+				writeStoreError(response, request, fmt.Errorf("lookup: %w", store.ErrNotFound))
+			}
 			var body v1.ErrorResponse
 			if response.Code != http.StatusNotFound || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 				t.Fatalf("response = %d %s", response.Code, response.Body)

@@ -73,6 +73,12 @@ func writeInputError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 }
 
+// writeContentTooLarge reports uploaded or copied content beyond the
+// operation's limit.
+func writeContentTooLarge(w http.ResponseWriter) {
+	writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "File exceeds this operation's content limit.")
+}
+
 const unstorableTextMessage = "Request text contains characters this service cannot store or compare, such as U+0000 or invalid UTF-8."
 
 // fieldError is a request validation failure reported with the official
@@ -185,8 +191,6 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 
 	case errors.Is(err, store.ErrDefaultSkillVersion):
 		writeError(w, http.StatusBadRequest, "invalid_value", "Cannot delete the default skill version.", "version")
-	case errors.Is(err, store.ErrSourceFileTooLarge):
-		writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "File exceeds this operation's content limit.")
 	case errors.Is(err, store.ErrModelProviderRequired):
 		writeError(w, http.StatusBadRequest, "model_provider_required", "This Session was created without a model provider and cannot run. Create a new Session with x_agents_core.model_provider or an Agent that has one saved.")
 	case errors.Is(err, store.ErrHostedEnvironmentFailed):
@@ -220,8 +224,8 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		}
 	case errors.Is(err, store.ErrNotFound):
 		code := "not_found_error"
-		// Files and Skills retain their non-beta error envelope.
-		if strings.HasPrefix(r.URL.Path, "/v1/files/") || strings.HasPrefix(r.URL.Path, "/v1/skills/") || r.URL.Path == "/v1/files" || r.URL.Path == "/v1/skills" {
+		// Skills retain their non-beta error envelope.
+		if strings.HasPrefix(r.URL.Path, "/v1/skills/") || r.URL.Path == "/v1/skills" {
 			code = ""
 		}
 		writeError(w, http.StatusNotFound, code, "Resource not found.", notFoundParam...)

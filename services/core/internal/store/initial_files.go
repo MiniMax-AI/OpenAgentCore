@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -99,8 +100,8 @@ func (s *Store) resolveEnvironmentTemplate(ctx context.Context, q *sqlc.Queries,
 	return value, files, nil
 }
 
-func (s *Store) saveInitialFiles(ctx context.Context, q *sqlc.Queries, tx pgx.Tx, tenant string, session pgtype.UUID, files []environmentconfig.InitialFile) ([]byte, error) {
-	if environmentconfig.ValidateInitialFiles(files) != nil {
+func (s *Store) saveInitialFiles(ctx context.Context, q *sqlc.Queries, tx pgx.Tx, tenant string, session pgtype.UUID, initial []environmentconfig.InitialFile) ([]byte, error) {
+	if environmentconfig.ValidateInitialFiles(initial) != nil {
 		return nil, ErrInvalidInput
 	}
 	tenantID, err := parseID(tenant)
@@ -108,33 +109,22 @@ func (s *Store) saveInitialFiles(ctx context.Context, q *sqlc.Queries, tx pgx.Tx
 		return nil, err
 	}
 	tenant = uuid.UUID(tenantID.Bytes).String()
-	metadata := environmentconfig.InitialFilesMetadata(files)
-	for i, f := range files {
+	metadata := environmentconfig.InitialFilesMetadata(initial)
+	for i, f := range initial {
 		body := f.Data
 		if f.Type == "file_id" {
-			sourceTenant, sourceID, err := sourceFileIDs(tenant, f.FileID)
-			if err != nil {
-				return nil, err
+			sourceID, ok := files.ParseID(f.FileID)
+			if !ok {
+				return nil, ErrNotFound
 			}
-			source, err := q.LockInitialSourceFile(ctx, sqlc.LockInitialSourceFileParams{TenantID: sourceTenant, ID: sourceID})
+			source, err := q.LockInitialSourceFile(ctx, sqlc.LockInitialSourceFileParams{TenantID: tenantID, ID: pgtype.UUID{Bytes: sourceID, Valid: true}})
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, ErrNotFound
 			}
 			if err != nil {
 				return nil, err
 			}
-			err = consumeSourceFile(ctx, tx, source, func(source SourceFile, reader io.Reader) error {
-				if source.SizeBytes > environmentconfig.MaxInitialFileBytes {
-					return ErrInvalidInput
-				}
-				var err error
-				body, err = io.ReadAll(io.LimitReader(reader, environmentconfig.MaxInitialFileBytes+1))
-				if err == nil && (len(body) > environmentconfig.MaxInitialFileBytes || int64(len(body)) != source.SizeBytes) {
-					return ErrInvalidInput
-				}
-				return err
-			})
-			if err != nil {
+			if body, err = readInitialSourceFile(ctx, tx, source); err != nil {
 				return nil, err
 			}
 		}
@@ -152,6 +142,28 @@ func (s *Store) saveInitialFiles(ctx context.Context, q *sqlc.Queries, tx pgx.Tx
 		}
 	}
 	return json.Marshal(metadata)
+}
+
+// readInitialSourceFile copies a File's content for a new Session. Session
+// creation reads source_files through store's SQL until Sessions move out of
+// store.
+func readInitialSourceFile(ctx context.Context, tx pgx.Tx, source sqlc.SourceFile) ([]byte, error) {
+	if source.SizeBytes > environmentconfig.MaxInitialFileBytes {
+		return nil, ErrInvalidInput
+	}
+	objects := tx.LargeObjects()
+	reader, err := objects.Open(ctx, source.BodyOid.Uint32, pgx.LargeObjectModeRead)
+	if err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(io.LimitReader(reader, environmentconfig.MaxInitialFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > environmentconfig.MaxInitialFileBytes || int64(len(body)) != source.SizeBytes {
+		return nil, ErrInvalidInput
+	}
+	return body, reader.Close()
 }
 
 // ReadInitialEnvironmentFile decrypts only the next frozen file, bounding memory per installation.

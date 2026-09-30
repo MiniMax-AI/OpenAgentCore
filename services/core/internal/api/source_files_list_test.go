@@ -9,7 +9,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 )
 
 func TestSourceFileListParametersAndEnvelope(t *testing.T) {
@@ -27,8 +27,8 @@ func TestSourceFileListParametersAndEnvelope(t *testing.T) {
 		t.Fatalf("default list changed: %s calls=%d after=%q limit=%d asc=%t purpose=%v", raw, f.listCalls, f.listAfter, f.listLimit, f.listAsc, f.listPurpose)
 	}
 
-	file := store.SourceFile{ID: "file-00000000-0000-0000-0000-000000000001", Filename: "one.bin", Purpose: "user_data", SizeBytes: 3, CreatedAt: time.Unix(123, 0)}
-	f.listPage = store.SourceFilePage{Files: []store.SourceFile{file}, NextCursor: file.ID}
+	file := files.File{ID: "file-00000000-0000-0000-0000-000000000001", Filename: "one.bin", Purpose: "user_data", SizeBytes: 3, CreatedAt: time.Unix(123, 0)}
+	f.listPage = files.Page{Files: []files.File{file}, NextCursor: file.ID}
 	status, raw = sourceRequest(t, server, http.MethodGet, "/v1/files?after="+file.ID+"&limit=7&order=asc&purpose=user_data", "files-key", "", nil)
 	var page v1.SourceFileList
 	if status != http.StatusOK || json.Unmarshal(raw, &page) != nil {
@@ -90,7 +90,7 @@ func TestSourceFileListIgnoresUnknownKeysAndEmptyPurpose(t *testing.T) {
 }
 
 func TestSourceFileListMapsStorageErrors(t *testing.T) {
-	f := &sourceFilesFixture{listErr: store.ErrNotFound}
+	f := &sourceFilesFixture{listErr: files.ErrNotFound}
 	h, _ := environmentFileCreateHandler(t, f.wire)
 	server := newSourceFileServer(t, h)
 	status, _ := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-missing", "files-key", "", nil)
@@ -102,7 +102,7 @@ func TestSourceFileListMapsStorageErrors(t *testing.T) {
 func TestSourceFileListPurposeValidationBeforeCursorLookup(t *testing.T) {
 	for _, purpose := range []string{"", "user_data", "assistants", "batch", "fine-tune", "vision", "evals", "assistants_output", "batch_output", "fine-tune-results", "unknown", "USER_DATA"} {
 		t.Run("purpose="+purpose, func(t *testing.T) {
-			f := &sourceFilesFixture{listErr: store.ErrNotFound}
+			f := &sourceFilesFixture{listErr: files.ErrNotFound}
 			h, _ := environmentFileCreateHandler(t, f.wire)
 			server := newSourceFileServer(t, h)
 			status, raw := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-missing&purpose="+purpose, "files-key", "", nil)

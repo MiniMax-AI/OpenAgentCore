@@ -10,8 +10,30 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// testFiles returns the files domain over pool for tests that need a File.
+func testFiles(t *testing.T, pool *pgxpool.Pool) (*files.Service, *filepg.Store) {
+	t.Helper()
+	storage := filepg.New(pgunit.NewPool(pool))
+	service, err := files.NewService(storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service, storage
+}
+
+func uploadSource(data []byte) func(io.Writer) (files.Upload, error) {
+	return func(w io.Writer) (files.Upload, error) {
+		_, err := w.Write(data)
+		return files.Upload{Filename: "source.bin", Purpose: files.PurposeUserData}, err
+	}
+}
 
 func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 	_, pool := testStore(t)
@@ -22,15 +44,13 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 	s := NewWithCredentialCipher(pool, cipher)
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	canary := []byte("private-initial-file-canary\x00\xff")
-	upload, err := s.CreateSourceFile(t.Context(), tenant, func(w io.Writer) (SourceFileUpload, error) {
-		_, err := w.Write(canary)
-		return SourceFileUpload{Filename: "source.bin", Purpose: "user_data"}, err
-	})
+	sourceFiles, _ := testFiles(t, pool)
+	upload, err := sourceFiles.Create(t.Context(), files.CreateCommand{TenantID: tenant, Upload: uploadSource(canary)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	files := []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a/data", Data: canary}, {Type: "file_id", Path: "/workspace/b", FileID: upload.ID}}
-	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetFiles: true, Files: files})
+	initial := []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a/data", Data: canary}, {Type: "file_id", Path: "/workspace/b", FileID: upload.ID}}
+	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetFiles: true, Files: initial})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +61,7 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 	if _, _, err := s.ResolveEnvironmentTemplate(t.Context(), foreign, template.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("foreign template resolved", err)
 	}
-	if _, err := s.UpdateEnvironmentTemplate(t.Context(), strings.ToUpper(tenant), strings.ToUpper(template.ID), EnvironmentTemplateInput{SetFiles: true, Files: files}); err != nil {
+	if _, err := s.UpdateEnvironmentTemplate(t.Context(), strings.ToUpper(tenant), strings.ToUpper(template.ID), EnvironmentTemplateInput{SetFiles: true, Files: initial}); err != nil {
 		t.Fatal("noncanonical update", err)
 	}
 	if _, _, err := s.ResolveEnvironmentTemplate(t.Context(), strings.ToUpper(tenant), strings.ToUpper(template.ID)); err != nil {
@@ -65,14 +85,14 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 	if _, err := s.DeleteEnvironmentTemplate(t.Context(), tenant, template.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteSourceFile(t.Context(), tenant, upload.ID); err != nil {
+	if err := sourceFiles.Delete(t.Context(), files.DeleteCommand{TenantID: tenant, FileID: upload.ID}); err != nil {
 		t.Fatal(err)
 	}
 	retry, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil || retry.ID != session.ID {
 		t.Fatal("retry re-resolved deleted resources", err)
 	}
-	for position := range files {
+	for position := range initial {
 		metadata, body, err := s.ReadInitialEnvironmentFile(t.Context(), strings.ToUpper(tenant), strings.ToUpper(session.ID), position)
 		if err != nil || !bytes.Equal(body, canary) || metadata.ID == "" {
 			t.Fatal("frozen initial content", err)
@@ -86,7 +106,7 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 		}
 	}
 	changed := input
-	changed.InitialFiles = append([]environmentconfig.InitialFile(nil), files...)
+	changed.InitialFiles = append([]environmentconfig.InitialFile(nil), initial...)
 	changed.InitialFiles[0].Data = []byte("changed")
 	if _, err := s.CreateSession(t.Context(), tenant, changed); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatal("changed bytes retried", err)

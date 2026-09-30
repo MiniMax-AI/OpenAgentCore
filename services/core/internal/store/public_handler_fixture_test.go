@@ -11,8 +11,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
@@ -27,10 +29,10 @@ const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 
 // publicHandler serves s through api.NewHandler. s backs every area the Store
 // implements, and db is the database and credential key that built s; the
-// audit reads come from db. keys authenticate as Project keys and "admin" as
-// the Core key. Metrics, Runtime observation and history, and executor
-// connections are strict stand-ins. Execution and Sandboxes stay disabled
-// unless configure sets them.
+// audit reads, Agents and Files come from db. keys authenticate as Project
+// keys and "admin" as the Core key. Metrics, Runtime observation and history,
+// and executor connections are strict stand-ins. Execution and Sandboxes stay
+// disabled unless configure sets them.
 func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyResolver, engine string, configure ...func(*api.Dependencies)) (http.Handler, error) {
 	t.Helper()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
@@ -40,10 +42,13 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 	strict := strictStandIn{t}
 	audit := auditpg.New(pgunit.NewPool(db.pool))
 	agentStore, agentService := fixtureAgents(t, db)
+	fileStore, fileService := fixtureFiles(t, db)
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: s,
-		Projects: fixtureProjects{Store: s, keys: keys}, Vaults: s, ModelProviders: s, Files: s, Skills: s,
-		EnvironmentTemplates: s, Agents: agentService, AgentsReader: agentStore, Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s,
+		Projects: fixtureProjects{Store: s, keys: keys}, Vaults: s, ModelProviders: s, Skills: s,
+		Files: fileService, FilesReader: fileStore,
+		Agents: agentService, AgentsReader: agentStore,
+		EnvironmentTemplates: s, Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s,
 		Artifacts: s, SessionAdmin: s, Environments: s, Admin: s, AdminAudit: audit, WriteAudit: audit,
 		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
 	}
@@ -62,6 +67,17 @@ func fixtureAgents(t testing.TB, db fixtureDB) (*agentpg.Store, *agents.Service)
 		t.Fatal(err)
 	}
 	return agentStore, agentService
+}
+
+// fixtureFiles builds the File adapter and service on db.
+func fixtureFiles(t testing.TB, db fixtureDB) (*filepg.Store, *files.Service) {
+	t.Helper()
+	fileStore := filepg.New(pgunit.NewPool(db.pool))
+	fileService, err := files.NewService(fileStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fileStore, fileService
 }
 
 // fixtureProjects serves Projects from the Store and resolves Project keys from

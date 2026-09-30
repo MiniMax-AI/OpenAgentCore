@@ -52,7 +52,7 @@ func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bo
 	if err != nil {
 		var limit *http.MaxBytesError
 		if errors.As(err, &limit) {
-			writeStoreError(w, r, store.ErrSourceFileTooLarge)
+			writeContentTooLarge(w)
 		} else {
 			writeStoreError(w, r, store.ErrInvalidInput)
 		}

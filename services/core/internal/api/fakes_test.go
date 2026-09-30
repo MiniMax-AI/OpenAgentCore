@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
@@ -461,48 +462,52 @@ func (f *fakeExecutorConnections) ExecutorConnected(a0 context.Context, a1 strin
 	return f.executorConnected(a0, a1, a2)
 }
 
+type fakeFilesReader struct {
+	t    testing.TB
+	get  func(ctx context.Context, tenantID, fileID string) (files.File, error)
+	list func(ctx context.Context, tenantID string, query files.ListQuery) (files.Page, error)
+	read func(ctx context.Context, tenantID, fileID string, consume func(files.File, io.Reader) error) error
+}
+
+func (f *fakeFilesReader) Get(a0 context.Context, a1 string, a2 string) (files.File, error) {
+	if f.get == nil {
+		unexpectedCall(f.t, "Get")
+	}
+	return f.get(a0, a1, a2)
+}
+
+func (f *fakeFilesReader) List(a0 context.Context, a1 string, a2 files.ListQuery) (files.Page, error) {
+	if f.list == nil {
+		unexpectedCall(f.t, "List")
+	}
+	return f.list(a0, a1, a2)
+}
+
+func (f *fakeFilesReader) Read(a0 context.Context, a1 string, a2 string, a3 func(files.File, io.Reader) error) error {
+	if f.read == nil {
+		unexpectedCall(f.t, "Read")
+	}
+	return f.read(a0, a1, a2, a3)
+}
+
 type fakeFiles struct {
-	t                testing.TB
-	createSourceFile func(context.Context, string, func(io.Writer) (store.SourceFileUpload, error)) (store.SourceFile, error)
-	getSourceFile    func(context.Context, string, string) (store.SourceFile, error)
-	listSourceFiles  func(context.Context, string, string, int, bool, *string) (store.SourceFilePage, error)
-	readSourceFile   func(context.Context, string, string, func(store.SourceFile, io.Reader) error) error
-	deleteSourceFile func(context.Context, string, string) error
+	t      testing.TB
+	create func(context.Context, files.CreateCommand) (files.File, error)
+	delete func(context.Context, files.DeleteCommand) error
 }
 
-func (f *fakeFiles) CreateSourceFile(a0 context.Context, a1 string, a2 func(io.Writer) (store.SourceFileUpload, error)) (store.SourceFile, error) {
-	if f.createSourceFile == nil {
-		unexpectedCall(f.t, "CreateSourceFile")
+func (f *fakeFiles) Create(a0 context.Context, a1 files.CreateCommand) (files.File, error) {
+	if f.create == nil {
+		unexpectedCall(f.t, "Create")
 	}
-	return f.createSourceFile(a0, a1, a2)
+	return f.create(a0, a1)
 }
 
-func (f *fakeFiles) GetSourceFile(a0 context.Context, a1 string, a2 string) (store.SourceFile, error) {
-	if f.getSourceFile == nil {
-		unexpectedCall(f.t, "GetSourceFile")
+func (f *fakeFiles) Delete(a0 context.Context, a1 files.DeleteCommand) error {
+	if f.delete == nil {
+		unexpectedCall(f.t, "Delete")
 	}
-	return f.getSourceFile(a0, a1, a2)
-}
-
-func (f *fakeFiles) ListSourceFiles(a0 context.Context, a1 string, a2 string, a3 int, a4 bool, a5 *string) (store.SourceFilePage, error) {
-	if f.listSourceFiles == nil {
-		unexpectedCall(f.t, "ListSourceFiles")
-	}
-	return f.listSourceFiles(a0, a1, a2, a3, a4, a5)
-}
-
-func (f *fakeFiles) ReadSourceFile(a0 context.Context, a1 string, a2 string, a3 func(store.SourceFile, io.Reader) error) error {
-	if f.readSourceFile == nil {
-		unexpectedCall(f.t, "ReadSourceFile")
-	}
-	return f.readSourceFile(a0, a1, a2, a3)
-}
-
-func (f *fakeFiles) DeleteSourceFile(a0 context.Context, a1 string, a2 string) error {
-	if f.deleteSourceFile == nil {
-		unexpectedCall(f.t, "DeleteSourceFile")
-	}
-	return f.deleteSourceFile(a0, a1, a2)
+	return f.delete(a0, a1)
 }
 
 type fakeInstallationBindings struct {

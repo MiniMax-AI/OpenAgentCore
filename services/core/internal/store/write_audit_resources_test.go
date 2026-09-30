@@ -29,7 +29,7 @@ func resourceAuditContext(ctx context.Context, tenant, request string) context.C
 
 // A database trigger fails the final audit insertion after each real business
 // mutation. Comparing complete tenant rows proves rollback of secret ciphertext,
-// version counters, timestamps, cascades, and the source-file large object.
+// version counters, timestamps, and cascades.
 func TestWriteAuditStandaloneResourceTransactions(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{91}, 32))
@@ -48,7 +48,7 @@ func TestWriteAuditStandaloneResourceTransactions(t *testing.T) {
 	for _, name := range []string{
 		"template_create", "template_update", "template_delete",
 		"skill_create", "skill_upload_version", "skill_update_default", "skill_delete", "version_delete", "version_delete_last",
-		"file_create", "file_delete", "vault_create", "vault_delete", "credential_create", "credential_update", "credential_delete",
+		"vault_create", "vault_delete", "credential_create", "credential_update", "credential_delete",
 		"oauth_create", "oauth_update", "oauth_delete",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestWriteAuditStandaloneResourceTransactions(t *testing.T) {
 			mutation := prepareResourceAuditMutation(t, s, tenant, name, archive)
 			snapshot := func() map[string]string {
 				result := make(map[string]string)
-				for _, table := range []string{"agents", "environment_templates", "skills", "skill_versions", "source_files", "vaults", "vault_credentials", "write_audit_operations", "write_audit_owners"} {
+				for _, table := range []string{"agents", "environment_templates", "skills", "skill_versions", "vaults", "vault_credentials", "write_audit_operations", "write_audit_owners"} {
 					query := "SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text)::text, '[]') FROM " + pgx.Identifier{table}.Sanitize() + " r WHERE tenant_id=$1"
 					if table == "vault_credentials" {
 						query = "SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY r.id)::text, '[]') FROM vault_credentials r JOIN vaults v ON v.id=r.vault_id WHERE v.tenant_id=$1"
@@ -69,11 +69,11 @@ func TestWriteAuditStandaloneResourceTransactions(t *testing.T) {
 				}
 				return result
 			}
-			before, objects := snapshot(), sourceObjectCount(t, pool)
+			before := snapshot()
 			if _, err := mutation.run(resourceAuditContext(ctx, tenant, "reject-resource-audit")); err == nil {
 				t.Fatal("audit failure was accepted")
 			}
-			if !reflect.DeepEqual(before, snapshot()) || objects != sourceObjectCount(t, pool) {
+			if !reflect.DeepEqual(before, snapshot()) {
 				t.Fatal("audit failure left business or audit changes")
 			}
 			request := uuid.NewString()
@@ -169,17 +169,6 @@ func prepareResourceAuditMutation(t *testing.T, s *Store, tenant, name string, a
 			v, e := s.DeleteSkillVersion(ctx, tenant, v.ID, "2")
 			return v.ID, e
 		}}
-	}
-	if strings.HasPrefix(name, "file_") {
-		if name == "file_create" {
-			return resourceAuditMutation{action: "create", kind: "file", owners: 1, run: func(ctx context.Context) (string, error) {
-				v, e := s.CreateSourceFile(ctx, tenant, uploadSource([]byte("audit-private-token")))
-				return v.ID, e
-			}}
-		}
-		v, err := s.CreateSourceFile(ctx, tenant, uploadSource([]byte("audit-private-token")))
-		must(err)
-		return resourceAuditMutation{action: "delete", kind: "file", run: func(ctx context.Context) (string, error) { return v.ID, s.DeleteSourceFile(ctx, tenant, v.ID) }}
 	}
 	if name == "vault_create" {
 		return resourceAuditMutation{action: "create", kind: "vault", owners: 1, run: func(ctx context.Context) (string, error) {

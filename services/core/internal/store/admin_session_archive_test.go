@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -126,7 +127,8 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, installation)
-	file, err := s.CreateSourceFile(t.Context(), tenant, uploadSource([]byte("retained source file")))
+	sourceFiles, sourceFileReader := testFiles(t, s.pool)
+	file, err := sourceFiles.Create(t.Context(), files.CreateCommand{TenantID: tenant, Upload: uploadSource([]byte("retained source file"))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +191,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ReadSourceFile(t.Context(), tenant, file.ID, func(_ SourceFile, r io.Reader) error {
+	if err := sourceFileReader.Read(t.Context(), tenant, file.ID, func(_ files.File, r io.Reader) error {
 		got, err := io.ReadAll(r)
 		if string(got) != "retained source file" {
 			t.Error("archive damaged source file bytes")

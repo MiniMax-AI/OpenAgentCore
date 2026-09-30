@@ -33,6 +33,7 @@ type Dependencies struct {
 	Vaults               Vaults
 	ModelProviders       ModelProviders
 	Files                Files
+	FilesReader          FilesReader
 	Skills               Skills
 	EnvironmentTemplates EnvironmentTemplates
 	Agents               Agents
@@ -111,9 +112,10 @@ func (d Dependencies) validate() error {
 	}
 	if err := required(
 		field{"InstallationBindings", d.InstallationBindings}, field{"Projects", d.Projects}, field{"Vaults", d.Vaults},
-		field{"ModelProviders", d.ModelProviders}, field{"Files", d.Files}, field{"Skills", d.Skills},
-		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},
-		field{"Sessions", d.Sessions},
+		field{"ModelProviders", d.ModelProviders}, field{"Skills", d.Skills},
+		field{"Files", d.Files}, field{"FilesReader", d.FilesReader},
+		field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},
+		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"Sessions", d.Sessions},
 		field{"SessionEvents", d.SessionEvents}, field{"SessionHistory", d.SessionHistory}, field{"Subagents", d.Subagents},
 		field{"Artifacts", d.Artifacts}, field{"SessionAdmin", d.SessionAdmin}, field{"Environments", d.Environments},
 		field{"ExecutorConnections", d.ExecutorConnections}, field{"Admin", d.Admin}, field{"AdminAudit", d.AdminAudit}, field{"WriteAudit", d.WriteAudit},

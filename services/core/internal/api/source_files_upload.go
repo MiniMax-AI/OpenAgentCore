@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 )
 
 const sourceTransferTimeout = 5 * time.Minute
@@ -33,25 +33,25 @@ func (h *Handler) createSourceFile(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithDeadline(r.Context(), deadline)
 	defer cancel()
-	r.Body = http.MaxBytesReader(w, r.Body, store.MaxSourceFileBytes+(64<<10))
-	file, err := h.Files.CreateSourceFile(ctx, tenantID(r), func(dst io.Writer) (store.SourceFileUpload, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, files.MaxBytes+(64<<10))
+	file, err := h.Files.Create(ctx, files.CreateCommand{TenantID: tenantID(r), Upload: func(dst io.Writer) (files.Upload, error) {
 		return readSourceUpload(r, dst)
-	})
+	}})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeFilesError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, sourceFileResponse(file))
 }
 
-func readSourceUpload(r *http.Request, dst io.Writer) (store.SourceFileUpload, error) {
-	var input store.SourceFileUpload
+func readSourceUpload(r *http.Request, dst io.Writer) (files.Upload, error) {
+	var input files.Upload
 	if r.Header.Get("Content-Encoding") != "" {
-		return input, store.ErrInvalidInput
+		return input, files.ErrInvalidInput
 	}
 	multi, err := r.MultipartReader()
 	if err != nil {
-		return input, store.ErrInvalidInput
+		return input, files.ErrInvalidInput
 	}
 	seen := make(map[string]bool, 2)
 	buffer := make([]byte, 256<<10)
@@ -66,7 +66,7 @@ func readSourceUpload(r *http.Request, dst io.Writer) (store.SourceFileUpload, e
 		kind, attrs, err := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
 		name := attrs["name"]
 		if err != nil || kind != "form-data" || seen[name] || (name != "file" && name != "purpose") || part.Header.Get("Content-Transfer-Encoding") != "" {
-			return input, store.ErrInvalidInput
+			return input, files.ErrInvalidInput
 		}
 		seen[name] = true
 		if name == "file" {
@@ -76,11 +76,11 @@ func readSourceUpload(r *http.Request, dst io.Writer) (store.SourceFileUpload, e
 			}
 		} else {
 			if _, exists := attrs["filename"]; exists {
-				return input, store.ErrInvalidInput
+				return input, files.ErrInvalidInput
 			}
 			value, err := io.ReadAll(io.LimitReader(part, 65))
 			if err != nil || len(value) > 64 {
-				return input, store.ErrInvalidInput
+				return input, files.ErrInvalidInput
 			}
 			input.Purpose = string(value)
 		}
@@ -91,16 +91,16 @@ func readSourceUpload(r *http.Request, dst io.Writer) (store.SourceFileUpload, e
 	if _, err := io.CopyBuffer(io.Discard, r.Body, buffer); err != nil {
 		return input, sourceUploadError(err)
 	}
-	if !seen["file"] || !seen["purpose"] || input.Purpose != "user_data" {
-		return input, store.ErrInvalidInput
+	if !seen["file"] || !seen["purpose"] || input.Purpose != files.PurposeUserData {
+		return input, files.ErrInvalidInput
 	}
 	return input, nil
 }
 
 func sourceUploadError(err error) error {
 	var limit *http.MaxBytesError
-	if errors.As(err, &limit) || errors.Is(err, store.ErrSourceFileTooLarge) {
-		return store.ErrSourceFileTooLarge
+	if errors.As(err, &limit) || errors.Is(err, files.ErrTooLarge) {
+		return files.ErrTooLarge
 	}
-	return store.ErrInvalidInput
+	return files.ErrInvalidInput
 }

@@ -15,17 +15,19 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/google/uuid"
 )
 
+// sourceFilesFixture keeps Files in memory. It is the storage behind a real
+// files.Service and the FilesReader, so the handlers run the domain rules.
 type sourceFilesFixture struct {
 	mu          sync.Mutex
 	tenant      string
-	file        store.SourceFile
+	file        files.File
 	data        []byte
 	reads       int
-	listPage    store.SourceFilePage
+	listPage    files.Page
 	listErr     error
 	listCalls   int
 	listAfter   string
@@ -34,38 +36,38 @@ type sourceFilesFixture struct {
 	listPurpose *string
 }
 
-func (f *sourceFilesFixture) CreateSourceFile(_ context.Context, tenant string, upload func(io.Writer) (store.SourceFileUpload, error)) (store.SourceFile, error) {
+func (f *sourceFilesFixture) Create(_ context.Context, tenant string, write func(io.Writer) (files.Upload, error)) (files.File, error) {
 	var body bytes.Buffer
-	input, err := upload(&body)
+	input, err := write(&body)
 	if err != nil {
-		return store.SourceFile{}, err
+		return files.File{}, err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.tenant, f.data = tenant, body.Bytes()
-	f.file = store.SourceFile{ID: "file-" + uuid.NewString(), Filename: input.Filename, Purpose: input.Purpose, SizeBytes: int64(body.Len()), CreatedAt: time.Unix(123, 0)}
+	f.file = files.File{ID: "file-" + uuid.NewString(), Filename: input.Filename, Purpose: input.Purpose, SizeBytes: int64(body.Len()), CreatedAt: time.Unix(123, 0)}
 	return f.file, nil
 }
 
-func (f *sourceFilesFixture) GetSourceFile(_ context.Context, tenant, id string) (store.SourceFile, error) {
+func (f *sourceFilesFixture) Get(_ context.Context, tenant, id string) (files.File, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.file.ID != id || f.tenant != tenant {
-		return store.SourceFile{}, store.ErrNotFound
+		return files.File{}, files.ErrNotFound
 	}
 	return f.file, nil
 }
 
-func (f *sourceFilesFixture) ListSourceFiles(_ context.Context, tenant, after string, limit int, ascending bool, purpose *string) (store.SourceFilePage, error) {
+func (f *sourceFilesFixture) List(_ context.Context, tenant string, query files.ListQuery) (files.Page, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.tenant, f.listAfter, f.listLimit, f.listAsc, f.listPurpose = tenant, after, limit, ascending, purpose
+	f.tenant, f.listAfter, f.listLimit, f.listAsc, f.listPurpose = tenant, query.After, query.Limit, query.Ascending, query.Purpose
 	f.listCalls++
 	return f.listPage, f.listErr
 }
 
-func (f *sourceFilesFixture) ReadSourceFile(ctx context.Context, tenant, id string, consume func(store.SourceFile, io.Reader) error) error {
-	file, err := f.GetSourceFile(ctx, tenant, id)
+func (f *sourceFilesFixture) Read(ctx context.Context, tenant, id string, consume func(files.File, io.Reader) error) error {
+	file, err := f.Get(ctx, tenant, id)
 	if err != nil {
 		return err
 	}
@@ -76,21 +78,25 @@ func (f *sourceFilesFixture) ReadSourceFile(ctx context.Context, tenant, id stri
 	return consume(file, bytes.NewReader(data))
 }
 
-func (f *sourceFilesFixture) DeleteSourceFile(ctx context.Context, tenant, id string) error {
-	if _, err := f.GetSourceFile(ctx, tenant, id); err != nil {
+func (f *sourceFilesFixture) Delete(ctx context.Context, tenant, id string) error {
+	if _, err := f.Get(ctx, tenant, id); err != nil {
 		return err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.file = store.SourceFile{}
+	f.file = files.File{}
 	f.data = nil
 	return nil
 }
 
-// wire serves the Files area from f.
+// wire serves the Files areas from f.
 func (f *sourceFilesFixture) wire(_ *Dependencies, fakes *testFakes) {
-	fakes.files.createSourceFile, fakes.files.getSourceFile, fakes.files.listSourceFiles = f.CreateSourceFile, f.GetSourceFile, f.ListSourceFiles
-	fakes.files.readSourceFile, fakes.files.deleteSourceFile = f.ReadSourceFile, f.DeleteSourceFile
+	service, err := files.NewService(f)
+	if err != nil {
+		fakes.files.t.Fatal(err)
+	}
+	fakes.files.create, fakes.files.delete = service.Create, service.Delete
+	fakes.filesReader.get, fakes.filesReader.list, fakes.filesReader.read = f.Get, f.List, f.Read
 }
 
 func sourceMultipart(t *testing.T, fields []string, data []byte) ([]byte, string) {
@@ -214,7 +220,7 @@ func TestSourceFilesRejectIncompleteOrUnsupportedMultipart(t *testing.T) {
 }
 
 func TestEnvironmentSourceCopyEnforcesScopeUnionAndSize(t *testing.T) {
-	f := &sourceFilesFixture{file: store.SourceFile{ID: "file-" + uuid.NewString(), SizeBytes: proto.WorkspaceWriteMaxBytes + 1}}
+	f := &sourceFilesFixture{file: files.File{ID: "file-" + uuid.NewString(), SizeBytes: proto.WorkspaceWriteMaxBytes + 1}}
 	h, env := environmentFileCreateHandler(t, f.wire)
 	f.tenant = env.environment.TenantID
 	body := `{"type":"file_id","file_id":"` + f.file.ID + `","path":"/workspace/source.bin"}`

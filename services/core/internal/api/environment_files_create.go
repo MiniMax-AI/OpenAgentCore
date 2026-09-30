@@ -17,6 +17,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/echotext"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -101,9 +102,9 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	if request.Type == "file_id" {
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
-		err = h.Files.ReadSourceFile(ctx, tenantID(r), *request.FileID, func(file store.SourceFile, body io.Reader) error {
+		err = h.FilesReader.Read(ctx, tenantID(r), *request.FileID, func(file files.File, body io.Reader) error {
 			if file.SizeBytes > proto.WorkspaceWriteMaxBytes {
-				return store.ErrSourceFileTooLarge
+				return files.ErrTooLarge
 			}
 			data, err = io.ReadAll(io.LimitReader(body, proto.WorkspaceWriteMaxBytes+1))
 			if err == nil && int64(len(data)) != file.SizeBytes {
@@ -112,7 +113,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 			return err
 		})
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeFilesError(w, r, err)
 			return
 		}
 	}

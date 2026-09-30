@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -65,10 +66,11 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	source, err := h.s.CreateSourceFile(t.Context(), h.tenant, func(out io.Writer) (store.SourceFileUpload, error) {
+	fileStore, fileService := fixtureFiles(t, h.db)
+	source, err := fileService.Create(t.Context(), files.CreateCommand{TenantID: h.tenant, Upload: func(out io.Writer) (files.Upload, error) {
 		_, err := out.Write([]byte("src"))
-		return store.SourceFileUpload{Filename: "source.txt", Purpose: "user_data"}, err
-	})
+		return files.Upload{Filename: "source.txt", Purpose: files.PurposeUserData}, err
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +146,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		}
 	}
 	// The rejected copy did not consume its Source File.
-	if got, err := h.s.GetSourceFile(t.Context(), h.tenant, source.ID); err != nil || got.SizeBytes != 3 {
+	if got, err := fileStore.Get(t.Context(), h.tenant, source.ID); err != nil || got.SizeBytes != 3 {
 		t.Fatal("source file consumed", got, err)
 	}
 	// The inline bound is checked before any mutation intent or dispatch.

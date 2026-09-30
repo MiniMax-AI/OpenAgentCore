@@ -105,8 +105,8 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 	s := NewWithCredentialCipher(pool, cipher)
 	rejectAdminAuditInsert(t, s)
 	archive := skillArchive(t, "admin-private-archive")
-	tables := []string{"agents", "agent_model_execution", "environment_templates", "skills", "skill_versions", "source_files", "vaults", "vault_credentials", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
-	for _, name := range []string{"template_delete", "skill_delete", "version_delete", "version_delete_last", "file_delete", "vault_delete", "credential_delete", "oauth_delete", "session_delete", "artifact_delete"} {
+	tables := []string{"agents", "agent_model_execution", "environment_templates", "skills", "skill_versions", "vaults", "vault_credentials", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
+	for _, name := range []string{"template_delete", "skill_delete", "version_delete", "version_delete_last", "vault_delete", "credential_delete", "oauth_delete", "session_delete", "artifact_delete"} {
 		t.Run(name, func(t *testing.T) {
 			tenant := uuid.NewString()
 			var mutation resourceAuditMutation
@@ -116,9 +116,6 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 				tenant, mutation, verifyRestored, removedObjects = prepareAdminHistoryDelete(t, s, name)
 			} else {
 				mutation = prepareResourceAuditMutation(t, s, tenant, name, archive)
-				if name == "file_delete" {
-					removedObjects = 1
-				}
 				if name == "template_delete" {
 					var id string
 					if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_templates WHERE tenant_id=$1", tenant).Scan(&id); err != nil {
@@ -135,7 +132,7 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 			if _, err := pool.Exec(t.Context(), "INSERT INTO projects(id,name,tenant_id,subject_kind,subject_id) VALUES($1,'Delete fixture',$1,'service_account',$2)", tenant, "project:"+tenant); err != nil {
 				t.Fatal(err)
 			}
-			before, objects := adminMutationSnapshot(t, s, tables...), sourceObjectCount(t, pool)
+			before, objects := adminMutationSnapshot(t, s, tables...), largeObjectCount(t, pool)
 			rejections := adminAuditRejections(t, s)
 			_, err := mutation.run(adminDeleteContext(t.Context(), tenant, rejectedAdminRequest))
 			requireAdminAuditFailure(t, s, err, rejections)
@@ -151,7 +148,7 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertAdminMutationAudit(t, s, tenant, request, "delete", mutation.kind, id)
-			if sourceObjectCount(t, pool) != objects-removedObjects {
+			if largeObjectCount(t, pool) != objects-removedObjects {
 				t.Fatal("successful deletion did not unlink exactly its large objects")
 			}
 			assertAdminDeletedResource(t, s, tenant, mutation, id)
@@ -219,8 +216,6 @@ func assertAdminDeletedResource(t *testing.T, s *Store, tenant string, mutation 
 			t.Fatal("skill version survived deletion", queryErr)
 		}
 		return
-	case "file":
-		_, err = s.GetSourceFile(t.Context(), tenant, id)
 	case "vault":
 		_, err = s.GetVault(t.Context(), tenant, id)
 	case "credential":

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 )
 
 // @Summary List source files
@@ -23,9 +24,9 @@ func (h *Handler) listSourceFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, err := h.Files.ListSourceFiles(r.Context(), tenantID(r), options.after, options.limit, options.ascending, purpose)
+	page, err := h.FilesReader.List(r.Context(), tenantID(r), files.ListQuery{After: options.after, Limit: options.limit, Ascending: options.ascending, Purpose: purpose})
 	if err != nil {
-		writeStoreError(w, r, err, "after")
+		writeFilesError(w, r, err, "after")
 		return
 	}
 	response := v1.SourceFileList{Object: "list", Data: make([]v1.SourceFile, 0, len(page.Files)), HasMore: page.NextCursor != ""}
@@ -41,7 +42,7 @@ func (h *Handler) listSourceFiles(w http.ResponseWriter, r *http.Request) {
 
 func readSourceFilePage(w http.ResponseWriter, r *http.Request) (pageOptions, *string, bool) {
 	q := r.URL.Query()
-	options, ok := readPageQueryLimits(w, r, q, 10000, 10000, false, "purpose")
+	options, ok := readPageQueryLimits(w, r, q, files.MaxPageSize, files.MaxPageSize, false, "purpose")
 	if !ok {
 		return pageOptions{}, nil, false
 	}
@@ -51,7 +52,7 @@ func readSourceFilePage(w http.ResponseWriter, r *http.Request) (pageOptions, *s
 		return options, nil, true
 	}
 	switch values[0] {
-	case "user_data", "assistants", "batch", "fine-tune", "vision", "evals", "assistants_output", "batch_output", "fine-tune-results":
+	case files.PurposeUserData, "assistants", "batch", "fine-tune", "vision", "evals", "assistants_output", "batch_output", "fine-tune-results":
 	default:
 		writeError(w, http.StatusBadRequest, "", "Invalid purpose.", "purpose")
 		return pageOptions{}, nil, false

@@ -20,8 +20,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -92,8 +92,8 @@ func routingFixture(t *testing.T) (http.Handler, *chi.Mux, *routingStore) {
 	deps, fakes := testDependencies(trapTB{t})
 	fakes.projects.resolveProjectAPIKey = keys.ResolveProjectAPIKey
 	fakes.agentsReader.getAgent, fakes.agentsReader.listAgents, fakes.agents.update = s.GetAgent, s.ListAgents, s.Update
-	fakes.files.getSourceFile = func(context.Context, string, string) (store.SourceFile, error) {
-		return store.SourceFile{}, store.ErrNotFound
+	fakes.filesReader.get = func(context.Context, string, string) (files.File, error) {
+		return files.File{}, files.ErrNotFound
 	}
 	deps.CoreKeys = coreKeys(t, routingAdminKey)
 	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()

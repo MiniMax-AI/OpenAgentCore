@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -47,7 +48,7 @@ func TestEnvironmentFileCreateSourceCopyKeepsDestinationBound(t *testing.T) {
 	h, f := environmentFileCreateHandler(t, sources.wire)
 	data := bytes.Repeat([]byte{9}, 6<<20)
 	sources.tenant, sources.data = f.environment.TenantID, data
-	sources.file = store.SourceFile{ID: "file-" + uuid.NewString(), SizeBytes: int64(len(data)), CreatedAt: time.Unix(1, 0)}
+	sources.file = files.File{ID: "file-" + uuid.NewString(), SizeBytes: int64(len(data)), CreatedAt: time.Unix(1, 0)}
 	body := `{"type":"file_id","file_id":"` + sources.file.ID + `","path":"/workspace/copy.bin"}`
 	if w := requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"); w.Code != 201 || f.writes != 1 || !bytes.Equal(f.data, data) {
 		t.Fatal("6 MiB source copy rejected", w.Code, w.Body)

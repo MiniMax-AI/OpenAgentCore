@@ -22,9 +22,9 @@ import (
 func (h *Handler) sourceFileContent(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	_, err := h.Files.GetSourceFile(ctx, tenantID(r), chi.URLParam(r, "file_id"))
+	_, err := h.FilesReader.Get(ctx, tenantID(r), chi.URLParam(r, "file_id"))
 	if err != nil {
-		writeStoreError(w, r, err, "id")
+		writeFilesError(w, r, err, "id")
 		return
 	}
 	writeError(w, http.StatusBadRequest, "", "Not allowed to download files of purpose: user_data")
