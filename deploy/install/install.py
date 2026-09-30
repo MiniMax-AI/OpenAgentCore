@@ -8,6 +8,7 @@ that fails before its services first start removes what it created; rerun the sa
 import argparse
 import base64
 import contextlib
+import errno
 import hashlib
 import ipaddress
 import json
@@ -75,6 +76,10 @@ def error_text(error):
         text = str(error)
     elif isinstance(error, KeyboardInterrupt):
         text = "interrupted"
+    elif isinstance(error, OSError) and error.errno in (errno.ENOSPC, errno.EDQUOT):
+        text = "Disk space or quota exhausted; free space on the installation filesystem and rerun"
+    elif isinstance(error, PermissionError):
+        text = "Permission denied; use a directory writable by your current account (--install-dir)"
     else:
         text = "inspect prerequisites and private deployment files"
     removal = getattr(error, "removal", None)
@@ -352,7 +357,11 @@ def read_core_key_file(source):
 
 
 def check_compose():
-    version = run(["docker", "compose", "version", "--short"], capture_output=True, text=True).stdout.strip()
+    try:
+        version = run(["docker", "compose", "version", "--short"], capture_output=True, text=True,
+                      timeout=30).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        raise InstallError("Docker with the Compose plugin is required; check docker compose version") from None
     match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?", version)
     if not match or tuple(map(int, match.groups())) < (2, 26, 0):
         raise InstallError("Docker Compose 2.26.0 or newer is required for literal Core environment values")
@@ -362,7 +371,11 @@ def check_host():
     if platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64"):
         raise InstallError("Core installation requires Linux amd64 with Docker access")
     check_compose()
-    run(["docker", "info", "--format", "{{.ServerVersion}}"], stdout=subprocess.DEVNULL)
+    try:
+        run(["docker", "info", "--format", "{{.ServerVersion}}"], capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        raise InstallError("Cannot reach Docker as the current account. Check docker info, the daemon and this "
+                           "account's Docker access; the installer does not require root or invoke sudo") from None
 
 
 def image_names(mode, native, managed=False):
@@ -376,8 +389,10 @@ def image_loader(manifest, bundle):
     def load(names):
         images = {}
         for name in names:
-            step("Preparing " + {"database": "PostgreSQL", "core": "Core", "web": "Web"}.get(name, name) + " image")
-            images[name] = ensure_docker_image(manifest, name, lambda name=name: bundle / f"images/{name}.tar")
+            message = "Preparing " + {"database": "PostgreSQL", "core": "Core", "web": "Web"}.get(name, name) + " image"
+            step(message)
+            with install_display.busy(message):
+                images[name] = ensure_docker_image(manifest, name, lambda name=name: bundle / f"images/{name}.tar")
         return images
     return load
 
@@ -661,7 +676,8 @@ def main(argv=None):
         step("Checking installation settings")
         prepared = prepare_fresh(args)
     step("Verifying installation files")
-    manifest = verify_bundle(bundle)
+    with install_display.busy("Verifying installation files"):
+        manifest = verify_bundle(bundle)
     # Refuse foreign state before even creating a lock; repeat under the lock to
     # protect against another current installer finishing between these reads.
     check_release(root, manifest)
@@ -677,7 +693,7 @@ def main(argv=None):
 def check_release(root, manifest):
     if (root / "state.json").exists():
         state = oac_cli.load_state(root)
-        if state.get("source_commit") != manifest["source_commit"]:
+        if state.get("complete") is True and state.get("source_commit") != manifest["source_commit"]:
             raise InstallError(oac_cli.UNSUPPORTED_VERSION)
 
 
@@ -768,7 +784,7 @@ def interrupted(signum, frame):
 if __name__ == "__main__":
     # SIGTERM and SIGHUP, such as from a dropped SSH session, stop the installer as Ctrl-C does,
     # so a new installation still removes what it created.
-    for signum in (signal.SIGTERM, signal.SIGHUP):
+    for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, interrupted)
     try:
         main()
