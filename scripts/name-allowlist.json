@@ -571,7 +571,7 @@
   },
   {
     "path": "services/agents-api/README.md",
-    "regex": "Parsar's product|Parsar\\nworkspace|Parsar Skill/SP",
+    "regex": "Parsar's product|Parsar\\sworkspace|Parsar Skill/SP",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
