@@ -111,7 +111,7 @@ func discoverClaudeSDK(parent context.Context, rc *runContext, profile string, c
 	out.Info.Capabilities.MCPHTTPTools = info.SupportsHTTPMCP()
 	out.Info.Capabilities.MCPHTTPBearerAuth = info.SupportsHTTPMCPBearer()
 	out.Info.Capabilities.MCPHTTPRequired = info.SupportsHTTPMCPRequired()
-	if out.Config.Workspace != nil {
+	if out.Config.Workspace != nil && !info.SupportsWorkspaceMCP() {
 		out.Info.Capabilities.MCPHTTPTools, out.Info.Capabilities.MCPHTTPBearerAuth = false, false
 		out.Info.Capabilities.MCPHTTPRequired = false
 	}

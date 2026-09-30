@@ -522,3 +522,14 @@ failure settles Environment input without destroying the machine or workspace.
 The public `connected` state describes transport; initialization completion and
 native executor readiness remain separate prerequisites for execution. Input
 sources and frozen metadata follow the [Environment contract](../contracts/agents-api/environments.md#runtime-capability-preparation).
+
+
+### MCP connection authority
+
+Public `MCPHTTPServer` messages carry an explicit `connection_origin`; missing or
+unknown values reject rather than selecting a default. Core freezes the public
+default before dispatch. Both peers require the exact wire version. Runtime uses
+the common origin validator before selecting a factory and resolves public and
+installed MCP into transient effective bindings. See the
+[origin and credential contract](../contracts/agents-api/environments.md#public-mcp-connection-origin)
+for supported combinations, native limits and failure ownership.

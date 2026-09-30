@@ -32,6 +32,8 @@ func discoverMCode(parent context.Context, rc *runContext, check func(context.Co
 		// Native preparation verifies the applied admission/tool profile before input.
 		result.Capabilities.SubagentObservations = true
 		result.Capabilities.EnvironmentNone = true
+		result.Capabilities.MCPHTTPTools = true
+		result.Capabilities.MCPHTTPBearerAuth = true
 	}
 	fmt.Fprintf(rc.stdout, "mcode preflight ok (%s)\n", version)
 	return result

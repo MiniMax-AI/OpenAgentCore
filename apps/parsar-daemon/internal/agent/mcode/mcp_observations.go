@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
@@ -16,8 +17,15 @@ type mcpToolIdentity struct{ server, tool string }
 // MiniMax 0.4.12 atomically writes these assignments before exposing tools.
 // Read its exact mapping instead of reversing lossy native name normalization.
 func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) {
-	if s.req.LocalEnvironment == nil || len(s.req.LocalEnvironment.MCP) == 0 ||
+	if s.req.LocalEnvironment == nil ||
 		!strings.HasPrefix(name, "mcp__") || strings.HasPrefix(name, "mcp__oac_workspace__") {
+		return nil, nil
+	}
+	bindings, err := agent.ResolveMCPBindings(s.req)
+	if err != nil {
+		return nil, err
+	}
+	if len(bindings) == 0 {
 		return nil, nil
 	}
 	raw, err := os.ReadFile(filepath.Join(s.opts.DataDir, "mcp-runtime-names.json"))
@@ -42,8 +50,8 @@ func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) 
 			}
 			var key []string
 			declared := 0
-			for _, item := range s.req.LocalEnvironment.MCP {
-				if item.Server.Name == server.Raw && (item.Server.Type == "stdio" || item.Server.Type == "http") {
+			for _, item := range bindings {
+				if item.ServerLabel == server.Raw {
 					declared++
 				}
 			}

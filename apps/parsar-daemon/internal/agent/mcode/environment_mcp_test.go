@@ -232,3 +232,47 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
+	c, req, _ := workspaceFixture(t)
+	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
+	token := "selected-public-vault-canary"
+	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", BearerToken: &token}}
+	opts, err := prepareWorkspaceOptions(t.Context(), c, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(opts.MCP)
+	if err != nil || !strings.Contains(string(raw), "Bearer "+token) {
+		t.Fatal("selected token not supplied to native ACP")
+	}
+	err = filepath.WalkDir(opts.DataDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		value, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(value), token) {
+			t.Fatal("public credential persisted in native state")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := []string{}
+	(*req.MCPHTTPServers)[0].AllowedTools = &empty
+	if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil {
+		t.Fatal("empty allowlist silently treated as all")
+	}
+	(*req.MCPHTTPServers)[0].AllowedTools = nil
+	(*req.MCPHTTPServers)[0].Required = true
+	if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil {
+		t.Fatal("required initialization silently ignored")
+	}
+}

@@ -682,7 +682,7 @@ and read back 404. The error records are `ERR-UNATTACHED`
 
 | Row | Case | Core behavior |
 | --- | --- | --- |
-| M1 | HTTP MCP tool with omitted or null `connection_origin`, on a saved Agent, an inline Session agent or a per-Session replacement | Saved and projected as `"service"`. The stored and frozen configuration equals an explicit `service` declaration, so execution is unchanged. Explicit `"environment"` and other transports keep their rejection. |
+| M1 | HTTP MCP tool with omitted or null `connection_origin`, on a saved Agent, an inline Session agent or a per-Session replacement | Saved and projected as `"service"`. The stored and frozen configuration equals an explicit `service` declaration, so execution is unchanged. Explicit `"environment"` follows the [qualified Environment MCP contract](environments.md#public-mcp-connection-origin); other transports remain rejected. |
 | M2 | Session tool without an explicit `credential_id` whose attached credential was selected | Retrieve, list and the created, in-progress and idle event snapshots show the selected credential ID, also after that credential is deleted. Anonymous and unmatched tools stay null; explicit IDs are echoed as sent. |
 | M3 | `credential_id` with omitted, null or empty `vault_ids` | 400 `invalid_request_error`, null param: "MCP credential_id requires an attached vault". |
 | M4 | `credential_id` not in an attached Vault: missing, foreign tenant, another Vault of the tenant, or malformed | 400 `invalid_request_error`, null param: "MCP credential_id `<id>` was not found in an attached vault". Byte-identical for one ID across the missing, foreign and unattached cases. |

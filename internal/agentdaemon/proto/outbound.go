@@ -67,7 +67,7 @@ type PromptRequestPayload struct {
 
 	// ExecutionControls are authoritative engine-neutral settings, translated by the adapter.
 	ExecutionControls *ExecutionControls `json:"execution_controls,omitempty"`
-	// MCPHTTPServers replaces MCP configuration for the service-side HTTP profile.
+	// MCPHTTPServers supplies public HTTP declarations with explicit connection origins.
 	// Nil preserves existing behavior; an empty list explicitly declares no servers.
 	MCPHTTPServers *[]MCPHTTPServer `json:"mcp_http_servers,omitempty"`
 

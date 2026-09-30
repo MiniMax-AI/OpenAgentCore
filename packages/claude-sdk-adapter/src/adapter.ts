@@ -95,11 +95,11 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         systemPrompt: request.system_prompt,
         ...(request.resume ? { resume: request.resume } : {}),
         tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed, strictMcpConfig: true, settingSources: [],
-        ...(profile && !workspace ? {
+        ...(profile ? {
           agent: "oac_root", disallowedTools: profile.denied,
           hooks: { PreToolUse: [{ hooks: [profile.beforeTool] }] },
           agents: { oac_root: { description: "Execution root.", prompt: request.system_prompt,
-            model: request.model, tools: profile.allowed } },
+            model: request.model, tools: [...(Array.isArray(workspace?.options.tools) ? workspace.options.tools : []), ...profile.allowed] } },
         } : {}),
         persistSession: true, includePartialMessages: true, abortController: abort,
         canUseTool: async () => ({ behavior: "deny", message: "Tools are unavailable in this execution profile." }),
@@ -141,7 +141,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         reads.bind(stream, request.cwd);
         if (process.platform === "linux") await directories.bind(request.cwd);
       }
-      if (request.mcp_http_servers?.some(server=>server.required)) profile?.verifyRequired(await stream.mcpServerStatus());
+      if (declarations?.some(server => "required" in server && server.required)) profile?.verifyRequired(await stream.mcpServerStatus());
       if(turns) {
         turns.configure(stream,(input,output)=>{
           inputs=new Inputs(input);
@@ -164,7 +164,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       stream = warm.query(turns ?? inputs);
       const initialized = await stream.initializationResult();
       if (initialized.hooks_applied !== true || children.length !== 1) throw new Error("MCP initialization unavailable");
-      if (request.mcp_http_servers?.some(server => server.required)) profile.verifyRequired(await stream.mcpServerStatus());
+      if (declarations?.some(server => "required" in server && server.required)) profile.verifyRequired(await stream.mcpServerStatus());
       if (abort.signal.aborted || !nativeAlive) throw new Error("MCP initialization interrupted");
       inputs.release(request.input);
     } else stream = query({ prompt: inputs, options });

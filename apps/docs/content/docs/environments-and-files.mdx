@@ -652,9 +652,49 @@ Runtime resolves public HTTP declarations and installed Plugin MCP through
 retains its connection origin, transport, nullable tool allowlist, required flag,
 credential authority and installed stdio identity. Bindings are never persisted
 or logged. Duplicate identities and unavailable selected credentials reject.
-A service-origin request cannot silently become an Environment-origin connection;
-the existing public HTTP MCP profile remains service-origin `environment:none`.
-This internal consolidation does not qualify public `connection_origin=environment`.
+Public HTTP MCP uses the same binding path as installed Plugin MCP. Its explicit
+`connection_origin` is retained from saved configuration through the Session
+snapshot and private Runtime request; the exact Runtime wire version is required.
+A service-origin request cannot silently become an Environment-origin connection.
+
+### Public MCP connection origin
+
+Core's Harness profile declares `MCPOrigins`; shared admission and dispatch check
+the origin against the Environment and Runtime's advertised HTTP/bearer/required
+capabilities. Runtime validates the same origin before invoking an adapter. No
+Harness-name or Sandbox Provider branch selects a different connection path.
+
+| Harness | `service` origin | `environment` origin | Optional policy |
+| --- | --- | --- | --- |
+| Codex | Service execution host, `environment:none` | Managed or self-hosted workspace | Nullable tool allowlist and required initialization |
+| Claude SDK | Service execution host, `environment:none` | Managed or self-hosted workspace; packaged `workspace_mcp_http` feature required | Nullable tool allowlist and required initialization |
+| MiniMax Code | Unsupported | Managed or self-hosted workspace | `allowed_tools` must be null/omitted; `required` must be false |
+
+Both origins support the declared Harness's anonymous HTTP and selected HTTPS
+bearer path. The existing attached-Vault selection freezes credential identity,
+including a unique implicit URL match or an anonymous selection. Only that
+Project-authorized credential may enter the transient Runtime request; Core
+defaults and unrelated Vaults are not searched. Decryption failure or a missing
+credential fails execution without an anonymous fallback. Public Environment
+MCP retains `project_vault` authority; Plugin credentials retain
+`environment_configuration` authority. Neither source overrides duplicate
+server labels. Bearers never enter persisted native configuration or argv.
+
+Omitted/null origin still means `service`, including on self-hosted requests;
+it does not select the local network automatically. Service-origin requests with
+a workspace remain rejected because they require separate service-side connection
+forwarding. This implementation adds no proxy. Environment origin requires an
+initialized workspace with enabled network access and is invalid on `none`.
+
+Null/omitted `allowed_tools` permits all server tools; an empty list permits none.
+MiniMax rejects every non-null allowlist, including an empty list, rather than
+silently expanding it. Codex and Claude preserve native allowlists and initialize
+required servers before releasing native input, including cold recovery.
+Public MCP with native Subagents remains unqualified. Nonempty literal HTTP
+headers, request metadata and public stdio declarations remain unsupported.
+See [public MCP qualification](https://github.com/MiniMax-AI/parsar-core/blob/e974a7f880a2eb799f0dd39e6ba0870462854a53/contracts/agents-api/public-mcp-qualification.md) for actual model,
+platform and infrastructure coverage; admission support is not a claim of
+complete cross-platform/provider qualification.
 
 Environment-origin literal HTTP headers remain rejected for the pinned Claude
 and MiniMax clients because their cross-origin forwarding cannot preserve header
@@ -662,7 +702,8 @@ authority. MiniMax supports installed stdio and HTTP servers with anonymous or
 explicit user-selected HTTPS bearer authentication. ACP HTTP declarations remain
 Session-local native memory; tokens do not enter native configuration files or
 process arguments. Required initialization and tool allowlists are not exposed
-through the Plugin manifest, and public MiniMax MCP remains unqualified.
+through the Plugin manifest. Public MiniMax HTTP uses the same transient ACP map
+with the stricter admission limits above.
 MiniMax reads the existing Session-private native runtime-name registry for exact
 first-frame identities and cross-checks completed native results for both transports.
 Reuse existing observation and cancellation settlement; never fabricate a delayed

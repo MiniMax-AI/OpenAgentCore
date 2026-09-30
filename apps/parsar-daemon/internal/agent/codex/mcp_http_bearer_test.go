@@ -15,9 +15,9 @@ func TestMCPHTTPBearerPlanSeparatesServersAndProcesses(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	tokens := []string{"first-synthetic.token+/==", "second-synthetic_token~"}
 	servers := []proto.MCPHTTPServer{
-		{ServerLabel: "first", ServerURL: "https://first.example/mcp", BearerToken: &tokens[0]},
-		{ServerLabel: "second", ServerURL: "https://second.example/mcp", BearerToken: &tokens[1]},
-		{ServerLabel: "public", ServerURL: "http://public.example/mcp"},
+		{ConnectionOrigin: "service", ServerLabel: "first", ServerURL: "https://first.example/mcp", BearerToken: &tokens[0]},
+		{ConnectionOrigin: "service", ServerLabel: "second", ServerURL: "https://second.example/mcp", BearerToken: &tokens[1]},
+		{ConnectionOrigin: "service", ServerLabel: "public", ServerURL: "http://public.example/mcp"},
 	}
 	req := proto.PromptRequestPayload{AgentStateKey: "retained-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
 	seen := map[string]bool{}
@@ -56,7 +56,7 @@ func TestMCPHTTPBearerRejectsInvalidTokensWithoutPersistence(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	for _, token := range []string{"", "=", " has-space", "has-space ", "has space", "line\r\ninjection", "nul\x00byte", "opaque中文", "middle=padding", "punctuation:invalid"} {
-		servers := []proto.MCPHTTPServer{{ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
+		servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
 		req := proto.PromptRequestPayload{AgentStateKey: "invalid-bearer", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
 		if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil || err.Error() != "invalid HTTPS MCP bearer credential" {
 			t.Fatal("invalid bearer value accepted or unsafe error returned")
@@ -79,7 +79,7 @@ func TestMCPHTTPBearerDoesNotReachModelCatalogProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := "synthetic-catalog-secret"
-	servers := []proto.MCPHTTPServer{{ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
+	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
 	req := proto.PromptRequestPayload{AgentStateKey: "catalog", DisableExecutionEnvironment: true, MCPHTTPServers: &servers,
 		AgentOptions: map[string]any{"model": "fixture-model", "model_verbosity": "medium"}}
 	cfg := defaultSessionConfig()

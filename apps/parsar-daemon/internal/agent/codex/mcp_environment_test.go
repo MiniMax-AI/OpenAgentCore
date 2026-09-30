@@ -62,7 +62,7 @@ func TestEnvironmentMCPRejectsUnqualifiedNetworkAndCredentialChanges(t *testing.
 		t.Fatal("plaintext bearer accepted")
 	}
 	local.MCP[0].Server.URL = "https://example.com/mcp"
-	if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local, MCPHTTPServers: &[]proto.MCPHTTPServer{{ServerLabel: "remote", ServerURL: "https://example.com/mcp"}}}); err == nil {
+	if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local, MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.com/mcp"}}}); err == nil {
 		t.Fatal("service and environment identity collision accepted")
 	}
 }

@@ -65,6 +65,8 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	// The native process, ACP Session and workspace tools share the declared cwd.
 	private := req
 	private.LocalEnvironment, private.WorkDir, private.DisableExecutionEnvironment = nil, "", true
+	// Public declarations have already been resolved into the transient ACP map.
+	private.MCPHTTPServers = nil
 	opts, err := prepareOptionsWithSkills(ctx, private, false)
 	if err != nil {
 		return opts, err

@@ -307,6 +307,23 @@ same dedicated Runtime binding and shared Files helpers. A native Bash sandbox
 alone does not establish isolation for other native file tools. Enable a placement
 only after its required security and lifecycle behavior is demonstrated.
 
+### MCP origin and native limits
+
+Declare supported public origins in the existing engine profile's `MCPOrigins`
+and bearer support in `MCPBearer`. Runtime advertises actual HTTP, bearer and
+required-initialization capabilities. Shared admission validates origin and
+placement; adapter validation retains native label, allowlist and initialization
+limits. These are separate checks, not a second MCP executor.
+
+Consume `agent.ResolveMCPBindings` for public and installed declarations; preserve
+origin, credential authority, null versus empty allowlists and required startup.
+Do not copy tokens into native profiles or reinterpret a service request as an
+Environment request. Reject unsupported native policies instead of dropping them.
+Follow [the MCP origin contract](/environments-and-files#public-mcp-connection-origin)
+and run public-client, failure, cancellation and cold-recovery qualification for
+each advertised combination. Model capability remains separate from Harness
+transport support; never infer it from model names or silently degrade input.
+
 ## Optional Subagent observations
 
 A harness that supports the Subagent resource reads implements the existing

@@ -30,8 +30,8 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 		service := "service"
 		input.ConnectionOrigin = &service
 	}
-	if *input.ConnectionOrigin != "service" {
-		return nil, errors.New("MCP currently requires explicit connection_origin=service.")
+	if *input.ConnectionOrigin != "service" && *input.ConnectionOrigin != "environment" {
+		return nil, errors.New("MCP connection_origin must be service or environment.")
 	}
 	if input.CredentialID != nil && *input.CredentialID == "" {
 		return nil, errors.New("MCP credential_id must be null or a nonempty string.")
@@ -77,7 +77,7 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 	}
 	tool := v1.MCPTool{Type: "mcp", ServerLabel: *input.ServerLabel,
 		Transport:    v1.MCPHTTPTransport{Type: "http", ServerURL: *transport.ServerURL},
-		AllowedTools: allowed, Required: required, ConnectionOrigin: "service", CredentialID: input.CredentialID, RequestMetadata: map[string]json.RawMessage{}}
+		AllowedTools: allowed, Required: required, ConnectionOrigin: *input.ConnectionOrigin, CredentialID: input.CredentialID, RequestMetadata: map[string]json.RawMessage{}}
 	if saved {
 		headers := map[string]string{}
 		tool.Transport.Headers = &headers

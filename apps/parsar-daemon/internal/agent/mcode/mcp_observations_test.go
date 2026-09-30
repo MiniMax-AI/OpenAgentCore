@@ -16,7 +16,7 @@ func mcpObservationSession(t *testing.T) (*Session, chan proto.Envelope) {
 	out := make(chan proto.Envelope, 16)
 	s := &Session{ctx: context.Background(), opts: launchOptions{DataDir: t.TempDir()},
 		req: proto.PromptRequestPayload{RunID: "run", ObserveToolObservations: true,
-			LocalEnvironment: &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{environmentMCPFixture()}}},
+			LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{environmentMCPFixture()}}},
 		out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}, active: true, sessionID: "native-session"}
 	if err := writeMCPRegistry(s.opts.DataDir, mcpRegistryEntry("proof.server", "proof_server_2", "read.status", "read_status_2")); err != nil {
 		t.Fatal(err)
@@ -47,9 +47,13 @@ func mcpNativeResult(server, tool string, isError bool) map[string]any {
 }
 
 func TestEnvironmentMCPUsesNativeRegistryBeforeResultAndRetainsErrors(t *testing.T) {
-	for _, failure := range []string{"none", "tool", "transport"} {
+	for _, failure := range []string{"none", "tool", "transport", "public-none", "public-tool", "public-transport"} {
 		t.Run(failure, func(t *testing.T) {
 			s, out := mcpObservationSession(t)
+			if strings.HasPrefix(failure, "public-") {
+				usePublicMCP(s)
+				failure = strings.TrimPrefix(failure, "public-")
+			}
 			if err := s.emitTool(toolUpdate{ID: "native-call", Name: "mcp__proof_server_2__read_status_2"}); err != nil {
 				t.Fatal(err)
 			}
@@ -120,9 +124,13 @@ func TestEnvironmentMCPIdentityRequiresUniqueCurrentConfiguredAssignment(t *test
 }
 
 func TestEnvironmentMCPResultMustMatchStartAndUnsettledCallsCloseOnce(t *testing.T) {
-	for _, change := range []string{"server", "tool", "missing-details", "native-name", "cancel"} {
+	for _, change := range []string{"server", "tool", "missing-details", "native-name", "cancel", "public-cancel"} {
 		t.Run(change, func(t *testing.T) {
 			s, out := mcpObservationSession(t)
+			if change == "public-cancel" {
+				usePublicMCP(s)
+				change = "cancel"
+			}
 			if err := s.emitTool(toolUpdate{ID: "native-call", Name: "mcp__proof_server_2__read_status_2", RawInput: map[string]any{"key": "value"}}); err != nil {
 				t.Fatal(err)
 			}
@@ -184,4 +192,12 @@ func TestEnvironmentMCPNativeJSONRetainsIntegerPrecision(t *testing.T) {
 	if !strings.Contains(string(before.Arguments), "9007199254740993") || !strings.Contains(string(after.Output), "9007199254740993") {
 		t.Fatal("MCP structured number rounded by native observation decoding")
 	}
+}
+
+// Both declaration sources must produce the same native observation semantics.
+func usePublicMCP(s *Session) {
+	s.req.LocalEnvironment.MCP = nil
+	s.req.MCPHTTPServers = &[]proto.MCPHTTPServer{{
+		ConnectionOrigin: "environment", ServerLabel: "proof.server", ServerURL: "https://mcp.example.test",
+	}}
 }

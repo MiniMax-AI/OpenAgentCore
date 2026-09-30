@@ -81,7 +81,7 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	allowed, anonymousTools := []string{"remember", "fail"}, []string{"ping"}
-	servers := []proto.MCPHTTPServer{{ServerLabel: "private_mcp", ServerURL: fixture.private.URL, AllowedTools: &allowed, BearerToken: &token}, {ServerLabel: "anonymous_mcp", ServerURL: fixture.anonymous.URL, AllowedTools: &anonymousTools}}
+	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "private_mcp", ServerURL: fixture.private.URL, AllowedTools: &allowed, BearerToken: &token}, {ConnectionOrigin: "service", ServerLabel: "anonymous_mcp", ServerURL: fixture.anonymous.URL, AllowedTools: &anonymousTools}}
 	run := func(prompt, resume string, expected map[string]string) *mcpBearerTurn {
 		t.Helper()
 		turn := &mcpBearerTurn{}

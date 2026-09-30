@@ -554,10 +554,12 @@ restart/history and credential lifecycle evidence, with its recorded revision li
 
 ### HTTP MCP execution
 
-This section covers `agent.tools` with `connection_origin: "service"`. An omitted
-or null origin on HTTP transport is saved as `"service"`, exactly like the explicit
-form. Environment-origin Plugin declarations use the separate
-[initialization and transport contract](../../contracts/agents-api/environment-templates.md#environment-origin-mcp-plugins).
+Public `agent.tools` declares an explicit MCP connection origin. Omitted/null
+origin remains `service`. The [origin, credential and Harness matrix](../../contracts/agents-api/environments.md#public-mcp-connection-origin)
+owns the supported combinations: Codex/Claude service HTTP on `none`, and
+Codex/Claude/MiniMax Environment HTTP on managed or user-owned workspaces, subject
+to declared native limits. Public declarations and installed Plugin MCP converge
+on the same Runtime effective bindings; they retain distinct credential authority.
 
 Service-origin MCP runs on trusted service-side compute. Codex supports `environment:{"type":"none"}`; Claude SDK supports HTTP MCP with
 `environment:{"type":"none"}`. Inline or saved Agent tools may declare:

@@ -28,17 +28,17 @@ type MCPBinding struct {
 }
 
 // ResolveMCPBindings combines public declarations with the frozen installation.
-// The current public profile is service-origin HTTP; a workspace cannot move
-// that connection or its credential authority onto the Environment implicitly.
+// Public declarations retain explicit origin and Vault authority; installed MCP
+// retains Environment configuration authority. Neither may relocate implicitly.
 func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 	var bindings []MCPBinding
 	if req.MCPHTTPServers != nil {
-		if !req.DisableExecutionEnvironment {
-			return nil, errors.New("service-origin MCP requires a service execution host")
-		}
 		bindings = make([]MCPBinding, 0, len(*req.MCPHTTPServers))
 		for _, server := range *req.MCPHTTPServers {
-			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: "service", CredentialAuthority: "none", Transport: "http", ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken}
+			if err := server.ValidateConnectionOrigin(req); err != nil {
+				return nil, err
+			}
+			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: server.ConnectionOrigin, CredentialAuthority: "none", Transport: "http", ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken}
 			if server.AllowedTools != nil {
 				names := append([]string{}, (*server.AllowedTools)...)
 				item.AllowedTools = &names

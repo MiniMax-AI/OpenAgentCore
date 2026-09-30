@@ -32,6 +32,9 @@ func validateProfileConfiguration(profile engine.Profile, snapshot Snapshot) err
 		return err
 	}
 	if err == nil {
+		if err := profile.ValidateMCPOrigins(snapshot.Environment, snapshot.Daemon != nil, tools.MCP); err != nil {
+			return err
+		}
 		if tools.DisableProgrammatic && !profile.ProgrammaticToolCallingDisable {
 			return errors.New("Disabling programmatic tool calling is not qualified for this engine.")
 		}

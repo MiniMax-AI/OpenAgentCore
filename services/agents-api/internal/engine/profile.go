@@ -15,6 +15,7 @@ var ErrInvalidInput = errors.New("invalid engine configuration")
 type Profile struct {
 	ProgrammaticToolCallingDisable             bool
 	Placements                                 []string
+	MCPOrigins                                 []string
 	WebSearchControl, TextVerbosity, MCPBearer bool
 	StructuredOutput                           bool
 	ToolSearch                                 bool
@@ -42,6 +43,7 @@ func NewCatalog(profiles map[string]Profile) Catalog {
 	c := Catalog{profiles: make(map[string]Profile, len(profiles))}
 	for kind, profile := range profiles {
 		profile.Placements = slices.Clone(profile.Placements)
+		profile.MCPOrigins = slices.Clone(profile.MCPOrigins)
 		c.profiles[kind] = profile
 	}
 	return c
@@ -53,6 +55,7 @@ func (c Catalog) Lookup(kind string) (Profile, bool) {
 	}
 	profile, ok := c.profiles[kind]
 	profile.Placements = slices.Clone(profile.Placements)
+	profile.MCPOrigins = slices.Clone(profile.MCPOrigins)
 	return profile, ok
 }
 

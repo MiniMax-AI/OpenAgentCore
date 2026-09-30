@@ -109,7 +109,7 @@ export const keys = {
     failed: "The API address couldn't be read.",
     localOnly: "For access from other machines, configure a domain and HTTPS in System.",
     noAddress: "Core has no public API address yet. Configure a domain and HTTPS in System.",
-    model: "To create a Session, replace {{model}} with a model name your model provider serves. Running an Agent needs a model provider: pass one in each request, save one on the Agent, or rely on the deployment default.",
+    model: "Replace {{model}} with a model name your model provider serves, or remove the model field to use this deployment's default model configuration. Running an Agent needs a model provider: pass one in each request, save one on the Agent, or rely on the deployment default. Self-hosted Sessions never use the deployment default.",
     keyPlaceholder: "<project API key>",
     projectKey: "Set OPENAI_API_KEY to an API key issued for this project. A key is shown only once, when it is issued; if it's lost, issue a new one.",
     projectHelp: "Samples for applications that call the Agents API with this project's API keys. The console never sends these requests.",

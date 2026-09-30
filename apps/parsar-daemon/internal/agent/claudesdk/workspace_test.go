@@ -86,7 +86,7 @@ func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
 			case "work-dir":
 				req.WorkDir = config.Workspace.ScratchDir
 			case "mcp":
-				req.MCPHTTPServers = &[]proto.MCPHTTPServer{}
+				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
 			case "caller-policy":
 				req.AgentOptions["workspace"] = "override"
 			case "relative":
@@ -135,5 +135,42 @@ func TestWorkspaceRetainsDeclaredFunctions(t *testing.T) {
 	}
 	if start.Workspace == nil || len(start.Functions) != 1 || start.Functions[0].Name != "lookup" || start.MCPHTTPServers != nil {
 		t.Fatal("workspace function declaration was not retained independently of external MCP")
+	}
+}
+
+func TestPublicMCPUsesWorkspaceProjectionWithoutCredentialCopy(t *testing.T) {
+	config := workspaceFixture(t)
+	config.Workspace.NetworkAccess = "enabled"
+	req := workspaceRequest()
+	req.LocalEnvironment = &proto.LocalEnvironment{NetworkAccess: "enabled"}
+	token := "vault-selected-canary"
+	tools := []string{"prove"}
+	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", AllowedTools: &tools, Required: true, BearerToken: &token}}
+	start, env, err := prepare(config, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if start.MCPHTTPServers != nil || start.Workspace == nil || len(start.Workspace.MCP) != 1 || !start.Workspace.MCP[0].Required || (*start.Workspace.MCP[0].AllowedTools)[0] != "prove" {
+		t.Fatal("workspace policy lost")
+	}
+	raw, _ := json.Marshal(start)
+	if strings.Contains(string(raw), token) {
+		t.Fatal("bearer copied into bridge request")
+	}
+	ref := start.Workspace.MCP[0].BearerTokenEnvVar
+	found := false
+	for _, entry := range env {
+		found = found || entry == ref+"="+token
+	}
+	if ref == "" || !found {
+		t.Fatal("selected credential not bound")
+	}
+	info := RuntimeInfo{Protocol: 3, Features: []string{"workspace_tools", "workspace_prepare", "workspace_command_observations", "local_runtime_v2", "mcp_http_tools", "mcp_http_bearer_auth", "mcp_http_required"}}
+	if validateExecutorFeatures(info, start) == nil {
+		t.Fatal("unqualified workspace bridge admitted")
+	}
+	info.Features = append(info.Features, "workspace_mcp_http")
+	if err := validateExecutorFeatures(info, start); err != nil {
+		t.Fatal(err)
 	}
 }

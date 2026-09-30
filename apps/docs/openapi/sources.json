@@ -1,6 +1,6 @@
 {
   "sources": {
-    "contracts/agents-api/openapi.yaml": "42ae2585b0abe60860de99a6958b639a495a0d9b7c3d0142b199a427fa77b5a5",
+    "contracts/agents-api/openapi.yaml": "bdda1027eb0e7d2e8ccc5dba3ed3e2dbb6d447e9ab2c5b571fe4056fa7596eec",
     "contracts/agents-api/core.openapi.yaml": "f1b9278c3a4b1cb55127cf9471583d00f1ab13b6ceb64f8693a01c4cf03674eb",
     "contracts/agents-api/runtime.openapi.yaml": "505286d5eacf94a14f9527fcf4e7beb4fba4f792681be26ba966254cbf49b4aa"
   },
@@ -8,7 +8,7 @@
     "content/docs/api-reference/agents.mdx": "1f7697959e9c52c9d24fbe70e116e807f49912b9a27ac638b86782e2f326af44",
     "content/docs/api-reference/environments.mdx": "6a9e08a67479a745983c45b9711137617c13fdf7599a64533997b00a26ac7282",
     "content/docs/api-reference/environment-templates.mdx": "68df9276e858e525e15bb88af624fc8adee8bcdcc03a788faaff56b560fd038c",
-    "content/docs/api-reference/sessions.mdx": "68a839427c3ff380644fd79e7876fd8fac7a6792179eb3cb9ed376f5953e6e46",
+    "content/docs/api-reference/sessions.mdx": "8ce222c8c196b18e6b4a21ed29f3fd54459be0576906d5c60239689ce990292b",
     "content/docs/api-reference/artifacts.mdx": "8df8d008126b49b1df88f28a676c4b237ccffc45a470b35ec30eab2daf1c0f7f",
     "content/docs/api-reference/events.mdx": "fa509794f3c208c0cdcdaa68615c26b7e400ea6c892922a4e0a6a833e42fe5dd",
     "content/docs/api-reference/items.mdx": "fa4d248ac5623beb3f00a4ebb5a6c4ff477865ebee351e0c543a970a7ec3654d",
@@ -18,7 +18,7 @@
     "content/docs/api-reference/skills.mdx": "774ea05a7a8250fe5af5164388b98dafca99d56dc2eae686e8f628acb4e7c10b",
     "content/docs/api-reference/vaults.mdx": "d80eade1c2f8100030866abbb0fb6b7a09c94250a859c97cdf1abce32fdfdf1e",
     "content/docs/api-reference/credentials.mdx": "f129a51f74a3c7021c016600518e2350023f8d29571666ac5d64b7584cd7c7d0",
-    "openapi/public-api.yaml": "3cdee54523822cd19766771dae4c13a64d6e318ca8e9d5fabe8339e975c8ac25",
+    "openapi/public-api.yaml": "db69b3ebaf6599ee502e5ec1d385ef0504940fa955ec2a4be271150ef1d59c41",
     "content/docs/api-reference/meta.json": "56bf1dc145ccc8adde38c5f956f1a06f18ef18b646122250d01a294c516f8f83",
     "content/docs/api-reference/index.mdx": "9fd6b1c54149874d2999235067c101326f9e8a2e707a70b6672c81eb3ebfe63f",
     "content/docs/api-reference/core/core-administration.mdx": "5fc3ada51d2190a141f13738151e4d513390cc3bd66ce6f5013994bda68569b0",

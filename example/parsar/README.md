@@ -102,8 +102,10 @@ A few more implementation details:
   running Session.
 - **Workspaces:** hosted Sessions each get their own. User-machine Sessions use the
   selected host directory, so the same path means shared files.
-- **Skills on a user machine** come only from local capability directories; managed
-  Skill references are rejected explicitly, not ignored.
+- **Skills on a user machine** come only from local capability directories in this
+  example; it rejects Agents bound to managed Skills instead of ignoring them. Core
+  itself can deliver managed Skills to user machines through
+  `x_agents_core.environment`.
 
 ## Validation
 

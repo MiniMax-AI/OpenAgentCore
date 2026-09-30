@@ -20,7 +20,7 @@ func TestMCPHTTPBearerRejectsUnsupportedRequestsBeforeFactory(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			token := "synthetic-private-token"
-			servers := []proto.MCPHTTPServer{{ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
+			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
 			req := proto.PromptRequestPayload{AgentKind: "codex", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
 			caps := proto.AgentKindCapabilities{EnvironmentNone: true, MCPHTTPTools: true, MCPHTTPBearerAuth: true}
 			switch mode {
@@ -78,19 +78,23 @@ func TestMCPHTTPBearerRejectsUnsupportedRequestsBeforeFactory(t *testing.T) {
 	}
 }
 
-func TestLocalMCPRejectsBeforePreparationFactory(t *testing.T) {
-	for _, mode := range []string{"anonymous", "bearer", "required", "empty declaration", "no declaration"} {
+func TestLocalMCPOriginAndCapabilityAdmission(t *testing.T) {
+	for _, mode := range []string{"anonymous", "bearer", "required", "empty declaration", "no declaration", "environment anonymous", "environment bearer", "environment required", "environment missing capability"} {
 		t.Run(mode, func(t *testing.T) {
 			h := localPreparationHarness(t)
 			defer h.router.Shutdown(context.Background())
 			req := preparationRequest()
-			servers := []proto.MCPHTTPServer{{ServerLabel: "tools", ServerURL: "https://tools.example/mcp"}}
+			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp"}}
 			req.Configuration.MCPHTTPServers = &servers
-			if mode == "bearer" {
+			if strings.HasPrefix(mode, "environment") {
+				servers[0].ConnectionOrigin = "environment"
+				req.Configuration.LocalEnvironment.NetworkAccess = "enabled"
+			}
+			if strings.Contains(mode, "bearer") {
 				token := "synthetic-private-token"
 				servers[0].BearerToken = &token
 			}
-			if mode == "required" {
+			if strings.Contains(mode, "required") {
 				servers[0].Required = true
 			}
 			if mode == "empty declaration" {
@@ -100,7 +104,7 @@ func TestLocalMCPRejectsBeforePreparationFactory(t *testing.T) {
 				req.Configuration.MCPHTTPServers = nil
 			}
 			entered := make(chan struct{}, 1)
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: proto.AgentKindCapabilities{LocalEnvironment: true, MCPHTTPTools: true, MCPHTTPBearerAuth: true, MCPHTTPRequired: true}}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: proto.AgentKindCapabilities{LocalEnvironment: true, MCPHTTPTools: mode != "environment missing capability", MCPHTTPBearerAuth: true, MCPHTTPRequired: true}}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 				t.Error("ordinary factory called")
 				return nil, errors.New("unexpected")
 			})
@@ -109,7 +113,7 @@ func TestLocalMCPRejectsBeforePreparationFactory(t *testing.T) {
 				return nil, errors.New("controlled stop")
 			})
 			err := h.router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "local-mcp", req))
-			allowed := mode == "no declaration"
+			allowed := mode == "no declaration" || mode == "empty declaration" || strings.HasPrefix(mode, "environment") && mode != "environment missing capability"
 			if (err == nil) != allowed {
 				t.Fatal("wrong preparation admission", err)
 			}

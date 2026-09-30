@@ -28,7 +28,7 @@ func resolveSessionAgent(input sessionRequest, saved *v1.SavedAgent) (v1.Agent, 
 		request.Model = &saved.Model
 	}
 	if request.Model == nil {
-		return v1.Agent{}, errors.New("agent.model is required without agent_id.")
+		return v1.Agent{}, errors.New("agent.model is required without agent_id unless a deployment default model applies.")
 	}
 	resolved, err := resolveSavedAgent(request)
 	if err != nil {

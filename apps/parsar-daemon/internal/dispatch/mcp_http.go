@@ -12,24 +12,21 @@ func validateMCPHTTP(req proto.PromptRequestPayload, caps proto.AgentKindCapabil
 	if req.MCPHTTPServers == nil {
 		return nil
 	}
-	if req.LocalEnvironment != nil {
-		return errors.New("service-side HTTP MCP is not supported with a local Environment")
-	}
 	for _, server := range *req.MCPHTTPServers {
-		if server.Required && (!caps.MCPHTTPTools || !caps.MCPHTTPRequired || !req.DisableExecutionEnvironment) {
-			return errors.New("engine does not support required service-side HTTP MCP initialization")
+		if err := server.ValidateConnectionOrigin(req); err != nil {
+			return err
+		}
+		if !caps.MCPHTTPTools {
+			return errors.New("engine does not support HTTP MCP")
+		}
+		if server.Required && !caps.MCPHTTPRequired {
+			return errors.New("engine does not support required HTTP MCP initialization")
 		}
 		if server.BearerToken == nil {
 			continue
 		}
 		if !caps.MCPHTTPTools || !caps.MCPHTTPBearerAuth {
 			return errors.New("engine does not support authenticated HTTP MCP")
-		}
-		if !req.DisableExecutionEnvironment {
-			return errors.New("authenticated HTTP MCP requires a supported service-side environment")
-		}
-		if !caps.EnvironmentNone {
-			return errors.New("engine does not support authenticated HTTP MCP with environment:none")
 		}
 		endpoint, err := url.Parse(server.ServerURL)
 		if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" {
