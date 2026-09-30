@@ -165,13 +165,19 @@ def verify_agents(client, other, invalid, expect_error):
         assert raw.post(base, json={"model": "x"}).json()["error"]["code"] == "invalid_beta"
         assert raw.post(base, headers={"OpenAI-Beta": "agents=v1"}, json={"model": "x"}).status_code == 401
         # The minimal pinned MCP tool saves its omitted origin as "service" (MV-01);
-        # the environment origin remains an explicit gap.
+        # explicit environment origin is retained independently of execution placement.
         mcp = {"type": "mcp", "server_label": "x", "transport": {"type": "http", "server_url": "https://example.invalid"}}
         minimal = agents.with_raw_response.create(model="x", tools=[mcp]).http_response.json()
         assert minimal["tools"] == [{**mcp, "transport": {**mcp["transport"], "headers": {}}, "connection_origin": "service",
                                      "allowed_tools": None, "credential_id": None, "request_metadata": {}, "required": False}]
         assert agents.delete(minimal["id"]).deleted
-        expect_error(BadRequestError, lambda: agents.create(model="x", tools=[{**mcp, "connection_origin": "environment"}]))
+        environment_mcp = agents.create(model="x", tools=[{**mcp, "connection_origin": "environment"}])
+        assert environment_mcp.tools[0].connection_origin == "environment"
+        assert agents.retrieve(environment_mcp.id).tools == environment_mcp.tools
+        assert raw.get(base + "/" + environment_mcp.id, headers=headers).json()["tools"][0]["connection_origin"] == "environment"
+        assert agents.delete(environment_mcp.id).deleted
+        expect_error(BadRequestError, lambda: agents.create(model="x", tools=[{**mcp, "connection_origin": "unknown"}]))
+        expect_error(BadRequestError, lambda: agents.create(model="x", tools=[{**mcp, "transport": {"type": "stdio", "command": "unqualified"}}]))
         # Every pinned web_search mode is saved as the official service does (TV-05);
         # omitted or null mode is saved as live. A supplied location, including {},
         # has all four keys (req_db41d2f6261b4abfb69465eafe719ab5,
