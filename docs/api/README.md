@@ -133,4 +133,4 @@ owns expiry, retry and credential ownership; the
 The console-local `GET`/`POST /console/installation/domain` surface uses the signed-in
 browser session and same-origin checks. It delegates only domain setup to the
 installer, with the server-held Core key over a private Unix socket; it is not part
-of the Agents API or Core management API. See [Web request boundaries](../web/architecture.md#request-boundaries).
+of the Agents API or Core management API. See [console domain setup](../web/console-server.md#domain-setup).

@@ -48,7 +48,7 @@ as observed officially. The shared daemon validator, daemon dispatch and the
 TypeScript client apply the same rule. Core Web keeps local UI rules: its
 composer trims leading and trailing whitespace from every message it sends and
 does not send blank text, and its Start Session form omits whitespace-only simple
-text ([Web architecture](../../docs/web/architecture.md)). Other clients' text is
+text ([console API usage](../../docs/web/console-api-usage.md#not-consumed)). Other clients' text is
 never trimmed.
 
 Harness profiles declare whether whitespace-only text is qualified, through the

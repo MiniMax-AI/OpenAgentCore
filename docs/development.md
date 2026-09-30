@@ -90,7 +90,7 @@ site; `pnpm dev:docs` starts its development server.
 | `apps/parsar-daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](../contracts/agents-api/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/parsar-daemon/internal/agent` | Native harness adapters | [Native references](../contracts/agents-api/harness-onboarding.md#native-references) |
 | `services/agents-api/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](sandbox-provider.md) |
-| `services/core-console` | Console login and the server-side management proxy | [Web architecture](web/architecture.md) |
+| `services/core-console` | Console login and the server-side management proxy | [Console server](web/console-server.md) |
 | `apps/web` and `packages/agents-client` | Console UI and typed clients | [Web guide](../apps/web/README.md) |
 | `deploy/install` and `scripts` | Distribution, installation and validation tools | [Maintainers](maintainers.md) |
 | `contracts/agents-api` | Pinned schema, local semantic contracts and qualification evidence | [Coverage ledger](../contracts/agents-api/README.md) |

@@ -13,7 +13,7 @@
   },
   {
     "slug": "execution-model",
-    "source": "docs/web/architecture.md",
+    "source": "docs/web/console-server.md",
     "title": "Execution and API architecture",
     "description": "Applications call the public API; the administrator browser calls Web; Runtime connects to Core."
   },
@@ -37,7 +37,7 @@
   },
   {
     "slug": "bootstrap-projects-keys",
-    "source": "docs/web/core-connection.md",
+    "source": "docs/web/console-server.md",
     "title": "Sign in and issue application keys",
     "description": "Keep the Core key on the management side and issue Project API keys through Web."
   },
@@ -93,10 +93,7 @@
     "slug": "console",
     "source": "docs/web/README.md",
     "title": "Administrator console",
-    "description": "Monitor Core, inspect resources and manage deployment settings through Web.",
-    "images": {
-      "docs/web/images/overview.png": "apps/web/public/onboarding/monitor-en.webp"
-    }
+    "description": "Monitor Core, inspect resources and manage deployment settings through Web."
   },
   {
     "slug": "admin-api",

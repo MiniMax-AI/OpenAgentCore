@@ -45,11 +45,6 @@
     "reason": "The test profile labels cite the historical source revision, not the current Core brand."
   },
   {
-    "path": "packages/agents-client/README.md",
-    "regex": "Parsar's current execution flow|Team orchestration belongs in Parsar",
-    "reason": "Client documentation distinguishes the separate product execution and team orchestration ownership."
-  },
-  {
     "path": "*",
     "regex": "Parsar (?:product|repository|service|checkout)\\b",
     "reason": "These phrases explicitly refer to the separate Parsar product."
@@ -465,11 +460,6 @@
     "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
   },
   {
-    "path": "apps/web/PRODUCT.md",
-    "regex": "(?:AGENTS_API_|AGENTS_CORE_WEB_)[A-Z0-9_]*\\*?",
-    "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
-  },
-  {
     "path": "scripts/core-doctor.test.mjs",
     "regex": "\"\\.parsar\"|\"agents-api\"",
     "reason": "These fixtures prove the old development credential directory is ignored."
@@ -542,11 +532,6 @@
   {
     "path": "docs/design-principles.md",
     "regex": "Parsar is an ordinary API-key holder",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "docs/web/architecture.md",
-    "regex": "including Parsar",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
@@ -658,11 +643,6 @@
     "path": "apps/docs/content/docs/concepts.mdx",
     "regex": "Parsar is an ordinary API-key holder",
     "reason": "Generated copy of docs/design-principles.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "apps/docs/content/docs/execution-model.mdx",
-    "regex": "including Parsar",
-    "reason": "Generated copy of docs/web/architecture.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
     "path": "apps/docs/content/docs/troubleshooting.mdx",

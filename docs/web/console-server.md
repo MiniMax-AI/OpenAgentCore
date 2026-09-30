@@ -1,7 +1,4 @@
----
-title: "Sign in and issue application keys"
-description: "Keep the Core key on the management side and issue Project API keys through Web."
----
+# Console server
 
 The console server (`services/core-console`, the `oac-web` process) serves the
 built console, signs the administrator in with the Core key and forwards the
@@ -30,7 +27,7 @@ flowchart LR
 ```
 
 The deployment's reverse proxy routes `/v1` and `/api/v1` to Core and every other
-path to the console; the [installation guide](/install#https-and-the-reverse-proxy)
+path to the console; the [installation guide](../getting-started/install.md#https-and-the-reverse-proxy)
 gives the routes. The console handles each path as follows:
 
 | Path | Sign-in | Handling |
@@ -59,7 +56,7 @@ Every request except `/healthz`, `/v1` and `/api/v1` must pass these checks firs
 3. **Sign-in.** Paths that need sign-in answer 401 without a valid session cookie.
 
 Under `/core`, these failures use the Core error envelope with the codes in
-[console-generated failures](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/core-errors.md#console-generated-failures);
+[console-generated failures](../../contracts/agents-api/core-errors.md#console-generated-failures);
 elsewhere they return `{"error": "…"}`, or plain text for an unsafe request. Every
 response carries `Cache-Control:
 no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and
@@ -78,7 +75,7 @@ On the way to Core, the console:
   and `Referer` headers;
 - sends `Authorization: Bearer <Core key>`;
 - sets `X-Core-Console-Actor: console`, replacing any value the browser sent. Core
-  records it as a display-only audit label ([administrator API](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/admin-api.md));
+  records it as a display-only audit label ([administrator API](../../contracts/agents-api/admin-api.md));
 - ignores ambient HTTP proxy settings, so the Core key reaches only the configured
   Core;
 - streams responses without buffering.
@@ -88,8 +85,8 @@ and every `Access-Control-*` header. A redirect from Core, or a failed connectio
 Core, becomes 502 `core_unreachable`.
 
 The console never retries a request. Browser code calls `/core/v1` through the typed
-clients in [`packages/agents-client`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/packages/agents-client/README.md);
-[console API usage](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/web/console-api-usage.md) lists what each page reads and writes.
+clients in [`packages/agents-client`](../../packages/agents-client/README.md);
+[console API usage](console-api-usage.md) lists what each page reads and writes.
 
 ## Sign-in
 
@@ -100,7 +97,7 @@ clients in [`packages/agents-client`](https://github.com/MiniMax-AI/parsar-core/
 | `POST /console/auth/logout` | No body | `200 {"mode":"login"}`; ends the session and clears the cookie |
 
 The administrator signs in with the deployment's
-[Core key](/troubleshooting#core-key). There are no console
+[Core key](../getting-started/operations.md#core-key). There are no console
 accounts, usernames or setup step, and signing in grants the whole console.
 
 - The console compares SHA-256 digests of the submitted and configured keys in
@@ -170,7 +167,7 @@ it. It never retries a write. Applying the domain restarts the console, which en
 every session; the page keeps a sign-in link to the new HTTPS address. Only the
 `ready` state confirms HTTPS; the browser does not probe the new origin. The
 installer owns certificates, locking and recovery
-([managed HTTPS](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/deploy/install/README.md#managed-https)).
+([managed HTTPS](../../deploy/install/README.md#managed-https)).
 
 `OAC_WEB_BOOTSTRAP=1`, which the installer sets while no public URL is configured,
 lets the console also accept plain HTTP requests addressed to a literal IP address,
@@ -196,7 +193,7 @@ installer gives the console only `secrets/core.key`.
 | `OAC_WEB_BOOTSTRAP` | `0` | `1` accepts literal-IP hosts before a domain is configured. Requires an `http://` origin and `OAC_WEB_INSTALLATION_SOCKET` |
 
 The console also reads `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT` and `OAC_LOG_ADD_SOURCE`
-([configuration](/configure#appendix-core-environment-without-the-installer)).
+([configuration](../configuration.md#appendix-core-environment-without-the-installer)).
 An invalid value stops the console at startup with a message naming the variable.
 Use HTTPS for any browser that is not on the same machine.
 
@@ -218,7 +215,5 @@ After installing or changing the console, check:
 
 A sign-in failure belongs to the console. A 401 from Core on a signed-in request
 means the console's Core key does not match Core's digest, or the console reaches
-the wrong Core. The [troubleshooting table](/troubleshooting#troubleshooting)
+the wrong Core. The [troubleshooting table](../getting-started/operations.md#troubleshooting)
 covers the common symptoms.
-
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/web/console-server.md)
