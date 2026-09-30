@@ -26,5 +26,16 @@ for (const file of fs.readdirSync(path.join(app, 'content/docs')).filter(n => n.
   const text = fs.readFileSync(path.join(app, 'content/docs', file), 'utf8')
   for (const retired of ['/core/v1/admin', 'sandbox-manager.openapi.yaml']) assert.ok(!text.includes(retired), 'Obsolete claim in ' + file + ': ' + retired)
 }
+// The sidebar is built from this list, so a page missing from it is reachable
+// only by direct link. fumadocs adds unlisted files back only for the "..."
+// placeholder, which this tree does not use.
+const navigation = JSON.parse(fs.readFileSync(path.join(app, 'content/docs/meta.json'))).pages
+const docsDir = path.join(app, 'content/docs')
+for (const entry of fs.readdirSync(docsDir, { withFileTypes: true })) {
+  if (entry.name === 'meta.json') continue
+  const slug = entry.isDirectory() ? entry.name : entry.name.replace(/\.mdx$/, '')
+  if (!entry.isDirectory() && !entry.name.endsWith('.mdx')) continue
+  assert.ok(navigation.includes(slug), 'Page is missing from the sidebar (content/docs/meta.json): ' + slug)
+}
 assert.deepEqual(fs.readFileSync(path.join(app, 'app/icon.svg')), fs.readFileSync(path.join(repo, 'apps/web/public/favicon.svg')), 'Docs favicon must match the approved Web asset')
 console.log('Guide copies, source authority and namespace/configuration facts are current.')

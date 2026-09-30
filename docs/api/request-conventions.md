@@ -1,7 +1,9 @@
 # Request conventions
 
 These rules apply to every `/v1` operation. Operation pages state only what differs
-from them.
+from them. Descriptions inherited verbatim from the pinned upstream contract are the
+exception: they keep upstream's wording, so the Files and Skills operations repeat the
+`OpenAI-Beta` rule above and Create a reusable Agent repeats the JSON body checks.
 
 ## Headers
 

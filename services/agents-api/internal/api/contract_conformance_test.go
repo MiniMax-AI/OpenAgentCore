@@ -865,3 +865,58 @@ func TestInstallationDomainCodesMatchRegistry(t *testing.T) {
 	add(invalid, text[codes[4]:codes[5]], codes[0])
 	compareRegistry(t, "Installation domain setup codes", emitted)
 }
+
+// TestErrorCodeRegistryNamespacesAreValid reads the Namespaces column, which no
+// other check touches. Reachability is not derived: a code emitted through the
+// store dispatcher cannot be attributed to a namespace statically, so only the
+// cell's form is checked. A token that is not a namespace, an empty cell or a
+// row claiming both "all" and a single namespace is always wrong.
+func TestErrorCodeRegistryNamespacesAreValid(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(conformanceRepoRoot, "contracts/agents-api/error-codes.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := regexp.MustCompile("^\\| *([0-9]{3}) *\\| *(`[a-z0-9_]+`|null) *\\| *([^|]*?) *\\|")
+	valid := map[string]bool{"all": true, "/v1": true, "/core/v1": true, "/api/v1": true}
+	inside, found, rows := false, false, 0
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "## ") {
+			inside = strings.TrimSpace(strings.TrimPrefix(line, "## ")) == "HTTP API codes"
+			found = found || inside
+			continue
+		}
+		if !inside {
+			continue
+		}
+		match := row.FindStringSubmatch(line)
+		if match == nil {
+			continue
+		}
+		rows++
+		where := match[1] + " " + match[2]
+		var tokens []string
+		for _, token := range strings.Split(match[3], ",") {
+			token = strings.Trim(strings.TrimSpace(token), "`")
+			if token == "" {
+				t.Errorf("HTTP API codes: %s has an empty namespace", where)
+				continue
+			}
+			if !valid[token] {
+				t.Errorf("HTTP API codes: %s names %q, which is not a namespace", where, token)
+			}
+			tokens = append(tokens, token)
+		}
+		if len(tokens) == 0 {
+			t.Errorf("HTTP API codes: %s names no namespace", where)
+		}
+		if len(tokens) > 1 && valid[tokens[0]] && tokens[0] == "all" {
+			t.Errorf("HTTP API codes: %s claims both \"all\" and %s", where, strings.Join(tokens[1:], ", "))
+		}
+	}
+	if !found {
+		t.Fatal("error-codes.md has no section \"HTTP API codes\"")
+	}
+	if rows == 0 {
+		t.Fatal("error-codes.md HTTP API codes has no rows with a Namespaces cell")
+	}
+}
