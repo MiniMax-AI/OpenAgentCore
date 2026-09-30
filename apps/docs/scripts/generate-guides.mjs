@@ -43,7 +43,7 @@ for (const guide of guides) {
     }
     return label + '(' + url + (anchor ? '#' + anchor : '') + ')'
   })
-  const en = `---\ntitle: ${JSON.stringify(guide.title)}\ndescription: ${JSON.stringify(guide.description)}\n---\n\n` + (guide.slug === 'execution-model' ? '![Application, administration and machine credential boundaries](/images/architecture.svg)\n\n' : '') + mdx(body.trim()) + `\n\n[Repository source](${sourceURL(guide.source)})\n`
+  const en = `---\ntitle: ${JSON.stringify(guide.title)}\ndescription: ${JSON.stringify(guide.description)}\n---\n\n` + mdx(body.trim()) + `\n\n[Repository source](${sourceURL(guide.source)})\n`
   const relative = `content/docs/${guide.slug}.mdx`
   fs.writeFileSync(path.join(app, relative), en)
   record.outputs[relative] = digest(en)

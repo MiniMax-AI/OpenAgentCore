@@ -1,112 +1,105 @@
 ---
-title: "Execution and API architecture"
-description: "Applications call the public API; the administrator browser calls Web; Runtime connects to Core."
+title: "Architecture"
+description: "Core, the Runtime daemon and the native harness: the three namespaces, replaceable parts and a Session end to end."
 ---
 
-![Application, administration and machine credential boundaries](/images/architecture.svg)
+OpenAgentCore separates control, runtime and execution. Core owns durable state
+and the API; the Runtime daemon runs work inside an Environment; the native harness
+keeps its own model and tool loop. Each connection between them is a defined
+protocol, so any part can be replaced without changing Core orchestration.
 
-Core Web manages a Core deployment. Applications, including Parsar, use the public
-Agents API independently with their own Project keys. The management backend,
-`AdminClient` and the React console built on them are implemented.
+This page is a map. Each section names a component, its boundary and the document
+that owns its rules.
 
-The [design principles](/concepts) define identity and authority.
-The [administrator contract](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/admin-api.md) defines exact
-routes, payloads, pagination and audit records.
+![OpenAgentCore architecture](/images/source/docs/assets/architecture-overview.png)
 
-## Request boundaries
+The diagram has four tiers:
 
-```mermaid
-flowchart LR
-  browser["Administrator browser"]
-  console["Core console service"]
-  core["Core API"]
-  database[("PostgreSQL")]
-  application["Application / official SDK"]
-  runtime["Runtime and native adapters"]
+1. **Callers.** Applications, including your product and the official OpenAI SDK,
+   call the Agents API. Operators use Core Web, which calls the Core API.
+2. **Core.** The control plane: public and administrator APIs, resources,
+   orchestration, PostgreSQL, the Runtime gateway and the Sandbox Provider
+   interface.
+3. **Environment.** Where the agent works: a Core-managed sandbox or your own
+   machine. The Runtime daemon prepares capabilities and starts the native harness,
+   which works on the workspace and tools.
+4. **Outside Core.** The model API and remote MCP servers, called by the harness
+   with the Session's model provider.
 
-  browser -->|"Same-origin management requests; console login"| console
-  console -->|"/core/v1/* by prefix, including sandbox; Core key"| core
-  application -->|"/v1; Project API key"| core
-  core <--> database
-  core <--> runtime
-```
+## Two APIs, and a machine channel
 
-React management code must use the Core clients from `packages/agents-client`:
-`AdminClient` for `/core/v1`, `CoreMetricsClient` for `/core/v1/metrics` and the
-sandbox management client for `/core/v1/sandbox`. The console service
-returns 404 for `/v1` and `/api/v1`, including requests with an explicit Bearer
-token. It has no application key and does not impersonate the selected Project.
+![Three namespaces and their credentials](/images/source/docs/assets/architecture-api-surfaces.png)
 
-The console signs the browser in with the Core key, checks the host and origin, and
-forwards every signed-in `/core/v1/*` request to Core by prefix; Core alone decides
-whether the route exists. It strips the browser's Authorization, Cookie, Origin and
-Referer headers and supplies the Core key as its private upstream credential. Core
-rejects application keys on management routes and the Core key on `/v1`.
-The audit actor label is declared by the caller and is display only, never Core authorization: the console server declares `console`, and operator scripts calling Core with the Core key directly leave it empty.
+Core serves three namespaces: the Agents API (`/v1`) for applications, the Core
+API (`/core/v1`) for operators, and a machine API (`/api/v1`) for nodes and Runtime
+daemons. Each has its own credential; one used elsewhere gets 401. The
+[API index](/public-api) owns the full matrix of callers, credentials and routes.
 
-`GET` and `POST /console/installation/domain` are the scoped installation-management
-exception: the console authenticates the same browser session and origin, then
-calls the installer's private Unix socket with its server-held Core key. This is
-not a Core `/core/v1` route and does not use `AdminClient`. It can configure only
-the managed domain; it cannot submit shell commands or arbitrary process settings.
-The [installer rules](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/maintainers.md#managed-https-ownership) own application,
-certificates and recovery. Before a domain is configured, the console accepts
-same-origin HTTP requests at literal IP addresses; after apply, only the configured
-HTTPS origin is accepted.
+## Core
 
-Node and daemon connections use `/api/v1` with their own credentials. The reverse
-proxy sends them directly to Core; the console never forwards them, and they do not
-grant a browser execution authority.
+Core is the only owner of durable execution facts: Projects and keys, Agents,
+Sessions, Turns, Items, Environments, files and audit records, all in PostgreSQL.
+It schedules Turns, handles cancellation and pending interactions, and checks that
+a requested harness, Environment and capability combination is supported before
+starting work.
 
-## Ownership
+Core does not isolate tools, run a model or talk to a vendor SDK directly. It
+selects implementations through interfaces and never branches on a harness,
+operating system or provider name. See
+[the decoupling principle](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#decoupling-principle) and the
+[repository map](/development#repository-map).
 
-| Component | Responsibility |
-| --- | --- |
-| React frontend | Project selection, permitted management actions and operational views; cached reads (TanStack Query) that keep the last data on screen while refreshing |
-| `AdminClient` | Typed management requests and validation, sharing resource parsers with the public client |
-| `services/core-console` | Core key login, host/origin checks, and prefix forwarding of `/core/v1/*` with the Core key as the private upstream credential |
-| Core API and PostgreSQL | Project isolation, resource state, deletion preconditions, audit and scheduling |
-| Runtime and native adapters | Existing allocation, process lifecycle and execution protocols |
+## Replaceable parts
 
-Projects, keys and administrator authority follow the
-[design principles](/concepts#projects-own-assets). The console adds
-no execution path: a deletion conflict is never resolved by an implicit cancellation.
+| Part | Responsibility | Connects through | Current implementations | Add one |
+| --- | --- | --- | --- | --- |
+| Sandbox Provider | Creates, bootstraps, renews and reclaims the outer Environment | `SandboxProvider` interface | Docker, microsandbox, E2B, sandbox nodes | [Sandbox Provider guide](/sandbox-provider) |
+| Runtime | Prepares Skills, MCP and files, runs executors, owns local cleanup | Core–Runtime protocol over `/api/v1` | `oac-daemon`: managed Linux; self-hosted Linux, macOS and Windows | [Core–Runtime protocol](/runtime-protocol) |
+| Harness | Runs the native model and tool loop | Harness adapter (`Executor` and `Turn`) | Codex, Claude Code, MiniMax Code | [Harness onboarding](/harness-onboarding) |
+| Model Provider | Serves inference for the harness | Responses, Anthropic or Chat Completions protocol | Any endpoint speaking one of those protocols | [Model execution](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/model-execution.md) |
 
-Secret fields remain write-only; Skill source and Artifact content have explicit
-read routes, while Source File content does not have an administrator download
-route.
+Replaceability does not mean every combination works. Supported combinations are
+declared as capabilities and validated explicitly; see
+[Harness selection](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/harness-selection.md) and the
+[coverage record](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md).
 
-## Deployment and application Runtime paths
+## A Session, end to end
 
-Deployment sandbox management selects one provider at a time: E2B, Docker or
-microsandbox. E2B uses the deployment's provider integration; Docker and microsandbox
-use operator-managed machines. Provider setup, reset and node administration
-belong to the existing sandbox management surface.
+![A managed Session from creation to result](/images/source/docs/assets/architecture-session-flow.png)
 
-An application's `self_hosted` Runtime, including one it provisions in its own E2B
-account, is a separate caller-managed path. It does not choose or reconfigure the
-deployment provider. This console contract changes neither native Runtime protocols
-nor application Session creation semantics.
+For a Core-managed (`openai_hosted`) Session:
 
-## Frontend state and validation
+1. The application creates a Session through the Agents API.
+2. Core asks the Sandbox Provider for an Environment.
+3. The provider starts the Runtime using the [bootstrap contract](/runtime-bootstrap).
+4. The daemon dials into Core and advertises its capabilities.
+5. Core sends the preparation request; Runtime prepares Skills, MCP declarations
+   and initial files inside the Environment.
+6. The application sends input.
+7. Core prepares and starts execution on the daemon.
+8. The daemon's harness adapter starts a native Turn.
+9. The harness runs its model and tool loop against the model provider.
+10. The daemon streams events, output and usage back to Core, then `done`.
+11. The application reads Items and events from Core.
 
-Session inspection uses paginated durable history and bounded polling. There is no
-management Session SSE endpoint. Project changes must discard stale reads and
-pending operation state before displaying results in another Project.
+A `self_hosted` Session skips steps 2 and 3: an administrator issues an executor
+credential and you start the daemon on your own machine
+([self-hosted guide](/self-hosted-execution)). A `none` Session uses an
+existing device connection. Everything from step 4 onward is the same protocol.
+The [Environment contract](/environments-and-files) covers
+placement and expiry; the [Core–Runtime protocol](/runtime-protocol) defines
+message order, receipts and failure ownership.
 
-The client sends each write once per explicit action. An uncertain result stays
-visible until the administrator checks state and decides how to proceed. Issued
-key plaintext must not enter browser storage or logs. Key issuance recovery
-follows the administrator contract.
+## Boundaries to keep in mind
 
-The sandbox deployment read (`GET /core/v1/sandbox/deployment`) describes the saved
-selection. It does not prove a reachable model, valid provider credentials or
-execution readiness. Runtime observations, usage coverage and audit history must
-retain the distinctions defined by Core. In E2B views, the running sandbox count
-comes from the deployment's allocations; the hosted Runtime total counts hosted
-observation records across projects and reported lifecycle states. These sources
-have different coverage and refresh independently, so the console does not infer
-resource retention or cleanup from their difference.
-Native execution ownership remains governed by [CONTRIBUTING.md](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md).
+- **Isolation belongs to the outer Environment.** The daemon is not a sandbox
+  ([Runtime and outer isolation](/concepts#runtime-and-outer-isolation)).
+- **Execution and compute have separate lifetimes.** Closing an executor does not
+  release its allocation, destroy its Environment or delete its workspace.
+  Reclamation is an explicit Sandbox Provider operation.
+- **Model keys stay with the compute that owns them.** A self-hosted Session brings
+  its own model provider ([why](/user-guide#which-model-provider-a-session-uses)).
+- **Core Web is an administrator console.** It calls only `/core/v1` and cannot
+  start Sessions or send input ([Web architecture](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/web/architecture.md)).
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/web/architecture.md)
+[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/architecture.md)

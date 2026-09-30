@@ -13,9 +13,9 @@
   },
   {
     "slug": "execution-model",
-    "source": "docs/web/architecture.md",
-    "title": "Execution and API architecture",
-    "description": "Applications call the public API; the administrator browser calls Web; Runtime connects to Core."
+    "source": "docs/architecture.md",
+    "title": "Architecture",
+    "description": "Core, the Runtime daemon and the native harness: the three namespaces, replaceable parts and a Session end to end."
   },
   {
     "slug": "install",

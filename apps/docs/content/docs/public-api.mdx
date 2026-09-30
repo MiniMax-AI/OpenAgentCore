@@ -147,7 +147,7 @@ ownership and platform rules.
 The console-local `GET`/`POST /console/installation/domain` surface uses the signed-in
 browser session and same-origin checks. It delegates only domain setup to the
 installer, with the server-held Core key over a private Unix socket; it is not part
-of the Agents API or Core management API. See [Web request boundaries](/execution-model#request-boundaries).
+of the Agents API or Core management API. See [Web request boundaries](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/web/architecture.md#request-boundaries).
 
 Core administration failures use the [Core error envelope](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/core-errors.md),
 including typed optional safe details and distinct console proxy rejection codes.
