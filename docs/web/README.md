@@ -6,7 +6,7 @@ Web is the administrator console of one OpenAgentCore deployment. Administrators
 
 ## Sign in
 
-[Sign in](../getting-started/install.md#sign-in-to-web) with the deployment's [Core key](../getting-started/operations.md#core-key); the console has no user accounts. The browser keeps only a session cookie, and the [console server](console-server.md) sends the Core key to Core on its behalf. A console restart or a Core key rotation signs everyone out.
+[Sign in](../getting-started/install.md#sign-in-to-web) with the deployment's [Core key](../getting-started/operations.md#core-key); the console has no user accounts. The browser keeps only a session cookie, and the [console server](console-server.md) sends the Core key to Core on its behalf; [sign-in](console-server.md#sign-in) describes how long a session lasts.
 
 Signing in opens the Overview. While any step is still to do, its **Getting started** checklist leads through four steps in any order: sandboxes ready, a default model provider, a Project with an active key, and a first Session. An optional tour of the console opens from it.
 
@@ -36,13 +36,13 @@ Missing data is shown as missing (—), never as zero. [Console API usage](conso
 | Set the default model of a harness | **System → Default model configuration**; see [default models](../configuration.md#default-models) |
 | Create a Project and issue its API keys | **Projects and keys**; see [Projects and API keys](../getting-started/operations.md#projects-and-api-keys) |
 | Issue, rotate or revoke a self-hosted executor's credential, or copy its install command | The Session's page in the **Session log**; see [self-hosted executors](../getting-started/self-hosted.md) |
-| Delete a resource, for example a leaked Credential | The resource's page, under the public deletion rules |
+| Delete a resource, for example a leaked Credential | The resource's row in its list, or its page; Files are deleted from the Files list. The public deletion rules apply |
 
 Installation creates no Project or key. Opening the console neither allocates compute nor calls a model, and an installation may have zero nodes. Web never starts a Session, sends input or cancels work; the [design principles](../design-principles.md#what-administrators-can-and-cannot-do) state what administrators can and cannot do.
 
 The deployment's sandbox backend serves hosted Sessions. An application's `self_hosted` Runtime, including one in its own E2B account, is a separate path that the sandbox configuration does not change.
 
-When Core's public address is a loopback address (`local_only`), Overview, Nodes and System warn that other machines, including nodes and remote applications, cannot reach Core, and show the configuration file and apply command that change it. The console itself stays reachable at its own address.
+A loopback public address (`local_only`) keeps nodes and remote applications from reaching Core. The console stays reachable at its own address and [warns about it](console-api-usage.md#provenance-and-monitoring).
 
 ## More
 

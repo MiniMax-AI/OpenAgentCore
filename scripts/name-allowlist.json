@@ -615,11 +615,6 @@
     "reason": "The external-client credential-leak test rejects product-secret prefixes in observed model tool output; this is a leak detector, not a runtime setting."
   },
   {
-    "path": "apps/web/.impeccable/design.json",
-    "regex": "Parsar [Ii]ndigo|Parsar\\n",
-    "reason": "The design records explicitly attribute the copied indigo palette to its original product; it is not a rendered Core product label."
-  },
-  {
     "path": "apps/web/.impeccable/surfaces/src-app-tsx.md",
     "regex": "Parsar [Ii]ndigo|Parsar\\n",
     "reason": "The design records explicitly attribute the copied indigo palette to its original product; it is not a rendered Core product label."

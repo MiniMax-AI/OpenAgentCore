@@ -34,6 +34,7 @@ The deployment's reverse proxy routes `/v1` and `/api/v1` to Core and every othe
 | `/console/config` | Yes | [Console configuration](#console-configuration) |
 | `/console/installation/domain` | Yes | [Domain setup](#domain-setup) |
 | `/core/v1/*` | Yes | [Forwarded to Core](#forwarding-to-core) |
+| `/core` and other paths under `/core/` | Yes | 404 |
 | Any other path | Yes | Static assets; a path without a file extension falls back to `index.html` |
 
 Every request except `/healthz`, `/v1` and `/api/v1` must pass these checks first:
@@ -101,7 +102,7 @@ With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution
 | `GET` | No body | The domain status |
 | `POST` | `{"hostname":"core.example.com"}`, optionally with `"confirm_public_url_change":"https://core.example.com"` | 202 and the status; the installer checks and applies the domain in the background |
 
-The status has `supported`, `state` (`unconfigured`, `checking`, `applying`, `ready` or `failed`), and nullable `public_url`, `target_url` and `message`. Installer errors use `{"error":{"code":"…","message":"…"}}`. Changing an address that nodes or executors already use returns 409 `public_url_confirmation_required` until the request confirms the new URL; pending `config.json` edits, an installation that is not applied or not running, and hand-edited generated files also return 409.
+The status has `supported`, `state` (`unconfigured`, `checking`, `applying`, `ready` or `failed`), and nullable `public_url`, `target_url` and `message`. Installer errors use `{"error":{"code":"…","message":"…"}}`. Changing an address that nodes or executors already use returns 409 `public_url_confirmation_required` until the request confirms the new URL; pending `config.json` edits, an installation that is not applied or not running, hand-edited generated files, and another installation operation holding the lock (`installation_busy`) also return 409.
 
 Without `OAC_WEB_INSTALLATION_SOCKET` (external reverse proxy installations), `GET` reports `supported: false` and `POST` returns 400 `domain_setup_unavailable`. An unreachable installer or an invalid answer returns 502 `installation_unreachable`.
 
@@ -124,7 +125,7 @@ The installer sets these variables from `config.json`; set them yourself only wh
 | `OAC_WEB_INSTALLATION_SOCKET` | unset | Absolute path of the installer's domain socket. Unset, domain setup reports unsupported |
 | `OAC_WEB_BOOTSTRAP` | `0` | `1` accepts literal-IP hosts before a domain is configured. Requires an `http://` origin and `OAC_WEB_INSTALLATION_SOCKET` |
 
-The console also reads `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT` and `OAC_LOG_ADD_SOURCE` ([configuration](../configuration.md#appendix-core-environment-without-the-installer)). An invalid value stops the console at startup with a message naming the variable. Use HTTPS for any browser that is not on the same machine.
+An invalid `OAC_WEB_*` value stops the console at startup with a message naming the variable. The console also reads `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT` and `OAC_LOG_ADD_SOURCE` ([configuration](../configuration.md#appendix-core-environment-without-the-installer)); unknown values fall back to their defaults. Use HTTPS for any browser that is not on the same machine.
 
 ## Verification
 

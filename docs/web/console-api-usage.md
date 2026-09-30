@@ -6,7 +6,7 @@ This page lists the Core routes each console page reads and writes, and how the 
 
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config`, `/console/installation/domain`, `/node-install/manifest.json` | The Core key at sign-in, then the console session cookie | Sign-in and sign-out; the node installer and node artifacts for Add node; domain setup on **System → Domain and HTTPS**; the distribution's Runtime release for Docker and microsandbox setup. See [console server](console-server.md) |
+| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config`, `/console/installation/domain`, `/node-install/manifest.json` | The Core key at sign-in, then the console session cookie; `/node-install/manifest.json` needs no sign-in | Sign-in and sign-out; the node installer and node artifacts for Add node; domain setup on **System → Domain and HTTPS**; the distribution's Runtime release for Docker and microsandbox setup. See [console server](console-server.md) |
 | Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | The Core key, added by the console server | Projects, keys, resource reads and deletion, diagnostics, executor credentials and installation commands, provenance, summaries, Core metrics, the installation, default models |
 | Sandbox administration | `/core/v1/sandbox/**` | The Core key, added by the console server | Sandbox configuration, Nodes, fleet and capacity figures on Overview and Sandbox metrics, Runtime observations of every project |
 | Agents API | `/v1/**` | Project API key | Not used. The console shows developers how to call it (see [Provenance and monitoring](#provenance-and-monitoring)) |
@@ -126,13 +126,15 @@ The console assembles several figures in the browser from bounded reads of each 
 | Agent metrics | Summary; Session lists; Turns and Items of the most recently active Sessions | 2,000 Sessions listed per project; 200 Sessions read per load, 10 Turn and 5 Item pages each, 15 s per Session and 45 s per load |
 | Sandbox metrics | Nodes and allocations; Runtime observations; hosted Sessions by ID; Runtime history | 100 hosted Sessions read per refresh; history for at most 24; refreshed every 30 s while visible |
 
-Agent metrics states these limits in its help tips:
+Agent metrics has these limits:
 
-- A request is one root Agent Turn. HTTP request counts, status codes and API latency are not available.
+- A request is one root Agent Turn; Subagent Turns and deleted Sessions are not counted. HTTP request counts, status codes and API latency are not available.
 - The model of a request comes from the Session's Agent snapshot, not from the Session's execution configuration.
-- Subagent Turns and deleted Sessions are not counted. Busy projects exceed the Session caps, so long ranges can be partial; the page names the projects that were cut short.
-- Usage by API key counts Sessions created in the range by their creating key.
-- The console accepts Turn times up to 15 minutes after the end of the range, to allow for clock differences between the browser and Core.
+- Busy projects exceed the Session caps, so long ranges can be partial.
+- Usage by API key counts Sessions created in the range by their creating key; Sessions without a creation record count as Unknown.
+- Turn times up to 15 minutes after the end of the range are accepted, to allow for clock differences between the browser and Core.
+
+Its help tips and coverage notes state what a request is and what is not counted, where the model comes from, which projects were cut short or Sessions skipped, and how usage by key is grouped. They do not mention HTTP request metrics or the clock allowance.
 
 ## Not consumed
 

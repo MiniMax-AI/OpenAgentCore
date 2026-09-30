@@ -6,7 +6,7 @@
 
 - Call Core only through `AdminClient`, `SandboxAdminClient` and `CoreMetricsClient` from [`packages/agents-client`](../../packages/agents-client/README.md). The browser calls same-origin `/console/*` and `/core/v1/*` routes and never `/v1` or `/api/v1`. [Console API usage](../../docs/web/console-api-usage.md) lists each page's routes and read bounds; update it with any change to them.
 - Keep API keys, the Core key and provider credentials out of `VITE_*` variables, browser storage, URLs, logs and source files.
-- Build pages from the shared components in `src/components` and the tokens in `src/styles`, as [DESIGN.md](DESIGN.md) describes.
+- Build pages from the shared components in `src/components` and the design tokens: the Beautiful UI base tokens in `src/app/beautifui/foundation.css` and the console's own in `src/styles`, as [DESIGN.md](DESIGN.md) describes.
 - Put copy in the i18n resources; see [Web internationalization](src/i18n/README.md).
 
 ## Run the console locally
@@ -23,7 +23,7 @@ OAC_WEB_DEV_PROXY_TARGET=http://127.0.0.1:18092 pnpm dev:web
 
 Open `http://127.0.0.1:4173` and sign in with the fixture-only key `fixture-core-key-3f9a2c71`.
 
-`pnpm dev:web` runs Vite on `127.0.0.1:4173` and proxies `/console`, `/node-install` and `/core/v1` to `OAC_WEB_DEV_PROXY_TARGET` (default `http://127.0.0.1:8091`). Vite reads the setting from the environment or the repository's `.env` file; it never reaches browser code. The target must serve the console routes. `apps/web/e2e/fixture-console.mjs` is a synthetic console service with deterministic data; `AGENTS_FIXTURE_PORT` changes its port (default 18092).
+`pnpm dev:web` runs Vite on `127.0.0.1:4173` and proxies `/console`, `/node-install` and `/core/v1` to `OAC_WEB_DEV_PROXY_TARGET` (default `http://127.0.0.1:8091`). Vite reads the setting from the environment or the repository's `.env` file; it never reaches browser code. The target must serve the console routes. The development server also forwards `/v1` to the same target for local tooling such as `scripts/core-doctor.mjs`, adding a bearer token from `OAC_WEB_DEV_PROXY_TOKEN` or from the private file `OAC_WEB_DEV_PROXY_TOKEN_FILE` (default `~/.oac/dev/web-token`, used when it exists); the console itself never calls `/v1`. `apps/web/e2e/fixture-console.mjs` is a synthetic console service with deterministic data; `AGENTS_FIXTURE_PORT` changes its port (default 18092).
 
 ## Checks
 
@@ -36,7 +36,7 @@ pnpm --filter @agents-core-web/web build
 pnpm test:web:acceptance
 ```
 
-`pnpm test:web:acceptance` runs the Playwright tests in `apps/web/e2e` in Chrome against the fixture console. Each test also checks that the browser sent nothing to `/v1` and no `Authorization` header. The tests do not exercise `services/core-console` or a real Core; the console server has its own Go tests. `make check-web` runs all of these; [CONTRIBUTING.md](../../CONTRIBUTING.md) lists the repository's required checks.
+`pnpm test:web:acceptance` runs the Playwright tests in `apps/web/e2e` in Chrome against the fixture console. After each test, every spec except `domain.spec.ts` checks that the browser sent nothing to `/v1` and no `Authorization` header. The tests do not exercise `services/core-console` or a real Core; the console server has its own Go tests. `make check-web` runs all of these; [CONTRIBUTING.md](../../CONTRIBUTING.md) lists the repository's required checks.
 
 ## README screenshots
 
