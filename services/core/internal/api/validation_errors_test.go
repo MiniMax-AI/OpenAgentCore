@@ -12,6 +12,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
@@ -49,14 +50,14 @@ func (s *validationStore) CreateSession(_ context.Context, tenant string, input 
 	return store.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, nil
 }
 
-func (s *validationStore) CreateEnvironmentTemplate(context.Context, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error) {
+func (s *validationStore) CreateEnvironmentTemplate(context.Context, environmenttemplates.CreateCommand) (environmenttemplates.Template, error) {
 	s.writes++
-	return store.EnvironmentTemplate{ID: uuid.NewString(), NetworkAccess: "enabled"}, nil
+	return environmenttemplates.Template{ID: uuid.NewString(), NetworkAccess: "enabled"}, nil
 }
 
-func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, _, id string, input store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error) {
+func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, command environmenttemplates.UpdateCommand) (environmenttemplates.Template, error) {
 	s.writes++
-	return store.EnvironmentTemplate{ID: id, NetworkAccess: input.NetworkAccess, AllowedDomains: input.AllowedDomains}, nil
+	return environmenttemplates.Template{ID: command.TemplateID, NetworkAccess: command.Input.NetworkAccess, AllowedDomains: command.Input.AllowedDomains}, nil
 }
 
 // serve takes every write from the handler, and the Worker admits Sessions
@@ -67,7 +68,7 @@ func (s *validationStore) serve(d *Dependencies, f *testFakes) {
 	f.agents.create, f.agents.update = s.CreateAgent, s.UpdateAgent
 	f.vaults.createVault = s.CreateVault
 	f.sessions.getSession, f.sessions.updateSessionMetadata = nil, s.UpdateSessionMetadata
-	f.environmentTemplates.createEnvironmentTemplate, f.environmentTemplates.updateEnvironmentTemplate = s.CreateEnvironmentTemplate, s.UpdateEnvironmentTemplate
+	f.environmentTemplates.create, f.environmentTemplates.update = s.CreateEnvironmentTemplate, s.UpdateEnvironmentTemplate
 }
 
 func validationHandler(t *testing.T) (http.Handler, *validationStore) {

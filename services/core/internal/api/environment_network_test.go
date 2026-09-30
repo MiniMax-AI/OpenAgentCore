@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -15,7 +16,7 @@ func TestRestrictedNetworkPublicMetadataPreservesInput(t *testing.T) {
 	if err != nil || !in.SetNetwork || !reflect.DeepEqual(in.AllowedDomains, domains) {
 		t.Fatal("template input changed", in, err)
 	}
-	response := templateResponse(store.EnvironmentTemplate{NetworkAccess: in.NetworkAccess, AllowedDomains: in.AllowedDomains})
+	response := templateResponse(environmenttemplates.Template{NetworkAccess: in.NetworkAccess, AllowedDomains: in.AllowedDomains})
 	if response.Network.Access != "restricted" || !reflect.DeepEqual(response.Network.AllowedDomains, domains) {
 		t.Fatal("template response changed", response.Network)
 	}
@@ -46,8 +47,7 @@ func TestRestrictedNetworkPublicMetadataPreservesInput(t *testing.T) {
 }
 
 func TestTemplateNetworkOverridesOnlyNarrowAndRetainIntent(t *testing.T) {
-	lookup := &templateLookupStore{network: "restricted", domains: []string{"Example.com", "api.example.com", "example.com"}}
-	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
+	lookup := &templateLookup{network: "restricted", domains: []string{"Example.com", "api.example.com", "example.com"}}
 	for _, test := range []struct {
 		name, override string
 		want           []string
@@ -75,7 +75,7 @@ func TestTemplateNetworkOverridesOnlyNarrowAndRetainIntent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = h.resolveTemplateEnvironment(t.Context(), "tenant", &input)
+			err = applyTemplateEnvironment(&input, lookup.resolved())
 			if test.invalid {
 				if err == nil {
 					t.Fatal("template authority widened")

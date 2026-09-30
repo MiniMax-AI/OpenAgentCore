@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -10,17 +9,8 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 )
-
-type compositionTemplateStore struct {
-	template store.EnvironmentTemplate
-	files    []environmentconfig.InitialFile
-}
-
-func (s *compositionTemplateStore) ResolveEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error) {
-	return s.template, s.files, nil
-}
 
 func compositionRequest(t *testing.T, fields string) sessionRequest {
 	t.Helper()
@@ -36,14 +26,15 @@ func compositionRequest(t *testing.T, fields string) sessionRequest {
 	return input
 }
 
-func compositionFixture() *compositionTemplateStore {
-	return &compositionTemplateStore{
-		template: store.EnvironmentTemplate{NetworkAccess: "enabled", Initialization: environmentconfig.Setup{
+func compositionFixture() *environmenttemplates.Resolved {
+	return &environmenttemplates.Resolved{
+		Template: environmenttemplates.Template{NetworkAccess: "enabled"},
+		Setup: environmentconfig.Setup{
 			Env:      map[string]string{"TEMPLATE": "private-template-env", "SHARED": "private-old-value"},
 			Commands: []environmentconfig.SetupCommand{{Command: "printf private-template-command"}},
 			Packages: v1.EnvironmentPackages{NPM: []string{"semver@7.7.2"}, Python: []string{"packaging==25.0"}},
-		}},
-		files: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/template", Data: []byte("private-template-bytes")}},
+		},
+		Files: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/template", Data: []byte("private-template-bytes")}},
 	}
 }
 
@@ -75,7 +66,7 @@ func TestTemplateInlineCompositionRules(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			lookup, expected := compositionFixture(), compositionFixture()
-			wantSetup, wantFiles := expected.template.Initialization, expected.files
+			wantSetup, wantFiles := expected.Setup, expected.Files
 			if test.change != nil {
 				test.change(&wantSetup, &wantFiles)
 			}
@@ -84,10 +75,9 @@ func TestTemplateInlineCompositionRules(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			beforeTemplate, _ := json.Marshal(lookup.template)
-			beforeFiles, _ := json.Marshal(lookup.files)
-			h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
-			if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil {
+			beforeTemplate, _ := json.Marshal(lookup.Setup)
+			beforeFiles, _ := json.Marshal(lookup.Files)
+			if err := applyTemplateEnvironment(&input, *lookup); err != nil {
 				t.Fatal(err)
 			}
 			// JSON omitempty normalizes nil/empty private slices without erasing public lists.
@@ -111,8 +101,8 @@ func TestTemplateInlineCompositionRules(t *testing.T) {
 				}
 			}
 			afterIntent, _ := sessionCreationRequest(input, nil)
-			afterTemplate, _ := json.Marshal(lookup.template)
-			afterFiles, _ := json.Marshal(lookup.files)
+			afterTemplate, _ := json.Marshal(lookup.Setup)
+			afterFiles, _ := json.Marshal(lookup.Files)
 			if !bytes.Equal(intent, afterIntent) || !bytes.Equal(beforeTemplate, afterTemplate) || !bytes.Equal(beforeFiles, afterFiles) {
 				t.Fatal("composition changed caller intent or template")
 			}
@@ -127,10 +117,9 @@ func TestTemplateCompositionDoesNotAliasChangedInputs(t *testing.T) {
 		originalSetup, originalFiles := input.initialization, input.initialFiles
 		beforeInline, _ := json.Marshal(originalSetup)
 		beforeInlineFiles, _ := json.Marshal(originalFiles)
-		beforeTemplate, _ := json.Marshal(lookup.template)
-		beforeFiles, _ := json.Marshal(lookup.files)
-		h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
-		if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil {
+		beforeTemplate, _ := json.Marshal(lookup.Setup)
+		beforeFiles, _ := json.Marshal(lookup.Files)
+		if err := applyTemplateEnvironment(&input, *lookup); err != nil {
 			t.Fatal(err)
 		}
 		input.initialization.Env["SHARED"] = "changed"
@@ -139,8 +128,8 @@ func TestTemplateCompositionDoesNotAliasChangedInputs(t *testing.T) {
 		input.initialFiles[0].Path = "/workspace/changed"
 		afterInline, _ := json.Marshal(originalSetup)
 		afterInlineFiles, _ := json.Marshal(originalFiles)
-		afterTemplate, _ := json.Marshal(lookup.template)
-		afterFiles, _ := json.Marshal(lookup.files)
+		afterTemplate, _ := json.Marshal(lookup.Setup)
+		afterFiles, _ := json.Marshal(lookup.Files)
 		if !bytes.Equal(beforeInline, afterInline) || !bytes.Equal(beforeInlineFiles, afterInlineFiles) || !bytes.Equal(beforeTemplate, afterTemplate) || !bytes.Equal(beforeFiles, afterFiles) {
 			t.Fatal("composed maps/slices alias caller or template")
 		}
@@ -150,18 +139,17 @@ func TestTemplateCompositionDoesNotAliasChangedInputs(t *testing.T) {
 func TestTemplateCompositionRevalidatesCombinedSetupLimit(t *testing.T) {
 	for _, field := range []string{"env", "packages"} {
 		lookup := compositionFixture()
-		lookup.template.Initialization.Env = map[string]string{"TEMPLATE": strings.Repeat("a", 300<<10)}
+		lookup.Setup.Env = map[string]string{"TEMPLATE": strings.Repeat("a", 300<<10)}
 		var override any = map[string]any{"INLINE": strings.Repeat("b", 300<<10)}
 		if field == "packages" {
 			override = map[string]any{"python": []string{strings.Repeat("b", 300<<10)}}
 		}
 		raw, _ := json.Marshal(override)
 		input := compositionRequest(t, `,"`+field+`":`+string(raw))
-		if lookup.template.Initialization.Validate() != nil || input.initialization.Validate() != nil {
+		if lookup.Setup.Validate() != nil || input.initialization.Validate() != nil {
 			t.Fatal("each side must be valid independently")
 		}
-		h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
-		if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err == nil {
+		if err := applyTemplateEnvironment(&input, *lookup); err == nil {
 			t.Fatalf("combined setup limit bypassed for %s", field)
 		}
 	}
@@ -191,15 +179,14 @@ func TestTemplateFilesReplacementDoesNotCombineCounts(t *testing.T) {
 	for i := range files {
 		files[i] = environmentconfig.InitialFile{Type: "inline", Path: "/workspace/" + strings.Repeat("a", i+1)}
 	}
-	lookup.files = files
+	lookup.Files = files
 	wire := make([]map[string]string, len(files))
 	for i, file := range files {
 		wire[i] = map[string]string{"type": "inline", "path": file.Path, "data": ""}
 	}
 	raw, _ := json.Marshal(wire)
 	input := compositionRequest(t, `,"files":`+string(raw))
-	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
-	if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil || len(input.initialFiles) != 30 {
+	if err := applyTemplateEnvironment(&input, *lookup); err != nil || len(input.initialFiles) != 30 {
 		t.Fatalf("file lists were combined: count=%d err=%v", len(input.initialFiles), err)
 	}
 }

@@ -54,6 +54,8 @@ type Dependencies struct {
 	RuntimeObservations  RuntimeObservations
 	RuntimeHistory       RuntimeHistory
 
+	EnvironmentTemplatesReader EnvironmentTemplatesReader
+
 	// Execution is nil when this Core runs without a Runtime gateway, and so
 	// without an execution Worker. Work that needs one then answers 503
 	// execution_unavailable.
@@ -116,8 +118,9 @@ func (d Dependencies) validate() error {
 		field{"Vaults", d.Vaults}, field{"VaultsReader", d.VaultsReader},
 		field{"ModelProviders", d.ModelProviders}, field{"Skills", d.Skills},
 		field{"Files", d.Files}, field{"FilesReader", d.FilesReader},
+		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"EnvironmentTemplatesReader", d.EnvironmentTemplatesReader},
 		field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},
-		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"Sessions", d.Sessions},
+		field{"Sessions", d.Sessions},
 		field{"SessionEvents", d.SessionEvents}, field{"SessionHistory", d.SessionHistory}, field{"Subagents", d.Subagents},
 		field{"Artifacts", d.Artifacts}, field{"SessionAdmin", d.SessionAdmin}, field{"Environments", d.Environments},
 		field{"ExecutorConnections", d.ExecutorConnections}, field{"Admin", d.Admin}, field{"AdminAudit", d.AdminAudit}, field{"WriteAudit", d.WriteAudit},

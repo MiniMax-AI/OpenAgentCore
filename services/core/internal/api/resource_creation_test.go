@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/google/uuid"
 )
 
@@ -17,14 +17,14 @@ func (*resourceCreationStore) CreateAgent(_ context.Context, command agents.Crea
 	return agents.Agent{ID: uuid.NewString(), TenantID: command.TenantID, Configuration: command.Configuration, Metadata: command.Metadata}, nil
 }
 
-func (*resourceCreationStore) CreateEnvironmentTemplate(context.Context, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error) {
-	return store.EnvironmentTemplate{ID: uuid.NewString(), NetworkAccess: "enabled"}, nil
+func (*resourceCreationStore) CreateEnvironmentTemplate(context.Context, environmenttemplates.CreateCommand) (environmenttemplates.Template, error) {
+	return environmenttemplates.Template{ID: uuid.NewString(), NetworkAccess: "enabled"}, nil
 }
 
 func TestAgentAndTemplateCreationStatus(t *testing.T) {
 	s := &resourceCreationStore{}
 	h, _, _ := testHandler(t, func(_ *Dependencies, f *testFakes) {
-		f.agents.create, f.environmentTemplates.createEnvironmentTemplate = s.CreateAgent, s.CreateEnvironmentTemplate
+		f.agents.create, f.environmentTemplates.create = s.CreateAgent, s.CreateEnvironmentTemplate
 	})
 	for _, tc := range []struct{ path, body, object string }{
 		{"/v1/agents", `{"model":"resource-model"}`, "agent"},

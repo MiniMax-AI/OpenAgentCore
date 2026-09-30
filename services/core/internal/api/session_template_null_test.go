@@ -28,15 +28,14 @@ func TestTemplateNullSelectionRetainsInheritedCapabilitiesAndPolicy(t *testing.T
 		{name: "clear only directories", fields: `,"skills":null,"plugins":null,"capability_directories":[]`, clearDirectories: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			lookup := &templateLookupStore{network: "restricted", domains: []string{"example.com"}, skills: template.Initialization.Skills, plugins: template.Initialization.Plugins, directories: template.Initialization.CapabilityDirectories}
+			lookup := &templateLookup{network: "restricted", domains: []string{"example.com"}, skills: template.Setup.Skills, plugins: template.Setup.Plugins, directories: template.Setup.CapabilityDirectories}
 			input := compositionRequest(t, test.fields)
 			intent, err := sessionCreationRequest(input, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			before, _ := json.Marshal(template.Initialization)
-			h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
-			if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil {
+			before, _ := json.Marshal(template.Setup)
+			if err := applyTemplateEnvironment(&input, lookup.resolved()); err != nil {
 				t.Fatal(err)
 			}
 			if input.Environment.Network.Access != "restricted" || !reflect.DeepEqual(input.Environment.Network.AllowedDomains, lookup.domains) {
@@ -46,21 +45,21 @@ func TestTemplateNullSelectionRetainsInheritedCapabilitiesAndPolicy(t *testing.T
 				if len(input.initialization.Skills) != 0 {
 					t.Fatal("skills not cleared")
 				}
-			} else if !reflect.DeepEqual(input.initialization.Skills, template.Initialization.Skills) {
+			} else if !reflect.DeepEqual(input.initialization.Skills, template.Setup.Skills) {
 				t.Fatal("skills not inherited")
 			}
 			if test.clearPlugins {
 				if len(input.initialization.Plugins) != 0 {
 					t.Fatal("plugins not cleared")
 				}
-			} else if !reflect.DeepEqual(input.initialization.Plugins, template.Initialization.Plugins) {
+			} else if !reflect.DeepEqual(input.initialization.Plugins, template.Setup.Plugins) {
 				t.Fatal("plugins not inherited")
 			}
 			if test.clearDirectories {
 				if len(input.initialization.CapabilityDirectories) != 0 {
 					t.Fatal("directories not cleared")
 				}
-			} else if !reflect.DeepEqual(input.initialization.CapabilityDirectories, template.Initialization.CapabilityDirectories) {
+			} else if !reflect.DeepEqual(input.initialization.CapabilityDirectories, template.Setup.CapabilityDirectories) {
 				t.Fatal("directories not inherited")
 			}
 			if !reflect.DeepEqual(input.Environment.Skills, skillResponse(input.initialization.SkillMetadata())) || !reflect.DeepEqual(input.Environment.Plugins, pluginResponse(input.initialization.PluginMetadata())) || len(input.Environment.CapabilityDirectories) != len(input.initialization.CapabilityDirectories) {
@@ -72,7 +71,7 @@ func TestTemplateNullSelectionRetainsInheritedCapabilitiesAndPolicy(t *testing.T
 					t.Fatal("private initialization leaked to public metadata")
 				}
 			}
-			after, _ := json.Marshal(template.Initialization)
+			after, _ := json.Marshal(template.Setup)
 			afterIntent, _ := sessionCreationRequest(input, nil)
 			if !bytes.Equal(before, after) || !bytes.Equal(intent, afterIntent) {
 				t.Fatal("selection mutated template or caller intent")
@@ -87,9 +86,9 @@ func TestTemplateNullSelectionDoesNotBypassValidation(t *testing.T) {
 			t.Fatal("invalid nonnull override accepted", fields)
 		}
 	}
-	h := templateHandler(t, (&templateLookupStore{network: "disabled"}).ResolveEnvironmentTemplate)
+	lookup := &templateLookup{network: "disabled"}
 	input := compositionRequest(t, `,"network":{"access":"enabled"},"skills":null,"plugins":null,"capability_directories":null`)
-	if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err == nil {
+	if err := applyTemplateEnvironment(&input, lookup.resolved()); err == nil {
 		t.Fatal("capability null overrides bypassed network narrowing")
 	}
 }

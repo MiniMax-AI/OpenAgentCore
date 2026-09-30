@@ -13,10 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Store) sealEnvironmentSetup(tenant, resource, id, field string, input any, empty bool) ([]byte, error) {
-	if empty {
-		return nil, nil
-	}
+func (s *Store) sealEnvironmentSetup(tenant, resource, id, field string, input any) ([]byte, error) {
 	plaintext, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
@@ -49,7 +46,7 @@ func (s *Store) saveEnvironmentSetup(ctx context.Context, q *sqlc.Queries, tenan
 	if err != nil {
 		return err
 	}
-	encrypted, err := s.sealEnvironmentSetup(uuid.UUID(owner.Bytes).String(), "session", uuid.UUID(session.Bytes).String(), "initialization", setup, false)
+	encrypted, err := s.sealEnvironmentSetup(uuid.UUID(owner.Bytes).String(), "session", uuid.UUID(session.Bytes).String(), "initialization", setup)
 	if err != nil {
 		return err
 	}
@@ -76,17 +73,4 @@ func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string
 		return result, ErrInvalidInput
 	}
 	return result, nil
-}
-
-func (s *Store) sealTemplateSetup(tenant, id string, setup environmentconfig.Setup) ([]byte, []byte, []byte, error) {
-	packages, err := json.Marshal(setup.PackageMetadata())
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	env, err := s.sealEnvironmentSetup(tenant, "environment_template", id, "env", setup.Env, len(setup.Env) == 0)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	commands, err := s.sealEnvironmentSetup(tenant, "environment_template", id, "setup_commands", setup.Commands, len(setup.Commands) == 0)
-	return packages, env, commands, err
 }

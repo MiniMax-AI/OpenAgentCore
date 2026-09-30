@@ -50,40 +50,13 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 		t.Fatal(err)
 	}
 	initial := []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a/data", Data: canary}, {Type: "file_id", Path: "/workspace/b", FileID: upload.ID}}
-	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetFiles: true, Files: initial})
-	if err != nil {
-		t.Fatal(err)
-	}
-	public, err := New(pool).GetEnvironmentTemplate(t.Context(), tenant, template.ID)
-	if err != nil || len(public.Files) != 2 {
-		t.Fatal("public read depends on secret key", err)
-	}
-	if _, _, err := s.ResolveEnvironmentTemplate(t.Context(), foreign, template.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatal("foreign template resolved", err)
-	}
-	if _, err := s.UpdateEnvironmentTemplate(t.Context(), strings.ToUpper(tenant), strings.ToUpper(template.ID), EnvironmentTemplateInput{SetFiles: true, Files: initial}); err != nil {
-		t.Fatal("noncanonical update", err)
-	}
-	if _, _, err := s.ResolveEnvironmentTemplate(t.Context(), strings.ToUpper(tenant), strings.ToUpper(template.ID)); err != nil {
-		t.Fatal("noncanonical resolution", err)
-	}
-	_, resolved, err := s.ResolveEnvironmentTemplate(t.Context(), tenant, template.ID)
-	if err != nil || !bytes.Equal(resolved[0].Data, canary) {
-		t.Fatal("template snapshot", err)
-	}
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: resolved}
+	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: initial}
 	session, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bytes.Contains(session.Configuration, canary) || bytes.Contains(session.Configuration, []byte(`"data"`)) {
 		t.Fatal("plaintext in Session configuration")
-	}
-	if _, err := s.UpdateEnvironmentTemplate(t.Context(), tenant, template.ID, EnvironmentTemplateInput{SetFiles: true}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.DeleteEnvironmentTemplate(t.Context(), tenant, template.ID); err != nil {
-		t.Fatal(err)
 	}
 	if err := sourceFiles.Delete(t.Context(), files.DeleteCommand{TenantID: tenant, FileID: upload.ID}); err != nil {
 		t.Fatal(err)

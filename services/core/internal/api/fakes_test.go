@@ -11,7 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
@@ -320,55 +320,59 @@ func (f *fakeDeploymentChanges) CancelSandboxReset(a0 context.Context, a1 uint64
 }
 
 type fakeEnvironmentTemplates struct {
-	t                          testing.TB
-	resolveEnvironmentTemplate func(context.Context, string, string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error)
-	createEnvironmentTemplate  func(context.Context, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error)
-	getEnvironmentTemplate     func(context.Context, string, string) (store.EnvironmentTemplate, error)
-	updateEnvironmentTemplate  func(context.Context, string, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error)
-	deleteEnvironmentTemplate  func(context.Context, string, string) (string, error)
-	listEnvironmentTemplates   func(context.Context, string, string, int, bool) (store.EnvironmentTemplatePage, error)
+	t      testing.TB
+	create func(context.Context, environmenttemplates.CreateCommand) (environmenttemplates.Template, error)
+	update func(context.Context, environmenttemplates.UpdateCommand) (environmenttemplates.Template, error)
+	delete func(context.Context, environmenttemplates.DeleteCommand) (string, error)
 }
 
-func (f *fakeEnvironmentTemplates) ResolveEnvironmentTemplate(a0 context.Context, a1 string, a2 string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error) {
-	if f.resolveEnvironmentTemplate == nil {
-		unexpectedCall(f.t, "ResolveEnvironmentTemplate")
+func (f *fakeEnvironmentTemplates) Create(a0 context.Context, a1 environmenttemplates.CreateCommand) (environmenttemplates.Template, error) {
+	if f.create == nil {
+		unexpectedCall(f.t, "Create")
 	}
-	return f.resolveEnvironmentTemplate(a0, a1, a2)
+	return f.create(a0, a1)
 }
 
-func (f *fakeEnvironmentTemplates) CreateEnvironmentTemplate(a0 context.Context, a1 string, a2 store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error) {
-	if f.createEnvironmentTemplate == nil {
-		unexpectedCall(f.t, "CreateEnvironmentTemplate")
+func (f *fakeEnvironmentTemplates) Update(a0 context.Context, a1 environmenttemplates.UpdateCommand) (environmenttemplates.Template, error) {
+	if f.update == nil {
+		unexpectedCall(f.t, "Update")
 	}
-	return f.createEnvironmentTemplate(a0, a1, a2)
+	return f.update(a0, a1)
 }
 
-func (f *fakeEnvironmentTemplates) GetEnvironmentTemplate(a0 context.Context, a1 string, a2 string) (store.EnvironmentTemplate, error) {
-	if f.getEnvironmentTemplate == nil {
-		unexpectedCall(f.t, "GetEnvironmentTemplate")
+func (f *fakeEnvironmentTemplates) Delete(a0 context.Context, a1 environmenttemplates.DeleteCommand) (string, error) {
+	if f.delete == nil {
+		unexpectedCall(f.t, "Delete")
 	}
-	return f.getEnvironmentTemplate(a0, a1, a2)
+	return f.delete(a0, a1)
 }
 
-func (f *fakeEnvironmentTemplates) UpdateEnvironmentTemplate(a0 context.Context, a1 string, a2 string, a3 store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error) {
-	if f.updateEnvironmentTemplate == nil {
-		unexpectedCall(f.t, "UpdateEnvironmentTemplate")
-	}
-	return f.updateEnvironmentTemplate(a0, a1, a2, a3)
+type fakeEnvironmentTemplatesReader struct {
+	t       testing.TB
+	get     func(context.Context, string, string) (environmenttemplates.Template, error)
+	list    func(context.Context, string, environmenttemplates.ListQuery) (environmenttemplates.Page, error)
+	resolve func(context.Context, string, string) (environmenttemplates.Resolved, error)
 }
 
-func (f *fakeEnvironmentTemplates) DeleteEnvironmentTemplate(a0 context.Context, a1 string, a2 string) (string, error) {
-	if f.deleteEnvironmentTemplate == nil {
-		unexpectedCall(f.t, "DeleteEnvironmentTemplate")
+func (f *fakeEnvironmentTemplatesReader) Get(a0 context.Context, a1 string, a2 string) (environmenttemplates.Template, error) {
+	if f.get == nil {
+		unexpectedCall(f.t, "Get")
 	}
-	return f.deleteEnvironmentTemplate(a0, a1, a2)
+	return f.get(a0, a1, a2)
 }
 
-func (f *fakeEnvironmentTemplates) ListEnvironmentTemplates(a0 context.Context, a1 string, a2 string, a3 int, a4 bool) (store.EnvironmentTemplatePage, error) {
-	if f.listEnvironmentTemplates == nil {
-		unexpectedCall(f.t, "ListEnvironmentTemplates")
+func (f *fakeEnvironmentTemplatesReader) List(a0 context.Context, a1 string, a2 environmenttemplates.ListQuery) (environmenttemplates.Page, error) {
+	if f.list == nil {
+		unexpectedCall(f.t, "List")
 	}
-	return f.listEnvironmentTemplates(a0, a1, a2, a3, a4)
+	return f.list(a0, a1, a2)
+}
+
+func (f *fakeEnvironmentTemplatesReader) Resolve(a0 context.Context, a1 string, a2 string) (environmenttemplates.Resolved, error) {
+	if f.resolve == nil {
+		unexpectedCall(f.t, "Resolve")
+	}
+	return f.resolve(a0, a1, a2)
 }
 
 type fakeEnvironmentWorkspaces struct {

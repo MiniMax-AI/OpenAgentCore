@@ -45,7 +45,6 @@ func TestWriteAuditStandaloneResourceTransactions(t *testing.T) {
 	}
 	archive := skillArchive(t, "audit-private-archive")
 	for _, name := range []string{
-		"template_create", "template_update", "template_delete",
 		"skill_create", "skill_upload_version", "skill_update_default", "skill_delete", "version_delete", "version_delete_last",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -53,7 +52,7 @@ func TestWriteAuditStandaloneResourceTransactions(t *testing.T) {
 			mutation := prepareResourceAuditMutation(t, s, tenant, name, archive)
 			snapshot := func() map[string]string {
 				result := make(map[string]string)
-				for _, table := range []string{"agents", "environment_templates", "skills", "skill_versions", "write_audit_operations", "write_audit_owners"} {
+				for _, table := range []string{"agents", "skills", "skill_versions", "write_audit_operations", "write_audit_owners"} {
 					query := "SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text)::text, '[]') FROM " + pgx.Identifier{table}.Sanitize() + " r WHERE tenant_id=$1"
 					var value string
 					if err := pool.QueryRow(ctx, query, tenant).Scan(&value); err != nil {
@@ -111,24 +110,6 @@ func prepareResourceAuditMutation(t *testing.T, s *Store, tenant, name string, a
 		if err != nil {
 			t.Fatal(err)
 		}
-	}
-	if strings.HasPrefix(name, "template_") {
-		if name == "template_create" {
-			return resourceAuditMutation{action: "create", kind: "environment_template", owners: 1, run: func(ctx context.Context) (string, error) {
-				v, e := s.CreateEnvironmentTemplate(ctx, tenant, EnvironmentTemplateInput{})
-				return v.ID, e
-			}}
-		}
-		v, err := s.CreateEnvironmentTemplate(ctx, tenant, EnvironmentTemplateInput{})
-		must(err)
-		if name == "template_update" {
-			return resourceAuditMutation{action: "update", kind: "environment_template", run: func(ctx context.Context) (string, error) {
-				label := "replacement"
-				v, e := s.UpdateEnvironmentTemplate(ctx, tenant, v.ID, EnvironmentTemplateInput{SetName: true, Name: &label})
-				return v.ID, e
-			}}
-		}
-		return resourceAuditMutation{action: "delete", kind: "environment_template", run: func(ctx context.Context) (string, error) { return s.DeleteEnvironmentTemplate(ctx, tenant, v.ID) }}
 	}
 	if strings.HasPrefix(name, "skill_") || strings.HasPrefix(name, "version_") {
 		if name == "skill_create" {

@@ -18,9 +18,8 @@ func TestHostedStructuredConfigurationQualification(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		lookup := &templateLookupStore{network: "enabled", skills: template.Initialization.Skills,
-			plugins: template.Initialization.Plugins, directories: template.Initialization.CapabilityDirectories}
-		h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
+		lookup := &templateLookup{network: "enabled", skills: template.Setup.Skills,
+			plugins: template.Setup.Plugins, directories: template.Setup.CapabilityDirectories}
 		for _, environment := range []string{
 			`{"type":"openai_hosted",` + fields + `}`,
 			`{"type":"openai_hosted","environment_template_id":"saved"}`,
@@ -34,8 +33,10 @@ func TestHostedStructuredConfigurationQualification(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil {
-				t.Fatal(err)
+			if input.templateID != "" {
+				if err := applyTemplateEnvironment(&input, lookup.resolved()); err != nil {
+					t.Fatal(err)
+				}
 			}
 			configuration, err := resolve(input, "tenant", "key", nil)
 			if err != nil {

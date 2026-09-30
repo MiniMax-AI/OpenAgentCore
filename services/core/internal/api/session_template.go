@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"maps"
 	"slices"
@@ -10,6 +9,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -47,14 +47,12 @@ func decodePreparationTemplate(raw json.RawMessage, extension bool) (*v1.Environ
 	return environment, id, raw, err
 }
 
-func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string, input *sessionRequest) error {
-	if input.templateID == "" {
-		return nil
-	}
-	template, files, err := h.EnvironmentTemplates.ResolveEnvironmentTemplate(ctx, tenant, input.templateID)
-	if err != nil {
-		return err
-	}
+// applyTemplateEnvironment composes the Session environment from the resolved
+// Template and the fields the request supplies. Each non-null request field
+// replaces the Template's, env merges key by key and the network may only
+// narrow the Template's policy.
+func applyTemplateEnvironment(input *sessionRequest, resolved environmenttemplates.Resolved) error {
+	template, files := resolved.Template, resolved.Files
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(input.templateEnvironment, &fields) != nil {
 		return store.ErrInvalidInput
@@ -71,17 +69,17 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	}
 	skills := input.initialization.Skills
 	if !templateFieldOverride(fields, "skills") {
-		skills = template.Initialization.Skills
+		skills = resolved.Setup.Skills
 	}
 	plugins := input.initialization.Plugins
 	if !templateFieldOverride(fields, "plugins") {
-		plugins = template.Initialization.Plugins
+		plugins = resolved.Setup.Plugins
 	}
 	directories := input.initialization.CapabilityDirectories
 	if !templateFieldOverride(fields, "capability_directories") {
-		directories = template.Initialization.CapabilityDirectories
+		directories = resolved.Setup.CapabilityDirectories
 	}
-	setup := template.Initialization
+	setup := resolved.Setup
 	setup.Env = maps.Clone(setup.Env)
 	if len(input.initialization.Env) > 0 {
 		if setup.Env == nil {

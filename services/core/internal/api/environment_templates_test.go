@@ -3,14 +3,39 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 )
+
+func TestEnvironmentTemplatesErrors(t *testing.T) {
+	for _, test := range []struct {
+		err    error
+		status int
+		body   string
+	}{
+		{environmenttemplates.ErrNotFound, 404, "not_found_error"},
+		{fmt.Errorf("create: %w", environmenttemplates.ErrInvalidInput), 400, invalidInputMessage},
+		{textvalue.ErrUnstorable, 400, unstorableTextMessage},
+		{credentialcrypto.ErrUnavailable, 503, "credential_storage_unavailable"},
+		{errors.New("template-canary"), 500, "internal_error"},
+	} {
+		response := httptest.NewRecorder()
+		writeEnvironmentTemplatesError(response, httptest.NewRequest(http.MethodPost, "/v1/agents/environments/templates", nil), test.err)
+		if response.Code != test.status || !strings.Contains(response.Body.String(), test.body) || strings.Contains(response.Body.String(), "canary") {
+			t.Errorf("%v: %d %s", test.err, response.Code, response.Body)
+		}
+	}
+}
 
 func TestTemplateConfigurationRejectsUnqualifiedInputs(t *testing.T) {
 	for _, raw := range []string{`{"network":{"access":"restricted","allowed_domains":["Example.com","example.com"]}}`, `{}`, `{"packages":{}}`, `{"packages":{"npm":null}}`, `{"name":null,"network":null}`, `{"name":"保存","network":{"access":"disabled"},"env":{},"files":[],"setup_commands":[],"packages":{"npm":null}}`} {
@@ -35,31 +60,43 @@ func TestTemplateConfigurationRejectsUnqualifiedInputs(t *testing.T) {
 	}
 }
 
-type templateLookupStore struct {
+// templateLookup is a resolved Template with the given network policy and
+// installations.
+type templateLookup struct {
 	network     string
 	domains     []string
-	tenant      string
 	skills      []environmentconfig.Skill
 	plugins     []environmentconfig.Plugin
 	directories []string
 }
 
-func (s *templateLookupStore) ResolveEnvironmentTemplate(_ context.Context, tenant, id string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error) {
-	s.tenant = tenant
-	return store.EnvironmentTemplate{ID: id, NetworkAccess: s.network, AllowedDomains: s.domains, Initialization: environmentconfig.Setup{Skills: s.skills, Plugins: s.plugins, CapabilityDirectories: s.directories}}, nil, nil
+func (l *templateLookup) resolved() environmenttemplates.Resolved {
+	return environmenttemplates.Resolved{Template: environmenttemplates.Template{ID: "saved", NetworkAccess: l.network, AllowedDomains: l.domains}, Setup: environmentconfig.Setup{Skills: l.skills, Plugins: l.plugins, CapabilityDirectories: l.directories}}
 }
 
-// templateHandler serves Environment template lookups from resolve.
-func templateHandler(t *testing.T, resolve func(context.Context, string, string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error)) Handler {
-	t.Helper()
-	deps, fakes := testDependencies(t)
-	fakes.environmentTemplates.resolveEnvironmentTemplate = resolve
-	return Handler{Dependencies: deps}
+// Session creation resolves the Template for the caller's tenant, and a
+// Template it cannot resolve answers with the Template's error.
+func TestSessionCreationResolvesTemplateForTenant(t *testing.T) {
+	var resolved []string
+	h, _, tenant := testHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.environmentTemplatesReader.resolve = func(_ context.Context, tenant, id string) (environmenttemplates.Resolved, error) {
+			resolved = append(resolved, tenant, id)
+			return environmenttemplates.Resolved{}, environmenttemplates.ErrNotFound
+		}
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"saved"},"input":"Start."}`))
+	req.Header.Set("Authorization", "Bearer test-api-key")
+	req.Header.Set("OpenAI-Beta", "agents=v1")
+	req.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, req)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), `"not_found_error"`) || !reflect.DeepEqual(resolved, []string{tenant, "saved"}) {
+		t.Fatal("missing Template", response.Code, response.Body.String(), resolved)
+	}
 }
 
 func TestTemplateResolutionAndCreationIntent(t *testing.T) {
-	lookup := &templateLookupStore{network: "disabled"}
-	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
+	lookup := &templateLookup{network: "disabled"}
 	request := func(raw string) sessionRequest {
 		t.Helper()
 		var decoded decodedSessionRequest
@@ -77,7 +114,7 @@ func TestTemplateResolutionAndCreationIntent(t *testing.T) {
 	if err != nil || !strings.Contains(string(intent), `"environment_template_id":"saved"`) {
 		t.Fatal("missing caller intent", string(intent), err)
 	}
-	if err := h.resolveTemplateEnvironment(t.Context(), "tenant-a", &inherited); err != nil || inherited.Environment.Network.Access != "disabled" || lookup.tenant != "tenant-a" {
+	if err := applyTemplateEnvironment(&inherited, lookup.resolved()); err != nil || inherited.Environment.Network.Access != "disabled" {
 		t.Fatal("inheritance failed", err)
 	}
 	raw, _ := json.Marshal(inherited.Environment)
@@ -89,12 +126,12 @@ func TestTemplateResolutionAndCreationIntent(t *testing.T) {
 	if string(broaderIntent) == string(intent) {
 		t.Fatal("default erased caller override")
 	}
-	if err := h.resolveTemplateEnvironment(t.Context(), "tenant-a", &broader); err == nil {
+	if err := applyTemplateEnvironment(&broader, lookup.resolved()); err == nil {
 		t.Fatal("network broadened")
 	}
 	narrower := request(`{"type":"openai_hosted","environment_template_id":"saved","network":{"access":"disabled"}}`)
 	lookup.network = "enabled"
-	if err := h.resolveTemplateEnvironment(t.Context(), "tenant-a", &narrower); err != nil {
+	if err := applyTemplateEnvironment(&narrower, lookup.resolved()); err != nil {
 		t.Fatal(err)
 	}
 	for _, raw := range []string{`{"type":"openai_hosted","environment_template_id":null}`, `{"type":"none","environment_template_id":"saved"}`} {

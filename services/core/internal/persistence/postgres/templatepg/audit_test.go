@@ -157,15 +157,15 @@ func TestAdminDeleteAuditCommitsWithTheDeletion(t *testing.T) {
 	if err != nil || id != template.ID {
 		t.Fatal(id, err)
 	}
-	var credential, actor, project, action, kind, gotID, raw string
-	if err := f.pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,project_id,action,resource_type,resource_id,to_jsonb(a)::text FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &project, &action, &kind, &gotID, &raw); err != nil {
+	var credential, actor, project, trace, action, kind, gotID, mappings, raw string
+	if err := f.pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,project_id,trace_id,action,resource_type,resource_id,result_ids::text,to_jsonb(a)::text FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &project, &trace, &action, &kind, &gotID, &mappings, &raw); err != nil {
 		t.Fatal(err)
 	}
-	if credential != "87654321" || actor != "administrator fixture" || project != tenant || action != "delete" || kind != "environment_template" || gotID != id || strings.Contains(raw, "admin-private") {
+	if credential != "87654321" || actor != "administrator fixture" || project != tenant || trace != "admin-mutation-trace" || action != "delete" || kind != "environment_template" || gotID != id || mappings != "[]" || strings.Contains(raw, "admin-private") {
 		t.Fatal("administrator audit identity differs")
 	}
-	var operations int
-	if err := f.pool.QueryRow(t.Context(), `SELECT count(*) FROM write_audit_operations WHERE tenant_id=$1 AND action='delete'`, tenant).Scan(&operations); err != nil || operations != 0 {
+	var operations, owners int
+	if err := f.pool.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM write_audit_operations WHERE tenant_id=$1 AND action='delete'),(SELECT count(*) FROM write_audit_owners WHERE tenant_id=$1 AND resource_type='environment_template' AND resource_id=$2)`, tenant, id).Scan(&operations, &owners); err != nil || operations != 0 || owners != 0 {
 		t.Fatal("administrator impersonated public-key provenance", err)
 	}
 	if _, err := f.keyless.Get(t.Context(), tenant, id); !errors.Is(err, environmenttemplates.ErrNotFound) {

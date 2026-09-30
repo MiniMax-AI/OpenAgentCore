@@ -44,7 +44,7 @@ func TestPluginsSharedParsingConfidentialMetadataAndOverrides(t *testing.T) {
 	plugin := pluginInput(t)
 	raw := []byte(`{"plugins":[` + string(plugin) + `],"capability_directories":["/workspace/generated"]}`)
 	template, err := decodeTemplateInput(raw)
-	if err != nil || !template.SetPlugins || !template.SetDirectories || len(template.Initialization.Plugins) != 1 {
+	if err != nil || !template.SetPlugins || !template.SetDirectories || len(template.Setup.Plugins) != 1 {
 		t.Fatal("template", err)
 	}
 	var decoded decodedSessionRequest
@@ -55,7 +55,7 @@ func TestPluginsSharedParsingConfidentialMetadataAndOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(input.initialization.Plugins, template.Initialization.Plugins) {
+	if !reflect.DeepEqual(input.initialization.Plugins, template.Setup.Plugins) {
 		t.Fatal("different installation inputs")
 	}
 	cfg, err := resolve(input, "tenant", "key", nil)
@@ -79,8 +79,7 @@ func TestPluginsSharedParsingConfidentialMetadataAndOverrides(t *testing.T) {
 	if response, err := hostedSessionEnvironment(env); err != nil || len(*response.Plugins) != 1 || len(*response.CapabilityDirectories) != 1 {
 		t.Fatal("session response", err)
 	}
-	lookup := &templateLookupStore{network: "enabled", plugins: template.Initialization.Plugins, directories: template.Initialization.CapabilityDirectories}
-	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
+	lookup := &templateLookup{network: "enabled", plugins: template.Setup.Plugins, directories: template.Setup.CapabilityDirectories}
 	for _, override := range []string{"", `,"plugins":null,"capability_directories":null`, `,"plugins":[],"capability_directories":[]`} {
 		if err = json.Unmarshal([]byte(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"template"`+override+`}}`), &decoded); err != nil {
 			t.Fatal(err)
@@ -93,7 +92,7 @@ func TestPluginsSharedParsingConfidentialMetadataAndOverrides(t *testing.T) {
 		if err != nil || !bytes.Contains(intent, []byte("template")) {
 			t.Fatal("intent", err)
 		}
-		if err = h.resolveTemplateEnvironment(t.Context(), "tenant", &in); err != nil {
+		if err = applyTemplateEnvironment(&in, lookup.resolved()); err != nil {
 			t.Fatal(err)
 		}
 		want := 1

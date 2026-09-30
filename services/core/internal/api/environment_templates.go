@@ -4,48 +4,50 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/go-chi/chi/v5"
 )
 
-// EnvironmentTemplates manages Environment Templates. ResolveEnvironmentTemplate
-// reads a Template with its initial files for Session creation.
+// EnvironmentTemplates runs the Environment Template write use cases.
 type EnvironmentTemplates interface {
-	ResolveEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error)
-	CreateEnvironmentTemplate(context.Context, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error)
-	GetEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, error)
-	UpdateEnvironmentTemplate(context.Context, string, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error)
-	DeleteEnvironmentTemplate(context.Context, string, string) (string, error)
-	ListEnvironmentTemplates(context.Context, string, string, int, bool) (store.EnvironmentTemplatePage, error)
+	Create(context.Context, environmenttemplates.CreateCommand) (environmenttemplates.Template, error)
+	Update(context.Context, environmenttemplates.UpdateCommand) (environmenttemplates.Template, error)
+	Delete(context.Context, environmenttemplates.DeleteCommand) (string, error)
 }
 
-func decodeTemplateInput(raw []byte) (store.EnvironmentTemplateInput, error) {
+// EnvironmentTemplatesReader reads Environment Templates. Resolve also returns
+// the decrypted configuration that Session creation composes.
+type EnvironmentTemplatesReader interface {
+	Get(ctx context.Context, tenantID, templateID string) (environmenttemplates.Template, error)
+	List(ctx context.Context, tenantID string, query environmenttemplates.ListQuery) (environmenttemplates.Page, error)
+	Resolve(ctx context.Context, tenantID, templateID string) (environmenttemplates.Resolved, error)
+}
+
+func decodeTemplateInput(raw []byte) (environmenttemplates.Input, error) {
 	var fields map[string]json.RawMessage
 	if decodeInputObject(raw, &fields, "name", "network", "capability_directories", "env", "files", "packages", "plugins", "skills", "setup_commands") != nil {
-		return store.EnvironmentTemplateInput{}, store.ErrInvalidInput
+		return environmenttemplates.Input{}, environmenttemplates.ErrInvalidInput
 	}
-	in := store.EnvironmentTemplateInput{}
+	in := environmenttemplates.Input{}
 	if value, supplied := fields["name"]; supplied {
 		in.SetName = true
-		if json.Unmarshal(value, &in.Name) != nil || (in.Name != nil && (!utf8.ValidString(*in.Name) || utf8.RuneCountInString(*in.Name) < 1 || utf8.RuneCountInString(*in.Name) > 256)) {
-			return in, store.ErrInvalidInput
+		if json.Unmarshal(value, &in.Name) != nil || environmenttemplates.ValidateName(in.Name) != nil {
+			return in, environmenttemplates.ErrInvalidInput
 		}
 	}
 	delete(fields, "name")
 	_, in.SetNetwork = fields["network"]
 	_, in.SetFiles = fields["files"]
 	_, in.SetEnv = fields["env"]
-	_, in.SetSetup = fields["setup_commands"]
+	_, in.SetCommands = fields["setup_commands"]
 	_, in.SetPackages = fields["packages"]
 	_, in.SetSkills = fields["skills"]
 	_, in.SetPlugins = fields["plugins"]
 	_, in.SetDirectories = fields["capability_directories"]
 	var setupErr error
-	in.Initialization, setupErr = decodeEnvironmentSetup(fields)
+	in.Setup, setupErr = decodeEnvironmentSetup(fields)
 	if setupErr != nil {
 		return in, setupErr
 	}
@@ -68,14 +70,14 @@ func decodeTemplateInput(raw []byte) (store.EnvironmentTemplateInput, error) {
 	return in, nil
 }
 
-func templateResponse(t store.EnvironmentTemplate) v1.EnvironmentTemplate {
+func templateResponse(t environmenttemplates.Template) v1.EnvironmentTemplate {
 	return v1.EnvironmentTemplate{ID: t.ID, Object: "agent.environment.template", Name: t.Name, CreatedAt: t.CreatedAt.Unix(), UpdatedAt: t.UpdatedAt.Unix(), CapabilityDirectories: append([]string{}, t.CapabilityDirectories...), Network: v1.EnvironmentNetwork{Access: t.NetworkAccess, AllowedDomains: append([]string{}, t.AllowedDomains...)}, Packages: packageMetadata(&t.Packages), Files: templateFileResponse(t.Files), Plugins: pluginResponse(t.Plugins), Skills: skillResponse(t.Skills)}
 }
 
-func readTemplateInput(w http.ResponseWriter, r *http.Request) (store.EnvironmentTemplateInput, bool) {
+func readTemplateInput(w http.ResponseWriter, r *http.Request) (environmenttemplates.Input, bool) {
 	raw, ok := readJSONObjectLimit(w, r, 16*1024*1024, "Request exceeds 16 MiB.")
 	if !ok {
-		return store.EnvironmentTemplateInput{}, false
+		return environmenttemplates.Input{}, false
 	}
 	in, err := decodeTemplateInput(raw)
 	if writeFieldError(w, err) {
@@ -104,9 +106,9 @@ func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	value, err := h.EnvironmentTemplates.CreateEnvironmentTemplate(r.Context(), tenantID(r), in)
+	value, err := h.EnvironmentTemplates.Create(r.Context(), environmenttemplates.CreateCommand{TenantID: tenantID(r), Input: in})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeEnvironmentTemplatesError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, templateResponse(value))
@@ -123,9 +125,9 @@ func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [get]
 func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	value, err := h.EnvironmentTemplates.GetEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
+	value, err := h.EnvironmentTemplatesReader.Get(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeEnvironmentTemplatesError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, templateResponse(value))
@@ -148,9 +150,9 @@ func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	value, err := h.EnvironmentTemplates.UpdateEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"), in)
+	value, err := h.EnvironmentTemplates.Update(r.Context(), environmenttemplates.UpdateCommand{TenantID: tenantID(r), TemplateID: chi.URLParam(r, "environment_template_id"), Input: in})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeEnvironmentTemplatesError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, templateResponse(value))
@@ -167,9 +169,9 @@ func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/templates/{environment_template_id} [delete]
 func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	id, err := h.EnvironmentTemplates.DeleteEnvironmentTemplate(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
+	id, err := h.EnvironmentTemplates.Delete(r.Context(), environmenttemplates.DeleteCommand{TenantID: tenantID(r), TemplateID: chi.URLParam(r, "environment_template_id")})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeEnvironmentTemplatesError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, v1.EnvironmentTemplateDeleted{ID: id, Object: "agent.environment.template.deleted", Deleted: true})
@@ -192,9 +194,9 @@ func (h *Handler) listEnvironmentTemplates(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	page, err := h.EnvironmentTemplates.ListEnvironmentTemplates(r.Context(), tenantID(r), options.after, options.limit, options.ascending)
+	page, err := h.EnvironmentTemplatesReader.List(r.Context(), tenantID(r), environmenttemplates.ListQuery{After: options.after, Limit: options.limit, Ascending: options.ascending})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeEnvironmentTemplatesError(w, r, err)
 		return
 	}
 	response := v1.EnvironmentTemplateList{Object: "list", Data: make([]v1.EnvironmentTemplate, 0, len(page.Templates)), HasMore: page.HasMore}

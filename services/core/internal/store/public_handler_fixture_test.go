@@ -10,12 +10,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
@@ -47,13 +49,19 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 	if err != nil {
 		return nil, err
 	}
+	templates := templatepg.New(pgunit.NewPool(db.pool), db.cipher)
+	environmentTemplates, err := environmenttemplates.NewService(templates)
+	if err != nil {
+		return nil, err
+	}
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: s,
 		Projects: fixtureProjects{Store: s, keys: keys}, ModelProviders: s, Skills: s,
 		Vaults: vaultService, VaultsReader: vaultStore,
 		Files: fileService, FilesReader: fileStore,
+		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templates,
 		Agents: agentService, AgentsReader: agentStore,
-		EnvironmentTemplates: s, Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s,
+		Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s,
 		Artifacts: s, SessionAdmin: s, Environments: s, Admin: s, AdminAudit: audit, WriteAudit: audit,
 		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
 	}

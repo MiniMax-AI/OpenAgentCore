@@ -46,6 +46,8 @@ type testFakes struct {
 	deployment             *fakeDeployment
 	deploymentChanges      *fakeDeploymentChanges
 	configurationDiscovery *fakeConfigurationDiscovery
+
+	environmentTemplatesReader *fakeEnvironmentTemplatesReader
 }
 
 // testDependencies returns Dependencies in which every area is a strict fake.
@@ -58,7 +60,8 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	f := &testFakes{
 		projects: &fakeProjects{t: t}, modelProviders: &fakeModelProviders{t: t},
 		vaults: &fakeVaults{t: t}, vaultsReader: &fakeVaultsReader{t: t},
-		skills: &fakeSkills{t: t}, environmentTemplates: &fakeEnvironmentTemplates{t: t},
+		skills:               &fakeSkills{t: t},
+		environmentTemplates: &fakeEnvironmentTemplates{t: t}, environmentTemplatesReader: &fakeEnvironmentTemplatesReader{t: t},
 		files: &fakeFiles{t: t}, filesReader: &fakeFilesReader{t: t},
 		agents: &fakeAgents{t: t}, agentsReader: &fakeAgentsReader{t: t},
 		sessions: &fakeSessions{t: t}, sessionEvents: &fakeSessionEvents{t: t},
@@ -74,8 +77,9 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		Projects: f.projects, ModelProviders: f.modelProviders, Skills: f.skills,
 		Vaults: f.vaults, VaultsReader: f.vaultsReader,
 		Files: f.files, FilesReader: f.filesReader,
+		EnvironmentTemplates: f.environmentTemplates, EnvironmentTemplatesReader: f.environmentTemplatesReader,
 		Agents: f.agents, AgentsReader: f.agentsReader,
-		EnvironmentTemplates: f.environmentTemplates, Sessions: f.sessions, SessionEvents: f.sessionEvents,
+		Sessions: f.sessions, SessionEvents: f.sessionEvents,
 		SessionHistory: f.sessionHistory, Subagents: f.subagents, Artifacts: f.artifacts, SessionAdmin: f.sessionAdmin,
 		Environments: f.environments, ExecutorConnections: f.executorConnections, Admin: f.admin, AdminAudit: f.adminAudit, WriteAudit: f.writeAudit,
 		Metrics: f.metrics, RuntimeObservations: f.runtimeObservations, RuntimeHistory: f.runtimeHistory,

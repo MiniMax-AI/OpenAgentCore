@@ -47,10 +47,6 @@ func TestSoleSkillVersionDeletionRemovesSkill(t *testing.T) {
 		t.Fatal(err)
 	}
 	reference := environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}
-	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetSkills: true, Initialization: reference})
-	if err != nil {
-		t.Fatal(err)
-	}
 	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: reference}
 	session, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
@@ -99,7 +95,7 @@ func TestSoleSkillVersionDeletionRemovesSkill(t *testing.T) {
 		t.Fatal("Skill deletion after sole-version deletion", err)
 	}
 
-	// Committed snapshots and Template intent are unchanged, as with DeleteSkill.
+	// Committed snapshots are unchanged, as with DeleteSkill.
 	after, err := s.ReadEnvironmentSetup(t.Context(), tenant, session.ID)
 	if err != nil || !reflect.DeepEqual(after.Skills, frozen.Skills) {
 		t.Fatal("frozen Session installation changed", err)
@@ -107,10 +103,6 @@ func TestSoleSkillVersionDeletionRemovesSkill(t *testing.T) {
 	retry, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil || retry.ID != session.ID {
 		t.Fatal("committed retry read the deleted source", err)
-	}
-	kept, err := s.GetEnvironmentTemplate(t.Context(), tenant, template.ID)
-	if err != nil || !reflect.DeepEqual(kept.Skills, template.Skills) || !kept.UpdatedAt.Equal(template.UpdatedAt) {
-		t.Fatal("Template reference intent changed", err)
 	}
 }
 

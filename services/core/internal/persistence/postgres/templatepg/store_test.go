@@ -370,6 +370,37 @@ func TestMissingKeyIsUnavailable(t *testing.T) {
 	}
 }
 
+// Stored package metadata naming the removed system manager is rejected on
+// every read instead of being silently dropped.
+func TestStoredSystemPackagesRejected(t *testing.T) {
+	f := newFixture(t, pgtest.Open(t))
+	ctx := t.Context()
+	tenant := uuid.NewString()
+	template := f.create(t, tenant, environmenttemplates.Input{})
+	store := func(packages string) {
+		t.Helper()
+		if _, err := f.pool.Exec(ctx, "UPDATE environment_templates SET packages=$1 WHERE id=$2", []byte(packages), template.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, value := range []string{`null`, `[]`, `["jq"]`} {
+		store(`{"npm":[],"python":[],"system":` + value + `}`)
+		if _, err := f.keyless.Get(ctx, tenant, template.ID); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
+			t.Fatal("get silently ignored removed system packages", value, err)
+		}
+		if _, err := f.keyless.List(ctx, tenant, environmenttemplates.ListQuery{Limit: 1}); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
+			t.Fatal("list silently ignored removed system packages", value, err)
+		}
+		if _, err := f.keyed.Resolve(ctx, tenant, template.ID); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
+			t.Fatal("resolve silently ignored removed system packages", value, err)
+		}
+	}
+	store(`{"npm":["semver"],"python":["packaging"]}`)
+	if got, err := f.keyless.Get(ctx, tenant, template.ID); err != nil || !reflect.DeepEqual(got.Packages, v1.EnvironmentPackages{NPM: []string{"semver"}, Python: []string{"packaging"}}) {
+		t.Fatal("supported stored package managers rejected", got.Packages, err)
+	}
+}
+
 func archive(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 	var buffer bytes.Buffer

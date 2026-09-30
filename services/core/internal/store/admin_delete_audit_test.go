@@ -11,7 +11,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -82,7 +81,7 @@ func assertAdminMutationAudit(t *testing.T, s *Store, tenant, request, action, k
 	if credential != "87654321" || actor != "administrator fixture" || key != expectedKey || trace != "admin-mutation-trace" || gotAction != action || gotKind != kind || gotID != id || mappings != "[]" {
 		t.Fatal("administrator audit identity differs")
 	}
-	for _, secret := range []string{"admin-private-archive", "admin-private-body", "admin-private-env", "private-agent-canary", "audit-private-token"} {
+	for _, secret := range []string{"admin-private-archive", "admin-private-body", "private-agent-canary", "audit-private-token"} {
 		if strings.Contains(raw, secret) {
 			t.Fatal("private content entered administrator audit")
 		}
@@ -105,8 +104,8 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 	s := NewWithCredentialCipher(pool, cipher)
 	rejectAdminAuditInsert(t, s)
 	archive := skillArchive(t, "admin-private-archive")
-	tables := []string{"agents", "agent_model_execution", "environment_templates", "skills", "skill_versions", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
-	for _, name := range []string{"template_delete", "skill_delete", "version_delete", "version_delete_last", "session_delete", "artifact_delete"} {
+	tables := []string{"agents", "agent_model_execution", "skills", "skill_versions", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
+	for _, name := range []string{"skill_delete", "version_delete", "version_delete_last", "session_delete", "artifact_delete"} {
 		t.Run(name, func(t *testing.T) {
 			tenant := uuid.NewString()
 			var mutation resourceAuditMutation
@@ -116,15 +115,6 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 				tenant, mutation, verifyRestored, removedObjects = prepareAdminHistoryDelete(t, s, name)
 			} else {
 				mutation = prepareResourceAuditMutation(t, s, tenant, name, archive)
-				if name == "template_delete" {
-					var id string
-					if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_templates WHERE tenant_id=$1", tenant).Scan(&id); err != nil {
-						t.Fatal(err)
-					}
-					if _, err := s.UpdateEnvironmentTemplate(t.Context(), tenant, id, EnvironmentTemplateInput{SetEnv: true, SetSetup: true, SetFiles: true, Initialization: environmentconfig.Setup{Env: map[string]string{"PRIVATE": "admin-private-env"}, Commands: []environmentconfig.SetupCommand{{Command: "printf admin-private-env"}}}, Files: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/private", Data: []byte("admin-private-body")}}}); err != nil {
-						t.Fatal(err)
-					}
-				}
 			}
 			if _, err := pool.Exec(t.Context(), "INSERT INTO execution_project_scopes(tenant_id,organization_id,project_id) VALUES($1,'admin-delete',$2)", tenant, tenant); err != nil {
 				t.Fatal(err)
@@ -202,8 +192,6 @@ func assertAdminDeletedResource(t *testing.T, s *Store, tenant string, mutation 
 	t.Helper()
 	var err error
 	switch mutation.kind {
-	case "environment_template":
-		_, err = s.GetEnvironmentTemplate(t.Context(), tenant, id)
 	case "skill":
 		_, err = s.GetSkill(t.Context(), tenant, id)
 	case "skill_version":

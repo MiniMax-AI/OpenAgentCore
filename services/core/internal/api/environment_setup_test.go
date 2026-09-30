@@ -9,7 +9,7 @@ import (
 func TestEnvironmentSetupSharedParsingAndConfidentialSnapshot(t *testing.T) {
 	raw := []byte(`{"env":{"TOKEN":"private-env-canary","QUOTED":"'\n$(false)"},"packages":{"npm":["is-number@7.0.0"],"python":["packaging==26.0"]},"setup_commands":[{"command":"printf private-command-canary > result","cwd":null},{"command":"pwd","cwd":"/workspace/sub"}]}`)
 	input, err := decodeTemplateInput(raw)
-	if err != nil || !input.SetEnv || !input.SetSetup || !input.SetPackages || len(input.Initialization.Commands) != 2 {
+	if err != nil || !input.SetEnv || !input.SetCommands || !input.SetPackages || len(input.Setup.Commands) != 2 {
 		t.Fatal("template setup input", err)
 	}
 	var request decodedSessionRequest
@@ -24,7 +24,7 @@ func TestEnvironmentSetupSharedParsingAndConfidentialSnapshot(t *testing.T) {
 	if err != nil || bytes.Contains(configuration, []byte("canary")) || !bytes.Contains(configuration, []byte("is-number@7.0.0")) {
 		t.Fatal("confidential input in ordinary configuration", err)
 	}
-	if decoded.initialization.Env["TOKEN"] != input.Initialization.Env["TOKEN"] || len(decoded.initialization.Commands) != 2 {
+	if decoded.initialization.Env["TOKEN"] != input.Setup.Env["TOKEN"] || len(decoded.initialization.Commands) != 2 {
 		t.Fatal("inline and template parsing diverged")
 	}
 	for _, invalid := range []string{`{"env":{"OPENAI_API_KEY":"x"}}`, `{"env":{"CODEX_HOME":"x"}}`, `{"env":{"OAC_RUNTIME_HOME":"x"}}`, `{"env":{"BAD-NAME":"x"}}`, `{"env":{"VALUE":null}}`, `{"setup_commands":[null]}`, `{"setup_commands":[{}]}`, `{"setup_commands":[{"command":null}]}`, `{"setup_commands":[{"command":"pwd","cwd":""}]}`, `{"packages":{"python":[null]}}`, `{"packages":{"npm":["--ignore-scripts"]}}`} {
@@ -33,7 +33,7 @@ func TestEnvironmentSetupSharedParsingAndConfidentialSnapshot(t *testing.T) {
 		}
 	}
 	cleared, err := decodeTemplateInput([]byte(`{"env":null,"setup_commands":null,"packages":null}`))
-	if err != nil || !cleared.Initialization.Empty() || !cleared.SetEnv || !cleared.SetSetup || !cleared.SetPackages {
+	if err != nil || !cleared.Setup.Empty() || !cleared.SetEnv || !cleared.SetCommands || !cleared.SetPackages {
 		t.Fatal("nullable replacements", err)
 	}
 }

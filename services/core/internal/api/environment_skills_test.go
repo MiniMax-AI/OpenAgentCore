@@ -32,8 +32,7 @@ func skillInput(t *testing.T, body string) json.RawMessage {
 }
 
 func TestSkillReferenceParsingInheritanceAndReplacement(t *testing.T) {
-	lookup := &templateLookupStore{network: "enabled", skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "skill-template", Version: "latest"}}}}
-	h := templateHandler(t, lookup.ResolveEnvironmentTemplate)
+	lookup := &templateLookup{network: "enabled", skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "skill-template", Version: "latest"}}}}
 	for _, fields := range []string{"", `,"skills":[]`, `,"skills":[{"type":"skill_reference","skill_id":"skill-override","version":"2"}]`} {
 		var decoded decodedSessionRequest
 		if err := json.Unmarshal([]byte(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"template"`+fields+`}}`), &decoded); err != nil {
@@ -47,7 +46,7 @@ func TestSkillReferenceParsingInheritanceAndReplacement(t *testing.T) {
 		if err != nil || len(intent) == 0 {
 			t.Fatal("missing unresolved retry intent", err)
 		}
-		if err = h.resolveTemplateEnvironment(t.Context(), "tenant", &input); err != nil {
+		if err = applyTemplateEnvironment(&input, lookup.resolved()); err != nil {
 			t.Fatal(err)
 		}
 		switch fields {
@@ -91,7 +90,7 @@ func TestInlineSkillsSharedParsingSnapshotAndIntent(t *testing.T) {
 	skill := skillInput(t, "private-skill-canary")
 	raw := append(append([]byte(`{"skills":[`), skill...), []byte(`]}`)...)
 	template, err := decodeTemplateInput(raw)
-	if err != nil || !template.SetSkills || len(template.Initialization.Skills) != 1 {
+	if err != nil || !template.SetSkills || len(template.Setup.Skills) != 1 {
 		t.Fatal("template", err)
 	}
 	environment := append([]byte(`{"type":"openai_hosted",`), raw[1:]...)
@@ -107,7 +106,7 @@ func TestInlineSkillsSharedParsingSnapshotAndIntent(t *testing.T) {
 		return input
 	}
 	inline := decode(`"agent":{"model":"test"}`, environment)
-	if !bytes.Equal(inline.initialization.Skills[0].Archive, template.Initialization.Skills[0].Archive) {
+	if !bytes.Equal(inline.initialization.Skills[0].Archive, template.Setup.Skills[0].Archive) {
 		t.Fatal("inline/template differ")
 	}
 	configuration, err := resolve(inline, "tenant", "key", nil)
@@ -129,7 +128,7 @@ func TestInlineSkillsSharedParsingSnapshotAndIntent(t *testing.T) {
 	}
 	for _, clearing := range []string{`{"skills":null}`, `{"skills":[]}`} {
 		input, err := decodeTemplateInput([]byte(clearing))
-		if err != nil || !input.SetSkills || !input.Initialization.Empty() {
+		if err != nil || !input.SetSkills || !input.Setup.Empty() {
 			t.Fatal("clear", err)
 		}
 	}

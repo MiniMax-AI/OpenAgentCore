@@ -171,11 +171,20 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	if h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
 		return
 	}
-	if err := h.resolveTemplateEnvironment(r.Context(), tenantID(r), &input); err != nil {
-		if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			writeStoreError(w, r, err)
+	if input.templateID != "" {
+		template, err := h.EnvironmentTemplatesReader.Resolve(r.Context(), tenantID(r), input.templateID)
+		if err != nil {
+			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
+				writeEnvironmentTemplatesError(w, r, err)
+			}
+			return
 		}
-		return
+		if err := applyTemplateEnvironment(&input, template); err != nil {
+			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
+				writeStoreError(w, r, err)
+			}
+			return
+		}
 	}
 	saved, inheritedProvider, err := h.sessionAgentDefaults(r.Context(), tenantID(r), input)
 	if err != nil {

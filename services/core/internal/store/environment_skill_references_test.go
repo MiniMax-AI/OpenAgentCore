@@ -29,15 +29,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 		t.Fatal(err)
 	}
 	intent := environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}
-	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetSkills: true, Initialization: intent})
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolved, _, err := s.ResolveEnvironmentTemplate(t.Context(), tenant, template.ID)
-	if err != nil || resolved.Skills[0].Version != "" || len(resolved.Initialization.Skills[0].Archive) != 0 {
-		t.Fatal("template resolved a mutable selector", err)
-	}
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: resolved.Initialization}
+	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: intent}
 	// Concurrent callers share one Session and one frozen installation.
 	var group sync.WaitGroup
 	ids := make(chan string, 6)
@@ -114,9 +106,6 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 		} else {
 			assertFrozen(created.ID, "2", second)
 		}
-	}
-	if _, err = s.DeleteEnvironmentTemplate(t.Context(), tenant, template.ID); err != nil {
-		t.Fatal(err)
 	}
 	if err = s.DeleteSkill(t.Context(), tenant, skill.ID); err != nil {
 		t.Fatal(err)

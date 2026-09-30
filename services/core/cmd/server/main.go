@@ -35,6 +35,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
@@ -42,6 +43,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
@@ -122,6 +124,11 @@ func run() error {
 	}
 	vaultStore := vaultpg.New(units)
 	vaultService, err := vaults.NewService(vaultStore, credentialKey, oauthClient)
+	if err != nil {
+		return err
+	}
+	templateStore := templatepg.New(units, credentialKey)
+	environmentTemplates, err := environmenttemplates.NewService(templateStore)
 	if err != nil {
 		return err
 	}
@@ -318,7 +325,8 @@ func run() error {
 		Installation: installation, InstallationBindings: executionStore,
 		Projects: executionStore, ModelProviders: executionStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
-		Skills: executionStore, EnvironmentTemplates: executionStore,
+		Skills:               executionStore,
+		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templateStore,
 		Files: fileService, FilesReader: fileStore,
 		Agents: agentService, AgentsReader: agentStore,
 		Sessions: executionStore, SessionEvents: executionStore, SessionHistory: executionStore,

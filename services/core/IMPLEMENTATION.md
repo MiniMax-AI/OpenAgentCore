@@ -25,6 +25,7 @@ Domain owners, each with its PostgreSQL adapter under `internal/persistence/post
 - `agents` (`agentpg`): saved Agents, their configuration merge and bounds, and the encrypted model-provider bundle bound to each Agent.
 - `files` (`filepg`): source Files.
 - `vaults` (`vaultpg`): Vaults and Credentials, the encryption of Credential secrets, OAuth access-token refresh, and the MCP credential selection that Session creation freezes and the Dispatcher's `Credentials` resolves into a bearer token.
+- `environmenttemplates` (`templatepg`): Environment Templates, their validation and default network, their sealed setup, initial files, Skills and Plugins, and the resolved Template that Session creation composes into its Environment.
 
 ## Request handling
 

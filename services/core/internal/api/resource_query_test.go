@@ -14,6 +14,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -60,23 +61,30 @@ func (s *missingResourceStore) UpdateSessionMetadata(_ context.Context, tenant, 
 	return store.Session{}, s.missing(tenant)
 }
 
-func (s *missingResourceStore) GetEnvironmentTemplate(_ context.Context, tenant, _ string) (store.EnvironmentTemplate, error) {
-	return store.EnvironmentTemplate{}, s.missing(tenant)
+// Environment Template operations report a missing Template with their
+// domain's error.
+func (s *missingResourceStore) missingTemplate(tenant string) error {
+	s.tenants = append(s.tenants, tenant)
+	return environmenttemplates.ErrNotFound
 }
 
-func (s *missingResourceStore) UpdateEnvironmentTemplate(_ context.Context, tenant, _ string, _ store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error) {
-	return store.EnvironmentTemplate{}, s.missing(tenant)
+func (s *missingResourceStore) GetEnvironmentTemplate(_ context.Context, tenant, _ string) (environmenttemplates.Template, error) {
+	return environmenttemplates.Template{}, s.missingTemplate(tenant)
 }
 
-func (s *missingResourceStore) DeleteEnvironmentTemplate(_ context.Context, tenant, _ string) (string, error) {
-	return "", s.missing(tenant)
+func (s *missingResourceStore) UpdateEnvironmentTemplate(_ context.Context, command environmenttemplates.UpdateCommand) (environmenttemplates.Template, error) {
+	return environmenttemplates.Template{}, s.missingTemplate(command.TenantID)
+}
+
+func (s *missingResourceStore) DeleteEnvironmentTemplate(_ context.Context, command environmenttemplates.DeleteCommand) (string, error) {
+	return "", s.missingTemplate(command.TenantID)
 }
 
 // wire serves the Agent, Session and Environment template lookups from s.
 func (s *missingResourceStore) wire(_ *Dependencies, f *testFakes) {
 	f.agentsReader.getAgent, f.agents.delete, f.agents.update = s.GetAgent, s.DeleteAgent, s.UpdateAgent
 	f.sessions.getSession, f.sessions.deleteSession, f.sessions.updateSessionMetadata = s.GetSession, s.DeleteSession, s.UpdateSessionMetadata
-	f.environmentTemplates.getEnvironmentTemplate, f.environmentTemplates.updateEnvironmentTemplate, f.environmentTemplates.deleteEnvironmentTemplate = s.GetEnvironmentTemplate, s.UpdateEnvironmentTemplate, s.DeleteEnvironmentTemplate
+	f.environmentTemplatesReader.get, f.environmentTemplates.update, f.environmentTemplates.delete = s.GetEnvironmentTemplate, s.UpdateEnvironmentTemplate, s.DeleteEnvironmentTemplate
 }
 
 // twoTenantHandler authenticates "test-api-key" as the owner and "foreign-key" as
