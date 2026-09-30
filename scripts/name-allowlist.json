@@ -310,11 +310,6 @@
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
-    "path": "contracts/agents-api/model-execution.md",
-    "regex": "Parsar manages",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
     "path": "contracts/agents-api/official-semantics-alignment.md",
     "regex": "The Parsar\\n",
     "reason": "This caller verification paragraph records the separate product client audit."
@@ -346,21 +341,6 @@
   },
   {
     "path": "CONTRIBUTING.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
-    "path": "contracts/agents-api/environment-templates.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
-    "path": "contracts/agents-api/harness-selection.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
-    "path": "contracts/agents-api/model-execution.md",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
   },
