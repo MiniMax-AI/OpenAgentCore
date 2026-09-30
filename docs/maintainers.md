@@ -231,6 +231,9 @@ The project has no historical installation compatibility or in-place version upg
 contract. Install only into an empty directory, or repair the exact same source
 revision. Refuse old formats, conversion journals and different revisions before
 installation mutation; retain their data and direct operators to reinstall separately.
+Distributions contain only current installation and maintenance code; historical
+layout conversion, brand migration and native binary replacement implementations
+are not packaged. Keep refusal checks and their tests when retiring these paths.
 The installer and every mutating `oac` command share the stable `.oac.lock` inode.
 The installer owns this lock across creation, payload/native/launcher repair and
 apply, invoking the already-locked apply implementation without nested locking.
