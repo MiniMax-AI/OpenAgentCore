@@ -36,7 +36,7 @@ class ListenerTests(unittest.TestCase):
         return json.loads((self.root / name).read_text())
 
     def test_custom_ipv4_listener_drives_services_and_operator_requests(self):
-        self.install("--host", "127.0.0.2", "--port", "18080", "--core-port", "18091")
+        self.install("--host", "127.0.0.2", "--web-port", "18080", "--core-port", "18091")
         config = self.document("config.json")
         self.assertEqual(config["host"], "127.0.0.2")
         self.assertEqual(config["ports"], {"core": 18091, "web": 18080})
@@ -130,29 +130,62 @@ class ListenerTests(unittest.TestCase):
     def test_invalid_listener_and_port_fail_before_creating_installation(self):
         for flags in (("--host", "localhost"), ("--host", "https://core.example"),
                       ("--host", "[::1]:8080"), ("--host", "fe80::1%eth0"),
-                      ("--host", "0.0.0.0"), ("--port", "65536"), ("--port", "8091"),
-                      ("--core-only", "--port", "8088")):
+                      ("--host", "0.0.0.0"), ("--web-port", "65536"), ("--web-port", "8091"),
+                      ("--core-only", "--web-port", "8088")):
             with self.subTest(flags=flags), self.assertRaises(config_model.ConfigError):
                 self.install(*flags)
             self.assertFalse((self.root / "config.json").exists())
             self.assertFalse(self.host.running())
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            install.arguments(["--web-port", "8088"])
+            install.arguments(["--port", "8088"])
 
     def test_config_seed_rejects_listener_overrides(self):
         path = self.work / "seed.json"
         path.write_text(json.dumps(config_model.initial("all")))
-        for flags in (("--host", "127.0.0.2"), ("--port", "8088")):
+        for flags in (("--host", "127.0.0.2"), ("--web-port", "8088")):
             with self.assertRaisesRegex(install.InstallError, "--config replaces"):
                 self.install("--config", path, *flags)
 
-    def test_port_probe_uses_requested_address(self):
+    def test_apply_checks_a_new_listener_before_changing_anything(self):
+        self.install("--host", "127.0.0.2", "--public-url", "https://core.example")
+        config = self.document("config.json")
+        config["ports"]["web"] = 18080
+        (self.root / "config.json").write_text(json.dumps(config))
+        generated = {path.name: path.read_bytes() for path in (self.root / "generated").iterdir()}
+        containers = json.dumps(self.host.containers, sort_keys=True)
+        # The installation's own services hold 8080 and 8091; another program holds 18080.
+        self.host.busy.update((8080, 8091, 18080))
+        self.host.recreated.clear()
+        with self.assertRaisesRegex(oac_cli.OacError, r"^Port 18080 \(ports.web\) is already in use on 127.0.0.2. Free it or "
+                                    r"choose another port; find the process with: sudo ss -ltnp 'sport = :18080'. Nothing was applied.$"):
+            oac_cli.apply(self.root, interactive=False, out=lambda _: None)
+        self.assertEqual(generated, {path.name: path.read_bytes() for path in (self.root / "generated").iterdir()})
+        self.assertEqual((containers, self.host.recreated), (json.dumps(self.host.containers, sort_keys=True), []))
+
+
+class PortProbeTests(unittest.TestCase):
+    def test_probe_binds_like_the_services_and_reads_privileged_ports_from_the_kernel(self):
         with socket.socket() as listener:
             listener.bind(("127.0.0.2", 0))
+            listener.listen()
             port = listener.getsockname()[1]
-            with self.assertRaises(install.InstallError):
-                install.free_port(port, "127.0.0.2")
-            install.free_port(port, "127.0.0.1")
+            self.assertFalse(oac_cli.port_free("127.0.0.2", port))
+            self.assertFalse(oac_cli.port_free("0.0.0.0", port))
+            self.assertTrue(oac_cli.port_free("127.0.0.1", port))
+            # An account that may not bind the port reads the listening sockets instead.
+            with mock.patch.object(socket.socket, "bind", side_effect=PermissionError):
+                self.assertFalse(oac_cli.port_free("0.0.0.0", port))
+                self.assertTrue(oac_cli.port_free("127.0.0.1", port))
+        # A connection in TIME_WAIT on a Go or Docker listener, which set SO_REUSEADDR, does not hold the port.
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen()
+            port = listener.getsockname()[1]
+            with socket.create_connection(("127.0.0.1", port)):
+                accepted, _ = listener.accept()
+                accepted.close()
+        self.assertTrue(oac_cli.port_free("127.0.0.1", port))
 
 
 if __name__ == "__main__":

@@ -47,8 +47,10 @@ class FakeHost:
         self.deployment = {"provider": "", "generation": 0, "reset": None, "resources": {"allocations": 0, "pending": 0}}  # what sandbox_setup reads and posts
         self.deployment_posts = []
         self.deployment_refusal = None  # Core's message when it refuses the POST
+        self.busy = set()  # ports that other programs hold
         for target, name, value in ((subprocess, "run", mock.Mock(side_effect=self.run)),
                                     (oac_cli, "http", self.http),
+                                    (oac_cli, "port_free", lambda host, port: port not in self.busy),
                                     (oac_cli, "time", SimpleNamespace(sleep=lambda seconds: None)),
                                     (native_service, "_process_environment", self.process_environment),
                                     (sandbox_setup, "send", self.sandbox_send)):
@@ -325,6 +327,5 @@ def run_installer(install, bundle, argv):
     with mock.patch.object(install, "__file__", str(bundle / "install.py")), \
             mock.patch.object(install.platform, "system", return_value="Linux"), \
             mock.patch.object(install.platform, "machine", return_value="x86_64"), \
-            mock.patch.object(install.native_service.platform, "system", return_value="Linux"), \
-            mock.patch.object(install, "free_port"):
+            mock.patch.object(install.native_service.platform, "system", return_value="Linux"):
         return install.main([str(item) for item in argv])

@@ -107,6 +107,11 @@ def reload(root, document):
         raise RuntimeError("HTTPS gateway is unavailable; inspect gateway logs and retry") from None
 
 
+def published(config):
+    """(host port, gateway port) of each port the gateway publishes on config["host"]."""
+    return [(config["ports"]["web"], 8080), (80, 80), (443, 443)]
+
+
 def services(root, config, state, bind):
     root = Path(root)
     identity = f'{state["uid"]}:{state["gid"]}'
@@ -116,7 +121,7 @@ def services(root, config, state, bind):
     if ":" in host:
         host = "[" + host + "]"
     gateway = dict(common, command=["caddy", "run", "--config", "/generated/Caddyfile", "--adapter", "caddyfile"],
-                   ports=[f'{host}:{config["ports"]["web"]}:8080', f"{host}:80:80", f"{host}:443:443"],
+                   ports=[f"{host}:{port}:{target}" for port, target in published(config)],
                    environment={"XDG_DATA_HOME": "/data", "XDG_CONFIG_HOME": "/data/config",
                                 "NO_PROXY": "core,web,localhost,127.0.0.1,::1",
                                 "no_proxy": "core,web,localhost,127.0.0.1,::1"},

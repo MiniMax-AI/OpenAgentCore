@@ -10,11 +10,14 @@ so an interrupted apply, rotation or rollback is finished by the next apply.
 import argparse
 import contextlib
 import datetime
+import errno
 import fcntl
+import ipaddress
 import json
 import os
 from pathlib import Path
 import secrets
+import socket
 import stat
 import subprocess
 import sys
@@ -178,6 +181,56 @@ def observe(state):
         inputs = native_service.running_inputs(state)
         result["core"] = {"running": inputs is not None or native_service.active(state), "inputs": inputs, "health": ""}
     return result
+
+
+def tcp_listeners():
+    """(address, port) of each listening TCP socket in this network namespace."""
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            lines = Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            fields = line.split()
+            if fields[3] != "0A":  # TCP_LISTEN
+                continue
+            raw, _, port = fields[1].partition(":")
+            # The kernel prints each 32-bit word of the address in host byte order, little-endian on amd64.
+            packed = b"".join(bytes.fromhex(raw[index:index + 8])[::-1] for index in range(0, len(raw), 8))
+            yield ipaddress.ip_address(packed), int(port, 16)
+
+
+def overlaps(first, second):
+    if first.version != second.version:
+        # Of two families, only a dual-stack IPv6 wildcard also takes IPv4 addresses.
+        return (first if first.version == 6 else second).is_unspecified
+    return first.is_unspecified or second.is_unspecified or first == second
+
+
+def port_free(host, port):
+    """Whether a listener could bind host:port now.
+
+    The probe binds with SO_REUSEADDR, as Go and Docker listeners do, so connections
+    in TIME_WAIT do not count. An account without the privilege to bind a port below
+    1024 reads the kernel's table of listening sockets instead.
+    """
+    address = ipaddress.ip_address(host)
+    with socket.socket(socket.AF_INET6 if address.version == 6 else socket.AF_INET) as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind((host, port))
+            return True
+        except PermissionError:
+            pass
+        except OSError as error:
+            return error.errno != errno.EADDRINUSE
+    return not any(held == port and overlaps(address, other) for other, held in tcp_listeners())
+
+
+def port_in_use(listener, name):
+    """The message for a port that another program holds; name is its flag or config.json key."""
+    return (f"Port {listener.port} ({name}) is already in use on {listener.host}. Free it or choose another port; "
+            f"find the process with: sudo ss -ltnp 'sport = :{listener.port}'")
 
 
 def stale(actual, desired, will_run):
@@ -512,6 +565,18 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
     return installation
 
 
+def check_new_listeners(config, previous):
+    """A listener this change adds must be free; the running installation holds the others."""
+    if previous is None:
+        return
+    applied = dict(config, host=previous["host"], public_url=previous.get("public_url"),
+                   ports={name: previous.get("ports." + name) for name in config["ports"]})
+    held = {listener.port for listener in configuration.listeners(applied)}
+    for listener in configuration.listeners(config):
+        if listener.port not in held and not port_free(listener.host, listener.port):
+            raise OacError(port_in_use(listener, listener.setting) + ". Nothing was applied.")
+
+
 def finish_apply(root, config, state, gateway_document, will_run):
     managed = ingress_config.enabled(config) and "gateway" in will_run
     if managed:
@@ -548,6 +613,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         raise OacError("\n".join(f"generated/{name} was edited by hand." for name in edited)
                           + "\nPut the change in config.json and run oac apply --discard-edits, which keeps the"
                           " edited copy as generated/<file>.edited-<time>. Nothing was applied.")
+    check_new_listeners(config, previous)
     changed = [name for name, text in rendered.files.items() if disk.get(name) != text.encode()]
     removed = [name for name in (state.get("generated") or {}) if name not in rendered.files and disk.get(name) is not None]
 
