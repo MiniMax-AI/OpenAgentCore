@@ -103,6 +103,8 @@ class FakeHost:
             stdout = "" if code else "[]" if "{{json .RepoTags}}" in args else args[3] + " linux/amd64"
         elif args[:3] == ["docker", "image", "rm"]:
             self.missing_images.add(args[3])
+        elif args[:3] == ["docker", "image", "ls"]:
+            stdout = "\n".join(sorted(set(MANIFEST["images"].values()) - self.missing_images))
         elif args[:2] == ["docker", "ps"] and args[-1].startswith("ancestor="):
             stdout = "\n".join(self.other_containers.get(args[-1].removeprefix("ancestor="), []))
         elif args[:2] == ["docker", "ps"]:

@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import stat
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -477,6 +478,50 @@ class OacTests(unittest.TestCase):
         listed = self.output.index("Nodes registered with this Core, which stay on their hosts: node-a (online), node-b (offline)")
         self.assertLess(listed, self.output.index(f"Removed the installation in {self.root}."))
         self.assertIn(f"  sudo python3 node-install.pyz --uninstall --installation-id {installation} --force", self.output)
+
+    def test_uninstall_preserves_state_when_docker_cannot_inspect_images(self):
+        self.install()
+        original = oac_cli.run
+        for daemon_unavailable in (False, True):
+            def fail_inspection(args, **kwargs):
+                if args[:3] == ["docker", "image", "inspect"]:
+                    return subprocess.CompletedProcess(args, 1, stdout="")
+                if daemon_unavailable and args[:3] == ["docker", "image", "ls"]:
+                    raise subprocess.CalledProcessError(1, args)
+                return original(args, **kwargs)
+
+            with self.subTest(daemon_unavailable=daemon_unavailable), \
+                    mock.patch.object(oac_cli, "run", side_effect=fail_inspection), \
+                    self.assertRaisesRegex(oac_cli.OacError, "the images of this installation"):
+                oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+            self.assertTrue((self.root / "state.json").is_file())
+            self.assertEqual(self.host.missing_images, set())
+        self.host.missing_images.add(IMAGES["core"])
+        oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        self.assertFalse(self.root.exists())
+        self.assertEqual(self.host.missing_images, set(IMAGES.values()))
+
+    def test_uninstall_does_not_probe_core_through_private_file_or_directory_links(self):
+        self.install()
+        for name in ("secrets/core.key", "generated", "secrets"):
+            path = self.root / name
+            outside = self.work / path.name
+            path.rename(outside)
+            path.symlink_to(outside, target_is_directory=outside.is_dir())
+            with self.subTest(path=name), mock.patch.object(oac_cli, "http") as request, \
+                    self.assertRaisesRegex(oac_cli.OacError, "--yes"):
+                oac_cli.uninstall(self.root, interactive=False, out=self.output.append)
+            request.assert_not_called()
+            path.unlink()
+            outside.rename(path)
+        # An unsafe probe does not prevent removing the installation's own files.
+        path.rename(outside)
+        path.symlink_to(outside, target_is_directory=True)
+        with mock.patch.object(oac_cli, "http") as request:
+            oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        request.assert_not_called()
+        self.assertFalse(self.root.exists())
+        self.assertTrue((outside / "core.key").is_file())
 
 
 if __name__ == "__main__":

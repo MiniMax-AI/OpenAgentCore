@@ -877,7 +877,11 @@ def remove_images(state, environment):
         found = run(["docker", "image", "inspect", image, "--format", "{{json .RepoTags}}"], check=False,
                     stdout=subprocess.PIPE, text=True, **quiet)
         if found.returncode:
-            continue  # already removed
+            present = run(["docker", "image", "ls", "--all", "--quiet", "--no-trunc"],
+                          stdout=subprocess.PIPE, text=True, **quiet).stdout.split()
+            if image in present:
+                raise subprocess.CalledProcessError(found.returncode, found.args)
+            continue  # Docker confirmed that the image is absent.
         tags = json.loads(found.stdout) or []
         users = run(["docker", "ps", "-aq", "--filter", "ancestor=" + image], stdout=subprocess.PIPE, text=True,
                     **quiet).stdout.split()
@@ -1084,6 +1088,10 @@ def rotate_core_key(root, yes=False, interactive=None, out=print):
 def core_sandboxes(root, state):
     """Core's (nodes, sandbox deployment), or None when Core does not answer. Any part of the installation may be missing."""
     try:
+        if not root.is_absolute() or root.resolve() != root:
+            return None
+        check_directories(root)
+        check_private(root / "secrets/core.key", "secrets/core.key")
         try:
             config = load_config(root)
         except (OacError, config_model.ConfigError):
