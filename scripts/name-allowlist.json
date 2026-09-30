@@ -526,7 +526,7 @@
   },
   {
     "path": "CONTRIBUTING.md",
-    "regex": "copied from Parsar at|in Parsar\\.|apps/parsar/|Parsar is an ordinary client|Parsar integration|`parsar` provider slug",
+    "regex": "copied from Parsar at|in Parsar\\.|apps/parsar/|Parsar is an ordinary client|Parsar integration|Parsar owns|`parsar` provider slug",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {

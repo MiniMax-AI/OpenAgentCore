@@ -41,6 +41,7 @@ Preserve copied Runtime and protocol behavior. Existing Go import paths stay unc
 
 Agents API is the primary infrastructure deliverable. Parsar is an ordinary client and example application; its feature backlog must not dictate the execution service's public protocol or internal model. Agents API must build, deploy and run without the Parsar product service, frontend or database. An optional Compose deployment may install both services with one PostgreSQL instance, but separate databases, credentials and migrations. The product uses Core exclusively; it has no native daemon or HTTP Agent fallback.
 
+- Parsar owns users, workspaces, business authorization, Agent/Team definitions, capabilities, product conversations, IM/sharing, approval decisions and billing.
 - A product conversation may map to several execution sessions. An execution session is distinct from a live daemon socket, process or sandbox. Native engine session identifiers belong to the execution service.
 - Establish single-Agent execution, approval, cancellation, idempotent submission, persisted recovery queries before Team orchestration. The upstream SSE stream is live-only; recover through Session/Turn/Items reads. Any additional product cursor replay must be documented as an extension, not upstream semantics. Agents API establishes single-Agent execution first; business Team loops are deferred. This does not exclude upstream `multi_agent` configuration or subagent resources from protocol coverage. Future business Team orchestration directly depends on `openai/openai-agents-python` in Parsar.
 - Daemon Skill/SP authoring remains a product operation: forward through a scoped product callback with the original requester and workspace checks. A runtime credential alone must not grant business write permissions.
@@ -76,6 +77,7 @@ Record unrelated findings without automatically starting them. Do not claim a br
 - Split growing files at an existing ownership boundary instead of adding unrelated responsibilities.
 - Use `internal/obs/log` for logs. Keep credentials out of source and logs. Harness profiles must not copy Runtime tool environment values; see the [environment contract](contracts/agents-api/environments.md#explicit-local-tool-environment).
 - Require absolute user-supplied working directories.
+- Keep test artifacts under `~/.oac/`.
 - New or changed routes identify their caller and credential in the [API index](docs/api/README.md) and link their detailed contract.
 
 ### Review

@@ -48,7 +48,7 @@ Core serves three namespaces: the Agents API (`/v1`) for applications, the Core 
 
 Core is the only owner of durable execution facts: Projects and keys, Agents, Sessions, Turns, Items, Environments, files and audit records, all in PostgreSQL. It schedules Turns, handles cancellation and pending interactions, and checks that a requested harness, Environment and capability combination is supported before starting work.
 
-Core does not isolate tools, run a model or talk to a vendor SDK directly; it reaches Sandbox Providers, Runtimes and Harnesses through the protocols below. The [repository map](development.md#repository-map) shows where each component lives.
+Core does not isolate tools, run a model or talk to a vendor SDK directly. It reaches Sandbox Providers and Runtimes through the protocols below, and Harnesses only through the Runtime. The [repository map](development.md#repository-map) shows where each component lives.
 
 ## Protocol boundaries
 
@@ -62,7 +62,7 @@ The numbers below match the overview. Each protocol defines behavior, ownership,
 | 4. Runtime / Harness | Native configuration, execution, event translation and confirmed cleanup |
 | Harness / Model Provider | Model inference through a protocol supported by the selected Harness |
 
-The Runtime's startup input crosses the provisioning boundary. After connection, capability preparation belongs to Runtime; the Provider does not become a second execution path.
+The [bootstrap contract](runtime-bootstrap.md) carries the Runtime's startup input across the provisioning boundary. After connection, capability preparation belongs to Runtime; the Provider does not become a second execution path.
 
 Not every combination of Harness, model and Environment works. The supported ones are recorded in [Harness selection](../contracts/agents-api/harness-selection.md) and the [coverage record](../contracts/agents-api/README.md).
 

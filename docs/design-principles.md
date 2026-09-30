@@ -1,9 +1,7 @@
 # Core design principles
 
-OpenAgentCore implements the OpenAI Agents API. Its public contract follows the
-repository's pinned upstream baseline. Documented native harness differences stay
-explicit; Core extensions never silently change upstream resource shapes or
-execution semantics.
+OpenAgentCore implements the OpenAI Agents API under the
+[public API rules](../AGENTS.md#public-api).
 
 ## Three namespaces, three credentials
 
@@ -83,7 +81,7 @@ not protect Runtime data from tools running as the same user.
 
 Do not add product users, RBAC, cross-Project shared assets, administrator
 execution or compatibility with old private protocols. Implementers follow the
-[contributor rules](../CONTRIBUTING.md) and the
+[design rules](../AGENTS.md#design-principles) and the
 [Core–Runtime protocol](runtime-protocol.md).
 
 Native failure classification is adapter-owned and uses finite, structured native
