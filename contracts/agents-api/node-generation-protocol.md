@@ -1,231 +1,112 @@
-# Node generation protocol
+# Sandbox node protocol
 
-This is the internal, authenticated Core-to-node Provider protocol. It does not
-change the pinned public Agents API. `sandbox/node.ProtocolVersion` is the only
-accepted wire version; both peers reject historical versions. The current hello
-explicitly advertises `generation_management` when the node can prepare and retain
-multiple deployment generations. Fixed-configuration manual nodes omit that
-capability and serve only their enrolled generation using the same wire protocol.
-Every Provider request carries its exact allocation-owned deployment generation;
-Core never strips it for an older peer. Automatic preparation and retention frames
-are sent only to nodes advertising generation management.
+A sandbox node runs the Docker or microsandbox Provider on its host and connects to Core over one WebSocket. Core sends Provider operations over that connection; the node runs them against its local provider and reports readiness, host measurements and the deployment generations it holds. Core stays the only lifecycle owner: the node never retries a mutation or schedules work. The frames and validators live in [`services/core/internal/sandbox/node`](../../services/core/internal/sandbox/node) (`wire.go`, `generation_wire.go`); the HTTP routes a node uses to enroll and read its configuration are in the [machine connection API](machine-api.md#node-routes).
 
-## Provider operation outcomes
+## Frames and version
 
-Node startup and generation loading validate complete Provider operation
-declarations before accepting work. Proxies use the same registered declaration
-for admission; unsupported operations reject before node resolution or native I/O.
-The Provider [operation contract](../../docs/sandbox-provider.md#explicit-operation-contracts)
-owns the inventory and support rules.
+Every frame is one JSON text message whose `version` equals `node.ProtocolVersion`; both peers reject any other version, and there is no fallback decoder. Member names are exact and unique: unknown members, case aliases, duplicates and unexpected nulls are rejected. Control frames (`hello`, `welcome`, `heartbeat`, `heartbeat_ack`, `retention`, `retention_ack`) are at most 32 KiB; `request` and `response` frames at most 72 MiB. An invalid frame closes the connection.
 
-A Provider response with `error_code: unsupported` carries an `unsupported` object
-containing the exact method `operation` and an authored safe `reason` code. The
-proxy checks both against the request. Missing, malformed or mismatched evidence
-is an unconfirmed result, never proof that a mutation was rejected. Unsupported
-remains distinct from observation unavailability and unknown compute/command
-results; it does not settle resource ownership or authorize replay. The current
-private wire version requires both peers to understand this outcome.
+## Connection
 
-## Bounded control
+1. The node dials `/api/v1/sandbox-node/connect?node_id=<uuid>` on its stored Core origin (`wss` for `https`) with its node credential as a Bearer header. Core answers 401 to a rejected credential, which the node treats as permanent; any other failure, including a 403 from a proxy, is retried with bounded backoff. Core refuses a second connection for a node identity while one is opening, live or closing, with 409.
+2. Within 15 seconds the node sends `hello` with its identity (`node_id`, `installation_id`, `provider`, `backend_fingerprint`, the enrolled `deployment_generation` and `specification_digest`, `max_active`, `max_retained`), its first health report and, when it can prepare and retain several deployment generations, `generation_management: true`. Core closes the connection unless the identity matches the authenticated node.
+3. Core records the node's presence, then replies `welcome` with a new `connection_id`, the current `owner_epoch` and, for a generation-managing node, `deployment`: the target `generation`, its `specification_digest` and a nullable `serving_generation`. The node stores a higher owner epoch and refuses a lower one.
+4. Every 10 seconds the node sends `heartbeat` with `connection_id`, `owner_epoch` and health. On each heartbeat Core authenticates the node credential again and checks the owner epoch, records the health and replies `heartbeat_ack`, with `deployment` for a generation-managing node. Either peer closes the connection after 35 seconds without a frame.
 
-A generation-managing node's hello or heartbeat contains at most eight generation observations.
-Each names a positive signed-64-bit generation, its lowercase SHA-256 specification
-digest, a `ready`, `preparing` or `failed` state, and an optional fixed diagnostic.
-The target and serving generation take priority; other records rotate fairly.
-Eight bounds one message, not the number of generations a node may retain.
-Omitted observations never authorize deletion or imply absence.
+Core counts a node as online while it is connected under the current owner epoch and its last heartbeat is less than 45 seconds old. A heartbeat establishes provider readiness and the last host measurements, never Session activity.
 
-Welcome and heartbeat acknowledgements carry the Core-owned target generation,
-its specification digest, and an explicitly nullable durable serving generation.
-Target preparation is independent of the readiness of a retained serving provider.
-A provider request carries its exact immutable `deployment_generation` separately
-from the allocation's compute generation.
+Health carries `provider_ready`, an optional fixed `diagnostic`, `observed_at`, `active_operations` (at most 32) and the host measurements that the [Runtime telemetry API](runtime-observability-api.md#node-host-observations-and-history) reports. A node without generation management probes its provider for every report; an unready provider reports one fixed diagnostic code, classified from typed probe errors, and the probe text and host paths stay on the node. Core stores an unknown code as `provider_unavailable`. The [nodes guide](../../docs/getting-started/nodes.md#readiness-codes) lists the codes and their causes. A generation-managing node reports readiness per generation instead, as described below.
 
-Retention exchanges use an independent bounded control path. A request identifies
-at most eight local `(generation, specification_digest)` references, a UUID request
-ID, a monotonically increasing sequence, the current connection UUID and owner
-epoch. Its acknowledgement must match the complete pending request, including
-entry order and identity, and must explicitly supply a boolean `keep` for every
-entry. Only one pending exchange exists per connection. A disconnect discards it;
-an unsolicited, replayed, stale, partial or mixed acknowledgement deletes nothing.
+## Provider requests
 
-Control envelopes are at most 32 KiB. Their member names are exact and unique;
-unknown members, case aliases, duplicate members and unexpected nulls are rejected.
-The nullable serving pin and host measurements preserve unknown values. Provider
-request/response frames retain the existing global size bound; control traffic
-does not increase that bound or consume the provider-operation queue.
+Core sends `request` frames with:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | New UUID per request |
+| `sequence` | Increases by exactly one per request on this connection |
+| `connection_id`, `owner_epoch` | The values from `welcome` |
+| `deployment_generation` | The generation the allocation belongs to, separate from its compute generation |
+| `operation` | One of the operations below |
+| `timeout_ms` | Remaining budget, 1 to 120000 |
+| `reference` | The exact `(tenant_id, environment_id, allocation_id)` |
+
+Each operation carries exactly its own argument:
+
+| `operation` | Provider method | Argument |
+| --- | --- | --- |
+| `create` | `Create` | `bootstrap` |
+| `info`, `renew`, `kill`, `command` | `GetInfo`, `Renew`, `Kill`, `RunCommand` | none, or `command` |
+| `observe` | `Observe` | `observation` |
+| `initial`, `new_compute`, `compute`, `kill_compute`, `resume_compute`, `command_compute` | Checkpoint compute operations | none, an optional `snapshot`, `compute`, or `compute` and `command` |
+| `suspend`, `resume`, `delete_snapshot` | `Suspend`, `Resume`, `DeleteSnapshot` | `suspend`, `resume` or `snapshot` |
+
+A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. A node without generation management accepts only its enrolled `deployment_generation`; a generation-managing node runs the request on that generation's provider and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not observe-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
+
+The budget is relative: the node anchors `timeout_ms` to its own clock on receipt and consumes it while the request waits in its queue, so the hosts' clocks need not agree. Core still bounds its own wait. A full node queue closes the connection.
+
+The `response` frame carries `id`, `connection_id`, an `error_code` when the call failed, and on success exactly one result (`info`, `compute`, `state`, `command` or `sample`):
+
+| `error_code` | Meaning |
+| --- | --- |
+| `invalid`, `ownership`, `exists`, `not_found` | `ErrInvalid`, `ErrOwnership`, `ErrExists`, `ErrNotFound` |
+| `command_unconfirmed` | `ErrCommandUnconfirmed` |
+| `observation_unavailable`, `runtime_not_running` | The observation outcomes |
+| `unsupported` | The operation is declared unsupported; see below |
+| `unconfirmed`, or any other value | The outcome is unknown |
+
+A failed response carries no result, except an `info` that is an exact-reference `CreateSettled` receipt: a confirmed native Create that failed a later check can still prove that the attempt settled. A timeout, a lost response or a disconnect is unavailable or uncertain, never evidence of absence, and Core never replays a mutation after one; it observes the original operation instead. The [Sandbox Provider guide](../../docs/sandbox-provider.md#operation-outcomes-and-retries) defines each outcome.
+
+Node startup and generation loading validate complete Provider operation declarations before accepting work, and the Core proxy uses the same registered declaration, so an unsupported operation rejects before node resolution or native I/O. The [operation contract](../../docs/sandbox-provider.md#explicit-operation-contracts) owns the inventory. An `unsupported` response carries an `unsupported` object with the exact method `operation` and an authored safe `reason`; the proxy checks both against the request. Missing, malformed or mismatched evidence is an unconfirmed result, never proof that a mutation was rejected. Unsupported stays distinct from observation unavailability and unknown compute or command results, and it neither settles resource ownership nor authorizes a replay.
+
+## Generation control
+
+A node without generation management serves only its enrolled generation, with fixed configuration, and receives no preparation or retention frames. A generation-managing node prepares the target generation Core announces in `welcome` and `heartbeat_ack` and keeps serving its durable serving generation while it does; target preparation is independent of the serving provider's readiness.
+
+Its `hello` and heartbeats carry at most eight generation observations. Each names a positive signed-64-bit generation, its lowercase SHA-256 specification digest, a `ready`, `preparing` or `failed` state and an optional fixed diagnostic. The target and serving generations come first; other records rotate fairly. Eight bounds one message, not the number of generations a node may keep. An omitted observation never authorizes deletion or implies absence.
+
+Retention uses its own bounded exchange. A `retention` request names at most eight local `(generation, specification_digest)` references, a UUID, a sequence that increases by one, the current `connection_id` and the owner epoch. The `retention_ack` must match the complete pending request, entry order and identity included, and give an explicit boolean `keep` for every entry. One exchange is pending per connection, and a disconnect discards it. An unsolicited, replayed, stale, partial or mixed acknowledgement deletes nothing. Retention traffic never uses the Provider request queue.
 
 ## Local retention and helper lifetime
 
-A Core drop grant is necessary but insufficient for collection. Queued and running
-provider calls, preparation, the local target and serving pin retain references.
-Collection rechecks those references and refuses an already canceled connection.
-A canceled provider caller does not establish that its native helper has stopped:
-the parent counts that helper through its actual `Wait` completion.
+A Core drop grant is necessary but not sufficient for collection. Queued and running provider calls, preparation, the local target and the serving pin all keep references; collection rechecks them and refuses on an already canceled connection. A canceled provider caller does not prove that its native helper stopped: the node counts a helper until its actual `Wait` returns.
 
-Every generation also owns a permanent private lease file at
-`state/node/generations/<generation>.lease`. Before starting a native helper, the
-node acquires its shared flock and validates the durable lease identity under
-that lock. It also requires the matching published final provider configuration
-and absence of preparing, collecting and dropped journals. The helper inherits the descriptor. The node closes its own descriptor
-only after `Wait`; it never explicitly unlocks the shared open-file description.
-Thus caller cancellation or node exit does not release a live helper's reference.
-New native helpers set this descriptor close-on-exec before calling the SDK so VM
-and daemon descendants do not inherit a helper reference.
+Every generation owns a permanent private lease file, `state/node/generations/<generation>.lease`. Before starting a native helper, the node takes a shared flock on it, validates the durable lease identity under that lock, and requires the published final provider configuration and no preparing, collecting or dropped journal. The helper inherits the descriptor; the node closes its own copy only after `Wait` and never unlocks the shared open-file description, so a canceled caller or a node exit does not release a live helper's reference. Native helpers set the descriptor close-on-exec before calling the SDK, so VM and daemon descendants do not inherit it.
 
-Collection acquires the exclusive nonblocking flock before inspecting references,
-removing shared images or release files, or publishing the dropped tombstone. It
-keeps the lock through those changes. Lock files belong to stable node state and
-are never removed or atomically replaced during collection. Symlinks, multiply
-linked files, foreign ownership, unsafe permissions and replaced lock paths are
-refused. Before the first helper can start, the installer exclusively creates the lease and
-fsyncs it, then atomically persists and fsyncs a private `.lease-identity` record and
-its parent directory. The record binds installation, generation, specification
-digest, device and inode. Python exclusive collection/repair and Go shared helper
-openers validate the same record on every open, including after node restart.
-Neither opener adopts a missing identity, replaces its inode, or erases
-it after GC. Initialization interrupted before the identity is durable refuses
-re-adoption; preserve the installation for inspection. A removed identity or an
-owned replacement 0600 lease still refuses, even when its current fstat/lstat agree.
+Collection takes the exclusive nonblocking flock before it inspects references, removes shared images or release files, or publishes the dropped marker, and holds it through those changes. Lease files belong to stable node state and are never removed or replaced during collection; symlinks, multiply linked files, foreign ownership, unsafe permissions and replaced lock paths are refused. Before the first helper can start, the installer creates the lease exclusively and fsyncs it, then atomically persists and fsyncs a private `.lease-identity` record and its directory. The record binds installation, generation, specification digest, device and inode. The Python collector and the Go helper opener validate the same record on every open, including after a restart; neither adopts a missing identity, replaces its inode or erases it after collection. An installation interrupted before the identity is durable refuses re-adoption and is kept for inspection. A removed identity or a replaced lease refuses even when its current metadata agree.
 
-A dropped generation cannot be prepared or used again; a future rollback
-would require a new generation and a separate policy.
-
-An immutable older native helper may pass its inherited descriptor to descendants.
-That conservatively retains its generation's bytes until those descriptors close;
-collection must not kill historical VMs or a host daemon merely to reclaim disk.
-A helper's exit is local file-lifetime evidence, not proof that a remote mutation
-or an uncertain provider receipt has been released. Core's durable allocation and
-placement retention requirements remain independent.
+A dropped generation can never be prepared or used again. A helper's exit is evidence about local files only, not proof that a remote mutation or an uncertain provider receipt has been released; Core's durable allocation and placement retention stays independent.
 
 ## Matched fresh installation
 
-The host program release and Core's selected Runtime release are independent.
-A fresh node gets its executable and private preparer from the current console
-release. It reads the exact Runtime source, image identities and native runtime /
-firmware digests from the authenticated Core configuration. If that Runtime is
-older, the console must still serve its immutable `releases/<source>/` manifest,
-checksums and allowlisted artifacts. Runtime helper, firmware, seccomp and image
-bytes come from that selected release; the enrolled specification records it.
-Artifact URLs are pinned to their verified manifest source even if the console's
-current release changes during download.
+The host program release and Core's selected Runtime release are independent. A fresh node gets its executable and private preparer from the console's current release, and reads the exact Runtime source, image identities and native runtime and firmware digests from its authenticated configuration. When that Runtime is older, the console still serves its immutable `releases/<source>/` manifest, checksums and allowlisted artifacts: the Runtime helper, firmware, seccomp profile and image bytes come from the selected release, and artifact URLs stay pinned to their verified manifest even if the console's current release changes during a download.
 
-A missing retained release refuses installation rather than substituting the
-current Runtime. A local bundle that contains only a different Runtime also
-refuses with guidance to use the console origin retaining the selected release.
-These refusals occur before writing the installation identity, importing the
-Runtime, registering the node or starting its service.
+A missing retained release refuses the installation rather than substituting the current Runtime, and so does a local bundle that holds only a different Runtime. These refusals happen before the installer writes the node identity, imports the Runtime, registers the node or starts its service.
+
+A published console release keeps its metadata and artifact bytes. Publishing it again first validates all metadata and every existing declared artifact, then may atomically add only missing, checksum-matched declared artifacts; any conflict prevents every addition, and nothing is overwritten.
 
 ## Restart recovery
 
-Missing retained Runtime bytes do not switch a pinned placement to the current
-Runtime. The node retains the original generation and specification digest as
-unready state, and asks Core's authenticated configuration endpoint for that exact
-kept generation before recovery. Missing seccomp bytes may leave an unready
-provider placeholder; missing image or native artifacts discovered by a provider
-probe queue repair without advertising readiness.
+Missing Runtime bytes never move a pinned placement to the current Runtime. The node keeps the original generation and specification digest as unready and asks Core's authenticated configuration route for that exact generation before recovery. Missing seccomp bytes may leave an unready provider placeholder; missing image or native artifacts found by a provider probe queue a repair without advertising readiness.
 
-Preparation and repair are serialized. Target and serving generations take
-priority, with bounded progress over other retained generations. Each attempt has
-a 30-minute deadline; failures back off for 1, 2, 5, 10 and then at most 30 minutes.
-No connection-established deployment facts means no preparation starts. Repair
-preserves existing configurations and paths, verifies the selected release and all
-existing sibling checksums, and downloads only absent immutable files. Conflicting
-bytes or a different retained specification refuse repair. A missing complete
-provider configuration without an exact durable preparation plan remains a refusal rather than a guessed reconstruction.
+Preparation and repair are serialized. Target and serving generations come first, with bounded progress on the others. Each attempt has a 30-minute deadline, and failures back off for 1, 2, 5 and 10 minutes, then at most 30. Nothing is prepared before the connection has delivered deployment facts. Repair keeps existing configurations and paths, verifies the selected release and every existing sibling checksum, and downloads only missing immutable files. Conflicting bytes or a different retained specification refuse repair, and a missing provider configuration without an exact preparation plan is refused rather than reconstructed.
 
-Repair takes the same exclusive generation lease and installation lock used by
-collection. A live helper or concurrent collector therefore retains ownership;
-repair retries later without replacing in-use files. Once bytes are restored, the
-node still runs the actual provider readiness probe. File presence and executable
-capability alone never establish serving readiness.
+Repair takes the same exclusive generation lease and installation lock as collection, so a live helper or a running collector keeps ownership and repair retries later. After the bytes are restored, the node still runs the provider's readiness probe; file presence and executable capability never establish readiness.
 
-## Interrupted local collection
+## Preparation and collection records
 
-Before native or release deletion, the node persists a private collection journal
-bound to its installation, generation and specification digest. Restart loads an
-unfinished journal only as a retention-exchange candidate: it cannot prepare,
-probe, acquire or advertise that generation. A fresh correlated Core drop grant
-is required to resume; the journal itself never authorizes deletion.
+New preparation writes two distinct records. Before downloads, `.preparing` holds the installation, generation and specification identity, the private provider paths and `import_started: false`; it is a recovery and collection plan, not a provider. Before the importer runs, the plan records `import_started: true`. Python retention discovery and Go restart recovery both recognize pending-only plans but never build, probe or acquire a provider from them, and recovery or collection still needs authorization on the current connection.
 
-For an installation-private microsandbox store, a successful complete native image
-inventory distinguishes absence from a CLI failure. Failed queries, malformed inventories, native in-use refusals and
-unknown ownership retain the local bytes. Native completion is persisted before
-release-file cleanup, so a retry can finish a partly removed release without
-executing an already removed helper. Shared microsandbox images and private releases remain until their last local
-reference. Docker imported images belong to the shared host daemon and are retained,
-including when another installation has only an idle serving pin. Automatic node
-GC never runs Docker image removal or pruning. The host administrator may remove
-those images only after confirming that no installation on the host needs them;
-local generation collection does not claim physical Docker image GC. The final digest-bound dropped marker follows durable file
-cleanup and permanently prevents re-adoption. The small immutable configuration
-and ownership journals remain as local identity records.
+Only a successful preparation publishes the final `.json` provider configuration, which is write-once. Docker records the immutable local image ID its resolver returns; either the builder's config identity or the manifest identity can be valid for the same specification. Publication is durable before the preparation journal is cleared. An interruption between the two revalidates the same plan and final identity; plan, specification or path drift refuses. A canceled or failed import stays visible to Core's retention exchange without becoming a serving generation.
 
-Fresh installations also persist the verified Runtime file checksums separately
-from the host program. Collection of the original generation removes only those
-exact private Runtime helper, executable, firmware, seccomp and import-cache files
-that no retained configuration references. All remaining files are checked before
-the first deletion; unknown hashes, changed bytes, links or missing ownership
-metadata refuse cleanup. Interruption resumes under the same collection journal.
-The current node executable, preparer, identity, base provider configuration and
-manifests remain, so restart can read its enrolled identity and construct a newer
-retained provider after the original Runtime bytes have gone. Shared native paths
-are compared across all retained configurations before removal.
+Before any native or release deletion, the node persists a private collection journal bound to its installation, generation and specification digest. After a restart an unfinished journal is only a retention-exchange candidate: it cannot prepare, probe, acquire or advertise that generation, and a fresh correlated Core drop grant is needed to resume. Native completion is persisted before release files are removed, so a retry can finish a partly removed release without running an already removed helper. The digest-bound dropped marker follows durable file cleanup and prevents re-adoption; the small configuration and ownership journals stay as local identity records.
 
-New preparation has two distinct records. Before downloads, `.preparing` holds the
-immutable installation/generation/specification identity, private provider paths
-and `import_started:false`; it is a recovery/collection plan, not a published
-provider. Before invoking the importer, the same plan records `import_started:true`.
-Both Python retention discovery and Go restart recovery recognize pending-only
-plans, but never build, probe or acquire a provider from them. Current-connection
-Core authorization is still required for recovery or collection.
+For the installation-private microsandbox store, a successful, complete native image inventory distinguishes absence from a CLI failure; a failed query, malformed inventory, native in-use refusal or unknown ownership keeps the bytes. Shared microsandbox images and private releases stay until their last local reference. Docker images belong to the host's shared daemon: automatic collection never removes or prunes them, and only the host administrator can remove them after confirming that no installation on the host needs them.
 
-Only successful preparation publishes the final `.json` provider configuration.
-Docker records the actual immutable local ID returned by the resolver; either
-builder-proven config or manifest identity can be valid for the same specification.
-The final configuration is write-once. Publication is durable before clearing the
-preparation journal. Interruption between those steps revalidates the same plan
-and existing final identity; it does not permit editing a published configuration.
-Plan/spec/path drift refuses. A canceled or failed import remains visible to fresh
-Core retention exchange without becoming a serving generation.
+A fresh installation also records the verified checksums of its Runtime files separately from the host program. Collecting the original generation removes only the exact private Runtime helper, executable, firmware, seccomp and import-cache files that no retained configuration references. Every remaining file is checked before the first deletion; an unknown hash, changed bytes, links or missing ownership metadata refuse cleanup. The node executable, preparer, identity, base provider configuration and manifests stay, so a restarted node can still read its enrolled identity and construct a newer retained provider. Shared native paths are compared across all retained configurations before removal.
 
-An interrupted download repairs only missing bytes at the original paths. If
-collection precedes any import attempt, the preparation journal proves that this
-generation has no imported native image. An older or interrupted generation whose
-native executable is missing and whose import may have started remains retained;
-missing files do not prove native absence. Receipt/store history is never
-erased using an empty native inventory.
+An interrupted download repairs only missing bytes at the original paths. When collection comes before any import attempt, the preparation journal proves that the generation has no imported native image. A generation whose native executable is missing and whose import may have started stays retained: missing files never prove native absence, and an empty native inventory never erases receipt or store history.
 
 The diagnostic codes are authored in `services/core/internal/sandbox/node_diagnostic.go`. The shared `services/core/internal/sandbox/testdata/node-diagnostics.json` fixture checks the Go mapping, OpenAPI source annotations and generated enums, and the TypeScript client declaration. Web uses the client normalizer and checks localized messages for every declared code. Update these projections with a code change; unknown codes normalize to `provider_unavailable`.
 
-Preparation diagnostics preserve fixed typed causes. Only artifact transfer,
-checksum or release-provenance failures report `runtime_download_failed`. A private
-preparer exit category communicates that class without parsing stderr; provider,
-ownership, cancellation and unclassified failures remain their existing typed
-code or `provider_unavailable`. No raw provider text crosses the node protocol.
-
-Published console releases keep immutable metadata and existing artifact bytes.
-A rerun first validates all published metadata and every existing declared artifact,
-then may atomically add only absent, checksum-matched declared artifacts. This
-supports thin-release completion and retained HTTP artifact repair. Any existing
-conflict prevents all additions; repair never overwrites a conflicting artifact.
-
-## Node program version policy
-
-Node program upgrades, historical conversion and adoption are not supported.
-`node-install.pyz --update` refuses before changing the installation. Preserve old
-installation files, credentials, Runtime stores, provider resources and history;
-install the current program separately through the ordinary fresh-node enrollment
-flow. Reinstallation does not automatically delete or migrate existing data.
-
-Current Runtime generation changes operate within an installation of the current
-node program. They do not upgrade that program or establish compatibility with
-historical node installations.
-
-## Qualification boundary
-
-Protocol and process tests do not qualify Runtime readiness, VM coexistence,
-or native image/store locking. Current-version Runtime behavior requires the
-separate exact-artifact KVM and Docker acceptance matrix. Historical helper
-behavior remains historical evidence, not a supported upgrade workflow; absence
-of local test coverage is not evidence of successful garbage collection.
+Preparation diagnostics keep fixed typed causes. Only artifact transfer, checksum or release-provenance failures report `runtime_download_failed`; the private preparer signals that class through its exit category, without Core or the node parsing stderr. Provider, ownership, cancellation and unclassified failures keep their typed code or `provider_unavailable`. No raw provider text crosses the protocol.
