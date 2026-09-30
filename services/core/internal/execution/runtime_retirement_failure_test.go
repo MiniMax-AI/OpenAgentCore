@@ -29,7 +29,7 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 			var readOnce sync.Once
 			unblockRead := func() { readOnce.Do(func() { close(releaseRead) }) }
 			defer unblockRead()
-			owner, _, pool := delayedReadWriter(t, &armed, reading, releaseRead)
+			owner, _, _, pool := delayedReadWriter(t, &armed, reading, releaseRead)
 			m := testRuntimeManager(t)
 			m.store, m.lease = owner.Store, owner.Lease
 			m.loadDeployment = func(context.Context) (*RuntimeProvider, error) { return nil, nil }

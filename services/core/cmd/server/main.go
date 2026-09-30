@@ -289,7 +289,7 @@ func run() error {
 	}
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
-			Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService,
+			Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService, DeploymentReader: deploymentStore,
 			Sessions:        sessionService,
 			SessionsReader:  sessionStore,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
@@ -370,7 +370,7 @@ func run() error {
 	}
 	deps := api.Dependencies{
 		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
-		Installation: installation, InstallationBindings: executionStore,
+		Installation: installation, InstallationBindings: deploymentService,
 		Projects: projectService, ProjectsReader: projectStore,
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,

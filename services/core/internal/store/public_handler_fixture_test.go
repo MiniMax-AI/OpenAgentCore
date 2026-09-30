@@ -76,7 +76,7 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 		return nil, err
 	}
 	deps := api.Dependencies{
-		Engine: engine, CoreKeys: admin, InstallationBindings: s,
+		Engine: engine, CoreKeys: admin, InstallationBindings: fixtureDeployment(t, db),
 		Projects: projectService, ProjectsReader: fixtureProjectsReader{Reader: projectStore, keys: keys},
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
@@ -290,7 +290,7 @@ func (s strictStandIn) UpdateSandboxDeployment(context.Context, sandbox.Selectio
 	return deployment.View{}, nil
 }
 
-func (s strictStandIn) StartSandboxReset(context.Context, store.SandboxResetRequest) (deployment.View, error) {
+func (s strictStandIn) StartSandboxReset(context.Context, deployment.ResetRequest) (deployment.View, error) {
 	s.unexpected("StartSandboxReset")
 	return deployment.View{}, nil
 }

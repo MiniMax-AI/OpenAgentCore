@@ -26,22 +26,22 @@ import (
 
 // The execution lease is database-scoped, so these manager tests own a database.
 // They receive the pooled Store, the Owner of its execution lease, which the
-// test closes when it ends, and the pooled deployment service the Worker
-// receives beside it.
-func resetManagerStore(t *testing.T) (*store.Store, Owner, *deployment.Service) {
+// test closes when it ends, and the pooled deployment service and reader the
+// Worker receives beside it.
+func resetManagerStore(t *testing.T) (*store.Store, Owner, *deployment.Service, deployment.Reader) {
 	t.Helper()
 	return resetManagerStoreConfig(t, nil)
 }
 
-func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner, *deployment.Service) {
+func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner, *deployment.Service, deployment.Reader) {
 	t.Helper()
-	s, owner, deployments, _ := resetManagerStoreDB(t, configure)
-	return s, owner, deployments
+	s, owner, deployments, reader, _ := resetManagerStoreDB(t, configure)
+	return s, owner, deployments, reader
 }
 
 // resetManagerStoreDB also returns the test database, for tests that build
 // adapters on it.
-func resetManagerStoreDB(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner, *deployment.Service, *pgxpool.Pool) {
+func resetManagerStoreDB(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner, *deployment.Service, deployment.Reader, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.OpenIsolated(t, configure)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
@@ -49,27 +49,27 @@ func resetManagerStoreDB(t *testing.T, configure func(*pgxpool.Config)) (*store.
 		t.Fatal(err)
 	}
 	s := store.NewWithCredentialCipher(pool, cipher)
-	owner, deployments := testOwner(t, pool, cipher, s)
-	return s, owner, deployments, pool
+	owner, deployments, reader := testOwner(t, pool, cipher, s)
+	return s, owner, deployments, reader, pool
 }
 
 // testOwner acquires the execution lease on pool and builds s's execution
 // writer and the deployment execution operations on it, and the pooled
-// deployment service, as cmd/server does. The lease closes when the test ends.
-func testOwner(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher, s *store.Store) (Owner, *deployment.Service) {
+// deployment service and reader, as cmd/server does. The lease closes when the
+// test ends.
+func testOwner(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher, s *store.Store) (Owner, *deployment.Service, deployment.Reader) {
 	t.Helper()
 	lease, err := pgunit.AcquireLease(t.Context(), pool)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	deployments, operations := testDeployment(t, pool, cipher, lease)
-	return Owner{Lease: lease, Store: store.NewExecution(s, lease), Deployment: operations}, deployments
+	deployments, reader, operations := testDeployment(t, pool, cipher, lease)
+	return Owner{Lease: lease, Store: store.NewExecution(s, lease), Deployment: operations}, deployments, reader
 }
 
 func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
-	_, owner, deployments := resetManagerStore(t)
-	w := owner.Store
+	_, owner, deployments, reader := resetManagerStore(t)
 	id := initializeE2BDeployment(t, owner)
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
@@ -85,7 +85,7 @@ func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
 		}
 		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}, nil
 	})
-	m, err := newRuntimeManager(owner, deployments, runtimegateway.NewRegistry(), config)
+	m, err := newRuntimeManager(owner, deployments, reader, runtimegateway.NewRegistry(), config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
 		}
 	}()
 	audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "reset-test", ActorLabel: "operator", RequestID: "request", TraceID: "trace"})
-	if err := w.StartSandboxReset(audit, id, store.SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err != nil {
+	if err := owner.Deployment.StartReset(audit, id, deployment.ResetRequest{ExpectedGeneration: 1, Clear: deployment.ResetForce}); err != nil {
 		t.Fatal(err)
 	}
 	reset, err := deployments.View(t.Context())
@@ -174,7 +174,7 @@ func initializeE2BDeployment(t *testing.T, owner Owner) string {
 }
 
 func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
-	_, owner, pooled, pool := resetManagerStoreDB(t, nil)
+	_, owner, pooled, _, pool := resetManagerStoreDB(t, nil)
 	id := initializeE2BDeployment(t, owner)
 	// The manager reads the deployment through a reader that fails every read
 	// of the committed reset, so publication cannot depend on one.
@@ -189,7 +189,7 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 		}
 		return snapshot, err
 	}}
-	deployments, operations := deploymentOperations(t, &strictDeploymentStorage{t: t}, reader, &strictExecutionStorage{t: t})
+	deployments, _ := deploymentOperations(t, &strictDeploymentStorage{t: t}, reader, &strictExecutionStorage{t: t})
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	config := NewDeferredRuntimeProvider(id, func(ctx context.Context) (*RuntimeProvider, error) {
@@ -206,7 +206,7 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 		}
 		published = append(published, generation)
 	}
-	m, err := newRuntimeManager(Owner{Lease: owner.Lease, Store: owner.Store, Deployment: operations}, deployments, runtimegateway.NewRegistry(), config)
+	m, err := newRuntimeManager(owner, deployments, adapter, runtimegateway.NewRegistry(), config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 		t.Fatal(err)
 	}
 	audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "reset-test", ActorLabel: "operator", RequestID: "request", TraceID: "trace"})
-	if err := owner.Store.StartSandboxReset(audit, id, store.SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err != nil {
+	if err := owner.Deployment.StartReset(audit, id, deployment.ResetRequest{ExpectedGeneration: 1, Clear: deployment.ResetForce}); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.resetStep(t.Context()); err != nil {
@@ -241,7 +241,7 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 		return deployment.Snapshot{Record: deployment.Record{InstallationID: id, WebManaged: true, Generation: 1}}, nil
 	}}
 	deployments, operations := deploymentOperations(t, &strictDeploymentStorage{t: t}, reader, &strictExecutionStorage{t: t})
-	m, err := newRuntimeManager(Owner{Lease: lostLease{}, Deployment: operations}, deployments, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(Owner{Lease: lostLease{}, Deployment: operations}, deployments, reader, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,16 +261,16 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 }
 
 func TestSandboxResetChangesReturnViewReadAfterCommit(t *testing.T) {
-	_, owner, deployments := resetManagerStore(t)
+	_, owner, deployments, reader := resetManagerStore(t)
 	id := initializeE2BDeployment(t, owner)
-	m, err := newRuntimeManager(owner, deployments, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(owner, deployments, reader, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { m.stop(); m.drain() }()
 	worker := &Worker{runtimes: m}
 	audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "reset-test", ActorLabel: "operator", RequestID: "request", TraceID: "trace"})
-	started, err := worker.StartSandboxReset(audit, store.SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"})
+	started, err := worker.StartSandboxReset(audit, deployment.ResetRequest{ExpectedGeneration: 1, Clear: deployment.ResetForce})
 	if err != nil {
 		t.Fatal(err)
 	}

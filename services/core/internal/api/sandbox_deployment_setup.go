@@ -3,14 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type SandboxDeploymentInput struct {
@@ -47,7 +46,7 @@ type DeploymentChanges interface {
 // DeploymentReset starts and cancels a sandbox deployment reset through the
 // execution owner.
 type DeploymentReset interface {
-	StartSandboxReset(ctx context.Context, input store.SandboxResetRequest) (deployment.View, error)
+	StartSandboxReset(ctx context.Context, input deployment.ResetRequest) (deployment.View, error)
 	CancelSandboxReset(ctx context.Context, generation uint64) (deployment.View, error)
 }
 
@@ -123,7 +122,7 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Accept json
-// @Param body body store.SandboxResetRequest true "Reset mode and current deployment generation"
+// @Param body body deployment.ResetRequest true "Reset mode and current deployment generation"
 // @Success 200 {object} deployment.View
 // @Failure 400,401,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/deployment/reset [post]
@@ -141,7 +140,7 @@ func (h *Handler) startSandboxReset(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "A current expected_generation is required.", "expected_generation")
 		return
 	}
-	if input.Clear != "auto" && input.Clear != "force" {
+	if input.Clear != deployment.ResetAuto && input.Clear != deployment.ResetForce {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "Choose auto or force for clear.", "clear")
 		return
 	}
@@ -151,14 +150,15 @@ func (h *Handler) startSandboxReset(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "deadline_seconds must be an integer when supplied.", "deadline_seconds")
 		return
 	}
-	if input.DeadlineSeconds != nil && (input.Clear != "auto" || *input.DeadlineSeconds < 300 || *input.DeadlineSeconds > 86400) {
-		writeCoreError(w, http.StatusBadRequest, "invalid_request_error", "deadline_seconds applies only to auto and must be between 300 and 86400.", CoreErrorDetails{"min": CoreErrorNumber(300), "max": CoreErrorNumber(86400)}, "deadline_seconds")
+	if input.DeadlineSeconds != nil && (input.Clear != deployment.ResetAuto || *input.DeadlineSeconds < deployment.MinResetDeadlineSeconds || *input.DeadlineSeconds > deployment.MaxResetDeadlineSeconds) {
+		message := fmt.Sprintf("deadline_seconds applies only to auto and must be between %d and %d.", deployment.MinResetDeadlineSeconds, deployment.MaxResetDeadlineSeconds)
+		writeCoreError(w, http.StatusBadRequest, "invalid_request_error", message, CoreErrorDetails{"min": CoreErrorNumber(deployment.MinResetDeadlineSeconds), "max": CoreErrorNumber(deployment.MaxResetDeadlineSeconds)}, "deadline_seconds")
 		return
 	}
 	setAdminAuditSource(r, "")
-	result, err := h.Sandboxes.DeploymentReset.StartSandboxReset(r.Context(), store.SandboxResetRequest{ExpectedGeneration: *input.ExpectedGeneration, Clear: input.Clear, DeadlineSeconds: input.DeadlineSeconds})
+	result, err := h.Sandboxes.DeploymentReset.StartSandboxReset(r.Context(), deployment.ResetRequest{ExpectedGeneration: *input.ExpectedGeneration, Clear: input.Clear, DeadlineSeconds: input.DeadlineSeconds})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeDeploymentError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -182,7 +182,7 @@ func (h *Handler) cancelSandboxReset(w http.ResponseWriter, r *http.Request) {
 	setAdminAuditSource(r, "")
 	result, err := h.Sandboxes.DeploymentReset.CancelSandboxReset(r.Context(), query)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeDeploymentError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -190,7 +190,7 @@ func (h *Handler) cancelSandboxReset(w http.ResponseWriter, r *http.Request) {
 func parseResetGeneration(r *http.Request) (uint64, error) {
 	query, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil || len(query) != 1 || len(query["expected_generation"]) != 1 {
-		return 0, sessions.ErrInvalidInput
+		return 0, deployment.ErrInvalidInput
 	}
 	return strconv.ParseUint(query.Get("expected_generation"), 10, 64)
 }

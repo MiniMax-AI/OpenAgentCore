@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -44,8 +45,9 @@ func newManagedTestStoreDB(t *testing.T) (*store.Store, fixtureDB) {
 // execution lease on db and hands it, with the execution writer built on it, to
 // the Worker, which closes it when Run exits. The Worker opens MCP bearer tokens
 // through the vaults service on db, records model configuration observations
-// through the model configuration adapter on db and runs Session use cases
-// and reads through the Session service and adapter on db.
+// through the model configuration adapter on db, runs Session use cases and
+// reads through the Session service and adapter on db, and reads the
+// deployment through the deployment adapter on db.
 func startWorker(t testing.TB, ctx context.Context, db fixtureDB, dispatcher *execution.Dispatcher) *execution.Worker {
 	t.Helper()
 	worker, err := startWorkerErr(ctx, db, dispatcher)
@@ -79,6 +81,7 @@ func startWorkerErr(ctx context.Context, db fixtureDB, dispatcher *execution.Dis
 	owned.Deployment = deployments
 	owned.Sessions = sessionService
 	owned.SessionsReader = sessionStore
+	owned.DeploymentReader = deploymentpg.New(pgunit.NewPool(db.pool), db.cipher)
 	return execution.StartWorker(ctx, &owned, execution.Owner{
 		Lease:      lease,
 		Store:      store.NewExecution(dispatcher.Store, lease),

@@ -11,14 +11,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func (w *Worker) StartSandboxReset(ctx context.Context, input store.SandboxResetRequest) (deployment.View, error) {
+func (w *Worker) StartSandboxReset(ctx context.Context, input deployment.ResetRequest) (deployment.View, error) {
 	unlock, err := w.runtimes.lockMutation(ctx)
 	if err != nil {
 		return deployment.View{}, err
 	}
 	defer unlock()
 	m := w.runtimes
-	if err := m.store.StartSandboxReset(ctx, m.setupInstallationID, input); err != nil {
+	if err := m.deployment.StartReset(ctx, m.setupInstallationID, input); err != nil {
 		return deployment.View{}, err
 	}
 	return m.committedView(ctx)
@@ -31,7 +31,7 @@ func (w *Worker) CancelSandboxReset(ctx context.Context, generation uint64) (dep
 	}
 	defer unlock()
 	m := w.runtimes
-	if err := m.store.CancelSandboxReset(ctx, m.setupInstallationID, generation); err != nil {
+	if err := m.deployment.CancelReset(ctx, m.setupInstallationID, generation); err != nil {
 		return deployment.View{}, err
 	}
 	return m.committedView(ctx)
@@ -82,7 +82,7 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		return err
 	}
 	defer unlock()
-	if err := m.store.AdvanceSandboxResetDeadline(ctx); err != nil {
+	if err := m.deployment.AdvanceResetDeadline(ctx); err != nil {
 		return err
 	}
 	current, err := m.deploymentService.View(ctx)
@@ -98,7 +98,7 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		m.resetCursor = ""
 		m.resetRequestedAt = current.Reset.RequestedAt
 	}
-	candidates, err := m.store.ListSandboxResetSessions(ctx, m.resetCursor, current.Reset.Clear == "force")
+	candidates, err := m.deploymentReader.ResetSessions(ctx, m.resetCursor, current.Reset.Clear == deployment.ResetForce)
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		}
 		return err
 	}
-	committed, err := m.store.CompleteSandboxReset(ctx, m.setupInstallationID, current.Generation, current.Reset.RequestedAt)
+	committed, err := m.deployment.CompleteReset(ctx, m.setupInstallationID, current.Generation, current.Reset.RequestedAt)
 	if err != nil {
 		recovery := m.restoreCommittedDeployment()
 		if recovery != nil {

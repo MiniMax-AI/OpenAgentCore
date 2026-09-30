@@ -11,7 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
@@ -25,8 +24,8 @@ func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fakes.installationBindings.addressBindings = func(context.Context) (store.AddressBindings, error) {
-		return store.AddressBindings{Nodes: 2, NodesOnOtherAddress: 1}, nil
+	fakes.installationBindings.addressBindings = func(context.Context) (deployment.AddressBindings, error) {
+		return deployment.AddressBindings{Nodes: 2, NodesOnOtherAddress: 1}, nil
 	}
 	// No sandbox deployment: the read is available before any deployment exists.
 	deps.Installation = Installation{InstallationID: &id, PublicURL: &public, Configuration: settings}

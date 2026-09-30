@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 
@@ -85,7 +86,7 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 				result, err = getManagedSessionArchive(ctx, q, tenant, session)
 				return err
 			}
-			source, err := sandboxResetAudit(current)
+			source, err := deploymentpg.ResetSource(current)
 			if err != nil {
 				return err
 			}

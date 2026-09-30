@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -324,6 +325,58 @@ func (t *deploymentTx) RetainGeneration() error { return t.q.RetainSandboxGenera
 
 func (t *deploymentTx) CollectGenerations() error { return t.q.CollectSandboxGenerations(t.ctx) }
 
+func (t *deploymentTx) StartReset(clear string, deadlineSeconds int32, source adminaudit.Source) error {
+	// The audit entry recorded in the same transaction validates the source
+	// before commit. Only the typed, non-secret source is stored.
+	audit, err := json.Marshal(source)
+	if err != nil {
+		return err
+	}
+	return t.q.StartSandboxReset(t.ctx, sqlc.StartSandboxResetParams{Clear: pgtype.Text{String: clear, Valid: true}, DeadlineSeconds: deadlineSeconds, Audit: audit})
+}
+
+func (t *deploymentTx) ForceReset() error { return t.q.ForceSandboxReset(t.ctx) }
+
+func (t *deploymentTx) CancelReset() error { return t.q.CancelSandboxReset(t.ctx) }
+
+func (t *deploymentTx) LoadResetSource() (adminaudit.Source, error) {
+	d, err := t.loadDeployment()
+	if err != nil {
+		return adminaudit.Source{}, err
+	}
+	return ResetSource(d)
+}
+
+var errNoResetSource = errors.New("sandbox reset has no stored administrator source")
+
+// ResetSource decodes the administrator source that started the running reset
+// from the stored deployment row. Audit entries the reset records later carry
+// that source.
+func ResetSource(d sqlc.RuntimeDeployment) (adminaudit.Source, error) {
+	var source adminaudit.Source
+	if !d.ResetClear.Valid || json.Unmarshal(d.ResetAudit, &source) != nil {
+		return adminaudit.Source{}, errNoResetSource
+	}
+	return source, nil
+}
+
+func (t *deploymentTx) CompleteReset() error {
+	if err := t.q.CompleteSandboxReset(t.ctx); err != nil {
+		return err
+	}
+	if err := t.q.RetireSandboxNodes(t.ctx); err != nil {
+		return err
+	}
+	if err := t.q.RetireSandboxEnrollments(t.ctx); err != nil {
+		return err
+	}
+	return t.q.ClearSandboxGenerations(t.ctx)
+}
+
 func (t *deploymentTx) RecordAudit(action, installationID string) error {
 	return auditpg.RecordDeploymentMutation(t.ctx, t.q, action, "sandbox_deployment", installationID)
+}
+
+func (t *deploymentTx) RecordAuditAs(source adminaudit.Source, action, installationID string) error {
+	return auditpg.RecordDeploymentMutation(adminaudit.WithSource(t.ctx, source), t.q, action, "sandbox_deployment", installationID)
 }

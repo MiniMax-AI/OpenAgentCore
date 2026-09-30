@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -60,11 +60,10 @@ func (d *snapshotBudget) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pg
 
 func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	budget := &snapshotBudget{t: t}
-	_, owner, deployments := resetManagerStoreConfig(t, func(cfg *pgxpool.Config) {
+	_, owner, deployments, reader := resetManagerStoreConfig(t, func(cfg *pgxpool.Config) {
 		cfg.ConnConfig.RuntimeParams["jit"] = "on"
 		cfg.ConnConfig.Tracer = budget
 	})
-	w := owner.Store
 	id := initializeE2BDeployment(t, owner)
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
@@ -75,7 +74,7 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 		}
 		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}, nil
 	})
-	m, err := newRuntimeManager(owner, deployments, runtimegateway.NewRegistry(), configuration)
+	m, err := newRuntimeManager(owner, deployments, reader, runtimegateway.NewRegistry(), configuration)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +82,7 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	if _, err = m.ensureDeployment(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if err = w.StartSandboxReset(adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "reset-test", ActorLabel: "operator", RequestID: "request", TraceID: "trace"}), id, store.SandboxResetRequest{ExpectedGeneration: 1, Clear: "force"}); err != nil {
+	if err = owner.Deployment.StartReset(adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "reset-test", ActorLabel: "operator", RequestID: "request", TraceID: "trace"}), id, deployment.ResetRequest{ExpectedGeneration: 1, Clear: deployment.ResetForce}); err != nil {
 		t.Fatal(err)
 	}
 	budget.armed.Store(true)

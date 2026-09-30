@@ -429,7 +429,7 @@ definitions:
   api.Installation:
     properties:
       address_bindings:
-        $ref: '#/definitions/store.AddressBindings'
+        $ref: '#/definitions/deployment.AddressBindings'
       api_base_url:
         description: public_url followed by /v1; null when public_url is null.
         type: string
@@ -902,6 +902,17 @@ definitions:
       service:
         $ref: '#/definitions/coremetrics.ServiceState'
     type: object
+  deployment.AddressBindings:
+    properties:
+      hosted_sandboxes:
+        type: integer
+      nodes:
+        type: integer
+      nodes_on_other_address:
+        type: integer
+      self_hosted_executors:
+        type: integer
+    type: object
   deployment.HostHistory:
     properties:
       points:
@@ -1150,6 +1161,24 @@ definitions:
       on_offline_nodes:
         type: integer
     type: object
+  deployment.ResetRequest:
+    properties:
+      clear:
+        enum:
+          - auto
+          - force
+        type: string
+      deadline_seconds:
+        maximum: 86400
+        minimum: 300
+        type: integer
+      expected_generation:
+        minimum: 0
+        type: integer
+    required:
+      - clear
+      - expected_generation
+    type: object
   deployment.Resources:
     properties:
       allocations:
@@ -1364,17 +1393,6 @@ definitions:
       state:
         type: string
     type: object
-  store.AddressBindings:
-    properties:
-      hosted_sandboxes:
-        type: integer
-      nodes:
-        type: integer
-      nodes_on_other_address:
-        type: integer
-      self_hosted_executors:
-        type: integer
-    type: object
   store.AdminAssetCounts:
     properties:
       agents:
@@ -1418,24 +1436,6 @@ definitions:
         type: string
       tenant_id:
         type: string
-    type: object
-  store.SandboxResetRequest:
-    properties:
-      clear:
-        enum:
-          - auto
-          - force
-        type: string
-      deadline_seconds:
-        maximum: 86400
-        minimum: 300
-        type: integer
-      expected_generation:
-        minimum: 0
-        type: integer
-    required:
-      - clear
-      - expected_generation
     type: object
   v1.Agent:
     properties:
@@ -6326,7 +6326,7 @@ paths:
           name: body
           required: true
           schema:
-            $ref: '#/definitions/store.SandboxResetRequest'
+            $ref: '#/definitions/deployment.ResetRequest'
       produces:
         - application/json
       responses:

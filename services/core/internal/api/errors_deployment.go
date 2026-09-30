@@ -48,7 +48,11 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 	var deploymentConfiguration *deployment.ConfigurationError
 	var stale *deployment.GenerationStaleError
 	var resetRequired *deployment.ResetRequiredError
+	var inUse *deployment.InUseError
 	switch {
+	// Reset completion's resource check unwraps to deployment.ErrConflict.
+	case errors.As(err, &inUse):
+		writeCoreError(w, http.StatusConflict, "sandbox_in_use", "Hosted sandbox resources still belong to this deployment.", CoreErrorDetails{"allocations": CoreErrorNumber(float64(inUse.Resources.Allocations)), "pending": CoreErrorNumber(float64(inUse.Resources.Pending))})
 	case errors.As(err, &configuration):
 		status := http.StatusInternalServerError
 		switch configuration.Class {

@@ -49,6 +49,15 @@ func (e *ResetRequiredError) Error() string {
 }
 func (e *ResetRequiredError) Unwrap() error { return ErrConflict }
 
+// InUseError rejects reset completion while hosted resources still belong to
+// the deployment.
+type InUseError struct{ Resources Resources }
+
+func (e *InUseError) Error() string {
+	return "hosted sandbox resources still belong to this deployment"
+}
+func (e *InUseError) Unwrap() error { return ErrConflict }
+
 // ConfigurationError contains only validated, non-secret configuration
 // diagnostics.
 type ConfigurationError struct {

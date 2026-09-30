@@ -299,11 +299,11 @@ func (f *fakeDeploymentChanges) UpdateSandboxDeployment(a0 context.Context, a1 s
 
 type fakeDeploymentReset struct {
 	t                  testing.TB
-	startSandboxReset  func(context.Context, store.SandboxResetRequest) (deployment.View, error)
+	startSandboxReset  func(context.Context, deployment.ResetRequest) (deployment.View, error)
 	cancelSandboxReset func(context.Context, uint64) (deployment.View, error)
 }
 
-func (f *fakeDeploymentReset) StartSandboxReset(a0 context.Context, a1 store.SandboxResetRequest) (deployment.View, error) {
+func (f *fakeDeploymentReset) StartSandboxReset(a0 context.Context, a1 deployment.ResetRequest) (deployment.View, error) {
 	if f.startSandboxReset == nil {
 		unexpectedCall(f.t, "StartSandboxReset")
 	}
@@ -527,10 +527,10 @@ func (f *fakeInputAdmission) SubmitInputs(a0 context.Context, a1 string, a2 stri
 
 type fakeInstallationBindings struct {
 	t               testing.TB
-	addressBindings func(context.Context) (store.AddressBindings, error)
+	addressBindings func(context.Context) (deployment.AddressBindings, error)
 }
 
-func (f *fakeInstallationBindings) AddressBindings(a0 context.Context) (store.AddressBindings, error) {
+func (f *fakeInstallationBindings) AddressBindings(a0 context.Context) (deployment.AddressBindings, error) {
 	if f.addressBindings == nil {
 		unexpectedCall(f.t, "AddressBindings")
 	}

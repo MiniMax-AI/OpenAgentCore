@@ -274,6 +274,47 @@ func (s *Store) DisconnectNode(ctx context.Context, nodeID, connectionID string,
 	})
 }
 
+func (s *Store) ResetSessions(ctx context.Context, after string, force bool) ([]deployment.ResetSession, error) {
+	cursor := pgtype.UUID{Valid: true}
+	if after != "" {
+		var err error
+		if cursor, err = parseID(after); err != nil {
+			return nil, err
+		}
+	}
+	rows, err := s.pool.Queries().ListSandboxResetSessions(ctx, sqlc.ListSandboxResetSessionsParams{AfterID: cursor, Force: force})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]deployment.ResetSession, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, deployment.ResetSession{SessionID: uuidString(row.ID), TenantID: uuidString(row.TenantID)})
+	}
+	return result, nil
+}
+
+func (s *Store) AddressBindings(ctx context.Context, publicURL string) (deployment.AddressBindings, error) {
+	var result deployment.AddressBindings
+	err := s.pool.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		q := sqlc.New(tx)
+		bindings, err := q.CountAddressBindings(ctx, publicURL)
+		if err != nil {
+			return err
+		}
+		resources, err := q.CountRuntimeDeploymentResources(ctx)
+		if err != nil {
+			return err
+		}
+		result = deployment.AddressBindings{Nodes: bindings.Nodes, NodesOnOtherAddress: bindings.NodesOnOtherAddress,
+			HostedSandboxes: resources.Allocations + resources.Pending, SelfHostedExecutors: bindings.SelfHostedExecutors}
+		return nil
+	})
+	if err != nil {
+		return deployment.AddressBindings{}, err
+	}
+	return result, nil
+}
+
 func (s *Store) SampleHostHistory(ctx context.Context) (int64, error) {
 	return s.pool.Queries().SampleNodeHostHistory(ctx)
 }

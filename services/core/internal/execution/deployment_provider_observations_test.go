@@ -36,7 +36,7 @@ type finishObservationFixture struct {
 func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObservationFixture {
 	t.Helper()
 	var cfg *pgxpool.Config
-	s, owner, _ := resetManagerStoreConfig(t, func(c *pgxpool.Config) {
+	s, owner, _, _ := resetManagerStoreConfig(t, func(c *pgxpool.Config) {
 		if maxConnections > 0 {
 			c.MaxConns = maxConnections
 		}

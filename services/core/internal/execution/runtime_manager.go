@@ -20,6 +20,7 @@ type runtimeManager struct {
 	store               *store.Store
 	deployment          *deployment.ExecutionOperations
 	deploymentService   *deployment.Service
+	deploymentReader    deployment.Reader
 	lease               Ownership
 	registry            *runtimegateway.Registry
 	config              RuntimeProvider

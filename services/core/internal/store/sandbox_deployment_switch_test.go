@@ -50,14 +50,14 @@ func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := SandboxResetTestContext(t.Context())
-	if err := w.StartSandboxReset(ctx, installation, SandboxResetRequest{ExpectedGeneration: configured.Generation, Clear: "force"}); err != nil {
+	if err := deploymentExecution(t, w).StartReset(ctx, installation, deployment.ResetRequest{ExpectedGeneration: configured.Generation, Clear: "force"}); err != nil {
 		t.Fatal(err)
 	}
 	reset, err := deploymentService(t, s).View(ctx)
 	if err != nil || reset.Reset == nil {
 		t.Fatal("reset did not start", reset, err)
 	}
-	generation, err := w.CompleteSandboxReset(ctx, installation, configured.Generation, reset.Reset.RequestedAt)
+	generation, err := deploymentExecution(t, w).CompleteReset(ctx, installation, configured.Generation, reset.Reset.RequestedAt)
 	if err != nil || generation != configured.Generation+1 {
 		t.Fatal("custom endpoint blocked reset completion", generation, err)
 	}
@@ -129,7 +129,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || observed.Expired {
 		t.Fatal("cloud inherited legacy node-less expiry", err)
 	}
-	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
+	if err := deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), id, deployment.ResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
 	update := sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker", ExpectedGeneration: 1}
@@ -152,7 +152,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || changed.Generation != 3 || changed.Mode != "nodes" || changed.Reset != nil || string(changed.Configuration) != "{}" || changed.Resources != (deployment.Resources{}) {
 		t.Fatal("clean switch", changed, err)
 	}
-	if err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), id, 1); !errors.Is(err, deployment.ErrConflict) {
+	if err := deploymentExecution(t, w).CancelReset(SandboxResetTestContext(t.Context()), id, 1); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("stale resume accepted", err)
 	}
 	if _, err := s.GetSession(t.Context(), tenant, session.ID); err != nil {
@@ -186,7 +186,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
+	if err := deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), id, deployment.ResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
 	// AdmissionPaused rejects a valid enrollment without consuming it. Authentication
@@ -216,13 +216,13 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if _, err := nodes.AuthenticateNode(t.Context(), node.NodeID, node.Credential); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old node credential survived", err)
 	}
-	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 3}); err != nil {
+	if err := deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), id, deployment.ResetRequest{Clear: "auto", ExpectedGeneration: 3}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := resetAndSelect(t, w, id, 3, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), id, 5); err != nil {
+	if err := deploymentExecution(t, w).CancelReset(SandboxResetTestContext(t.Context()), id, 5); err != nil {
 		t.Fatal(err)
 	}
 	node.NodeID = uuid.NewString()
@@ -260,7 +260,7 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 			}
 		}()
 	}
-	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), id, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
+	if err := deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), id, deployment.ResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
 	wg.Wait()
@@ -332,7 +332,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT to_jsonb(a) FROM runtime_allocations a WHERE id=$1", owner.ID).Scan(&allocationBefore); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
+	if err := deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), installation, deployment.ResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := resetAndSelect(t, w, installation, 1, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
@@ -10,6 +11,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
+
+// ErrSandboxResetAdmission rejects new hosted work while a sandbox reset
+// pauses admission.
+var ErrSandboxResetAdmission = errors.New("hosted admission is paused for a sandbox reset")
 
 // sandboxProviders interprets the deployment's provider declarations for
 // Session admission and placement until they move out of the Store.

@@ -64,7 +64,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 	}{{"Kill_no_delivery", false, false}, {"KillCompute_no_delivery", true, false}, {"Kill_live_delivery", false, true}, {"KillCompute_live_delivery", true, true}} {
 		t.Run(scenario.name, func(t *testing.T) {
 			checkpoint := scenario.checkpoint
-			s, leased, _, pool := resetManagerStoreDB(t, nil)
+			s, leased, _, _, pool := resetManagerStoreDB(t, nil)
 			writer := leased.Store
 			installation := initializeE2BDeployment(t, leased)
 			projectID := uuid.NewString()

@@ -119,7 +119,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	}
 	reset := func(generation uint64) deployment.View {
 		t.Helper()
-		if _, err := w.StartSandboxReset(store.SandboxResetTestContext(t.Context()), store.SandboxResetRequest{ExpectedGeneration: generation, Clear: "force"}); err != nil {
+		if _, err := w.StartSandboxReset(store.SandboxResetTestContext(t.Context()), deployment.ResetRequest{ExpectedGeneration: generation, Clear: "force"}); err != nil {
 			t.Fatal(err)
 		}
 		deadline := time.Now().Add(12 * time.Second)

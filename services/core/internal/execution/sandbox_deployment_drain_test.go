@@ -48,7 +48,7 @@ func (c *delayedLeaseRead) Read(p []byte) (int, error) {
 // delayedReadWriter owns an isolated database, so each case has its own
 // advisory-lock namespace. The delayed driver read lets a cancellation fence hit
 // its own deadline without shortening production timeouts.
-func delayedReadWriter(t *testing.T, armed *atomic.Bool, reading chan struct{}, release <-chan struct{}) (Owner, *deployment.Service, *pgxpool.Pool) {
+func delayedReadWriter(t *testing.T, armed *atomic.Bool, reading chan struct{}, release <-chan struct{}) (Owner, *deployment.Service, deployment.Reader, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.OpenIsolated(t, func(cfg *pgxpool.Config) {
 		dial := cfg.ConnConfig.DialFunc
@@ -71,8 +71,8 @@ func delayedReadWriter(t *testing.T, armed *atomic.Bool, reading chan struct{}, 
 			t.Error(err)
 		}
 	})
-	deployments, operations := testDeployment(t, pool, nil, lease)
-	return Owner{Lease: lease, Store: store.NewExecution(store.New(pool), lease), Deployment: operations}, deployments, pool
+	deployments, reader, operations := testDeployment(t, pool, nil, lease)
+	return Owner{Lease: lease, Store: store.NewExecution(store.New(pool), lease), Deployment: operations}, deployments, reader, pool
 }
 
 func TestSandboxDeploymentDrainPreservesLeaseInFlightRead(t *testing.T) {
@@ -89,12 +89,12 @@ func testLifecycleCancellationPreservesLease(t *testing.T, mode string) {
 	var releaseOnce sync.Once
 	unblock := func() { releaseOnce.Do(func() { close(release) }) }
 	defer unblock()
-	owner, deployments, _ := delayedReadWriter(t, &armed, reading, release)
+	owner, deployments, reader, _ := delayedReadWriter(t, &armed, reading, release)
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
 	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(owner, deployments, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }))
+	m, err := newRuntimeManager(owner, deployments, reader, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,12 +227,12 @@ func (c *delayedCancellationContext) unblock() {
 }
 
 func TestSandboxDeploymentDrainFailureCannotReactivate(t *testing.T) {
-	_, owner, deployments := resetManagerStore(t)
+	_, owner, deployments, reader := resetManagerStore(t)
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
 	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(owner, deployments, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }))
+	m, err := newRuntimeManager(owner, deployments, reader, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}

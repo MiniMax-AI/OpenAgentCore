@@ -20,13 +20,14 @@ import (
 // a public origin, so it is never loopback.
 const fixturePublicURL = "https://core.example"
 
-// testDeployment builds the pooled deployment service and the deployment
-// execution operations on lease, as cmd/server does for the Worker. cipher is
-// nil when the owner has no credential key.
-func testDeployment(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher, lease *pgunit.Lease) (*deployment.Service, *deployment.ExecutionOperations) {
+// testDeployment builds the pooled deployment service and reader and the
+// deployment execution operations on lease, as cmd/server does for the Worker.
+// cipher is nil when the owner has no credential key.
+func testDeployment(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher, lease *pgunit.Lease) (*deployment.Service, deployment.Reader, *deployment.ExecutionOperations) {
 	t.Helper()
 	adapter := deploymentpg.New(pgunit.NewPool(pool), cipher)
-	return deploymentOperations(t, adapter, adapter, deploymentpg.NewExecution(lease, cipher))
+	service, operations := deploymentOperations(t, adapter, adapter, deploymentpg.NewExecution(lease, cipher))
+	return service, adapter, operations
 }
 
 // unitDeploymentService builds a deployment service for tests without a
@@ -113,15 +114,17 @@ func (s *strictExecutionStorage) WithDeployment(ctx context.Context, apply func(
 
 // strictDeploymentReader runs each set func; any other call fails the test.
 type strictDeploymentReader struct {
-	t           *testing.T
-	deployment  func(context.Context) (deployment.Record, error)
-	snapshot    func(context.Context) (deployment.Snapshot, error)
-	ownerEpoch  func(context.Context) (uint64, error)
-	allocation  func(context.Context, sandbox.Reference) (deployment.AllocationRecord, error)
-	generations func(context.Context, int64) ([]deployment.GenerationRecord, error)
-	nodes       func(context.Context) ([]deployment.NodeRecord, error)
-	nodeHistory func(context.Context, string, coremetrics.Range) (deployment.NodeRecord, []deployment.HostHistoryPoint, error)
-	readNodes   func(context.Context, func(deployment.NodeReads) error) error
+	t               *testing.T
+	deployment      func(context.Context) (deployment.Record, error)
+	snapshot        func(context.Context) (deployment.Snapshot, error)
+	ownerEpoch      func(context.Context) (uint64, error)
+	allocation      func(context.Context, sandbox.Reference) (deployment.AllocationRecord, error)
+	generations     func(context.Context, int64) ([]deployment.GenerationRecord, error)
+	nodes           func(context.Context) ([]deployment.NodeRecord, error)
+	nodeHistory     func(context.Context, string, coremetrics.Range) (deployment.NodeRecord, []deployment.HostHistoryPoint, error)
+	readNodes       func(context.Context, func(deployment.NodeReads) error) error
+	resetSessions   func(context.Context, string, bool) ([]deployment.ResetSession, error)
+	addressBindings func(context.Context, string) (deployment.AddressBindings, error)
 }
 
 func (r *strictDeploymentReader) Deployment(ctx context.Context) (deployment.Record, error) {
@@ -178,4 +181,18 @@ func (r *strictDeploymentReader) ReadNodes(ctx context.Context, apply func(deplo
 		return unexpectedDeploymentCall(r.t, "ReadNodes")
 	}
 	return r.readNodes(ctx, apply)
+}
+
+func (r *strictDeploymentReader) ResetSessions(ctx context.Context, after string, force bool) ([]deployment.ResetSession, error) {
+	if r.resetSessions == nil {
+		return nil, unexpectedDeploymentCall(r.t, "ResetSessions")
+	}
+	return r.resetSessions(ctx, after, force)
+}
+
+func (r *strictDeploymentReader) AddressBindings(ctx context.Context, publicURL string) (deployment.AddressBindings, error) {
+	if r.addressBindings == nil {
+		return deployment.AddressBindings{}, unexpectedDeploymentCall(r.t, "AddressBindings")
+	}
+	return r.addressBindings(ctx, publicURL)
 }

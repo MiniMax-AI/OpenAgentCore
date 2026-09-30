@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"context"
 	"net"
 	"net/url"
 	"strconv"
@@ -59,4 +60,20 @@ func LoopbackOrigin(value string) bool {
 		return ip.IsLoopback()
 	}
 	return u.Hostname() == "localhost"
+}
+
+// AddressBindings counts what is bound to an installation address: nodes
+// connect to the address they enrolled with, hosted sandboxes were started with
+// the address current at the time, and self-hosted executors were installed
+// with an advertised remote_url.
+type AddressBindings struct {
+	Nodes               int64 `json:"nodes"`
+	NodesOnOtherAddress int64 `json:"nodes_on_other_address"`
+	HostedSandboxes     int64 `json:"hosted_sandboxes"`
+	SelfHostedExecutors int64 `json:"self_hosted_executors"`
+}
+
+// AddressBindings counts what is bound to the installation public URL.
+func (s *Service) AddressBindings(ctx context.Context) (AddressBindings, error) {
+	return s.reader.AddressBindings(ctx, s.publicURL)
 }

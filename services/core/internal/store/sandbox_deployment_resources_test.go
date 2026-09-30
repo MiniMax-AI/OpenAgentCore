@@ -50,9 +50,9 @@ func TestSandboxDeploymentMutationViewsIncludeActualResources(t *testing.T) {
 	for _, maintenance := range []bool{true, false} {
 		var err error
 		if maintenance {
-			err = w.StartSandboxReset(SandboxResetTestContext(t.Context()), installation, SandboxResetRequest{ExpectedGeneration: 1, Clear: "auto"})
+			err = deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), installation, deployment.ResetRequest{ExpectedGeneration: 1, Clear: "auto"})
 		} else {
-			err = w.CancelSandboxReset(SandboxResetTestContext(t.Context()), installation, 1)
+			err = deploymentExecution(t, w).CancelReset(SandboxResetTestContext(t.Context()), installation, 1)
 		}
 		if err != nil {
 			t.Fatal(err)

@@ -40,6 +40,9 @@ type Dispatcher struct {
 	// Deployment reads the sandbox deployment and prepares a selection's setup.
 	// It is required; deployment changes go through Owner.Deployment.
 	Deployment *deployment.Service
+	// DeploymentReader reads the deployment's pooled records, such as the
+	// Sessions a reset still has to archive. It is required.
+	DeploymentReader deployment.Reader
 	// Sessions runs the pooled Session use cases, such as staging a Turn's
 	// Artifacts. It is required.
 	Sessions *sessions.Service

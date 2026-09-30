@@ -90,7 +90,7 @@ func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T)
 	if _, err := nodes.NodeConfiguration(t.Context(), "", token, 0); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("consumed enrollment still authorized bootstrap", err)
 	}
-	if err := w.StartSandboxReset(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxResetRequest{Clear: "auto", ExpectedGeneration: view.Generation}); err != nil {
+	if err := deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), view.InstallationID, deployment.ResetRequest{Clear: "auto", ExpectedGeneration: view.Generation}); err != nil {
 		t.Fatal(err)
 	}
 	config, err := nodes.NodeConfiguration(t.Context(), node.NodeID, node.Credential, 0)
@@ -268,9 +268,10 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 			results <- result{session, owner, err}
 		}()
 	}
+	resets := deploymentExecution(t, w)
 	go func() {
 		<-start
-		maintenance <- w.StartSandboxReset(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxResetRequest{Clear: "auto", ExpectedGeneration: view.Generation})
+		maintenance <- resets.StartReset(SandboxResetTestContext(t.Context()), view.InstallationID, deployment.ResetRequest{Clear: "auto", ExpectedGeneration: view.Generation})
 	}()
 	close(start)
 	if err := <-maintenance; err != nil {
@@ -319,7 +320,7 @@ func TestNodeBoundToAnotherPublicURLGetsNoNewSandboxes(t *testing.T) {
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodeUnavailable) {
 		t.Fatal("placed a new sandbox on a node bound to the old address", err)
 	}
-	bindings, err := s.AddressBindings(t.Context())
+	bindings, err := deploymentService(t, s).AddressBindings(t.Context())
 	if err != nil || bindings.Nodes != 1 || bindings.NodesOnOtherAddress != 1 || bindings.HostedSandboxes != 0 {
 		t.Fatal(bindings, err)
 	}

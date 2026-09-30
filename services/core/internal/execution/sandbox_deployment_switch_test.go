@@ -19,7 +19,7 @@ func TestSandboxManagerSwitchDrainsBeforeDirectActivation(t *testing.T) {
 	defer hub.Close()
 	id := uuid.NewString()
 	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }))
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestSandboxManagerSwitchDrainsBeforeDirectActivation(t *testing.T) {
 
 func TestSandboxManagerFailedActivationStaysPaused(t *testing.T) {
 	id := uuid.NewString()
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, errors.New("provider unavailable") }))
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, errors.New("provider unavailable") }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestSandboxManagerCancelledSwitchCannotResumeBeforeDrain(t *testing.T) {
 	defer hub.Close()
 	id := uuid.NewString()
 	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }))
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestSandboxActivationCannotBypassOutstandingDrain(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id,
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id,
 		func(context.Context) (*RuntimeProvider, error) { return nil, nil },
 		func(_ context.Context, setup deployment.Setup) (PreparedRuntimeDeployment, error) {
 			return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}}, nil

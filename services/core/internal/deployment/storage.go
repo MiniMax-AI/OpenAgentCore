@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -63,6 +64,14 @@ type Reader interface {
 	NodeHistory(ctx context.Context, nodeID string, window coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
 	// ReadNodes runs apply in one read-only snapshot.
 	ReadNodes(ctx context.Context, apply func(NodeReads) error) error
+	// ResetSessions returns up to 32 hosted Sessions after the given Session
+	// ID, in ID order, that still hold or await deployment resources. Without
+	// force it skips Sessions with a running Turn or a pending file write. An
+	// empty after starts at the beginning; a malformed one is ErrInvalidInput.
+	ResetSessions(ctx context.Context, after string, force bool) ([]ResetSession, error)
+	// AddressBindings counts what is bound to an installation address, read
+	// in one snapshot. publicURL is the address nodes are compared against.
+	AddressBindings(ctx context.Context, publicURL string) (AddressBindings, error)
 }
 
 // NodeReads loads node authentication facts.
@@ -131,8 +140,27 @@ type DeploymentTx interface {
 	RetainGeneration() error
 	// CollectGenerations deletes retained generations nothing uses.
 	CollectGenerations() error
-	// RecordAudit records an administrator mutation of the deployment.
+	// StartReset pauses admission and records a reset in the clear mode,
+	// with its request time, the auto deadline in seconds from now and the
+	// administrator source that started it.
+	StartReset(clear string, deadlineSeconds int32, source adminaudit.Source) error
+	// ForceReset escalates a running auto reset to force.
+	ForceReset() error
+	// CancelReset forgets the running reset and restores admission.
+	CancelReset() error
+	// LoadResetSource returns the administrator source that started the
+	// running reset.
+	LoadResetSource() (adminaudit.Source, error)
+	// CompleteReset forgets the selection and the reset, restores admission,
+	// advances the generation and owner epoch by one, and retires the nodes,
+	// enrollments and retained generations.
+	CompleteReset() error
+	// RecordAudit records an administrator mutation of the deployment by the
+	// source the transaction's context carries.
 	RecordAudit(action, installationID string) error
+	// RecordAuditAs records an administrator mutation of the deployment by
+	// the given source.
+	RecordAuditAs(source adminaudit.Source, action, installationID string) error
 }
 
 // Record is the stored deployment.

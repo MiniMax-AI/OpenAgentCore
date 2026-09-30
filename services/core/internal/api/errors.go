@@ -86,16 +86,10 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 }
 
 // writeStoreError reports a failure of an operation that can meet a sandbox
-// reset or a deployment's sandbox resources, then the Session errors.
+// reset or the sandbox deployment, then the Session errors.
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
-	// A reset's resource check unwraps to deployment.ErrConflict and admission
-	// paused by a reset is Session admission's, so both precede the deployment errors.
-	var inUse *store.SandboxInUseError
-	switch {
-	case errors.As(err, &inUse):
-		writeCoreError(w, http.StatusConflict, "sandbox_in_use", "Hosted sandbox resources still belong to this deployment.", CoreErrorDetails{"allocations": CoreErrorNumber(float64(inUse.Resources.Allocations)), "pending": CoreErrorNumber(float64(inUse.Resources.Pending))})
-		return
-	case errors.Is(err, store.ErrSandboxResetAdmission):
+	// Admission paused by a reset is Session admission's.
+	if errors.Is(err, store.ErrSandboxResetAdmission) {
 		writeError(w, http.StatusServiceUnavailable, "sandbox_reset_in_progress", "A sandbox reset is in progress.")
 		return
 	}

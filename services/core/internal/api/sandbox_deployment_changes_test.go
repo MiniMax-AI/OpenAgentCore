@@ -24,7 +24,7 @@ func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 		}
 		return deployment.View{Provider: in.Provider}, nil
 	}
-	maintain := func(_ context.Context, in store.SandboxResetRequest) (deployment.View, error) {
+	maintain := func(_ context.Context, in deployment.ResetRequest) (deployment.View, error) {
 		resets++
 		if in.ExpectedGeneration != 2 {
 			t.Fatal("generation was lost")
@@ -73,36 +73,45 @@ func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 	}
 }
 
+// The deployment writer, which the reset handlers use, and the Session writer,
+// which admission uses, report the deployment errors alike.
 func TestSandboxMutationErrorsExposeOnlyTypedCoreFacts(t *testing.T) {
+	writers := map[string]func(http.ResponseWriter, *http.Request, error){"deployment": writeDeploymentError, "store": writeStoreError}
 	for _, tc := range []struct {
-		err     error
-		code    string
-		status  int
-		details string
+		err       error
+		code      string
+		status    int
+		details   string
+		admission bool
 	}{
-		{&deployment.GenerationStaleError{CurrentGeneration: 8}, "sandbox_generation_stale", 409, `"current_generation":8`},
-		{&deployment.ResetRequiredError{CurrentProvider: "docker", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"requested_provider":"e2b"`},
-		{&deployment.ResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"current_provider":"e2b"`},
-		{&store.SandboxInUseError{Resources: deployment.Resources{Allocations: 2, Pending: 1}}, "sandbox_in_use", 409, `"allocations":2`},
-		{deployment.ErrResetInProgress, "sandbox_reset_in_progress", 409, ""},
-		{store.ErrSandboxResetAdmission, "sandbox_reset_in_progress", 503, ""},
+		{&deployment.GenerationStaleError{CurrentGeneration: 8}, "sandbox_generation_stale", 409, `"current_generation":8`, false},
+		{&deployment.ResetRequiredError{CurrentProvider: "docker", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"requested_provider":"e2b"`, false},
+		{&deployment.ResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"current_provider":"e2b"`, false},
+		{&deployment.InUseError{Resources: deployment.Resources{Allocations: 2, Pending: 1}}, "sandbox_in_use", 409, `"allocations":2`, false},
+		{deployment.ErrResetInProgress, "sandbox_reset_in_progress", 409, "", false},
+		{store.ErrSandboxResetAdmission, "sandbox_reset_in_progress", 503, "", true},
 	} {
-		for _, core := range []bool{false, true} {
-			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeStoreError(w, r, tc.err) }))
-			if core {
-				handler = coreErrorResponses(handler)
+		for name, write := range writers {
+			if tc.admission && name != "store" {
+				continue
 			}
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequest("POST", "/test", nil))
-			body := response.Body.String()
-			if response.Code != tc.status || !strings.Contains(body, `"code":"`+tc.code+`"`) {
-				t.Fatal(body)
-			}
-			if core && tc.details != "" && !strings.Contains(body, tc.details) {
-				t.Fatal("typed detail missing", body)
-			}
-			if !core && strings.Contains(body, `"details"`) {
-				t.Fatal("Core facts escaped their router", body)
+			for _, core := range []bool{false, true} {
+				handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { write(w, r, tc.err) }))
+				if core {
+					handler = coreErrorResponses(handler)
+				}
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, httptest.NewRequest("POST", "/test", nil))
+				body := response.Body.String()
+				if response.Code != tc.status || !strings.Contains(body, `"code":"`+tc.code+`"`) {
+					t.Fatal(name, body)
+				}
+				if core && tc.details != "" && !strings.Contains(body, tc.details) {
+					t.Fatal("typed detail missing", body)
+				}
+				if !core && strings.Contains(body, `"details"`) {
+					t.Fatal("Core facts escaped their router", body)
+				}
 			}
 		}
 	}

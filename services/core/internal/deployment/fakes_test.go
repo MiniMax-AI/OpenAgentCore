@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -67,15 +68,17 @@ func (f *fakeExecutionStorage) WithDeployment(ctx context.Context, apply func(De
 }
 
 type fakeReader struct {
-	t           testing.TB
-	deployment  func(context.Context) (Record, error)
-	snapshot    func(context.Context) (Snapshot, error)
-	ownerEpoch  func(context.Context) (uint64, error)
-	allocation  func(context.Context, sandbox.Reference) (AllocationRecord, error)
-	generations func(context.Context, int64) ([]GenerationRecord, error)
-	nodes       func(context.Context) ([]NodeRecord, error)
-	nodeHistory func(context.Context, string, coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
-	readNodes   func(context.Context, func(NodeReads) error) error
+	t               testing.TB
+	deployment      func(context.Context) (Record, error)
+	snapshot        func(context.Context) (Snapshot, error)
+	ownerEpoch      func(context.Context) (uint64, error)
+	allocation      func(context.Context, sandbox.Reference) (AllocationRecord, error)
+	generations     func(context.Context, int64) ([]GenerationRecord, error)
+	nodes           func(context.Context) ([]NodeRecord, error)
+	nodeHistory     func(context.Context, string, coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
+	readNodes       func(context.Context, func(NodeReads) error) error
+	resetSessions   func(context.Context, string, bool) ([]ResetSession, error)
+	addressBindings func(context.Context, string) (AddressBindings, error)
 }
 
 func (f *fakeReader) Deployment(ctx context.Context) (Record, error) {
@@ -132,6 +135,20 @@ func (f *fakeReader) ReadNodes(ctx context.Context, apply func(NodeReads) error)
 		unexpected(f.t, "ReadNodes")
 	}
 	return f.readNodes(ctx, apply)
+}
+
+func (f *fakeReader) ResetSessions(ctx context.Context, after string, force bool) ([]ResetSession, error) {
+	if f.resetSessions == nil {
+		unexpected(f.t, "ResetSessions")
+	}
+	return f.resetSessions(ctx, after, force)
+}
+
+func (f *fakeReader) AddressBindings(ctx context.Context, publicURL string) (AddressBindings, error) {
+	if f.addressBindings == nil {
+		unexpected(f.t, "AddressBindings")
+	}
+	return f.addressBindings(ctx, publicURL)
 }
 
 type fakeNodeReads struct {
@@ -325,7 +342,13 @@ type fakeDeploymentTx struct {
 	recordConfigurationMetadata func(json.RawMessage) error
 	retainGeneration            func() error
 	collectGenerations          func() error
+	startReset                  func(string, int32, adminaudit.Source) error
+	forceReset                  func() error
+	cancelReset                 func() error
+	loadResetSource             func() (adminaudit.Source, error)
+	completeReset               func() error
 	recordAudit                 func(string, string) error
+	recordAuditAs               func(adminaudit.Source, string, string) error
 }
 
 func (f *fakeDeploymentTx) LoadDeployment() (Record, error) {
@@ -424,4 +447,46 @@ func (f *fakeDeploymentTx) RecordAudit(action, installationID string) error {
 		unexpected(f.t, "RecordAudit")
 	}
 	return f.recordAudit(action, installationID)
+}
+
+func (f *fakeDeploymentTx) StartReset(clear string, deadlineSeconds int32, source adminaudit.Source) error {
+	if f.startReset == nil {
+		unexpected(f.t, "StartReset")
+	}
+	return f.startReset(clear, deadlineSeconds, source)
+}
+
+func (f *fakeDeploymentTx) ForceReset() error {
+	if f.forceReset == nil {
+		unexpected(f.t, "ForceReset")
+	}
+	return f.forceReset()
+}
+
+func (f *fakeDeploymentTx) CancelReset() error {
+	if f.cancelReset == nil {
+		unexpected(f.t, "CancelReset")
+	}
+	return f.cancelReset()
+}
+
+func (f *fakeDeploymentTx) LoadResetSource() (adminaudit.Source, error) {
+	if f.loadResetSource == nil {
+		unexpected(f.t, "LoadResetSource")
+	}
+	return f.loadResetSource()
+}
+
+func (f *fakeDeploymentTx) CompleteReset() error {
+	if f.completeReset == nil {
+		unexpected(f.t, "CompleteReset")
+	}
+	return f.completeReset()
+}
+
+func (f *fakeDeploymentTx) RecordAuditAs(source adminaudit.Source, action, installationID string) error {
+	if f.recordAuditAs == nil {
+		unexpected(f.t, "RecordAuditAs")
+	}
+	return f.recordAuditAs(source, action, installationID)
 }
