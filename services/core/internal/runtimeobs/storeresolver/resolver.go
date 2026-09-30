@@ -9,11 +9,12 @@ import (
 	"io"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type sessionStore interface {
-	GetSession(context.Context, string, string) (store.Session, error)
+	GetSession(context.Context, string, string) (sessions.Session, error)
 	MeasuredSessionUsage(context.Context, string, string) (json.RawMessage, error)
 	GetRuntimeAllocation(context.Context, string, string) (store.RuntimeAllocation, error)
 	ListRuntimeObservationSessions(context.Context, string, int) (store.RuntimeObservationSessionPage, error)
@@ -77,7 +78,7 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (run
 		}
 		target.EnvironmentID = session.Environment.ID
 		allocation, err := r.store.GetRuntimeAllocation(ctx, tenantID, target.EnvironmentID)
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, sessions.ErrNotFound) {
 			return target, runtimeobs.ErrUnavailable
 		}
 		if err != nil {

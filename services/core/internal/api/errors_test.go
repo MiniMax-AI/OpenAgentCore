@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,20 +10,30 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 func TestResourceNotFoundErrorSurfaces(t *testing.T) {
 	for _, path := range []string{
 		"/v1/agents/missing", "/v1/vaults/missing",
 		"/v1/agents/sessions/missing/items", "/v1/agents/environments/missing/files",
-		"/v1/files", "/v1/files/missing/content", "/v1/skills", "/v1/skills/missing/versions/1",
+		"/v1/files", "/v1/files/missing/content",
 	} {
 		t.Run(path, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, path, nil)
-			writeStoreError(response, request, fmt.Errorf("lookup: %w", store.ErrNotFound))
+			if strings.HasPrefix(path, "/v1/files") {
+				writeFilesError(response, request, fmt.Errorf("lookup: %w", files.ErrNotFound))
+			} else {
+				writeSessionsError(response, request, fmt.Errorf("lookup: %w", sessions.ErrNotFound))
+			}
 			var body v1.ErrorResponse
 			if response.Code != http.StatusNotFound || json.Unmarshal(response.Body.Bytes(), &body) != nil {
 				t.Fatalf("response = %d %s", response.Code, response.Body)
@@ -42,23 +53,24 @@ func TestResourceNotFoundErrorSurfaces(t *testing.T) {
 			if _, present := envelope["code"]; !present {
 				t.Fatal("nullable error code must remain present")
 			}
+			if param, present := envelope["param"]; !present || string(param) != "null" {
+				t.Fatalf("param = %s", param)
+			}
 		})
 	}
 }
 
-// An unresolved list cursor keeps its store message; Skill versions use the
-// observed invalid_value code on after, Beta lists invalid_request_error with a
-// null param.
+// An unresolved Beta list cursor keeps its store message with the observed
+// invalid_request_error code and a null param.
 func TestInvalidCursorErrorFields(t *testing.T) {
 	for path, want := range map[string]string{
 		"/v1/agents/sessions/session/items":         `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
 		"/v1/agents/sessions/session/subagents":     `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
-		"/v1/skills/skill_missing/versions":         `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_value","param":"after"}}`,
 		"/v1/agents/sessions/session/artifacts?x=1": `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
 	} {
 		response := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, path, nil)
-		writeStoreError(response, request, fmt.Errorf("list: %w", &store.InvalidCursorError{Message: "Invalid session item ID in `after`"}))
+		writeSessionsError(response, request, fmt.Errorf("list: %w", &sessions.CursorError{Message: "Invalid session item ID in `after`"}))
 		if response.Code != http.StatusBadRequest || response.Body.String() != want+"\n" {
 			t.Errorf("%s: %d %s", path, response.Code, response.Body)
 		}
@@ -112,7 +124,7 @@ func equalOptional(got, want *string) bool {
 func TestSessionDeletionConflictError(t *testing.T) {
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodDelete, "/v1/agents/sessions/session", nil)
-	writeStoreError(response, request, fmt.Errorf("delete: %w", store.ErrSessionNotIdle))
+	writeSessionsError(response, request, fmt.Errorf("delete: %w", sessions.ErrNotIdle))
 	want := `{"error":{"message":"session must be durably idle or failed without required actions before deletion","type":"conflict_error","code":"conflict_error","param":null}}` + "\n"
 	if response.Code != http.StatusConflict || response.Body.String() != want {
 		t.Fatalf("response = %d %s", response.Code, response.Body)
@@ -124,18 +136,18 @@ func TestSessionDeletionConflictError(t *testing.T) {
 // turn_conflict because the official behavior there is unobserved.
 func TestConflictErrorsUseConflictType(t *testing.T) {
 	for err, code := range map[error]string{
-		store.ErrSandboxDeploymentConflict:     "sandbox_deployment_conflict",
-		store.ErrRuntimeNodeInUse:              "runtime_node_in_use",
-		store.ErrRuntimeLocalNodeConfigured:    "runtime_local_node_configured",
-		store.ErrRuntimeNodeAddressMismatch:    "sandbox_node_address_mismatch",
-		store.ErrEnvironmentUnavailable:        "environment_unavailable",
+		deployment.ErrConflict:                 "sandbox_deployment_conflict",
+		deployment.ErrNodeInUse:                "runtime_node_in_use",
+		deployment.ErrLocalNodeConfigured:      "runtime_local_node_configured",
+		deployment.ErrNodeAddressMismatch:      "sandbox_node_address_mismatch",
+		sessions.ErrEnvironmentUnavailable:     "environment_unavailable",
 		execution.ErrEnvironmentInputExpired:   "environment_input_expired",
 		execution.ErrEnvironmentInputCancelled: "environment_input_cancelled",
-		store.ErrSessionNotIdle:                "conflict_error",
-		store.ErrFunctionResultConflict:        "conflict_error",
-		store.ErrIdempotencyConflict:           "idempotency_conflict",
-		store.ErrTurnConflict:                  "turn_conflict",
-		store.ErrSessionInputPending:           "turn_conflict",
+		sessions.ErrNotIdle:                    "conflict_error",
+		sessions.ErrFunctionResultConflict:     "conflict_error",
+		sessions.ErrIdempotencyConflict:        "idempotency_conflict",
+		sessions.ErrTurnConflict:               "turn_conflict",
+		sessions.ErrInputPending:               "turn_conflict",
 	} {
 		t.Run(code, func(t *testing.T) {
 			response := httptest.NewRecorder()
@@ -152,5 +164,37 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 	writeError(response, http.StatusConflict, "runtime_history_unsupported", "Runtime history is not supported for this Session.")
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"type":"conflict_error","code":"runtime_history_unsupported"`) {
 		t.Fatal(response.Body)
+	}
+}
+
+// The shared persistence errors keep the responses the store errors had: an
+// audit source or query that cannot be used answers like invalid input.
+func TestSharedPersistenceErrors(t *testing.T) {
+	storeError := func(w http.ResponseWriter, r *http.Request, err error) { writeStoreError(w, r, err) }
+	respond := func(write func(http.ResponseWriter, *http.Request, error), err error) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		write(response, httptest.NewRequest(http.MethodPost, "/v1/agents", nil), err)
+		return response
+	}
+	invalid := respond(storeError, sessions.ErrInvalidInput).Body.String()
+	for _, test := range []struct {
+		write  func(http.ResponseWriter, *http.Request, error)
+		err    error
+		status int
+		body   string
+	}{
+		{storeError, fmt.Errorf("write: %w", writeaudit.ErrInvalidSource), 400, invalid},
+		{storeError, fmt.Errorf("write: %w", adminaudit.ErrInvalidSource), 400, invalid},
+		{writeAuditError, writeaudit.ErrInvalidQuery, 400, invalid},
+		{writeAuditError, adminaudit.ErrInvalidQuery, 400, invalid},
+		{storeError, fmt.Errorf("write: %w", textvalue.ErrUnstorable), 400, unstorableTextMessage},
+		{writeAuditError, textvalue.ErrUnstorable, 400, unstorableTextMessage},
+		{storeError, credentialcrypto.ErrUnavailable, 503, "credential_storage_unavailable"},
+		{writeAuditError, errors.New("canary"), 500, "internal_error"},
+	} {
+		response := respond(test.write, test.err)
+		if response.Code != test.status || !strings.Contains(response.Body.String(), test.body) {
+			t.Errorf("%v: %d %s", test.err, response.Code, response.Body)
+		}
 	}
 }

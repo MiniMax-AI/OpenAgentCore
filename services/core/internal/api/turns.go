@@ -1,15 +1,22 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
+
+// Turns reads a Session's root Turns.
+type Turns interface {
+	GetTurn(context.Context, string, string, string) (sessions.Turn, error)
+	ListTurns(context.Context, string, string, string, int, bool) (sessions.TurnPage, error)
+}
 
 // @Summary Retrieve an execution Turn
 // @Description Returns a root Turn of this Session. A Subagent Turn ID returns the same not found error as a missing Turn; read it through the Subagent Turn routes.
@@ -24,12 +31,12 @@ import (
 // @Router /agents/sessions/{session_id}/turns/{turn_id} [get]
 func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "session_id")
-	turn, err := h.store.GetTurn(r.Context(), tenantID(r), sessionID, chi.URLParam(r, "turn_id"))
+	turn, err := h.Turns.GetTurn(r.Context(), tenantID(r), sessionID, chi.URLParam(r, "turn_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	session, err := h.store.GetSession(r.Context(), tenantID(r), sessionID)
+	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -61,12 +68,12 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionID := chi.URLParam(r, "session_id")
-	session, err := h.store.GetSession(r.Context(), tenantID(r), sessionID)
+	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	page, err := h.store.ListTurns(r.Context(), tenantID(r), sessionID, options.after, options.limit, options.ascending)
+	page, err := h.Turns.ListTurns(r.Context(), tenantID(r), sessionID, options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -83,14 +90,14 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, turnListResponse(response.Data, response.HasMore))
 }
 
-func turnResponse(session store.Session, turn store.Turn) (v1.Turn, error) {
+func turnResponse(session sessions.Session, turn sessions.Turn) (v1.Turn, error) {
 	var cfg configuration
 	if err := json.Unmarshal(session.Configuration, &cfg); err != nil || cfg.Agent.ID == "" {
 		return v1.Turn{}, errors.New("missing stored agent identity")
 	}
 	// Session Turns are root Turns, so subagent_id is always null here.
 	response := v1.Turn{Usage: tokenUsage(turn.Usage), ID: turn.ID, SessionID: turn.SessionID, AgentID: cfg.Agent.ID, Object: "agent.session.turn", Status: turn.Status, CreatedAt: turn.CreatedAt.Unix(), StartedAt: unixTime(turn.StartedAt), CompletedAt: unixTime(turn.CompletedAt)}
-	if turn.Status == store.TurnFailed {
+	if turn.Status == sessions.TurnFailed {
 		// Native errors can contain secrets; publish a stable category without raw diagnostics.
 		response.Error = &v1.TurnError{Code: "internal_error", Message: "The execution could not complete."}
 	}

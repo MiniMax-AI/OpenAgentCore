@@ -10,35 +10,38 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type emptyEventSessionStore struct {
-	ResourceStore
 	tenant, id string
 	reads      int
 }
 
-func (s *emptyEventSessionStore) GetSession(_ context.Context, tenant, id string) (store.Session, error) {
+func (s *emptyEventSessionStore) GetSession(_ context.Context, tenant, id string) (sessions.Session, error) {
 	s.tenant, s.id = tenant, id
 	s.reads++
 	if id != "owned" {
-		return store.Session{}, store.ErrNotFound
+		return sessions.Session{}, sessions.ErrNotFound
 	}
-	return store.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
+	return sessions.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
+}
+
+func (s *emptyEventSessionStore) AuditSessionOperation(context.Context, string, string, string) error {
+	return nil
 }
 
 func TestEmptyEventBatchAuthorizesWithoutExecutionEffects(t *testing.T) {
 	for _, executor := range []bool{false, true} {
 		t.Run(map[bool]string{false: "without executor", true: "with executor"}[executor], func(t *testing.T) {
 			recorder := &inputRecorder{}
-			var options []Option
-			if executor {
-				options = append(options, WithExecution(recorder))
-			}
-			h, base, tenant := testHandler(t, options...)
 			sessions := &emptyEventSessionStore{}
-			base.ResourceStore = sessions
+			h, _, tenant := testHandler(t, func(d *Dependencies, f *testFakes) {
+				f.sessions.getSession, f.sessions.auditSessionOperation = sessions.GetSession, sessions.AuditSessionOperation
+				if executor {
+					recorder.admit(d, f)
+				}
+			})
 			request := func(id, token, key string) *httptest.ResponseRecorder {
 				r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/"+id+"/events", strings.NewReader(`{"events":[]}`))
 				r.Header.Set("Authorization", "Bearer "+token)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -26,7 +27,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 				t.Fatal(err)
 			}
 		case "deleted":
-			if err := h.s.DeleteSession(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, store.ErrSessionNotIdle) {
+			if err := h.s.DeleteSession(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotIdle) {
 				t.Fatal("pending input deleted", err)
 			}
 			if err := h.s.CommitLegacyDeletion(t.Context(), h.tenant, pending.SessionID); err != nil {
@@ -40,7 +41,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 		default:
 			runtime := h.environments[pending.SessionID]
 			if state == "revoked" {
-				if err := h.s.RevokeDevice(t.Context(), h.tenant, runtime.device.ID); err != nil {
+				if err := fixtureSessionService(t, h.db).RevokeDevice(t.Context(), h.tenant, runtime.device.ID); err != nil {
 					t.Fatal(err)
 				}
 				work, err := h.s.ListEnvironmentInputWork(t.Context(), "", []string{runtime.device.ID})

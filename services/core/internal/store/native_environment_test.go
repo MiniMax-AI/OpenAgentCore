@@ -12,6 +12,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -98,21 +99,21 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 	provider := nativeModelProvider(model)
 	config, _ := json.Marshal(map[string]any{"agent": map[string]string{"model": "gpt-5.5", "instructions": "Keep this instruction."}, "environment": map[string]string{"type": "none"}})
 	var err error
-	h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "native-session", Configuration: config, ModelProvider: provider, ModelProviderSource: v1.ModelProviderSourceDeployment})
+	h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "native-session", Configuration: config, ModelProvider: provider, ModelProviderSource: v1.ModelProviderSourceDeployment})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err = bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	first := h.message("first", "Return an answer.")
-	h.finished(h.run(ctx, first.TurnID), store.TurnCompleted)
+	h.finished(h.run(ctx, first.TurnID), sessions.TurnCompleted)
 	bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID == "" {
 		t.Fatal(bound, err)
 	}
 	second := h.message("second", "Continue the same conversation.")
-	h.finished(h.run(ctx, second.TurnID), store.TurnCompleted)
+	h.finished(h.run(ctx, second.TurnID), sessions.TurnCompleted)
 	again, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || again.NativeSessionID != bound.NativeSessionID {
 		t.Fatal(again, err)
@@ -123,7 +124,7 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("forbidden command may have executed: %v", err)
 	}
-	page, err := h.s.ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
+	page, err := sessionReads(h.db.pool).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -54,10 +54,6 @@ export const files: TranslationShape<typeof english> = {
     title: "此 Core 不支持列出文件",
     description: "文件列表请求返回 HTTP {{status}}。",
   },
-  storage: {
-    title: "未配置文件存储",
-    description: "Core 未配置文件存储，因此无法列出或上传文件。",
-  },
   upload: {
     uploading: "正在上传 {{name}}…",
     uploaded: "已上传 {{name}}",
@@ -78,7 +74,6 @@ export const files: TranslationShape<typeof english> = {
     transport: "请求未到达 Core，或响应已丢失。",
     unauthorized: "Core 拒绝了当前连接凭据。",
     tooLarge: "文件超过 Core 的大小上限。",
-    storage: "Core 未配置文件存储。",
     invalidResponse: "Core 返回了控制台无法识别的响应。",
   },
 };

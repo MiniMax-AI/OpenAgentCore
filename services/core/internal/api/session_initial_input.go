@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func initialSessionInputs(raw json.RawMessage) ([]store.Input, error) {
+func initialSessionInputs(raw json.RawMessage) ([]sessions.Input, error) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
 		return nil, nil
@@ -16,7 +16,7 @@ func initialSessionInputs(raw json.RawMessage) ([]store.Input, error) {
 	if raw[0] == '"' {
 		var text string
 		if err := json.Unmarshal(raw, &text); err != nil {
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		raw, _ = json.Marshal([]v1.InputMessage{{Role: "user", Content: []v1.InputContent{{Type: "input_text", Text: &text}}}})
 	}
@@ -26,7 +26,7 @@ func initialSessionInputs(raw json.RawMessage) ([]store.Input, error) {
 		Input json.RawMessage `json:"input"`
 	}{Type: "agent.session.input.message", Input: raw})
 	if err != nil {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	return executionInputs([]json.RawMessage{event})
 }

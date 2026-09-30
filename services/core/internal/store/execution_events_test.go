@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -48,7 +49,7 @@ func TestExecutionPersistsLiveAndCancelledPartialOutput(t *testing.T) {
 		h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{Delta: "片段", Sequence: uint64(i + 2)})
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})
-	h.finished(result, store.TurnCancelled)
+	h.finished(result, sessions.TurnCancelled)
 	events, err := reopened.ListTurnEvents(ctx, h.tenant, h.session.ID, input.TurnID, 0, 100)
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +88,7 @@ func TestExecutionDoesNotCompleteAfterEventPersistenceFailure(t *testing.T) {
 	}
 	h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{Delta: "cannot be stored", Sequence: 1})
 	h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "Do not report success", Usage: proto.Usage{InputTokens: 13}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "failed-native"}})
-	turn := h.finished(result, store.TurnFailed)
+	turn := h.finished(result, sessions.TurnFailed)
 	var outcome execution.Result
 	_ = json.Unmarshal(turn.Outcome, &outcome)
 	if outcome.ErrorCode != "event_persistence_failed" {

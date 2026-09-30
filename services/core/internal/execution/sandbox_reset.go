@@ -6,25 +6,59 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func (w *Worker) StartSandboxReset(ctx context.Context, input store.SandboxResetRequest) (store.RuntimeDeploymentView, error) {
+func (w *Worker) StartSandboxReset(ctx context.Context, input deployment.ResetRequest) (deployment.View, error) {
 	unlock, err := w.runtimes.lockMutation(ctx)
 	if err != nil {
-		return store.RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	defer unlock()
-	return w.runtimes.store.StartSandboxReset(ctx, w.runtimes.setupInstallationID, input)
+	m := w.runtimes
+	if err := m.deployment.StartReset(ctx, m.setupInstallationID, input); err != nil {
+		return deployment.View{}, err
+	}
+	return m.committedView(ctx)
 }
 
-func (w *Worker) CancelSandboxReset(ctx context.Context, generation uint64) (store.RuntimeDeploymentView, error) {
+func (w *Worker) CancelSandboxReset(ctx context.Context, generation uint64) (deployment.View, error) {
 	unlock, err := w.runtimes.lockMutation(ctx)
 	if err != nil {
-		return store.RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	defer unlock()
-	return w.runtimes.store.CancelSandboxReset(ctx, w.runtimes.setupInstallationID, generation)
+	m := w.runtimes
+	if err := m.deployment.CancelReset(ctx, m.setupInstallationID, generation); err != nil {
+		return deployment.View{}, err
+	}
+	return m.committedView(ctx)
+}
+
+// committedView reads the deployment after a committed reset change. The
+// caller still holds the mutation gate, so no other Web change interleaves,
+// but the gate does not freeze allocation counts or other live observations:
+// the response is the current state read after commit. A failed read fails the
+// response and never rolls back the change. The read runs on a pooled
+// snapshot, so the lease check that follows proves no successor owner wrote
+// before it; a lost lease stops this owner.
+func (m *runtimeManager) committedView(ctx context.Context) (deployment.View, error) {
+	view, err := m.deploymentService.View(ctx)
+	if err != nil {
+		return deployment.View{}, err
+	}
+	check, cancel := context.WithTimeout(m.ctx, 5*time.Second)
+	defer cancel()
+	if err := m.lease.CheckOwnership(check); err != nil {
+		select {
+		case m.failed <- err:
+		default:
+		}
+		return deployment.View{}, ErrExecutionUnavailable
+	}
+	return view, nil
 }
 
 // resetStep runs only on the manager's uncounted coordinator loop. It must never
@@ -48,10 +82,10 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		return err
 	}
 	defer unlock()
-	if err := m.store.AdvanceSandboxResetDeadline(ctx); err != nil {
+	if err := m.deployment.AdvanceResetDeadline(ctx); err != nil {
 		return err
 	}
-	current, err := m.store.GetRuntimeDeployment(ctx)
+	current, err := m.deploymentService.View(ctx)
 	if err != nil {
 		return err
 	}
@@ -64,7 +98,7 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		m.resetCursor = ""
 		m.resetRequestedAt = current.Reset.RequestedAt
 	}
-	candidates, err := m.store.ListSandboxResetSessions(ctx, m.resetCursor, current.Reset.Clear == "force")
+	candidates, err := m.deploymentReader.ResetSessions(ctx, m.resetCursor, current.Reset.Clear == deployment.ResetForce)
 	if err != nil {
 		return err
 	}
@@ -74,7 +108,7 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		}
 		_, err := m.store.ArchiveSandboxResetSession(ctx, candidate.TenantID, candidate.SessionID, current.Generation, current.Reset.RequestedAt)
 		m.resetCursor = candidate.SessionID
-		if err != nil && !errors.Is(err, store.ErrSandboxResetSessionBusy) && !errors.Is(err, store.ErrNotFound) {
+		if err != nil && !errors.Is(err, store.ErrSandboxResetSessionBusy) && !errors.Is(err, sessions.ErrNotFound) {
 			// Do not log a provider body, request, credential or stored provenance.
 			log.Warn(ctx, "Sandbox reset archive remains pending", "session_id", candidate.SessionID)
 		}
@@ -85,7 +119,7 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	current, err = m.store.GetRuntimeDeployment(ctx)
+	current, err = m.deploymentService.View(ctx)
 	if err != nil {
 		return err
 	}
@@ -103,7 +137,7 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		}
 		return err
 	}
-	committed, err := m.store.CompleteSandboxReset(ctx, m.setupInstallationID, current.Generation, current.Reset.RequestedAt)
+	committed, err := m.deployment.CompleteReset(ctx, m.setupInstallationID, current.Generation, current.Reset.RequestedAt)
 	if err != nil {
 		recovery := m.restoreCommittedDeployment()
 		if recovery != nil {
@@ -114,7 +148,9 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		log.Warn(parent, "Sandbox reset completion remains pending", "generation", current.Generation)
 		return nil
 	}
-	m.publishEmptyDeployment(committed)
+	// Publish from the committed generation alone: no read may stand between
+	// the commit and retiring the old runtime configuration.
+	m.publishEmptyDeployment(m.setupInstallationID, committed)
 	m.resetCursor = ""
 	return nil
 }

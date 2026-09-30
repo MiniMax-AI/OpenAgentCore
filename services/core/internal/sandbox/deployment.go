@@ -112,3 +112,10 @@ func (s DeploymentSpec) Digest(provider string) string {
 	digest := sha256.Sum256(raw)
 	return hex.EncodeToString(digest[:])
 }
+
+// Description is what a provider registration says about a deployment of it:
+// its mode, its backend namespace fingerprint and its checkpoint timing.
+type Description struct {
+	Mode, BackendFingerprint      string
+	IdleSeconds, RetentionSeconds int64
+}

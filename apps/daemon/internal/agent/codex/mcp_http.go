@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
@@ -51,13 +50,8 @@ func runtimeMCPServers(req proto.PromptRequestPayload) (map[string]mcpServerConf
 }
 
 func configureMCP(plan *SessionPlan, servers map[string]mcpServerConfig) error {
-	var codexHome string
-	for _, entry := range plan.Env {
-		if value, ok := strings.CutPrefix(entry, "CODEX_HOME="); ok {
-			codexHome = value
-		}
-	}
-	if codexHome == "" || !filepath.IsAbs(codexHome) {
+	codexHome := nativeHomeFromPlan(*plan)
+	if !filepath.IsAbs(codexHome) {
 		return errors.New("codex: public MCP requires a private native home")
 	}
 	// Native OAuth defaults to the global keyring. File mode confines lookup to
@@ -67,9 +61,6 @@ func configureMCP(plan *SessionPlan, servers map[string]mcpServerConfig) error {
 	}
 	if err := writeCodexMCPConfig(codexHome, servers); err != nil {
 		return errors.New("codex: cannot write public MCP configuration")
-	}
-	if plan.Cwd == "" {
-		plan.Cwd = codexHome
 	}
 	for _, feature := range []string{"plugins", "apps"} {
 		plan.EnableFeatures = slices.DeleteFunc(plan.EnableFeatures, func(value string) bool { return value == feature })

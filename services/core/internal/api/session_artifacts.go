@@ -7,27 +7,20 @@ import (
 	"path"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
 
-type SessionArtifactStore interface {
-	GetSessionArtifact(context.Context, string, string, string) (store.SessionArtifact, error)
-	ListSessionArtifacts(context.Context, string, string, string, string, int, bool) (store.ArtifactPage, error)
-	ReadSessionArtifact(context.Context, string, string, string, func(store.SessionArtifact, io.Reader) error) error
-	DeleteSessionArtifact(context.Context, string, string, string) error
+// Artifacts deletes a Session's published Artifacts.
+type Artifacts interface {
+	DeleteSessionArtifact(context.Context, sessions.DeleteSessionArtifactCommand) error
 }
 
-func WithSessionArtifacts(s SessionArtifactStore) Option {
-	return func(h *Handler) { h.artifacts = s }
-}
-
-func (h *Handler) artifactsReady(w http.ResponseWriter) bool {
-	if h.artifacts == nil {
-		writeError(w, http.StatusServiceUnavailable, "artifact_storage_unavailable", "Artifact storage is unavailable.")
-		return false
-	}
-	return true
+// ArtifactsReader reads and streams a Session's published Artifacts.
+type ArtifactsReader interface {
+	GetSessionArtifact(context.Context, string, string, string) (sessions.Artifact, error)
+	ListSessionArtifacts(context.Context, string, string, string, string, int, bool) (sessions.ArtifactPage, error)
+	ReadSessionArtifact(context.Context, string, string, string, func(sessions.Artifact, io.Reader) error) error
 }
 
 // @Summary List immutable Session artifacts
@@ -45,16 +38,13 @@ func (h *Handler) artifactsReady(w http.ResponseWriter) bool {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts [get]
 func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w) {
-		return
-	}
 	options, ok := readPage(w, r, "environment_id")
 	if !ok {
 		return
 	}
-	page, err := h.artifacts.ListSessionArtifacts(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), r.URL.Query().Get("environment_id"), options.after, options.limit, options.ascending)
+	page, err := h.ArtifactsReader.ListSessionArtifacts(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), r.URL.Query().Get("environment_id"), options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	data := make([]v1.SessionArtifact, 0, len(page.Artifacts))
@@ -76,12 +66,9 @@ func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [get]
 func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w) {
-		return
-	}
-	artifact, err := h.artifacts.GetSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"))
+	artifact, err := h.ArtifactsReader.GetSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, artifactResponse(artifact))
@@ -99,12 +86,9 @@ func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [delete]
 func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w) {
-		return
-	}
 	id := chi.URLParam(r, "artifact_id")
-	if err := h.artifacts.DeleteSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), id); err != nil {
-		writeStoreError(w, r, err)
+	if err := h.Artifacts.DeleteSessionArtifact(r.Context(), sessions.DeleteSessionArtifactCommand{TenantID: tenantID(r), SessionID: chi.URLParam(r, "session_id"), ArtifactID: id}); err != nil {
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, v1.SessionArtifactDeleted{ID: id, Object: "agent.session.artifact.deleted", Deleted: true})
@@ -122,17 +106,17 @@ func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) 
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request) {
-	if !h.artifactsReady(w) {
-		return
-	}
-	serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
-		return h.artifacts.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a store.SessionArtifact, body io.Reader) error {
+	err := serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
+		return h.ArtifactsReader.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a sessions.Artifact, body io.Reader) error {
 			return consume(path.Base(a.Path), a.SizeBytes, body)
 		})
 	})
+	if err != nil {
+		writeSessionsError(w, r, err)
+	}
 }
 
-func artifactResponse(a store.SessionArtifact) v1.SessionArtifact {
+func artifactResponse(a sessions.Artifact) v1.SessionArtifact {
 	return v1.SessionArtifact{ID: a.ID, CreatedAt: a.CreatedAt.Unix(), EnvironmentID: a.EnvironmentID,
 		Object: "agent.session.artifact", Path: a.Path, SessionID: a.SessionID, SizeBytes: a.SizeBytes, TurnID: a.TurnID}
 }

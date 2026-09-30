@@ -18,22 +18,17 @@ const (
 	runtimeHistoryRequestBudget = 15 * time.Second
 )
 
-type RuntimeHistoryService interface {
+// RuntimeHistory queries durable Runtime history. Its capabilities declare
+// whether this Core collects any; one that does not answers 503
+// runtime_history_unavailable.
+type RuntimeHistory interface {
 	Capabilities() runtimehistory.Capabilities
 	QuerySession(context.Context, string, string, runtimehistory.Range) (runtimehistory.Response, error)
 }
 
-func WithRuntimeHistory(service RuntimeHistoryService) Option {
-	return func(h *Handler) { h.runtimeHistory = service }
-}
-
 // getRuntimeHistory serves the administrator per-Session history read.
 func (h *Handler) getRuntimeHistory(w http.ResponseWriter, r *http.Request) {
-	if h.runtimeHistory == nil {
-		writeError(w, http.StatusServiceUnavailable, "runtime_history_unavailable", "Durable Runtime history is not configured on this service.")
-		return
-	}
-	capabilities := h.runtimeHistory.Capabilities()
+	capabilities := h.RuntimeHistory.Capabilities()
 	if capabilities.Validate() != nil || !capabilities.Durable() {
 		writeError(w, http.StatusServiceUnavailable, "runtime_history_unavailable", "Durable Runtime history is not configured on this service.")
 		return
@@ -46,7 +41,7 @@ func (h *Handler) getRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 	expectedSessionID := chi.URLParam(r, "session_id")
 	ctx, cancel := context.WithTimeout(r.Context(), runtimeHistoryRequestBudget)
 	defer cancel()
-	value, err := h.runtimeHistory.QuerySession(ctx, expectedTenantID, expectedSessionID, requested)
+	value, err := h.RuntimeHistory.QuerySession(ctx, expectedTenantID, expectedSessionID, requested)
 	if err != nil {
 		switch {
 		case errors.Is(err, runtimehistory.ErrInvalidRange):

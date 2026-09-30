@@ -2,38 +2,38 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type projectKeyStoreFixture struct {
-	ProjectAPIKeyStore
-	binding store.ProjectAPIKeyBinding
-	project store.ProjectBinding
+	binding projects.KeyBinding
+	project projects.Binding
 	resolve error
 	lookups int
 }
 
-func (s *projectKeyStoreFixture) GetProject(_ context.Context, id string) (store.ProjectBinding, error) {
+func (s *projectKeyStoreFixture) GetProject(_ context.Context, id string) (projects.Binding, error) {
 	if s.project.Project.ID == id {
 		return s.project, nil
 	}
-	return store.ProjectBinding{}, store.ErrNotFound
+	return projects.Binding{}, projects.ErrNotFound
 }
 
-func (s *projectKeyStoreFixture) ResolveProjectAPIKey(_ context.Context, digest string) (store.ProjectAPIKeyBinding, error) {
+func (s *projectKeyStoreFixture) ResolveAPIKey(_ context.Context, digest [sha256.Size]byte) (projects.KeyBinding, error) {
 	s.lookups++
 	if s.resolve != nil {
-		return store.ProjectAPIKeyBinding{}, s.resolve
+		return projects.KeyBinding{}, s.resolve
 	}
-	if digest != runtimedevice.HashCredential("issued-project-key") {
-		return store.ProjectAPIKeyBinding{}, store.ErrNotFound
+	if digest != sha256.Sum256([]byte("issued-project-key")) {
+		return projects.KeyBinding{}, projects.ErrNotFound
 	}
 	return s.binding, nil
 }
@@ -48,15 +48,10 @@ func projectKeyHTTP(h http.Handler, method, path, token, body string) *httptest.
 }
 func TestAdminCredentialNeverAuthenticatesPublicAPI(t *testing.T) {
 	key := callerBinding()
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, err := NewDeploymentAuthenticator([]string{key.TokenSHA256})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := &Handler{auth: auth, deploymentAuth: admin}
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
+	deps.CoreKeys = coreKeys(t, "caller")
+	h := &Handler{Dependencies: deps}
 	r := httptest.NewRequest("GET", "/v1/files", nil)
 	r.Header.Set("Authorization", "Bearer caller")
 	_, _, ok, err := h.resolveCaller(r)
@@ -66,18 +61,18 @@ func TestAdminCredentialNeverAuthenticatesPublicAPI(t *testing.T) {
 }
 func TestDatabaseResolverControlsAuthentication(t *testing.T) {
 	p := callerBinding()
-	fixture, _ := NewAuthenticator([]APIKey{p})
-	binding, _ := fixture.keys.ResolveProjectAPIKey(t.Context(), p.TokenSHA256)
+	binding := projectKeyBinding(t, p)
 	keys := &projectKeyStoreFixture{binding: binding}
-	auth, _ := NewDatabaseAuthenticator(keys)
-	h := &Handler{auth: auth}
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = keys.ResolveAPIKey
+	h := &Handler{Dependencies: deps}
 	r := httptest.NewRequest("GET", "/v1/files", nil)
 	r.Header.Set("Authorization", "Bearer issued-project-key")
 	got, _, ok, err := h.resolveCaller(r)
 	if err != nil || !ok || got != binding.Principal {
 		t.Fatal("database key rejected")
 	}
-	keys.resolve = store.ErrNotFound
+	keys.resolve = projects.ErrNotFound
 	_, _, ok, err = h.resolveCaller(r)
 	if err != nil || ok {
 		t.Fatal("revoked database key authenticated")
@@ -90,37 +85,41 @@ func TestDatabaseResolverControlsAuthentication(t *testing.T) {
 }
 
 type separationFixture struct {
-	digests []string
+	checked [][sha256.Size]byte
+	exists  bool
 	err     error
 }
 
-func (s *separationFixture) ValidateProjectKeySeparation(_ context.Context, digests []string) error {
-	s.digests = digests
-	return s.err
+func (s *separationFixture) APIKeyDigestExists(_ context.Context, digest [sha256.Size]byte) (bool, error) {
+	s.checked = append(s.checked, digest)
+	return s.exists, s.err
 }
 func TestAdministratorCredentialSeparation(t *testing.T) {
 	s := &separationFixture{}
 	if err := ValidateCredentialSeparation(t.Context(), nil, s); err == nil {
 		t.Fatal("missing administrator accepted")
 	}
-	digest := runtimedevice.HashCredential("admin")
-	admin, _ := NewDeploymentAuthenticator([]string{digest})
-	if err := ValidateCredentialSeparation(t.Context(), admin, s); err != nil || len(s.digests) != 1 || s.digests[0] != digest {
+	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
+	if err := ValidateCredentialSeparation(t.Context(), admin, s); err != nil || len(s.checked) != 1 || s.checked[0] != sha256.Sum256([]byte("admin")) {
 		t.Fatal("administrator digest was not checked against persisted keys", err)
 	}
-	s.err = errors.New("credential overlap")
-	if err := ValidateCredentialSeparation(t.Context(), admin, s); !errors.Is(err, s.err) {
+	s.exists = true
+	if err := ValidateCredentialSeparation(t.Context(), admin, s); err == nil {
 		t.Fatal("persisted credential collision accepted")
+	}
+	s.exists, s.err = false, errors.New("database unavailable")
+	if err := ValidateCredentialSeparation(t.Context(), admin, s); !errors.Is(err, s.err) {
+		t.Fatal("digest lookup failure ignored")
 	}
 }
 func TestAdminCatalogPageLimits(t *testing.T) {
 	for _, query := range []string{"limit=101", "limit=0", "limit=bad", "limit=1&limit=2", "order=sideways", "order=asc&order=desc", "after=a&after=b"} {
-		if _, _, _, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/projects?"+query, nil)); err == nil {
+		if _, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/projects?"+query, nil)); err == nil {
 			t.Errorf("invalid page accepted: %s", query)
 		}
 	}
-	_, limit, ascending, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/projects?limit=100&order=asc", nil))
-	if err != nil || limit != 100 || !ascending {
+	page, err := adminCatalogPage(httptest.NewRequest("GET", "/core/v1/projects?limit=100&order=asc", nil))
+	if err != nil || page.Limit != 100 || !page.Ascending {
 		t.Fatal("valid maximum page rejected", err)
 	}
 }

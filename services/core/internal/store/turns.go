@@ -2,86 +2,54 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
-
-var ErrTurnConflict = errors.New("turn state changed or cancellation was requested")
-
-const (
-	TurnQueued     = "queued"
-	TurnInProgress = "in_progress"
-	TurnWaiting    = "waiting"
-	TurnCompleted  = "completed"
-	TurnFailed     = "failed"
-	TurnCancelled  = "cancelled"
-)
-
-// Turn is a root Turn from the Core work queue and uses its Session's immutable
-// execution configuration; Subagent Turns have a native writer and their own
-// table. Zero timestamps mean the corresponding event has not occurred. Outcome
-// is adapter-owned data, not an upstream response; the API must project
-// supported wire types explicitly.
-type Turn struct {
-	ID, SessionID, Status string
-	CreatedAt             time.Time
-	StartedAt             time.Time
-	CompletedAt           time.Time
-	CancelRequestedAt     time.Time
-	Usage                 json.RawMessage
-	Outcome               json.RawMessage
-	// ArtifactCaptureStarted is private Runtime coordination, never a wire field.
-	ArtifactCaptureStarted bool `json:"-"`
-}
-
-type TurnTransition struct {
-	ExpectedStatus string
-	Status         string
-	Outcome        json.RawMessage
-}
 
 // GetTurn reads a root Turn. A Subagent Turn ID is not found here, exactly like
 // a missing one; GetSubagentTurn reads child Turns.
-func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string) (Turn, error) {
+func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string) (sessions.Turn, error) {
 	params, err := publicTurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
-		return Turn{}, err
+		return sessions.Turn{}, err
 	}
 	row, err := s.queries.GetTurn(ctx, params)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Turn{}, ErrNotFound
+		return sessions.Turn{}, sessions.ErrNotFound
 	}
 	if err != nil {
-		return Turn{}, fmt.Errorf("get turn: %w", err)
+		return sessions.Turn{}, fmt.Errorf("get turn: %w", err)
 	}
-	return turnFromRow(row), nil
+	return sessionpg.TurnFromRow(row), nil
 }
 
 // TransitionTurn is a compare-and-set for execution callbacks. Once terminal,
 // a Turn cannot be reopened or have its outcome overwritten, including by retries.
 // A dispatcher must claim queued -> in_progress before sending work to a daemon.
-func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID string, input TurnTransition) (Turn, error) {
-	params, err := turnLookup(tenantID, sessionID, turnID)
+func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID string, input sessions.TurnTransition) (sessions.Turn, error) {
+	params, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
-		return Turn{}, err
+		return sessions.Turn{}, err
 	}
-	if !validTransition(input.ExpectedStatus, input.Status) || len(input.Outcome) > 512*1024 {
-		return Turn{}, fmt.Errorf("%w: invalid turn transition or outcome size", ErrInvalidInput)
+	if !sessions.ValidTransition(input.ExpectedStatus, input.Status) || len(input.Outcome) > 512*1024 {
+		return sessions.Turn{}, fmt.Errorf("%w: invalid turn transition or outcome size", sessions.ErrInvalidInput)
 	}
-	outcome, err := canonicalJSONObject(input.Outcome)
+	outcome, err := jsonobject.Normalize(input.Outcome)
 	if err != nil {
-		return Turn{}, err
+		return sessions.Turn{}, fmt.Errorf("%w: %w", sessions.ErrInvalidInput, err)
 	}
-	if !terminalStatus(input.Status) && string(outcome) != "{}" {
-		return Turn{}, fmt.Errorf("%w: outcome requires a terminal status", ErrInvalidInput)
+	if !sessions.TerminalStatus(input.Status) && string(outcome) != "{}" {
+		return sessions.Turn{}, fmt.Errorf("%w: outcome requires a terminal status", sessions.ErrInvalidInput)
 	}
 	input.Outcome = outcome
 	var row sqlc.Turn
@@ -91,19 +59,19 @@ func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID 
 		return err
 	})
 	if err != nil {
-		return Turn{}, fmt.Errorf("transition turn: %w", err)
+		return sessions.Turn{}, fmt.Errorf("transition turn: %w", err)
 	}
-	return turnFromRow(row), nil
+	return sessionpg.TurnFromRow(row), nil
 }
 
-func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnParams, input TurnTransition) (sqlc.Turn, error) {
+func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnParams, input sessions.TurnTransition) (sqlc.Turn, error) {
 	if _, err := q.GetTurn(ctx, params); errors.Is(err, pgx.ErrNoRows) {
-		return sqlc.Turn{}, ErrNotFound
+		return sqlc.Turn{}, sessions.ErrNotFound
 	} else if err != nil {
 		return sqlc.Turn{}, err
 	}
-	if input.ExpectedStatus == TurnQueued && input.Status == TurnInProgress {
-		if err := checkRuntimeComputeAdmission(ctx, q, params.SessionID); err != nil {
+	if input.ExpectedStatus == sessions.TurnQueued && input.Status == sessions.TurnInProgress {
+		if err := sessions.CheckComputeAdmission(ctx, sessionpg.BindSession(q, params.TenantID, params.SessionID)); err != nil {
 			return sqlc.Turn{}, err
 		}
 	}
@@ -112,65 +80,37 @@ func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnPar
 		NewStatus: input.Status, Outcome: input.Outcome,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sqlc.Turn{}, ErrTurnConflict
-	}
-	if err == nil && terminalStatus(row.Status) {
-		if err = projectSource(ctx, q, row.SessionID, row.ID, "execution_"+row.Status, 0, row.Outcome, row.CompletedAt); err != nil {
-			return sqlc.Turn{}, err
-		}
-		row, err = q.GetTurn(ctx, params)
+		return sqlc.Turn{}, sessions.ErrTurnConflict
 	}
 	if err != nil {
 		return sqlc.Turn{}, err
 	}
-	if err := recordTurnChange(ctx, q, row, false); err != nil {
+	if !sessions.TerminalStatus(row.Status) {
+		if err := sessionpg.AppendChanges(ctx, q, row.SessionID, sessions.TurnChanges(sessionpg.TurnFromRow(row), false)...); err != nil {
+			return sqlc.Turn{}, err
+		}
+		return row, nil
+	}
+	outcome := sessions.Source{Turn: uuid.UUID(row.ID.Bytes).String(), Kind: "execution_" + row.Status, Payload: row.Outcome, CreatedAt: row.CompletedAt.Time}
+	if err = sessions.ProjectSource(ctx, sessionpg.BindSession(q, params.TenantID, row.SessionID), outcome); err != nil {
+		return sqlc.Turn{}, err
+	}
+	if row, err = q.GetTurn(ctx, params); err != nil {
+		return sqlc.Turn{}, err
+	}
+	ending, err := sessionpg.LoadEnding(ctx, q, row.SessionID, row.ID)
+	if err != nil {
+		return sqlc.Turn{}, err
+	}
+	if err := sessionpg.ApplyTurnEnd(ctx, q, row.SessionID, row.ID, sessions.EndTurn(sessionpg.TurnFromRow(row), ending)); err != nil {
 		return sqlc.Turn{}, err
 	}
 	return row, nil
-}
-
-func validTransition(from, to string) bool {
-	switch from {
-	case TurnQueued:
-		return to == TurnInProgress || to == TurnFailed || to == TurnCancelled
-	case TurnInProgress:
-		return to == TurnWaiting || terminalStatus(to)
-	case TurnWaiting:
-		return to == TurnInProgress || terminalStatus(to)
-	default:
-		return false
-	}
-}
-
-func terminalStatus(status string) bool {
-	return status == TurnCompleted || status == TurnFailed || status == TurnCancelled
-}
-
-func turnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) {
-	var p sqlc.GetTurnParams
-	var err error
-	if p.TenantID, err = parseID(tenantID); err != nil {
-		return p, err
-	}
-	if p.SessionID, err = parseID(sessionID); err != nil {
-		return p, err
-	}
-	p.ID, err = parseID(turnID)
-	return p, err
 }
 
 // publicTurnLookup resolves caller-supplied path identifiers for a Turn or a
 // Turn-scoped resource. Unparsable values are indistinguishable from missing ones.
 func publicTurnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) {
 	tenant, err := parseID(tenantID)
-	return sqlc.GetTurnParams{TenantID: tenant, SessionID: parsePathID(sessionID), ID: parsePathID(turnID)}, err
-}
-
-func turnFromRow(row sqlc.Turn) Turn {
-	return Turn{
-		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), Status: row.Status,
-		CreatedAt: row.CreatedAt.Time, StartedAt: row.StartedAt.Time, CompletedAt: row.CompletedAt.Time,
-		CancelRequestedAt: row.CancelRequestedAt.Time, Outcome: json.RawMessage(row.Outcome), Usage: json.RawMessage(row.TokenUsage),
-		ArtifactCaptureStarted: row.ArtifactCaptureStarted,
-	}
+	return sqlc.GetTurnParams{TenantID: tenant, SessionID: pgunit.PathID(sessionID), ID: pgunit.PathID(turnID)}, err
 }

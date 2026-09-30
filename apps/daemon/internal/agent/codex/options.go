@@ -16,8 +16,9 @@ import (
 // SessionPlan holds the resolved per-prompt launch plan derived from
 // the daemon's PromptRequestPayload.
 type SessionPlan struct {
-	// Cwd is the validated working directory passed to codex (and to
-	// the spawned app-server). Empty when the caller provided no work_dir.
+	// Cwd is the working directory passed to codex and the spawned
+	// app-server: the bound workspace root for an Environment request and
+	// the Session's private CODEX_HOME for environment:none.
 	Cwd string
 
 	// Env is the full environment slice (KEY=value) to layer onto
@@ -93,7 +94,7 @@ type SessionPlan struct {
 // codexBinary in sessionConfig) rather than per-call.
 //
 // Daemon-managed Codex sessions bypass approvals and the engine sandbox.
-func BuildSessionPlan(runID, agentStateKey, workDir string, opts map[string]any) (SessionPlan, error) {
+func BuildSessionPlan(runID, agentStateKey string, opts map[string]any) (SessionPlan, error) {
 	cleanup := func() {}
 	plan := SessionPlan{
 		CollaborationMode: CollaborationModeDefault,
@@ -126,12 +127,6 @@ func BuildSessionPlan(runID, agentStateKey, workDir string, opts map[string]any)
 			return plan, fmt.Errorf("codex: model_verbosity must be low, medium or high")
 		}
 	}
-
-	resolvedCwd, err := resolveWorkDirCodex(workDir)
-	if err != nil {
-		return plan, err
-	}
-	plan.Cwd = resolvedCwd
 
 	plan.Model = stringOpt(opts, "model")
 	plan.SystemPrompt = stringOpt(opts, "system_prompt")
@@ -212,33 +207,6 @@ func BuildSessionPlan(runID, agentStateKey, workDir string, opts map[string]any)
 // helpers
 // ---------------------------------------------------------------------------
 
-func resolveWorkDirCodex(input string) (string, error) {
-	trimmed := strings.TrimSpace(input)
-	if trimmed == "" {
-		return "", nil
-	}
-	var abs string
-	switch {
-	case strings.HasPrefix(trimmed, "~/"):
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("codex: resolve home dir: %w", err)
-		}
-		abs = filepath.Join(home, strings.TrimPrefix(trimmed, "~/"))
-	case filepath.IsAbs(trimmed):
-		abs = trimmed
-	default:
-		return "", fmt.Errorf("codex: work_dir must be absolute or start with ~/, got %q", trimmed)
-	}
-	// Create the working directory so a user
-	// naming a fresh project root in the agent wizard works on first
-	// run instead of erroring with "does not exist".
-	if err := os.MkdirAll(abs, 0o755); err != nil {
-		return "", fmt.Errorf("codex: mkdir work_dir %s: %w", abs, err)
-	}
-	return abs, nil
-}
-
 func allocCodexHome(agentStateKey string) (string, error) {
 	if strings.TrimSpace(agentStateKey) == "" {
 		return "", fmt.Errorf("codex: agentStateKey required for CODEX_HOME allocation")
@@ -263,6 +231,18 @@ func allocCodexHome(agentStateKey string) (string, error) {
 		return "", fmt.Errorf("codex: create CODEX_HOME %s: %w", dir, err)
 	}
 	return dir, nil
+}
+
+// nativeHomeFromPlan returns the CODEX_HOME codex receives: os/exec keeps the
+// last duplicate entry, and BuildSessionPlan appends the allocated home last.
+func nativeHomeFromPlan(plan SessionPlan) string {
+	var home string
+	for _, entry := range plan.Env {
+		if value, ok := strings.CutPrefix(entry, "CODEX_HOME="); ok {
+			home = value
+		}
+	}
+	return home
 }
 
 func resetGeneratedConfig(codexHome string) error {

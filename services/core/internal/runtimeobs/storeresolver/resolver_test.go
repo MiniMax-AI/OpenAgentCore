@@ -7,18 +7,19 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type resolverStore struct {
-	session       store.Session
+	session       sessions.Session
 	measured      json.RawMessage
 	allocation    store.RuntimeAllocation
 	allocationErr error
 	page          store.RuntimeObservationSessionPage
 }
 
-func (s resolverStore) GetSession(context.Context, string, string) (store.Session, error) {
+func (s resolverStore) GetSession(context.Context, string, string) (sessions.Session, error) {
 	return s.session, nil
 }
 
@@ -53,7 +54,7 @@ func TestResolverListsOnlyProviderNeutralSessionIdentity(t *testing.T) {
 
 func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 	r, err := NewResolver(resolverStore{
-		session:  store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		session:  sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
 		measured: []byte(`{"input_tokens":120,"input_tokens_details":{"cached_tokens":20},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":10},"total_tokens":150}`),
 		allocation: store.RuntimeAllocation{
 			ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
@@ -89,7 +90,7 @@ func TestResolverRejectsInvalidCanonicalSessionUsage(t *testing.T) {
 		`{"input_tokens":0,"input_tokens_details":{"cached_tokens":-1},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":0}`,
 		`{"input_tokens":0,"input_tokens_details":{"cached_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":0,"unknown":0}`,
 	} {
-		resolver, err := NewResolver(resolverStore{session: store.Session{
+		resolver, err := NewResolver(resolverStore{session: sessions.Session{
 			ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`),
 		}, measured: []byte(usage)})
 		if err != nil {
@@ -102,7 +103,7 @@ func TestResolverRejectsInvalidCanonicalSessionUsage(t *testing.T) {
 }
 
 func TestResolverKeepsNullCanonicalSessionUsageAbsent(t *testing.T) {
-	resolver, err := NewResolver(resolverStore{session: store.Session{
+	resolver, err := NewResolver(resolverStore{session: sessions.Session{
 		ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`),
 	}, measured: []byte(" \n null \t")})
 	if err != nil {
@@ -125,7 +126,7 @@ func TestResolverUsesMeasuredRatherThanPublicSessionUsage(t *testing.T) {
 		{"null", measured, &runtimeobs.TokenUsage{InputTokens: 7, OutputTokens: 3}},
 		{measured, "null", nil},
 	} {
-		resolver, err := NewResolver(resolverStore{session: store.Session{
+		resolver, err := NewResolver(resolverStore{session: sessions.Session{
 			ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`), Usage: []byte(test.public),
 		}, measured: []byte(test.measured)})
 		if err != nil {
@@ -141,12 +142,12 @@ func TestResolverUsesMeasuredRatherThanPublicSessionUsage(t *testing.T) {
 func TestResolverKeepsUnsupportedModesDistinct(t *testing.T) {
 	for _, tc := range []struct {
 		mode        string
-		environment *store.Environment
+		environment *sessions.Environment
 	}{
 		{mode: "none"},
-		{mode: "self_hosted", environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		{mode: "self_hosted", environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
 	} {
-		r, err := NewResolver(resolverStore{session: store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"` + tc.mode + `"}}`), Environment: tc.environment}})
+		r, err := NewResolver(resolverStore{session: sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"` + tc.mode + `"}}`), Environment: tc.environment}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -159,8 +160,8 @@ func TestResolverKeepsUnsupportedModesDistinct(t *testing.T) {
 
 func TestResolverReportsManagedAllocationAsUnavailable(t *testing.T) {
 	r, err := NewResolver(resolverStore{
-		session:       store.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
-		allocationErr: store.ErrNotFound,
+		session:       sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		allocationErr: sessions.ErrNotFound,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -173,11 +174,11 @@ func TestResolverReportsManagedAllocationAsUnavailable(t *testing.T) {
 
 func TestResolverRejectsMismatchedEnvironmentOwnership(t *testing.T) {
 	for _, mode := range []string{"self_hosted", "openai_hosted"} {
-		for _, environment := range []store.Environment{
+		for _, environment := range []sessions.Environment{
 			{ID: "environment", TenantID: "other", SessionID: "session"},
 			{ID: "environment", TenantID: "tenant", SessionID: "other"},
 		} {
-			resolver, err := NewResolver(resolverStore{session: store.Session{
+			resolver, err := NewResolver(resolverStore{session: sessions.Session{
 				ID: "session", TenantID: "tenant",
 				Configuration: []byte(`{"environment":{"type":"` + mode + `"}}`), Environment: &environment,
 			}})
@@ -204,9 +205,9 @@ func TestResolverRejectsMismatchedAllocationOwnership(t *testing.T) {
 		allocation := base
 		mutate(&allocation)
 		resolver, err := NewResolver(resolverStore{
-			session: store.Session{
+			session: sessions.Session{
 				ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`),
-				Environment: &store.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"},
+				Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"},
 			},
 			allocation: allocation,
 		})

@@ -7,11 +7,11 @@ import (
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type environmentStore interface {
-	GetSessionEnvironment(context.Context, string, string) (store.Environment, error)
+	GetSessionEnvironment(context.Context, string, string) (sessions.Environment, error)
 }
 
 type Resolver struct{ store environmentStore }

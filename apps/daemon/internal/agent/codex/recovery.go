@@ -13,12 +13,7 @@ func SupportsNativeSessionRecovery(version string) bool {
 }
 
 func (s *Session) recoverRoot(plan SessionPlan) (string, error) {
-	var home string
-	for _, value := range plan.Env {
-		if strings.HasPrefix(value, "CODEX_HOME=") {
-			home = strings.TrimPrefix(value, "CODEX_HOME=")
-		}
-	}
+	home := nativeHomeFromPlan(plan)
 	if !filepath.IsAbs(home) || !filepath.IsAbs(plan.Cwd) {
 		return "", errors.New("codex: recovery requires private native history")
 	}

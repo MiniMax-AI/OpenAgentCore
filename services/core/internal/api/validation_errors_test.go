@@ -11,7 +11,10 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -19,50 +22,59 @@ import (
 // validationStore counts every persistence attempt so rejected requests can
 // prove that validation ran before any write.
 type validationStore struct {
-	ResourceStore
 	writes int
 }
 
-func (s *validationStore) CreateAgent(_ context.Context, tenant string, input store.CreateAgentInput) (store.SavedAgent, error) {
+func (s *validationStore) CreateAgent(_ context.Context, command agents.CreateCommand) (agents.Agent, error) {
 	s.writes++
-	return store.SavedAgent{ID: uuid.NewString(), TenantID: tenant, Configuration: input.Configuration, Metadata: input.Metadata, CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}, nil
+	return agents.Agent{ID: uuid.NewString(), TenantID: command.TenantID, Configuration: command.Configuration, Metadata: command.Metadata, CreatedAt: time.Unix(1700000000, 0), UpdatedAt: time.Unix(1700000000, 0)}, nil
 }
 
-func (s *validationStore) UpdateAgent(_ context.Context, tenant, id string, input store.UpdateAgentInput) (store.SavedAgent, error) {
+func (s *validationStore) UpdateAgent(_ context.Context, command agents.UpdateCommand) (agents.Agent, error) {
 	s.writes++
-	return store.SavedAgent{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"model":"validation-model"}`), Metadata: map[string]string{}}, nil
+	return agents.Agent{ID: command.AgentID, TenantID: command.TenantID, Configuration: json.RawMessage(`{"model":"validation-model"}`), Metadata: map[string]string{}}, nil
 }
 
-func (s *validationStore) CreateVault(_ context.Context, tenant string, input store.CreateVaultInput) (store.Vault, error) {
+func (s *validationStore) CreateVault(_ context.Context, input vaults.CreateVault) (vaults.Vault, error) {
 	s.writes++
-	return store.Vault{ID: uuid.NewString(), TenantID: tenant, Name: input.Name, Metadata: input.Metadata}, nil
+	return vaults.Vault{ID: uuid.NewString(), TenantID: input.TenantID, Name: input.Name, Metadata: input.Metadata}, nil
 }
 
-func (s *validationStore) UpdateSessionMetadata(_ context.Context, tenant, id string, metadata map[string]string) (store.Session, error) {
+func (s *validationStore) UpdateSessionMetadata(_ context.Context, tenant, id string, metadata map[string]string) (sessions.Session, error) {
 	s.writes++
-	return store.Session{ID: id, TenantID: tenant, Metadata: metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
+	return sessions.Session{ID: id, TenantID: tenant, Metadata: metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
 }
 
-func (s *validationStore) CreateSession(_ context.Context, tenant string, input store.CreateSessionInput) (store.Session, error) {
+func (s *validationStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
 	s.writes++
-	return store.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, nil
+	return sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, nil
 }
 
-func (s *validationStore) CreateEnvironmentTemplate(context.Context, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error) {
+func (s *validationStore) CreateEnvironmentTemplate(context.Context, environmenttemplates.CreateCommand) (environmenttemplates.Template, error) {
 	s.writes++
-	return store.EnvironmentTemplate{ID: uuid.NewString(), NetworkAccess: "enabled"}, nil
+	return environmenttemplates.Template{ID: uuid.NewString(), NetworkAccess: "enabled"}, nil
 }
 
-func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, _, id string, input store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error) {
+func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, command environmenttemplates.UpdateCommand) (environmenttemplates.Template, error) {
 	s.writes++
-	return store.EnvironmentTemplate{ID: id, NetworkAccess: input.NetworkAccess, AllowedDomains: input.AllowedDomains}, nil
+	return environmenttemplates.Template{ID: command.TemplateID, NetworkAccess: command.Input.NetworkAccess, AllowedDomains: command.Input.AllowedDomains}, nil
+}
+
+// serve takes every write from the handler, and the Worker admits Sessions
+// with initial input into s. Session reads are unexpected.
+func (s *validationStore) serve(d *Dependencies, f *testFakes) {
+	d.Execution = f.execution()
+	f.sessionAdmission.createSession = s.CreateSession
+	f.agents.create, f.agents.update = s.CreateAgent, s.UpdateAgent
+	f.vaults.createVault = s.CreateVault
+	f.sessions.getSession, f.sessions.updateSessionMetadata = nil, s.UpdateSessionMetadata
+	f.environmentTemplates.create, f.environmentTemplates.update = s.CreateEnvironmentTemplate, s.UpdateEnvironmentTemplate
 }
 
 func validationHandler(t *testing.T) (http.Handler, *validationStore) {
 	t.Helper()
 	s := &validationStore{}
-	h, recording, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
-	recording.ResourceStore = s
+	h, _, _ := testHandler(t, s.serve)
 	return h, s
 }
 

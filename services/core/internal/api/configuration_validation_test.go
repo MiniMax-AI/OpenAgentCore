@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/google/uuid"
 )
 
@@ -19,19 +20,27 @@ type savedConfigurationStore struct {
 	agents map[string]string
 }
 
-func (s *savedConfigurationStore) GetAgent(_ context.Context, tenant, id string) (store.SavedAgent, error) {
+func (s *savedConfigurationStore) GetAgent(_ context.Context, tenant, id string) (agents.Agent, error) {
 	configuration, ok := s.agents[id]
 	if !ok {
-		return store.SavedAgent{}, store.ErrNotFound
+		return agents.Agent{}, agents.ErrNotFound
 	}
-	return store.SavedAgent{ID: id, TenantID: tenant, Configuration: json.RawMessage(configuration), Metadata: map[string]string{}}, nil
+	return agents.Agent{ID: id, TenantID: tenant, Configuration: json.RawMessage(configuration), Metadata: map[string]string{}}, nil
 }
 
-func configurationHandler(t *testing.T, agents map[string]string) (http.Handler, *savedConfigurationStore) {
+// GetAgentWithModelProvider reads the saved Agent for Session creation; these
+// records carry no model provider.
+func (s *savedConfigurationStore) GetAgentWithModelProvider(ctx context.Context, tenant, id string) (agents.Agent, *v1.ModelProviderInput, error) {
+	agent, err := s.GetAgent(ctx, tenant, id)
+	return agent, nil, err
+}
+
+func configurationHandler(t *testing.T, saved map[string]string) (http.Handler, *savedConfigurationStore) {
 	t.Helper()
-	s := &savedConfigurationStore{validationStore: &validationStore{}, agents: agents}
-	h, recording, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
-	recording.ResourceStore = s
+	s := &savedConfigurationStore{validationStore: &validationStore{}, agents: saved}
+	h, _, _ := testHandler(t, s.serve, func(_ *Dependencies, f *testFakes) {
+		f.agentsReader.getAgent, f.agentsReader.getAgentWithModelProvider = s.GetAgent, s.GetAgentWithModelProvider
+	})
 	return h, s
 }
 

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -22,36 +22,31 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: "other-project", SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Private setup isolates the persistence prerequisite from public creation admission.
 	configuration := json.RawMessage(`{"agent":{"id":"agent_initial_failure","model":"fixture","tools":[],"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"}},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)
-	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{
 		Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "initial", Configuration: configuration,
-		InitialInputs: []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"private-input-marker"}`)}},
+		InitialInputs: []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"private-input-marker"}`)}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	writer, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	owner := executionOwner(t, db, s)
+	writer := owner.Store
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := writer.CloseExecution(ctx); err != nil {
+		if err := owner.Lease.Close(ctx); err != nil {
 			t.Error(err)
 		}
 	})
-	handler, err := api.NewHandler(s, auth, "codex", api.WithEnvironmentRemoteURL("https://executor.example"))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,10 +91,10 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 		}
 	}
 	var reservation string
-	if err := pool.QueryRow(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial RETURNING id", session.ID).Scan(&reservation); err != nil {
+	if err := db.pool.QueryRow(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial RETURNING id", session.ID).Scan(&reservation); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := writer.ExpireEnvironmentInput(t.Context(), tenant, session.ID, reservation); err != nil || result.State != store.EnvironmentInputExpired {
+	if result, err := writer.ExpireEnvironmentInput(t.Context(), tenant, session.ID, reservation); err != nil || result.State != sessions.EnvironmentInputExpired {
 		t.Fatal("initial reservation did not expire", result, err)
 	}
 	observed := <-done

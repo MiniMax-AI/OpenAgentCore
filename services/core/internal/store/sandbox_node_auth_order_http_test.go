@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -17,30 +17,26 @@ import (
 // authenticate first: a missing or invalid credential gets 401, and only a
 // recognized credential learns that the deployment is unavailable.
 func TestSandboxNodeRoutesAuthenticateBeforeDeploymentState(t *testing.T) {
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(uuid.NewString())})
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth, err := api.NewDatabaseAuthenticator(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(s, auth, "codex", api.WithSandboxManager(s, admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s, db), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Recognized, unconsumed enrollment tokens; no deployment has been initialized.
 	enrollment := func(token, installation string) {
 		t.Helper()
-		if _, err := pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VALUES(encode(sha256($1::bytea),'hex'),$2,clock_timestamp()+interval '10 minutes')", token, installation); err != nil {
+		if _, err := db.pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VALUES(encode(sha256($1::bytea),'hex'),$2,clock_timestamp()+interval '10 minutes')", token, installation); err != nil {
 			t.Fatal(err)
 		}
 	}
 	token, claimedToken, claimed := strings.Repeat("e", 64), strings.Repeat("c", 64), uuid.NewString()
 	enrollment(token, uuid.NewString())
 	enrollment(claimedToken, claimed)
-	enroll, _ := json.Marshal(store.RuntimeNodeEnrollment{NodeID: uuid.NewString(), Credential: strings.Repeat("n", 64), Name: "Early node", Provider: "docker",
+	enroll, _ := json.Marshal(deployment.Enrollment{NodeID: uuid.NewString(), Credential: strings.Repeat("n", 64), Name: "Early node", Provider: "docker",
 		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: 1, SpecificationDigest: strings.Repeat("d", 64), CoreURL: "https://core.example"})
 	nodeID := uuid.NewString()
 	type check struct {
@@ -79,7 +75,7 @@ func TestSandboxNodeRoutesAuthenticateBeforeDeploymentState(t *testing.T) {
 
 	// Once Web claims an installation, still before initialization, another
 	// installation's token gets the same 401 it gets after initialization.
-	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET installation_id=$1, web_managed=true WHERE singleton=true", claimed); err != nil {
+	if _, err := db.pool.Exec(t.Context(), "UPDATE runtime_deployment SET installation_id=$1, web_managed=true WHERE singleton=true", claimed); err != nil {
 		t.Fatal(err)
 	}
 	run([]check{

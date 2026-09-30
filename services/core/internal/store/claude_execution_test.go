@@ -11,19 +11,19 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func claudeSession(t *testing.T, h *dispatchHarness, configuration string, prebound bool) {
 	t.Helper()
 	var err error
-	h.session, err = h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "claude_sdk", IdempotencyKey: "claude", Configuration: json.RawMessage(configuration)})
+	h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "claude_sdk", IdempotencyKey: "claude", Configuration: json.RawMessage(configuration)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if prebound {
-		if err := h.s.BindSessionDevice(t.Context(), h.tenant, h.session.ID, h.device.ID); err != nil {
+		if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -55,10 +55,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 			input := h.message("start", "Look up ticket")
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker, err := execution.StartWorker(ctx, h.d)
-			if err != nil {
-				t.Fatal(err)
-			}
+			worker := startWorker(t, ctx, h.db, h.d)
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
 			defer func() {
@@ -72,11 +69,11 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 			queued := func() {
 				time.Sleep(650 * time.Millisecond)
 				turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
-				if err != nil || turn.Status != store.TurnQueued {
+				if err != nil || turn.Status != sessions.TurnQueued {
 					t.Fatal(turn, err)
 				}
 				if !prebound {
-					if _, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, store.ErrNotFound) {
+					if _, err := fixtureSessionStore(h.db).GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("bound an incapable device", err)
 					}
 				}
@@ -93,7 +90,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 				t.Fatal(prompt)
 			}
 			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "claude-native"}})
-			waitTurn(t, h, input.TurnID, store.TurnCompleted)
+			waitTurn(t, h, input.TurnID, sessions.TurnCompleted)
 			bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 			if err != nil || bound.NativeSessionID != "claude-native" {
 				t.Fatal(bound, err)
@@ -116,7 +113,7 @@ func TestClaudeDispatcherRejectsUnsupportedConfigurationBeforeClaim(t *testing.T
 				t.Fatal("unsupported configuration claimed")
 			}
 			turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
-			if err != nil || turn.Status != store.TurnQueued {
+			if err != nil || turn.Status != sessions.TurnQueued {
 				t.Fatal(turn, err)
 			}
 		})
@@ -126,36 +123,33 @@ func TestClaudeDispatcherRejectsUnsupportedConfigurationBeforeClaim(t *testing.T
 func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T) {
 	h := newDispatchHarness(t)
 	claudeSession(t, h, functionConfiguration, false)
-	worker, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startOwnedWorker(t, t.Context(), h.db, h.d, h.owner())
 	defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 	input := h.message("start", "Run")
-	if _, err := h.s.TransitionTurn(t.Context(), h.tenant, h.session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err := h.s.TransitionTurn(t.Context(), h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	call := store.FunctionCall{CallID: "public-call", ExecutorCallID: "native-call", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)}
-	if err := h.s.RecordFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, call); err != nil {
+	call := sessions.FunctionCall{CallID: "public-call", ExecutorCallID: "native-call", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)}
+	if err := h.owner().Sessions.RecordFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, call); err != nil {
 		t.Fatal(err)
 	}
-	result := func(raw string) store.Input {
-		payload, err := json.Marshal(store.FunctionResultInput{TurnID: input.TurnID, CallID: call.CallID, Result: json.RawMessage(raw)})
+	result := func(raw string) sessions.Input {
+		payload, err := json.Marshal(sessions.FunctionResultInput{TurnID: input.TurnID, CallID: call.CallID, Result: json.RawMessage(raw)})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return store.Input{Kind: "tool_result", Payload: payload}
+		return sessions.Input{Kind: "tool_result", Payload: payload}
 	}
-	batch := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, result(`{"success":true,"output":[{"type":"input_image","image_url":"data:image/png;base64,AA=="}]}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
-	if _, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "batch", batch); !errors.Is(err, store.ErrInvalidInput) {
+	batch := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, result(`{"success":true,"output":[{"type":"input_image","image_url":"data:image/png;base64,AA=="}]}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
+	if _, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "batch", batch); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal(err)
 	}
-	saved, err := h.s.GetFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, call.CallID)
+	saved, err := store.FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, call.CallID)
 	if err != nil || saved.Result != nil || saved.Applied {
 		t.Fatal(saved, err)
 	}
 	turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnWaiting || !turn.CancelRequestedAt.IsZero() {
+	if err != nil || turn.Status != sessions.TurnWaiting || !turn.CancelRequestedAt.IsZero() {
 		t.Fatal(turn, err)
 	}
 	history, err := h.s.ListTurnInputs(t.Context(), h.tenant, h.session.ID, input.TurnID, 0, 100)

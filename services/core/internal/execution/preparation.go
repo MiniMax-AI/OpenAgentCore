@@ -7,7 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -89,7 +89,7 @@ func (p *preparedStart) observation(env proto.Envelope) (proto.PreparationStatus
 	}
 }
 
-func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session string, pending store.EnvironmentInputReservation, prepared *preparedStart) (store.EnvironmentInputReservation, error) {
+func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session string, pending sessions.EnvironmentInputReservation, prepared *preparedStart) (sessions.EnvironmentInputReservation, error) {
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
 	for {
@@ -98,7 +98,7 @@ func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session strin
 			return pending, ctx.Err()
 		case <-tick.C:
 			current, err := d.Store.ExpireEnvironmentInput(ctx, tenant, session, pending.ID)
-			if err != nil || current.State != store.EnvironmentInputPending {
+			if err != nil || current.State != sessions.EnvironmentInputPending {
 				return current, err
 			}
 		case env, ok := <-prepared.sub.Events:

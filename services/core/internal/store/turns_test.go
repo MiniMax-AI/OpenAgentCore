@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestCancellationStaysBoundToItsOriginalTurn(t *testing.T) {
@@ -18,7 +20,7 @@ func TestCancellationStaysBoundToItsOriginalTurn(t *testing.T) {
 		t.Fatalf("idle cancellation: %+v, %v", idle, err)
 	}
 	first := submitMessage(t, s, tenant, session.ID, "first")
-	started := transition(t, s, tenant, session.ID, first.TurnID, TurnQueued, TurnInProgress)
+	started := transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	if started.StartedAt.IsZero() || !started.CompletedAt.IsZero() {
 		t.Fatalf("started timestamps: %+v", started)
 	}
@@ -27,29 +29,29 @@ func TestCancellationStaysBoundToItsOriginalTurn(t *testing.T) {
 		t.Fatalf("cancellation target: %+v, %v", cancel, err)
 	}
 	pending, err := s.GetTurn(ctx, tenant, session.ID, first.TurnID)
-	if err != nil || pending.Status != TurnInProgress || pending.CancelRequestedAt.IsZero() || !pending.CompletedAt.IsZero() {
+	if err != nil || pending.Status != sessions.TurnInProgress || pending.CancelRequestedAt.IsZero() || !pending.CompletedAt.IsZero() {
 		t.Fatalf("running cancellation falsely completed: %+v, %v", pending, err)
 	}
-	transition(t, s, tenant, session.ID, first.TurnID, TurnInProgress, TurnCancelled)
+	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnInProgress, sessions.TurnCancelled)
 	next := submitMessage(t, s, tenant, session.ID, "next")
-	for key, original := range map[string]InputReceipt{"cancel": cancel, "idle-cancel": idle} {
+	for key, original := range map[string]sessions.InputReceipt{"cancel": cancel, "idle-cancel": idle} {
 		retry, err := s.RequestCancel(ctx, tenant, session.ID, key)
 		if err != nil || !retry.Replayed || retry.TurnID != original.TurnID || retry.Sequence != original.Sequence {
 			t.Fatalf("cancellation retargeted: %+v, %v", retry, err)
 		}
 	}
 	queued, err := s.GetTurn(ctx, tenant, session.ID, next.TurnID)
-	if err != nil || queued.Status != TurnQueued || !queued.CancelRequestedAt.IsZero() {
+	if err != nil || queued.Status != sessions.TurnQueued || !queued.CancelRequestedAt.IsZero() {
 		t.Fatalf("old cancellation affected later Turn: %+v, %v", queued, err)
 	}
 	if _, err := s.RequestCancel(ctx, tenant, session.ID, "cancel-queued"); err != nil {
 		t.Fatal(err)
 	}
 	stopped, err := s.GetTurn(ctx, tenant, session.ID, next.TurnID)
-	if err != nil || stopped.Status != TurnCancelled || stopped.CompletedAt.IsZero() || !stopped.StartedAt.IsZero() {
+	if err != nil || stopped.Status != sessions.TurnCancelled || stopped.CompletedAt.IsZero() || !stopped.StartedAt.IsZero() {
 		t.Fatalf("queued work did not stop: %+v, %v", stopped, err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, next.TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnInProgress}); !errors.Is(err, ErrTurnConflict) {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, next.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("cancelled queued work was started: %v", err)
 	}
 }
@@ -59,24 +61,24 @@ func TestWaitingTurnRetainsInputsAndStartTime(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
 	first := submitMessage(t, s, tenant, session.ID, "first")
-	started := transition(t, s, tenant, session.ID, first.TurnID, TurnQueued, TurnInProgress)
-	transition(t, s, tenant, session.ID, first.TurnID, TurnInProgress, TurnWaiting)
+	started := transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnInProgress, sessions.TurnWaiting)
 	steer := submitMessage(t, s, tenant, session.ID, "steer")
 	if steer.TurnID != first.TurnID {
 		t.Fatal("waiting input started another Turn")
 	}
-	resumed := transition(t, s, tenant, session.ID, first.TurnID, TurnWaiting, TurnInProgress)
+	resumed := transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnWaiting, sessions.TurnInProgress)
 	if !started.StartedAt.Equal(resumed.StartedAt) {
 		t.Fatal("resume reset the start time")
 	}
-	transition(t, s, tenant, session.ID, first.TurnID, TurnInProgress, TurnWaiting)
+	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnInProgress, sessions.TurnWaiting)
 	if _, err := s.RequestCancel(ctx, tenant, session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, TurnTransition{ExpectedStatus: TurnWaiting, Status: TurnInProgress}); !errors.Is(err, ErrTurnConflict) {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnInProgress}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("cancelling Turn resumed: %v", err)
 	}
-	transition(t, s, tenant, session.ID, first.TurnID, TurnWaiting, TurnCancelled)
+	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnWaiting, sessions.TurnCancelled)
 }
 
 func TestTerminalOutcomeIsImmutableDuringConcurrentCallbacks(t *testing.T) {
@@ -85,19 +87,19 @@ func TestTerminalOutcomeIsImmutableDuringConcurrentCallbacks(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
 	first := submitMessage(t, s, tenant, session.ID, "first")
-	transition(t, s, tenant, session.ID, first.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	if _, err := s.RequestCancel(ctx, tenant, session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup
-	winners := make(chan Turn, 3)
+	winners := make(chan sessions.Turn, 3)
 	errs := make(chan error, 3)
-	for _, status := range []string{TurnCompleted, TurnFailed, TurnCancelled} {
+	for _, status := range []string{sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled} {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			outcome, _ := json.Marshal(map[string]string{"reported": status})
-			turn, err := other.TransitionTurn(ctx, tenant, session.ID, first.TurnID, TurnTransition{ExpectedStatus: TurnInProgress, Status: status, Outcome: outcome})
+			turn, err := other.TransitionTurn(ctx, tenant, session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status, Outcome: outcome})
 			if err == nil {
 				winners <- turn
 			} else {
@@ -112,7 +114,7 @@ func TestTerminalOutcomeIsImmutableDuringConcurrentCallbacks(t *testing.T) {
 		t.Fatalf("winners=%d errors=%d", len(winners), len(errs))
 	}
 	for err := range errs {
-		if !errors.Is(err, ErrTurnConflict) {
+		if !errors.Is(err, sessions.ErrTurnConflict) {
 			t.Fatal(err)
 		}
 	}
@@ -120,7 +122,7 @@ func TestTerminalOutcomeIsImmutableDuringConcurrentCallbacks(t *testing.T) {
 	if winner.CompletedAt.IsZero() || winner.CancelRequestedAt.IsZero() || winner.CompletedAt.Before(winner.StartedAt) {
 		t.Fatalf("terminal timestamps: %+v", winner)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, TurnTransition{ExpectedStatus: TurnInProgress, Status: TurnFailed, Outcome: json.RawMessage(`{"late":true}`)}); !errors.Is(err, ErrTurnConflict) {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"late":true}`)}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("late terminal callback accepted: %v", err)
 	}
 	pool.Close()
@@ -136,7 +138,7 @@ func TestTurnInputValidationHasNoSideEffects(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
 	for _, raw := range []json.RawMessage{nil, json.RawMessage(`[]`), json.RawMessage(`null`), json.RawMessage(`{} {}`), json.RawMessage(`{"text":"` + string(make([]byte, 512*1024)) + `"}`)} {
-		if _, err := s.SubmitMessage(ctx, tenant, session.ID, "first", raw); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.SubmitMessage(ctx, tenant, session.ID, "first", raw); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatalf("invalid input accepted: %v", err)
 		}
 	}
@@ -149,18 +151,18 @@ func TestTurnInputValidationHasNoSideEffects(t *testing.T) {
 	if first.Replayed {
 		t.Fatal("failed submission persisted a receipt")
 	}
-	for _, input := range []TurnTransition{
-		{ExpectedStatus: TurnQueued, Status: TurnCompleted},
-		{ExpectedStatus: TurnInProgress, Status: TurnQueued},
-		{ExpectedStatus: TurnCompleted, Status: TurnInProgress},
-		{ExpectedStatus: TurnQueued, Status: TurnInProgress, Outcome: json.RawMessage(`{"premature":true}`)},
+	for _, input := range []sessions.TurnTransition{
+		{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCompleted},
+		{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnQueued},
+		{ExpectedStatus: sessions.TurnCompleted, Status: sessions.TurnInProgress},
+		{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress, Outcome: json.RawMessage(`{"premature":true}`)},
 	} {
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, input); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, input); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatalf("invalid transition accepted: %v", err)
 		}
 	}
 	got, err := s.GetTurn(ctx, tenant, session.ID, first.TurnID)
-	if err != nil || got.Status != TurnQueued || !got.StartedAt.IsZero() {
+	if err != nil || got.Status != sessions.TurnQueued || !got.StartedAt.IsZero() {
 		t.Fatalf("invalid transition changed Turn: %+v, %v", got, err)
 	}
 }

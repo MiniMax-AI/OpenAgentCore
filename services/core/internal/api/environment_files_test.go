@@ -16,33 +16,32 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 type environmentFilesFixture struct {
-	ResourceStore
-	environment           store.Environment
+	environment           sessions.Environment
 	result                proto.WorkspaceDirectoryResult
 	storeError, readError error
 	lookups, reads        int
 	directory             string
-	readEnvironment       store.Environment
+	readEnvironment       sessions.Environment
 	readDelay             time.Duration
 }
 
-func (f *environmentFilesFixture) GetEnvironment(_ context.Context, tenant, id string) (store.Environment, error) {
+func (f *environmentFilesFixture) GetEnvironment(_ context.Context, tenant, id string) (sessions.Environment, error) {
 	f.lookups++
 	if f.storeError != nil {
-		return store.Environment{}, f.storeError
+		return sessions.Environment{}, f.storeError
 	}
 	if tenant != f.environment.TenantID || id != f.environment.ID {
-		return store.Environment{}, store.ErrNotFound
+		return sessions.Environment{}, sessions.ErrNotFound
 	}
 	return f.environment, nil
 }
 
-func (f *environmentFilesFixture) ReadEnvironmentDirectory(ctx context.Context, environment store.Environment, directory string) (proto.WorkspaceDirectoryResult, error) {
+func (f *environmentFilesFixture) ReadEnvironmentDirectory(ctx context.Context, environment sessions.Environment, directory string) (proto.WorkspaceDirectoryResult, error) {
 	f.reads++
 	f.directory, f.readEnvironment = directory, environment
 	if f.readDelay > 0 {
@@ -55,13 +54,19 @@ func (f *environmentFilesFixture) ReadEnvironmentDirectory(ctx context.Context, 
 	return f.result, f.readError
 }
 
-func environmentFilesHandler(t *testing.T, enabled bool) (http.Handler, *environmentFilesFixture) {
-	t.Helper()
-	f := &environmentFilesFixture{
-		environment: store.Environment{ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "connected",
+func newEnvironmentFilesFixture() *environmentFilesFixture {
+	return &environmentFilesFixture{
+		environment: sessions.Environment{ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "connected",
 			Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)},
 		result: proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}},
 	}
+}
+
+// environmentFilesHandler serves f's Environment. Without enabled, Core has no
+// execution Worker.
+func environmentFilesHandler(t *testing.T, enabled bool, configure ...func(*Dependencies, *testFakes)) (http.Handler, *environmentFilesFixture) {
+	t.Helper()
+	f := newEnvironmentFilesFixture()
 	keys := []APIKey{}
 	for _, key := range []struct{ token, tenant, project string }{
 		{"files-key", f.environment.TenantID, "files-project"},
@@ -71,19 +76,23 @@ func environmentFilesHandler(t *testing.T, enabled bool) (http.Handler, *environ
 		keys = append(keys, APIKey{OrganizationID: "files-org", ProjectID: key.project, SubjectKind: "user", SubjectID: key.project,
 			TokenSHA256: runtimedevice.HashCredential(key.token), TenantID: key.tenant})
 	}
-	auth, err := NewAuthenticator(keys)
-	if err != nil {
-		t.Fatal(err)
-	}
-	options := []Option{}
+	deps, fakes := testDependencies(t)
+	deps.Engine = "fake_alpha"
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, keys...).ResolveAPIKey
+	fakes.environmentsReader.getEnvironment = f.GetEnvironment
 	if enabled {
-		options = append(options, WithEnvironmentDirectoryReader(f))
+		deps.Execution = fakes.execution()
+		fakes.workspaces.readEnvironmentDirectory = f.ReadEnvironmentDirectory
 	}
-	h, err := NewHandler(f, auth, "fake_alpha", options...)
-	if err != nil {
-		t.Fatal(err)
+	for _, c := range configure {
+		c(&deps, fakes)
 	}
-	return h, f
+	return newTestHandler(t, deps), f
+}
+
+// countEnvironmentFilesUnavailable counts execution_unavailable responses.
+func countEnvironmentFilesUnavailable(count *int) func(*Dependencies, *testFakes) {
+	return func(_ *Dependencies, f *testFakes) { f.metrics.recordUnavailable = func() { *count++ } }
 }
 
 func requestEnvironmentFiles(h http.Handler, id, query, key string) *httptest.ResponseRecorder {
@@ -223,9 +232,10 @@ func TestEnvironmentFilesSafeStoreAndReaderFailures(t *testing.T) {
 			err    error
 			status int
 		}{
-			{store.ErrNotFound, 404}, {store.ErrInvalidInput, 400}, {execution.ErrExecutionUnavailable, 503}, {errors.New("private-native-secret"), 500},
+			{sessions.ErrNotFound, 404}, {sessions.ErrInvalidInput, 400}, {execution.ErrExecutionUnavailable, 503}, {errors.New("private-native-secret"), 500},
 		} {
-			h, f := environmentFilesHandler(t, true)
+			unavailable := 0
+			h, f := environmentFilesHandler(t, true, countEnvironmentFilesUnavailable(&unavailable))
 			if target == "store" {
 				f.storeError = test.err
 			} else {
@@ -235,10 +245,14 @@ func TestEnvironmentFilesSafeStoreAndReaderFailures(t *testing.T) {
 			if w.Code != test.status || strings.Contains(w.Body.String(), "private-native-secret") || strings.Contains(w.Body.String(), `"data"`) || strings.Contains(w.Body.String(), `"next"`) {
 				t.Fatal("unsafe error", target, w.Code, w.Body)
 			}
+			if unavailable != 0 != (test.status == 503) {
+				t.Fatal("unavailability not counted", target, unavailable)
+			}
 		}
 	}
-	h, f := environmentFilesHandler(t, false)
-	if w := requestEnvironmentFiles(h, f.environment.ID, "", "files-key"); w.Code != 503 || f.reads != 0 {
+	unavailable := 0
+	h, f := environmentFilesHandler(t, false, countEnvironmentFilesUnavailable(&unavailable))
+	if w := requestEnvironmentFiles(h, f.environment.ID, "", "files-key"); w.Code != 503 || f.reads != 0 || unavailable != 1 {
 		t.Fatal("missing reader accepted", w.Code, f)
 	}
 }

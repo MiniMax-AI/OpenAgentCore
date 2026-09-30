@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -19,18 +19,15 @@ import (
 func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	_, pool := store.NewTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{19}, 32))
-	st := store.NewWithCredentialCipher(pool, cipher)
+	st, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	tenant, token := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	deployment := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: "deployment-canary"}
 	defaultsCalls := 0
-	handler, err := api.NewHandler(st, auth, "codex", api.WithHarnesses([]string{"codex", "claude_sdk", "mcode"}), api.WithHostedEnvironments(), api.WithEnvironmentRemoteURL("wss://core.example/api/v1/agent-daemon/ws"), api.WithExecution(st), api.WithModelProviderDefaults(func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, st, db), withHarnesses([]string{"codex", "claude_sdk", "mcode"}), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
 		defaultsCalls++
 		copy := *deployment
-		return &store.DeploymentModelProviderSnapshot{Model: "fixture", Provider: &copy, Revision: uuid.New()}, nil
+		return &modelconfiguration.Snapshot{Model: "fixture", Provider: &copy, Revision: uuid.New()}, nil
 	}))
 	if err != nil {
 		t.Fatal(err)

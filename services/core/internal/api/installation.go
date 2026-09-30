@@ -12,7 +12,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 )
 
 // Installation reports Core's installation facts. Core reads them from its
@@ -31,7 +31,7 @@ type Installation struct {
 	SourceCommit *string `json:"source_commit" extensions:"x-nullable"`
 	// The installer's settings snapshot (OAC_SETTINGS_FILE); null when the installer did not start Core.
 	Configuration   *InstallationConfiguration `json:"configuration" extensions:"x-nullable"`
-	AddressBindings store.AddressBindings      `json:"address_bindings"`
+	AddressBindings deployment.AddressBindings `json:"address_bindings"`
 }
 
 // InstallationConfiguration says where process settings are changed and what
@@ -97,13 +97,9 @@ func ParseInstallationConfiguration(raw []byte) (*InstallationConfiguration, err
 	return &value, nil
 }
 
-// WithInstallation serves GET /core/v1/installation. bindings counts what is
-// bound to the current public URL.
-func WithInstallation(value Installation, bindings func(context.Context) (store.AddressBindings, error)) Option {
-	return func(h *Handler) {
-		value.Object = "core.installation"
-		h.installation, h.installationBindings = &value, bindings
-	}
+// InstallationBindings counts what is bound to the current public URL.
+type InstallationBindings interface {
+	AddressBindings(context.Context) (deployment.AddressBindings, error)
 }
 
 // @Summary Retrieve installation facts and process settings
@@ -115,12 +111,12 @@ func WithInstallation(value Installation, bindings func(context.Context) (store.
 // @Failure 401,500 {object} CoreErrorResponse
 // @Router /core/v1/installation [get]
 func (h *Handler) getInstallation(w http.ResponseWriter, r *http.Request) {
-	bindings, err := h.installationBindings(r.Context())
+	bindings, err := h.InstallationBindings.AddressBindings(r.Context())
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeDeploymentError(w, r, err)
 		return
 	}
-	value := *h.installation
+	value := h.Installation
 	value.AddressBindings = bindings
 	writeJSON(w, http.StatusOK, value)
 }

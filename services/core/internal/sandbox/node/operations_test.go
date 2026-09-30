@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"testing"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/google/uuid"
-	"testing"
 )
 
 func TestUnsupportedWireIsExplicitAndDoesNotInvokeProvider(t *testing.T) {
@@ -35,10 +37,10 @@ func TestUnsupportedWireIsExplicitAndDoesNotInvokeProvider(t *testing.T) {
 	}
 }
 func TestUnsupportedProxyRejectsBeforeNodeResolution(t *testing.T) {
-	p := &provider{kind: "docker", resolveGeneration: func(context.Context, sandbox.Reference) (string, uint64, error) {
+	p := (&Hub{}).GenerationProvider("docker", docker.Operations(), func(context.Context, sandbox.Reference) (string, uint64, error) {
 		t.Fatal("unsupported call resolved a node")
 		return "", 0, nil
-	}}
+	}).(*provider)
 	if err := sandbox.ValidateProvider(p); err != nil {
 		t.Fatal(err)
 	}

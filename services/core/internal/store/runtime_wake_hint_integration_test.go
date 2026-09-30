@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -39,8 +40,8 @@ func (p *wakeHintScanProvider) GetCompute(ctx context.Context, reference sandbox
 
 type wakeHintIntegrationTarget struct {
 	tenant      string
-	session     store.Session
-	environment store.Environment
+	session     sessions.Session
+	environment sessions.Environment
 	owner       store.RuntimeAllocation
 }
 
@@ -72,7 +73,7 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 		fakeSuspensionProvider: f.provider, sentinel: sentinel.owner.ID,
 		release: make(chan struct{}), scans: make(chan int, 16),
 	}
-	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{
+	worker := startWorker(t, t.Context(), f.db, &execution.Dispatcher{
 		Store: f.store, Registry: f.provider.registry,
 		ManagedRuntimes: &execution.RuntimeProvider{
 			CoreURL: "http://core.invalid/api/v1", InstallationID: f.key,
@@ -80,9 +81,6 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 			Provider:           provider, Suspension: &f.policy,
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	var once sync.Once
@@ -114,21 +112,21 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 	return result
 }
 
-func wakeHintInput(text string) []store.Input {
+func wakeHintInput(text string) []sessions.Input {
 	payload, _ := json.Marshal(map[string]string{"text": text})
-	return []store.Input{{Kind: "message", Payload: payload}}
+	return []sessions.Input{{Kind: "message", Payload: payload}}
 }
 
-func (f *wakeHintIntegration) pending(t *testing.T, target wakeHintIntegrationTarget, key string) store.EnvironmentInputReservation {
+func (f *wakeHintIntegration) pending(t *testing.T, target wakeHintIntegrationTarget, key string) sessions.EnvironmentInputReservation {
 	t.Helper()
 	var id string
 	awaitDaemonRemoteCondition(t, t.Context(), 2*time.Second, "committed wake input", func() bool {
-		return f.fixture.pool.QueryRow(t.Context(),
+		return f.fixture.db.pool.QueryRow(t.Context(),
 			"SELECT id::text FROM environment_input_reservations WHERE session_id=$1 AND idempotency_key=$2",
 			target.session.ID, key).Scan(&id) == nil
 	})
 	pending, err := f.fixture.store.GetEnvironmentInputReservation(t.Context(), target.tenant, target.session.ID, id)
-	if err != nil || pending.State != store.EnvironmentInputPending {
+	if err != nil || pending.State != sessions.EnvironmentInputPending {
 		t.Fatal("input was not durably pending", pending.State, err)
 	}
 	return pending
@@ -181,7 +179,7 @@ func TestRuntimeWakeHintCommittedSubmitResumesBeforeNormalTick(t *testing.T) {
 		t.Fatal("wake replayed creation/restoration or sent native input", restores, creates, f.provider.promptFrames.Load())
 	}
 	var reservations, turns int
-	if err := f.fixture.pool.QueryRow(t.Context(),
+	if err := f.fixture.db.pool.QueryRow(t.Context(),
 		"SELECT (SELECT count(*) FROM environment_input_reservations WHERE session_id=$1), (SELECT count(*) FROM turns WHERE session_id=$1)",
 		f.target.session.ID).Scan(&reservations, &turns); err != nil || reservations != 1 || turns != 1 {
 		t.Fatal("retry duplicated input or started a Turn before preparation", reservations, turns, err)
@@ -192,9 +190,9 @@ func TestRuntimeWakeHintRejectedSubmitDoesNotAccelerateScan(t *testing.T) {
 	for _, name := range []string{"invalid", "idempotency conflict", "competing batch"} {
 		t.Run(name, func(t *testing.T) {
 			f := newWakeHintIntegration(t)
-			key, inputs, want := "wake", wakeHintInput("next turn"), store.ErrInvalidInput
+			key, inputs, want := "wake", wakeHintInput("next turn"), sessions.ErrInvalidInput
 			if name == "invalid" {
-				inputs = []store.Input{{Kind: "unsupported", Payload: json.RawMessage("{}")}}
+				inputs = []sessions.Input{{Kind: "unsupported", Payload: json.RawMessage("{}")}}
 			} else {
 				// Persist directly while the sentinel is blocked. Only the failing
 				// Worker submission could emit a hint; Store persistence cannot.
@@ -202,9 +200,9 @@ func TestRuntimeWakeHintRejectedSubmitDoesNotAccelerateScan(t *testing.T) {
 					t.Fatal(err)
 				}
 				if name == "idempotency conflict" {
-					inputs, want = wakeHintInput("different input"), store.ErrIdempotencyConflict
+					inputs, want = wakeHintInput("different input"), sessions.ErrIdempotencyConflict
 				} else {
-					key, want = "different-key", store.ErrTurnConflict
+					key, want = "different-key", sessions.ErrTurnConflict
 				}
 			}
 			if _, err := f.worker.SubmitInputs(t.Context(), f.target.tenant, f.target.session.ID, key, inputs); !errors.Is(err, want) {

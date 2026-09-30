@@ -7,6 +7,10 @@ on:
         description: Source commit to check
         required: false
         type: string
+      native-artifacts:
+        description: Retain native installers for a release build
+        type: boolean
+        default: false
   push:
     branches: [main]
   pull_request:
@@ -19,7 +23,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  plan:
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.select.outputs.plan }}
+      jobs: ${{ steps.select.outputs.jobs }}
+      image: ${{ steps.select.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 2
+      - name: Select checks from the integrated change
+        id: select
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: python3 scripts/ci_plan.py plan
+
+  hygiene:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'hygiene')
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Verify names, documentation and CI selection invariants
+        run: make check-names check-docs check-ci
+
   backend:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'backend')
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     timeout-minutes: 40
     services:
@@ -83,7 +119,9 @@ jobs:
       - name: Build execution daemon
         run: make build-daemon
 
-  tooling:
+  distribution:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'distribution')
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     timeout-minutes: 20
     steps:
@@ -105,48 +143,76 @@ jobs:
           path: |
             ~/.oac/cache/go-build
             ~/.oac/cache/go-mod
-          key: core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-tooling-${{ steps.source.outputs.revision }}
+          key: core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-distribution-${{ steps.source.outputs.revision }}
           restore-keys: |
+            core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-distribution-
             core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-tooling-
             core-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-      - name: Install pinned pnpm
-        run: npm install --global pnpm@10.30.3
-      - name: Install dependencies and example acceptance browser
-        run: |
-          make node-deps
-          pnpm exec playwright install --with-deps chrome
-      - name: Verify Harness catalog
+      - name: Verify Harness catalog and installer schema
         run: make check-harness-catalog
-      - name: Verify repository names
-        run: make check-names
       - name: Test distribution, installer and console packaging
         run: make check-distribution
-      - name: Test and package Claude SDK adapter
-        run: make check-claude-sdk
-      - name: Test and build optional example with browser acceptance
-        run: make check-example
-      - name: Verify MiniMax companion scripts
-        run: make check-mcode-harness
 
-  web:
+  harness:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'harness')
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: ./.github/actions/node
+      - name: Test and package Harness adapters
+        run: make check-claude-sdk check-mcode-harness
+
+  example:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'example')
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
-      - uses: actions/setup-node@v6
+      - uses: ./.github/actions/node
+      - name: Install dependencies and example acceptance browser
+        run: |
+          make node-deps
+          pnpm exec playwright install --with-deps chrome
+      - name: Test and build optional example with browser acceptance
+        run: make check-example
+      - name: Upload browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v6
         with:
-          node-version: '22'
-      - name: Install pinned pnpm
-        run: npm install --global pnpm@10.30.3
+          name: example-acceptance-${{ github.run_attempt }}
+          path: |
+            example/*/playwright-report/
+            example/*/test-results/
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: ignore
+
+  web:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'web')
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: ./.github/actions/node
       - name: Typecheck, test and build Web and clients
         run: make check-web-unit
 
   web-acceptance:
+    needs: [plan, web]
+    if: needs.web.result == 'success' && needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'web-acceptance')
     strategy:
       fail-fast: false
       matrix:
@@ -157,11 +223,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-      - name: Install pinned pnpm
-        run: npm install --global pnpm@10.30.3
+      - uses: ./.github/actions/node
       - name: Install dependencies and Web acceptance browser
         run: |
           make node-deps
@@ -180,22 +242,41 @@ jobs:
           compression-level: 0
           if-no-files-found: ignore
 
-  # Preserve the required check name, and fail closed for skipped/cancelled jobs.
+  api:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'api')
+    uses: ./.github/workflows/api-acceptance.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+      container: ${{ needs.plan.outputs.image == 'true' }}
+
+  native:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'native')
+    uses: ./.github/workflows/native.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+      upload-artifacts: ${{ inputs.native-artifacts || false }}
+
+  lint:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'lint')
+    uses: ./.github/workflows/actionlint.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+
+  # Always report the required check, even when planning or a dependency fails.
   check:
     if: always()
-    needs: [backend, tooling, web, web-acceptance]
+    needs: [plan, hygiene, distribution, backend, harness, example, web, web-acceptance, api, native, lint]
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     timeout-minutes: 5
     steps:
-      - name: Require every full-gate partition to succeed
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Require every selected check to succeed
         env:
+          PLAN: ${{ needs.plan.outputs.plan }}
           RESULTS: ${{ toJSON(needs) }}
-        run: |
-          python3 - <<'PY'
-          import json, os, sys
-          results = json.loads(os.environ['RESULTS'])
-          failed = [name for name, job in results.items() if job['result'] != 'success']
-          if failed:
-              sys.exit('Full gate did not pass: ' + ', '.join(failed))
-          print('OpenAgentCore checks passed.')
-          PY
+        run: python3 scripts/ci_plan.py gate

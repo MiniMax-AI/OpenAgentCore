@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -98,7 +99,7 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner store.Runti
 	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
 		return r.cleanupCompute(ctx, p, owner, state)
 	}
-	if err := r.store.CheckExecutionOwnership(ctx); err != nil {
+	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
 	switch owner.ComputePhase {
@@ -141,7 +142,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Suspension
 	if sandbox.ValidateComputeResult(state.Current, renewed.Compute) != nil || renewed.Status != "running" || !renewed.BootstrapComplete {
 		return sandbox.ErrComputeUnconfirmed
 	}
-	peer, err := authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
+	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 	if err != nil {
 		return err
 	}
@@ -180,13 +181,13 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Suspension
 		return err
 	}
 	// Publish disconnected only after receiving the daemon's receipt barrier.
-	if err := observeRuntimeConnection(ctx, r.store, r.connections, owner.TenantID, owner.EnvironmentID, nil, false); err != nil {
+	if err := observeRuntimeConnection(ctx, r.sessionExecution, r.connections, owner.TenantID, owner.EnvironmentID, nil, false); err != nil {
 		return err
 	}
 	// The Session-locked phase commit checks pending work and wake requests.
 	// A competing request keeps its queue position and resumes this source.
 	suspending, err := r.saveCompute(ctx, next, "suspending", state, &until)
-	if errors.Is(err, store.ErrTurnConflict) {
+	if errors.Is(err, sessions.ErrTurnConflict) {
 		state.Rollback = true
 		next, err = r.saveCompute(ctx, next, "waking", state, &until)
 		if err != nil {

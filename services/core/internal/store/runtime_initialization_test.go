@@ -6,17 +6,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -48,19 +51,19 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			s := store.NewWithCredentialCipher(pool, cipher)
+			s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 			tenant := uuid.NewString()
-			input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: []store.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte("first")}, {Type: "inline", Path: "/workspace/b", Data: []byte("second")}}}
+			input := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte("first")}, {Type: "inline", Path: "/workspace/b", Data: []byte("second")}}}
 			if setupOnly {
 				input.InitialFiles = nil
-				input.Initialization = store.EnvironmentSetup{Env: map[string]string{"VALUE": "private"}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}}, Commands: []store.SetupCommand{{Command: "touch first"}, {Command: "test -f first"}}}
+				input.Initialization = environmentconfig.Setup{Env: map[string]string{"VALUE": "private"}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}}, Commands: []environmentconfig.SetupCommand{{Command: "touch first"}, {Command: "test -f first"}}}
 				expectedSteps = 4
 			}
 			session, err := s.CreateSession(t.Context(), tenant, input)
 			if err != nil {
 				t.Fatal(err)
 			}
-			env, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
+			env, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), tenant, session.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -71,10 +74,10 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			}
 			p := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, initializationPeer: initializationPeer{deferred: true}}
 			p.apply = func(_ proto.RuntimePreparePayload, _ []byte) proto.RuntimePrepareResultPayload {
-				if _, err := s.GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, store.ErrNotFound) {
+				if _, err := fixtureSessionStore(db).GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Error("premature file access", err)
 				}
-				if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, store.ErrNotFound) {
+				if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Error("premature execution", err)
 				}
 				if mode == "uncertain" {
@@ -83,9 +86,9 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				return completedInitialization(proto.RuntimePreparePayload{}, nil)
 			}
 			key := uuid.NewString()
-			w, stop := managedWorkerMode(t, s, key, p, false, true)
+			w, stop := managedWorkerMode(t, s, db, key, p, false, true)
 			if mode == "restart" {
-				awaitInitialization(t, s, tenant, env.ID, "failed")
+				awaitInitialization(t, db.pool, tenant, env.ID, "failed")
 				if p.writes.Load() != 0 {
 					t.Fatal("recovered unknown operation replayed")
 				}
@@ -95,11 +98,11 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
+			if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
 				t.Fatal("preparation blocked authentication", err)
 			}
 			time.Sleep(350 * time.Millisecond)
-			if initializationState(t, s, tenant, env.ID) != "pending" || p.writes.Load() != 0 {
+			if initializationState(t, db.pool, tenant, env.ID) != "pending" || p.writes.Load() != 0 {
 				t.Fatal("missing socket consumed initialization")
 			}
 			p.deferred = false
@@ -110,7 +113,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			if mode == "uncertain" {
 				want = "failed"
 			}
-			awaitInitialization(t, s, tenant, env.ID, want)
+			awaitInitialization(t, db.pool, tenant, env.ID, want)
 			if mode == "complete" {
 				if int(p.writes.Load()) != expectedSteps {
 					t.Fatal("missing operations", p.writes.Load())
@@ -119,7 +122,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 					t.Fatal("completed preparation blocked", err)
 				}
 				stop()
-				_, _ = managedWorkerMode(t, s, key, p, false, true)
+				_, _ = managedWorkerMode(t, s, db, key, p, false, true)
 				time.Sleep(350 * time.Millisecond)
 				if int(p.writes.Load()) != expectedSteps {
 					t.Fatal("completed preparation replayed")
@@ -138,7 +141,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 }
 
 func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
-	s := hostedFailureStore(t)
+	s, db := hostedFailureStore(t)
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	for path, body := range map[string]string{"proof/.codex-plugin/plugin.json": `{"name":"plugin","description":"A plugin.","skills":"./skills"}`, "proof/skills/example/SKILL.md": "---\nname: plugin-proof\ndescription: A plugin Skill.\n---\nProof."} {
@@ -155,9 +158,9 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	}
 	tenant := uuid.NewString()
 	fileBody := bytes.Repeat([]byte("bounded bytes"), 12000)
-	session, environment := hostedFailureSession(t, s, tenant, store.CreateSessionInput{
-		InitialFiles:   []store.InitialFile{{Type: "inline", Path: "/workspace/first", Data: fileBody}},
-		Initialization: store.EnvironmentSetup{Skills: []store.EnvironmentSkill{hostedFailureSkill(t)}, Plugins: []store.EnvironmentPlugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "A plugin."}, Archive: archive.Bytes()}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}, Python: []string{"packaging==24.2"}}, Commands: []store.SetupCommand{{Command: "read installed bundles and create directory"}}, CapabilityDirectories: []string{"/workspace/generated"}},
+	session, environment := hostedFailureSession(t, s, db, tenant, sessions.CreateSession{
+		InitialFiles:   []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/first", Data: fileBody}},
+		Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{hostedFailureSkill(t)}, Plugins: []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "A plugin."}, Archive: archive.Bytes()}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}, Python: []string{"packaging==24.2"}}, Commands: []environmentconfig.SetupCommand{{Command: "read installed bundles and create directory"}}, CapabilityDirectories: []string{"/workspace/generated"}},
 	})
 	provider := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
 	var actions []string
@@ -179,11 +182,11 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 		return completedInitialization(request, data)
 	}
 	key := uuid.NewString()
-	worker, _ := managedWorkerMode(t, s, key, provider, false, true)
+	worker, _ := managedWorkerMode(t, s, db, key, provider, false, true)
 	if _, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}
-	awaitInitialization(t, s, tenant, environment.ID, "complete")
+	awaitInitialization(t, db.pool, tenant, environment.ID, "complete")
 	actionsMu.Lock()
 	defer actionsMu.Unlock()
 	expected := []string{"file", "configure", "skill", "plugin", "npm", "python", "setup", "finalize"}
@@ -191,7 +194,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 		t.Fatal("typed ordering or provider isolation", actions, provider.commandCalls.Load())
 	}
 	allocation, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
-	if err != nil || initializationState(t, s, allocation.TenantID, allocation.EnvironmentID) != "complete" {
+	if err != nil || initializationState(t, db.pool, allocation.TenantID, allocation.EnvironmentID) != "complete" {
 		t.Fatal("initialization incomplete", allocation, err)
 	}
 }

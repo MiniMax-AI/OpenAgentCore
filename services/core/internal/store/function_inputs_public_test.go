@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -22,15 +22,15 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if python == "" {
 		t.Skip("OAC_TEST_OFFICIAL_SDK_PYTHON is required for official-client verification")
 	}
-	s, _ := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "fixture"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "fixture"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
+	other, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,19 +38,17 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
+	functions := executionOwner(t, db, s).Sessions
 	for _, id := range []string{"a", "b", "c", "rollback", "late"} {
-		if err := s.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, store.FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
+		if err := functions.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(s, auth, "codex", api.WithExecution(s))
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()}})
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +73,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 		t.Fatalf("SDK admission: %s %v %s", line, err, stderr.String())
 	}
 	for _, id := range []string{"a", "b", "c", "rollback", "late"} {
-		call, err := s.GetFunctionCall(ctx, tenant, session.ID, input.TurnID, id)
+		call, err := store.FixtureFunctionCall(ctx, db.pool, tenant, session.ID, input.TurnID, id)
 		if err != nil || call.Applied {
 			t.Fatal(call, err)
 		}
@@ -110,7 +108,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil || len(history) != 6 {
 		t.Fatal(history, err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnWaiting, Status: store.TurnFailed}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnFailed}); err != nil {
 		t.Fatal(err)
 	}
 	next, err := s.SubmitMessage(ctx, tenant, session.ID, "next", json.RawMessage(`{"text":"next"}`))
@@ -128,7 +126,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 		t.Fatal(history, err)
 	}
 	current, err := s.GetTurn(ctx, tenant, session.ID, next.TurnID)
-	if err != nil || current.Status != store.TurnQueued || !current.CancelRequestedAt.IsZero() {
+	if err != nil || current.Status != sessions.TurnQueued || !current.CancelRequestedAt.IsZero() {
 		t.Fatal(current, err)
 	}
 }

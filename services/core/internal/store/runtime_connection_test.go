@@ -16,15 +16,15 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
-	tenant, session, environment := managedSession(t, s)
+	s, db := newManagedTestStoreDB(t)
+	tenant, session, environment := managedSession(t, s, db)
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(s, wsURL)
+	handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,10 +34,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	key := uuid.NewString()
 	start := func() *execution.Worker {
-		w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: server.URL + "/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		w := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: server.URL + "/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
 		return w
 	}
 	stop := func(w *execution.Worker) {
@@ -57,7 +54,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 			if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			got, err := s.GetEnvironment(t.Context(), tenant, environment.ID)
+			got, err := fixtureSessionStore(db).GetEnvironment(t.Context(), tenant, environment.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -93,7 +90,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	if err != nil || got.LastTurn != nil || got.EnvironmentInputActivity != nil {
 		t.Fatal("connection fabricated native execution", err)
 	}
-	if _, err := s.GetEnvironment(t.Context(), uuid.NewString(), environment.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := fixtureSessionStore(db).GetEnvironment(t.Context(), uuid.NewString(), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Environment access", err)
 	}
 	p.unavailable = true

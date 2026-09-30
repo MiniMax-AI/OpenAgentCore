@@ -115,17 +115,14 @@ func cleanPath(p string) string {
 	return cleaned
 }
 
-// agentsResponseHeaders adds the observed official response headers to every
-// response of this handler, including errors, 401, 404, 405 and SSE streams
-// (HP-23/HP-24): a fresh random X-Request-Id, attached to the request log
-// context next to the trace carrier, OpenAI-Version, OpenAI-Processing-Ms at
-// the time headers are written, and nosniff. Core's traceparent and
+// responseHeadersWithErrors adds the observed official response headers to
+// every response of this handler, including errors, 401, 404, 405 and SSE
+// streams (HP-23/HP-24): a fresh random X-Request-Id, attached to the request
+// log context next to the trace carrier, OpenAI-Version, OpenAI-Processing-Ms
+// at the time headers are written, and nosniff. Core's traceparent and
 // Cache-Control extensions remain. Organization and project headers are not
-// reported: Core's project scope is configured, not account-derived.
-func agentsResponseHeaders(next http.Handler) http.Handler {
-	return responseHeadersWithErrors(next, nil)
-}
-
+// reported: Core's project scope is configured, not account-derived. report
+// observes each emitted API error code.
 func responseHeadersWithErrors(next http.Handler, report func(string)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := newRequestID()
@@ -156,7 +153,7 @@ type processingTimeWriter struct {
 
 // reportAPIError observes the emitted code without reading or retaining bodies.
 func (w *processingTimeWriter) reportAPIError(code string) {
-	if !w.stamped && w.report != nil {
+	if !w.stamped {
 		w.report(code)
 	}
 }

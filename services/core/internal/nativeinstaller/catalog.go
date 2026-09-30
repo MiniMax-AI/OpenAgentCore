@@ -125,11 +125,11 @@ func psQuote(s string) string    { return "'" + strings.ReplaceAll(s, "'", "''")
 
 func (c *Catalog) Commands(origin, authorization string) map[string]string {
 	base := origin + "/api/v1/agent-daemon/install/" + c.Version
-	// Download to a private temporary file so failure cannot become an empty,
-	// successful shell program. Keep stdin available for installer interaction.
-	posix := "set -e; f=$(mktemp); trap 'rm -f \"$f\"' EXIT; curl -fsS " + shellQuote(base+"/bootstrap.sh") + " -o \"$f\"; bash \"$f\" \"$@\""
+	// Hold the small bootstrap in memory so an interrupted fetch leaves no file.
+	// Only execute a complete successful response; preserve interactive stdin.
+	posix := `set -e; script=; for attempt in 1 2 3; do if script=$(curl -fsS --connect-timeout 15 --max-time 60 --max-filesize 1048576 ` + shellQuote(base+"/bootstrap.sh") + `); then break; fi; [ "$attempt" -lt 3 ] || exit 1; sleep "$attempt"; done; bash -c "$script" -- "$@"`
 	return map[string]string{
 		"posix":      "bash -c " + shellQuote(posix) + " -- " + shellQuote(base) + " " + shellQuote(authorization),
-		"powershell": "& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing " + psQuote(base+"/bootstrap.ps1") + " -ErrorAction Stop).Content)) -Base " + psQuote(base) + " -Authorization " + psQuote(authorization),
+		"powershell": "& { $source=$null; for ($attempt=1; $attempt -le 3; $attempt++) { try { $source=(Invoke-WebRequest -UseBasicParsing " + psQuote(base+"/bootstrap.ps1") + " -TimeoutSec 60 -ErrorAction Stop).Content; break } catch { if ($attempt -eq 3) { throw }; Start-Sleep -Seconds $attempt } }; & ([scriptblock]::Create($source)) -Base " + psQuote(base) + " -Authorization " + psQuote(authorization) + " @args }",
 	}
 }

@@ -43,8 +43,8 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 	if req.DisableExecutionEnvironment {
 		return nil, nil, fmt.Errorf("claudesdk: workspace profile does not support the requested execution combination")
 	}
-	if req.WorkDir != "" && req.WorkDir != config.Workspace.Directory {
-		return nil, nil, fmt.Errorf("claudesdk: work_dir conflicts with the trusted workspace binding")
+	if req.LocalEnvironment != nil && req.LocalEnvironment.WorkspaceRoot != config.Workspace.Directory {
+		return nil, nil, fmt.Errorf("claudesdk: workspace root conflicts with the trusted workspace binding")
 	}
 	if req.LocalEnvironment != nil && !(agentnetwork.Policy{Access: config.Workspace.NetworkAccess, AllowedDomains: config.Workspace.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) {
 		return nil, nil, fmt.Errorf("claudesdk: local Runtime network policy mismatch")

@@ -1,18 +1,19 @@
 package api
 
 import (
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"context"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 )
 
 func TestSandboxNodeDetailValidationAndAuthentication(t *testing.T) {
-	auth, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithSandboxManager(&store.Store{}, admin))
-	if err != nil {
-		t.Fatal(err)
+	deps, fakes := sandboxFakes(t)
+	// The deployment rejects an unknown range or a malformed node ID.
+	fakes.deployment.nodeDetail = func(context.Context, string, string) (deployment.NodeDetail, error) {
+		return deployment.NodeDetail{}, deployment.ErrInvalidInput
 	}
+	h := newTestHandler(t, deps)
 	path := "/core/v1/sandbox/nodes/11111111-1111-4111-8111-111111111111"
 	for _, token := range []string{"", "caller", "enrollment", "node"} {
 		if w := projectKeyHTTP(h, "GET", path, token, ""); w.Code != 401 {

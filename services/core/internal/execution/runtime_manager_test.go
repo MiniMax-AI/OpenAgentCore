@@ -8,10 +8,21 @@ import (
 	"time"
 )
 
+// heldLease is an execution lease that stays held, for lifecycle tests that run
+// no execution query: its cancellation fence cancels immediately.
+type heldLease struct{}
+
+func (heldLease) CheckOwnership(context.Context) error { return nil }
+func (heldLease) CancelOperations(_ context.Context, cancel context.CancelFunc) error {
+	cancel()
+	return nil
+}
+func (heldLease) Close(context.Context) error { return nil }
+
 func testRuntimeManager(t *testing.T) *runtimeManager {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	m := &runtimeManager{config: RuntimeProvider{ProviderKind: "docker"}, ctx: ctx, cancel: cancel, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}
+	m := &runtimeManager{lease: heldLease{}, config: RuntimeProvider{ProviderKind: "docker"}, ctx: ctx, cancel: cancel, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}
 	t.Cleanup(func() { m.stop(); m.drain() })
 	return m
 }

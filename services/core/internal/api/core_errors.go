@@ -33,7 +33,6 @@ type CoreErrorDetail struct{ value any }
 
 func CoreErrorString(value string) CoreErrorDetail  { return CoreErrorDetail{value} }
 func CoreErrorNumber(value float64) CoreErrorDetail { return CoreErrorDetail{value} }
-func CoreErrorBoolean(value bool) CoreErrorDetail   { return CoreErrorDetail{value} }
 func CoreErrorNull() CoreErrorDetail                { return CoreErrorDetail{} }
 func CoreErrorStrings(values ...string) CoreErrorDetail {
 	return CoreErrorDetail{append([]string{}, values...)}
@@ -50,7 +49,7 @@ func validCoreDetails(details CoreErrorDetails) CoreErrorDetails {
 			return nil
 		}
 		switch value := detail.value.(type) {
-		case nil, string, bool, []string:
+		case nil, string, []string:
 		case float64:
 			if math.IsNaN(value) || math.IsInf(value, 0) {
 				return nil

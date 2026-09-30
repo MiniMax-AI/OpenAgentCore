@@ -13,43 +13,45 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
 func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
-	s, pool := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	principal := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
-	session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
+	session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
 		Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
+	environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+	key, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256([]byte(key.Token))
-	bound, err := s.EnrollRuntime(t.Context(), environment.ID, hex.EncodeToString(digest[:]))
+	bound, err := fixtureSessionService(t, db).EnrollRuntime(t.Context(), environment.ID, hex.EncodeToString(digest[:]))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(s, wsURL)
+	handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	connection := runtimeenrollment.ConnectionHandler(s, registry)
+	connection := runtimeenrollment.ConnectionHandler(fixtureSessionStore(db), registry)
 	assertConnection := func(target, token, status string, code int) {
 		t.Helper()
 		request := httptest.NewRequest("GET", "/api/v1/agent-daemon/connection?environment_id="+target, nil)
@@ -68,13 +70,13 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	}
 	assertConnection(environment.ID, key.Token, "disconnected", 200)
 	assertConnection(uuid.NewString(), key.Token, "", 401)
-	otherKey, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+	otherKey, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertConnection(environment.ID, otherKey.Token, "", 409)
 	foreign := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
-	foreignKey, err := s.IssueExecutorCredential(t.Context(), foreign, uuid.NewString(), "")
+	foreignKey, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), foreign, uuid.NewString(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,10 +85,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	server.Start()
 	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
 	start := func() func() {
-		worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry})
-		if err != nil {
-			t.Fatal(err)
-		}
+		worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry})
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
 		go func() { done <- worker.Run(ctx) }()
@@ -122,7 +121,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
 		for time.Now().Before(deadline) {
-			current, err := s.GetEnvironment(t.Context(), principal.TenantID, environment.ID)
+			current, err := fixtureSessionStore(db).GetEnvironment(t.Context(), principal.TenantID, environment.ID)
 			if err == nil && current.Status == status {
 				return
 			}
@@ -133,7 +132,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	first := connect(key.Token)
 	await("connected")
 	assertConnection(environment.ID, key.Token, "connected", 200)
-	rotated, err := s.RotateExecutorCredential(t.Context(), principal, key.KeyID)
+	rotated, err := fixtureSessionService(t, db).RotateExecutorCredential(t.Context(), principal, key.KeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +147,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	second := connect(rotated.Token)
 	await("connected")
 	assertConnection(environment.ID, rotated.Token, "connected", 200)
-	awaitRelease := observeExecutionLeaseRelease(t, pool)
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
 	stop()
 	stop = nil
 	awaitRelease()
@@ -156,7 +155,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	// live, authorized daemon. No compute allocation or native execution is made.
 	stop = start()
 	await("connected")
-	if err = s.RevokeExecutorCredential(t.Context(), principal, key.KeyID); err != nil {
+	if err = fixtureSessionService(t, db).RevokeExecutorCredential(t.Context(), principal, key.KeyID); err != nil {
 		t.Fatal(err)
 	}
 	assertConnection(environment.ID, rotated.Token, "", 401)
@@ -166,7 +165,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 		t.Fatal("revoked socket retained authority")
 	}
 	var allocations int
-	if err = pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id=$1", environment.ID).Scan(&allocations); err != nil || allocations != 0 {
+	if err = db.pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id=$1", environment.ID).Scan(&allocations); err != nil || allocations != 0 {
 		t.Fatal("user Runtime acquired managed allocation", allocations, err)
 	}
 	current, err := s.GetSession(t.Context(), principal.TenantID, session.ID)

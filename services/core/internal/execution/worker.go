@@ -9,7 +9,9 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -21,6 +23,7 @@ type Worker struct {
 	metrics             workerMetricsState
 	dispatcher          *Dispatcher
 	admission           *store.Store
+	lease               Ownership
 	directoryReads      chan directoryReadRequest
 	fileWrites          chan fileWriteRequest
 	scheduleWake        chan struct{}
@@ -30,59 +33,85 @@ type Worker struct {
 	enrolledConnections map[string]*runtimeConnection
 }
 
-func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
+// StartWorker takes over owner.Lease from the moment it is called: a failed
+// start closes the lease before returning, and a started Worker closes it after
+// Run drains.
+func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *Worker, err error) {
+	if owner.Lease == nil {
+		return nil, errors.New("execution worker requires an execution lease")
+	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		if closeErr := closeLease(ctx, owner.Lease); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 	if dispatcher.MaxConcurrentExecutions < 0 || dispatcher.MaxConcurrentExecutions > 1024 {
 		return nil, errors.New("execution concurrency must be between 1 and 1024, or zero for the default")
 	}
-	writer, err := store.NewExecution(ctx, dispatcher.Store)
+	if dispatcher.Credentials == nil {
+		return nil, errors.New("execution worker requires MCP Credentials")
+	}
+	if dispatcher.Observer == nil {
+		return nil, errors.New("execution requires a model configuration observer")
+	}
+	if dispatcher.Deployment == nil {
+		return nil, errors.New("execution worker requires the deployment service")
+	}
+	if dispatcher.DeploymentReader == nil {
+		return nil, errors.New("execution worker requires the deployment reader")
+	}
+	if dispatcher.Sessions == nil {
+		return nil, errors.New("execution worker requires the Session service")
+	}
+	if dispatcher.SessionsReader == nil {
+		return nil, errors.New("execution worker requires the Session reader")
+	}
+	owned, err := dispatcher.Bind(owner)
 	if err != nil {
 		return nil, err
 	}
-	owned := *dispatcher
-	owned.Store = writer
+	if owner.Deployment == nil {
+		return nil, errors.New("execution worker requires the deployment execution operations")
+	}
 	if err := owned.Store.CheckRuntimeComputeProtocol(ctx, sandbox.SuspensionStateVersion); err != nil {
-		_ = writer.CloseExecution(context.Background())
 		return nil, err
 	}
 	owned.notifications = &executionNotifications{}
-	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: &owned, admission: dispatcher.Store, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
-	worker.runtimes, err = newRuntimeManager(owned.Store, owned.Registry, owned.ManagedRuntimes)
+	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, admission: dispatcher.Store, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
+	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
-		_ = writer.CloseExecution(context.Background())
 		return nil, err
 	}
-	var deployment *store.RuntimeDeployment
+	if worker.runtimes != nil {
+		defer func() {
+			if err != nil {
+				worker.runtimes.stop()
+			}
+		}()
+	}
+	var process *deployment.ProcessDeployment
 	if worker.runtimes != nil && worker.runtimes.loadDeployment == nil {
 		config := worker.runtimes.config
-		deployment = &store.RuntimeDeployment{ProviderKind: config.ProviderKind, LocalNodeID: config.LocalNodeID, LocalCredentialSHA256: config.LocalCredentialSHA256, LocalMaxActive: config.LocalMaxActive, LocalMaxRetained: config.LocalMaxRetained, InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, AdmissionPaused: config.AdmissionPaused}
+		process = &deployment.ProcessDeployment{ProviderKind: config.ProviderKind, LocalNodeID: config.LocalNodeID, LocalCredentialSHA256: config.LocalCredentialSHA256, LocalMaxActive: config.LocalMaxActive, LocalMaxRetained: config.LocalMaxRetained, InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, AdmissionPaused: config.AdmissionPaused}
 	}
 	if worker.runtimes != nil && worker.runtimes.loadDeployment != nil {
-		err = owned.Store.ClaimWebSandboxDeployment(ctx, worker.runtimes.setupInstallationID)
+		err = owner.Deployment.Claim(ctx, worker.runtimes.setupInstallationID)
 		if err == nil {
 			_, err = worker.runtimes.ensureDeployment(ctx)
 		}
 	} else {
-		err = owned.Store.ConfigureRuntimeDeployment(ctx, deployment)
+		err = owner.Deployment.ConfigureProcess(ctx, process)
 	}
 	if err != nil {
-		if worker.runtimes != nil {
-			worker.runtimes.stop()
-		}
-		_ = writer.CloseExecution(context.Background())
 		return nil, err
 	}
-	if err := owned.Store.ReconcileEnvironmentConnections(ctx); err != nil {
-		if worker.runtimes != nil {
-			worker.runtimes.stop()
-		}
-		_ = writer.CloseExecution(context.Background())
+	if err = owned.sessionExecution.ReconcileEnvironmentConnections(ctx); err != nil {
 		return nil, err
 	}
-	if err := worker.reconcile(ctx); err != nil {
-		if worker.runtimes != nil {
-			worker.runtimes.stop()
-		}
-		_ = writer.CloseExecution(context.Background())
+	if err = worker.reconcile(ctx); err != nil {
 		return nil, err
 	}
 	worker.observeOwnership(nil)
@@ -91,12 +120,12 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 
 // CheckOwnership checks the same database lease used for execution writes.
 func (w *Worker) CheckOwnership(ctx context.Context) error {
-	err := w.dispatcher.Store.CheckExecutionOwnership(ctx)
+	err := w.lease.CheckOwnership(ctx)
 	w.observeOwnership(err)
 	return err
 }
 
-func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, inputs []store.Input) ([]store.InputReceipt, error) {
+func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
 	value, err := w.admission.GetSession(ctx, tenant, session)
 	if err != nil {
 		return nil, err
@@ -108,15 +137,15 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 		return w.submitEnvironmentInputs(ctx, value, key, inputs)
 	}
 	if !w.dispatcher.canAdmitInputs(value.Engine, value.Configuration) {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	return w.admitInputs(ctx, tenant, session, key, inputs)
 }
 
 // CreateSession validates execution support before reserving or admitting initial work.
-func (w *Worker) CreateSession(ctx context.Context, tenant string, input store.CreateSessionInput) (store.Session, error) {
+func (w *Worker) CreateSession(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
 	if err := w.validateCreation(ctx, input); err != nil {
-		return store.Session{}, err
+		return sessions.Session{}, err
 	}
 	session, err := w.admission.CreateSession(ctx, tenant, input)
 	if err == nil && len(input.InitialInputs) > 0 {
@@ -126,9 +155,9 @@ func (w *Worker) CreateSession(ctx context.Context, tenant string, input store.C
 }
 
 // CreateSessionStream applies the same execution admission before creating a stream.
-func (w *Worker) CreateSessionStream(ctx context.Context, tenant string, input store.CreateSessionInput) (store.SessionCreation, error) {
+func (w *Worker) CreateSessionStream(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	if err := w.validateCreation(ctx, input); err != nil {
-		return store.SessionCreation{}, err
+		return sessions.Creation{}, err
 	}
 	creation, err := w.admission.CreateSessionStream(ctx, tenant, input)
 	if err == nil && len(input.InitialInputs) > 0 {
@@ -153,9 +182,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			// Drain an external provisioning caller before releasing the writer lease.
 			w.runtimes.drain()
 		}
-		closeCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
-		defer stop()
-		w.observeWorkerClosed(w.dispatcher.Store.CloseExecution(closeCtx))
+		w.observeWorkerClosed(closeLease(ctx, w.lease))
 	}()
 	active := make(map[string]bool)
 	w.observeSlots(len(active))
@@ -329,7 +356,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 func (w *Worker) reconcile(ctx context.Context) error {
 	cursor := ""
 	for {
-		work, err := w.dispatcher.Store.ListExecutionWork(ctx, cursor, []string{store.TurnInProgress, store.TurnWaiting}, nil)
+		work, err := w.dispatcher.Store.ListExecutionWork(ctx, cursor, []string{sessions.TurnInProgress, sessions.TurnWaiting}, nil)
 		if err != nil {
 			return err
 		}
@@ -337,8 +364,8 @@ func (w *Worker) reconcile(ctx context.Context) error {
 			return nil
 		}
 		for _, item := range work {
-			_, err := w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: item.Status, Status: store.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
-			if err != nil && !errors.Is(err, store.ErrTurnConflict) {
+			_, err := w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: item.Status, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
+			if err != nil && !errors.Is(err, sessions.ErrTurnConflict) {
 				return err
 			}
 			cursor = item.TurnID
@@ -346,15 +373,15 @@ func (w *Worker) reconcile(ctx context.Context) error {
 	}
 }
 
-func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
+func (w *Worker) runClaim(ctx context.Context, item sessions.ExecutionWork) error {
 	_, err := w.dispatcher.Run(ctx, item.TenantID, item.SessionID, item.TurnID)
-	if err == nil || errors.Is(err, store.ErrTurnConflict) {
+	if err == nil || errors.Is(err, sessions.ErrTurnConflict) {
 		return nil
 	}
 	var rejection *preparationRejection
 	capacityRejected := errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionPrepare && rejection.code == "preparation_capacity"
 	outcome := json.RawMessage(`{"error_code":"execution_unavailable"}`)
-	if errors.Is(err, store.ErrModelProviderRequired) {
+	if errors.Is(err, ErrModelProviderRequired) {
 		outcome = json.RawMessage(`{"error_code":"model_provider_required"}`)
 	}
 	finish, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -363,17 +390,17 @@ func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
 	if err != nil {
 		return err
 	}
-	if turn.Status == store.TurnQueued && capacityRejected {
+	if turn.Status == sessions.TurnQueued && capacityRejected {
 		// No input was sent. Leave durable work for the existing scheduler tick;
 		// active and cleanup-held Runtime capacity have the same rejection.
 		return nil
 	}
-	if turn.Status == store.TurnCompleted || turn.Status == store.TurnFailed || turn.Status == store.TurnCancelled {
+	if turn.Status == sessions.TurnCompleted || turn.Status == sessions.TurnFailed || turn.Status == sessions.TurnCancelled {
 		return nil
 	}
 	log.Ctx(ctx).Error("oac-core dispatch did not complete", "turn_id", item.TurnID)
-	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: turn.Status, Status: store.TurnFailed, Outcome: outcome})
-	if errors.Is(err, store.ErrTurnConflict) {
+	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: turn.Status, Status: sessions.TurnFailed, Outcome: outcome})
+	if errors.Is(err, sessions.ErrTurnConflict) {
 		return nil
 	}
 	return err

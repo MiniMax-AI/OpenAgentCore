@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -15,9 +16,9 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 	other, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "stream", InitialInputs: []Input{messageInput("first")}}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "stream", InitialInputs: []sessions.Input{messageInput("first")}}
 	var wg sync.WaitGroup
-	results := make(chan SessionCreation, 8)
+	results := make(chan sessions.Creation, 8)
 	for i := range 8 {
 		wg.Go(func() {
 			st := s
@@ -34,8 +35,8 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 	}
 	wg.Wait()
 	close(results)
-	var created SessionCreation
-	var retries []SessionCreation
+	var created sessions.Creation
+	var retries []sessions.Creation
 	for result := range results {
 		if result.Created {
 			if created.Created {
@@ -48,7 +49,7 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 	}
 	// The snapshot is the committed post-admission projection; the cursor still
 	// precedes the initial input's events.
-	if !created.Created || created.Cursor != 0 || created.Session.LastTurn == nil || created.Session.LastTurn.Status != TurnQueued || len(retries) != 7 {
+	if !created.Created || created.Cursor != 0 || created.Session.LastTurn == nil || created.Session.LastTurn.Status != sessions.TurnQueued || len(retries) != 7 {
 		t.Fatal("invalid post-admission creation snapshot", created, retries)
 	}
 	id := created.Session.ID
@@ -61,10 +62,10 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 			t.Fatal("new Turn events are out of order", i, initial[i].Event.Type)
 		}
 	}
-	if initial[1].Event.Item == nil || initial[1].Event.Item.Role != "user" || initial[2].Turn == nil || initial[2].Turn.Status != TurnQueued {
+	if initial[1].Event.Item == nil || initial[1].Event.Item.Role != "user" || initial[2].Turn == nil || initial[2].Turn.Status != sessions.TurnQueued {
 		t.Fatal("invalid initial input or activity snapshot", initial)
 	}
-	encoded := func(value Session) string {
+	encoded := func(value sessions.Session) string {
 		raw, err := json.Marshal(value)
 		if err != nil {
 			t.Fatal(err)
@@ -99,8 +100,8 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 	if err != nil || encoded(snapshot) != encoded(read) || cursor != initial[len(initial)-1].Sequence || initial[2].Settled {
 		t.Fatal("stream snapshot differs from the Session read and its cursor", cursor, err)
 	}
-	transition(t, s, tenant, id, ordinary.LastTurn.ID, TurnQueued, TurnInProgress)
-	transition(t, s, tenant, id, ordinary.LastTurn.ID, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, id, ordinary.LastTurn.ID, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, s, tenant, id, ordinary.LastTurn.ID, sessions.TurnInProgress, sessions.TurnCompleted)
 	// Completing before the HTTP observer drains does not change its start point.
 	all, err := s.ListSessionEvents(ctx, tenant, id, created.Cursor)
 	if err != nil || len(all) <= len(initial) || all[0].Event.EventID != initial[0].Event.EventID {
@@ -113,14 +114,14 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 	if _, cursor, err := s.SessionStreamSnapshot(ctx, tenant, id); err != nil || cursor != all[len(all)-1].Sequence {
 		t.Fatal("stream snapshot cursor", cursor, err)
 	}
-	if _, _, err := s.SessionStreamSnapshot(ctx, uuid.NewString(), id); !errors.Is(err, ErrNotFound) {
+	if _, _, err := s.SessionStreamSnapshot(ctx, uuid.NewString(), id); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign stream snapshot", err)
 	}
 	late, err := s.CreateSessionStream(ctx, tenant, input)
 	if err != nil || late.Created || late.Cursor != all[len(all)-1].Sequence {
 		t.Fatal(late, err)
 	}
-	next, err := s.SubmitInputs(ctx, tenant, id, "next", []Input{messageInput("later")})
+	next, err := s.SubmitInputs(ctx, tenant, id, "next", []sessions.Input{messageInput("later")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,12 +151,12 @@ func TestCreationStreamIdleAndNonstreamRetry(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "idle"}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "idle"}
 	first, err := s.CreateSessionStream(ctx, tenant, input)
 	if err != nil || !first.Created || first.Cursor != 0 || first.Session.LastTurn != nil {
 		t.Fatal(first, err)
 	}
-	if _, err := s.SubmitInputs(ctx, tenant, first.Session.ID, "message", []Input{messageInput("later")}); err != nil {
+	if _, err := s.SubmitInputs(ctx, tenant, first.Session.ID, "message", []sessions.Input{messageInput("later")}); err != nil {
 		t.Fatal(err)
 	}
 	retry, err := s.CreateSessionStream(ctx, tenant, input)

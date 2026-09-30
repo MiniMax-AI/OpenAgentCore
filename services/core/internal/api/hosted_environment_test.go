@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestHostedEnvironmentDefaultsAndExplicitGaps(t *testing.T) {
@@ -66,10 +66,10 @@ func TestHostedEnvironmentResponseHasPinnedShapeAndNoConnectionAction(t *testing
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatal("hosted response shape changed", string(raw))
 	}
-	for _, mutate := range []func(*store.Environment){
-		func(e *store.Environment) { e.TenantID = "foreign" },
-		func(e *store.Environment) { e.SessionID = "other" },
-		func(e *store.Environment) {
+	for _, mutate := range []func(*sessions.Environment){
+		func(e *sessions.Environment) { e.TenantID = "foreign" },
+		func(e *sessions.Environment) { e.SessionID = "other" },
+		func(e *sessions.Environment) {
 			e.Configuration = json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)
 		},
 	} {
@@ -88,7 +88,10 @@ func TestHostedEnvironmentResponseHasPinnedShapeAndNoConnectionAction(t *testing
 func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		recorder := &hostedCreationRecorder{}
-		handler, fixture := environmentCreationHandler(t, "codex", WithHostedEnvironments(), WithExecution(recorder))
+		handler, fixture := environmentCreationHandler(t, "codex", func(d *Dependencies, f *testFakes) {
+			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
+			f.sessionAdmission.createSession, f.sessionAdmission.createSessionStream = recorder.CreateSession, recorder.CreateSessionStream
+		})
 		input := ""
 		if stream {
 			input = `,"input":"Initialize the streamed hosted execution."`
@@ -108,16 +111,17 @@ func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 	}
 }
 
+// hostedCreationRecorder is the Worker's hosted admission; it counts
+// creations.
 type hostedCreationRecorder struct {
-	inputRecorder
 	calls int
 }
 
-func (r *hostedCreationRecorder) CreateSession(context.Context, string, store.CreateSessionInput) (store.Session, error) {
+func (r *hostedCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error) {
 	r.calls++
-	return store.Session{}, store.ErrInvalidInput
+	return sessions.Session{}, sessions.ErrInvalidInput
 }
-func (r *hostedCreationRecorder) CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error) {
+func (r *hostedCreationRecorder) CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	r.calls++
-	return store.SessionCreation{}, store.ErrInvalidInput
+	return sessions.Creation{}, sessions.ErrInvalidInput
 }

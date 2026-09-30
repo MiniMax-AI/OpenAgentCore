@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -13,7 +14,7 @@ func (s *Store) RecordRuntimeObservation(ctx context.Context, owner RuntimeAlloc
 	switch diagnostic {
 	case "", "node_unavailable", "resource_missing", "compute_unconfirmed", "ownership_mismatch", "provider_unavailable":
 	default:
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	if owner.NodeID == "" {
 		return nil

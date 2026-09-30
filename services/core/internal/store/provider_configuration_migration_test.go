@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"os"
+	"testing"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
-	"os"
-	"testing"
 )
 
 func TestProviderConfigurationMigrationPreservesCiphertextAndRetainedOwnership(t *testing.T) {
@@ -17,7 +18,8 @@ func TestProviderConfigurationMigrationPreservesCiphertextAndRetainedOwnership(t
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	archiveAllocation(t, w, tenant, session, view.InstallationID)
 	input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
-	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1}); err != nil {
+	input.ExpectedGeneration = 1
+	if _, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, input); err != nil {
 		t.Fatal(err)
 	}
 	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))
@@ -44,11 +46,11 @@ func TestProviderConfigurationMigrationPreservesCiphertextAndRetainedOwnership(t
 	if err = db.QueryRowContext(t.Context(), "SELECT provider_credential FROM runtime_deployment").Scan(&after); err != nil || !bytes.Equal(before, after) {
 		t.Fatal("ciphertext rewritten", err)
 	}
-	restored, err := s.GetSandboxSetup(t.Context())
+	restored, err := deploymentService(t, s).Setup(t.Context())
 	if err != nil || restored.Generation != uint64(generation) || restored.Configuration.(*e2b.DeploymentConfiguration).APIKey != input.Configuration.(*e2b.DeploymentConfiguration).APIKey {
 		t.Fatal("ownership or credential changed", err)
 	}
-	public, err := s.GetRuntimeDeployment(t.Context())
+	public, err := deploymentService(t, s).View(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

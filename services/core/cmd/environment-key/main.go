@@ -13,7 +13,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -107,15 +109,19 @@ func run() error {
 		return errors.New("invalid execution database configuration")
 	}
 	defer pool.Close()
-	s := store.New(pool)
-	if options.revoke {
-		return credentialOperationError(s.RevokeExecutorCredential(ctx, options.principal, options.keyID))
+	// Executor credentials need no credential key.
+	credentials, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil))
+	if err != nil {
+		return err
 	}
-	var credential store.IssuedExecutorCredential
+	if options.revoke {
+		return credentialOperationError(credentials.RevokeExecutorCredential(ctx, options.principal, options.keyID))
+	}
+	var credential sessions.IssuedExecutorCredential
 	if options.rotate {
-		credential, err = s.RotateExecutorCredential(ctx, options.principal, options.keyID)
+		credential, err = credentials.RotateExecutorCredential(ctx, options.principal, options.keyID)
 	} else {
-		credential, err = s.IssueExecutorCredential(ctx, options.principal, options.keyID, options.environment)
+		credential, err = credentials.IssueExecutorCredential(ctx, options.principal, options.keyID, options.environment)
 	}
 	if err != nil {
 		return credentialOperationError(err)
@@ -131,11 +137,11 @@ func credentialOperationError(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, store.ErrExecutorCredentialExists):
-		return store.ErrExecutorCredentialExists
-	case errors.Is(err, store.ErrNotFound):
+	case errors.Is(err, sessions.ErrExecutorCredentialExists):
+		return sessions.ErrExecutorCredentialExists
+	case errors.Is(err, sessions.ErrNotFound):
 		return errors.New("executor principal project mapping or authorized credential target not found")
-	case errors.Is(err, store.ErrInvalidInput):
+	case errors.Is(err, sessions.ErrInvalidInput):
 		return errors.New("invalid executor credential identity or target")
 	default:
 		return errors.New("executor credential database operation failed")

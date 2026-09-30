@@ -3,7 +3,7 @@ package execution
 import (
 	"context"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // wakeScheduler only hints at committed work. The existing loop retains lease,
@@ -15,7 +15,7 @@ func (w *Worker) wakeScheduler() {
 	}
 }
 
-func (w *Worker) admitInputs(ctx context.Context, tenant, session, key string, inputs []store.Input) ([]store.InputReceipt, error) {
+func (w *Worker) admitInputs(ctx context.Context, tenant, session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
 	receipts, err := w.admission.SubmitInputs(ctx, tenant, session, key, inputs)
 	if err == nil {
 		w.wakeScheduler()

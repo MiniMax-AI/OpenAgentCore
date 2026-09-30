@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -25,7 +25,7 @@ import (
 // hostedArtifactSession creates an openai_hosted Session without Turns.
 func hostedArtifactSession(t *testing.T, s *store.Store, tenant, key string) (session, environment string) {
 	t.Helper()
-	created, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key,
+	created, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key,
 		Configuration: json.RawMessage(`{"agent":{"model":"artifact-model"},"environment":{"type":"openai_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil || created.Environment == nil {
 		t.Fatal("fixture Session", err)
@@ -33,9 +33,9 @@ func hostedArtifactSession(t *testing.T, s *store.Store, tenant, key string) (se
 	return created.ID, created.Environment.ID
 }
 
-// completeArtifactTurn runs one Turn whose complete outputs tree is captured
-// and settled as completed, and returns the Turn ID.
-func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environment, key string, outputs map[string]string) string {
+// completeArtifactTurn runs one Turn whose complete outputs tree is staged
+// through artifacts and settled as completed, and returns the Turn ID.
+func completeArtifactTurn(t *testing.T, s *store.Store, artifacts *sessions.Service, tenant, session, environment, key string, outputs map[string]string) string {
 	t.Helper()
 	receipt, err := s.SubmitMessage(t.Context(), tenant, session, key, json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"publish outputs"}]}]}`))
 	if err != nil {
@@ -43,11 +43,11 @@ func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environ
 	}
 	transition := func(from, to string) {
 		t.Helper()
-		if _, err := s.TransitionTurn(t.Context(), tenant, session, receipt.TurnID, store.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
+		if _, err := s.TransitionTurn(t.Context(), tenant, session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	transition(store.TurnQueued, store.TurnInProgress)
+	transition(sessions.TurnQueued, sessions.TurnInProgress)
 	var archive bytes.Buffer
 	w := tar.NewWriter(&archive)
 	for name, body := range outputs {
@@ -61,26 +61,23 @@ func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environ
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.StageTurnArtifacts(t.Context(), tenant, session, receipt.TurnID, environment, &archive); err != nil {
+	if err := artifacts.StageTurnArtifacts(t.Context(), sessions.StageTurnArtifactsCommand{TenantID: tenant, SessionID: session, TurnID: receipt.TurnID, EnvironmentID: environment, Export: &archive}); err != nil {
 		t.Fatal(err)
 	}
-	transition(store.TurnInProgress, store.TurnCompleted)
+	transition(sessions.TurnInProgress, sessions.TurnCompleted)
 	return receipt.TurnID
 }
 
 // artifactHTTPServer serves Artifact routes for an owner and a foreign tenant.
-func artifactHTTPServer(t *testing.T, s *store.Store) (server *httptest.Server, owner, ownerTenant, foreign, foreignTenant string) {
+func artifactHTTPServer(t *testing.T, s *store.Store, db fixtureDB) (server *httptest.Server, owner, ownerTenant, foreign, foreignTenant string) {
 	t.Helper()
 	owner, foreign = uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant = uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "artifact-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "artifact-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithSessionArtifacts(s))
+	h, err := publicHandler(t, s, db, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,15 +90,19 @@ func artifactHTTPServer(t *testing.T, s *store.Store) (server *httptest.Server, 
 // environment_id filter matches nothing like another Environment's ID (HE-56),
 // without weakening tenant or Session scoping.
 func TestSessionArtifactListEnvelopeAndEnvironmentFilterPostgres(t *testing.T) {
-	s, _ := store.NewTestStore(t)
-	server, owner, ownerTenant, foreign, foreignTenant := artifactHTTPServer(t, s)
+	s, db := newTestStoreDB(t)
+	_, sessionService, err := fixtureSessions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, owner, ownerTenant, foreign, foreignTenant := artifactHTTPServer(t, s, db)
 	client := pathIDClient{t: t, server: server}
 
 	session, environment := hostedArtifactSession(t, s, ownerTenant, "artifact-list")
-	completeArtifactTurn(t, s, ownerTenant, session, environment, "artifact-list-turn", map[string]string{"a.txt": "alpha", "b.txt": "bravo"})
+	completeArtifactTurn(t, s, sessionService, ownerTenant, session, environment, "artifact-list-turn", map[string]string{"a.txt": "alpha", "b.txt": "bravo"})
 	idle, otherEnvironment := hostedArtifactSession(t, s, ownerTenant, "artifact-idle")
 	foreignSession, foreignEnvironment := hostedArtifactSession(t, s, foreignTenant, "artifact-foreign")
-	completeArtifactTurn(t, s, foreignTenant, foreignSession, foreignEnvironment, "artifact-foreign-turn", map[string]string{"a.txt": "alpha"})
+	completeArtifactTurn(t, s, sessionService, foreignTenant, foreignSession, foreignEnvironment, "artifact-foreign-turn", map[string]string{"a.txt": "alpha"})
 
 	type envelope struct {
 		Object  *string           `json:"object"`
@@ -213,26 +214,30 @@ func TestSessionArtifactsOfficialClientPostgres(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, _ := store.NewTestStore(t)
-	server, owner, ownerTenant, foreign, _ := artifactHTTPServer(t, s)
+	s, db := newTestStoreDB(t)
+	sessionStore, sessionService, err := fixtureSessions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, owner, ownerTenant, foreign, _ := artifactHTTPServer(t, s, db)
 	session, environment := hostedArtifactSession(t, s, ownerTenant, "artifact-sdk")
 	outputs := map[string]string{"a.txt": "alpha", "sub/b.txt": "bravo", "empty.txt": ""}
-	first := completeArtifactTurn(t, s, ownerTenant, session, environment, "artifact-sdk-1", outputs)
-	page, err := s.ListSessionArtifacts(t.Context(), ownerTenant, session, "", "", 100, true)
+	first := completeArtifactTurn(t, s, sessionService, ownerTenant, session, environment, "artifact-sdk-1", outputs)
+	page, err := sessionStore.ListSessionArtifacts(t.Context(), ownerTenant, session, "", "", 100, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, artifact := range page.Artifacts {
 		if artifact.Path == "/workspace/outputs/a.txt" {
-			if err := s.DeleteSessionArtifact(t.Context(), ownerTenant, session, artifact.ID); err != nil {
+			if err := sessionService.DeleteSessionArtifact(t.Context(), sessions.DeleteSessionArtifactCommand{TenantID: ownerTenant, SessionID: session, ArtifactID: artifact.ID}); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
 	outputs["c.txt"] = "charlie"
-	second := completeArtifactTurn(t, s, ownerTenant, session, environment, "artifact-sdk-2", outputs)
+	second := completeArtifactTurn(t, s, sessionService, ownerTenant, session, environment, "artifact-sdk-2", outputs)
 	outputs["sub/b.txt"] = "bravo-v2"
-	third := completeArtifactTurn(t, s, ownerTenant, session, environment, "artifact-sdk-3", outputs)
+	third := completeArtifactTurn(t, s, sessionService, ownerTenant, session, environment, "artifact-sdk-3", outputs)
 	hex := func(files map[string]string) map[string]string {
 		out := make(map[string]string, len(files))
 		for name, body := range files {

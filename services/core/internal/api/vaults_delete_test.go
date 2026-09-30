@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
-func (f *vaultResourceFixture) DeleteVault(_ context.Context, tenant, id string) (string, error) {
-	f.tenant, f.id, f.calls = tenant, id, f.calls+1
+func (f *vaultResourceFixture) DeleteVault(_ context.Context, command vaults.DeleteVault) (string, error) {
+	f.tenant, f.id, f.calls = command.TenantID, command.VaultID, f.calls+1
 	return f.vault.ID, f.err
 }
 
@@ -70,7 +70,7 @@ func TestVaultDeletionRejectsBeforeMutation(t *testing.T) {
 	for _, tc := range []struct {
 		err    error
 		status int
-	}{{store.ErrNotFound, 404}, {errors.New("vault-delete-canary"), 500}} {
+	}{{vaults.ErrNotFound, 404}, {errors.New("vault-delete-canary"), 500}} {
 		h, f := vaultResourceHandler(t)
 		f.err = tc.err
 		w := vaultRequest(h, "DELETE", "/v1/vaults/"+f.vault.ID, "")

@@ -7,25 +7,24 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
 func TestSandboxDeploymentSetupRequiresAdministratorAndStrictBody(t *testing.T) {
-	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
+	deps, fakes := sandboxFakes(t)
 	calls := 0
-	initialize := func(_ context.Context, input store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
+	initialize := func(_ context.Context, input sandbox.Selection) (deployment.View, error) {
 		calls++
 		if input.Provider == "microsandbox" {
-			return store.RuntimeDeploymentView{}, store.ErrSandboxDeploymentConflict
+			return deployment.View{}, deployment.ErrConflict
 		}
-		return store.RuntimeDeploymentView{Provider: input.Provider}, nil
+		return deployment.View{Provider: input.Provider}, nil
 	}
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin), WithSandboxDeploymentSetup(initialize))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fakes.deploymentChanges.initializeSandboxDeployment = initialize
+	fakes.deployment.decodeConfiguration = providers.Builtin().DecodeInput
+	h := newTestHandler(t, deps)
 	for _, test := range []struct {
 		token, body   string
 		status, calls int
@@ -46,15 +45,5 @@ func TestSandboxDeploymentSetupRequiresAdministratorAndStrictBody(t *testing.T) 
 		if result.Code != test.status || calls != test.calls {
 			t.Fatal(result.Code, calls, result.Body.String())
 		}
-	}
-}
-
-func TestSandboxDeploymentSetupFileModeReturnsConflict(t *testing.T) {
-	h := &Handler{}
-	request := httptest.NewRequest(http.MethodPost, "/core/v1/sandbox/deployment", strings.NewReader(`{"provider":"docker","expected_generation":0}`))
-	result := httptest.NewRecorder()
-	h.initializeSandboxDeployment(result, request)
-	if result.Code != http.StatusConflict || !strings.Contains(result.Body.String(), "sandbox_deployment_conflict") {
-		t.Fatal(result.Code, result.Body.String())
 	}
 }

@@ -5,13 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/google/uuid"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,23 +12,34 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func initializationState(t *testing.T, s *store.Store, tenant, environment string) string {
+func initializationState(t *testing.T, pool *pgxpool.Pool, tenant, environment string) string {
 	t.Helper()
-	value, err := s.GetEnvironment(t.Context(), tenant, environment)
+	value, err := sessionReads(pool).GetEnvironment(t.Context(), tenant, environment)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return value.Initialization
 }
 
-func awaitInitialization(t *testing.T, s *store.Store, tenant, environment, state string) {
+func awaitInitialization(t *testing.T, pool *pgxpool.Pool, tenant, environment, state string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if initializationState(t, s, tenant, environment) == state {
+		if initializationState(t, pool, tenant, environment) == state {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -51,37 +55,34 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			s := store.NewWithCredentialCipher(pool, cipher)
+			s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 			principal := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
-			session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
+			session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
 				Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 				Configuration:  json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/home/user/work"}}`),
-				InitialFiles:   []store.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
-				Initialization: store.EnvironmentSetup{Skills: []store.EnvironmentSkill{hostedFailureSkill(t)}, Env: map[string]string{"EXPLICIT": "value"}, Commands: []store.SetupCommand{{Command: "touch setup"}}, CapabilityDirectories: []string{"/home/user/capabilities"}},
+				InitialFiles:   []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
+				Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{hostedFailureSkill(t)}, Env: map[string]string{"EXPLICIT": "value"}, Commands: []environmentconfig.SetupCommand{{Command: "touch setup"}}, CapabilityDirectories: []string{"/home/user/capabilities"}},
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			environment, err := s.GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
+			environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			key, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+			key, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
+			enrolled, err := fixtureSessionService(t, db).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 			if err != nil {
 				t.Fatal(err)
 			}
 			registry := runtimegateway.NewRegistry()
-			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
+			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
-			worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry})
-			if err != nil {
-				t.Fatal(err)
-			}
+			worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry})
 			ctx, cancel := context.WithCancel(t.Context())
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
@@ -110,7 +111,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				actions = append(actions, action)
 				mu.Unlock()
 				if outcome == "revoked" {
-					if err := s.RevokeDevice(t.Context(), principal.TenantID, enrolled.DeviceID); err != nil {
+					if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), principal.TenantID, enrolled.DeviceID); err != nil {
 						t.Error(err)
 					}
 					return completedInitialization(request, data)
@@ -121,7 +122,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				return completedInitialization(request, data)
 			}
 			time.Sleep(350 * time.Millisecond)
-			if initializationState(t, s, principal.TenantID, environment.ID) != "pending" {
+			if initializationState(t, db.pool, principal.TenantID, environment.ID) != "pending" {
 				t.Fatal("unconnected preparation was consumed")
 			}
 			bootstrap := sandbox.Bootstrap{DeviceID: enrolled.DeviceID, Credential: key.Token}
@@ -132,8 +133,8 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if outcome != "completed" {
 				want = "failed"
 			}
-			awaitInitialization(t, s, principal.TenantID, environment.ID, want)
-			if _, err := s.GetRuntimeAllocation(t.Context(), principal.TenantID, environment.ID); !errors.Is(err, store.ErrNotFound) {
+			awaitInitialization(t, db.pool, principal.TenantID, environment.ID, want)
+			if _, err := s.GetRuntimeAllocation(t.Context(), principal.TenantID, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("self-hosted preparation fabricated allocation", err)
 			}
 			if outcome == "completed" {
@@ -170,50 +171,46 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 // Revocation can commit after the worker observes a connected peer but before
 // it claims preparation. It must remain a per-Environment admission result.
 func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	principal := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
-	create := func() store.EnvironmentInitialization {
+	create := func() sessions.EnvironmentInitialization {
 		t.Helper()
-		session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
+		session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
 			Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 			Configuration: json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/home/user/work"}}`),
-			InitialFiles:  []store.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
+			InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		environment, err := s.GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
+		environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		key, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+		key, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
+		enrolled, err := fixtureSessionService(t, db).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 		if err != nil {
 			t.Fatal(err)
 		}
-		return store.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
+		return sessions.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
 	}
 	revoked, other := create(), create()
-	owned, err := store.NewExecution(t.Context(), s)
-	if err != nil {
+	owned := executionOwner(t, db, s).Sessions
+	if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
 		t.Fatal(err)
 	}
-	defer owned.CloseExecution(context.Background())
-	if err := s.RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
-		t.Fatal(err)
-	}
-	if err := owned.ClaimEnvironmentInitialization(t.Context(), revoked); !errors.Is(err, store.ErrNotFound) {
+	if err := owned.ClaimEnvironmentInitialization(t.Context(), revoked); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("revocation escaped normal admission handling: %v", err)
 	}
 	stale := other
 	stale.DeviceID = uuid.NewString()
-	if err := owned.ClaimEnvironmentInitialization(t.Context(), stale); !errors.Is(err, store.ErrTurnConflict) {
+	if err := owned.ClaimEnvironmentInitialization(t.Context(), stale); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("stale binding escaped normal admission handling: %v", err)
 	}
-	if initializationState(t, s, other.TenantID, other.EnvironmentID) != "pending" {
+	if initializationState(t, db.pool, other.TenantID, other.EnvironmentID) != "pending" {
 		t.Fatal("stale claim changed preparation state")
 	}
 	if err := owned.ClaimEnvironmentInitialization(t.Context(), other); err != nil {

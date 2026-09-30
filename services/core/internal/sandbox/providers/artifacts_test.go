@@ -14,7 +14,8 @@ import (
 )
 
 func TestArtifactProjectionsMatchRegistrations(t *testing.T) {
-	catalog, err := ArtifactCatalog()
+	registry := Builtin()
+	catalog, err := registry.ArtifactCatalog()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +45,7 @@ func TestArtifactProjectionsMatchRegistrations(t *testing.T) {
 }
 
 func TestNodeArtifactRegistrationRejectsInvalidDeclarations(t *testing.T) {
+	registry := Builtin()
 	for _, mutate := range []func(*Adapter){
 		func(a *Adapter) { a.NodeArtifacts = nil },
 		func(a *Adapter) { a.NodeArtifacts[0].Path = "../private" },
@@ -55,7 +57,7 @@ func TestNodeArtifactRegistrationRejectsInvalidDeclarations(t *testing.T) {
 		func(a *Adapter) { a.NodeArtifacts[0].Role = "unknown" },
 		func(a *Adapter) { a.NodeArtifacts = append(a.NodeArtifacts, a.NodeArtifacts[0]) },
 	} {
-		a := adapters["docker"]
+		a := registry.adapters["docker"]
 		a.NodeArtifacts = append([]providerassets.Artifact(nil), a.NodeArtifacts...)
 		mutate(&a)
 		if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) {
@@ -63,26 +65,25 @@ func TestNodeArtifactRegistrationRejectsInvalidDeclarations(t *testing.T) {
 		}
 	}
 	const kind = "another-node-provider"
-	adapters[kind] = adapters["docker"]
-	defer delete(adapters, kind)
-	catalog, err := ArtifactCatalog()
-	if err != nil || !reflect.DeepEqual(catalog[kind], adapters[kind].NodeArtifacts) {
+	registry.adapters[kind] = registry.adapters["docker"]
+	catalog, err := registry.ArtifactCatalog()
+	if err != nil || !reflect.DeepEqual(catalog[kind], registry.adapters[kind].NodeArtifacts) {
 		t.Fatalf("additional registration not projected: %v", err)
 	}
 }
 
 func TestArtifactCatalogRejectsConflictingSharedFiles(t *testing.T) {
+	registry := Builtin()
 	const kind = "conflicting-provider"
-	defer delete(adapters, kind)
 	for _, mutate := range []func(*providerassets.Artifact){
 		func(item *providerassets.Artifact) { item.Suffix = "different" },
 		func(item *providerassets.Artifact) { item.Path = "native/bin/other-node" },
 	} {
-		a := adapters["docker"]
+		a := registry.adapters["docker"]
 		a.NodeArtifacts = append([]providerassets.Artifact(nil), a.NodeArtifacts...)
 		mutate(&a.NodeArtifacts[0])
-		adapters[kind] = a
-		if _, err := ArtifactCatalog(); !errors.Is(err, providercontract.ErrContract) {
+		registry.adapters[kind] = a
+		if _, err := registry.ArtifactCatalog(); !errors.Is(err, providercontract.ErrContract) {
 			t.Fatalf("conflicting declaration accepted: %v", err)
 		}
 	}

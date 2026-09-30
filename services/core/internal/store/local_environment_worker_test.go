@@ -10,18 +10,19 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
-func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *execution.Worker, store.Environment) {
+func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *execution.Worker, sessions.Environment) {
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), scoped)
 	if scoped {
 		_, pool := store.NewTestStore(t)
 		insertWorkerRuntimeAllocation(t, pool, h, "disabled")
 	}
-	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
+	environment, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,10 +42,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.LocalEnvironment
 	})
-	w, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := startWorker(t, t.Context(), h.db, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- w.Run(ctx) }()
@@ -63,7 +61,7 @@ func TestLocalEnvironmentWorkerDirectoryUsesExactAuthorityWithoutModel(t *testin
 	h, w, environment := localWorker(t, true, false)
 	foreign := environment
 	foreign.TenantID = uuid.NewString()
-	if _, err := w.ReadEnvironmentDirectory(t.Context(), foreign, "reports"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := w.ReadEnvironmentDirectory(t.Context(), foreign, "reports"); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign read admitted", err)
 	}
 	result := startDirectoryRead(t.Context(), w, environment)
@@ -94,25 +92,25 @@ func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), environment, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("general device used as local authority", err)
 	}
-	other, err := h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "unassigned", Configuration: h.session.Configuration})
+	other, err := h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "unassigned", Configuration: h.session.Configuration})
 	if err != nil {
 		t.Fatal(err)
 	}
-	unassigned, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, other.ID)
+	unassigned, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, other.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), unassigned, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("unassigned environment selected general device", err)
 	}
-	if _, err := h.s.GetSessionDevice(t.Context(), h.tenant, other.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, other.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("read persisted an unauthorized placement", err)
 	}
 }
 
 func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *testing.T) {
 	h, worker, environment := localWorker(t, true, true)
-	reservation, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "local-input", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	reservation, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "local-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +123,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 		}
 	}
 	var prepare proto.ExecutionPreparePayload
-	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID || prepare.Configuration.WorkDir != "" {
+	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID {
 		t.Fatal("local preparation lost identity")
 	}
 	before, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
@@ -144,17 +142,17 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 	completeLocalArtifactExport(t, h, worker, environment)
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "local completion", func() bool {
 		turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
-		return err == nil && turn.Status == store.TurnCompleted
+		return err == nil && turn.Status == sessions.TurnCompleted
 	})
 	settled, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, reservation.ID)
-	if err != nil || settled.State != store.EnvironmentInputAdmitted || len(settled.Receipts) != 1 {
+	if err != nil || settled.State != sessions.EnvironmentInputAdmitted || len(settled.Receipts) != 1 {
 		t.Fatal("local reservation did not settle", err)
 	}
 	bound, err := h.s.GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
 	if err != nil || bound.Device.EnvironmentID != environment.ID || bound.NativeSessionID != "local-native-history" {
 		t.Fatal("local native identity was not retained", err)
 	}
-	artifacts, err := h.s.ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, environment.ID, "", 20, false)
+	artifacts, err := sessionReads(h.db.pool).ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, environment.ID, "", 20, false)
 	if err != nil || len(artifacts.Artifacts) != 1 || artifacts.Artifacts[0].Path != "/workspace/outputs/result.bin" || artifacts.Artifacts[0].TurnID != start.RunID || artifacts.Artifacts[0].SizeBytes != 3 {
 		t.Fatalf("completed turn did not publish output: %+v %v", artifacts, err)
 	}

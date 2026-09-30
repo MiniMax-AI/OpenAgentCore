@@ -16,7 +16,7 @@ func TestLocalWorkspaceBindingNetworkAndRequiredHistory(t *testing.T) {
 	config.Workspace.PublicDirectory = config.Workspace.Directory
 	config.Workspace.NetworkAccess = "enabled"
 	req := workspaceRequest()
-	req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled"}
+	req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: config.Workspace.Directory}
 	req.RequireExistingNativeSession = true
 	start, _, err := prepare(config, req)
 	if err != nil || !start.RequireHistory || start.Workspace.NetworkAccess != "enabled" {
@@ -47,7 +47,7 @@ func TestRestrictedWorkspacePolicyUsesExactBoundAuthority(t *testing.T) {
 	config.Workspace.NetworkAccess = "restricted"
 	config.Workspace.AllowedDomains = []string{"Example.com", "api.example.com", "example.com"}
 	req := workspaceRequest()
-	req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "restricted", AllowedDomains: []string{"api.example.com", "EXAMPLE.COM"}}
+	req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "restricted", AllowedDomains: []string{"api.example.com", "EXAMPLE.COM"}, WorkspaceRoot: config.Workspace.Directory}
 	if _, _, err := prepare(config, req); err == nil {
 		t.Fatal("Runtime must not promise inner network isolation")
 	}

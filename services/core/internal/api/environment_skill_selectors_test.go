@@ -5,7 +5,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestSkillReferenceNullableSelectorAdmissionAndTemplateProjection(t *testing.T) {
@@ -22,14 +24,14 @@ func TestSkillReferenceNullableSelectorAdmissionAndTemplateProjection(t *testing
 		t.Run(test.name, func(t *testing.T) {
 			skills := `[{"type":"skill_reference","skill_id":"skill-owned"` + test.field + `}]`
 			template, err := decodeTemplateInput([]byte(`{"skills":` + skills + `}`))
-			if err != nil || !template.SetSkills || len(template.Initialization.Skills) != 1 {
+			if err != nil || !template.SetSkills || len(template.Setup.Skills) != 1 {
 				t.Fatalf("template admission: %+v %v", template, err)
 			}
-			want := store.EnvironmentSkill{Metadata: store.EnvironmentSkillMetadata{Type: "skill_reference", SkillID: "skill-owned", Version: test.selector}}
-			if !reflect.DeepEqual(template.Initialization.Skills[0], want) {
-				t.Fatalf("unresolved selector changed: %+v", template.Initialization.Skills[0])
+			want := environmentconfig.Skill{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "skill-owned", Version: test.selector}}
+			if !reflect.DeepEqual(template.Setup.Skills[0], want) {
+				t.Fatalf("unresolved selector changed: %+v", template.Setup.Skills[0])
 			}
-			public := templateResponse(store.EnvironmentTemplate{Skills: template.Initialization.SkillMetadata()})
+			public := templateResponse(environmenttemplates.Template{Skills: template.Setup.SkillMetadata()})
 			var reference map[string]any
 			if len(public.Skills) != 1 || json.Unmarshal(public.Skills[0], &reference) != nil {
 				t.Fatalf("template projection: %+v", public.Skills)
@@ -44,7 +46,7 @@ func TestSkillReferenceNullableSelectorAdmissionAndTemplateProjection(t *testing
 					t.Fatal(err)
 				}
 				input, err := request.validated()
-				if err != nil || !reflect.DeepEqual(input.initialization.Skills, template.Initialization.Skills) {
+				if err != nil || !reflect.DeepEqual(input.initialization.Skills, template.Setup.Skills) {
 					t.Fatalf("Session admission differs from Template: %+v %v", input.initialization.Skills, err)
 				}
 			}
@@ -61,8 +63,8 @@ func TestSkillReferenceNullDoesNotWidenOtherSelectors(t *testing.T) {
 }
 
 func TestInstalledSkillReferenceRequiresConcreteVersion(t *testing.T) {
-	metadata := store.EnvironmentSkillMetadata{Type: "skill_reference", SkillID: "skill-owned", Version: "2", Name: "proof", Description: "A proof."}
-	public := skillResponse([]store.EnvironmentSkillMetadata{metadata})
+	metadata := environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "skill-owned", Version: "2", Name: "proof", Description: "A proof."}
+	public := skillResponse([]environmentconfig.SkillMetadata{metadata})
 	var reference map[string]any
 	if len(public) != 1 || json.Unmarshal(public[0], &reference) != nil {
 		t.Fatalf("installed projection: %s", public)
@@ -73,7 +75,7 @@ func TestInstalledSkillReferenceRequiresConcreteVersion(t *testing.T) {
 	}
 	for _, selector := range []string{`"2"`, `null`, `"latest"`} {
 		raw := json.RawMessage(`{"type":"openai_hosted","skills":[{"type":"skill_reference","skill_id":"skill-owned","version":` + selector + `,"name":"proof","description":"A proof."}]}`)
-		result, err := environmentResponse(store.Environment{ID: "environment-owned", Status: "pending", Configuration: raw})
+		result, err := environmentResponse(sessions.Environment{ID: "environment-owned", Status: "pending", Configuration: raw})
 		if selector != `"2"` {
 			if err == nil {
 				t.Fatalf("unresolved installed selector accepted: %s", selector)

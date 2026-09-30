@@ -15,10 +15,13 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -75,6 +78,7 @@ func (p *nodeIsolationProvider) RunCommand(ctx context.Context, r sandbox.Refere
 type nodeIsolationFixture struct {
 	t                    *testing.T
 	store                *store.Store
+	nodes                *deployment.Service
 	pool                 *pgxpool.Pool
 	worker               *execution.Worker
 	provider             *nodeIsolationProvider
@@ -93,7 +97,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	registry := runtimegateway.NewRegistry()
 	cp := &fakeSuspensionProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.RetainedState{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
 	p := &nodeIsolationProvider{fakeSuspensionProvider: cp, blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
@@ -110,7 +114,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		p.writes.Add(1)
 		return completedInitialization(request, data)
 	}}
-	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
+	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	cp.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
 	t.Cleanup(func() {
@@ -121,14 +125,11 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		cp.mu.Unlock()
 		server.Close()
 	})
-	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, pool: pool, provider: p, key: uuid.NewString(), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
+	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, nodes: fixtureDeployment(t, db), pool: pool, provider: p, key: uuid.NewString(), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
 	// Keep restored compute awake throughout the isolation assertions.
 	// The suspension setup explicitly dates its activity two minutes in the past.
 	policy := &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour, MaxActive: 100, MaxRetained: 100}
-	f.worker, err = execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: runtimedevice.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	f.worker = startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: runtimedevice.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
 	spec := store.SandboxDeploymentTestSpec("microsandbox")
 	raw, _ := json.Marshal(spec)
 	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET specification=$1", raw); err != nil {
@@ -138,10 +139,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(f.stop)
-	f.epoch, err = s.RuntimeOwnerEpoch(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
+	f.epoch = fixtureOwnerEpoch(t, db)
 	f.enroll(f.nodeB)
 	f.online(f.nodeA)
 	f.online(f.nodeB)
@@ -149,11 +147,11 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 }
 func (f *nodeIsolationFixture) enroll(id string) {
 	f.t.Helper()
-	token, err := store.EnrollmentTestToken(f.store.CreateRuntimeEnrollment(f.t.Context(), store.RuntimeNodeCapacity{MaxActive: 100, MaxRetained: 100}))
+	token, err := store.EnrollmentTestToken(f.nodes.CreateEnrollment(f.t.Context(), deployment.Capacity{MaxActive: 100, MaxRetained: 100}))
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	_, err = f.store.EnrollRuntimeNode(f.t.Context(), token, store.RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64)})
+	_, err = f.nodes.Enroll(f.t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: store.SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64)})
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -161,19 +159,19 @@ func (f *nodeIsolationFixture) enroll(id string) {
 func (f *nodeIsolationFixture) online(id string) {
 	f.t.Helper()
 	connection := uuid.NewString()
-	if err := f.store.ConnectRuntimeNode(f.t.Context(), id, connection, f.epoch); err != nil {
+	if err := f.nodes.ConnectNode(f.t.Context(), id, connection, f.epoch); err != nil {
 		f.t.Fatal(err)
 	}
-	if err := f.store.HeartbeatRuntimeNode(f.t.Context(), id, connection, f.epoch, store.RuntimeNodeHealth{ProviderReady: true}); err != nil {
+	if err := f.nodes.Heartbeat(f.t.Context(), id, connection, f.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 		f.t.Fatal(err)
 	}
 }
-func (f *nodeIsolationFixture) session(node string, initialize bool) (string, store.Session, store.Environment) {
+func (f *nodeIsolationFixture) session(node string, initialize bool) (string, sessions.Session, sessions.Environment) {
 	f.t.Helper()
 	tenant := uuid.NewString()
-	input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage("{\"agent\":{\"model\":\"test\"},\"environment\":{\"type\":\"openai_hosted\"}}")}
+	input := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage("{\"agent\":{\"model\":\"test\"},\"environment\":{\"type\":\"openai_hosted\"}}")}
 	if initialize {
-		input.InitialFiles = []store.InitialFile{{Type: "inline", Path: "/workspace/seed", Data: []byte("retained")}}
+		input.InitialFiles = []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/seed", Data: []byte("retained")}}
 	}
 	// Placement is automatic and generation readiness is current-connection
 	// authority. Do not merely change the legacy provider_ready projection.
@@ -199,20 +197,20 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, st
 		f.t.Fatal(err)
 	}
 	for _, value := range others {
-		if err := f.store.HeartbeatRuntimeNode(f.t.Context(), value.id, value.connection, value.epoch, store.RuntimeNodeHealth{ProviderReady: false}); err != nil {
+		if err := f.nodes.Heartbeat(f.t.Context(), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
 			f.t.Fatal(err)
 		}
 	}
 	session, err := f.store.CreateSession(f.t.Context(), tenant, input)
 	for _, value := range others {
-		if err := f.store.HeartbeatRuntimeNode(context.WithoutCancel(f.t.Context()), value.id, value.connection, value.epoch, store.RuntimeNodeHealth{ProviderReady: true}); err != nil {
+		if err := f.nodes.Heartbeat(context.WithoutCancel(f.t.Context()), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 			f.t.Fatal(err)
 		}
 	}
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	env, err := f.store.GetSessionEnvironment(f.t.Context(), tenant, session.ID)
+	env, err := sessionReads(f.pool).GetSessionEnvironment(f.t.Context(), tenant, session.ID)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -222,7 +220,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, st
 	}
 	return tenant, session, env
 }
-func (f *nodeIsolationFixture) provision(tenant string, env store.Environment) store.RuntimeAllocation {
+func (f *nodeIsolationFixture) provision(tenant string, env sessions.Environment) store.RuntimeAllocation {
 	f.t.Helper()
 	ctx, cancel := context.WithTimeout(f.t.Context(), 3*time.Second)
 	defer cancel()

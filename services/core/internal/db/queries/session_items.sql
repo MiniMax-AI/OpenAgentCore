@@ -15,6 +15,19 @@ ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload,
         THEN COALESCE(session_items.settled_at, EXCLUDED.created_at) ELSE session_items.settled_at END
 RETURNING *;
 
+-- name: ListUnfinishedSessionItems :many
+SELECT id, position, output_index, payload FROM session_items
+WHERE session_id = $1 AND turn_id = $2 AND payload->>'status' = 'in_progress';
+
+-- name: FinishSessionItems :exec
+-- The finished Items share one settlement time; an Item keeps a settlement
+-- time it already has.
+WITH observed AS MATERIALIZED (SELECT clock_timestamp() AS at)
+UPDATE session_items SET payload = jsonb_set(payload, '{status}', to_jsonb(sqlc.arg(status)::text)),
+    settled_at = COALESCE(session_items.settled_at, observed.at)
+FROM observed
+WHERE session_id = sqlc.arg(session_id) AND id = ANY(sqlc.arg(ids)::uuid[]);
+
 -- name: ListSessionItems :many
 SELECT i.id, i.created_at,
     (CASE WHEN i.payload->>'status' = 'in_progress' AND t.status IN ('completed', 'failed', 'cancelled')

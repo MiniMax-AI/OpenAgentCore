@@ -8,14 +8,15 @@ import (
 )
 
 func TestRegistrationRejectsMissingAndMismatchedDeclarations(t *testing.T) {
+	registry := Builtin()
 	for _, adapter := range []Adapter{{}, {Operations: func() providercontract.Operations { return nil }}} {
-		adapters["invalid-contract-fixture"] = adapter
-		if _, err := Lookup("invalid-contract-fixture"); err == nil {
+		registry.adapters["invalid-contract-fixture"] = adapter
+		if _, err := registry.Lookup("invalid-contract-fixture"); err == nil {
 			t.Fatal("invalid declaration registered")
 		}
 	}
-	delete(adapters, "invalid-contract-fixture")
-	if err := ValidateBinding(adapters["e2b"], &docker.Provider{}); !errors.Is(err, providercontract.ErrContract) {
+	delete(registry.adapters, "invalid-contract-fixture")
+	if err := ValidateBinding(registry.adapters["e2b"], &docker.Provider{}); !errors.Is(err, providercontract.ErrContract) {
 		t.Fatal("registration differs from instance", err)
 	}
 }

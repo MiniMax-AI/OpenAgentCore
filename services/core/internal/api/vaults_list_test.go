@@ -8,12 +8,11 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func (f *vaultResourceFixture) ListVaults(_ context.Context, tenant, after string, limit int, ascending bool, statuses []string) (store.VaultPage, error) {
-	f.tenant, f.calls = tenant, f.calls+1
-	f.options, f.statuses = pageOptions{after: after, limit: limit, ascending: ascending}, statuses
+func (f *vaultResourceFixture) ListVaults(_ context.Context, tenant string, query vaults.PageQuery) (vaults.VaultPage, error) {
+	f.tenant, f.query, f.calls = tenant, query, f.calls+1
 	return f.page, f.err
 }
 
@@ -34,8 +33,8 @@ func TestVaultListParameters(t *testing.T) {
 		t.Run(tc.query, func(t *testing.T) {
 			h, f := vaultResourceHandler(t)
 			w := vaultRequest(h, http.MethodGet, "/v1/vaults"+tc.query, "")
-			if w.Code != 200 || f.calls != 1 || f.tenant != f.vault.TenantID || f.options.limit != tc.limit || !reflect.DeepEqual(f.statuses, tc.statuses) {
-				t.Fatalf("list: %d %s; options %+v statuses %v owner %s", w.Code, w.Body.String(), f.options, f.statuses, f.tenant)
+			if w.Code != 200 || f.calls != 1 || f.tenant != f.vault.TenantID || f.query.Limit != tc.limit || !reflect.DeepEqual(f.query.Statuses, tc.statuses) {
+				t.Fatalf("list: %d %s; query %+v owner %s", w.Code, w.Body.String(), f.query, f.tenant)
 			}
 			var body map[string]any
 			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
@@ -58,16 +57,16 @@ func TestVaultListParameters(t *testing.T) {
 
 func TestVaultListSafeProjectionAndCursor(t *testing.T) {
 	h, f := vaultResourceHandler(t)
-	f.page = store.VaultPage{Vaults: []store.Vault{f.vault}, NextCursor: f.vault.ID}
+	f.page = vaults.VaultPage{Vaults: []vaults.Vault{f.vault}, NextCursor: f.vault.ID}
 	w := vaultRequest(h, http.MethodGet, "/v1/vaults?order=asc&after="+f.vault.ID, "")
 	var body v1.VaultList
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String(), err)
 	}
-	if !reflect.DeepEqual(body.Data, []v1.Vault{vaultResponse(f.vault)}) || !body.HasMore || body.FirstID == nil || *body.FirstID != f.vault.ID || body.LastID == nil || *body.LastID != f.vault.ID || !f.options.ascending || f.options.after != f.vault.ID {
-		t.Fatalf("page changed: %+v, %+v", body, f.options)
+	if !reflect.DeepEqual(body.Data, []v1.Vault{vaultResponse(f.vault)}) || !body.HasMore || body.FirstID == nil || *body.FirstID != f.vault.ID || body.LastID == nil || *body.LastID != f.vault.ID || !f.query.Ascending || f.query.After != f.vault.ID {
+		t.Fatalf("page changed: %+v, %+v", body, f.query)
 	}
-	f.err = store.ErrNotFound
+	f.err = vaults.ErrNotFound
 	if w = vaultRequest(h, http.MethodGet, "/v1/vaults?after="+f.vault.ID, ""); w.Code != 404 {
 		t.Fatal(w.Code, w.Body.String())
 	}

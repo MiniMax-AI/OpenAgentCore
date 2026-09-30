@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // ObserveRuntimeRunning requires verified original compute identity. It does not
@@ -41,16 +43,16 @@ func (s *Store) SettleRuntimeCreation(ctx context.Context, owner RuntimeAllocati
 // Cancellation requests do not prove existing native work has stopped. A live,
 // unexpired Environment fails with the generic provisioning reason.
 func (s *Store) RequestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {
-	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason, nil, false)
+	return s.requestRuntimeCleanup(ctx, owner, sessions.ProvisioningFailureReason, nil, false)
 }
 
 // ReleaseAbsentRuntimeCreation consumes provider proof that the original attempt
 // is settled and owns no resources. Authority revocation and release commit together.
 func (s *Store) ReleaseAbsentRuntimeCreation(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {
-	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason, nil, true)
+	return s.requestRuntimeCleanup(ctx, owner, sessions.ProvisioningFailureReason, nil, true)
 }
 
-func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation, reason string, detail *ProvisioningFailureDetail, absent bool) (RuntimeAllocation, error) {
+func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation, reason string, detail *sessions.ProvisioningFailureDetail, absent bool) (RuntimeAllocation, error) {
 	return s.mutateRuntimeAllocation(ctx, owner, false, func(ctx context.Context, q *sqlc.Queries, row sqlc.RuntimeAllocation) (sqlc.RuntimeAllocation, error) {
 		if row.State == "released" {
 			return row, nil
@@ -63,11 +65,11 @@ func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocati
 		if err != nil {
 			return sqlc.RuntimeAllocation{}, err
 		}
-		cancel := func() error { return cancelSessionWork(ctx, q, current.SessionID) }
+		session := sessionpg.BindSession(q, current.TenantID, current.SessionID)
 		if current.DeletedAt.Valid {
-			err = cancel()
+			err = sessions.CancelWork(ctx, session)
 		} else {
-			err = terminateRuntimeEnvironment(ctx, q, current, reason, detail, cancel)
+			err = sessions.TerminateEnvironment(ctx, session, current.Expired, reason, detail)
 		}
 		if err != nil {
 			return sqlc.RuntimeAllocation{}, err
@@ -118,9 +120,9 @@ func (s *Store) mutateRuntimeAllocation(ctx context.Context, owner RuntimeAlloca
 		return RuntimeAllocation{}, err
 	}
 	if previous.ID != owner.ID || previous.DeviceID != owner.DeviceID || previous.ProviderKey != owner.ProviderKey || previous.NodeID != owner.NodeID {
-		return RuntimeAllocation{}, ErrIdempotencyConflict
+		return RuntimeAllocation{}, sessions.ErrIdempotencyConflict
 	}
-	lookup, _ := deviceLookup(owner.TenantID, owner.EnvironmentID)
+	lookup, _ := sessionpg.DeviceLookup(owner.TenantID, owner.EnvironmentID)
 	var result RuntimeAllocation
 	err = s.withSession(ctx, owner.TenantID, previous.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		current, err := q.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
@@ -129,19 +131,19 @@ func (s *Store) mutateRuntimeAllocation(ctx context.Context, owner RuntimeAlloca
 		}
 		if live {
 			if current.DeletedAt.Valid {
-				return ErrNotFound
+				return sessions.ErrNotFound
 			}
 			device, err := q.GetSessionDevice(ctx, sqlc.GetSessionDeviceParams{TenantID: lookup.TenantID, ID: session})
 			if err != nil {
 				return err
 			}
 			if device.ID != current.RuntimeAllocation.DeviceID || device.EnvironmentID != lookup.ID {
-				return ErrDeviceBindingConflict
+				return sessions.ErrDeviceBindingConflict
 			}
 		}
 		row, err := apply(ctx, q, current.RuntimeAllocation)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		if err == nil {
 			result = runtimeAllocationFromRow(row, session, lookup.TenantID, current.DeletedAt, current.Expired)

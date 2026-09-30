@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestEnvironmentInputTerminalReservationsCannotRestart(t *testing.T) {
-	for _, terminal := range []string{EnvironmentInputCancelled, EnvironmentInputExpired} {
+	for _, terminal := range []string{sessions.EnvironmentInputCancelled, sessions.EnvironmentInputExpired} {
 		t.Run(terminal, func(t *testing.T) {
 			s, pool := testStore(t)
 			writer := executionWriter(t, s)
@@ -19,11 +21,11 @@ func TestEnvironmentInputTerminalReservationsCannotRestart(t *testing.T) {
 			ctx := context.Background()
 			pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
 			early, err := s.ExpireEnvironmentInput(ctx, tenant, session.ID, pending.ID)
-			if err != nil || early.State != EnvironmentInputPending || early.SettledAt != nil || !early.Deadline.Equal(pending.Deadline) {
+			if err != nil || early.State != sessions.EnvironmentInputPending || early.SettledAt != nil || !early.Deadline.Equal(pending.Deadline) {
 				t.Fatal("early expiry", early, err)
 			}
-			var settled EnvironmentInputReservation
-			if terminal == EnvironmentInputExpired {
+			var settled sessions.EnvironmentInputReservation
+			if terminal == sessions.EnvironmentInputExpired {
 				if _, err := pool.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE id=$1", pending.ID); err != nil {
 					t.Fatal(err)
 				}
@@ -38,14 +40,14 @@ func TestEnvironmentInputTerminalReservationsCannotRestart(t *testing.T) {
 			if err != nil || retry.State != terminal || retry.ID != pending.ID || !retry.Deadline.Equal(settled.Deadline) || !retry.SettledAt.Equal(*settled.SettledAt) {
 				t.Fatal("terminal retry changed outcome", retry, err)
 			}
-			if _, err := s.SubmitInputs(ctx, tenant, session.ID, "pending", pending.Inputs); !errors.Is(err, ErrTurnConflict) {
+			if _, err := s.SubmitInputs(ctx, tenant, session.ID, "pending", pending.Inputs); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("terminal request reopened through direct path", err)
 			}
-			if _, err := s.SubmitInputs(ctx, tenant, session.ID, "pending", []Input{messageInput("changed")}); !errors.Is(err, ErrIdempotencyConflict) {
+			if _, err := s.SubmitInputs(ctx, tenant, session.ID, "pending", []sessions.Input{messageInput("changed")}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal("terminal identity changed", err)
 			}
 			later := reserveEnvironmentInput(t, s, tenant, session.ID, "later")
-			for _, finish := range []func(context.Context, string, string, string) (EnvironmentInputReservation, error){
+			for _, finish := range []func(context.Context, string, string, string) (sessions.EnvironmentInputReservation, error){
 				writer.PromoteEnvironmentInput, s.CancelEnvironmentInput, s.ExpireEnvironmentInput,
 			} {
 				got, err := finish(ctx, tenant, session.ID, pending.ID)
@@ -54,7 +56,7 @@ func TestEnvironmentInputTerminalReservationsCannotRestart(t *testing.T) {
 				}
 			}
 			got, err := s.GetEnvironmentInputReservation(ctx, tenant, session.ID, later.ID)
-			if err != nil || got.State != EnvironmentInputPending || !got.Deadline.Equal(later.Deadline) {
+			if err != nil || got.State != sessions.EnvironmentInputPending || !got.Deadline.Equal(later.Deadline) {
 				t.Fatal("old settlement touched successor", got, err)
 			}
 			environmentInputHistory(t, pool, session.ID, 0, 0)
@@ -94,14 +96,14 @@ func TestEnvironmentInputPromotionRollsBackHistoryAndSettlement(t *testing.T) {
 			}
 			environmentInputHistory(t, pool, session.ID, 0, 0)
 			got, err := s.GetEnvironmentInputReservation(ctx, tenant, session.ID, pending.ID)
-			if err != nil || got.State != EnvironmentInputPending || got.SettledAt != nil || !got.Deadline.Equal(pending.Deadline) {
+			if err != nil || got.State != sessions.EnvironmentInputPending || got.SettledAt != nil || !got.Deadline.Equal(pending.Deadline) {
 				t.Fatal("partial settlement survived", got, err)
 			}
 			if _, err := pool.Exec(ctx, "ALTER TABLE "+table+" DROP CONSTRAINT "+name); err != nil {
 				t.Fatal(err)
 			}
 			got, err = writer.PromoteEnvironmentInput(ctx, tenant, session.ID, pending.ID)
-			if err != nil || got.State != EnvironmentInputAdmitted {
+			if err != nil || got.State != sessions.EnvironmentInputAdmitted {
 				t.Fatal(got, err)
 			}
 			environmentInputHistory(t, pool, session.ID, 1, 2)
@@ -128,12 +130,12 @@ func TestEnvironmentInputDeadlineIsCheckedAfterSessionLock(t *testing.T) {
 				t.Fatal(err)
 			}
 			type outcome struct {
-				value EnvironmentInputReservation
+				value sessions.EnvironmentInputReservation
 				err   error
 			}
 			done := make(chan outcome, 1)
 			go func() {
-				var got EnvironmentInputReservation
+				var got sessions.EnvironmentInputReservation
 				var err error
 				if action == "promote" {
 					got, err = writer.PromoteEnvironmentInput(ctx, tenant, session.ID, pending.ID)
@@ -169,12 +171,12 @@ func TestEnvironmentInputDeadlineIsCheckedAfterSessionLock(t *testing.T) {
 				t.Fatal(err)
 			}
 			result := <-done
-			if result.err != nil || result.value.State != EnvironmentInputExpired || result.value.SettledAt == nil {
+			if result.err != nil || result.value.State != sessions.EnvironmentInputExpired || result.value.SettledAt == nil {
 				t.Fatal("lock wait extended input lifetime", result)
 			}
 			environmentInputHistory(t, pool, session.ID, 0, 0)
 			stored, err := s.GetEnvironmentInputReservation(ctx, tenant, session.ID, pending.ID)
-			if err != nil || stored.State != EnvironmentInputExpired {
+			if err != nil || stored.State != sessions.EnvironmentInputExpired {
 				t.Fatal("expiry was rolled back", stored, err)
 			}
 		})
@@ -189,9 +191,9 @@ func TestEnvironmentInputCancelAndPromotionShareOneOutcome(t *testing.T) {
 	ctx := context.Background()
 	pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
 	start := make(chan struct{})
-	results := make(chan EnvironmentInputReservation, 2)
+	results := make(chan sessions.EnvironmentInputReservation, 2)
 	errs := make(chan error, 2)
-	for _, finish := range []func(context.Context, string, string, string) (EnvironmentInputReservation, error){
+	for _, finish := range []func(context.Context, string, string, string) (sessions.EnvironmentInputReservation, error){
 		writer.PromoteEnvironmentInput, other.CancelEnvironmentInput,
 	} {
 		go func() {
@@ -208,11 +210,11 @@ func TestEnvironmentInputCancelAndPromotionShareOneOutcome(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if first.State != second.State || (first.State != EnvironmentInputAdmitted && first.State != EnvironmentInputCancelled) {
+	if first.State != second.State || (first.State != sessions.EnvironmentInputAdmitted && first.State != sessions.EnvironmentInputCancelled) {
 		t.Fatal("competing settlements diverged", first.State, second.State)
 	}
 	turns, inputs := 0, 0
-	if first.State == EnvironmentInputAdmitted {
+	if first.State == sessions.EnvironmentInputAdmitted {
 		turns, inputs = 1, 2
 	}
 	environmentInputHistory(t, pool, session.ID, turns, inputs)
@@ -234,7 +236,7 @@ func TestEnvironmentInputDeletionSettlesPendingAndFencesPromotion(t *testing.T) 
 				}()
 			}
 			if !concurrent {
-				if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+				if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("pending input deleted", err)
 				}
 			}
@@ -243,18 +245,18 @@ func TestEnvironmentInputDeletionSettlesPendingAndFencesPromotion(t *testing.T) 
 				t.Fatal(err)
 			}
 			if concurrent {
-				if err := <-done; err != nil && !errors.Is(err, ErrNotFound) {
+				if err := <-done; err != nil && !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal(err)
 				}
 			}
-			for _, action := range []func(context.Context, string, string, string) (EnvironmentInputReservation, error){
+			for _, action := range []func(context.Context, string, string, string) (sessions.EnvironmentInputReservation, error){
 				s.GetEnvironmentInputReservation, writer.PromoteEnvironmentInput, s.CancelEnvironmentInput,
 			} {
-				if _, err := action(ctx, tenant, session.ID, pending.ID); !errors.Is(err, ErrNotFound) {
+				if _, err := action(ctx, tenant, session.ID, pending.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("deleted reservation remained accessible", err)
 				}
 			}
-			if _, err := s.ReserveEnvironmentInput(ctx, tenant, session.ID, "late", pending.Inputs); !errors.Is(err, ErrNotFound) {
+			if _, err := s.ReserveEnvironmentInput(ctx, tenant, session.ID, "late", pending.Inputs); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("deleted Session accepted reservation", err)
 			}
 			var state string
@@ -262,7 +264,7 @@ func TestEnvironmentInputDeletionSettlesPendingAndFencesPromotion(t *testing.T) 
 			if err := pool.QueryRow(ctx, "SELECT state FROM environment_input_reservations WHERE id=$1", pending.ID).Scan(&state); err != nil {
 				t.Fatal(err)
 			}
-			if state != EnvironmentInputCancelled && (!concurrent || state != EnvironmentInputAdmitted) {
+			if state != sessions.EnvironmentInputCancelled && (!concurrent || state != sessions.EnvironmentInputAdmitted) {
 				t.Fatal("deletion lost pending settlement", state)
 			}
 			if err := pool.QueryRow(ctx, "SELECT count(*) FROM turns WHERE session_id=$1 AND (status='queued' OR (status IN ('in_progress','waiting') AND cancel_requested_at IS NULL))", session.ID).Scan(&active); err != nil || active != 0 {

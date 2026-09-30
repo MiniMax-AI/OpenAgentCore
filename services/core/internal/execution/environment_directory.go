@@ -6,7 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type directoryReadResult struct {
@@ -16,7 +16,7 @@ type directoryReadResult struct {
 
 type directoryReadRequest struct {
 	ctx         context.Context
-	environment store.Environment
+	environment sessions.Environment
 	path        string
 	result      chan directoryReadResult
 }
@@ -24,15 +24,15 @@ type directoryReadRequest struct {
 func (r directoryReadRequest) reply(result directoryReadResult) { r.result <- result }
 
 // ReadEnvironmentDirectory observes a Worker-owned read without admitting model input.
-func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment store.Environment, path string) (proto.WorkspaceDirectoryResult, error) {
+func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment sessions.Environment, path string) (proto.WorkspaceDirectoryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	current, err := w.admission.GetEnvironment(ctx, environment.TenantID, environment.ID)
+	current, err := w.dispatcher.SessionsReader.GetEnvironment(ctx, environment.TenantID, environment.ID)
 	if err != nil {
 		return proto.WorkspaceDirectoryResult{}, err
 	}
 	if current.SessionID != environment.SessionID {
-		return proto.WorkspaceDirectoryResult{}, store.ErrNotFound
+		return proto.WorkspaceDirectoryResult{}, sessions.ErrNotFound
 	}
 	if err := w.waitRuntimeAwake(ctx, current); err != nil {
 		return proto.WorkspaceDirectoryResult{}, err
@@ -72,13 +72,13 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	if w.CheckOwnership(check) != nil {
 		return
 	}
-	environment, err := w.dispatcher.Store.GetEnvironment(check, request.environment.TenantID, request.environment.ID)
+	environment, err := w.dispatcher.SessionsReader.GetEnvironment(check, request.environment.TenantID, request.environment.ID)
 	if err != nil {
 		result.err = err
 		return
 	}
 	if environment.SessionID != request.environment.SessionID {
-		result.err = store.ErrNotFound
+		result.err = sessions.ErrNotFound
 		return
 	}
 	placement, err := parseEnvironmentPlacement(environment.Configuration)
@@ -91,7 +91,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		return
 	}
 	run := ""
-	if session.LastTurn != nil && (session.LastTurn.Status == store.TurnInProgress || session.LastTurn.Status == store.TurnWaiting) {
+	if session.LastTurn != nil && (session.LastTurn.Status == sessions.TurnInProgress || session.LastTurn.Status == sessions.TurnWaiting) {
 		run = session.LastTurn.ID
 	}
 	if (run == "") != reserved {
@@ -105,7 +105,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	}
 	// Capture retains the public Turn after its native Run has been released.
 	prepare := reserved || session.LastTurn != nil && session.LastTurn.ArtifactCaptureStarted
-	bound, err := w.dispatcher.Store.GetSessionDevice(check, session.TenantID, session.ID)
+	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(check, session.TenantID, session.ID)
 	if err != nil || !environmentDeviceMatches(session, environment, bound) || !w.directoryDeviceReady(check, bound.ID, session.Engine, placement, prepare) {
 		return
 	}
@@ -148,7 +148,7 @@ func readEnvironmentDirectory(ctx context.Context, peer *runtimegateway.Session,
 		return directoryReadResult{directory: proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}
 	}
 	if err == nil && result.Outcome == "rejected" && result.ErrorCode == "not_found" {
-		return directoryReadResult{err: store.ErrNotFound}
+		return directoryReadResult{err: sessions.ErrNotFound}
 	}
 	return directoryReadResult{err: ErrExecutionUnavailable}
 }

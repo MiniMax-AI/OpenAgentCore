@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -22,12 +22,12 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	if python == "" {
 		t.Skip("OAC_TEST_OFFICIAL_SDK_PYTHON is required for official-client verification")
 	}
-	s, _ := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	cfg := json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[],"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"}},"environment":{"type":"none"}}`)
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "fixture", Configuration: cfg})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "fixture", Configuration: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,21 +35,19 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
+	functions := executionOwner(t, db, s).Sessions
 	record := func(id string) {
 		t.Helper()
-		if err := s.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, store.FunctionCall{CallID: id, ExecutorCallID: "private-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}); err != nil {
+		if err := functions.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "private-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	record("first")
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(s, auth, "codex")
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()}})
+	handler, err := publicHandler(t, s, db, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,14 +72,14 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	}
 	record("second")
 	for _, id := range []string{"first", "second"} {
-		if err := s.SubmitFunctionResult(ctx, tenant, session.ID, input.TurnID, id, json.RawMessage(`{"success":true,"output":"private"}`)); err != nil {
+		if err := store.SubmitFixtureFunctionResult(ctx, s, tenant, session.ID, input.TurnID, id, json.RawMessage(`{"success":true,"output":"private"}`)); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.ConfirmFunctionResult(ctx, tenant, session.ID, input.TurnID, id); err != nil {
+		if err := functions.ConfirmFunctionResult(ctx, tenant, session.ID, input.TurnID, id); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, store.TurnCompleted, nil, "", input.Sequence); err != nil {
+	if _, err := s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, nil, "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	if err := command.Wait(); err != nil {

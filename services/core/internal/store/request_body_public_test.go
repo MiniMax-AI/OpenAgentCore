@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -11,7 +12,9 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -27,16 +30,15 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	owner, foreign, ownerTenant := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "body-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "body-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s))
+	// No Runtime is connected, so a file write that passes the gate is unavailable.
+	unavailable := func(d *api.Dependencies) { d.Execution.Workspaces = unavailableWorkspaces{strictStandIn{t}} }
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), unavailable, acceptUnavailable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +51,7 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 	credential := client.created(owner, "/v1/vaults/"+vault+"/credentials", `{"name":"body","auth":{"type":"static_bearer","mcp_server_url":"https://mcp.example/mcp","token":"body-token"}}`)
 	template := client.created(owner, "/v1/agents/environments/templates", `{"name":"body-template"}`)
 	session := client.created(owner, "/v1/agents/sessions", `{"agent":{"model":"body-model"},"environment":{"type":"none"},"input":"Keep this Session.","metadata":{"k":"v"}}`)
-	prepared, err := s.CreateSession(t.Context(), ownerTenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "body-environment",
+	prepared, err := s.CreateSession(t.Context(), ownerTenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "body-environment",
 		Configuration: json.RawMessage(`{"agent":{"model":"body-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil || prepared.Environment == nil {
 		t.Fatal("fixture Environment", err)
@@ -169,13 +171,10 @@ func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	token, tenant := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "excluded-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s), api.WithSkills(s), api.WithSourceFiles(s))
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "excluded-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,4 +231,10 @@ func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
 			t.Fatalf("DELETE %s: %d %s", path, status, response)
 		}
 	}
+}
+
+type unavailableWorkspaces struct{ strictStandIn }
+
+func (unavailableWorkspaces) WriteEnvironmentFile(context.Context, sessions.Environment, string, []byte) (int64, error) {
+	return 0, execution.ErrExecutionUnavailable
 }

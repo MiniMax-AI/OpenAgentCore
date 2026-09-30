@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -38,30 +38,28 @@ const (
 // and every rejection leaves the database and the pending action unchanged.
 func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	ctx := t.Context()
 	tenant, owner, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "conflict-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "conflict-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s), api.WithEnvironmentRemoteURL("https://executor.example"))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
+	functions := executionOwner(t, db, s).Sessions
 
 	create := func(environment string, initial bool) string {
 		t.Helper()
-		input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		input := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 			Configuration: json.RawMessage(`{` + conflictAgent + `,"environment":` + environment + `}`)}
 		if initial {
-			input.InitialInputs = []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"reserved"}`)}}
+			input.InitialInputs = []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"reserved"}`)}}
 		}
 		session, err := s.CreateSession(ctx, tenant, input)
 		if err != nil {
@@ -70,26 +68,26 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		return session.ID
 	}
 	// waiting starts a Turn that waits for one function result.
-	waiting := func(session, key, call string) store.InputReceipt {
+	waiting := func(session, key, call string) sessions.InputReceipt {
 		t.Helper()
 		receipt, err := s.SubmitMessage(ctx, tenant, session, key, json.RawMessage(`{"text":"work"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+		if _, err := s.TransitionTurn(ctx, tenant, session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.RecordFunctionCall(ctx, tenant, session, receipt.TurnID, store.FunctionCall{CallID: call, ExecutorCallID: "native-" + call, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
+		if err := functions.RecordFunctionCall(ctx, tenant, session, receipt.TurnID, sessions.FunctionCall{CallID: call, ExecutorCallID: "native-" + call, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 		return receipt
 	}
-	complete := func(session string, receipt store.InputReceipt, call string) {
+	complete := func(session string, receipt sessions.InputReceipt, call string) {
 		t.Helper()
-		if err := s.ConfirmFunctionResult(ctx, tenant, session, receipt.TurnID, call); err != nil {
+		if err := functions.ConfirmFunctionResult(ctx, tenant, session, receipt.TurnID, call); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.CompleteExecution(ctx, tenant, session, receipt.TurnID, store.TurnCompleted, nil, "", receipt.Sequence); err != nil {
+		if _, err := s.CompleteExecution(ctx, tenant, session, receipt.TurnID, sessions.TurnCompleted, nil, "", receipt.Sequence); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -136,7 +134,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	// reject checks each response body and that no rejection wrote anything.
 	reject := func(cases []rejection, watched ...string) {
 		t.Helper()
-		digest := databaseDigest(t, pool)
+		digest := databaseDigest(t, db.pool)
 		before := make([]string, len(watched))
 		for i, session := range watched {
 			before[i] = read(session)
@@ -150,7 +148,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 				t.Errorf("%s: %d %s", tc.name, status, body)
 			}
 		}
-		if after := databaseDigest(t, pool); !reflect.DeepEqual(after, digest) {
+		if after := databaseDigest(t, db.pool); !reflect.DeepEqual(after, digest) {
 			t.Error("rejected input changed the database")
 		}
 		for i, session := range watched {
@@ -163,7 +161,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	none := `{"type":"none"}`
 	session := create(none, false)
 	first := waiting(session, "first", "first-call")
-	if err := s.SubmitFunctionResult(ctx, tenant, session, first.TurnID, "first-call", json.RawMessage(`{"success":true,"output":"one"}`)); err != nil {
+	if err := store.SubmitFixtureFunctionResult(ctx, s, tenant, session, first.TurnID, "first-call", json.RawMessage(`{"success":true,"output":"one"}`)); err != nil {
 		t.Fatal(err)
 	}
 	complete(session, first, "first-call")
@@ -235,7 +233,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	if status, body := submit(owner, session, "same-after-completion", valid); status != http.StatusAccepted || body != "" {
 		t.Fatalf("identical result after completion: %d %s", status, body)
 	}
-	if call, err := s.GetFunctionCall(ctx, tenant, session, current.TurnID, "pending-call"); err != nil || !bytes.Contains(call.Result, []byte(`"value"`)) {
+	if call, err := store.FixtureFunctionCall(ctx, db.pool, tenant, session, current.TurnID, "pending-call"); err != nil || !bytes.Contains(call.Result, []byte(`"value"`)) {
 		t.Fatal("saved result changed", call, err)
 	}
 
@@ -249,7 +247,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		{"after-cancel", owner, session, []string{late}, 409, turnConflictBody, ""},
 		{"after-cancel-foreign", foreign, session, []string{late}, 404, missingSessionBody, ""},
 	}, session)
-	if call, err := s.GetFunctionCall(ctx, tenant, session, cancelled.TurnID, "late-call"); err != nil || call.Result != nil {
+	if call, err := store.FixtureFunctionCall(ctx, db.pool, tenant, session, cancelled.TurnID, "late-call"); err != nil || call.Result != nil {
 		t.Fatal("late result was saved", call, err)
 	}
 
@@ -275,7 +273,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	if status, body := createSession("first"); status != http.StatusCreated {
 		t.Fatal(status, body)
 	}
-	digest := databaseDigest(t, pool)
+	digest := databaseDigest(t, db.pool)
 	status, body := createSession("changed")
 	var creation struct {
 		Error struct {
@@ -288,7 +286,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		creation.Error.Type != "conflict_error" || creation.Error.Code != "idempotency_conflict" || creation.Error.Param != nil {
 		t.Fatalf("creation key reuse: %d %s", status, body)
 	}
-	if after := databaseDigest(t, pool); !reflect.DeepEqual(after, digest) {
+	if after := databaseDigest(t, db.pool); !reflect.DeepEqual(after, digest) {
 		t.Error("creation key reuse changed the database")
 	}
 }

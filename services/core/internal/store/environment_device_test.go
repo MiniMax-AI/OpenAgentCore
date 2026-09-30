@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -25,7 +26,7 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			awaitFixtureCapabilities(t, originalRuntime, caps)
 			generalFrames := workerFrames(t, h)
 			boundFrames := workerFrames(t, originalRuntime)
-			_, stop := startEnvironmentExpiryWorker(t, h.d)
+			_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 			select {
 			case frame := <-generalFrames:
 				t.Fatal("general device received self-hosted work", frame.Type)
@@ -33,7 +34,7 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 				t.Fatal("incapable enrolled device received work", frame.Type)
 			case <-time.After(time.Second):
 			}
-			if _, err := h.s.GetSessionDevice(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, store.ErrNotFound) {
+			if _, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("unregistered Runtime was assigned general compute", err)
 			}
 			session, err := h.s.GetSession(t.Context(), h.tenant, pending.SessionID)
@@ -43,11 +44,11 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			other := connectFixtureRuntime(t, h, session)
 			otherFrames := workerFrames(t, other)
 			request := nextWorkerFrame(t, otherFrames, proto.TypeExecutionPrepare)
-			selected, err := h.s.GetSessionDevice(t.Context(), h.tenant, pending.SessionID)
+			selected, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, pending.SessionID)
 			if err != nil || selected.ID != other.device.ID {
 				t.Fatal("enrollment did not retain exact Runtime", err)
 			}
-			original, err := h.s.GetSessionDevice(t.Context(), h.tenant, bound.SessionID)
+			original, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, bound.SessionID)
 			if err != nil || original.ID != originalRuntime.device.ID {
 				t.Fatal("existing binding moved to a capable Runtime", err)
 			}
@@ -59,9 +60,9 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 				t.Fatal("preparation owner was not released")
 			}
 			stop()
-			for _, value := range []store.EnvironmentInputReservation{pending, bound} {
+			for _, value := range []sessions.EnvironmentInputReservation{pending, bound} {
 				stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, value.SessionID, value.ID)
-				if err != nil || stored.State != store.EnvironmentInputPending || !stored.Deadline.Equal(value.Deadline) {
+				if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(value.Deadline) {
 					t.Fatal("device readiness changed pending input", err)
 				}
 				assertEnvironmentExpiryHasNoHistory(t, pool, value.SessionID)

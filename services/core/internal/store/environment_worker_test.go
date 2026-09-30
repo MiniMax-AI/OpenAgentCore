@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -14,7 +15,7 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	h := newDispatchHarness(t)
 	_, pool := store.NewTestStore(t)
 	enableWorkerEnvironment(t, h)
-	pending := map[string]store.EnvironmentInputReservation{}
+	pending := map[string]sessions.EnvironmentInputReservation{}
 	for range 2 {
 		value := workerEnvironmentReservation(t, h)
 		pending[value.SessionID] = value
@@ -24,14 +25,14 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 		runtimes = append(runtimes, runtime)
 	}
 	frames := workerFrames(t, runtimes...)
-	ordinary := map[string]store.Session{}
+	ordinary := map[string]sessions.Session{}
 	for _, key := range []string{"one", "two", "three"} {
 		session := publicSession(t, h, key)
 		h.session = session
 		receipt := h.message(key, "ordinary")
 		ordinary[receipt.TurnID] = session
 	}
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	var normal []proto.Envelope
 	var preparing []proto.Envelope
 	for range 4 {
@@ -116,7 +117,7 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	for _, request := range normal {
 		h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "ordinary complete"})
 		h.session = ordinary[request.ID]
-		waitTurn(t, h, request.ID, store.TurnCompleted)
+		waitTurn(t, h, request.ID, sessions.TurnCompleted)
 	}
 	firstRuntime.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "local complete"})
 	completeEmptyArtifactExport(t, firstRuntime, frames)
@@ -132,7 +133,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	pending := workerEnvironmentReservation(t, h)
 	runtime := h.environments[pending.SessionID]
 	frames := workerFrames(t, h, runtime)
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	first := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	started := time.Now()
 	handle := acknowledgePreparation(runtime, first.ID)
@@ -145,7 +146,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 		t.Fatal("preparation failure blocked ordinary work")
 	}
 	h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "complete"})
-	waitTurn(t, h, request.ID, store.TurnCompleted)
+	waitTurn(t, h, request.ID, sessions.TurnCompleted)
 	second := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	if elapsed := time.Since(started); elapsed < 750*time.Millisecond || elapsed > 3*time.Second || first.ID == second.ID {
 		t.Fatal("pending preparation missed its next scan or reused a released owner")
@@ -159,10 +160,10 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	stop()
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 	stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, pending.SessionID, pending.ID)
-	if err != nil || stored.State != store.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
+	if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
 		t.Fatal("retry or shutdown changed the original reservation", stored, err)
 	}
-	_, stop = startEnvironmentExpiryWorker(t, h.d)
+	_, stop = startEnvironmentExpiryWorker(t, h.db, h.d)
 	third := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	handle = acknowledgePreparation(runtime, third.ID)
 	runtime.write(third.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
@@ -175,7 +176,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	runtime.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "resumed"})
 	completeEmptyArtifactExport(t, runtime, frames)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
-	if run.Turn.Status != store.TurnCompleted || !run.Reservation.Deadline.Equal(pending.Deadline) {
+	if run.Turn.Status != sessions.TurnCompleted || !run.Reservation.Deadline.Equal(pending.Deadline) {
 		t.Fatal("restarted worker did not complete original work", run)
 	}
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)

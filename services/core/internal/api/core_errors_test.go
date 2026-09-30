@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -21,11 +20,8 @@ func TestCoreErrorDetailsAreScopedByRouterNotRequestPath(t *testing.T) {
 		}, "expected_generation")
 	})
 	router := chi.NewRouter()
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	(&Handler{deploymentAuth: admin}).registerCoreRoutes(router)
+	deps, _ := testDependencies(t)
+	(&Handler{Dependencies: deps}).registerCoreRoutes(router)
 	var core chi.Router
 	for _, route := range router.Routes() {
 		if route.Pattern == "/core/v1/*" {
@@ -81,7 +77,7 @@ func TestCoreDetailsTypesOmissionAndSnapshot(t *testing.T) {
 	values := []string{"docker"}
 	stringsDetail := CoreErrorStrings(values...)
 	values[0] = "private-request-value"
-	valid := CoreErrorDetails{"label": CoreErrorString("ready"), "number": CoreErrorNumber(1.5), "enabled": CoreErrorBoolean(true), "unset": CoreErrorNull(), "values": stringsDetail, "empty": CoreErrorStrings()}
+	valid := CoreErrorDetails{"label": CoreErrorString("ready"), "number": CoreErrorNumber(1.5), "unset": CoreErrorNull(), "values": stringsDetail, "empty": CoreErrorStrings()}
 	for _, details := range []CoreErrorDetails{nil, {}, {"bad": CoreErrorNumber(math.NaN())}, {"bad": CoreErrorNumber(math.Inf(1))}, {"bad": CoreErrorDetail{map[string]string{"nested": "private"}}}, {"": CoreErrorString("private")}, valid} {
 		out := httptest.NewRecorder()
 		coreErrorResponses(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -117,7 +113,7 @@ func TestCoreMarkerPreservesObservationAndStreamingWrappers(t *testing.T) {
 			if err := http.NewResponseController(w).SetWriteDeadline(deadline); err != nil {
 				t.Fatal(err)
 			}
-			writeCoreError(w, 503, "execution_unavailable", "Unavailable.", CoreErrorDetails{"retryable": CoreErrorBoolean(false)})
+			writeCoreError(w, 503, "execution_unavailable", "Unavailable.", CoreErrorDetails{"reason": CoreErrorString("draining")})
 			if f, ok := w.(http.Flusher); !ok {
 				t.Fatal("Flusher was lost")
 			} else {
@@ -132,7 +128,7 @@ func TestCoreMarkerPreservesObservationAndStreamingWrappers(t *testing.T) {
 			handler = responseHeadersWithErrors(coreErrorResponses(handler), observer)
 		}
 		handler.ServeHTTP(out, httptest.NewRequest("GET", "/core/v1/test", nil))
-		if !out.Flushed || !out.deadline.Equal(time.Unix(1234, 0)) || out.Header().Get("Openai-Processing-Ms") == "" || !reflect.DeepEqual(observed, []string{"execution_unavailable"}) || !strings.Contains(out.Body.String(), `"details":{"retryable":false}`) {
+		if !out.Flushed || !out.deadline.Equal(time.Unix(1234, 0)) || out.Header().Get("Openai-Processing-Ms") == "" || !reflect.DeepEqual(observed, []string{"execution_unavailable"}) || !strings.Contains(out.Body.String(), `"details":{"reason":"draining"}`) {
 			t.Fatal(markerOutside, out, observed)
 		}
 	}

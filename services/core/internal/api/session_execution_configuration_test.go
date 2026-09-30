@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestExecutionConfigurationSources(t *testing.T) {
@@ -52,7 +52,6 @@ func TestExecutionConfigurationSources(t *testing.T) {
 }
 
 type executionConfigurationReader struct {
-	ResourceStore
 	calls      int
 	tenant, id string
 	value      v1.SessionExecutionConfiguration
@@ -67,13 +66,15 @@ func (s *executionConfigurationReader) GetSessionExecutionConfiguration(_ contex
 
 func TestExecutionConfigurationReadBoundary(t *testing.T) {
 	s := &executionConfigurationReader{value: v1.SessionExecutionConfiguration{Object: "agent.session.execution_configuration", SchemaVersion: 1, SessionID: "frozen"}}
-	h, _, tenant := adminTestHandler(t, func(h *Handler) { h.store = s })
+	h, _, tenant := adminTestHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.sessionAdmin.getSessionExecutionConfiguration = s.GetSessionExecutionConfiguration
+	})
 	for _, tc := range []struct {
 		auth   string
 		err    error
 		status int
 	}{
-		{"", nil, 401}, {"Bearer admin", nil, 200}, {"Bearer admin", store.ErrNotFound, 404},
+		{"", nil, 401}, {"Bearer admin", nil, 200}, {"Bearer admin", sessions.ErrNotFound, 404},
 	} {
 		s.err = tc.err
 		before := s.calls

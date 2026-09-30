@@ -11,6 +11,14 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
+// forbidSessionAccess withdraws the Session and deployment model provider reads
+// testHandler serves, so any access fails the test.
+func forbidSessionAccess(_ *Dependencies, f *testFakes) {
+	f.sessionCreation.createSession, f.sessionCreation.findSessionCreation = nil, nil
+	f.sessions.getSession, f.sessions.listSessions = nil, nil
+	f.modelProviders.resolve = nil
+}
+
 func TestSessionAdmissionRejectsBeforeResourceOrExecutionAccess(t *testing.T) {
 	for _, environment := range []string{"none", "openai_hosted"} {
 		for _, input := range []string{"", `,"input":null`} {
@@ -19,11 +27,8 @@ func TestSessionAdmissionRejectsBeforeResourceOrExecutionAccess(t *testing.T) {
 					continue
 				}
 				t.Run(fmt.Sprintf("%s/%s/stream=%t", environment, input, stream), func(t *testing.T) {
-					// Any resource access, including creation retry lookup, would panic.
-					handler, _, _ := testHandler(t, func(h *Handler) {
-						h.store = &struct{ ResourceStore }{}
-						h.inputs = &inputRecorder{}
-					})
+					// Any resource access, including creation retry lookup, fails the test.
+					handler, _, _ := testHandler(t, forbidSessionAccess, func(d *Dependencies, f *testFakes) { d.Execution = f.execution() })
 					body := fmt.Sprintf(`{"agent":{"model":"example"},"environment":{"type":%q},"stream":%t%s}`, environment, stream, input)
 					for _, token := range []string{"test-api-key", "invalid"} {
 						request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
@@ -51,7 +56,7 @@ func TestSessionAdmissionRejectsBeforeResourceOrExecutionAccess(t *testing.T) {
 }
 
 func TestSessionEmptyUpdateRejectsBeforeResourceAccess(t *testing.T) {
-	handler, _, _ := testHandler(t, func(h *Handler) { h.store = &struct{ ResourceStore }{} })
+	handler, _, _ := testHandler(t, forbidSessionAccess)
 	for _, token := range []string{"test-api-key", "invalid"} {
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/unknown", strings.NewReader(`{}`))
 		request.Header.Set("Authorization", "Bearer "+token)

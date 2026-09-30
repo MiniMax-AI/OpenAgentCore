@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -50,7 +49,7 @@ func TestExecutorNativeReuse(t *testing.T) {
 	cfg.codexBinary = binary
 	cfg.logger = obslog.Discard()
 	req := proto.PromptRequestPayload{
-		AgentKind: "codex", AgentStateKey: "executor-native", WorkDir: filepath.Join(isolated, "workspace"),
+		AgentKind: "codex", AgentStateKey: "executor-native",
 		StrictResume: true, DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true,
 		AgentOptions:  map[string]any{"model": model, "model_provider": map[string]any{"base_url": endpoint, "protocol": "responses", "api_key": strings.TrimSpace(string(key))}},
 		FunctionTools: []proto.FunctionTool{{Name: "hold", Description: "Wait until the host supplies a result.", Parameters: json.RawMessage("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")}},

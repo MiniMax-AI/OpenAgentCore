@@ -11,6 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -19,6 +22,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -31,31 +36,30 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 	for _, scenario := range []string{"receipt_without_heartbeat", "heartbeat_before_receipt", "done_heartbeat_ack", "ack_commit_blocked", "rotated", "expired", "transport_lost", "negative_ack", "missing_outcome", "revoke_before_archive", "cancel_revoke_archive", "revoke_after_archive", "revoke_concurrent_archive"} {
 		t.Run(scenario, func(t *testing.T) {
 			heartbeat := scenario != "receipt_without_heartbeat"
-			s, pool := store.NewManagedTestStore(t)
-			writer, err := store.NewExecution(t.Context(), s)
-			if err != nil {
-				t.Fatal(err)
-			}
+			s, db := newManagedTestStoreDB(t)
+			leased := executionOwner(t, db, s)
+			writer := leased.Store
 			t.Cleanup(func() {
-				if err := writer.CloseExecution(context.Background()); err != nil {
+				if err := leased.Lease.Close(context.Background()); err != nil {
 					t.Error(err)
 				}
 			})
 			installation := uuid.NewString()
-			if err := writer.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
+			if err := leased.Deployment.Claim(t.Context(), installation); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := writer.InitializeSandboxDeployment(t.Context(), installation, store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture", Template: "runtime:" + uuid.NewString()}}); err != nil {
+			if _, err := leased.Deployment.Initialize(t.Context(), installation, sandbox.Selection{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture", Template: "runtime:" + uuid.NewString()}}); err != nil {
 				t.Fatal(err)
 			}
 			projectID := uuid.NewString()
 			auditCtx := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-			project, err := s.CreateProject(auditCtx, projectID, "Archive diagnosis")
+			_, management := fixtureProjects(t, db)
+			project, err := management.CreateProject(auditCtx, projects.CreateProject{ID: projectID, Name: "Archive diagnosis"})
 			if err != nil {
 				t.Fatal(err)
 			}
 			configuration := strings.Replace(functionConfiguration, `"type":"none"`, `"type":"openai_hosted","network":{"access":"disabled"}`, 1)
-			session, err := s.CreateSession(t.Context(), project.TenantID, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(configuration)}))
+			session, err := s.CreateSession(t.Context(), project.TenantID, store.WithFixtureModelProvider(sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(configuration)}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -70,19 +74,19 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if err := writer.BindSessionDevice(t.Context(), project.TenantID, session.ID, owner.DeviceID); err != nil {
+			if err := leased.Sessions.BindSessionDevice(t.Context(), project.TenantID, session.ID, owner.DeviceID); err != nil {
 				t.Fatal(err)
 			}
 			generation := uuid.NewString()
-			if err := writer.ReplaceEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation); err != nil {
+			if err := leased.Sessions.ReplaceEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation); err != nil {
 				t.Fatal(err)
 			}
-			if err := writer.ObserveEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation, 1, true); err != nil {
+			if err := leased.Sessions.ObserveEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation, 1, true); err != nil {
 				t.Fatal(err)
 			}
 			server := httptest.NewUnstartedServer(nil)
 			wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-			handler, registry, err := runtime.NewGateway(s, wsURL)
+			handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -96,7 +100,12 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { conn.Close() })
-			h := &dispatchHarness{t: t, s: s, tenant: project.TenantID, session: session, conn: conn, registry: registry, d: &execution.Dispatcher{Store: writer, Registry: registry}}
+			sessionStore, sessionService, err := fixtureSessions(db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := &dispatchHarness{t: t, s: s, db: db, lease: leased.Lease, owned: &leased, tenant: project.TenantID, session: session, conn: conn, registry: registry, d: &execution.Dispatcher{Registry: registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher), Sessions: sessionService, SessionsReader: sessionStore}}
+			h.d = h.bound()
 			capabilities := workerEnvironmentCapabilities()
 			capabilities.FunctionTools = proto.CapabilitySupported
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: capabilities}}})
@@ -114,7 +123,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-			pending, err := s.ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
+			pending, err := s.ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -125,10 +134,10 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			handle := acknowledgePreparation(h, frame.ID)
 			start := readyPreparedDispatch(t, h, frame.ID, handle)
 			h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
-			input := store.InputReceipt{TurnID: start.RunID}
+			input := sessions.InputReceipt{TurnID: start.RunID}
 			h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "pending", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)})
 			state := functionState(t, h, 1)
-			if state.LastTurn.Status != store.TurnWaiting {
+			if state.LastTurn.Status != sessions.TurnWaiting {
 				t.Fatal(state.LastTurn)
 			}
 
@@ -138,14 +147,14 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 			}
 			if scenario == "revoke_before_archive" || scenario == "cancel_revoke_archive" {
-				if err := s.RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
+				if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
 					t.Fatal(err)
 				}
 			}
 			var revokeDone chan error
 			if scenario == "revoke_concurrent_archive" {
 				revokeDone = make(chan error, 1)
-				go func() { revokeDone <- s.RevokeDevice(t.Context(), h.tenant, owner.DeviceID) }()
+				go func() { revokeDone <- fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID) }()
 			}
 
 			archived, err := writer.ArchiveManagedSession(auditCtx, h.tenant, session.ID, 1)
@@ -158,7 +167,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 			}
 			if scenario == "revoke_after_archive" {
-				if err := s.RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
+				if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -173,10 +182,10 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 
 			current, err := s.GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
-			if err != nil || current.Status != store.TurnWaiting || current.CancelRequestedAt.IsZero() {
+			if err != nil || current.Status != sessions.TurnWaiting || current.CancelRequestedAt.IsZero() {
 				t.Fatal("archive must request rather than invent cancellation", current, err)
 			}
-			if _, err := runtimegateway.NewAuthenticator(s).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
+			if _, err := runtimegateway.NewAuthenticator(fixtureSessionStore(db)).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
 				t.Fatal("archive allowed renewed authority", err)
 			}
 			rejected, response, dialErr := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + secret}})
@@ -210,18 +219,18 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal("missing cancel delivery identity")
 			}
 			if scenario == "rotated" {
-				if _, err := pool.Exec(t.Context(), "UPDATE devices SET credential_hash=$2 WHERE id=$1", owner.DeviceID, runtimedevice.HashCredential(uuid.NewString())); err != nil {
+				if _, err := db.pool.Exec(t.Context(), "UPDATE devices SET credential_hash=$2 WHERE id=$1", owner.DeviceID, runtimedevice.HashCredential(uuid.NewString())); err != nil {
 					t.Fatal(err)
 				}
 			}
 			if scenario == "expired" {
-				if _, err := pool.Exec(t.Context(), "UPDATE turns SET cancel_requested_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", input.TurnID); err != nil {
+				if _, err := db.pool.Exec(t.Context(), "UPDATE turns SET cancel_requested_at=clock_timestamp()-interval '21 seconds' WHERE id=$1", input.TurnID); err != nil {
 					t.Fatal(err)
 				}
 			}
 			var unlockCommit func()
 			if scenario == "ack_commit_blocked" {
-				tx, err := pool.Begin(t.Context())
+				tx, err := db.pool.Begin(t.Context())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -261,7 +270,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				// Observe actual SQL lock contention, not an assumed timing delay.
 				for deadline := time.Now().Add(3 * time.Second); ; {
 					var blocked bool
-					if err := pool.QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query ILIKE '%session_devices%')").Scan(&blocked); err != nil {
+					if err := db.pool.QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query ILIKE '%session_devices%')").Scan(&blocked); err != nil {
 						t.Fatal(err)
 					}
 					if blocked {
@@ -281,20 +290,20 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 
 			got := awaitPreparedDispatch(t, result)
-			wantStatus := store.TurnCancelled
+			wantStatus := sessions.TurnCancelled
 			if closedCase || scenario == "negative_ack" || scenario == "missing_outcome" {
-				wantStatus = store.TurnFailed
+				wantStatus = sessions.TurnFailed
 			}
 			if got.err != nil || got.run.Turn.Status != wantStatus {
 				t.Fatal(got.run.Turn.Status, got.err, string(got.run.Turn.Outcome))
 			}
 			var outcome execution.Result
-			if err := json.Unmarshal(got.run.Turn.Outcome, &outcome); err != nil || (wantStatus == store.TurnCancelled && outcome.Done.Usage.InputTokens != 17) {
+			if err := json.Unmarshal(got.run.Turn.Outcome, &outcome); err != nil || (wantStatus == sessions.TurnCancelled && outcome.Done.Usage.InputTokens != 17) {
 				t.Fatal("receipt lost usage", string(got.run.Turn.Outcome), err)
 			}
 
 			var receipts int
-			if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM turn_events WHERE turn_id=$1 AND kind='cancel_receipt'", input.TurnID).Scan(&receipts); err != nil {
+			if err := db.pool.QueryRow(t.Context(), "SELECT count(*) FROM turn_events WHERE turn_id=$1 AND kind='cancel_receipt'", input.TurnID).Scan(&receipts); err != nil {
 				t.Fatal(err)
 			}
 			wantReceipts := 1
@@ -311,7 +320,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(allocation, err)
 			}
 			var revoked bool
-			if err := pool.QueryRow(t.Context(), "SELECT revoked_at IS NOT NULL FROM devices WHERE id=$1", owner.DeviceID).Scan(&revoked); err != nil || !revoked {
+			if err := db.pool.QueryRow(t.Context(), "SELECT revoked_at IS NOT NULL FROM devices WHERE id=$1", owner.DeviceID).Scan(&revoked); err != nil || !revoked {
 				t.Fatal(revoked, err)
 			}
 		})

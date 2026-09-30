@@ -12,8 +12,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -63,7 +62,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Minute)
 	defer cancel()
-	worker, err := execution.StartWorker(ctx, h.d)
+	worker, err := startWorkerErr(ctx, h.db, h.d)
 	if err != nil {
 		t.Fatal("cannot start native execution worker")
 	}
@@ -78,13 +77,10 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 		}
 	}()
 	token := uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
-	if err != nil {
-		t.Fatal("cannot create fixture authenticator")
-	}
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
 	providerRevision := uuid.New()
-	handler, err := api.NewHandler(h.s, auth, options.Engine, api.WithExecution(worker), api.WithExecutionPolicy(h.d.Policy), api.WithModelProviderDefaults(func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
-		return &store.DeploymentModelProviderSnapshot{Model: options.Model, HarnessConfig: options.HarnessConfig, Provider: &options.Provider, Revision: providerRevision}, nil
+	handler, err := publicHandler(t, h.s, h.db, auth, options.Engine, workerExecution(worker), withPolicy(h.d.Policy), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
+		return &modelconfiguration.Snapshot{Model: options.Model, HarnessConfig: options.HarnessConfig, Provider: &options.Provider, Revision: providerRevision}, nil
 	}))
 	if err != nil {
 		t.Fatal("cannot create public API handler")
@@ -125,7 +121,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	}
 	failed := 0
 	for _, item := range proof.Calls {
-		call, err := h.s.GetFunctionCall(ctx, h.tenant, proof.Session, item.Turn, item.Call)
+		call, err := store.FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, item.Turn, item.Call)
 		if err != nil || !call.Applied {
 			t.Fatal("public function result lacks native delivery acknowledgement")
 		}

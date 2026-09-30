@@ -10,12 +10,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
-func messageInput(text string) Input {
+func messageInput(text string) sessions.Input {
 	payload, _ := json.Marshal(map[string]string{"text": text})
-	return Input{Kind: "message", Payload: payload}
+	return sessions.Input{Kind: "message", Payload: payload}
 }
 
 func TestInputBatchesAreOrderedAndIdempotentAcrossConnections(t *testing.T) {
@@ -24,10 +25,10 @@ func TestInputBatchesAreOrderedAndIdempotentAcrossConnections(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
 	const count = 8
-	batch := []Input{messageInput("first"), messageInput("second")}
+	batch := []sessions.Input{messageInput("first"), messageInput("second")}
 	for _, repeated := range []bool{true, false} {
 		var wg sync.WaitGroup
-		receipts := make(chan []InputReceipt, count)
+		receipts := make(chan []sessions.InputReceipt, count)
 		errs := make(chan error, count)
 		for i := range count {
 			wg.Add(1)
@@ -98,8 +99,8 @@ func TestBatchRetriesCompareTheWholeRequestAndRetainTargets(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
-	cancel := Input{Kind: "cancel", Payload: json.RawMessage(`{}`)}
-	batch := []Input{cancel, messageInput("one"), cancel, messageInput("two")}
+	cancel := sessions.Input{Kind: "cancel", Payload: json.RawMessage(`{}`)}
+	batch := []sessions.Input{cancel, messageInput("one"), cancel, messageInput("two")}
 	first, err := s.SubmitInputs(ctx, tenant, session.ID, "mixed", batch)
 	if err != nil {
 		t.Fatal(err)
@@ -108,14 +109,14 @@ func TestBatchRetriesCompareTheWholeRequestAndRetainTargets(t *testing.T) {
 		t.Fatalf("cancellation targets: %+v", first)
 	}
 	cancelled, err := s.GetTurn(ctx, tenant, session.ID, first[1].TurnID)
-	if err != nil || cancelled.Status != TurnCancelled {
+	if err != nil || cancelled.Status != sessions.TurnCancelled {
 		t.Fatalf("cancelled turn=%+v err=%v", cancelled, err)
 	}
-	transition(t, s, tenant, session.ID, first[3].TurnID, TurnQueued, TurnInProgress)
-	transition(t, s, tenant, session.ID, first[3].TurnID, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, session.ID, first[3].TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, s, tenant, session.ID, first[3].TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	next := submitMessage(t, s, tenant, session.ID, "next")
-	for _, changed := range [][]Input{batch[:3], append(append([]Input{}, batch...), cancel), {batch[0], batch[3], batch[2], batch[1]}} {
-		if _, err := s.SubmitInputs(ctx, tenant, session.ID, "mixed", changed); !errors.Is(err, ErrIdempotencyConflict) {
+	for _, changed := range [][]sessions.Input{batch[:3], append(append([]sessions.Input{}, batch...), cancel), {batch[0], batch[3], batch[2], batch[1]}} {
+		if _, err := s.SubmitInputs(ctx, tenant, session.ID, "mixed", changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatalf("changed batch accepted: %v", err)
 		}
 	}
@@ -130,11 +131,11 @@ func TestBatchRetriesCompareTheWholeRequestAndRetainTargets(t *testing.T) {
 		t.Fatalf("restart changed receipts: %+v, %v", retry, err)
 	}
 	current, err := restarted.GetTurn(ctx, tenant, session.ID, next.TurnID)
-	if err != nil || current.Status != TurnQueued || !current.CancelRequestedAt.IsZero() {
+	if err != nil || current.Status != sessions.TurnQueued || !current.CancelRequestedAt.IsZero() {
 		t.Fatalf("retry cancelled later work: %+v, %v", current, err)
 	}
 	otherTenant, _ := newTurnSession(t, restarted)
-	if _, err := restarted.SubmitInputs(ctx, otherTenant, session.ID, "mixed", batch); !errors.Is(err, ErrNotFound) {
+	if _, err := restarted.SubmitInputs(ctx, otherTenant, session.ID, "mixed", batch); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("batch retry escaped tenant: %v", err)
 	}
 }
@@ -144,7 +145,7 @@ func TestFailedBatchRollsBackEarlierCancellationAndInputs(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
 	initial := submitMessage(t, s, tenant, session.ID, "initial")
-	transition(t, s, tenant, session.ID, initial.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, initial.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	key := uuid.NewString()
 	constraint := "batch_failure_" + strings.ReplaceAll(key, "-", "")
 	// Inject a storage error on the second insert, after cancellation has run.
@@ -153,12 +154,12 @@ func TestFailedBatchRollsBackEarlierCancellationAndInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(ctx, "ALTER TABLE turn_inputs DROP CONSTRAINT IF EXISTS "+constraint) })
-	batch := []Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}, messageInput("after cancel")}
+	batch := []sessions.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}, messageInput("after cancel")}
 	if got, err := s.SubmitInputs(ctx, tenant, session.ID, key, batch); err == nil || got != nil {
 		t.Fatalf("partial batch succeeded: %+v %v", got, err)
 	}
 	turn, err := s.GetTurn(ctx, tenant, session.ID, initial.TurnID)
-	if err != nil || turn.Status != TurnInProgress || !turn.CancelRequestedAt.IsZero() {
+	if err != nil || turn.Status != sessions.TurnInProgress || !turn.CancelRequestedAt.IsZero() {
 		t.Fatalf("cancellation escaped rollback: %+v %v", turn, err)
 	}
 	inputs, err := s.ListTurnInputs(ctx, tenant, session.ID, initial.TurnID, 0, 100)
@@ -175,13 +176,13 @@ func TestFailedBatchRollsBackEarlierCancellationAndInputs(t *testing.T) {
 }
 
 func TestInputBatchValidation(t *testing.T) {
-	for _, input := range [][]Input{
-		nil, make([]Input, 65), {messageInput("ok"), {Kind: "unsupported", Payload: json.RawMessage(`{}`)}},
+	for _, input := range [][]sessions.Input{
+		nil, make([]sessions.Input, 65), {messageInput("ok"), {Kind: "unsupported", Payload: json.RawMessage(`{}`)}},
 		{{Kind: "message"}}, {{Kind: "message", Payload: json.RawMessage(`[]`)}},
 		{{Kind: "cancel", Payload: json.RawMessage(`{"target":"other"}`)}},
 		{messageInput(strings.Repeat("x", 300*1024)), messageInput(strings.Repeat("y", 300*1024))},
 	} {
-		if _, _, err := validateInputs(input); !errors.Is(err, ErrInvalidInput) {
+		if _, _, err := validateInputs(input); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatalf("invalid batch accepted: %v", err)
 		}
 	}

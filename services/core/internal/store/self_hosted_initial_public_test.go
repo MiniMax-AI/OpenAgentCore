@@ -17,8 +17,10 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,25 +31,33 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewModelTestStore(t)
+	s, db := newModelTestStoreDB(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "initial-creator", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "user", SubjectID: "different-creator", TokenSHA256: runtimedevice.HashCredential(peer), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "initial-creator", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	const origin = "https://offline-executor.example"
-	serve := func(s *store.Store, worker *execution.Worker) *httptest.Server {
+	serve := func(s *store.Store, db fixtureDB, worker *execution.Worker) *httptest.Server {
 		t.Helper()
-		options := []api.Option{api.WithEnvironmentRemoteURL(origin)}
+		enabled := []func(*api.Dependencies){acceptUnavailable(t)}
 		if worker != nil {
-			options = append(options, api.WithExecution(worker))
+			enabled = append(enabled, workerExecution(worker), executorURL(origin))
+		} else {
+			// Without a Worker, Core keeps its executor URL but admits nothing.
+			enabled = append(enabled, func(d *api.Dependencies) {
+				d.Execution = &api.Execution{
+					ExecutorURL:      origin,
+					SessionAdmission: unavailableAdmission{},
+					InputAdmission:   unavailableAdmission{},
+					SessionArchive:   strictStandIn{t},
+					Workspaces:       strictStandIn{t},
+				}
+			})
 		}
-		handler, err := api.NewHandler(s, auth, "codex", options...)
+		handler, err := publicHandler(t, s, db, auth, "codex", enabled...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -55,8 +65,8 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		t.Cleanup(server.Close)
 		return server
 	}
-	worker, stop := publicInitialWorker(t, s)
-	server := serve(s, worker)
+	worker, stop := publicInitialWorker(t, s, db)
+	server := serve(s, db, worker)
 	settings := map[string]any{"base": server.URL, "token": token, "peer_token": peer, "foreign_token": foreign, "remote_url": origin}
 	run := func(phase string) json.RawMessage {
 		t.Helper()
@@ -89,9 +99,9 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	if err := json.Unmarshal(accepted, &created); err != nil || len(created.Cases) != 4 {
 		t.Fatal("missing public initial creation cases", err)
 	}
-	reservations := func(s *store.Store, pool *pgxpool.Pool) map[string]store.EnvironmentInputReservation {
+	reservations := func(s *store.Store, pool *pgxpool.Pool) map[string]sessions.EnvironmentInputReservation {
 		t.Helper()
-		result := make(map[string]store.EnvironmentInputReservation)
+		result := make(map[string]sessions.EnvironmentInputReservation)
 		for _, item := range created.Cases {
 			var id string
 			if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", item.ID).Scan(&id); err != nil {
@@ -120,7 +130,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			if !reflect.DeepEqual(texts, item.Texts) {
 				t.Fatal("public initial text order changed")
 			}
-			environment, err := s.GetSessionEnvironment(t.Context(), tenant, item.ID)
+			environment, err := sessionReads(pool).GetSessionEnvironment(t.Context(), tenant, item.ID)
 			if err != nil || environment.ID != item.EnvironmentID || environment.Status != "pending" {
 				t.Fatal("public initial Environment identity changed", err)
 			}
@@ -135,21 +145,23 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		}
 		return result
 	}
-	before := reservations(s, pool)
+	before := reservations(s, db.pool)
 	for _, reservation := range before {
-		if reservation.State != store.EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute {
+		if reservation.State != sessions.EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute {
 			t.Fatal("public initial creation did not retain its database deadline")
 		}
 	}
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
 	stop(false)
+	awaitRelease()
 	server.Close()
-	pool.Close()
-	reopened, reopenedPool := store.NewModelTestStore(t)
-	worker, stop = publicInitialWorker(t, reopened)
-	server = serve(reopened, worker)
+	db.pool.Close()
+	reopened, reopenedDB := newModelTestStoreDB(t)
+	worker, stop = publicInitialWorker(t, reopened, reopenedDB)
+	server = serve(reopened, reopenedDB, worker)
 	settings["base"], settings["accepted"] = server.URL, accepted
 	run("reopen")
-	if !reflect.DeepEqual(before, reservations(reopened, reopenedPool)) {
+	if !reflect.DeepEqual(before, reservations(reopened, reopenedDB.pool)) {
 		t.Fatal("reopened public retry changed reservation identity or deadline")
 	}
 	failureID := created.Cases[0].ID
@@ -159,7 +171,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			return
 		}
 		// Advance one known deadline; the running Worker still owns settlement and events.
-		tag, err := reopenedPool.Exec(r.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial AND state='pending'", failureID)
+		tag, err := reopenedDB.pool.Exec(r.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial AND state='pending'", failureID)
 		if err != nil || tag.RowsAffected() != 1 {
 			t.Error("controlled initial deadline update failed", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -170,10 +182,10 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	defer control.Close()
 	settings["expiry_control"] = control.URL
 	run("expire")
-	after := reservations(reopened, reopenedPool)
+	after := reservations(reopened, reopenedDB.pool)
 	for id, reservation := range after {
 		if id == failureID {
-			if reservation.ID != before[id].ID || reservation.State != store.EnvironmentInputExpired || reservation.SettledAt == nil {
+			if reservation.ID != before[id].ID || reservation.State != sessions.EnvironmentInputExpired || reservation.SettledAt == nil {
 				t.Fatal("Worker did not settle the original public initial reservation")
 			}
 		} else if !reflect.DeepEqual(reservation, before[id]) {
@@ -181,7 +193,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		}
 	}
 	var pid uint32
-	err = reopenedPool.QueryRow(t.Context(), `SELECT pid FROM pg_locks WHERE locktype='advisory'
+	err := reopenedDB.pool.QueryRow(t.Context(), `SELECT pid FROM pg_locks WHERE locktype='advisory'
 		AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
 		AND classid=(706172736172::bigint >> 32)::oid
 		AND objid=(706172736172::bigint & 4294967295)::oid AND objsubid=1 AND granted`).Scan(&pid)
@@ -189,24 +201,27 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	var killed bool
-	if err := reopenedPool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", pid).Scan(&killed); err != nil || !killed {
+	if err := reopenedDB.pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", pid).Scan(&killed); err != nil || !killed {
 		t.Fatal("could not end the fixture Worker's execution lease", err)
 	}
 	stop(true)
-	settings["disabled_base"] = serve(reopened, nil).URL
+	settings["disabled_base"] = serve(reopened, reopenedDB, nil).URL
 	run("unavailable")
-	if !reflect.DeepEqual(after, reservations(reopened, reopenedPool)) {
+	if !reflect.DeepEqual(after, reservations(reopened, reopenedDB.pool)) {
 		t.Fatal("unavailable execution or recorded retry changed initial work")
 	}
 }
 
-func publicInitialWorker(t *testing.T, s *store.Store) (*execution.Worker, func(bool)) {
+func publicInitialWorker(t *testing.T, s *store.Store, db fixtureDB) (*execution.Worker, func(bool)) {
 	t.Helper()
-	dispatcher := &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}
-	worker, err := execution.StartWorker(t.Context(), dispatcher)
-	if err != nil {
-		t.Fatal(err)
-	}
+	return publicOwnedWorker(t, s, db, executionOwner(t, db, s))
+}
+
+// publicOwnedWorker is publicInitialWorker on owner, for tests that also write
+// as the Worker's execution owner.
+func publicOwnedWorker(t *testing.T, s *store.Store, db fixtureDB, owner execution.Owner) (*execution.Worker, func(bool)) {
+	t.Helper()
+	worker := startOwnedWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}, owner)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
@@ -229,4 +244,20 @@ func publicInitialWorker(t *testing.T, s *store.Store) (*execution.Worker, func(
 	}
 	t.Cleanup(func() { stop(false) })
 	return worker, stop
+}
+
+// unavailableAdmission admits no Session creation or input, as a Core without
+// a running Worker.
+type unavailableAdmission struct{}
+
+func (unavailableAdmission) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error) {
+	return sessions.Session{}, execution.ErrExecutionUnavailable
+}
+
+func (unavailableAdmission) CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
+	return sessions.Creation{}, execution.ErrExecutionUnavailable
+}
+
+func (unavailableAdmission) SubmitInputs(context.Context, string, string, string, []sessions.Input) ([]sessions.InputReceipt, error) {
+	return nil, execution.ErrExecutionUnavailable
 }

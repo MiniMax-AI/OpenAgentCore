@@ -6,7 +6,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -22,19 +23,19 @@ type runtimeStepFailure struct{ exitCode int }
 
 func (*runtimeStepFailure) Error() string { return "environment initialization operation failed" }
 
-func (operation runtimeSetupOperation) provisioningFailure(exitCode int) store.ProvisioningFailure {
+func (operation runtimeSetupOperation) provisioningFailure(exitCode int) sessions.ProvisioningFailure {
 	action := operation.Request.Action
 	if operation.Request.Initialization != nil {
 		action = operation.Request.Initialization.Action
 	}
 	switch action {
 	case "setup", "python", "npm", "skill":
-		return store.ProvisioningFailure{Step: action, Index: operation.Index, ExitCode: exitCode}
+		return sessions.ProvisioningFailure{Step: action, Index: operation.Index, ExitCode: exitCode}
 	}
-	return store.ProvisioningFailure{}
+	return sessions.ProvisioningFailure{}
 }
 
-func setupOperations(setup store.EnvironmentSetup) []runtimeSetupOperation {
+func setupOperations(setup environmentconfig.Setup) []runtimeSetupOperation {
 	if setup.Empty() {
 		return nil
 	}
@@ -97,8 +98,8 @@ func runRuntimeSetup(ctx context.Context, peer runtimePreparer, identity agentca
 	return errors.New("environment initialization operation unconfirmed")
 }
 
-func installInitialFile(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, file store.InitialFileMetadata, body []byte) error {
-	if file.SizeBytes == nil || *file.SizeBytes != int64(len(body)) || len(body) > store.MaxInitialFileBytes {
+func installInitialFile(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, file environmentconfig.InitialFileMetadata, body []byte) error {
+	if file.SizeBytes == nil || *file.SizeBytes != int64(len(body)) || len(body) > environmentconfig.MaxInitialFileBytes {
 		return errors.New("environment initialization request unavailable")
 	}
 	return runRuntimeSetup(ctx, peer, identity, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: file.Path}}, Data: body})

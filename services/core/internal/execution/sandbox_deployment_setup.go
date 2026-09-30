@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // PreparedRuntimeDeployment has completed provider validation without publishing
@@ -19,7 +19,7 @@ type PreparedRuntimeDeployment struct {
 	FenceCredential  func(context.Context) (func(), error)
 }
 
-type RuntimeDeploymentPreparer func(context.Context, store.SandboxSetup) (PreparedRuntimeDeployment, error)
+type RuntimeDeploymentPreparer func(context.Context, deployment.Setup) (PreparedRuntimeDeployment, error)
 
 // NewDeferredRuntimeProvider enables Web setup for one fixed installation. The
 // loader returns nil until selection, then the committed immutable generation.
@@ -32,19 +32,19 @@ func NewDeferredRuntimeProvider(installationID string, load func(context.Context
 	return config
 }
 
-func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
+func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input sandbox.Selection) (deployment.View, error) {
 	unlock, err := w.runtimes.lockMutation(ctx)
 	if err != nil {
-		return store.RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	defer unlock()
 	m := w.runtimes
-	if err := m.store.CheckSandboxDeploymentSetup(ctx, m.setupInstallationID, input); err != nil {
-		return store.RuntimeDeploymentView{}, err
+	if err := m.deployment.CheckSetup(ctx, m.setupInstallationID, input); err != nil {
+		return deployment.View{}, err
 	}
 	candidate, err := m.prepareCandidate(ctx, input)
 	if err != nil {
-		return store.RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	// An idempotent setup retry can arrive after an interrupted replacement.
 	// It must not reopen admission while that replacement is still draining.
@@ -53,12 +53,12 @@ func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input store.Sa
 	m.mu.Unlock()
 	if switching {
 		if err := m.pauseDeployment(ctx); err != nil {
-			return store.RuntimeDeploymentView{}, err
+			return deployment.View{}, err
 		}
 	}
-	result, err := m.store.InitializeSandboxDeployment(ctx, m.setupInstallationID, *candidate.Selection)
+	result, err := m.deployment.Initialize(ctx, m.setupInstallationID, *candidate.Selection)
 	if err != nil {
-		return store.RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	m.publishDeployment(candidate, result)
 	return result, nil
@@ -118,11 +118,11 @@ func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) 
 
 // Preparation is outside the manager mutex and all database transactions. A
 // rejected candidate cannot retire the current generation or its node lanes.
-func (m *runtimeManager) prepareCandidate(ctx context.Context, input store.SandboxDeploymentSetupRequest) (PreparedRuntimeDeployment, error) {
+func (m *runtimeManager) prepareCandidate(ctx context.Context, input sandbox.Selection) (PreparedRuntimeDeployment, error) {
 	if m.prepareDeployment == nil {
 		return PreparedRuntimeDeployment{}, ErrExecutionUnavailable
 	}
-	setup, err := store.SandboxSetupForSelection(m.setupInstallationID, input)
+	setup, err := m.deploymentService.SetupForSelection(m.setupInstallationID, input)
 	if err != nil {
 		return PreparedRuntimeDeployment{}, err
 	}
@@ -160,7 +160,7 @@ func (m *runtimeManager) prepareCandidate(ctx context.Context, input store.Sandb
 
 // The store commit is the point of no return. Publishing a validated candidate
 // is infallible, including when shutdown or request cancellation follows commit.
-func (m *runtimeManager) publishDeployment(candidate PreparedRuntimeDeployment, committed store.RuntimeDeploymentView) {
+func (m *runtimeManager) publishDeployment(candidate PreparedRuntimeDeployment, committed deployment.View) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	config := *candidate.Config

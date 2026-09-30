@@ -8,13 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
 func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
-	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, callerBinding()).ResolveAPIKey
+	deps.CoreKeys = coreKeys(t, "administrator")
 	public, id := "https://core.example", "5b7c0f3e-0000-4000-8000-000000000001"
 	settings, err := ParseInstallationConfiguration([]byte(`{"path":"/home/alice/.oac/core/config.json","apply_command":"/home/alice/.oac/core/oac apply",
 		"applied_at":"2026-09-25T09:30:00Z","settings":[{"key":"ports.core","value":8091,"default":8091,"changeable":true,"sensitive":false,"restarts":["core"]},
@@ -22,15 +24,12 @@ func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bindings := func(context.Context) (store.AddressBindings, error) {
-		return store.AddressBindings{Nodes: 2, NodesOnOtherAddress: 1}, nil
+	fakes.installationBindings.addressBindings = func(context.Context) (deployment.AddressBindings, error) {
+		return deployment.AddressBindings{Nodes: 2, NodesOnOtherAddress: 1}, nil
 	}
-	// No sandbox manager: the read is available before any deployment exists.
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithProjectAPIKeys(nil, admin),
-		WithInstallation(Installation{InstallationID: &id, PublicURL: &public, Configuration: settings}, bindings))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// No sandbox deployment: the read is available before any deployment exists.
+	deps.Installation = Installation{InstallationID: &id, PublicURL: &public, Configuration: settings}
+	h := newTestHandler(t, deps)
 	get := func(token string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodGet, "/core/v1/installation", nil)
 		request.Header.Set("Authorization", "Bearer "+token)
@@ -64,25 +63,19 @@ func TestInstallationSnapshotCannotCarryASensitiveValue(t *testing.T) {
 }
 
 func TestDeploymentAddressIsNotInput(t *testing.T) {
-	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
+	deps, fakes := sandboxFakes(t)
 	initializations := 0
-	initialize := func(_ context.Context, input store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error) {
+	initialize := func(_ context.Context, input sandbox.Selection) (deployment.View, error) {
 		initializations++
 		if input.Provider != "e2b" || input.ExpectedGeneration != 0 {
 			t.Fatal("invalid selection reached initialization", input.Provider, input.ExpectedGeneration)
 		}
-		return store.RuntimeDeploymentView{}, store.ErrSandboxPublicURLUnreachable
+		return deployment.View{}, deployment.ErrPublicURLUnreachable
 	}
-	update := func(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
-		t.Fatal("core_url reached the update")
-		return store.RuntimeDeploymentView{}, nil
-	}
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin),
-		WithSandboxDeploymentSetup(initialize), WithSandboxDeploymentChanges(update, nil, nil))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The strict fake fails the test if core_url reaches the update.
+	fakes.deploymentChanges.initializeSandboxDeployment = initialize
+	fakes.deployment.decodeConfiguration = providers.Builtin().DecodeInput
+	h := newTestHandler(t, deps)
 	for _, test := range []struct {
 		method, body, code string
 		status             int

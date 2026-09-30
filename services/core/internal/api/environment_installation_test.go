@@ -12,7 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -23,28 +23,25 @@ type installationFixture struct {
 
 func (f *installationFixture) AuthorizeEnvironmentInstallation(_ context.Context, p identity.Principal, environment, version string) (string, int64, error) {
 	if p.TenantID != f.session.TenantID || environment != f.session.Environment.ID || version != "build" {
-		return "", 0, store.ErrNotFound
+		return "", 0, sessions.ErrNotFound
 	}
 	f.authorizedEnvironment = environment
 	return "short-lived-install-grant", 2000000000, nil
 }
-func (f *installationFixture) ValidateEnvironmentInstallation(context.Context, string, string) (store.InstallationAuthorization, error) {
-	return store.InstallationAuthorization{}, store.ErrInstallationAuthorization
-}
-func (f *installationFixture) ClaimEnvironmentInstallation(context.Context, string, string, string) error {
-	return store.ErrInstallationAuthorization
+func (f *installationFixture) ValidateEnvironmentInstallation(context.Context, string, string) (sessions.InstallationAuthorization, error) {
+	return sessions.InstallationAuthorization{}, sessions.ErrInstallationAuthorization
 }
 
 func TestSelfHostedCreationReturnsInstallationWithoutWebCredential(t *testing.T) {
 	f := &installationFixture{}
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := NewHandler(f, auth, "codex", withFixtureDeploymentProvider(), WithExecution(&inputRecorder{}), WithEnvironmentRemoteURL("wss://core.example/api/v1/agent-daemon/ws"), WithNativeInstaller(&nativeinstaller.Catalog{Version: "build"}, "build"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}).ResolveAPIKey
+	fakes.sessionCreation.findSessionCreation, fakes.sessionCreation.createSession = f.FindSessionCreation, f.CreateSession
+	fakes.modelProviders.resolve = fixtureDeploymentProvider
+	fakes.environments.authorizeEnvironmentInstallation, fakes.environments.validateEnvironmentInstallation = f.AuthorizeEnvironmentInstallation, f.ValidateEnvironmentInstallation
+	deps.Execution = fakes.execution()
+	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Catalog: &nativeinstaller.Catalog{Version: "build"}}
+	handler := newTestHandler(t, deps)
 	body := `{"agent":{"model":"model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://model.example/v1","api_key":"fixture-model"}}}`
 	r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer project-key")

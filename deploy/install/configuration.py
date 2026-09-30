@@ -29,8 +29,8 @@ _HOST_LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 
 
 def valid_core_origin(value):
-    """Accept exactly the origins Core's ValidateSandboxCoreURL accepts
-    (services/core/internal/store/sandbox_deployment_setup.go), so an
+    """Accept exactly the origins Core's deployment.ValidateCoreURL accepts
+    (services/core/internal/deployment/public_url.go), so an
     installer value never fails Core's OAC_PUBLIC_URL check at startup."""
     if not isinstance(value, str) or any(char in value for char in "?#@\\% \t\r\n"):
         return False

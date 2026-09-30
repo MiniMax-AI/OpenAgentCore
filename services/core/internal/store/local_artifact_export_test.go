@@ -8,10 +8,10 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func completeLocalArtifactExport(t *testing.T, h *dispatchHarness, worker *execution.Worker, environment store.Environment) {
+func completeLocalArtifactExport(t *testing.T, h *dispatchHarness, worker *execution.Worker, environment sessions.Environment) {
 	t.Helper()
 	prepared := h.read(proto.TypeExecutionPrepare)
 	var request proto.ExecutionPreparePayload
@@ -41,13 +41,13 @@ func completeLocalArtifactExport(t *testing.T, h *dispatchHarness, worker *execu
 	if next.DecodePayload(&export) != nil || export.Step != "next" || export.Offset != int64(data.Len()) {
 		t.Fatal("export did not await native completion")
 	}
-	page, err := h.s.ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, "", "", 20, false)
+	page, err := sessionReads(h.db.pool).ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, "", "", 20, false)
 	if err != nil || len(page.Artifacts) != 0 {
 		t.Fatal("capture published before native completion", err)
 	}
 	completeCaptureDirectoryRead(t, h, worker, environment)
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "during-artifact-capture", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"run after the completed native execution"}`)}})
-	if err != nil || pending.State != store.EnvironmentInputPending || len(pending.Receipts) != 0 {
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "during-artifact-capture", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"run after the completed native execution"}`)}})
+	if err != nil || pending.State != sessions.EnvironmentInputPending || len(pending.Receipts) != 0 {
 		t.Fatalf("input during artifact capture was assigned to the finished executor: %+v %v", pending, err)
 	}
 	h.write(begin.ID, proto.TypeWorkspaceExportResult, proto.WorkspaceExportResultPayload{Outcome: "completed", Offset: export.Offset})
@@ -59,7 +59,7 @@ func completeLocalArtifactExport(t *testing.T, h *dispatchHarness, worker *execu
 	h.write(prepared.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "released"})
 }
 
-func completeCaptureDirectoryRead(t *testing.T, h *dispatchHarness, worker *execution.Worker, environment store.Environment) {
+func completeCaptureDirectoryRead(t *testing.T, h *dispatchHarness, worker *execution.Worker, environment sessions.Environment) {
 	t.Helper()
 	result := startDirectoryRead(t.Context(), worker, environment)
 	frame := h.read(proto.TypeExecutionPrepare)

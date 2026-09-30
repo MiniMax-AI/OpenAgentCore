@@ -232,7 +232,7 @@ func TestEnvironmentFilesHostedProvisioning(t *testing.T) {
 	const hosted = `{"type":"openai_hosted","network":{"access":"disabled"}}`
 	const createBody = `{"type":"inline","data":"YWJj","path":"/workspace/a"}`
 	sources := &sourceFilesFixture{}
-	h, f := environmentFileCreateHandler(t, WithSourceFiles(sources))
+	h, f := environmentFileCreateHandler(t, sources.wire)
 	f.environment.Configuration, f.environment.Status = json.RawMessage(hosted), "pending"
 
 	w := requestEnvironmentFiles(h, f.environment.ID, "?path=/workspace/a", "files-key")

@@ -62,7 +62,7 @@ def lookup(config, key):
 
 # Checks named by x-oac.check. Core stays the authority for its own semantic rules.
 def _origin(value, https_only=False):
-    """Core's ValidateSandboxCoreURL rule, through the installer's one implementation of it."""
+    """Core's deployment.ValidateCoreURL rule, through the installer's one implementation of it."""
     from configuration import valid_core_origin  # configuration imports this module at load time
     return valid_core_origin(value) and (not https_only or value.startswith("https://"))
 

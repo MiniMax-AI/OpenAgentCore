@@ -8,11 +8,11 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtimegateway.Session, session store.Session, environment store.Environment, bound store.ExecutionDevice, turnID string, result Result, status string) (Result, string) {
-	if status != store.TurnCompleted || !LocalWorkspaceConfiguration(environment.Configuration) {
+func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtimegateway.Session, session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice, turnID string, result Result, status string) (Result, string) {
+	if status != sessions.TurnCompleted || !LocalWorkspaceConfiguration(environment.Configuration) {
 		return result, status
 	}
 	owner, cancel := context.WithTimeout(ctx, 180*time.Second)
@@ -21,7 +21,7 @@ func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtim
 	if err == nil {
 		err = d.withPreparedWorkspace(owner, peer, session, environment, bound, func(ctx context.Context, handle string) error {
 			return peer.ExportWorkspaceOutputs(ctx, proto.WorkspaceExportPayload{Handle: handle, EnvironmentID: environment.ID}, func(body io.Reader) error {
-				return d.Store.StageTurnArtifacts(ctx, session.TenantID, session.ID, turnID, environment.ID, body)
+				return d.Sessions.StageTurnArtifacts(ctx, sessions.StageTurnArtifactsCommand{TenantID: session.TenantID, SessionID: session.ID, TurnID: turnID, EnvironmentID: environment.ID, Export: body})
 			})
 		})
 	}
@@ -30,14 +30,14 @@ func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtim
 	}
 	// Do not expose native diagnostics or publish partial output after a failed capture.
 	result.ErrorCode = "artifact_capture_failed"
-	if errors.Is(err, store.ErrUnappliedInputs) {
+	if errors.Is(err, sessions.ErrUnappliedInputs) {
 		result.ErrorCode = "input_not_applied"
 	}
-	status = store.TurnFailed
+	status = sessions.TurnFailed
 	check, stop := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stop()
 	if turn, err := d.Store.GetTurn(check, session.TenantID, session.ID, turnID); err == nil && !turn.CancelRequestedAt.IsZero() {
-		status = store.TurnCancelled
+		status = sessions.TurnCancelled
 	}
 	return result, status
 }

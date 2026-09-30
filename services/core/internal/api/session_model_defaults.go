@@ -6,38 +6,25 @@ import (
 	"errors"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/google/uuid"
 )
 
-// ModelProviderDefaults decrypts the deployment default model provider for a
-// harness at Session creation, before the encrypted Session snapshot is
-// committed. It returns nil when the harness has no default.
-type ModelProviderDefaults func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error)
-
-func WithModelProviderDefaults(resolve ModelProviderDefaults) Option {
-	return func(h *Handler) { h.modelProviderDefaults = resolve }
-}
-
-type agentDefaultsStore interface {
-	GetAgentForSession(context.Context, string, string, bool) (store.SavedAgent, *v1.ModelProviderInput, error)
-}
-
+// sessionAgentDefaults reads the Session's saved Agent. A Session that
+// inherits the Agent's model provider reads the opened bundle with it.
 func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input sessionRequest) (*v1.SavedAgent, *v1.ModelProviderInput, error) {
 	if input.AgentID == nil {
 		return nil, nil, nil
 	}
-	if !validAgentID(*input.AgentID) {
-		return nil, nil, store.ErrNotFound
-	}
 	inherit := input.XAgentsCore == nil || input.XAgentsCore.ModelProvider == nil
-	var resource store.SavedAgent
+	var resource agents.Agent
 	var provider *v1.ModelProviderInput
 	var err error
-	if source, ok := h.store.(agentDefaultsStore); ok {
-		resource, provider, err = source.GetAgentForSession(ctx, tenant, *input.AgentID, inherit)
+	if inherit {
+		resource, provider, err = h.AgentsReader.GetAgentWithModelProvider(ctx, tenant, *input.AgentID)
 	} else {
-		resource, err = h.lookupAgent(ctx, tenant, *input.AgentID)
+		resource, err = h.AgentsReader.GetAgent(ctx, tenant, *input.AgentID)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -47,7 +34,7 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 		return nil, nil, err
 	}
 	if inherit && saved.XAgentsCore != nil && saved.XAgentsCore.ModelProvider != nil && provider == nil {
-		return nil, nil, store.ErrCredentialStorageUnavailable
+		return nil, nil, credentialcrypto.ErrUnavailable
 	}
 	return saved, provider, nil
 }
@@ -91,7 +78,7 @@ func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequ
 		}
 	}
 	environment := input.Environment.Type
-	if provider == nil && h.modelProviderDefaults != nil && v1.ModelProviderAllowed(environment, v1.ModelProviderSourceDeployment) {
+	if provider == nil && v1.ModelProviderAllowed(environment, v1.ModelProviderSourceDeployment) {
 		snapshot := input.deploymentDefaults
 		if snapshot != nil {
 			provider, revision = snapshot.Provider, snapshot.Revision

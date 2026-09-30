@@ -11,7 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // RuntimeAllocation retains compute ownership, not public readiness. It survives
@@ -54,7 +57,7 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
-	owned, err := s.GetEnvironment(ctx, tenant, environment)
+	owned, err := sessionpg.LoadEnvironment(ctx, s.queries, tenant, environment)
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
@@ -62,22 +65,23 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 		Type string `json:"type"`
 	}
 	if json.Unmarshal(owned.Configuration, &config) != nil || config.Type != "openai_hosted" {
-		return RuntimeAllocation{}, ErrInvalidInput
+		return RuntimeAllocation{}, sessions.ErrInvalidInput
 	}
-	lookup, err := deviceLookup(tenant, environment)
+	lookup, err := sessionpg.DeviceLookup(tenant, environment)
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
-	device, err := newDeviceParams(lookup.TenantID, "managed-runtime", credentialHash)
+	registration, err := sessions.NewDeviceRegistration("managed-runtime", credentialHash)
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
+	deviceID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	var result RuntimeAllocation
 	err = s.withPublicSession(ctx, tenant, owned.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		previous, err := q.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
 		if err == nil {
 			if previous.RuntimeAllocation.ProviderKey != provider {
-				return ErrIdempotencyConflict
+				return sessions.ErrIdempotencyConflict
 			}
 			result = runtimeAllocationFromRow(previous.RuntimeAllocation, session, lookup.TenantID, previous.DeletedAt, previous.Expired)
 			result.Replayed = true
@@ -94,31 +98,32 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 			return err
 		}
 		if current.Environment.Status == "failed" || current.Environment.Status == "expired" {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		var nodeID pgtype.UUID
-		deployment, err := q.GetRuntimeDeployment(ctx)
+		active, err := q.GetRuntimeDeployment(ctx)
 		if err != nil {
 			return err
 		}
-		generation := pgtype.Int8{Int64: deployment.Generation, Valid: true}
-		if deployment.Mode == "nodes" {
+		generation := pgtype.Int8{Int64: active.Generation, Valid: true}
+		if active.Mode == "nodes" {
 			placement, err := q.GetRuntimePlacement(ctx, lookup.ID)
 			if err != nil {
 				return err
 			}
 			if placement.ReleasedAt.Valid || !placement.Available {
-				return ErrRuntimeNodeUnavailable
+				return deployment.ErrNodeUnavailable
 			}
 			nodeID = placement.NodeID
 			generation = placement.DeploymentGeneration
 		}
-		if err := createEnvironmentDevice(ctx, q, lookup, session, device); err != nil {
+		dedicated := sessions.ExecutionDevice{ID: uuid.UUID(deviceID.Bytes).String(), Name: registration.Name, EnvironmentID: owned.ID}
+		if err := sessions.CreateEnvironmentDevice(ctx, sessionpg.BindSession(q, lookup.TenantID, session), dedicated, registration.CredentialHash); err != nil {
 			return err
 		}
 		row, err := q.CreateRuntimeAllocation(ctx, sqlc.CreateRuntimeAllocationParams{
 			ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, EnvironmentID: lookup.ID,
-			DeviceID: device.ID, ProviderKey: provider, NodeID: nodeID, DeploymentGeneration: generation,
+			DeviceID: deviceID, ProviderKey: provider, NodeID: nodeID, DeploymentGeneration: generation,
 			ProtocolVersion: sandbox.SuspensionStateVersion,
 		})
 		if err == nil {
@@ -134,13 +139,13 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 
 // GetRuntimeAllocation is an internal cleanup lookup, including deleted Sessions.
 func (s *Store) GetRuntimeAllocation(ctx context.Context, tenant, environment string) (RuntimeAllocation, error) {
-	lookup, err := deviceLookup(tenant, environment)
+	lookup, err := sessionpg.DeviceLookup(tenant, environment)
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
 	row, err := s.queries.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return RuntimeAllocation{}, ErrNotFound
+		return RuntimeAllocation{}, sessions.ErrNotFound
 	}
 	if err != nil {
 		return RuntimeAllocation{}, err
@@ -150,7 +155,7 @@ func (s *Store) GetRuntimeAllocation(ctx context.Context, tenant, environment st
 
 // ListRuntimeAllocations retains unresolved cleanup in bounded recovery scans.
 func (s *Store) ListRuntimeAllocations(ctx context.Context, after string) ([]RuntimeAllocation, error) {
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	id := pgtype.UUID{Valid: true}
@@ -177,7 +182,7 @@ func (s *Store) ListRuntimeAllocations(ctx context.Context, after string) ([]Run
 // released allocations; it does not acquire, renew, or mutate Runtime state.
 func (s *Store) ListRuntimeObservationSessions(ctx context.Context, after string, limit int) (RuntimeObservationSessionPage, error) {
 	if limit < 1 || limit > 100 {
-		return RuntimeObservationSessionPage{}, ErrInvalidInput
+		return RuntimeObservationSessionPage{}, sessions.ErrInvalidInput
 	}
 	id := pgtype.UUID{Valid: true}
 	if after != "" {
@@ -230,7 +235,7 @@ type UnallocatedHostedEnvironment struct {
 }
 
 func (s *Store) ListUnallocatedHostedEnvironments(ctx context.Context, after string) ([]UnallocatedHostedEnvironment, error) {
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	id := pgtype.UUID{Valid: true}

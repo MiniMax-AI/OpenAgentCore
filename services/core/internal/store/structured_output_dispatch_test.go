@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -23,11 +24,11 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 		t.Fatal(err)
 	}
 	var err error
-	h.session, err = h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "fixture_harness", IdempotencyKey: "structured", Configuration: configuration})
+	h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "fixture_harness", IdempotencyKey: "structured", Configuration: configuration})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = h.s.BindSessionDevice(t.Context(), h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err = bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, StructuredOutput: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
@@ -54,7 +55,7 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 		t.Fatal("unqualified structured output dispatched")
 	}
 	turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnQueued {
+	if err != nil || turn.Status != sessions.TurnQueued {
 		t.Fatal("unqualified work was claimed", turn.Status, err)
 	}
 }

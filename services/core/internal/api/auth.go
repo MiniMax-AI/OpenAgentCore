@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
@@ -13,21 +12,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 )
-
-// ProjectAPIKeyResolver resolves current database credentials on each request.
-type ProjectAPIKeyResolver interface {
-	ResolveProjectAPIKey(context.Context, string) (store.ProjectAPIKeyBinding, error)
-}
-type Authenticator struct{ keys ProjectAPIKeyResolver }
-
-func NewDatabaseAuthenticator(keys ProjectAPIKeyResolver) (*Authenticator, error) {
-	if keys == nil {
-		return nil, errors.New("database API key resolver is required")
-	}
-	return &Authenticator{keys: keys}, nil
-}
 
 func projectBearerDigest(r *http.Request) ([sha256.Size]byte, bool) {
 	parts := strings.Fields(r.Header.Get("Authorization"))
@@ -51,15 +37,14 @@ func (h *Handler) resolveCaller(r *http.Request) (identity.Principal, writeaudit
 	if !valid {
 		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
-	if h.deploymentAuth != nil {
-		if _, admin := h.deploymentAuth.digests[digest]; admin {
-			return identity.Principal{}, writeaudit.Source{}, false, nil
-		}
+	// A Core key never authenticates as a Project key.
+	if _, admin := h.CoreKeys.digests[digest]; admin {
+		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	binding, err := h.auth.keys.ResolveProjectAPIKey(ctx, hex.EncodeToString(digest[:]))
-	if errors.Is(err, store.ErrNotFound) {
+	binding, err := h.ProjectsReader.ResolveAPIKey(ctx, digest)
+	if errors.Is(err, projects.ErrNotFound) {
 		return identity.Principal{}, writeaudit.Source{}, false, nil
 	}
 	if err != nil {

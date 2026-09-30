@@ -5,10 +5,10 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func (p Policy) mcpCredentialBindings(engine string, snapshot Snapshot) (map[string]store.MCPCredentialBinding, error) {
+func (p Policy) mcpCredentialBindings(engine string, snapshot Snapshot) (map[string]vaults.MCPCredentialBinding, error) {
 	selected, err := selectedMCPCredentials(snapshot)
 	if err != nil {
 		return nil, err
@@ -22,8 +22,8 @@ func (p Policy) mcpCredentialBindings(engine string, snapshot Snapshot) (map[str
 
 // Selection, final preclaim and request construction use the same combination
 // checks. This function never reads plaintext credentials or native configuration.
-func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, servers []proto.MCPHTTPServer, caps runtimedevice.KindCapabilities) (map[string]store.MCPCredentialBinding, error) {
-	fail := func(message string) (map[string]store.MCPCredentialBinding, error) {
+func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, servers []proto.MCPHTTPServer, caps runtimedevice.KindCapabilities) (map[string]vaults.MCPCredentialBinding, error) {
+	fail := func(message string) (map[string]vaults.MCPCredentialBinding, error) {
 		return nil, errors.New(message)
 	}
 	profile, _ := p.Engines.Lookup(engine)

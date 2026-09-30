@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 )
 
 func TestSourceFileMissingErrorParameters(t *testing.T) {
@@ -23,8 +23,8 @@ func TestSourceFileMissingErrorParameters(t *testing.T) {
 		{http.MethodGet, "/v1/files?after=file-missing&unknown=1", "after"},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
-			f := &sourceFilesFixture{listErr: fmt.Errorf("wrapped: %w", store.ErrNotFound)}
-			h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+			f := &sourceFilesFixture{listErr: fmt.Errorf("wrapped: %w", files.ErrNotFound)}
+			h, _ := environmentFileCreateHandler(t, f.wire)
 			server := newSourceFileServer(t, h)
 			status, raw := sourceRequest(t, server, tc.method, tc.path, "files-key", "", nil)
 			var body map[string]map[string]any
@@ -39,26 +39,29 @@ func TestSourceFileMissingErrorParameters(t *testing.T) {
 	}
 }
 
-func TestStoreErrorOptionalParameterPreservesOtherErrors(t *testing.T) {
+func TestFilesErrorOptionalParameterPreservesOtherErrors(t *testing.T) {
 	for _, tc := range []struct {
 		path   string
 		err    error
 		status int
 		code   any
-		param  []string
 	}{
-		{"/v1/skills/skill_missing", store.ErrNotFound, 404, nil, nil},
-		{"/v1/agents/agent_missing", store.ErrNotFound, 404, "not_found_error", nil},
-		{"/v1/files/file-missing", store.ErrInvalidInput, 400, "invalid_request", []string{"id"}},
-		{"/v1/files/file-missing", fmt.Errorf("database unavailable"), 500, "internal_error", []string{"id"}},
+		{"/v1/files/file-missing", files.ErrInvalidInput, 400, "invalid_request"},
+		{"/v1/files/file-missing", fmt.Errorf("database unavailable"), 500, "internal_error"},
+		{"/v1/files/file-missing", files.ErrTooLarge, 413, "request_too_large"},
+		{"/core/v1/projects/project/files/file-missing", files.ErrNotFound, 404, "not_found_error"},
 	} {
 		w := httptest.NewRecorder()
-		writeStoreError(w, httptest.NewRequest(http.MethodGet, tc.path, nil), tc.err, tc.param...)
+		writeFilesError(w, httptest.NewRequest(http.MethodGet, tc.path, nil), tc.err, "id")
 		var body map[string]map[string]any
 		if w.Code != tc.status || json.Unmarshal(w.Body.Bytes(), &body) != nil {
 			t.Fatalf("unexpected error: %d %s", w.Code, w.Body.String())
 		}
-		if body["error"]["code"] != tc.code || body["error"]["param"] != nil {
+		wantParam := any(nil)
+		if tc.status == http.StatusNotFound {
+			wantParam = "id"
+		}
+		if body["error"]["code"] != tc.code || body["error"]["param"] != wantParam {
 			t.Fatalf("unrelated error changed: %s", w.Body.String())
 		}
 	}

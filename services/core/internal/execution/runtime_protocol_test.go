@@ -16,7 +16,7 @@ func TestRuntimeProtocolUnknownEffectRetainsObservationFailure(t *testing.T) {
 		t.Run(reason, func(t *testing.T) {
 			result := Result{ErrorCode: reason, AppliedThrough: 1}
 			writer := &recoveringWriter{}
-			j := journal{store: writer, next: 1}
+			j := journal{writer: writer, next: 1}
 			events := make(chan proto.Envelope, 1)
 			usage, err := proto.NewEnvelope(proto.TypeUsage, "run", proto.Usage{InputTokens: 7})
 			if err != nil {

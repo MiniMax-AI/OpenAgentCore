@@ -57,7 +57,7 @@ func TestAuthenticator_RejectsWrongRuntimeType(t *testing.T) {
 func TestAuthenticator_RejectsBadCredential(t *testing.T) {
 	row := runtimedevice.Credential{
 		ID:             "dev-1",
-		Type:           RuntimeTypeAgentDaemon,
+		Type:           runtimedevice.RuntimeTypeAgentDaemon,
 		CredentialHash: runtimedevice.HashCredential("real-tok"),
 	}
 	auth := NewAuthenticator(&stubRuntimeStore{row: row, ok: true})
@@ -82,7 +82,7 @@ func TestAuthenticator_AcceptsValidCredential(t *testing.T) {
 		ID:             "dev-1",
 		WorkspaceID:    "wks-1",
 		Name:           "alice-mac",
-		Type:           RuntimeTypeAgentDaemon,
+		Type:           runtimedevice.RuntimeTypeAgentDaemon,
 		CredentialHash: runtimedevice.HashCredential("real-tok"),
 	}
 	auth := NewAuthenticator(&stubRuntimeStore{row: row, ok: true})

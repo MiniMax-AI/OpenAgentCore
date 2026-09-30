@@ -43,7 +43,11 @@ The script picks the latest stable release, verifies its checksum and runs the b
 
 It creates no Project or key and makes no model request. It ends by printing the console address, the API base URL and the next steps.
 
-If installation fails or is interrupted before the installer reports that the services are running, including by Ctrl-C or a closed SSH session, the installer removes everything it created: its Compose project with its volumes, native Core's service and the files in the installation directory, and the directory itself when the installer created it. Only the loaded images stay. Fix the cause it prints and run the same command again. A rerun also removes an installation that stopped without this cleanup, for example after a power loss, and then installs with the options given now; until then, the `oac` command refuses to change that installation. Once the installer has reported that the services are running, the installation is kept, and a rerun only [repairs](operations.md#installation-version-policy) it.
+Downloads retry temporary network failures automatically. The terminal shows download progress and activity during long steps.
+
+If installation fails or is interrupted before the services first become healthy, fix the reported cause and rerun the same command. The installer removes its temporary download, new service project, volumes and installation files; loaded Docker images remain reusable. A rerun first clears an incomplete installation or download left by a forced exit or power loss. It never clears another active installation process or an unrelated directory. Once the services have started successfully, failures preserve the installation and its data; use [same-release repair](operations.md#installation-version-policy).
+
+For insufficient space or quota, free space on the filesystem named by the error. Image-loading failures can also require space in Docker's storage, which may be on a different filesystem.
 
 ## Sign in to Web
 

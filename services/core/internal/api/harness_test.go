@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestSessionHarnessAdmission(t *testing.T) {
@@ -29,13 +29,16 @@ func TestSessionHarnessAdmission(t *testing.T) {
 		{"mcode self-hosted requires executor configuration", `,"x_agents_core":{"harness":"mcode"}`, "", `{"type":"self_hosted","workspace_directory":"/workspace"},` + fixtureAnthropicSessionProvider, "", true, 503},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var options []Option
-			if tc.enabled {
-				options = append(options, WithHarnesses([]string{"claude_sdk", "mcode"}))
-			}
-			s := &recordingStore{}
-			options = append(options, WithExecution(&inputRecorder{ResourceStore: s}))
-			h, _, _ := testHandler(t, options...)
+			h, s, _ := testHandler(t, func(d *Dependencies, f *testFakes) {
+				if tc.enabled {
+					d.Harnesses = []string{"claude_sdk", "mcode"}
+				}
+				// Self-hosted execution needs an executor, which this Core lacks.
+				if !strings.Contains(tc.environment, "self_hosted") {
+					admitSessions(d, f)
+				}
+				f.metrics.recordUnavailable = func() {}
+			})
 			r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"fixture"`+tc.extension+tc.extra+`},"environment":`+tc.environment+`,"input":"Run on the selected harness."}`))
 			r.Header.Set("Authorization", "Bearer test-api-key")
 			r.Header.Set("OpenAI-Beta", "agents=v1")
@@ -91,7 +94,7 @@ func TestSavedHarnessReplacementAndEffectiveRead(t *testing.T) {
 		t.Fatal("mutated saved Agent")
 	}
 	raw, _ := json.Marshal(configuration{Agent: v1.Agent{ID: "agent", Model: "fixture", XAgentsCore: &v1.AgentsCore{Harness: "claude_sdk"}}, Environment: v1.Environment{Type: "none"}})
-	response, err := sessionResponse(store.Session{Engine: "mcode", Configuration: raw}, "")
+	response, err := sessionResponse(sessions.Session{Engine: "mcode", Configuration: raw}, "")
 	if err != nil || response.Agent.XAgentsCore.Harness != "mcode" {
 		t.Fatalf("effective read=%+v %v", response, err)
 	}
@@ -99,7 +102,7 @@ func TestSavedHarnessReplacementAndEffectiveRead(t *testing.T) {
 
 func TestDefaultHarnessPreservesSessionAgentResponse(t *testing.T) {
 	raw, _ := json.Marshal(configuration{Agent: v1.Agent{ID: "agent", Model: "fixture"}, Environment: v1.Environment{Type: "none"}})
-	response, err := sessionResponse(store.Session{Engine: "codex", Configuration: raw}, "")
+	response, err := sessionResponse(sessions.Session{Engine: "codex", Configuration: raw}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,12 +10,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
-func (f *credentialFixture) UpdateStaticCredential(_ context.Context, tenant, vault, id string, input store.UpdateStaticCredentialInput) (store.Credential, error) {
-	f.tenant, f.vault, f.id, f.replacement, f.calls = tenant, vault, id, input, f.calls+1
+func (f *credentialFixture) UpdateStaticCredential(_ context.Context, input vaults.UpdateStaticCredential) (vaults.Credential, error) {
+	f.tenant, f.vault, f.id, f.replacement, f.calls = input.TenantID, input.VaultID, input.CredentialID, input, f.calls+1
 	return f.credential, f.err
 }
 
@@ -69,11 +70,11 @@ func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 		h, f, _ := credentialHandler(t)
 		path := "/v1/vaults/" + f.credential.VaultID + "/credentials/" + f.credential.ID
 		method, status := "POST", http.StatusBadRequest
-		// Malformed identifiers reach storage only as the never-assigned ID,
-		// after body validation, exactly like a well-formed missing identifier.
+		// Malformed identifiers reach the use case unchanged, after body
+		// validation, and resolve exactly like a well-formed missing identifier.
 		malformed := strings.Contains(mode, "invalid") || strings.Contains(mode, "zero")
 		if malformed {
-			f.err = store.ErrNotFound
+			f.err = vaults.ErrNotFound
 		}
 		switch mode {
 		case "method":
@@ -99,14 +100,14 @@ func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != status || !malformed && f.calls != 0 || malformed && (f.calls != 1 || f.vault != store.UnknownResourceID && f.id != store.UnknownResourceID) {
+		if w.Code != status || !malformed && f.calls != 0 || malformed && (f.calls != 1 || !strings.Contains(path, "/vaults/"+f.vault+"/credentials/"+f.id)) {
 			t.Fatal("update boundary changed", mode, w.Code, f.vault, f.id)
 		}
 	}
 	for _, tc := range []struct {
 		err    error
 		status int
-	}{{store.ErrNotFound, 404}, {store.ErrCredentialStorageUnavailable, 503}, {errors.New("credential-canary"), 500}} {
+	}{{vaults.ErrNotFound, 404}, {credentialcrypto.ErrUnavailable, 503}, {errors.New("credential-canary"), 500}} {
 		h, f, _ := credentialHandler(t)
 		f.err = tc.err
 		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID, body)

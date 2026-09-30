@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -82,7 +81,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 		{name: "kill unavailable stays retained", inspectionError: sandbox.ErrInvalid, killError: sandbox.ErrComputeUnconfirmed, wantSettled: true, wantKill: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			s, _ := store.NewManagedTestStore(t)
+			s, db := newManagedTestStoreDB(t)
 			key := uuid.NewString()
 			p := &configurationCleanupProvider{
 				lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: test.loseCreate},
@@ -90,8 +89,8 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 				settleInspection: test.settleInspection, foreign: test.foreign,
 				inspectionError: test.inspectionError, killError: test.killError,
 			}
-			w, _ := managedWorker(t, s, key, p)
-			tenant, session, environment := managedSession(t, s)
+			w, _ := managedWorker(t, s, db, key, p)
+			tenant, session, environment := managedSession(t, s, db)
 			owner, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 			if (err != nil) != (test.rejectCreate || test.loseCreate) || owner.ID == "" {
 				t.Fatal("unexpected creation outcome", owner, err)
@@ -138,7 +137,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 			if err != nil || got.ID != owner.ID || got.State != wantState || got.CreateSettled != test.wantSettled {
 				t.Fatal("cleanup lost ownership or settlement", got, err)
 			}
-			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+			if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("cleanup retained execution authority", err)
 			}
 			p.mu.Lock()

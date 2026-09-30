@@ -10,12 +10,13 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
 type environmentAdmissionResult struct {
-	receipts []store.InputReceipt
+	receipts []sessions.InputReceipt
 	err      error
 }
 
@@ -23,22 +24,20 @@ func newEnvironmentAdmission(t *testing.T) (*dispatchHarness, *execution.Worker)
 	t.Helper()
 	h := newDispatchHarness(t)
 	enableWorkerEnvironment(t, h)
-	worker, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), h.db, h.d)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		_ = worker.Run(ctx)
 	})
-	h.session, err = worker.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{
+	session, err := worker.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(sessions.CreateSession{
 		Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.session = session
 	h = connectFixtureRuntime(t, h, h.session)
 	return h, worker
 }
@@ -52,8 +51,8 @@ func submitEnvironmentAdmission(ctx context.Context, h *dispatchHarness, worker 
 	return result
 }
 
-func environmentAdmissionInputs() []store.Input {
-	return []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}}
+func environmentAdmissionInputs() []sessions.Input {
+	return []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}}
 }
 
 func awaitEnvironmentAdmission(t *testing.T, result <-chan environmentAdmissionResult) environmentAdmissionResult {
@@ -67,7 +66,7 @@ func awaitEnvironmentAdmission(t *testing.T, result <-chan environmentAdmissionR
 	}
 }
 
-func environmentAdmissionPending(t *testing.T, h *dispatchHarness, key string) store.EnvironmentInputReservation {
+func environmentAdmissionPending(t *testing.T, h *dispatchHarness, key string) sessions.EnvironmentInputReservation {
 	t.Helper()
 	_, pool := store.NewTestStore(t)
 	var id string
@@ -98,17 +97,17 @@ func TestEnvironmentAdmissionWaitsForPreparedClaimAndRetainsRetry(t *testing.T) 
 		t.Fatal("waiting activity", session, err)
 	}
 	inputs := environmentAdmissionInputs()
-	if _, err = worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "other", inputs); !errors.Is(err, store.ErrTurnConflict) {
+	if _, err = worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "other", inputs); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("competing batch", err)
 	}
-	if _, err = worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "wait", inputs[:1]); !errors.Is(err, store.ErrIdempotencyConflict) {
+	if _, err = worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "wait", inputs[:1]); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed retry", err)
 	}
-	if _, err = worker.SubmitInputs(t.Context(), uuid.NewString(), h.session.ID, "wait", inputs); !errors.Is(err, store.ErrNotFound) {
+	if _, err = worker.SubmitInputs(t.Context(), uuid.NewString(), h.session.ID, "wait", inputs); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant", err)
 	}
-	mixed := append(inputs, store.Input{Kind: "cancel", Payload: json.RawMessage(`{}`)})
-	if _, err = worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "mixed", mixed); !errors.Is(err, store.ErrInvalidInput) {
+	mixed := append(inputs, sessions.Input{Kind: "cancel", Payload: json.RawMessage(`{}`)})
+	if _, err = worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "mixed", mixed); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("mixed batch accepted", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -155,7 +154,7 @@ func TestEnvironmentAdmissionWaitsForPreparedClaimAndRetainsRetry(t *testing.T) 
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "done", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "admitted-native"}})
 	completeEmptyArtifactExport(t, h)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
-	if run.Turn.Status != store.TurnCompleted {
+	if run.Turn.Status != sessions.TurnCompleted {
 		t.Fatal("completion", run.Turn)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)
@@ -186,8 +185,8 @@ func TestEnvironmentAdmissionSettlementDoesNotCreateTurn(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "deleted":
-				expected = store.ErrNotFound
-				if err := h.s.DeleteSession(t.Context(), h.tenant, h.session.ID); !errors.Is(err, store.ErrSessionNotIdle) {
+				expected = sessions.ErrNotFound
+				if err := h.s.DeleteSession(t.Context(), h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("pending input deleted", err)
 				}
 				if err := h.s.CommitLegacyDeletion(t.Context(), h.tenant, h.session.ID); err != nil {
@@ -226,7 +225,7 @@ func TestEnvironmentAdmissionSettlementDoesNotCreateTurn(t *testing.T) {
 				t.Fatal(err)
 			}
 			if name == "disconnected" || name == "ownership_lost" {
-				if retained.State != store.EnvironmentInputPending || !retained.Deadline.Equal(pending.Deadline) {
+				if retained.State != sessions.EnvironmentInputPending || !retained.Deadline.Equal(pending.Deadline) {
 					t.Fatal("observer changed durable outcome", retained)
 				}
 			} else {

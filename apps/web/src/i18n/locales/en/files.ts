@@ -50,10 +50,6 @@ export const files = {
     title: "This Core does not list files",
     description: "The Files list returned HTTP {{status}}.",
   },
-  storage: {
-    title: "File storage is not configured",
-    description: "Core has no file storage configured, so files cannot be listed or uploaded.",
-  },
   upload: {
     uploading: "Uploading {{name}}…",
     uploaded: "Uploaded {{name}}",
@@ -74,7 +70,6 @@ export const files = {
     transport: "The request did not reach Core or its response was lost.",
     unauthorized: "Core rejected the connection credentials.",
     tooLarge: "The file is larger than Core accepts.",
-    storage: "Core has no file storage configured.",
     invalidResponse: "Core returned a response this console does not recognize.",
   },
 } as const;

@@ -6,25 +6,28 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 func lifecycleTestNode(t *testing.T, s *Store) string {
 	t.Helper()
-	token, err := EnrollmentTestToken(s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 100, MaxRetained: 100}))
+	nodes := deploymentService(t, s)
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 100, MaxRetained: 100}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := uuid.NewString()
-	_, err = s.EnrollRuntimeNode(t.Context(), token, RuntimeNodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: id, Credential: strings.Repeat("n", 64), Name: "second", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64)})
+	_, err = nodes.Enroll(t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: id, Credential: strings.Repeat("n", 64), Name: "second", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.publicURL})
 	if err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, id)
 	return id
 }
-func lifecycleTestSession(t *testing.T, s *Store, node string) (string, Session) {
+func lifecycleTestSession(t *testing.T, s *Store, node string) (string, sessions.Session) {
 	t.Helper()
 	tenant := uuid.NewString()
 	session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), node)
@@ -33,7 +36,7 @@ func lifecycleTestSession(t *testing.T, s *Store, node string) (string, Session)
 	}
 	return tenant, session
 }
-func lifecycleTestAllocation(t *testing.T, s, w *Store, d RuntimeDeployment, node string) RuntimeAllocation {
+func lifecycleTestAllocation(t *testing.T, s, w *Store, d deployment.ProcessDeployment, node string) RuntimeAllocation {
 	t.Helper()
 	tenant, session := lifecycleTestSession(t, s, node)
 	allocation, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
@@ -132,7 +135,7 @@ func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 		}
 	}
 	checkRoute(other, nil) // Pending has no allocation yet.
-	if _, err := w.ResolveRuntimeLifecycleNode(t.Context(), uuid.NewString(), environment); !errors.Is(err, ErrNotFound) {
+	if _, err := w.ResolveRuntimeLifecycleNode(t.Context(), uuid.NewString(), environment); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("tenant boundary", err)
 	}
 	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment, d.InstallationID, runtimedevice.HashCredential("runtime"))
@@ -150,7 +153,7 @@ func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET node_id=NULL WHERE id=$1", owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	checkRoute("", ErrRuntimeNodeUnavailable)
+	checkRoute("", deployment.ErrNodeUnavailable)
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET node_id=$1 WHERE id=$2", other, owner.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +176,7 @@ func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 	if rows, err := w.ListRuntimeAllocationsForNode(t.Context(), other, ""); err != nil || len(rows) != 0 {
 		t.Fatal("released allocation scanned", rows, err)
 	}
-	if err := s.RemoveRuntimeNode(t.Context(), other); err != nil {
+	if err := deploymentService(t, s).RemoveNode(t.Context(), other); err != nil {
 		t.Fatal(err)
 	}
 	nodes, err = w.ListRuntimeLifecycleNodes(t.Context())
@@ -193,7 +196,7 @@ func TestRuntimeLifecycleNodeRejectsMissingOrReleasedPlacement(t *testing.T) {
 			if _, err := s.pool.Exec(t.Context(), mutation, session.Environment.ID); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := w.ResolveRuntimeLifecycleNode(t.Context(), tenant, session.Environment.ID); !errors.Is(err, ErrRuntimeNodeUnavailable) {
+			if _, err := w.ResolveRuntimeLifecycleNode(t.Context(), tenant, session.Environment.ID); !errors.Is(err, deployment.ErrNodeUnavailable) {
 				t.Fatal("invalid placement routed", err)
 			}
 			rows, err := w.ListUnallocatedHostedEnvironmentsForNode(t.Context(), d.LocalNodeID, "")
@@ -230,7 +233,7 @@ func TestRuntimeLifecycleLegacyLaneAndOwnerLoss(t *testing.T) {
 	if _, err := w.ListUnallocatedHostedEnvironmentsForNode(t.Context(), "", "bad"); err == nil {
 		t.Fatal("invalid cursor accepted")
 	}
-	if err := w.CloseExecution(t.Context()); err != nil {
+	if err := w.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.ListRuntimeLifecycleNodes(t.Context()); err == nil {

@@ -9,8 +9,9 @@ import (
 )
 
 func TestNodeConfigurationExplicitUnsupportedAndStrictEmptyInput(t *testing.T) {
+	registry := Builtin()
 	for _, kind := range []string{"docker", "microsandbox"} {
-		a, err := Lookup(kind)
+		a, err := registry.Lookup(kind)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -38,7 +39,8 @@ func TestNodeConfigurationExplicitUnsupportedAndStrictEmptyInput(t *testing.T) {
 }
 
 func TestConfigurationRequirementsDoNotTurnLookupFailuresIntoFalse(t *testing.T) {
-	for _, check := range []func(string) (bool, error){UsesCredential, RequiresPublicOrigin} {
+	registry := Builtin()
+	for _, check := range []func(string) (bool, error){registry.UsesCredential, registry.RequiresPublicOrigin} {
 		if _, err := check("missing-configuration-provider"); err == nil {
 			t.Fatal("unknown provider treated as not required")
 		}

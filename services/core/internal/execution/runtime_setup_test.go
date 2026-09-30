@@ -8,7 +8,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 const setupCanary = "CANARY-runtime-setup-9b3e"
@@ -53,7 +54,7 @@ func TestRuntimeSetupReceiptOutcomes(t *testing.T) {
 	}
 }
 func TestRuntimeSetupFailureLabels(t *testing.T) {
-	for action, want := range map[string]store.ProvisioningFailure{"setup": {Step: store.ProvisioningSetupCommand, Index: 2, ExitCode: 3}, "python": {Step: store.ProvisioningPythonPackages, Index: 2, ExitCode: 3}, "npm": {Step: store.ProvisioningNPMPackages, Index: 2, ExitCode: 3}, "skill": {Step: store.ProvisioningSkill, Index: 2, ExitCode: 3}, "configure": {}, "": {}} {
+	for action, want := range map[string]sessions.ProvisioningFailure{"setup": {Step: sessions.ProvisioningSetupCommand, Index: 2, ExitCode: 3}, "python": {Step: sessions.ProvisioningPythonPackages, Index: 2, ExitCode: 3}, "npm": {Step: sessions.ProvisioningNPMPackages, Index: 2, ExitCode: 3}, "skill": {Step: sessions.ProvisioningSkill, Index: 2, ExitCode: 3}, "configure": {}, "": {}} {
 		op := runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: action}, Index: 2}
 		if action != "skill" {
 			op.Request = proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: action}}
@@ -62,7 +63,7 @@ func TestRuntimeSetupFailureLabels(t *testing.T) {
 			t.Fatal(action, got)
 		}
 	}
-	operations := setupOperations(store.EnvironmentSetup{Commands: []store.SetupCommand{{Command: "a"}, {Command: "b"}}})
+	operations := setupOperations(environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "a"}, {Command: "b"}}})
 	if len(operations) != 3 || operations[1].Index != 0 || operations[2].Index != 1 || operations[2].Request.Initialization.CWD != "" {
 		t.Fatal("command index or Runtime default changed")
 	}
@@ -72,14 +73,14 @@ func TestInitialFileUsesTypedRuntimeBytes(t *testing.T) {
 	size := int64(len(body))
 	owner := agentcapabilities.Identity{EnvironmentID: "environment", SessionID: "session"}
 	peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: "completed"}}
-	if err := installInitialFile(t.Context(), peer, owner, store.InitialFileMetadata{Path: "/workspace/a", SizeBytes: &size}, body); err != nil {
+	if err := installInitialFile(t.Context(), peer, owner, environmentconfig.InitialFileMetadata{Path: "/workspace/a", SizeBytes: &size}, body); err != nil {
 		t.Fatal(err)
 	}
 	if peer.request.Action != "file" || peer.request.File.Path != "/workspace/a" || peer.request.EnvironmentID != owner.EnvironmentID || peer.request.SessionID != owner.SessionID || string(peer.data) != setupCanary {
 		t.Fatal("file transport changed")
 	}
 	size++
-	if err := installInitialFile(t.Context(), peer, owner, store.InitialFileMetadata{SizeBytes: &size}, body); err == nil {
+	if err := installInitialFile(t.Context(), peer, owner, environmentconfig.InitialFileMetadata{SizeBytes: &size}, body); err == nil {
 		t.Fatal("mismatched source size accepted")
 	}
 }

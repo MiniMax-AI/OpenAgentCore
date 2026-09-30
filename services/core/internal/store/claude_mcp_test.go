@@ -10,8 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
@@ -44,10 +43,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				}
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
-				worker, err := execution.StartWorker(ctx, h.d)
-				if err != nil {
-					t.Fatal(err)
-				}
+				worker := startOwnedWorker(t, ctx, h.db, h.d, h.owner())
 				done := make(chan error, 1)
 				go func() { done <- worker.Run(ctx) }()
 				defer func() {
@@ -60,11 +56,11 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				}()
 				time.Sleep(650 * time.Millisecond)
 				turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
-				if err != nil || turn.Status != store.TurnQueued {
+				if err != nil || turn.Status != sessions.TurnQueued {
 					t.Fatal("incapable runtime claimed work", turn, err)
 				}
 				if !prebound {
-					if _, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, store.ErrNotFound) {
+					if _, err := fixtureSessionStore(h.db).GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("bound an incapable runtime", err)
 					}
 				}
@@ -87,7 +83,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 					t.Fatal("dispatch lost scoped authentication or authenticated an anonymous server")
 				}
 				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
-				waitTurn(t, h, input.TurnID, store.TurnCompleted)
+				waitTurn(t, h, input.TurnID, sessions.TurnCompleted)
 			})
 		}
 	}
@@ -126,7 +122,7 @@ func TestClaudeMCPUnsupportedSnapshotRejectedBeforeClaim(t *testing.T) {
 				t.Fatal("unsupported MCP configuration claimed")
 			}
 			turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
-			if err != nil || turn.Status != store.TurnQueued {
+			if err != nil || turn.Status != sessions.TurnQueued {
 				t.Fatal(turn, err)
 			}
 		})

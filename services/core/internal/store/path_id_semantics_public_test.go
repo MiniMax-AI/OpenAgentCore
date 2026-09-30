@@ -10,9 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -91,17 +92,14 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant := uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s), api.WithSubagents(s), api.WithSkills(s), api.WithSourceFiles(s), api.WithSessionArtifacts(s))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,13 +118,13 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 		t.Fatalf("fixture Turn: %d %s", status, raw)
 	}
 	turn := turns.Data[0].ID
-	hosted, err := s.CreateSession(t.Context(), ownerTenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "path-environment",
+	hosted, err := s.CreateSession(t.Context(), ownerTenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "path-environment",
 		Configuration: json.RawMessage(`{"agent":{"model":"path-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil || hosted.Environment == nil {
 		t.Fatal("fixture Environment", err)
 	}
 	environment := hosted.Environment.ID
-	skill, err := s.CreateSkill(t.Context(), ownerTenant, store.SkillArchive(t, "path-skill"))
+	skill, err := store.SkillService(t, pool, cipher).CreateSkill(t.Context(), skills.CreateSkill{TenantID: ownerTenant, Archive: store.SkillArchive(t, "path-skill")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +361,7 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	}
 
 	// Storage availability checks also run before the lookup of a missing identifier.
-	h, err = api.NewHandler(store.New(pool), auth, "codex")
+	h, err = publicHandler(t, store.New(pool), fixtureDB{pool: pool}, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

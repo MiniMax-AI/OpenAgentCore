@@ -15,9 +15,10 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -32,19 +33,16 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
-	reopenedStore := store.NewWithCredentialCipher(pool, cipher)
+	s, reopenedStore := store.NewWithCredentialCipher(pool, cipher), store.NewWithCredentialCipher(pool, cipher)
+	db := fixtureDB{pool: pool, cipher: cipher} // built both Stores
 	tenant, foreignTenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	serve := func(current *store.Store) *httptest.Server {
 		t.Helper()
-		h, err := api.NewHandler(current, auth, "codex", api.WithHostedEnvironments(), api.WithExecution(current), api.WithSourceFiles(current), api.WithSkills(current), fixtureDeploymentProvider())
+		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, current, db), fixtureDeploymentProvider())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,11 +68,11 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 		Sessions     map[string]string `json:"sessions"`
 		RejectedKeys []string          `json:"rejected_keys"`
 		Expected     map[string]struct {
-			Skills                []store.EnvironmentSkillMetadata `json:"skills"`
-			Plugins               []agentplugin.Metadata           `json:"plugins"`
-			CapabilityDirectories []string                         `json:"capability_directories"`
-			SkillDigests          []string                         `json:"skill_digests"`
-			PluginDigests         []string                         `json:"plugin_digests"`
+			Skills                []environmentconfig.SkillMetadata `json:"skills"`
+			Plugins               []agentplugin.Metadata            `json:"plugins"`
+			CapabilityDirectories []string                          `json:"capability_directories"`
+			SkillDigests          []string                          `json:"skill_digests"`
+			PluginDigests         []string                          `json:"plugin_digests"`
 		} `json:"expected"`
 	}
 	if err := json.Unmarshal(output, &receipt); err != nil {
@@ -95,44 +93,44 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing expectation for %s", label)
 		}
-		for _, current := range []*store.Store{s, reopenedStore} {
-			setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
-			if err != nil {
-				t.Fatalf("%s frozen setup: %v", label, err)
-			}
-			if !reflect.DeepEqual(setup.Env, map[string]string{"PRIVATE_SELECTION": marker}) ||
-				!reflect.DeepEqual(setup.SkillMetadata(), want.Skills) || !reflect.DeepEqual(setup.PluginMetadata(), want.Plugins) ||
-				!reflect.DeepEqual(append([]string{}, setup.CapabilityDirectories...), want.CapabilityDirectories) {
-				t.Fatalf("%s frozen selection changed", label)
-			}
-			if len(setup.Skills) != len(want.SkillDigests) || len(setup.Plugins) != len(want.PluginDigests) {
-				t.Fatalf("%s frozen archive count differs", label)
-			}
-			for i, skill := range setup.Skills {
-				digest := sha256.Sum256(skill.Archive)
-				if hex.EncodeToString(digest[:]) != want.SkillDigests[i] {
-					t.Fatalf("%s frozen Skill bytes changed", label)
-				}
-			}
-			for i, plugin := range setup.Plugins {
-				digest := sha256.Sum256(plugin.Archive)
-				if hex.EncodeToString(digest[:]) != want.PluginDigests[i] {
-					t.Fatalf("%s frozen Plugin bytes changed", label)
-				}
-			}
-			if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, store.ErrNotFound) {
-				t.Fatalf("%s foreign setup read: %v", label, err)
-			}
-			file, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, 0)
-			if err != nil || string(body) != marker+"-source" || file.Path != "/workspace/source.txt" {
-				t.Fatalf("%s frozen source file changed: %v", label, err)
-			}
-			if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, 0); err == nil {
-				t.Fatalf("%s foreign initial file read: %v", label, err)
+		// A reader built after the requests reads the frozen setup and files.
+		current := fixtureSessionStore(db)
+		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
+		if err != nil {
+			t.Fatalf("%s frozen setup: %v", label, err)
+		}
+		if !reflect.DeepEqual(setup.Env, map[string]string{"PRIVATE_SELECTION": marker}) ||
+			!reflect.DeepEqual(setup.SkillMetadata(), want.Skills) || !reflect.DeepEqual(setup.PluginMetadata(), want.Plugins) ||
+			!reflect.DeepEqual(append([]string{}, setup.CapabilityDirectories...), want.CapabilityDirectories) {
+			t.Fatalf("%s frozen selection changed", label)
+		}
+		if len(setup.Skills) != len(want.SkillDigests) || len(setup.Plugins) != len(want.PluginDigests) {
+			t.Fatalf("%s frozen archive count differs", label)
+		}
+		for i, skill := range setup.Skills {
+			digest := sha256.Sum256(skill.Archive)
+			if hex.EncodeToString(digest[:]) != want.SkillDigests[i] {
+				t.Fatalf("%s frozen Skill bytes changed", label)
 			}
 		}
+		for i, plugin := range setup.Plugins {
+			digest := sha256.Sum256(plugin.Archive)
+			if hex.EncodeToString(digest[:]) != want.PluginDigests[i] {
+				t.Fatalf("%s frozen Plugin bytes changed", label)
+			}
+		}
+		if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, sessions.ErrNotFound) {
+			t.Fatalf("%s foreign setup read: %v", label, err)
+		}
+		file, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, 0)
+		if err != nil || string(body) != marker+"-source" || file.Path != "/workspace/source.txt" {
+			t.Fatalf("%s frozen source file changed: %v", label, err)
+		}
+		if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, 0); err == nil {
+			t.Fatalf("%s foreign initial file read: %v", label, err)
+		}
 		var encryptedSetup, encryptedFile, configuration []byte
-		err := pool.QueryRow(t.Context(), "SELECT e.contents,f.contents,s.configuration FROM environment_setups e JOIN sessions s ON s.id=e.session_id JOIN initial_environment_files f ON f.session_id=s.id WHERE s.id=$1", id).Scan(&encryptedSetup, &encryptedFile, &configuration)
+		err = pool.QueryRow(t.Context(), "SELECT e.contents,f.contents,s.configuration FROM environment_setups e JOIN sessions s ON s.id=e.session_id JOIN initial_environment_files f ON f.session_id=s.id WHERE s.id=$1", id).Scan(&encryptedSetup, &encryptedFile, &configuration)
 		if err != nil || len(encryptedSetup) == 0 || len(encryptedFile) == 0 ||
 			bytes.Contains(encryptedSetup, []byte(marker)) || bytes.Contains(encryptedFile, []byte(marker)) || bytes.Contains(configuration, []byte(marker)) {
 			t.Fatalf("%s confidential initialization storage: %v", label, err)

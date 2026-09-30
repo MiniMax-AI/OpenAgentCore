@@ -3,77 +3,77 @@ package store
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// ManagedSessionArchive reports resource disposal, not archive request provenance
-// or Turn settlement. Existing expiry and failed provisioning use the same states.
-type ManagedSessionArchive struct {
-	SessionID     string `json:"session_id"`
-	EnvironmentID string `json:"environment_id"`
-	State         string `json:"state"`
-}
-
 // ArchiveManagedSession ends a managed Environment's lifetime while keeping its
 // public Session, history and persisted files. The lifecycle owner performs the
 // external cleanup; only its existing confirmation can release an allocation.
-func (s *Store) ArchiveManagedSession(ctx context.Context, tenantID, sessionID string, expectedGeneration uint64) (ManagedSessionArchive, error) {
+func (s *Store) ArchiveManagedSession(ctx context.Context, tenantID, sessionID string, expectedGeneration uint64) (sessions.ManagedArchive, error) {
 	return s.archiveManagedSession(ctx, tenantID, sessionID, expectedGeneration, nil)
 }
 
 // A reset instance is identified by its persisted request time as well as its
 // generation, preventing a cancelled clear's candidates from affecting its successor.
-func (s *Store) ArchiveSandboxResetSession(ctx context.Context, tenantID, sessionID string, generation uint64, requestedAt time.Time) (ManagedSessionArchive, error) {
+func (s *Store) ArchiveSandboxResetSession(ctx context.Context, tenantID, sessionID string, generation uint64, requestedAt time.Time) (sessions.ManagedArchive, error) {
 	return s.archiveManagedSession(ctx, tenantID, sessionID, generation, &requestedAt)
 }
 
 var ErrSandboxResetSessionBusy = errors.New("the hosted Session is busy")
 
-func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID string, expectedGeneration uint64, resetRequestedAt *time.Time) (ManagedSessionArchive, error) {
+func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID string, expectedGeneration uint64, resetRequestedAt *time.Time) (sessions.ManagedArchive, error) {
 	if err := s.checkExecutionAuthority(); err != nil {
-		return ManagedSessionArchive{}, err
+		return sessions.ManagedArchive{}, err
 	}
 	tenant, err := parseID(tenantID)
 	if err != nil {
-		return ManagedSessionArchive{}, err
+		return sessions.ManagedArchive{}, err
 	}
-	var result ManagedSessionArchive
+	var result sessions.ManagedArchive
 	err = s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		// Session precedes deployment, matching Turn, allocation and input admission.
-		deployment, err := q.LockRuntimeDeployment(ctx)
+		current, err := q.LockRuntimeDeployment(ctx)
 		if err != nil {
 			return err
 		}
-		if uint64(deployment.Generation) != expectedGeneration {
-			return &SandboxGenerationStaleError{uint64(deployment.Generation)}
+		if uint64(current.Generation) != expectedGeneration {
+			return &deployment.GenerationStaleError{CurrentGeneration: uint64(current.Generation)}
 		}
-		if !deployment.WebManaged || !deployment.InstallationID.Valid {
-			return ErrSandboxDeploymentConflict
+		if !current.WebManaged || !current.InstallationID.Valid {
+			return deployment.ErrConflict
 		}
-		if deployment.ProviderKind == "" {
-			return ErrSandboxNotConfigured
+		if current.ProviderKind == "" {
+			return deployment.ErrNotConfigured
 		}
 		environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: session})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		if err != nil {
 			return err
 		}
-		kind, err := storedEnvironmentType(environment)
+		kind, err := sessions.EnvironmentType(environment.Configuration)
 		if err != nil || kind != "openai_hosted" {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		if resetRequestedAt != nil {
-			if !deployment.ResetClear.Valid || !deployment.ResetRequestedAt.Time.Equal(*resetRequestedAt) {
-				return ErrSandboxDeploymentConflict
+			if !current.ResetClear.Valid || !current.ResetRequestedAt.Time.Equal(*resetRequestedAt) {
+				return deployment.ErrConflict
 			}
-			if deployment.ResetClear.String == "auto" {
+			if current.ResetClear.String == "auto" {
 				busy, err := q.SessionBlocksAutoReset(ctx, session)
 				if err != nil {
 					return err
@@ -86,7 +86,7 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 				result, err = getManagedSessionArchive(ctx, q, tenant, session)
 				return err
 			}
-			source, err := sandboxResetAudit(deployment)
+			source, err := deploymentpg.ResetSource(current)
 			if err != nil {
 				return err
 			}
@@ -102,16 +102,17 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		if allocated && allocation.RuntimeAllocation.State != "released" && allocation.RuntimeAllocation.ProviderKey != deployment.InstallationID {
-			return ErrSandboxDeploymentConflict
+		if allocated && allocation.RuntimeAllocation.State != "released" && allocation.RuntimeAllocation.ProviderKey != current.InstallationID {
+			return deployment.ErrConflict
 		}
-		if err := withEnvironmentInputActivity(ctx, q, session, func() error {
+		bound := sessionpg.BindSession(q, tenant, session)
+		if err := sessions.TrackInputActivity(ctx, bound, func(ctx context.Context) error {
 			if environment.Environment.Status != "failed" && environment.Environment.Status != "expired" {
 				if err := q.SetEnvironmentConnectionStatus(ctx, sqlc.SetEnvironmentConnectionStatusParams{ID: environment.Environment.ID, Status: "expired"}); err != nil {
 					return err
 				}
 			}
-			return cancelSessionWork(ctx, q, session)
+			return sessions.CancelWork(ctx, bound)
 		}); err != nil {
 			return err
 		}
@@ -127,7 +128,7 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 				return err
 			}
 		}
-		if err := recordAdminMutation(ctx, q, tenantID, "archive", "session", runtimeUUID(session)); err != nil {
+		if err := auditpg.RecordAdminMutation(ctx, q, tenantID, "archive", "session", runtimeUUID(session)); err != nil {
 			return err
 		}
 		result, err = getManagedSessionArchive(ctx, q, tenant, session)
@@ -137,24 +138,24 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 }
 
 // GetManagedSessionArchive reads one database snapshot and never contacts compute.
-func (s *Store) GetManagedSessionArchive(ctx context.Context, tenantID, sessionID string) (ManagedSessionArchive, error) {
+func (s *Store) GetManagedSessionArchive(ctx context.Context, tenantID, sessionID string) (sessions.ManagedArchive, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
-		return ManagedSessionArchive{}, err
+		return sessions.ManagedArchive{}, err
 	}
-	return getManagedSessionArchive(ctx, s.queries, tenant, parsePathID(sessionID))
+	return getManagedSessionArchive(ctx, s.queries, tenant, pgunit.PathID(sessionID))
 }
 
-func getManagedSessionArchive(ctx context.Context, q *sqlc.Queries, tenant, session pgtype.UUID) (ManagedSessionArchive, error) {
+func getManagedSessionArchive(ctx context.Context, q *sqlc.Queries, tenant, session pgtype.UUID) (sessions.ManagedArchive, error) {
 	row, err := q.GetManagedSessionArchive(ctx, sqlc.GetManagedSessionArchiveParams{TenantID: tenant, ID: session})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ManagedSessionArchive{}, ErrNotFound
+		return sessions.ManagedArchive{}, sessions.ErrNotFound
 	}
 	if err != nil {
-		return ManagedSessionArchive{}, err
+		return sessions.ManagedArchive{}, err
 	}
 	if row.EnvironmentType != "openai_hosted" {
-		return ManagedSessionArchive{}, ErrInvalidInput
+		return sessions.ManagedArchive{}, sessions.ErrInvalidInput
 	}
-	return ManagedSessionArchive{SessionID: runtimeUUID(row.SessionID), EnvironmentID: runtimeUUID(row.EnvironmentID), State: row.State}, nil
+	return sessions.ManagedArchive{SessionID: runtimeUUID(row.SessionID), EnvironmentID: runtimeUUID(row.EnvironmentID), State: row.State}, nil
 }

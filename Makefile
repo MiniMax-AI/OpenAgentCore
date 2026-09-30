@@ -8,7 +8,7 @@ SWAG_VERSION ?= v1.16.4
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
-check: check-harness-catalog check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-core check-claude-sdk check-web check-example check-mcode-harness
+check: check-ci check-harness-catalog check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-core check-claude-sdk check-web check-example check-mcode-harness
 	@printf 'OpenAgentCore checks passed.\n'
 
 .PHONY: generate-harness-catalog check-harness-catalog
@@ -175,3 +175,10 @@ check-e2b-provider:
 .PHONY: check-sandbox-provider-contract
 check-sandbox-provider-contract:
 	go test ./services/core/internal/sandbox/... -count=1
+
+.PHONY: check-docs check-ci
+check-docs:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
+
+check-ci:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'ci_*test.py'

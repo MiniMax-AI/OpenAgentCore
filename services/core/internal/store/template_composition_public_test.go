@@ -13,9 +13,10 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -30,20 +31,17 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
-	reopenedStore := store.NewWithCredentialCipher(pool, cipher)
+	s, reopenedStore := store.NewWithCredentialCipher(pool, cipher), store.NewWithCredentialCipher(pool, cipher)
+	db := fixtureDB{pool: pool, cipher: cipher} // built both Stores
 	tenant, foreignTenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	serve := func(current *store.Store) *httptest.Server {
 		t.Helper()
 		// Hosted admission and freezing use the real Store; no Runtime or model runs.
-		h, err := api.NewHandler(current, auth, "codex", api.WithHostedEnvironments(), api.WithExecution(current), api.WithSourceFiles(current), fixtureDeploymentProvider())
+		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, current, db), fixtureDeploymentProvider())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,14 +83,14 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	// A second handler/Store exercises reopened persistence, not an OS process restart.
 	for label, id := range receipt.Sessions {
 		env := map[string]string{"TEMPLATE_ONLY": marker + "-template-env", "SHARED": marker + "-template-shared"}
-		commands := []store.SetupCommand{{Command: "printf " + marker + "-template-command", CWD: "/workspace"}}
+		commands := []environmentconfig.SetupCommand{{Command: "printf " + marker + "-template-command", CWD: "/workspace"}}
 		packages := v1.EnvironmentPackages{Python: []string{"packaging==25.0"}, NPM: []string{"semver@7.7.2"}}
 		paths := []string{"/workspace/template-only.txt", "/workspace/overlap.txt"}
 		contents := []string{marker + "-template-file", marker + "-source"}
 		switch label {
 		case "populated":
 			env["SHARED"], env["INLINE_ONLY"] = marker+"-inline-shared", marker+"-inline-env"
-			commands = []store.SetupCommand{{Command: "printf " + marker + "-inline-one"}, {Command: "printf " + marker + "-inline-two", CWD: "/workspace"}}
+			commands = []environmentconfig.SetupCommand{{Command: "printf " + marker + "-inline-one"}, {Command: "printf " + marker + "-inline-two", CWD: "/workspace"}}
 			packages.Python, packages.NPM = []string{"idna==3.10"}, []string{}
 			paths = []string{"/workspace/overlap.txt", "/workspace/selected-source.txt"}
 			contents = []string{marker + "-inline-file", marker + "-source"}
@@ -105,31 +103,31 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 		default:
 			t.Fatalf("unknown case %q", label)
 		}
-		for _, current := range []*store.Store{s, reopenedStore} {
-			setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
-			if err != nil || !reflect.DeepEqual(setup.Env, env) || !reflect.DeepEqual(setup.PackageMetadata(), packages) || len(setup.Commands) != len(commands) {
-				t.Fatalf("%s durable setup differs: %v", label, err)
+		// A reader built after the requests reads the frozen setup and files.
+		current := fixtureSessionStore(db)
+		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
+		if err != nil || !reflect.DeepEqual(setup.Env, env) || !reflect.DeepEqual(setup.PackageMetadata(), packages) || len(setup.Commands) != len(commands) {
+			t.Fatalf("%s durable setup differs: %v", label, err)
+		}
+		for i, want := range commands {
+			if setup.Commands[i] != want {
+				t.Fatalf("%s command order differs", label)
 			}
-			for i, want := range commands {
-				if setup.Commands[i] != want {
-					t.Fatalf("%s command order differs", label)
-				}
+		}
+		if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, sessions.ErrNotFound) {
+			t.Fatalf("%s foreign setup read: %v", label, err)
+		}
+		for position, want := range contents {
+			metadata, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
+			if err != nil || string(body) != want || metadata.Path != paths[position] || metadata.SizeBytes == nil || *metadata.SizeBytes != int64(len(want)) {
+				t.Fatalf("%s frozen file %d differs: %v", label, position, err)
 			}
-			if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, store.ErrNotFound) {
-				t.Fatalf("%s foreign setup read: %v", label, err)
+			if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, position); err == nil {
+				t.Fatalf("%s foreign file read succeeded", label)
 			}
-			for position, want := range contents {
-				metadata, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
-				if err != nil || string(body) != want || metadata.Path != paths[position] || metadata.SizeBytes == nil || *metadata.SizeBytes != int64(len(want)) {
-					t.Fatalf("%s frozen file %d differs: %v", label, position, err)
-				}
-				if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, position); err == nil {
-					t.Fatalf("%s foreign file read succeeded", label)
-				}
-				var encrypted []byte
-				if err := pool.QueryRow(t.Context(), "SELECT contents FROM initial_environment_files WHERE id=$1", metadata.ID).Scan(&encrypted); err != nil || bytes.Contains(encrypted, []byte(marker)) {
-					t.Fatalf("%s plaintext file storage: %v", label, err)
-				}
+			var encrypted []byte
+			if err := pool.QueryRow(t.Context(), "SELECT contents FROM initial_environment_files WHERE id=$1", metadata.ID).Scan(&encrypted); err != nil || bytes.Contains(encrypted, []byte(marker)) {
+				t.Fatalf("%s plaintext file storage: %v", label, err)
 			}
 		}
 		var encrypted, configuration []byte

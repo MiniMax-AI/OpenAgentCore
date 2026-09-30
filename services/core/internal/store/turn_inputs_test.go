@@ -9,15 +9,16 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 var messagePayload = json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}]}`)
 
-func newTurnSession(t *testing.T, s *Store) (string, Session) {
+func newTurnSession(t *testing.T, s *Store) (string, sessions.Session) {
 	t.Helper()
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(context.Background(), tenant, CreateSessionInput{Creator: FixtureCreator(),
+	session, err := s.CreateSession(context.Background(), tenant, sessions.CreateSession{Creator: FixtureCreator(),
 		Engine: "codex", IdempotencyKey: "session", Configuration: json.RawMessage(`{"agent":{"model":"test","instructions":"original"}}`),
 	})
 	if err != nil {
@@ -26,7 +27,7 @@ func newTurnSession(t *testing.T, s *Store) (string, Session) {
 	return tenant, session
 }
 
-func submitMessage(t *testing.T, s *Store, tenant, session, key string) InputReceipt {
+func submitMessage(t *testing.T, s *Store, tenant, session, key string) sessions.InputReceipt {
 	t.Helper()
 	receipt, err := s.SubmitMessage(context.Background(), tenant, session, key, messagePayload)
 	if err != nil {
@@ -35,9 +36,9 @@ func submitMessage(t *testing.T, s *Store, tenant, session, key string) InputRec
 	return receipt
 }
 
-func transition(t *testing.T, s *Store, tenant, session, turn, from, to string) Turn {
+func transition(t *testing.T, s *Store, tenant, session, turn, from, to string) sessions.Turn {
 	t.Helper()
-	got, err := s.TransitionTurn(context.Background(), tenant, session, turn, TurnTransition{ExpectedStatus: from, Status: to})
+	got, err := s.TransitionTurn(context.Background(), tenant, session, turn, sessions.TurnTransition{ExpectedStatus: from, Status: to})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +54,7 @@ func TestConcurrentInputsUseOneTurnAndOneRetryReceipt(t *testing.T) {
 	for _, repeatedKey := range []bool{true, false} {
 		t.Run(fmt.Sprintf("repeated-key-%v", repeatedKey), func(t *testing.T) {
 			var wg sync.WaitGroup
-			receipts := make(chan InputReceipt, count)
+			receipts := make(chan sessions.InputReceipt, count)
 			errs := make(chan error, count)
 			for i := range count {
 				wg.Add(1)
@@ -109,7 +110,7 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
 	first := submitMessage(t, s, tenant, session.ID, "first")
-	transition(t, s, tenant, session.ID, first.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	steer := submitMessage(t, s, tenant, session.ID, "steer")
 	if steer.TurnID != first.TurnID || steer.Sequence <= first.Sequence {
 		t.Fatalf("active message did not steer: %+v", steer)
@@ -119,13 +120,13 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 	if err != nil || !retry.Replayed || retry.Sequence != first.Sequence || retry.TurnID != first.TurnID {
 		t.Fatalf("equivalent retry = %+v, %v", retry, err)
 	}
-	if _, err := s.SubmitMessage(ctx, tenant, session.ID, "first", json.RawMessage(`{"text":"changed"}`)); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := s.SubmitMessage(ctx, tenant, session.ID, "first", json.RawMessage(`{"text":"changed"}`)); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatalf("changed payload accepted: %v", err)
 	}
-	if _, err := s.RequestCancel(ctx, tenant, session.ID, "first"); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := s.RequestCancel(ctx, tenant, session.ID, "first"); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatalf("changed input kind accepted: %v", err)
 	}
-	completed := transition(t, s, tenant, session.ID, first.TurnID, TurnInProgress, TurnCompleted)
+	completed := transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	next := submitMessage(t, s, tenant, session.ID, "next")
 	if next.TurnID == first.TurnID {
 		t.Fatal("idle message did not start a new Turn")
@@ -140,7 +141,7 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, completed) {
 		t.Fatalf("restart turn: %+v, %v", got, err)
 	}
-	var all []TurnInput
+	var all []sessions.TurnInput
 	var cursor int64
 	for {
 		page, err := recovered.ListTurnInputs(ctx, tenant, session.ID, first.TurnID, cursor, 1)
@@ -160,7 +161,7 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 		t.Fatalf("recovered inputs = %+v", all)
 	}
 	snapshot, err := recovered.GetSession(ctx, tenant, session.ID)
-	if err != nil || snapshot.LastTurn == nil || snapshot.LastTurn.ID != next.TurnID || snapshot.LastTurn.Status != TurnQueued {
+	if err != nil || snapshot.LastTurn == nil || snapshot.LastTurn.ID != next.TurnID || snapshot.LastTurn.Status != sessions.TurnQueued {
 		t.Fatal("latest Session activity did not survive restart", err)
 	}
 	snapshot.LastTurn = nil
@@ -188,24 +189,24 @@ func TestTurnOperationsAreTenantAndSessionScoped(t *testing.T) {
 				return err
 			},
 			"transition": func() error {
-				_, err := s.TransitionTurn(ctx, scope.tenant, scope.session, first.TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnFailed})
+				_, err := s.TransitionTurn(ctx, scope.tenant, scope.session, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed})
 				return err
 			},
 		} {
-			if err := call(); !errors.Is(err, ErrNotFound) {
+			if err := call(); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatalf("%s escaped scope: %v", name, err)
 			}
 		}
 	}
 	// Turn IDs cannot be used with another valid Session in the same tenant either.
-	second, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "second"})
+	second, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "second"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetTurn(ctx, tenant, second.ID, first.TurnID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetTurn(ctx, tenant, second.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("cross-session turn read: %v", err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, second.ID, first.TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnFailed}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.TransitionTurn(ctx, tenant, second.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("cross-session turn write: %v", err)
 	}
 	otherInput := submitMessage(t, s, otherTenant, other.ID, "input")

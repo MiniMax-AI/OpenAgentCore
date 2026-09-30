@@ -23,7 +23,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -32,12 +31,28 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -45,9 +60,11 @@ import (
 	historystoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	observationstoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/storeresolver"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -107,18 +124,57 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	executionStore := store.NewWithCredentialCipherAndOAuthRefresh(pool, credentialKey, oauthClient)
+	executionStore := store.NewWithCredentialCipher(pool, credentialKey)
 	executionStore.SetPublicURL(public)
+	units := pgunit.NewPool(pool)
+	auditStore := auditpg.New(units)
+	agentStore := agentpg.New(units, credentialKey)
+	agentService, err := agents.NewService(agentStore)
+	if err != nil {
+		return err
+	}
+	vaultStore := vaultpg.New(units, credentialKey)
+	vaultService, err := vaults.NewService(vaultStore, oauthClient)
+	if err != nil {
+		return err
+	}
+	templateStore := templatepg.New(units, credentialKey)
+	environmentTemplates, err := environmenttemplates.NewService(templateStore)
+	if err != nil {
+		return err
+	}
+	modelConfigurationStore := modelconfigurationpg.New(units, credentialKey)
+	modelConfigurationService, err := modelconfiguration.NewService(modelConfigurationStore)
+	if err != nil {
+		return err
+	}
+	skillStore := skillpg.New(units, credentialKey)
+	skillService, err := skills.NewService(skillStore, skillStore)
+	if err != nil {
+		return err
+	}
+	projectStore := projectpg.New(units)
+	projectService, err := projects.NewService(projectStore)
+	if err != nil {
+		return err
+	}
+	sandboxProviders := providers.Builtin()
+	deploymentStore := deploymentpg.New(units, credentialKey)
+	deploymentService, err := deployment.NewService(deploymentStore, deploymentStore, sandboxProviders, public)
+	if err != nil {
+		return err
+	}
+	sessionStore := sessionpg.New(units, credentialKey)
+	sessionService, err := sessions.NewService(sessionStore)
+	if err != nil {
+		return err
+	}
 	installation, err := installationFacts(public)
 	if err != nil {
 		return err
 	}
 	metricsSource := &coreMetricsSource{store: executionStore, pool: pool}
 	metrics := coremetrics.New(processStartedAt, buildRevision, metricsSource)
-	auth, err := api.NewDatabaseAuthenticator(executionStore)
-	if err != nil {
-		return err
-	}
 	auditRetention, err := writeAuditRetention()
 	if err != nil {
 		return err
@@ -127,12 +183,12 @@ func run() error {
 	auditCleanupDone := make(chan struct{})
 	go func() {
 		defer close(auditCleanupDone)
-		runWriteAuditCleanup(auditCleanupCtx, executionStore, auditRetention, metrics)
+		runWriteAuditCleanup(auditCleanupCtx, auditStore, auditRetention, metrics)
 	}()
 	defer func() { cancelAuditCleanup(); <-auditCleanupDone }()
 	var workerDone chan error
 	var worker *execution.Worker
-	managedNodes, err := configureManagedNodes(executionStore, public, func(ctx context.Context) error {
+	managedNodes, err := configureManagedNodes(executionStore, deploymentService, deploymentStore, sandboxProviders, public, func(ctx context.Context) error {
 		if worker == nil {
 			return errors.New("sandbox execution owner is unavailable")
 		}
@@ -143,18 +199,10 @@ func run() error {
 	}
 	defer managedNodes.close()
 	var managed *execution.RuntimeProvider
+	observationSources := map[string]runtimeobs.SourceResolver{}
 	if managedNodes != nil {
 		managed = managedNodes.runtime
-	}
-	observationSources := map[string]runtimeobs.SourceResolver{}
-	if managedNodes != nil && managedNodes.setup != nil {
 		observationSources[managed.InstallationID] = managedNodes.setup
-	} else if managed != nil {
-		source, ok := managed.Provider.(runtimeobs.SourceResolver)
-		if !ok {
-			return providercontract.ErrContract
-		}
-		observationSources[managed.InstallationID] = source
 	}
 	observationResolver, err := observationstoreresolver.NewResolver(executionStore)
 	if err != nil {
@@ -188,13 +236,6 @@ func run() error {
 		runHistoryCleanup(cleanupCtx, history.Prune, metrics)
 	}()
 	defer func() { cancelCleanup(); <-cleanupDone }()
-	options := []api.Option{api.WithCoreMetrics(metrics), api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
-	if managedNodes != nil {
-		options = append(options, api.WithSandboxManager(executionStore, managedNodes.admin))
-		options = append(options, api.WithSandboxConfigurationDiscovery(func(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
-			return providers.DiscoverConfiguration(ctx, kind, input, managedNodes.setup.processPaths)
-		}))
-	}
 	var keyAdmin *api.DeploymentAuthenticator
 	if managedNodes != nil {
 		keyAdmin = managedNodes.admin
@@ -204,30 +245,27 @@ func run() error {
 			return err
 		}
 	}
-	if err := api.ValidateCredentialSeparation(ctx, keyAdmin, executionStore); err != nil {
+	if err := api.ValidateCredentialSeparation(ctx, keyAdmin, projectStore); err != nil {
 		return err
 	}
-	options = append(options, api.WithProjectAPIKeys(executionStore, keyAdmin), api.WithWriteAudit(executionStore, keyAdmin), api.WithAdminManagement(executionStore),
-		api.WithInstallation(installation, executionStore.AddressBindings))
-	if history.Reader != nil {
-		historyResolver, resolverErr := historystoreresolver.NewResolver(executionStore)
-		if resolverErr != nil {
-			return resolverErr
-		}
-		historyService, serviceErr := runtimehistory.NewService(historyResolver, history.Reader)
-		if serviceErr != nil {
-			return serviceErr
-		}
-		options = append(options, api.WithRuntimeHistory(historyService))
+	historyResolver, err := historystoreresolver.NewResolver(sessionStore)
+	if err != nil {
+		return err
+	}
+	historyService, err := runtimehistory.NewService(historyResolver, history.Reader)
+	if err != nil {
+		return err
 	}
 	var daemonHandler http.Handler
 	var registry *runtimegateway.Registry
+	var executorURL string
+	var nativeInstaller *api.NativeInstaller
 	if public != "" {
-		wsURL, err := runtimeWebSocketURL(public)
+		executorURL, err = runtimeWebSocketURL(public)
 		if err != nil {
 			return err
 		}
-		daemonHandler, registry, err = runtime.NewGateway(executionStore, wsURL)
+		daemonHandler, registry, err = runtime.NewGateway(sessionStore, sessionService, executionStore, executorURL)
 		if err != nil {
 			return err
 		}
@@ -245,21 +283,37 @@ func run() error {
 				return err
 			}
 		}
-		options = append(options, api.WithEnvironmentRemoteURL(wsURL), api.WithNativeInstaller(catalog, buildRevision))
+		if buildRevision != "" {
+			nativeInstaller = &api.NativeInstaller{Version: buildRevision, Catalog: catalog}
+		}
 	}
-	options = append(options, api.WithExecutorConnections(func(ctx context.Context, environment, digest string) (bool, error) {
-		return runtimeenrollment.RuntimeConnected(ctx, executionStore, registry, environment, digest)
-	}))
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
+			Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService, DeploymentReader: deploymentStore,
+			Sessions:        sessionService,
+			SessionsReader:  sessionStore,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
-
-		worker, err = execution.StartWorker(ctx, dispatcher)
+		lease, err := pgunit.AcquireLease(ctx, pool)
 		if err != nil {
 			return err
 		}
-		if managedNodes != nil && managedNodes.setup != nil {
-			options = append(options, api.WithSandboxDeploymentSetup(worker.InitializeSandboxDeployment), api.WithSandboxDeploymentChanges(worker.UpdateSandboxDeployment, worker.StartSandboxReset, worker.CancelSandboxReset))
+		deploymentExecution, err := deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey))
+		if err != nil {
+			return errors.Join(err, lease.Close(ctx))
+		}
+		sessionExecution, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
+		if err != nil {
+			return errors.Join(err, lease.Close(ctx))
+		}
+		// From this call on the Worker closes the lease, even when it fails to start.
+		worker, err = execution.StartWorker(ctx, dispatcher, execution.Owner{
+			Lease:      lease,
+			Store:      store.NewExecution(executionStore, lease),
+			Deployment: deploymentExecution,
+			Sessions:   sessionExecution,
+		})
+		if err != nil {
+			return err
 		}
 		workerDone = make(chan error, 1)
 		go func() { workerDone <- worker.Run(ctx) }()
@@ -269,11 +323,6 @@ func run() error {
 				<-workerDone
 			}
 		}()
-		options = append(options, api.WithExecution(worker), api.WithSessionArchive(worker.ArchiveManagedSession), api.WithEnvironmentDirectoryReader(worker), api.WithEnvironmentFileWriter(worker))
-		options = append(options, api.WithHarnesses(kinds), api.WithModelProviderDefaults(executionStore.DeploymentModelProvider))
-		if managed != nil {
-			options = append(options, api.WithHostedEnvironments())
-		}
 	}
 	if history.SampleInterval == 0 {
 		metrics.StopJob("runtime_sampler")
@@ -288,7 +337,7 @@ func run() error {
 				sampleCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 				sampleErr := worker.CheckOwnership(sampleCtx)
 				if sampleErr == nil {
-					_, sampleErr = executionStore.SampleNodeHostHistory(sampleCtx)
+					_, sampleErr = deploymentStore.SampleHostHistory(sampleCtx)
 				}
 				cancel()
 				if !result.Complete {
@@ -319,14 +368,61 @@ func run() error {
 	metricsDone := make(chan struct{})
 	go func() { defer close(metricsDone); metrics.Run(metricsCtx) }()
 	defer func() { cancelMetrics(); <-metricsDone }()
-	handler, err := api.NewHandler(executionStore, auth, engine, options...)
+	fileStore := filepg.New(units)
+	fileService, err := files.NewService(fileStore)
+	if err != nil {
+		return err
+	}
+	deps := api.Dependencies{
+		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
+		Installation: installation, InstallationBindings: deploymentService,
+		Projects: projectService, ProjectsReader: projectStore,
+		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
+		Vaults: vaultService, VaultsReader: vaultStore,
+		Skills: skillService, SkillsReader: skillStore,
+		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templateStore,
+		Files: fileService, FilesReader: fileStore,
+		Agents: agentService, AgentsReader: agentStore,
+		Sessions:        executionStore,
+		SessionCreation: executionStore,
+		SessionEvents:   executionStore,
+		Turns:           executionStore,
+		Items:           sessionStore,
+		Subagents:       sessionStore,
+		Artifacts:       sessionService,
+		ArtifactsReader: sessionStore,
+		SessionAdmin:    executionStore,
+		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, registry: registry},
+		Admin: executionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
+		RuntimeObservations: observationService, RuntimeHistory: historyService,
+	}
+	if worker != nil {
+		deps.Execution = &api.Execution{
+			ExecutorURL:      executorURL,
+			SessionAdmission: worker,
+			InputAdmission:   worker,
+			SessionArchive:   worker,
+			Workspaces:       worker,
+			NativeInstaller:  nativeInstaller,
+		}
+	}
+	if managedNodes != nil {
+		deps.Sandboxes = &api.Sandboxes{
+			Deployment:             deploymentService,
+			NodeAllocations:        executionStore,
+			DeploymentChanges:      worker,
+			DeploymentReset:        worker,
+			ConfigurationDiscovery: managedNodes.setup,
+		}
+	}
+	handler, err := api.NewHandler(deps)
 	if err != nil {
 		return err
 	}
 	if daemonHandler != nil {
 		routes := daemonRoutes{gateway: daemonHandler,
-			enrollment: runtimeenrollment.EnrollmentHandler(executionStore),
-			connection: runtimeenrollment.ConnectionHandler(executionStore, registry)}
+			enrollment: runtimeenrollment.EnrollmentHandler(sessionService),
+			connection: runtimeenrollment.ConnectionHandler(sessionStore, registry)}
 		if managedNodes != nil {
 			routes.nodeConnect = managedNodes.hub
 		}

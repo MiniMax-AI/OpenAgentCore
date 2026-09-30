@@ -3,12 +3,15 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/google/uuid"
 )
 
 func TestNativeSessionRecoveryRequiresPinnedNative(t *testing.T) {
@@ -139,36 +142,57 @@ func TestRequiredHistoryResolution(t *testing.T) {
 }
 
 func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
-	req, cfg, root := preparationFixture(t)
-	req.RequireExistingNativeSession = true
-	p, err := newPreparation(t.Context(), req, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer p.Close()
-	assertPreparationOnly(t, root)
-	out := make(chan proto.Envelope, 16)
-	session, err := p.Start(t.Context(), "recovery-run", proto.TextInput("continue"), out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer session.Cancel(context.Background())
-	select {
-	case <-p.session.waitDone:
-	case <-time.After(4 * time.Second):
-		t.Fatal("recovery did not terminate")
-	}
-	found := false
-	for _, frame := range preparationFrames(t, root) {
-		if frame.Method == "thread/list" {
-			found = true
-		}
-		if frame.Method == "thread/start" || frame.Method == "turn/start" {
-			t.Fatal("missing history started work", frame.Method)
-		}
-	}
-	if !found {
-		t.Fatal("prepared start lost recovery requirement")
+	// Recovery searches history for the Session's working directory: the private
+	// home for environment:none and the bound workspace root otherwise.
+	for _, environment := range []string{"none", "local"} {
+		t.Run(environment, func(t *testing.T) {
+			req, cfg, root := preparationFixture(t)
+			req.RequireExistingNativeSession = true
+			cwd, err := allocCodexHome(req.AgentStateKey)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if environment == "local" {
+				cwd = filepath.Join(root, "workspace")
+				if err := os.Mkdir(cwd, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				req.DisableExecutionEnvironment = false
+				req.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}, WorkspaceRoot: cwd}
+			}
+			p, err := newPreparation(t.Context(), req, cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer p.Close()
+			if p.plan.Cwd != cwd {
+				t.Fatalf("cwd = %q, want %q", p.plan.Cwd, cwd)
+			}
+			assertPreparationOnly(t, root)
+			out := make(chan proto.Envelope, 16)
+			session, err := p.Start(t.Context(), "recovery-run", proto.TextInput("continue"), out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer session.Cancel(context.Background())
+			select {
+			case <-p.session.waitDone:
+			case <-time.After(4 * time.Second):
+				t.Fatal("recovery did not terminate")
+			}
+			found := false
+			for _, frame := range preparationFrames(t, root) {
+				if frame.Method == "thread/list" {
+					found = true
+				}
+				if frame.Method == "thread/start" || frame.Method == "turn/start" {
+					t.Fatal("missing history started work", frame.Method)
+				}
+			}
+			if !found {
+				t.Fatal("prepared start lost recovery requirement")
+			}
+		})
 	}
 }
 

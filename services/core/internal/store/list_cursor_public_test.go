@@ -13,9 +13,11 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -33,7 +35,7 @@ type cursorFixture struct {
 	file                                                            string
 }
 
-func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client pathIDClient, token, tenant, label string) cursorFixture {
+func seedCursorFixture(t *testing.T, s *store.Store, leased execution.Owner, skillService *skills.Service, sessionService *sessions.Service, client pathIDClient, token, tenant, label string) cursorFixture {
 	t.Helper()
 	ctx := t.Context()
 	var f cursorFixture
@@ -64,7 +66,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 	f.session = client.created(token, "/v1/agents/sessions", newSession)
 	f.turn = first("/v1/agents/sessions/" + f.session + "/turns")
 	f.item = first("/v1/agents/sessions/" + f.session + "/items")
-	if _, err := s.TransitionTurn(ctx, tenant, f.session, f.turn, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnCancelled}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, f.session, f.turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCancelled}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.SubmitMessage(ctx, tenant, f.session, label+"-second", json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"second"}]}]}`)); err != nil {
@@ -75,16 +77,16 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 
 	artifactSession, environment := hostedArtifactSession(t, s, tenant, label+"-artifacts")
 	f.artifactSession = artifactSession
-	f.artifactTurn = completeArtifactTurn(t, s, tenant, artifactSession, environment, label+"-artifact-turn", map[string]string{"a.txt": "alpha", "c.txt": "charlie"})
+	f.artifactTurn = completeArtifactTurn(t, s, sessionService, tenant, artifactSession, environment, label+"-artifact-turn", map[string]string{"a.txt": "alpha", "c.txt": "charlie"})
 	f.artifact = first("/v1/agents/sessions/" + artifactSession + "/artifacts")
 	otherArtifactSession, otherEnvironment := hostedArtifactSession(t, s, tenant, label+"-other-artifacts")
-	completeArtifactTurn(t, s, tenant, otherArtifactSession, otherEnvironment, label+"-other-artifact-turn", map[string]string{"b.txt": "bravo"})
+	completeArtifactTurn(t, s, sessionService, tenant, otherArtifactSession, otherEnvironment, label+"-other-artifact-turn", map[string]string{"b.txt": "bravo"})
 	f.otherArtifact = first("/v1/agents/sessions/" + otherArtifactSession + "/artifacts")
 
 	// Subagent history is seeded through the execution lease, as a daemon would.
 	seedSubagents := func(key string) (session, rootTurn string) {
 		t.Helper()
-		created, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key,
+		created, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key,
 			Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"cursor-model","multi_agent":{"enabled":true,"max_concurrent_subagents":4}}}`)})
 		if err != nil {
 			t.Fatal(err)
@@ -93,34 +95,34 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 		if err != nil {
 			t.Fatal(err)
 		}
-		host, err := s.CreateDevice(ctx, tenant, "cursor "+key, runtimedevice.HashCredential(uuid.NewString()))
+		host, err := sessionService.CreateDevice(ctx, tenant, "cursor "+key, runtimedevice.HashCredential(uuid.NewString()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = writer.BindSessionDevice(ctx, tenant, created.ID, host.ID); err != nil {
+		if err = leased.Sessions.BindSessionDevice(ctx, tenant, created.ID, host.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = writer.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+		if _, err = leased.Store.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
 		opened := int64(1700000001000)
-		identity := func(child string) store.ExecutionEvent {
+		identity := func(child string) sessions.ExecutionEvent {
 			return subagentFixture(proto.TypeSubagentIdentity, proto.SubagentIdentityPayload{NativeID: child, ParentNativeID: "root", NativeCreatedAt: 1700000001, ParentTurnID: "native-root", SourceItemID: "spawn-" + child})
 		}
 		// Distinct creation times keep child-turn before later-child-turn.
-		turn := func(child, id string, created int64) store.ExecutionEvent {
-			return subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: child, TurnID: id, Status: store.TurnInProgress, CreatedAtMS: created, StartedAtMS: &created})
+		turn := func(child, id string, created int64) sessions.ExecutionEvent {
+			return subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: child, TurnID: id, Status: sessions.TurnInProgress, CreatedAtMS: created, StartedAtMS: &created})
 		}
-		message := func(child, turn, id string, position int32) store.ExecutionEvent {
+		message := func(child, turn, id string, position int32) sessions.ExecutionEvent {
 			text := "answer " + id
 			payload, _ := json.Marshal(proto.OutputMessagePayload{ID: id, Status: "completed", Text: &text})
 			return subagentFixture(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: child, TurnID: turn, ItemID: id, Position: position, Kind: proto.TypeOutputMessage, Payload: payload})
 		}
-		facts := []store.ExecutionEvent{identity("child"), identity("sibling"),
+		facts := []sessions.ExecutionEvent{identity("child"), identity("sibling"),
 			turn("child", "child-turn", opened), message("child", "child-turn", "child-item", 0), message("child", "child-turn", "child-item-2", 1),
 			turn("child", "later-child-turn", opened+1000), message("child", "later-child-turn", "later-child-item", 0),
 			turn("sibling", "sibling-turn", opened), message("sibling", "sibling-turn", "sibling-item", 0)}
-		if err = writer.AppendTurnEvents(ctx, tenant, created.ID, receipt.TurnID, 1, facts); err != nil {
+		if err = leased.Sessions.AppendTurnEvents(ctx, tenant, created.ID, receipt.TurnID, 1, facts); err != nil {
 			t.Fatal(err)
 		}
 		return created.ID, receipt.TurnID
@@ -136,9 +138,10 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 	f.subSession, f.rootTurn = seedSubagents(label + "-subagents")
 	f.rootItem = first("/v1/agents/sessions/" + f.subSession + "/items")
 	f.child, f.sibling = subagent(f.subSession, "child"), subagent(f.subSession, "sibling")
-	childTurns, err := s.ListSubagentTurns(ctx, tenant, f.subSession, f.child, "", 10, true)
-	if err != nil || len(childTurns.Data) != 2 {
-		t.Fatal("fixture child Turns", childTurns, err)
+	status, raw := client.do(token, http.MethodGet, "/v1/agents/sessions/"+f.subSession+"/subagents/"+f.child+"/turns?order=asc", "", nil)
+	var childTurns struct{ Data []struct{ ID string } }
+	if status != http.StatusOK || json.Unmarshal([]byte(raw), &childTurns) != nil || len(childTurns.Data) != 2 {
+		t.Fatal("fixture child Turns", status, raw)
 	}
 	f.childTurn, f.laterChildTurn = childTurns.Data[0].ID, childTurns.Data[1].ID
 	f.childItem = first("/v1/agents/sessions/" + f.subSession + "/subagents/" + f.child + "/turns/" + f.childTurn + "/items")
@@ -149,34 +152,35 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 	f.otherSubagent = subagent(otherSubSession, "child")
 	f.otherChildTurn = first("/v1/agents/sessions/" + otherSubSession + "/subagents/" + f.otherSubagent + "/turns")
 
-	skill, err := s.CreateSkill(ctx, tenant, store.SkillArchive(t, label+"-cursor-skill"))
+	skill, err := skillService.CreateSkill(ctx, skills.CreateSkill{TenantID: tenant, Archive: store.SkillArchive(t, label+"-cursor-skill")})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.skill = skill.ID
-	versions, err := s.ListSkillVersions(ctx, tenant, skill.ID, "", 10, true)
+	skillID := skills.PathID(skill.ID)
+	versions, err := skillService.ListVersions(ctx, skills.ListVersions{TenantID: tenant, SkillID: skillID, Limit: 10, Ascending: true})
 	if err != nil || len(versions.Versions) != 1 {
 		t.Fatal("fixture Skill version", versions, err)
 	}
 	f.version = versions.Versions[0].ID
-	later, err := s.CreateSkillVersion(ctx, tenant, skill.ID, store.SkillArchive(t, label+"-cursor-skill-v2"), false)
+	later, err := skillService.CreateVersion(ctx, skills.CreateVersion{TenantID: tenant, SkillID: skillID, Archive: store.SkillArchive(t, label+"-cursor-skill-v2")})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.laterVersion = later.ID
-	deleted, err := s.CreateSkillVersion(ctx, tenant, skill.ID, store.SkillArchive(t, label+"-cursor-skill-v3"), false)
+	deleted, err := skillService.CreateVersion(ctx, skills.CreateVersion{TenantID: tenant, SkillID: skillID, Archive: store.SkillArchive(t, label+"-cursor-skill-v3")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.DeleteSkillVersion(ctx, tenant, skill.ID, "3"); err != nil {
+	if _, err = skillService.DeleteVersion(ctx, skills.DeleteVersion{TenantID: tenant, SkillID: skillID, Version: 3}); err != nil {
 		t.Fatal(err)
 	}
 	f.deletedVersion = deleted.ID
-	otherSkill, err := s.CreateSkill(ctx, tenant, store.SkillArchive(t, label+"-cursor-other-skill"))
+	otherSkill, err := skillService.CreateSkill(ctx, skills.CreateSkill{TenantID: tenant, Archive: store.SkillArchive(t, label+"-cursor-other-skill")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherVersions, err := s.ListSkillVersions(ctx, tenant, otherSkill.ID, "", 10, true)
+	otherVersions, err := skillService.ListVersions(ctx, skills.ListVersions{TenantID: tenant, SkillID: skills.PathID(otherSkill.ID), Limit: 10, Ascending: true})
 	if err != nil || len(otherVersions.Versions) != 1 {
 		t.Fatal("fixture other Skill version", otherVersions, err)
 	}
@@ -197,7 +201,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 	if err := form.Close(); err != nil {
 		t.Fatal(err)
 	}
-	status, raw := client.do(token, http.MethodPost, "/v1/files", form.FormDataContentType(), upload.Bytes())
+	status, raw = client.do(token, http.MethodPost, "/v1/files", form.FormDataContentType(), upload.Bytes())
 	var file struct{ ID string }
 	if status != http.StatusOK || json.Unmarshal([]byte(raw), &file) != nil || file.ID == "" {
 		t.Fatalf("fixture File: %d %s", status, raw)
@@ -222,30 +226,28 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s), api.WithSubagents(s), api.WithSkills(s), api.WithSourceFiles(s), api.WithSessionArtifacts(s))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	writer, err := store.NewExecution(t.Context(), s)
+	leased := executionOwner(t, db, s)
+	skillService := store.SkillService(t, db.pool, db.cipher)
+	_, sessionService, err := fixtureSessions(db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = writer.CloseExecution(t.Context()) }()
-	a := seedCursorFixture(t, s, writer, client, owner, ownerTenant, "a")
-	b := seedCursorFixture(t, s, writer, client, foreign, foreignTenant, "b")
+	a := seedCursorFixture(t, s, leased, skillService, sessionService, client, owner, ownerTenant, "a")
+	b := seedCursorFixture(t, s, leased, skillService, sessionService, client, foreign, foreignTenant, "b")
 
 	text := func(value string) *string { return &value }
 	var (

@@ -12,16 +12,18 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
+// recordingStore records Session creation and listing. Tests wire it into
+// fakeSessions with record.
 type recordingStore struct {
-	ResourceStore
 	tenant            string
-	input             store.CreateSessionInput
-	sessions          []store.Session
+	input             sessions.CreateSession
+	sessions          []sessions.Session
 	nextSessionCursor string
 	listTenant        string
 	listAfter         string
@@ -29,46 +31,59 @@ type recordingStore struct {
 	listAscending     bool
 }
 
-func (s *recordingStore) ListSessions(_ context.Context, tenant, after string, limit int, ascending bool, _ *string) (store.SessionPage, error) {
+func (s *recordingStore) ListSessions(_ context.Context, tenant, after string, limit int, ascending bool, _ *string) (sessions.Page, error) {
 	s.listTenant, s.listAfter, s.listLimit, s.listAscending = tenant, after, limit, ascending
-	return store.SessionPage{Sessions: append([]store.Session(nil), s.sessions...), NextCursor: s.nextSessionCursor}, nil
+	return sessions.Page{Sessions: append([]sessions.Session(nil), s.sessions...), NextCursor: s.nextSessionCursor}, nil
 }
 
-func (s *recordingStore) GetSession(ctx context.Context, tenant, id string) (store.Session, error) {
-	if s.ResourceStore != nil {
-		return s.ResourceStore.GetSession(ctx, tenant, id)
-	}
-	return store.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
+func (s *recordingStore) GetSession(_ context.Context, tenant, id string) (sessions.Session, error) {
+	return sessions.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
 }
 
-func (s *recordingStore) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (store.SessionCreation, error) {
-	return store.SessionCreation{}, store.ErrNotFound
+func (s *recordingStore) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error) {
+	return sessions.Creation{}, sessions.ErrNotFound
 }
 
-func (s *recordingStore) CreateSession(_ context.Context, tenant string, input store.CreateSessionInput) (store.Session, error) {
+func (s *recordingStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
 	s.tenant, s.input = tenant, input
-	return store.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration, CreatedAt: time.Unix(1700000000, 0)}, nil
+	return sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration, CreatedAt: time.Unix(1700000000, 0)}, nil
 }
 
-func testHandler(t *testing.T, options ...Option) (http.Handler, *recordingStore, string) {
+// record answers Session creation, reads and listing from s.
+func (s *recordingStore) record(f *testFakes) {
+	f.sessionCreation.createSession, f.sessionCreation.findSessionCreation = s.CreateSession, s.FindSessionCreation
+	f.sessions.getSession, f.sessions.listSessions = s.GetSession, s.ListSessions
+}
+
+// testHandler serves strict fakes for a fresh tenant whose caller
+// authenticates with "Bearer test-api-key". A recordingStore answers Session
+// creation, reads and listing, and the deployment has no default model
+// provider. Each configure func adjusts the dependencies before the handler is
+// built.
+func testHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (http.Handler, *recordingStore, string) {
 	t.Helper()
 	tenant := uuid.NewString()
 	hash := sha256.Sum256([]byte("test-api-key"))
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: hex.EncodeToString(hash[:]), TenantID: tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: hex.EncodeToString(hash[:]), TenantID: tenant}).ResolveAPIKey
 	s := &recordingStore{}
-	h, err := NewHandler(s, auth, "codex", options...)
-	if err != nil {
-		t.Fatal(err)
+	s.record(fakes)
+	fakes.modelProviders.resolve = noDeploymentModelProvider
+	for _, c := range configure {
+		c(&deps, fakes)
 	}
-	return h, s, tenant
+	return newTestHandler(t, deps), s, tenant
+}
+
+// admitSessions enables Execution whose Worker admits Session creation, as it
+// does for a Session with initial input, into the recording store.
+func admitSessions(d *Dependencies, f *testFakes) {
+	d.Execution = f.execution()
+	f.sessionAdmission.createSession = f.sessionCreation.createSession
 }
 
 func TestHTTPConfigurationAndTenantIdentity(t *testing.T) {
-	s := &recordingStore{}
-	h, _, tenant := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
+	h, s, tenant := testHandler(t, admitSessions)
 	body := `{"agent":{"model":"requested-model","instructions":"Keep this."},"environment":{"type":"none"},"metadata":{"tenant_id":"untrusted-tenant"},"input":"Follow the configured instructions."}`
 	// Unknown query keys are ignored and never select the tenant.
 	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions?tenant_id=untrusted-tenant", strings.NewReader(body))
@@ -94,8 +109,7 @@ func TestHTTPConfigurationAndTenantIdentity(t *testing.T) {
 // Session responses carry both reasoning keys (SES-23); the stored
 // configuration and creation retry identity keep their original encoding.
 func TestSessionResponseReasoningKeysAreExplicit(t *testing.T) {
-	s := &recordingStore{}
-	h, _, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
+	h, s, _ := testHandler(t, admitSessions)
 	request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"requested-model"},"environment":{"type":"none"},"input":"hello"}`))
 	request.Header.Set("Authorization", "Bearer test-api-key")
 	request.Header.Set("OpenAI-Beta", "agents=v1")
@@ -141,7 +155,15 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 		{"large body", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", `{"agent":{"model":"` + strings.Repeat("x", 16*1024*1024) + `"}}`, 413},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			h, s, _ := testHandler(t)
+			unavailable := 0
+			h, s, _ := testHandler(t, func(_ *Dependencies, f *testFakes) {
+				f.metrics.recordUnavailable = func() { unavailable++ }
+				if test.name == "unknown saved agent" {
+					f.agentsReader.getAgentWithModelProvider = func(context.Context, string, string) (agents.Agent, *v1.ModelProviderInput, error) {
+						return agents.Agent{}, nil, agents.ErrNotFound
+					}
+				}
+			})
 			r := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
 			r.Header.Set("Authorization", test.auth)
 			r.Header.Set("OpenAI-Beta", test.beta)
@@ -156,6 +178,10 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 			coded := response.Error.Code != nil && *response.Error.Code != ""
 			if w.Code != test.status || coded == (test.status == http.StatusUnauthorized) || s.tenant != "" {
 				t.Fatalf("response = %d %s, stored tenant = %s", w.Code, w.Body, s.tenant)
+			}
+			// Core counts each execution_unavailable response.
+			if unavailable != 0 != (test.status == http.StatusServiceUnavailable) {
+				t.Fatalf("recorded unavailability %d times for %d", unavailable, w.Code)
 			}
 		})
 	}

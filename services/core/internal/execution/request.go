@@ -8,10 +8,15 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session, snapshot Snapshot, caps runtimedevice.KindCapabilities, bound store.SessionExecutionBinding) (proto.PromptRequestPayload, error) {
+// ErrModelProviderRequired reports a hosted or self-hosted Session that has no
+// frozen model provider and therefore cannot run.
+var ErrModelProviderRequired = errors.New("the Session has no model provider")
+
+func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Session, snapshot Snapshot, caps runtimedevice.KindCapabilities, bound sessions.ExecutionBinding) (proto.PromptRequestPayload, error) {
 	recoverNativeSession := bound.HasStartedTurn && bound.NativeSessionID == ""
 	if recoverNativeSession && !caps.NativeSessionRecovery {
 		return proto.PromptRequestPayload{}, errors.New("native session recovery is unavailable")
@@ -29,7 +34,7 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 	} else if snapshot.Environment != nil && v1.ModelProviderRequired(snapshot.Environment.Type) {
 		// Require the frozen bundle before dispatch so the harness cannot
 		// select an implicit provider endpoint.
-		return proto.PromptRequestPayload{}, store.ErrModelProviderRequired
+		return proto.PromptRequestPayload{}, ErrModelProviderRequired
 	}
 	options["model"], options["system_prompt"] = snapshot.Agent.Model, snapshot.Agent.Instructions
 	if snapshot.Agent.XAgentsCore != nil && len(snapshot.Agent.XAgentsCore.HarnessConfig) > 0 {
@@ -60,12 +65,9 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 		if err != nil {
 			return proto.PromptRequestPayload{}, err
 		}
-		if len(selected) > 0 && d.Store == nil {
-			return proto.PromptRequestPayload{}, errors.New("authenticated MCP execution is unavailable")
-		}
 		for i := range tools.MCP {
 			if binding, ok := selected[tools.MCP[i].ServerLabel]; ok {
-				token, err := d.Store.MCPBearerToken(ctx, session.TenantID, snapshot.VaultIDs, binding)
+				token, err := d.Credentials.MCPBearerToken(ctx, vaults.MCPBearerToken{TenantID: session.TenantID, VaultIDs: snapshot.VaultIDs, Binding: binding})
 				if err != nil {
 					return proto.PromptRequestPayload{}, err
 				}

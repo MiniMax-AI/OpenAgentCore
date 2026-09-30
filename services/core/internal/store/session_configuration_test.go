@@ -7,21 +7,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-)
 
-func TestConfigurationCanonicalization(t *testing.T) {
-	input := ` {"environment":{"type":"none"},"agent":{"revision":9007199254740993,"model":"example"}} `
-	want := `{"agent":{"model":"example","revision":9007199254740993},"environment":{"type":"none"}}`
-	got, err := canonicalJSONObject([]byte(input))
-	if err != nil || string(got) != want {
-		t.Fatalf("canonical = %s, %v; want %s", got, err, want)
-	}
-	for _, raw := range []string{`null`, `[]`, `"text"`, `{} {}`, `{`} {
-		if _, err := canonicalJSONObject([]byte(raw)); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("invalid JSON object accepted (length %d): %v", len(raw), err)
-		}
-	}
-}
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+)
 
 func TestConfigurationSizeLimitSurvivesJSONBRoundTrip(t *testing.T) {
 	s, _ := testStore(t)
@@ -29,7 +17,7 @@ func TestConfigurationSizeLimitSurvivesJSONBRoundTrip(t *testing.T) {
 	tenant := uuid.NewString()
 	empty := `{"agent":{"model":"example","instructions":""},"environment":{"type":"none"}}`
 	raw := strings.Replace(empty, `"instructions":""`, `"instructions":"`+strings.Repeat("x", 512*1024-len(empty))+`"`, 1)
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "size-limit", Configuration: []byte(raw)}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "size-limit", Configuration: []byte(raw)}
 	first, err := s.CreateSession(ctx, tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +31,7 @@ func TestConfigurationSizeLimitSurvivesJSONBRoundTrip(t *testing.T) {
 		t.Fatalf("configuration broke listing: %v", err)
 	}
 	input.Configuration = append(input.Configuration, ' ')
-	if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatalf("oversized request accepted: %v", err)
 	}
 }
@@ -52,7 +40,7 @@ func TestConfigurationIsPartOfSessionIdentity(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "configured",
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "configured",
 		Configuration: []byte(`{"agent":{"model":"example","instructions":"First"},"environment":{"type":"none"}}`)}
 	first, err := s.CreateSession(ctx, tenant, input)
 	if err != nil {
@@ -69,7 +57,7 @@ func TestConfigurationIsPartOfSessionIdentity(t *testing.T) {
 		`{"agent":{"model":"example","instructions":"First"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`,
 	} {
 		input.Configuration = []byte(configuration)
-		if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+		if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatalf("changed snapshot was accepted: %v", err)
 		}
 	}
@@ -82,7 +70,7 @@ func TestConfigurationIsPartOfSessionIdentity(t *testing.T) {
 func TestEmptyConfigurationCanonicalizationPreservesCreator(t *testing.T) {
 	s, _ := testStore(t)
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "empty-configuration"}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "empty-configuration"}
 	first, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +83,7 @@ func TestEmptyConfigurationCanonicalizationPreservesCreator(t *testing.T) {
 		}
 	}
 	input.Creator.ID += "-other"
-	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("another creator claimed the same request", err)
 	}
 }

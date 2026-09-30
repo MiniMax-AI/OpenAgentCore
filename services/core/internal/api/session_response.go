@@ -5,15 +5,10 @@ import (
 	"errors"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-// WithEnvironmentRemoteURL uses the composition's validated daemon executor URL for self-hosted requests and output.
-func WithEnvironmentRemoteURL(origin string) Option {
-	return func(h *Handler) { h.executorURL = origin }
-}
-
-func sessionResponse(session store.Session, executorURL string) (v1.Session, error) {
+func sessionResponse(session sessions.Session, executorURL string) (v1.Session, error) {
 	var cfg configuration
 	if err := json.Unmarshal(session.Configuration, &cfg); err != nil || cfg.Agent.ID == "" || cfg.Agent.Model == "" {
 		return v1.Session{}, errors.New("unsupported stored session configuration")
@@ -56,7 +51,7 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 		}
 		response.LastActiveAt = active.Unix()
 		switch turn.Status {
-		case store.TurnQueued, store.TurnInProgress, store.TurnWaiting:
+		case sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnWaiting:
 			response.Status = "in_progress"
 			if turn.CancelRequestedAt.IsZero() && len(session.RequiredActions) > 0 {
 				response.Status = "requires_action"
@@ -66,7 +61,7 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 					})
 				}
 			}
-		case store.TurnFailed:
+		case sessions.TurnFailed:
 			response.Status = "failed"
 			message := "The execution could not complete."
 			response.Error = &message
@@ -111,7 +106,7 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 	return response, nil
 }
 
-func sessionEnvironment(session store.Session, kind, executorURL string) (v1.SessionEnvironment, error) {
+func sessionEnvironment(session sessions.Session, kind, executorURL string) (v1.SessionEnvironment, error) {
 	if kind == "none" {
 		return v1.SessionEnvironment{Type: "none"}, nil
 	}

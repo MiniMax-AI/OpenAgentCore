@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -17,23 +17,23 @@ type diagnosticDeadlineStore struct {
 	observed context.Context
 }
 
-func (s *diagnosticDeadlineStore) GetSessionDiagnosticsSnapshot(ctx context.Context, tenant, session string) (store.Session, error) {
+func (s *diagnosticDeadlineStore) GetSessionDiagnosticsSnapshot(ctx context.Context, tenant, session string) (sessions.Session, error) {
 	s.observed = ctx
 	return s.diagnosticSnapshotStore.GetSessionDiagnosticsSnapshot(ctx, tenant, session)
 }
-func (s *diagnosticDeadlineStore) GetTurnDiagnosticsSnapshot(ctx context.Context, tenant, session, turn string) (store.TurnDiagnosticsSnapshot, error) {
+func (s *diagnosticDeadlineStore) GetTurnDiagnosticsSnapshot(ctx context.Context, tenant, session, turn string) (sessions.TurnDiagnosticsSnapshot, error) {
 	s.observed = ctx
 	return s.diagnosticSnapshotStore.GetTurnDiagnosticsSnapshot(ctx, tenant, session, turn)
 }
 
 func TestDiagnosticsReadDeadline(t *testing.T) {
 	id, turn := uuid.NewString(), uuid.NewString()
-	session := store.Session{ID: id, Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`), LastTurn: &store.Turn{ID: turn, SessionID: id, Status: store.TurnCompleted}}
+	session := sessions.Session{ID: id, Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`), LastTurn: &sessions.Turn{ID: turn, SessionID: id, Status: sessions.TurnCompleted}}
 	for _, suffix := range []string{"/diagnostics", "/turns/" + turn + "/diagnostics"} {
 		for _, shorter := range []bool{false, true} {
 			t.Run(suffix+map[bool]string{false: "/server", true: "/caller"}[shorter], func(t *testing.T) {
 				source := &diagnosticDeadlineStore{diagnosticSnapshotStore: diagnosticSnapshotStore{session: session}}
-				h, _, _ := adminTestHandler(t, func(h *Handler) { h.store = source })
+				h, _, _ := adminTestHandler(t, serveDiagnostics(source))
 				ctx := t.Context()
 				var callerDeadline time.Time
 				if shorter {

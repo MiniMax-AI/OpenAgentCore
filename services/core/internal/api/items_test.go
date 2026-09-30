@@ -8,24 +8,22 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type itemReadStore struct {
-	ResourceStore
 	tenant, session, cursor string
 	limit                   int
 	ascending               bool
 }
 
-func (s *itemReadStore) ListItems(_ context.Context, tenant, session, cursor string, limit int, asc bool) (store.ItemPage, error) {
+func (s *itemReadStore) ListItems(_ context.Context, tenant, session, cursor string, limit int, asc bool) (sessions.ItemPage, error) {
 	s.tenant, s.session, s.cursor, s.limit, s.ascending = tenant, session, cursor, limit, asc
-	return store.ItemPage{Items: []v1.Item{}, HasMore: false}, nil
+	return sessions.ItemPage{Items: []v1.Item{}, HasMore: false}, nil
 }
 func TestItemRouteUsesAuthenticationAndSharedPagination(t *testing.T) {
-	h, record, tenant := testHandler(t)
 	s := &itemReadStore{}
-	record.ResourceStore = s
+	h, _, tenant := testHandler(t, func(_ *Dependencies, f *testFakes) { f.items.listItems = s.ListItems })
 	request := func(query, token string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodGet, "/v1/agents/sessions/session/items"+query, nil)
 		r.Header.Set("Authorization", "Bearer "+token)

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,7 +50,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 					mutated <- h.s.CommitLegacyDeletion(t.Context(), h.tenant, candidateSession)
 					return
 				}
-				_, err := h.s.SubmitInputs(t.Context(), h.tenant, candidateSession, "cancel", []store.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}})
+				_, err := h.s.SubmitInputs(t.Context(), h.tenant, candidateSession, "cancel", []sessions.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}})
 				mutated <- err
 			}}
 			instrumented, err := pgxpool.NewWithConfig(t.Context(), cfg)
@@ -61,10 +61,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 			h.d.Store = store.New(instrumented)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker, err := execution.StartWorker(ctx, h.d)
-			if err != nil {
-				t.Fatal(err)
-			}
+			worker := startWorker(t, ctx, fixtureDB{pool: instrumented}, h.d)
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
 			defer func() {
@@ -84,11 +81,11 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 				t.Fatal("input-read interleaving was not reached")
 			}
 			turn, err := h.s.GetTurn(ctx, h.tenant, candidateSession, candidate.TurnID)
-			if err != nil || turn.Status != store.TurnCancelled {
+			if err != nil || turn.Status != sessions.TurnCancelled {
 				t.Fatal("candidate was not cancelled", err)
 			}
 			// A later Session must still execute through this same Worker.
-			h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "healthy", Configuration: h.session.Configuration})
+			h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "healthy", Configuration: h.session.Configuration})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -105,7 +102,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 				t.Fatal("cancelled candidate reached the Runtime", frame.ID)
 			}
 			h.write(healthy.TurnID, proto.TypeDone, proto.DonePayload{Content: "continued"})
-			waitTurn(t, h, healthy.TurnID, store.TurnCompleted)
+			waitTurn(t, h, healthy.TurnID, sessions.TurnCompleted)
 		})
 	}
 }

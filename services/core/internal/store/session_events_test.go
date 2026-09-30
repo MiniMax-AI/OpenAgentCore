@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -17,7 +18,7 @@ func TestSessionEventsAreVisibleOnlyAfterCommit(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "commit"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "commit"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,8 +51,9 @@ func TestSessionEventsAreVisibleOnlyAfterCommit(t *testing.T) {
 func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "stream"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "stream"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,22 +72,22 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if before != after {
 		t.Fatal("input retry published duplicate events")
 	}
-	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	batch := []store.ExecutionEvent{
+	batch := []sessions.ExecutionEvent{
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"first","delta":"partial"}`)},
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"first","delta":" partial"}`)},
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"first","delta":" partial"}`)},
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"cmd","stage":"before","observation":{"status":"in_progress","kind":"command","command":"sleep 10"}}`)},
 	}
 	for range 2 {
-		if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
+		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 			t.Fatal(err)
 		}
 	}
 	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 5, []store.ExecutionEvent{
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 5, []sessions.ExecutionEvent{
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"discarded","delta":"rollback"}`)},
 		{Kind: "output_message", Payload: json.RawMessage(`{"status":"invalid"}`)},
 	}); err == nil {
@@ -95,10 +97,10 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if before != after {
 		t.Fatal("failed transaction published events")
 	}
-	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, store.TurnCancelled, json.RawMessage(`{"private":"must not escape"}`), "", input.Sequence); err != nil {
+	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"private":"must not escape"}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
-	var all []store.SessionChange
+	var all []sessions.SessionChange
 	cursor := int64(0)
 	for {
 		page, err := store.New(pool).ListSessionEvents(ctx, tenant, session.ID, cursor)
@@ -111,7 +113,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 		all = append(all, page...)
 		cursor = page[len(page)-1].Sequence
 	}
-	if all[0].Event.Type != "agent.session.turn.created" || all[0].Turn.Status != store.TurnQueued || all[len(all)-1].Event.Type != "agent.session.idle" || all[len(all)-1].Turn.Status != store.TurnCancelled {
+	if all[0].Event.Type != "agent.session.turn.created" || all[0].Turn.Status != sessions.TurnQueued || all[len(all)-1].Event.Type != "agent.session.idle" || all[len(all)-1].Turn.Status != sessions.TurnCancelled {
 		t.Fatalf("transition snapshots changed: %+v", all)
 	}
 	counts := map[string]int{}
@@ -137,11 +139,11 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if counts["agent.session.turn.output_text.delta"] != 3 || counts["agent.session.turn.item.done"] != 2 {
 		t.Fatal(counts)
 	}
-	if _, err = s.ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, store.ErrNotFound) {
+	if _, err = s.ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign event access", err)
 	}
 	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
-	if _, err = s.ListItems(ctx, tenant, session.ID, "", 100, true); err != nil {
+	if _, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true); err != nil {
 		t.Fatal(err)
 	}
 	after, _ = s.SessionEventCursor(ctx, tenant, session.ID)
@@ -154,7 +156,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "retention"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "retention"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,9 +165,9 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	inputs := make([]store.Input, 64)
+	inputs := make([]sessions.Input, 64)
 	for i := range inputs {
-		inputs[i] = store.Input{Kind: "message", Payload: json.RawMessage(`{"text":"input"}`)}
+		inputs[i] = sessions.Input{Kind: "message", Payload: json.RawMessage(`{"text":"input"}`)}
 	}
 	for range 5 {
 		if _, err = s.SubmitInputs(ctx, tenant, session.ID, uuid.NewString(), inputs); err != nil {
@@ -176,7 +178,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	if err = pool.QueryRow(ctx, "SELECT count(*) FROM session_events WHERE session_id=$1", session.ID).Scan(&count); err != nil || count != 256 {
 		t.Fatal(count, err)
 	}
-	if _, err = s.ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, store.ErrStreamGap) {
+	if _, err = s.ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, sessions.ErrStreamGap) {
 		t.Fatal("lagging reader did not detect missing events", err)
 	}
 	cursor, err := s.SessionEventCursor(ctx, tenant, session.ID)
@@ -194,7 +196,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	if _, err = pool.Exec(ctx, "UPDATE session_events SET payload=jsonb_build_object('padding',repeat('x',524288)) WHERE session_id=$1", session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.ListItems(ctx, tenant, session.ID, "", 1, true); err != nil {
+	if _, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 1, true); err != nil {
 		t.Fatal(err)
 	}
 	var bytes int64

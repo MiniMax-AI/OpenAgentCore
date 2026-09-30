@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -56,23 +56,21 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		t.Fatal(err)
 	}
 	token, other := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: runtimedevice.HashCredential(other), TenantID: uuid.NewString()},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(h.s, auth, "codex", api.WithEnvironmentFileWriter(w), api.WithSourceFiles(h.s))
+	handler, err := publicHandler(t, h.s, h.db, auth, "codex", workerExecution(w))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	source, err := h.s.CreateSourceFile(t.Context(), h.tenant, func(out io.Writer) (store.SourceFileUpload, error) {
+	fileStore, fileService := fixtureFiles(t, h.db)
+	source, err := fileService.Create(t.Context(), files.CreateCommand{TenantID: h.tenant, Upload: func(out io.Writer) (files.Upload, error) {
 		_, err := out.Write([]byte("src"))
-		return store.SourceFileUpload{Filename: "source.txt", Purpose: "user_data"}, err
-	})
+		return files.Upload{Filename: "source.txt", Purpose: files.PurposeUserData}, err
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,12 +141,12 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		done := post(token, environment.ID, tc.body)
 		id := serveFileWrite(h, rejected(tc.reason))
 		assertError(await(done), tc.message)
-		if intent, err := h.s.GetEnvironmentFileWrite(t.Context(), h.tenant, environment.ID, id); err != nil || intent.State != "rejected" {
+		if intent, err := store.FixtureFileWrite(t.Context(), h.db.pool, h.tenant, environment.ID, id); err != nil || intent.State != "rejected" {
 			t.Fatal("rejection did not settle", intent, err)
 		}
 	}
 	// The rejected copy did not consume its Source File.
-	if got, err := h.s.GetSourceFile(t.Context(), h.tenant, source.ID); err != nil || got.SizeBytes != 3 {
+	if got, err := fileStore.Get(t.Context(), h.tenant, source.ID); err != nil || got.SizeBytes != 3 {
 		t.Fatal("source file consumed", got, err)
 	}
 	// The inline bound is checked before any mutation intent or dispatch.

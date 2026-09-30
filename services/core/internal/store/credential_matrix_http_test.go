@@ -11,11 +11,16 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -24,26 +29,23 @@ import (
 // the Core key in /core/v1, and node and executor credentials only on their
 // own /api/v1 machine connection routes.
 func TestCredentialNamespaceMatrix(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	s.SetPublicURL("https://core.example")
+	db.publicURL = "https://core.example"
 	ctx := t.Context()
 	coreKey := uuid.NewString()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth, err := api.NewDatabaseAuthenticator(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(s, auth, "codex", api.WithSandboxManager(s, admin), api.WithProjectAPIKeys(s, admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s, db), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The server composition: daemon transport beside the API handler.
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(s))
-	mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(s, runtimegateway.NewRegistry()))
+	mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(fixtureSessionService(t, db)))
+	mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(fixtureSessionStore(db), runtimegateway.NewRegistry()))
 	mux.Handle("/", handler)
 	server := api.CanonicalPaths(mux)
 	call := func(method, path, token, body string) *httptest.ResponseRecorder {
@@ -64,44 +66,42 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	}
 
 	// A Project and its API key, issued with the Core key.
-	var project store.Project
+	var project projects.Project
 	created("POST", "/core/v1/projects", coreKey, `{"name":"Matrix"}`, &project)
-	var projectKey store.IssuedProjectAPIKey
+	var projectKey projects.IssuedAPIKey
 	created("POST", "/core/v1/projects/"+project.ID+"/keys", coreKey, `{"name":"application"}`, &projectKey)
 
 	// An executor credential for a self_hosted Session of that Project.
-	binding, err := s.GetProject(ctx, project.ID)
+	binding, err := projectpg.New(pgunit.NewPool(db.pool)).GetProject(ctx, project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := s.CreateSession(ctx, binding.Principal.TenantID, store.CreateSessionInput{Creator: binding.Principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+	session, err := s.CreateSession(ctx, binding.Principal.TenantID, sessions.CreateSession{Creator: binding.Principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(ctx, binding.Principal.TenantID, session.ID)
+	environment, err := fixtureSessionStore(db).GetSessionEnvironment(ctx, binding.Principal.TenantID, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var executor store.IssuedExecutorCredential
+	var executor sessions.IssuedExecutorCredential
 	created("POST", "/core/v1/projects/"+project.ID+"/environments/"+environment.ID+"/executor-credentials", coreKey, `{"key_id":"`+uuid.NewString()+`"}`, &executor)
 
 	// A node credential: a Docker deployment, an enrollment token issued with the Core key, and an enrolled node.
+	deployments := fixtureDeployment(t, db)
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	runtimes := execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := s.GetSandboxSetup(ctx)
+		setup, err := deployments.Setup(ctx)
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
 		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, BackendFingerprint: setup.BackendFingerprint, CoreURL: "https://core.example/api/v1", Provider: provider}, nil
-	}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+	}, func(_ context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
 	})
-	worker, err := execution.StartWorker(ctx, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
 	var stop sync.Once
 	t.Cleanup(func() {
 		stop.Do(func() {
@@ -111,15 +111,15 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 		})
 	})
 	specification := store.SandboxDeploymentTestSpec("docker")
-	if _, err := worker.InitializeSandboxDeployment(ctx, store.SandboxDeploymentSetupRequest{DeploymentSpec: specification, Provider: "docker"}); err != nil {
+	if _, err := worker.InitializeSandboxDeployment(ctx, sandbox.Selection{DeploymentSpec: specification, Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
 	var enrollment api.SandboxEnrollmentToken
 	created("POST", "/core/v1/sandbox/enrollment-tokens", coreKey, `{}`, &enrollment)
 	nodeID, nodeCredential := uuid.NewString(), strings.Repeat("n", 64)
-	enroll, _ := json.Marshal(store.RuntimeNodeEnrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
+	enroll, _ := json.Marshal(deployment.Enrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		DeploymentGeneration: 1, SpecificationDigest: specification.Digest("docker"), CoreURL: "https://core.example"})
-	var node store.RuntimeNodeIdentity
+	var node deployment.NodeIdentity
 	created("POST", "/api/v1/sandbox-node/enroll", enrollment.Token, string(enroll), &node)
 
 	// A second, unconsumed enrollment token; its only uses are enroll and configuration.

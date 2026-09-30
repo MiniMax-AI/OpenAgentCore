@@ -9,82 +9,39 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 )
 
-type ResourceStore interface {
-	AgentStore
-	EnvironmentTemplateStore
-	VaultStore
-	CredentialStore
-	GetEnvironment(context.Context, string, string) (store.Environment, error)
-	ListItems(context.Context, string, string, string, int, bool) (store.ItemPage, error)
-	GetTurn(context.Context, string, string, string) (store.Turn, error)
-	ListTurns(context.Context, string, string, string, int, bool) (store.TurnPage, error)
-	CreateSession(context.Context, string, store.CreateSessionInput) (store.Session, error)
-	FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (store.SessionCreation, error)
-	GetSession(context.Context, string, string) (store.Session, error)
+// SessionCreation creates Sessions without execution work and finds an
+// earlier creation by its retry identity. Creation that admits work goes
+// through Execution.SessionAdmission.
+type SessionCreation interface {
+	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error)
+	CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error)
+}
+
+// SessionAdmission creates Sessions that admit work through the execution
+// Worker, which validates execution support first.
+type SessionAdmission interface {
+	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error)
+	CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+}
+
+// Sessions reads, updates and deletes Sessions, and records their public write
+// audit.
+type Sessions interface {
+	GetSession(context.Context, string, string) (sessions.Session, error)
+	ListSessions(context.Context, string, string, int, bool, *string) (sessions.Page, error)
+	UpdateSessionMetadata(context.Context, string, string, map[string]string) (sessions.Session, error)
 	DeleteSession(context.Context, string, string) error
-	UpdateSessionMetadata(context.Context, string, string, map[string]string) (store.Session, error)
-	ListSessions(context.Context, string, string, int, bool, *string) (store.SessionPage, error)
-}
-
-type Handler struct {
-	nativeInstaller              *nativeinstaller.Catalog
-	nativeVersion                string
-	executorConnections          func(context.Context, string, string) (bool, error)
-	coreMetrics                  CoreMetricsService
-	sandboxStore                 *store.Store
-	deploymentAuth               *DeploymentAuthenticator
-	sandboxSetup                 func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)
-	sandboxConfigurationDiscover func(context.Context, string, sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error)
-	sandboxUpdate                func(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error)
-	sandboxReset                 func(context.Context, store.SandboxResetRequest) (store.RuntimeDeploymentView, error)
-	sandboxResetCancel           func(context.Context, uint64) (store.RuntimeDeploymentView, error)
-	policy                       execution.Policy
-	store                        ResourceStore
-	auth                         *Authenticator
-	projectKeys                  ProjectAPIKeyStore
-	writeAudit                   WriteAuditStore
-	adminArchive                 func(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)
-	adminManagement              AdminManagementStore
-	harnesses                    map[string]bool
-	modelProviderDefaults        ModelProviderDefaults
-	engine                       string
-	inputs                       InputSubmitter
-	executorURL                  string
-	hostedEnvironments           bool
-	directoryReader              EnvironmentDirectoryReader
-	fileWriter                   EnvironmentFileWriter
-	skills                       SkillStore
-	sourceFiles                  SourceFileStore
-	artifacts                    SessionArtifactStore
-	subagents                    SubagentStore
-	runtimeObservations          RuntimeObservationService
-	runtimeHistory               RuntimeHistoryService
-	installation                 *Installation
-	installationBindings         func(context.Context) (store.AddressBindings, error)
-}
-
-func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...Option) (http.Handler, error) {
-	if s == nil || auth == nil || !store.ValidEngine(engine) {
-		return nil, errors.New("resource store, authentication and a valid execution engine are required")
-	}
-	h := &Handler{store: s, auth: auth, engine: engine}
-	for _, option := range options {
-		option(h)
-	}
-	return CanonicalPaths(h.routes()), nil
+	AuditSessionOperation(context.Context, string, string, string) error
 }
 
 // routes builds the router. HEAD runs the GET route without a body after the
@@ -226,16 +183,25 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	if h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
 		return
 	}
-	if err := h.resolveTemplateEnvironment(r.Context(), tenantID(r), &input); err != nil {
-		if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			writeStoreError(w, r, err)
+	if input.templateID != "" {
+		template, err := h.EnvironmentTemplatesReader.Resolve(r.Context(), tenantID(r), input.templateID)
+		if err != nil {
+			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
+				writeEnvironmentTemplatesError(w, r, err)
+			}
+			return
 		}
-		return
+		if err := applyTemplateEnvironment(&input, template); err != nil {
+			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
+				writeStoreError(w, r, err)
+			}
+			return
+		}
 	}
 	saved, inheritedProvider, err := h.sessionAgentDefaults(r.Context(), tenantID(r), input)
 	if err != nil {
 		if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			writeStoreError(w, r, err)
+			writeAgentsError(w, r, err)
 		}
 		return
 	}
@@ -251,12 +217,12 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		configuration, err = h.bindSessionCredentials(r.Context(), tenantID(r), configuration)
 		if err != nil {
 			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-				writeStoreError(w, r, err)
+				writeVaultsError(w, r, err)
 			}
 			return
 		}
 	}
-	selectedEngine := h.engine
+	selectedEngine := h.Engine
 	var provider *v1.ModelProviderInput
 	var providerSource string
 	var deploymentRevision uuid.UUID
@@ -264,7 +230,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		selectedEngine, provider, providerSource, deploymentRevision, err = h.resolveSessionExecution(r.Context(), input, inheritedProvider, configuration)
 	}
 	if err == nil {
-		if invalid := h.policy.ValidateSessionConfiguration(selectedEngine, configuration); invalid != nil {
+		if invalid := h.Policy.ValidateSessionConfiguration(selectedEngine, configuration); invalid != nil {
 			err = fmt.Errorf("Harness %s does not support the requested Agent/environment configuration: %w", selectedEngine, invalid)
 		}
 	}
@@ -281,22 +247,22 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		case errors.As(err, &required):
 			writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "x_agents_core.model_provider")
 		case errors.As(err, &defaults):
-			writeStoreError(w, r, defaults.err)
+			writeModelConfigurationError(w, r, defaults.err)
 		case !writeFieldError(w, err):
 			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
 		}
 		return
 	}
-	if input.Environment.Type == "self_hosted" && (h.inputs == nil || h.executorURL == "") {
+	if input.Environment.Type == "self_hosted" && h.Execution == nil {
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Self-hosted execution is not configured on this service.")
 		return
 	}
-	if input.Environment.Type == "openai_hosted" && (!h.hostedEnvironments || h.inputs == nil) {
+	if input.Environment.Type == "openai_hosted" && h.Sandboxes == nil {
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Hosted execution is not configured on this service.")
 		return
 	}
 	executionConfiguration := sessionExecutionProjection(input, saved, inheritedProvider, provider, selectedEngine, configuration)
-	createInput := store.CreateSessionInput{
+	createInput := sessions.CreateSession{
 		ExecutionConfiguration:     &executionConfiguration,
 		ModelProvider:              provider,
 		ModelProviderSource:        providerSource,
@@ -308,13 +274,13 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		h.createSessionStream(w, r, createInput)
 		return
 	}
-	create := h.store.CreateSession
+	create := h.SessionCreation.CreateSession
 	if len(initialInputs) > 0 || input.Environment.Type == "openai_hosted" {
-		if h.inputs == nil {
+		if h.Execution == nil {
 			writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution input is not enabled on this service.")
 			return
 		}
-		create = h.inputs.CreateSession
+		create = h.Execution.SessionAdmission.CreateSession
 	}
 	session, err := create(r.Context(), tenantID(r), createInput)
 	if err != nil {
@@ -332,10 +298,10 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 // @Param OpenAI-Beta header string true "agents=v1"
 // @Param session_id path string true "Session ID"
 // @Success 200 {object} v1.Session
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
+// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id} [get]
 func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
-	session, err := h.store.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
+	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -343,12 +309,12 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 	h.respondSession(w, r, session)
 }
 
-func (h *Handler) respondSession(w http.ResponseWriter, r *http.Request, session store.Session) {
+func (h *Handler) respondSession(w http.ResponseWriter, r *http.Request, session sessions.Session) {
 	h.respondSessionStatus(w, r, session, http.StatusOK)
 }
 
-func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, session store.Session, status int) {
-	response, err := sessionResponse(session, h.executorURL)
+func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, session sessions.Session, status int) {
+	response, err := sessionResponse(session, h.executorURL())
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -382,14 +348,14 @@ func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
 	if values, present := r.URL.Query()["agent_id"]; present {
 		agentID = &values[0]
 	}
-	page, err := h.store.ListSessions(r.Context(), tenantID(r), options.after, options.limit, options.ascending, agentID)
+	page, err := h.Sessions.ListSessions(r.Context(), tenantID(r), options.after, options.limit, options.ascending, agentID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
 	response := v1.SessionList{Data: make([]v1.Session, 0, len(page.Sessions)), HasMore: page.NextCursor != ""}
 	for _, session := range page.Sessions {
-		item, err := sessionResponse(session, h.executorURL)
+		item, err := sessionResponse(session, h.executorURL())
 		if err != nil {
 			writeStoreError(w, r, err)
 			return

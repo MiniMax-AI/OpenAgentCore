@@ -7,36 +7,36 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
-
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
-	project, _ := NewAuthenticator([]APIKey{callerBinding()})
-	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("administrator")})
+	deps, fakes := sandboxFakes(t)
 	updates, resets := 0, 0
-	update := func(_ context.Context, in store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
+	update := func(_ context.Context, in sandbox.Selection) (deployment.View, error) {
 		updates++
 		if in.Provider != "e2b" || in.ExpectedGeneration != 2 || in.Configuration == nil || in.Configuration.(*e2b.DeploymentConfiguration).APIKey != "synthetic-private-key" {
 			t.Fatal("write-only fields were lost")
 		}
-		return store.RuntimeDeploymentView{Provider: in.Provider}, nil
+		return deployment.View{Provider: in.Provider}, nil
 	}
-	maintain := func(_ context.Context, in store.SandboxResetRequest) (store.RuntimeDeploymentView, error) {
+	maintain := func(_ context.Context, in deployment.ResetRequest) (deployment.View, error) {
 		resets++
 		if in.ExpectedGeneration != 2 {
 			t.Fatal("generation was lost")
 		}
-		return store.RuntimeDeploymentView{Reset: &store.SandboxResetView{Clear: in.Clear}}, nil
+		return deployment.View{Reset: &deployment.Reset{Clear: in.Clear}}, nil
 	}
-	h, err := NewHandler(&recordingStore{}, project, "codex", WithSandboxManager(&store.Store{}, admin), WithSandboxDeploymentChanges(update, maintain, func(context.Context, uint64) (store.RuntimeDeploymentView, error) {
-		return store.RuntimeDeploymentView{}, nil
-	}))
-	if err != nil {
-		t.Fatal(err)
+	fakes.deploymentChanges.updateSandboxDeployment, fakes.deploymentReset.startSandboxReset = update, maintain
+	fakes.deployment.decodeConfiguration = providers.Builtin().DecodeInput
+	fakes.deploymentReset.cancelSandboxReset = func(context.Context, uint64) (deployment.View, error) {
+		return deployment.View{}, nil
 	}
+	h := newTestHandler(t, deps)
 	const selection = `{"provider":"e2b","expected_generation":2,"credential":{"api_key":"synthetic-private-key"},"configuration":{"template":"qualified:build"}}`
 	for _, tc := range []struct {
 		method, path, token, body string
@@ -73,53 +73,45 @@ func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 	}
 }
 
-func TestSandboxDeploymentChangesUnavailableWithoutOwner(t *testing.T) {
-	h := &Handler{}
-	for _, tc := range []struct {
-		body    string
-		handler http.HandlerFunc
-	}{
-		{`{"provider":"docker","expected_generation":1}`, h.updateSandboxDeployment},
-		{`{"clear":"auto","expected_generation":1}`, h.startSandboxReset},
-	} {
-		w := httptest.NewRecorder()
-		tc.handler(w, httptest.NewRequest("PUT", "/", strings.NewReader(tc.body)))
-		if w.Code != http.StatusConflict {
-			t.Fatal(w.Code)
-		}
-	}
-}
-
+// The deployment writer, which the reset handlers use, and the Session writer,
+// which admission uses, report the deployment errors alike.
 func TestSandboxMutationErrorsExposeOnlyTypedCoreFacts(t *testing.T) {
+	writers := map[string]func(http.ResponseWriter, *http.Request, error){"deployment": writeDeploymentError, "store": writeStoreError}
 	for _, tc := range []struct {
-		err     error
-		code    string
-		status  int
-		details string
+		err       error
+		code      string
+		status    int
+		details   string
+		admission bool
 	}{
-		{&store.SandboxGenerationStaleError{CurrentGeneration: 8}, "sandbox_generation_stale", 409, `"current_generation":8`},
-		{&store.SandboxResetRequiredError{CurrentProvider: "docker", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"requested_provider":"e2b"`},
-		{&store.SandboxResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"current_provider":"e2b"`},
-		{&store.SandboxInUseError{Resources: store.SandboxDeploymentResources{Allocations: 2, Pending: 1}}, "sandbox_in_use", 409, `"allocations":2`},
-		{store.ErrSandboxResetInProgress, "sandbox_reset_in_progress", 409, ""},
-		{store.ErrSandboxResetAdmission, "sandbox_reset_in_progress", 503, ""},
+		{&deployment.GenerationStaleError{CurrentGeneration: 8}, "sandbox_generation_stale", 409, `"current_generation":8`, false},
+		{&deployment.ResetRequiredError{CurrentProvider: "docker", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"requested_provider":"e2b"`, false},
+		{&deployment.ResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"current_provider":"e2b"`, false},
+		{&deployment.InUseError{Resources: deployment.Resources{Allocations: 2, Pending: 1}}, "sandbox_in_use", 409, `"allocations":2`, false},
+		{deployment.ErrResetInProgress, "sandbox_reset_in_progress", 409, "", false},
+		{store.ErrSandboxResetAdmission, "sandbox_reset_in_progress", 503, "", true},
 	} {
-		for _, core := range []bool{false, true} {
-			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeStoreError(w, r, tc.err) }))
-			if core {
-				handler = coreErrorResponses(handler)
+		for name, write := range writers {
+			if tc.admission && name != "store" {
+				continue
 			}
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequest("POST", "/test", nil))
-			body := response.Body.String()
-			if response.Code != tc.status || !strings.Contains(body, `"code":"`+tc.code+`"`) {
-				t.Fatal(body)
-			}
-			if core && tc.details != "" && !strings.Contains(body, tc.details) {
-				t.Fatal("typed detail missing", body)
-			}
-			if !core && strings.Contains(body, `"details"`) {
-				t.Fatal("Core facts escaped their router", body)
+			for _, core := range []bool{false, true} {
+				handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { write(w, r, tc.err) }))
+				if core {
+					handler = coreErrorResponses(handler)
+				}
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, httptest.NewRequest("POST", "/test", nil))
+				body := response.Body.String()
+				if response.Code != tc.status || !strings.Contains(body, `"code":"`+tc.code+`"`) {
+					t.Fatal(name, body)
+				}
+				if core && tc.details != "" && !strings.Contains(body, tc.details) {
+					t.Fatal("typed detail missing", body)
+				}
+				if !core && strings.Contains(body, `"details"`) {
+					t.Fatal("Core facts escaped their router", body)
+				}
 			}
 		}
 	}

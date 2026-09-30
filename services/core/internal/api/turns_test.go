@@ -10,35 +10,35 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type turnReadStore struct {
-	ResourceStore
 	tenant, sessionID, turnID, cursor string
 	limit                             int
 	ascending                         bool
-	session                           store.Session
-	turn                              store.Turn
+	session                           sessions.Session
+	turn                              sessions.Turn
 }
 
-func (s *turnReadStore) GetSession(_ context.Context, tenant, id string) (store.Session, error) {
+func (s *turnReadStore) GetSession(_ context.Context, tenant, id string) (sessions.Session, error) {
 	s.tenant, s.sessionID = tenant, id
 	return s.session, nil
 }
-func (s *turnReadStore) GetTurn(_ context.Context, tenant, session, id string) (store.Turn, error) {
+func (s *turnReadStore) GetTurn(_ context.Context, tenant, session, id string) (sessions.Turn, error) {
 	s.tenant, s.sessionID, s.turnID = tenant, session, id
 	return s.turn, nil
 }
-func (s *turnReadStore) ListTurns(_ context.Context, tenant, session, cursor string, limit int, asc bool) (store.TurnPage, error) {
+func (s *turnReadStore) ListTurns(_ context.Context, tenant, session, cursor string, limit int, asc bool) (sessions.TurnPage, error) {
 	s.tenant, s.sessionID, s.cursor, s.limit, s.ascending = tenant, session, cursor, limit, asc
-	return store.TurnPage{Turns: []store.Turn{s.turn}, NextCursor: s.turn.ID}, nil
+	return sessions.TurnPage{Turns: []sessions.Turn{s.turn}, NextCursor: s.turn.ID}, nil
 }
 
 func TestTurnRoutesUseAuthenticatedScopeAndSafeProjection(t *testing.T) {
-	h, record, tenant := testHandler(t)
-	s := &turnReadStore{session: store.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}, turn: store.Turn{ID: "turn", SessionID: "session", Status: store.TurnFailed, CreatedAt: time.Unix(1700000000, 999), Outcome: json.RawMessage(`{"error":"Bearer SECRET","done":{"metadata":{"password":"SECRET"}}}`)}}
-	record.ResourceStore = s
+	s := &turnReadStore{session: sessions.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}, turn: sessions.Turn{ID: "turn", SessionID: "session", Status: sessions.TurnFailed, CreatedAt: time.Unix(1700000000, 999), Outcome: json.RawMessage(`{"error":"Bearer SECRET","done":{"metadata":{"password":"SECRET"}}}`)}}
+	h, _, tenant := testHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.sessions.getSession, f.turns.getTurn, f.turns.listTurns = s.GetSession, s.GetTurn, s.ListTurns
+	})
 	request := func(path string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		r.Header.Set("Authorization", "Bearer test-api-key")
@@ -83,11 +83,11 @@ func TestTurnRoutesUseAuthenticatedScopeAndSafeProjection(t *testing.T) {
 }
 
 func TestTurnProjectionPreservesLifecycle(t *testing.T) {
-	session := store.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}
-	for _, status := range []string{store.TurnQueued, store.TurnInProgress, store.TurnWaiting, store.TurnCompleted, store.TurnFailed, store.TurnCancelled} {
-		turn := store.Turn{Status: status, CreatedAt: time.Unix(1700000000, 0), StartedAt: time.Unix(1700000001, 0), CompletedAt: time.Unix(1700000002, 0)}
+	session := sessions.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}
+	for _, status := range []string{sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnWaiting, sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled} {
+		turn := sessions.Turn{Status: status, CreatedAt: time.Unix(1700000000, 0), StartedAt: time.Unix(1700000001, 0), CompletedAt: time.Unix(1700000002, 0)}
 		got, err := turnResponse(session, turn)
-		if err != nil || got.Status != status || *got.StartedAt != 1700000001 || *got.CompletedAt != 1700000002 || (got.Error != nil) != (status == store.TurnFailed) {
+		if err != nil || got.Status != status || *got.StartedAt != 1700000001 || *got.CompletedAt != 1700000002 || (got.Error != nil) != (status == sessions.TurnFailed) {
 			t.Fatalf("lifecycle %s: %+v %v", status, got, err)
 		}
 	}

@@ -2,6 +2,7 @@
 """install.sh acceptance behavior: fresh install, repair and bundle checks."""
 
 import contextlib
+import errno
 import io
 import json
 import os
@@ -107,6 +108,44 @@ class InstallerTests(unittest.TestCase):
                     ["docker", "compose", "version", "--short"],
                     ["docker", "info", "--format", "{{.ServerVersion}}"],
                 ])
+
+    def test_host_failures_explain_the_required_action_without_secrets(self):
+        for command, failure, message in (
+                ("compose", FileNotFoundError(), "Compose plugin"),
+                ("info", PermissionError("private detail"), "current account"),
+                ("info", subprocess.TimeoutExpired(["docker", "info"], 30), "current account")):
+            with self.subTest(command=command, failure=failure):
+                original = self.host.run
+                def run(args, **kwargs):
+                    if command in args:
+                        raise failure
+                    return original(args, **kwargs)
+                with mock.patch.object(subprocess, "run", side_effect=run):
+                    with self.assertRaisesRegex(install.InstallError, message) as raised:
+                        self.install()
+                self.assertNotIn("private detail", str(raised.exception))
+                self.assertFalse(self.root.exists())
+
+    def test_space_and_permission_errors_are_actionable_and_leave_no_installation(self):
+        for error, message in ((OSError(errno.ENOSPC, "full"), "Disk space"),
+                               (OSError(errno.EDQUOT, "quota"), "quota"),
+                               (PermissionError("private detail"), "current account")):
+            with self.subTest(error=error), mock.patch.object(install, "create", side_effect=error):
+                with self.assertRaises(OSError) as raised:
+                    self.install()
+                self.assertIn(message, install.error_text(raised.exception))
+                self.assertIn(install.NOTHING_KEPT, install.error_text(raised.exception))
+                self.assertFalse(self.root.exists())
+
+    def test_new_release_cleans_an_incomplete_installation_before_starting_again(self):
+        self.install()
+        state = self.document("state.json")
+        previous_id = state["installation_id"]
+        install.oac_cli.save_state(self.root, dict(state, complete=False, source_commit="b" * 40))
+        self.install("--ingress", "external")
+        self.assertNotEqual(self.document("state.json")["installation_id"], previous_id)
+        self.assertTrue(self.document("state.json")["complete"])
+        self.assertTrue(any("down" in command for command in self.host.commands))
 
     def test_root_identity_is_preserved_in_service_configuration(self):
         with mock.patch.object(install.os, "getuid", return_value=0), \

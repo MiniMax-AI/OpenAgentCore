@@ -5,20 +5,22 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func readVaultPage(w http.ResponseWriter, r *http.Request) (pageOptions, []string, bool) {
+func readVaultPage(w http.ResponseWriter, r *http.Request) (vaults.PageQuery, bool) {
 	q := r.URL.Query()
 	if len(q["status"]) > 1 {
 		writeListDuplicateError(w, r, "status", nil)
-		return pageOptions{}, nil, false
+		return vaults.PageQuery{}, false
 	}
 	// A scalar status and status[] entries filter by their union.
 	statuses := slices.Concat(q["status"], q["status[]"])
 	for _, status := range statuses {
-		if status != "active" && status != "archived" {
+		if status != vaults.StatusActive && status != vaults.StatusArchived {
 			writeError(w, http.StatusBadRequest, "invalid_request_error", "Failed to deserialize query string: status: data did not match any variant of untagged enum VaultStatusFilterParam")
-			return pageOptions{}, nil, false
+			return vaults.PageQuery{}, false
 		}
 	}
 	// Vault and Credential limits also clamp negative and overflowing integers;
@@ -29,5 +31,5 @@ func readVaultPage(w http.ResponseWriter, r *http.Request) (pageOptions, []strin
 		}
 	}
 	options, ok := readPageQuery(w, r, q, true)
-	return options, statuses, ok
+	return vaults.PageQuery{After: options.after, Limit: options.limit, Ascending: options.ascending, Statuses: statuses}, ok
 }

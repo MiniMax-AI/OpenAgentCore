@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestSelfHostedCreationSnapshotRetainsEnvironmentAndCursor(t *testing.T) {
 	s, _ := testStore(t)
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "environment-snapshot",
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "environment-snapshot",
 		Configuration:   json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 		CreationRequest: json.RawMessage(`{"agent_id":"saved-agent","environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 	}
@@ -23,8 +25,8 @@ func TestSelfHostedCreationSnapshotRetainsEnvironmentAndCursor(t *testing.T) {
 	if environment.ID == "" || environment.SessionID != created.Session.ID || environment.TenantID != tenant || environment.Status != "pending" {
 		t.Fatal("incorrect creation association", environment)
 	}
-	pending, err := s.ReserveEnvironmentInput(t.Context(), tenant, created.Session.ID, "later", []Input{messageInput("later")})
-	if err != nil || pending.State != EnvironmentInputPending {
+	pending, err := s.ReserveEnvironmentInput(t.Context(), tenant, created.Session.ID, "later", []sessions.Input{messageInput("later")})
+	if err != nil || pending.State != sessions.EnvironmentInputPending {
 		t.Fatal(pending, err)
 	}
 	events, err := s.ListSessionEvents(t.Context(), tenant, created.Session.ID, created.Cursor)
@@ -39,7 +41,7 @@ func TestSelfHostedCreationSnapshotRetainsEnvironmentAndCursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, value := range []SessionCreation{retry, recovered} {
+	for _, value := range []sessions.Creation{retry, recovered} {
 		snapshot := value.Session
 		if value.Created || value.Cursor != events[0].Sequence || snapshot.Environment == nil || snapshot.Environment.ID != environment.ID || string(snapshot.Environment.Configuration) != string(environment.Configuration) {
 			t.Fatal("retry changed Environment or cursor", value)
@@ -47,14 +49,14 @@ func TestSelfHostedCreationSnapshotRetainsEnvironmentAndCursor(t *testing.T) {
 	}
 	// Recorded-intent lookup and upsert retries return only the row; they read
 	// no projection because a stream retry sends no events.
-	for _, snapshot := range []Session{recovered.Session, retry.Session} {
+	for _, snapshot := range []sessions.Session{recovered.Session, retry.Session} {
 		if snapshot.LastTurn != nil || snapshot.EnvironmentInputActivity != nil || snapshot.Usage != nil {
 			t.Fatal("creation retry borrowed later activity", snapshot)
 		}
 	}
 	changedCreator := input.Creator
 	changedCreator.ID = "another-creator"
-	if _, err := s.FindSessionCreation(t.Context(), tenant, input.IdempotencyKey, input.CreationRequest, changedCreator); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := s.FindSessionCreation(t.Context(), tenant, input.IdempotencyKey, input.CreationRequest, changedCreator); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("retry creator isolation", err)
 	}
 	current, err := s.GetSession(t.Context(), tenant, created.Session.ID)

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 )
 
@@ -47,10 +48,6 @@ type AdminRuntimeObservationList struct {
 // @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/runtime-observations [get]
 func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Request) {
-	if h.runtimeObservations == nil {
-		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Runtime observation is not configured on this service.")
-		return
-	}
 	options, ok := readPage(w, r)
 	if !ok {
 		return
@@ -61,21 +58,21 @@ func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Reques
 	projectByTenant := map[string]string{}
 	cursor := ""
 	for {
-		projects, err := h.listAdminProjects(ctx, cursor, 100, true)
+		page, err := h.ProjectsReader.ListProjects(ctx, projects.ListQuery{After: cursor, Limit: projects.MaxListLimit, Ascending: true})
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeProjectsError(w, r, err)
 			return
 		}
-		for _, project := range projects.Data {
+		for _, project := range page.Data {
 			tenants = append(tenants, project.TenantID)
 			projectByTenant[project.TenantID] = project.ID
 			cursor = project.ID
 		}
-		if !projects.HasMore {
+		if !page.HasMore {
 			break
 		}
 	}
-	page, err := h.adminManagement.ListAdminRuntimeTargets(ctx, tenants, options.after, options.limit, options.ascending)
+	page, err := h.Admin.ListAdminRuntimeTargets(ctx, tenants, options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -84,7 +81,7 @@ func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Reques
 	for index, target := range page.Data {
 		sessions[index] = runtimeobs.SessionIdentity{TenantID: target.TenantID, SessionID: target.SessionID}
 	}
-	observations, errs := h.runtimeObservations.ObserveSessions(ctx, sessions, runtimeObservationPage)
+	observations, errs := h.RuntimeObservations.ObserveSessions(ctx, sessions, runtimeObservationPage)
 	if ctx.Err() != nil {
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Runtime observation collection exceeded its request budget.")
 		return

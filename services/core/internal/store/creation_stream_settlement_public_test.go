@@ -11,15 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
-
-// storeAdmission admits creation input through the Store without a Worker, so
-// reservations stay pending until the test settles them.
-type storeAdmission struct{ *store.Store }
 
 type sseLines struct {
 	lines chan string
@@ -118,13 +113,10 @@ func (s sseLines) open(t *testing.T) {
 // creation stream whose initial reservation is cancelled without a Session event
 // ends through the committed projection, while GET stays open.
 func TestCreationStreamPublicLifetimes(t *testing.T) {
-	s, pool := store.NewModelTestStore(t)
+	s, db := newModelTestStoreDB(t)
 	tenant, token := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(s, auth, "codex", api.WithEnvironmentRemoteURL("https://offline-executor.example"), api.WithExecution(storeAdmission{s}))
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://offline-executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,18 +127,14 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 		handler.ServeHTTP(w, r)
 	}))
 	defer server.Close()
-	writer, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = writer.CloseExecution(context.Background()) }()
+	sessionExecution := executionOwner(t, db, s).Sessions
 	connect := func(environment string) {
 		t.Helper()
 		generation := uuid.NewString()
-		if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
+		if err := sessionExecution.ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
 			t.Fatal(err)
 		}
-		if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
+		if err := sessionExecution.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -182,7 +170,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	created.ended(t, 5*time.Second)
 
 	connect(first.Session.Environment.ID)
-	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, first.Session.ID, "later", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); err != nil {
+	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, first.Session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	if current, err := s.GetSession(t.Context(), tenant, first.Session.ID); err != nil || !current.PendingInput {
@@ -215,14 +203,14 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	}
 	fresh.open(t)
 	var reservation string
-	if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", session).Scan(&reservation); err != nil {
+	if err := db.pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", session).Scan(&reservation); err != nil {
 		t.Fatal(err)
 	}
 	cursor, err := s.SessionEventCursor(t.Context(), tenant, session)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settled, err := s.CancelEnvironmentInput(t.Context(), tenant, session, reservation); err != nil || settled.State != store.EnvironmentInputCancelled {
+	if settled, err := s.CancelEnvironmentInput(t.Context(), tenant, session, reservation); err != nil || settled.State != sessions.EnvironmentInputCancelled {
 		t.Fatal(settled.State, err)
 	}
 	if after, err := s.SessionEventCursor(t.Context(), tenant, session); err != nil || after != cursor {

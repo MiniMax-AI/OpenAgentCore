@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,13 +49,8 @@ func runtimeWorkerHarness(t *testing.T) (*dispatchHarness, *pgxpool.Pool) {
 
 func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.T) {
 	h, _ := runtimeWorkerHarness(t)
-	writer, err := store.NewExecution(t.Context(), h.s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
-	h.d.Store = writer
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	h.d, h.lease = h.bound(), h.owner().Lease
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +59,7 @@ func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.
 	handle := acknowledgePreparation(h, frame.ID)
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	got := awaitPreparedDispatch(t, result)
-	if !errors.Is(got.err, store.ErrTurnConflict) || got.run.Reservation.ID != pending.ID || got.run.Reservation.State != store.EnvironmentInputPending {
+	if !errors.Is(got.err, sessions.ErrTurnConflict) || got.run.Reservation.ID != pending.ID || got.run.Reservation.State != sessions.EnvironmentInputPending {
 		t.Fatal("rejected promotion lost its pending owner", got)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)
@@ -75,14 +71,11 @@ func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.
 
 func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	h, pool := runtimeWorkerHarness(t)
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	worker, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), h.db, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
@@ -95,7 +88,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 		}
 	})
 	frames := workerFrames(t, h)
-	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
+	environment, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +119,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 		t.Fatal("conflicted preparation was not released")
 	}
 	stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
-	if err != nil || stored.State != store.EnvironmentInputPending || len(stored.Receipts) != 0 {
+	if err != nil || stored.State != sessions.EnvironmentInputPending || len(stored.Receipts) != 0 {
 		t.Fatal("conflict consumed queued input", stored, err)
 	}
 	setPhase("running")
@@ -146,7 +139,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "original input completed once", func() bool {
 		turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
-		return err == nil && turn.Status == store.TurnCompleted
+		return err == nil && turn.Status == sessions.TurnCompleted
 	})
 	var turns int
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM turns WHERE session_id=$1`, h.session.ID).Scan(&turns); err != nil || turns != 1 {
@@ -166,7 +159,7 @@ func TestWorkerRestartPreservesQueuedTurnWhileComputeWakes(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, turn, h.session.ID); err != nil {
 		t.Fatal(err)
 	}
-	worker, err := execution.StartWorker(t.Context(), h.d)
+	worker, err := startWorkerErr(t.Context(), h.db, h.d)
 	if err != nil {
 		t.Fatal("queued wake blocked Core startup", err)
 	}
@@ -176,7 +169,7 @@ func TestWorkerRestartPreservesQueuedTurnWhileComputeWakes(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, turn)
-	if err != nil || got.Status != store.TurnQueued || !got.StartedAt.IsZero() {
+	if err != nil || got.Status != sessions.TurnQueued || !got.StartedAt.IsZero() {
 		t.Fatal("startup consumed queued work before restore", got, err)
 	}
 }

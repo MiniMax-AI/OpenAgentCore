@@ -11,9 +11,8 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -45,7 +44,7 @@ func TestNativePublicFunctionExecution(t *testing.T) {
 		t.Fatal(proof, err)
 	}
 	for i, callID := range proof.Calls {
-		call, err := h.s.GetFunctionCall(ctx, h.tenant, proof.Session, proof.Turns[i], callID)
+		call, err := store.FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, proof.Turns[i], callID)
 		if err != nil || call.Applied != (i < 2) {
 			t.Fatal(call, err)
 		}
@@ -62,10 +61,7 @@ func TestNativePublicFunctionExecution(t *testing.T) {
 
 func nativePublicFunctionServer(t *testing.T, h *dispatchHarness, ctx context.Context, provider *v1.ModelProviderInput) (string, string) {
 	t.Helper()
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	ctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
@@ -79,11 +75,8 @@ func nativePublicFunctionServer(t *testing.T, h *dispatchHarness, ctx context.Co
 		}
 	})
 	token := uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(h.s, auth, "codex", api.WithExecution(worker), nativeDeploymentDefaults("gpt-5.5", provider))
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
+	handler, err := publicHandler(t, h.s, h.db, auth, "codex", workerExecution(worker), nativeDeploymentDefaults("gpt-5.5", provider))
 	if err != nil {
 		t.Fatal(err)
 	}

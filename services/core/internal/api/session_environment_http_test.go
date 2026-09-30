@@ -12,20 +12,20 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 type environmentHTTPFixture struct{ streamFixture }
 
-func (f *environmentHTTPFixture) ListSessions(_ context.Context, tenant, _ string, _ int, _ bool, _ *string) (store.SessionPage, error) {
+func (f *environmentHTTPFixture) ListSessions(_ context.Context, tenant, _ string, _ int, _ bool, _ *string) (sessions.Page, error) {
 	if tenant != f.session.TenantID {
-		return store.SessionPage{}, store.ErrNotFound
+		return sessions.Page{}, sessions.ErrNotFound
 	}
-	return store.SessionPage{Sessions: []store.Session{f.session}}, nil
+	return sessions.Page{Sessions: []sessions.Session{f.session}}, nil
 }
 
-func (f *environmentHTTPFixture) UpdateSessionMetadata(ctx context.Context, tenant, session string, metadata map[string]string) (store.Session, error) {
+func (f *environmentHTTPFixture) UpdateSessionMetadata(ctx context.Context, tenant, session string, metadata map[string]string) (sessions.Session, error) {
 	value, err := f.GetSession(ctx, tenant, session)
 	value.Metadata = metadata
 	return value, err
@@ -35,24 +35,24 @@ func TestSelfHostedSessionHTTPReadListMetadataAndLiveStream(t *testing.T) {
 	session := environmentSession()
 	session.TenantID = uuid.NewString()
 	session.Environment.TenantID = session.TenantID
-	session.EnvironmentInputActivity = &store.EnvironmentInputActivity{
+	session.EnvironmentInputActivity = &sessions.EnvironmentInputActivity{
 		Status: "requires_action", EnvironmentID: session.Environment.ID, LastActiveAt: time.Unix(1700000100, 0),
 	}
-	fixture := &environmentHTTPFixture{streamFixture{session: session, changes: []store.SessionChange{{
+	fixture := &environmentHTTPFixture{streamFixture{session: session, changes: []sessions.SessionChange{{
 		Sequence: 11, Event: v1.SessionEvent{Type: "agent.session.requires_action", EventID: "activity", SessionID: session.ID},
 		EnvironmentInputActivity: session.EnvironmentInputActivity,
 	}}}}
-	auth, err := NewAuthenticator([]APIKey{{
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: session.TenantID,
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := NewHandler(fixture, auth, "codex", WithEnvironmentRemoteURL(environmentOrigin))
-	if err != nil {
-		t.Fatal(err)
-	}
+	}).ResolveAPIKey
+	fixture.serve(fakes)
+	fakes.sessions.listSessions, fakes.sessions.updateSessionMetadata = fixture.ListSessions, fixture.UpdateSessionMetadata
+	// Self-hosted Sessions report the executor URL of the enabled Execution.
+	deps.Execution = fakes.execution()
+	deps.Execution.ExecutorURL = environmentOrigin
+	handler := newTestHandler(t, deps)
 	want, err := sessionResponse(session, environmentOrigin)
 	if err != nil {
 		t.Fatal(err)

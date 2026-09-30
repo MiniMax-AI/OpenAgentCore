@@ -20,7 +20,8 @@ const (
 
 var runtimeProviderTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
-type RuntimeObservationService interface {
+// RuntimeObservations samples the current Runtime of one or more Sessions.
+type RuntimeObservations interface {
 	ObserveSession(context.Context, string, string) (runtimeobs.Observation, error)
 	ObserveSessions(context.Context, []runtimeobs.SessionIdentity, runtimeobs.PageOptions) ([]runtimeobs.Observation, []error)
 }
@@ -37,23 +38,15 @@ func firstRuntimeObservationError(errs []error) error {
 	return nil
 }
 
-func WithRuntimeObservations(service RuntimeObservationService) Option {
-	return func(h *Handler) { h.runtimeObservations = service }
-}
-
 // getRuntimeObservation serves the administrator per-Session observation read.
 func (h *Handler) getRuntimeObservation(w http.ResponseWriter, r *http.Request) {
 	if len(r.URL.Query()) != 0 {
 		writeError(w, http.StatusBadRequest, "unsupported_parameter", "Runtime observation retrieval does not accept query parameters.")
 		return
 	}
-	if h.runtimeObservations == nil {
-		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Runtime observation is not configured on this service.")
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), runtimeObservationSourceBudget)
 	defer cancel()
-	observation, err := h.runtimeObservations.ObserveSession(ctx, tenantID(r), chi.URLParam(r, "session_id"))
+	observation, err := h.RuntimeObservations.ObserveSession(ctx, tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

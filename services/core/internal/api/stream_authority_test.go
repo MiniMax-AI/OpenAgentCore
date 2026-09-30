@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,23 +13,24 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 type streamAuthorityResolver struct {
-	ProjectAPIKeyResolver
+	keys        fixtureKeyResolver
 	unavailable atomic.Bool
 	calls       atomic.Int32
 }
 
-func (r *streamAuthorityResolver) ResolveProjectAPIKey(ctx context.Context, digest string) (store.ProjectAPIKeyBinding, error) {
+func (r *streamAuthorityResolver) ResolveAPIKey(ctx context.Context, digest [sha256.Size]byte) (projects.KeyBinding, error) {
 	r.calls.Add(1)
 	if r.unavailable.Load() {
-		return store.ProjectAPIKeyBinding{}, errors.New("resolver unavailable")
+		return projects.KeyBinding{}, errors.New("resolver unavailable")
 	}
-	return r.ProjectAPIKeyResolver.ResolveProjectAPIKey(ctx, digest)
+	return r.keys.ResolveAPIKey(ctx, digest)
 }
 
 type busyAuthorityStream struct {
@@ -36,28 +38,24 @@ type busyAuthorityStream struct {
 	sequence int64
 }
 
-func (s *busyAuthorityStream) ListSessionEvents(ctx context.Context, _, _ string, _ int64) ([]store.SessionChange, error) {
+func (s *busyAuthorityStream) ListSessionEvents(ctx context.Context, _, _ string, _ int64) ([]sessions.SessionChange, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 	s.sequence++
-	return []store.SessionChange{{Sequence: s.sequence + 10, Event: v1.SessionEvent{Type: "agent.session.idle", EventID: "busy"}}}, nil
+	return []sessions.SessionChange{{Sequence: s.sequence + 10, Event: v1.SessionEvent{Type: "agent.session.idle", EventID: "busy"}}}, nil
 }
 
 func TestBusyStreamRechecksAuthorityAndFailsClosed(t *testing.T) {
 	key := callerBinding()
 	key.TokenSHA256 = runtimedevice.HashCredential("stream")
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolver := &streamAuthorityResolver{ProjectAPIKeyResolver: auth.keys}
-	auth.keys = resolver
-	f := &busyAuthorityStream{streamFixture: &streamFixture{session: store.Session{ID: uuid.NewString(), TenantID: key.TenantID, CreatedAt: time.Now(), Metadata: map[string]string{}, Configuration: json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[]},"environment":{"type":"none"}}`)}}}
-	h, err := NewHandler(f, auth, "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resolver := &streamAuthorityResolver{keys: projectKeys(t, key)}
+	f := &busyAuthorityStream{streamFixture: &streamFixture{session: sessions.Session{ID: uuid.NewString(), TenantID: key.TenantID, CreatedAt: time.Now(), Metadata: map[string]string{}, Configuration: json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[]},"environment":{"type":"none"}}`)}}}
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = resolver.ResolveAPIKey
+	f.serve(fakes)
+	fakes.sessionEvents.listSessionEvents = f.ListSessionEvents
+	h := newTestHandler(t, deps)
 	server := httptest.NewServer(h)
 	defer server.Close()
 	ctx, cancel := context.WithCancel(t.Context())

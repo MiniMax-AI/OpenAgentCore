@@ -9,10 +9,12 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
-func TestSkillsEncryptedTemplateAndFrozenSession(t *testing.T) {
+func TestSkillsFrozenInSession(t *testing.T) {
 	_, pool := testStore(t)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{17}, 32))
 	if err != nil {
@@ -32,51 +34,17 @@ func TestSkillsEncryptedTemplateAndFrozenSession(t *testing.T) {
 	if err = writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	setup := EnvironmentSetup{Skills: []EnvironmentSkill{{Metadata: EnvironmentSkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}}}
+	setup := environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}}}
 	tenant, foreign := uuid.NewString(), uuid.NewString()
-	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetSkills: true, Initialization: setup})
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: setup})
 	if err != nil {
 		t.Fatal(err)
 	}
-	public, err := New(pool).GetEnvironmentTemplate(t.Context(), tenant, template.ID)
-	if err != nil || len(public.Skills) != 1 || !public.Initialization.Empty() {
-		t.Fatal("public metadata", err)
-	}
-	var metadata, encrypted []byte
-	if err = pool.QueryRow(t.Context(), "SELECT skills,skill_contents FROM environment_templates WHERE id=$1", template.ID).Scan(&metadata, &encrypted); err != nil || bytes.Contains(metadata, []byte("canary")) || bytes.Contains(encrypted, []byte("canary")) {
-		t.Fatal("plaintext storage", err)
-	}
-	resolved, _, err := s.ResolveEnvironmentTemplate(t.Context(), tenant, template.ID)
-	if err != nil || !reflect.DeepEqual(resolved.Initialization.Skills, setup.Skills) {
-		t.Fatal("resolution", err)
-	}
-	if _, _, err = s.ResolveEnvironmentTemplate(t.Context(), foreign, template.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatal("tenant isolation", err)
-	}
-	session, err := s.CreateSession(t.Context(), tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: resolved.Initialization})
-	if err != nil {
-		t.Fatal(err)
-	}
-	name := "renamed"
-	if _, err = s.UpdateEnvironmentTemplate(t.Context(), tenant, template.ID, EnvironmentTemplateInput{SetName: true, Name: &name}); err != nil {
-		t.Fatal(err)
-	}
-	preserved, _, err := s.ResolveEnvironmentTemplate(t.Context(), tenant, template.ID)
-	if err != nil || !reflect.DeepEqual(preserved.Initialization.Skills, setup.Skills) {
-		t.Fatal("unrelated update", err)
-	}
-	cleared, err := s.UpdateEnvironmentTemplate(t.Context(), tenant, template.ID, EnvironmentTemplateInput{SetSkills: true})
-	if err != nil || len(cleared.Skills) != 0 {
-		t.Fatal("clearing", err)
-	}
-	if _, err = s.DeleteEnvironmentTemplate(t.Context(), tenant, template.ID); err != nil {
-		t.Fatal(err)
-	}
-	frozen, err := s.ReadEnvironmentSetup(t.Context(), tenant, session.ID)
+	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.ID)
 	if err != nil || !reflect.DeepEqual(frozen.Skills, setup.Skills) {
 		t.Fatal("frozen content changed", err)
 	}
-	if _, err = s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err = sessionAdapter(s).ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign content", err)
 	}
 }

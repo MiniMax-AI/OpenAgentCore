@@ -7,7 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -17,6 +19,12 @@ var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", E
 
 type runtimeManager struct {
 	store               *store.Store
+	sessions            sessions.Reader
+	sessionExecution    *sessions.ExecutionOperations
+	deployment          *deployment.ExecutionOperations
+	deploymentService   *deployment.Service
+	deploymentReader    deployment.Reader
+	lease               Ownership
 	registry            *runtimegateway.Registry
 	config              RuntimeProvider
 	setupInstallationID string
@@ -81,7 +89,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 	if n == nil {
 		ctx, stop := context.WithCancel(m.ctx)
 		n = &runtimeNode{lifecycle: &runtimeLifecycle{
-			store: m.store, registry: m.registry, config: m.config, nodeID: id,
+			store: m.store, sessions: m.sessions, sessionExecution: m.sessionExecution, lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
 			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1),
 		}}
@@ -234,7 +242,7 @@ func (m *runtimeManager) run(ctx context.Context) error {
 	m.running = true
 	m.mu.Unlock()
 	if m.loadDeployment != nil {
-		if err := m.store.CollectSandboxGenerations(ctx); err != nil {
+		if err := m.deployment.CollectGenerations(ctx); err != nil {
 			return err
 		}
 	}
@@ -256,7 +264,7 @@ func (m *runtimeManager) run(ctx context.Context) error {
 			return err
 		case <-ticker.C:
 			if m.loadDeployment != nil {
-				if err := m.store.CollectSandboxGenerations(ctx); err != nil {
+				if err := m.deployment.CollectGenerations(ctx); err != nil {
 					return err
 				}
 			}

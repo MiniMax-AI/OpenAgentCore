@@ -11,15 +11,18 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -32,25 +35,23 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	providerConfig := func(setup store.SandboxSetup) *execution.RuntimeProvider {
+	deployments := fixtureDeployment(t, db)
+	providerConfig := func(setup deployment.Setup) *execution.RuntimeProvider {
 		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	}
 	configuration := execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := s.GetSandboxSetup(ctx)
+		setup, err := deployments.Setup(ctx)
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
 		return providerConfig(setup), nil
-	}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+	}, func(_ context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: providerConfig(setup)}, nil
 	})
-	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
 	var once sync.Once
 	stop := func() {
 		once.Do(func() {
@@ -60,19 +61,20 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		})
 	}
 	t.Cleanup(stop)
-	selection := store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
+	selection := sandbox.Selection{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
 	if _, err := worker.InitializeSandboxDeployment(t.Context(), selection); err != nil {
 		t.Fatal(err)
 	}
 	projectID := uuid.NewString()
 	ctx := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-	project, err := s.CreateProject(ctx, projectID, "Archive HTTP fixture")
+	_, management := fixtureProjects(t, db)
+	project, err := management.CreateProject(ctx, projects.CreateProject{ID: projectID, Name: "Archive HTTP fixture"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	create := func() store.Session {
+	create := func() sessions.Session {
 		t.Helper()
-		session, err := s.CreateSession(t.Context(), project.TenantID, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)})
+		session, err := s.CreateSession(t.Context(), project.TenantID, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,11 +96,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth, err := api.NewDatabaseAuthenticator(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(s, auth, "codex", api.WithProjectAPIKeys(s, admin), api.WithAdminManagement(s), api.WithExecution(worker), api.WithSessionArchive(worker.ArchiveManagedSession))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), workerExecution(worker), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +110,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		return w
 	}
 	w := request(http.MethodPost, active.ID)
-	var archived store.ManagedSessionArchive
+	var archived sessions.ManagedArchive
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &archived) != nil || archived.State != "cleanup_pending" || archived.SessionID != active.ID {
 		t.Fatalf("archive did not use Worker's leased Store: %d %s", w.Code, w.Body)
 	}
@@ -121,7 +119,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		t.Fatal("archive did not retain cleanup ownership", allocation, err)
 	}
 	turn, err := s.GetTurn(t.Context(), project.TenantID, active.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnCancelled {
+	if err != nil || turn.Status != sessions.TurnCancelled {
 		t.Fatal("archive did not cancel queued work", turn, err)
 	}
 	var audits int

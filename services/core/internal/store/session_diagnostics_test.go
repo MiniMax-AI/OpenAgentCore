@@ -11,23 +11,25 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func diagnosticToolEvent(id, stage, status string) ExecutionEvent {
-	return ExecutionEvent{Kind: "tool_call", Payload: json.RawMessage(fmt.Sprintf(`{"id":%q,"stage":%q,"observation":{"kind":"command","command":"private-command-canary","status":%q}}`, id, stage, status))}
+func diagnosticToolEvent(id, stage, status string) sessions.ExecutionEvent {
+	return sessions.ExecutionEvent{Kind: "tool_call", Payload: json.RawMessage(fmt.Sprintf(`{"id":%q,"stage":%q,"observation":{"kind":"command","command":"private-command-canary","status":%q}}`, id, stage, status))}
 }
 
 func TestDiagnosticItemReceiptSettlementAndReplay(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	receipt := submitMessage(t, s, tenant, session.ID, "start")
-	transition(t, s, tenant, session.ID, receipt.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	journal := sessionExecution(t, executionWriter(t, s).lease)
 	before := diagnosticToolEvent("cmd", "before", "in_progress")
 	after := diagnosticToolEvent("cmd", "after", "failed")
-	for i, event := range []ExecutionEvent{before, after} {
-		if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, int32(i+1), []ExecutionEvent{event}); err != nil {
+	for i, event := range []sessions.ExecutionEvent{before, after} {
+		if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, int32(i+1), []sessions.ExecutionEvent{event}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -46,15 +48,15 @@ func TestDiagnosticItemReceiptSettlementAndReplay(t *testing.T) {
 	if item.CompletedAt == nil || !item.CompletedAt.Equal(received) || item.CompletedAt.Before(item.StartedAt) {
 		t.Fatal("Item did not use terminal receipt", item, received)
 	}
-	if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 2, []ExecutionEvent{after}); err != nil {
+	if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 2, []sessions.ExecutionEvent{after}); err != nil {
 		t.Fatal(err)
 	}
 	// A terminal legacy Item with unknown settlement must remain unknown even on a repeated upsert.
 	runtimeSuspensionSQL(t, s.pool, "UPDATE session_items SET settled_at=NULL WHERE id=$1", item.ItemID)
-	if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, []ExecutionEvent{after}); err != nil {
+	if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, []sessions.ExecutionEvent{after}); err != nil {
 		t.Fatal(err)
 	}
-	transition(t, s, tenant, session.ID, receipt.TurnID, TurnInProgress, TurnFailed)
+	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnInProgress, sessions.TurnFailed)
 	snap, err = s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 	if err != nil || snap.Items[1].CompletedAt != nil {
 		t.Fatal("historical settlement synthesized", snap, err)
@@ -67,13 +69,13 @@ func TestDiagnosticForceSettlementIgnoresNativeClock(t *testing.T) {
 			s, w, owner := managedIdleClockFixture(t)
 			turn := uuid.NewString()
 			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at) VALUES($1,$2,'in_progress',clock_timestamp())", turn, owner.SessionID)
-			events := []ExecutionEvent{diagnosticToolEvent("first", "before", "in_progress"), diagnosticToolEvent("second", "before", "in_progress")}
-			if err := w.AppendTurnEvents(t.Context(), owner.TenantID, owner.SessionID, turn, 1, events); err != nil {
+			events := []sessions.ExecutionEvent{diagnosticToolEvent("first", "before", "in_progress"), diagnosticToolEvent("second", "before", "in_progress")}
+			if err := sessionExecution(t, w.lease).AppendTurnEvents(t.Context(), owner.TenantID, owner.SessionID, turn, 1, events); err != nil {
 				t.Fatal(err)
 			}
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			before := runtimeDatabaseTime(t, s)
-			completed, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source)), "", 0)
+			completed, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source)), "", 0)
 			after := runtimeDatabaseTime(t, s)
 			if err != nil || completed.CompletedAt.UnixMilli() != source {
 				t.Fatal("public native completion changed", completed, err)
@@ -98,7 +100,7 @@ func TestDiagnosticSettlementWaitsForSessionLock(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	receipt := submitMessage(t, s, tenant, session.ID, "start")
-	transition(t, s, tenant, session.ID, receipt.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	tx, err := pool.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +111,7 @@ func TestDiagnosticSettlementWaitsForSessionLock(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: TurnInProgress, Status: TurnFailed})
+		_, err := s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
 		done <- err
 	}()
 	// Wait for the actual competing transaction to block, not a scheduler delay.
@@ -181,15 +183,15 @@ func TestDiagnosticTimingBoundOrderAndIsolation(t *testing.T) {
 		t.Fatal("exact limit falsely truncated", len(exact.Items), exact.ItemsTruncated, err)
 	}
 	for _, ids := range [][3]string{{uuid.NewString(), session.ID, receipt.TurnID}, {tenant, "malformed", receipt.TurnID}, {tenant, session.ID, uuid.NewString()}} {
-		if _, err := s.GetTurnDiagnosticsSnapshot(t.Context(), ids[0], ids[1], ids[2]); !errors.Is(err, ErrNotFound) {
+		if _, err := s.GetTurnDiagnosticsSnapshot(t.Context(), ids[0], ids[1], ids[2]); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("scope leaked", ids, err)
 		}
 	}
 	runtimeSuspensionSQL(t, pool, "UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=$1", session.ID)
-	if _, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted root visible", err)
 	}
-	if _, err := s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted Session visible", err)
 	}
 }
@@ -198,7 +200,7 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 	s, pool := testStore(t)
 	tenant := uuid.NewString()
 	input := environmentInput("safe-detail", "openai_hosted", "/workspace")
-	input.InitialInputs = []Input{messageInput("initial")}
+	input.InitialInputs = []sessions.Input{messageInput("initial")}
 	session, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -216,10 +218,10 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), "ALTER TABLE session_events DROP CONSTRAINT IF EXISTS "+constraint)
 	})
-	failure := ProvisioningFailure{Step: ProvisioningSetupCommand, Index: 2, ExitCode: 7}
+	failure := sessions.ProvisioningFailure{Step: sessions.ProvisioningSetupCommand, Index: 2, ExitCode: 7}
 	runtimeSuspensionSQL(t, pool, "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID)
-	preparation := EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}
-	if err = writer.FailEnvironmentInitialization(t.Context(), preparation, failure); err == nil {
+	preparation := sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}
+	if err = sessionExecution(t, writer.lease).FailEnvironmentInitialization(t.Context(), preparation, failure); err == nil {
 		t.Fatal("failure committed without events")
 	}
 	var detail []byte
@@ -227,7 +229,7 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 		t.Fatal("partial failure detail", string(detail), err)
 	}
 	runtimeSuspensionSQL(t, pool, "ALTER TABLE session_events DROP CONSTRAINT "+constraint)
-	if err = writer.FailEnvironmentInitialization(t.Context(), preparation, failure); err != nil {
+	if err = sessionExecution(t, writer.lease).FailEnvironmentInitialization(t.Context(), preparation, failure); err != nil {
 		t.Fatal(err)
 	}
 	snap, err := s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID)
@@ -278,9 +280,10 @@ func TestDiagnosticFirstSettlementSurvivesStoredStatusRegression(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	receipt := submitMessage(t, s, tenant, session.ID, "start")
-	transition(t, s, tenant, session.ID, receipt.TurnID, TurnQueued, TurnInProgress)
-	events := []ExecutionEvent{diagnosticToolEvent("cmd", "before", "in_progress"), diagnosticToolEvent("cmd", "after", "completed")}
-	if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 1, events); err != nil {
+	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	events := []sessions.ExecutionEvent{diagnosticToolEvent("cmd", "before", "in_progress"), diagnosticToolEvent("cmd", "after", "completed")}
+	journal := sessionExecution(t, executionWriter(t, s).lease)
+	if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 1, events); err != nil {
 		t.Fatal(err)
 	}
 	first, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
@@ -296,8 +299,8 @@ func TestDiagnosticFirstSettlementSurvivesStoredStatusRegression(t *testing.T) {
 	for _, force := range []bool{false, true} {
 		runtimeSuspensionSQL(t, pool, "UPDATE session_items SET payload=jsonb_set(payload,'{status}','\"in_progress\"') WHERE id=$1", item.ItemID)
 		if force {
-			transition(t, s, tenant, session.ID, receipt.TurnID, TurnInProgress, TurnFailed)
-		} else if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, events[1:]); err != nil {
+			transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnInProgress, sessions.TurnFailed)
+		} else if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, events[1:]); err != nil {
 			t.Fatal(err)
 		}
 		got, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
@@ -314,7 +317,7 @@ func TestDiagnosticRootReadRejectsActualChildTurn(t *testing.T) {
 	runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, root)
 	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, owner.DeviceID, root)
 	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn','in_progress',clock_timestamp())`, turn, owner.SessionID, child)
-	if _, err := w.GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.SessionID, turn); !errors.Is(err, ErrNotFound) {
+	if _, err := w.GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.SessionID, turn); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("child Turn became root diagnostics", err)
 	}
 }

@@ -2,14 +2,15 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"maps"
 	"slices"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // Validate the reference and inline shape without looking up mutable resources.
@@ -21,7 +22,7 @@ func decodeTemplateEnvironment(raw json.RawMessage) (*v1.Environment, string, js
 func decodePreparationTemplate(raw json.RawMessage, extension bool) (*v1.Environment, string, json.RawMessage, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
-		return nil, "", nil, store.ErrInvalidInput
+		return nil, "", nil, sessions.ErrInvalidInput
 	}
 	reference, supplied := fields["environment_template_id"]
 	if !supplied {
@@ -35,7 +36,7 @@ func decodePreparationTemplate(raw json.RawMessage, extension bool) (*v1.Environ
 	}
 	var id, kind string
 	if json.Unmarshal(reference, &id) != nil || id == "" || json.Unmarshal(fields["type"], &kind) != nil || (kind != "openai_hosted" && !(extension && kind == "self_hosted")) {
-		return nil, "", nil, store.ErrInvalidInput
+		return nil, "", nil, sessions.ErrInvalidInput
 	}
 	delete(fields, "environment_template_id")
 	inline, err := json.Marshal(fields)
@@ -46,17 +47,15 @@ func decodePreparationTemplate(raw json.RawMessage, extension bool) (*v1.Environ
 	return environment, id, raw, err
 }
 
-func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string, input *sessionRequest) error {
-	if input.templateID == "" {
-		return nil
-	}
-	template, files, err := h.store.ResolveEnvironmentTemplate(ctx, tenant, input.templateID)
-	if err != nil {
-		return err
-	}
+// applyTemplateEnvironment composes the Session environment from the resolved
+// Template and the fields the request supplies. Each non-null request field
+// replaces the Template's, env merges key by key and the network may only
+// narrow the Template's policy.
+func applyTemplateEnvironment(input *sessionRequest, resolved environmenttemplates.Resolved) error {
+	template, files := resolved.Template, resolved.Files
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(input.templateEnvironment, &fields) != nil {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	if input.Environment.Type == "self_hosted" && template.NetworkAccess != "enabled" {
 		return &fieldError{param: "x_agents_core.environment.environment_template_id", message: "This template requires a managed network policy; user-managed machines do not enforce it."}
@@ -66,21 +65,21 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	}
 	effective := agentnetwork.Policy{Access: input.Environment.Network.Access, AllowedDomains: input.Environment.Network.AllowedDomains}
 	if !effective.Narrows(agentnetwork.Policy{Access: template.NetworkAccess, AllowedDomains: template.AllowedDomains}) {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	skills := input.initialization.Skills
 	if !templateFieldOverride(fields, "skills") {
-		skills = template.Initialization.Skills
+		skills = resolved.Setup.Skills
 	}
 	plugins := input.initialization.Plugins
 	if !templateFieldOverride(fields, "plugins") {
-		plugins = template.Initialization.Plugins
+		plugins = resolved.Setup.Plugins
 	}
 	directories := input.initialization.CapabilityDirectories
 	if !templateFieldOverride(fields, "capability_directories") {
-		directories = template.Initialization.CapabilityDirectories
+		directories = resolved.Setup.CapabilityDirectories
 	}
-	setup := template.Initialization
+	setup := resolved.Setup
 	setup.Env = maps.Clone(setup.Env)
 	if len(input.initialization.Env) > 0 {
 		if setup.Env == nil {
@@ -99,7 +98,7 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	var managers map[string]json.RawMessage
 	if templateFieldOverride(fields, "packages") {
 		if json.Unmarshal(fields["packages"], &managers) != nil {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 	}
 	if templateFieldOverride(managers, "npm") {
@@ -114,7 +113,7 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	if err := setup.Validate(); err != nil {
 		return err
 	}
-	if err := store.ValidateInitialFiles(files); err != nil {
+	if err := environmentconfig.ValidateInitialFiles(files); err != nil {
 		return err
 	}
 	input.initialization = setup

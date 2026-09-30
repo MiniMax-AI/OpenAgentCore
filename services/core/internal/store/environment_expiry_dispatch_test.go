@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -19,30 +20,30 @@ func TestWorkerEnvironmentExpiryAtFullExecutionCapacity(t *testing.T) {
 	h := newDispatchHarness(t)
 	_, pool := store.NewTestStore(t)
 	enableEnvironmentExpiryDispatch(h)
-	worker, stop := startEnvironmentExpiryWorker(t, h.d)
+	worker, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	var requests []proto.Envelope
-	var sessions []store.Session
+	var active []sessions.Session
 	for _, key := range []string{"one", "two", "three", "four"} {
 		session := publicSession(t, h, key)
-		if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, key, []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"remain active"}`)}}); err != nil {
+		if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, key, []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"remain active"}`)}}); err != nil {
 			t.Fatal(err)
 		}
 		requests = append(requests, h.read(testExecutionRequest))
-		sessions = append(sessions, session)
+		active = append(active, session)
 	}
 	tenant, due := newEnvironmentExpiryReservation(t, h.s)
 	makeEnvironmentExpiryDue(t, pool, &due)
 	waitEnvironmentExpiry(t, h.s, tenant, due)
 	for i, request := range requests {
-		turn, err := h.s.GetTurn(t.Context(), h.tenant, sessions[i].ID, request.ID)
-		if err != nil || turn.Status != store.TurnInProgress {
+		turn, err := h.s.GetTurn(t.Context(), h.tenant, active[i].ID, request.ID)
+		if err != nil || turn.Status != sessions.TurnInProgress {
 			t.Fatal("expiry was not observed at full capacity", turn, err)
 		}
 	}
 	for i, request := range requests {
 		h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "finished"})
-		h.session = sessions[i]
-		waitTurn(t, h, request.ID, store.TurnCompleted)
+		h.session = active[i]
+		waitTurn(t, h, request.ID, sessions.TurnCompleted)
 	}
 	stop()
 	assertEnvironmentExpiryHasNoHistory(t, pool, due.SessionID)
@@ -64,9 +65,9 @@ func TestWorkerEnvironmentExpirySkipsBusySessionAndAllowsDispatch(t *testing.T) 
 	if _, err := tx.Exec(t.Context(), "SELECT id FROM sessions WHERE id=$1 FOR UPDATE", locked.SessionID); err != nil {
 		t.Fatal(err)
 	}
-	worker, stop := startEnvironmentExpiryWorker(t, h.d)
+	worker, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	h.session = publicSession(t, h, "unrelated")
-	receipt, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "work", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"make normal progress"}`)}})
+	receipt, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "work", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"make normal progress"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,9 +77,9 @@ func TestWorkerEnvironmentExpirySkipsBusySessionAndAllowsDispatch(t *testing.T) 
 		t.Fatal("unrelated dispatch mismatch", request.ID)
 	}
 	h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "finished"})
-	waitTurn(t, h, request.ID, store.TurnCompleted)
+	waitTurn(t, h, request.ID, sessions.TurnCompleted)
 	var state string
-	if err := pool.QueryRow(t.Context(), "SELECT state FROM environment_input_reservations WHERE id=$1", locked.ID).Scan(&state); err != nil || state != store.EnvironmentInputPending {
+	if err := pool.QueryRow(t.Context(), "SELECT state FROM environment_input_reservations WHERE id=$1", locked.ID).Scan(&state); err != nil || state != sessions.EnvironmentInputPending {
 		t.Fatal("sweep did not honor Session lock", state, err)
 	}
 	if err := tx.Commit(t.Context()); err != nil {

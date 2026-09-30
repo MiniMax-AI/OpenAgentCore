@@ -9,12 +9,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
-// RuntimeTypeAgentDaemon is the value runtimes.type takes for rows
-// that back an agent_daemon device. The DB has no CHECK constraint on
-// runtimes.type so this is a Go-side invariant; the listRuntimes admin
-// endpoint's allowlist must be updated alongside it.
-const RuntimeTypeAgentDaemon = "agent_daemon"
-
 var ErrAuthMissingParams = errors.New("agentdaemon auth: missing device_id / token / version")
 
 var ErrAuthUnknownDevice = errors.New("agentdaemon auth: unknown device")
@@ -72,7 +66,7 @@ func (a *Authenticator) AuthenticateBearer(ctx context.Context, deviceID, bearer
 	if !ok {
 		return AuthenticatedRuntime{}, ErrAuthUnknownDevice
 	}
-	if rt.Type != RuntimeTypeAgentDaemon {
+	if rt.Type != runtimedevice.RuntimeTypeAgentDaemon {
 		return AuthenticatedRuntime{}, ErrAuthWrongRuntimeType
 	}
 	storedHash := rt.CredentialHash

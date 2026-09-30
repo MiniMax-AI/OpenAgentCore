@@ -13,76 +13,95 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/google/uuid"
 )
 
 // missingResourceStore reports every resource as missing, recording the tenant
 // each lookup used.
 type missingResourceStore struct {
-	ResourceStore
 	tenants []string
 }
 
 func (s *missingResourceStore) missing(tenant string) error {
 	s.tenants = append(s.tenants, tenant)
-	return store.ErrNotFound
+	return sessions.ErrNotFound
 }
 
-func (s *missingResourceStore) GetAgent(_ context.Context, tenant, _ string) (store.SavedAgent, error) {
-	return store.SavedAgent{}, s.missing(tenant)
+// missingAgent records the tenant and reports the Agent as missing.
+func (s *missingResourceStore) missingAgent(tenant string) error {
+	s.tenants = append(s.tenants, tenant)
+	return agents.ErrNotFound
 }
 
-func (s *missingResourceStore) DeleteAgent(_ context.Context, tenant, _ string) (string, error) {
-	return "", s.missing(tenant)
+func (s *missingResourceStore) GetAgent(_ context.Context, tenant, _ string) (agents.Agent, error) {
+	return agents.Agent{}, s.missingAgent(tenant)
 }
 
-func (s *missingResourceStore) UpdateAgent(_ context.Context, tenant, _ string, _ store.UpdateAgentInput) (store.SavedAgent, error) {
-	return store.SavedAgent{}, s.missing(tenant)
+func (s *missingResourceStore) DeleteAgent(_ context.Context, command agents.DeleteCommand) (string, error) {
+	return "", s.missingAgent(command.TenantID)
 }
 
-func (s *missingResourceStore) GetSession(_ context.Context, tenant, _ string) (store.Session, error) {
-	return store.Session{}, s.missing(tenant)
+func (s *missingResourceStore) UpdateAgent(_ context.Context, command agents.UpdateCommand) (agents.Agent, error) {
+	return agents.Agent{}, s.missingAgent(command.TenantID)
+}
+
+func (s *missingResourceStore) GetSession(_ context.Context, tenant, _ string) (sessions.Session, error) {
+	return sessions.Session{}, s.missing(tenant)
 }
 
 func (s *missingResourceStore) DeleteSession(_ context.Context, tenant, _ string) error {
 	return s.missing(tenant)
 }
 
-func (s *missingResourceStore) UpdateSessionMetadata(_ context.Context, tenant, _ string, _ map[string]string) (store.Session, error) {
-	return store.Session{}, s.missing(tenant)
+func (s *missingResourceStore) UpdateSessionMetadata(_ context.Context, tenant, _ string, _ map[string]string) (sessions.Session, error) {
+	return sessions.Session{}, s.missing(tenant)
 }
 
-func (s *missingResourceStore) GetEnvironmentTemplate(_ context.Context, tenant, _ string) (store.EnvironmentTemplate, error) {
-	return store.EnvironmentTemplate{}, s.missing(tenant)
+// Environment Template operations report a missing Template with their
+// domain's error.
+func (s *missingResourceStore) missingTemplate(tenant string) error {
+	s.tenants = append(s.tenants, tenant)
+	return environmenttemplates.ErrNotFound
 }
 
-func (s *missingResourceStore) UpdateEnvironmentTemplate(_ context.Context, tenant, _ string, _ store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error) {
-	return store.EnvironmentTemplate{}, s.missing(tenant)
+func (s *missingResourceStore) GetEnvironmentTemplate(_ context.Context, tenant, _ string) (environmenttemplates.Template, error) {
+	return environmenttemplates.Template{}, s.missingTemplate(tenant)
 }
 
-func (s *missingResourceStore) DeleteEnvironmentTemplate(_ context.Context, tenant, _ string) (string, error) {
-	return "", s.missing(tenant)
+func (s *missingResourceStore) UpdateEnvironmentTemplate(_ context.Context, command environmenttemplates.UpdateCommand) (environmenttemplates.Template, error) {
+	return environmenttemplates.Template{}, s.missingTemplate(command.TenantID)
+}
+
+func (s *missingResourceStore) DeleteEnvironmentTemplate(_ context.Context, command environmenttemplates.DeleteCommand) (string, error) {
+	return "", s.missingTemplate(command.TenantID)
+}
+
+// wire serves the Agent, Session and Environment template lookups from s.
+func (s *missingResourceStore) wire(_ *Dependencies, f *testFakes) {
+	f.agentsReader.getAgent, f.agents.delete, f.agents.update = s.GetAgent, s.DeleteAgent, s.UpdateAgent
+	f.sessions.getSession, f.sessions.deleteSession, f.sessions.updateSessionMetadata = s.GetSession, s.DeleteSession, s.UpdateSessionMetadata
+	f.environmentTemplatesReader.get, f.environmentTemplates.update, f.environmentTemplates.delete = s.GetEnvironmentTemplate, s.UpdateEnvironmentTemplate, s.DeleteEnvironmentTemplate
 }
 
 // twoTenantHandler authenticates "test-api-key" as the owner and "foreign-key" as
 // another project.
-func twoTenantHandler(t *testing.T, s ResourceStore, options ...Option) (http.Handler, string, string) {
+func twoTenantHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (http.Handler, string, string) {
 	t.Helper()
 	owner, foreign := uuid.NewString(), uuid.NewString()
-	auth, err := NewAuthenticator([]APIKey{
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential("test-api-key"), TenantID: owner},
-		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential("foreign-key"), TenantID: foreign},
-	})
-	if err != nil {
-		t.Fatal(err)
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = projectKeys(t,
+		APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential("test-api-key"), TenantID: owner},
+		APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential("foreign-key"), TenantID: foreign},
+	).ResolveAPIKey
+	for _, c := range configure {
+		c(&deps, fakes)
 	}
-	h, err := NewHandler(s, auth, "codex", options...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return h, owner, foreign
+	return newTestHandler(t, deps), owner, foreign
 }
 
 // Unknown query keys on single-resource routes are ignored: a missing or foreign
@@ -102,7 +121,7 @@ func TestSingleResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 	} {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			s := &missingResourceStore{}
-			h, tenant, _ := twoTenantHandler(t, s)
+			h, tenant, _ := twoTenantHandler(t, s.wire)
 			var bodies []string
 			for _, query := range []string{"", "?tenant_id=foreign&include=files&unknown=1&unknown=2"} {
 				r := httptest.NewRequest(route.method, route.path+query, strings.NewReader(route.body))
@@ -123,42 +142,37 @@ func TestSingleResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 	}
 }
 
-// missingSkillStore reports every Skill as missing and records list parameters.
-type missingSkillStore struct {
-	SkillStore
+// missingSkills reports every Skill as missing and records list parameters.
+type missingSkills struct {
 	tenants []string
 	limit   int
 	hasMore bool
 }
 
-func (s *missingSkillStore) GetSkill(_ context.Context, tenant, _ string) (store.Skill, error) {
-	s.tenants = append(s.tenants, tenant)
-	return store.Skill{}, store.ErrNotFound
-}
-
-func (s *missingSkillStore) DeleteSkill(_ context.Context, tenant, _ string) error {
-	s.tenants = append(s.tenants, tenant)
-	return store.ErrNotFound
-}
-
-func (s *missingSkillStore) GetSkillVersion(_ context.Context, tenant, _, _ string) (store.SkillVersion, error) {
-	s.tenants = append(s.tenants, tenant)
-	return store.SkillVersion{}, store.ErrNotFound
-}
-
-func (s *missingSkillStore) ListSkills(_ context.Context, tenant, _ string, limit int, _ bool) (store.SkillPage, error) {
-	s.tenants, s.limit = append(s.tenants, tenant), limit
-	return store.SkillPage{HasMore: s.hasMore}, nil
-}
-
-func (s *missingSkillStore) ListSkillVersions(_ context.Context, tenant, _, _ string, limit int, _ bool) (store.SkillVersionPage, error) {
-	s.tenants, s.limit = append(s.tenants, tenant), limit
-	return store.SkillVersionPage{HasMore: s.hasMore}, nil
-}
-
-func skillQueryHandler(t *testing.T, s SkillStore) (http.Handler, string) {
+func skillQueryHandler(t *testing.T, s *missingSkills) (http.Handler, string) {
 	t.Helper()
-	h, tenant, _ := twoTenantHandler(t, &missingResourceStore{}, WithSkills(s))
+	h, tenant, _ := twoTenantHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.skillsReader.skill = func(_ context.Context, tenant string, _ uuid.UUID) (skills.Skill, error) {
+			s.tenants = append(s.tenants, tenant)
+			return skills.Skill{}, skills.ErrNotFound
+		}
+		f.skillsReader.version = func(_ context.Context, tenant string, _ uuid.UUID, _ int64) (skills.Version, error) {
+			s.tenants = append(s.tenants, tenant)
+			return skills.Version{}, skills.ErrNotFound
+		}
+		f.skills.deleteSkill = func(_ context.Context, c skills.DeleteSkill) error {
+			s.tenants = append(s.tenants, c.TenantID)
+			return skills.ErrNotFound
+		}
+		f.skills.listSkills = func(_ context.Context, c skills.ListSkills) (skills.Page, error) {
+			s.tenants, s.limit = append(s.tenants, c.TenantID), c.Limit
+			return skills.Page{HasMore: s.hasMore}, nil
+		}
+		f.skills.listVersions = func(_ context.Context, c skills.ListVersions) (skills.VersionPage, error) {
+			s.tenants, s.limit = append(s.tenants, c.TenantID), c.Limit
+			return skills.VersionPage{HasMore: s.hasMore}, nil
+		}
+	})
 	return h, tenant
 }
 
@@ -177,7 +191,7 @@ func TestSkillResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 		{http.MethodGet, "/v1/skills/skill_missing/versions/1"},
 	} {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
-			s := &missingSkillStore{}
+			s := &missingSkills{}
 			h, tenant := skillQueryHandler(t, s)
 			plain := skillQueryRequest(h, route.method, route.path)
 			query := skillQueryRequest(h, route.method, route.path+"?tenant_id=foreign&limit=5&unknown=1")
@@ -191,7 +205,7 @@ func TestSkillResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 func TestSkillListLimitZeroReturnsEmptyPage(t *testing.T) {
 	for _, path := range []string{"/v1/skills", "/v1/skills/skill_example/versions"} {
 		for _, hasMore := range []bool{true, false} {
-			s := &missingSkillStore{hasMore: hasMore}
+			s := &missingSkills{hasMore: hasMore}
 			h, tenant := skillQueryHandler(t, s)
 			w := skillQueryRequest(h, http.MethodGet, path+"?limit=0&unknown=1")
 			want := fmt.Sprintf(`{"object":"list","data":[],"first_id":null,"last_id":null,"has_more":%t}`, hasMore)
@@ -235,16 +249,15 @@ func TestEnvironmentFileCreateIgnoresUnknownQueryKeys(t *testing.T) {
 }
 
 type ownedArtifactStore struct {
-	SessionArtifactStore
 	owner   string
 	tenants []string
 	deleted int
 }
 
-func (s *ownedArtifactStore) DeleteSessionArtifact(_ context.Context, tenant, session, id string) error {
-	s.tenants = append(s.tenants, tenant)
-	if tenant != s.owner || session != "session" || id != "artifact" {
-		return store.ErrNotFound
+func (s *ownedArtifactStore) DeleteSessionArtifact(_ context.Context, command sessions.DeleteSessionArtifactCommand) error {
+	s.tenants = append(s.tenants, command.TenantID)
+	if command.TenantID != s.owner || command.SessionID != "session" || command.ArtifactID != "artifact" {
+		return sessions.ErrNotFound
 	}
 	s.deleted++
 	return nil
@@ -252,7 +265,7 @@ func (s *ownedArtifactStore) DeleteSessionArtifact(_ context.Context, tenant, se
 
 func TestArtifactDeletionIgnoresUnknownQueryKeys(t *testing.T) {
 	s := &ownedArtifactStore{}
-	h, owner, foreign := twoTenantHandler(t, &missingResourceStore{}, WithSessionArtifacts(s))
+	h, owner, foreign := twoTenantHandler(t, func(_ *Dependencies, f *testFakes) { f.artifacts.deleteSessionArtifact = s.DeleteSessionArtifact })
 	s.owner = owner
 	request := func(id, key string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodDelete, "/v1/agents/sessions/session/artifacts/"+id+"?tenant_id="+owner+"&unknown=1", nil)
@@ -275,7 +288,7 @@ func TestArtifactDeletionIgnoresUnknownQueryKeys(t *testing.T) {
 
 func TestSourceFileUploadIgnoresUnknownQueryKeys(t *testing.T) {
 	f := &sourceFilesFixture{}
-	h, env := environmentFileCreateHandler(t, WithSourceFiles(f))
+	h, env := environmentFileCreateHandler(t, f.wire)
 	server := newSourceFileServer(t, h)
 	query := "?purpose=assistants&tenant_id=" + env.environment.TenantID + "&unknown=1"
 	// A query purpose is not a form field: the body purpose is still validated.
@@ -298,27 +311,27 @@ func TestSourceFileUploadIgnoresUnknownQueryKeys(t *testing.T) {
 	}
 }
 
-// ownedSkillStore accepts uploads and knows one owned Skill.
-type ownedSkillStore struct {
-	SkillStore
+// ownedSkills accepts uploads and knows one owned Skill.
+type ownedSkills struct {
 	owner    string
+	ownedID  uuid.UUID
 	tenants  []string
 	defaults []bool
 	created  int
 }
 
-func (s *ownedSkillStore) CreateSkill(_ context.Context, tenant string, _ []byte) (store.Skill, error) {
-	s.tenants, s.created = append(s.tenants, tenant), s.created+1
-	return store.Skill{ID: "skill_created", Name: "proof", DefaultVersion: 1, LatestVersion: 1}, nil
+func (s *ownedSkills) CreateSkill(_ context.Context, c skills.CreateSkill) (skills.Skill, error) {
+	s.tenants, s.created = append(s.tenants, c.TenantID), s.created+1
+	return skills.Skill{ID: "skill_created", Name: "proof", DefaultVersion: 1, LatestVersion: 1}, nil
 }
 
-func (s *ownedSkillStore) CreateSkillVersion(_ context.Context, tenant, skill string, _ []byte, makeDefault bool) (store.SkillVersion, error) {
-	s.tenants, s.defaults = append(s.tenants, tenant), append(s.defaults, makeDefault)
-	if tenant != s.owner || skill != "skill_owned" {
-		return store.SkillVersion{}, store.ErrNotFound
+func (s *ownedSkills) CreateVersion(_ context.Context, c skills.CreateVersion) (skills.Version, error) {
+	s.tenants, s.defaults = append(s.tenants, c.TenantID), append(s.defaults, c.MakeDefault)
+	if c.TenantID != s.owner || c.SkillID != s.ownedID {
+		return skills.Version{}, skills.ErrNotFound
 	}
 	s.created++
-	return store.SkillVersion{ID: "skillver_created", SkillID: skill, Name: "proof", Version: 2}, nil
+	return skills.Version{ID: "skillver_created", SkillID: skills.FormatID(c.SkillID), Name: "proof", Version: 2}, nil
 }
 
 func skillUpload(t *testing.T, include bool) ([]byte, string) {
@@ -341,8 +354,10 @@ func skillUpload(t *testing.T, include bool) ([]byte, string) {
 }
 
 func TestSkillUploadsIgnoreUnknownQueryKeys(t *testing.T) {
-	s := &ownedSkillStore{}
-	h, owner, foreign := twoTenantHandler(t, &missingResourceStore{}, WithSkills(s))
+	s := &ownedSkills{ownedID: uuid.New()}
+	h, owner, foreign := twoTenantHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.skills.createSkill, f.skills.createVersion = s.CreateSkill, s.CreateVersion
+	})
 	s.owner = owner
 	server := newSourceFileServer(t, h)
 	query := "?tenant_id=" + owner + "&default=true&unknown=1"
@@ -356,12 +371,12 @@ func TestSkillUploadsIgnoreUnknownQueryKeys(t *testing.T) {
 		t.Fatalf("create: %d %s %v", status, raw, s.tenants)
 	}
 	// Version creation: a foreign Skill equals a missing one and writes nothing.
-	_, denied := sourceRequest(t, server, http.MethodPost, "/v1/skills/skill_owned/versions"+query, "foreign-key", contentType, body)
+	_, denied := sourceRequest(t, server, http.MethodPost, "/v1/skills/"+skills.FormatID(s.ownedID)+"/versions"+query, "foreign-key", contentType, body)
 	_, missing := sourceRequest(t, server, http.MethodPost, "/v1/skills/skill_missing/versions"+query, "test-api-key", contentType, body)
 	if string(denied) != string(missing) || !strings.Contains(string(denied), "Resource not found.") || s.created != 1 || s.tenants[1] != foreign {
 		t.Fatalf("foreign version: %s / %s tenants=%v", denied, missing, s.tenants)
 	}
-	status, raw = sourceRequest(t, server, http.MethodPost, "/v1/skills/skill_owned/versions"+query, "test-api-key", contentType, body)
+	status, raw = sourceRequest(t, server, http.MethodPost, "/v1/skills/"+skills.FormatID(s.ownedID)+"/versions"+query, "test-api-key", contentType, body)
 	// The default query key is not the multipart default field.
 	if status != http.StatusOK || !strings.Contains(string(raw), `"version":"2"`) || s.created != 2 || s.defaults[len(s.defaults)-1] {
 		t.Fatalf("version: %d %s defaults=%v", status, raw, s.defaults)

@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -22,20 +23,19 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewModelTestStore(t)
+	s, db := newModelTestStoreDB(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, foreign := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "cancel-caller", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "cancel-caller", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	var owner execution.Owner
 	serve := func() (*httptest.Server, func(bool)) {
 		t.Helper()
-		worker, stop := publicInitialWorker(t, s)
-		handler, err := api.NewHandler(s, auth, "codex", api.WithExecution(worker), api.WithEnvironmentRemoteURL("https://offline-executor.example"))
+		owner = executionOwner(t, db, s)
+		worker, stop := publicOwnedWorker(t, s, db, owner)
+		handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(worker), executorURL("https://offline-executor.example"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -77,17 +77,17 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		t.Fatal("missing public cancellation fixture identities", err)
 	}
 	settings["accepted"] = accepted
-	receipts := func(key, target string) []store.InputReceipt {
+	receipts := func(key, target string) []sessions.InputReceipt {
 		t.Helper()
-		rows, err := pool.Query(t.Context(), `SELECT sequence, COALESCE(turn_id::text,'') FROM turn_inputs
+		rows, err := db.pool.Query(t.Context(), `SELECT sequence, COALESCE(turn_id::text,'') FROM turn_inputs
 			WHERE session_id=$1 AND idempotency_key=$2 ORDER BY batch_position`, created.ID, key)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer rows.Close()
-		var result []store.InputReceipt
+		var result []sessions.InputReceipt
 		for rows.Next() {
-			var receipt store.InputReceipt
+			var receipt sessions.InputReceipt
 			if err := rows.Scan(&receipt.Sequence, &receipt.TurnID); err != nil {
 				t.Fatal(err)
 			}
@@ -104,7 +104,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	snapshot := func(sessionID string) string {
 		t.Helper()
 		var value string
-		err := pool.QueryRow(t.Context(), `SELECT jsonb_build_object(
+		err := db.pool.QueryRow(t.Context(), `SELECT jsonb_build_object(
 			'session', (SELECT to_jsonb(s) FROM sessions s WHERE id=$1),
 			'reservations', (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM environment_input_reservations r WHERE session_id=$1),
 			'turns', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM turns t WHERE session_id=$1),
@@ -117,14 +117,14 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		return value
 	}
 	idleReceipts := receipts(created.IdleKey, "")
-	later, err := s.ReserveEnvironmentInput(t.Context(), tenant, created.LaterID, "controlled-later-input", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Retain pending input."}`)}})
-	if err != nil || later.State != store.EnvironmentInputPending || later.IsInitial {
+	later, err := s.ReserveEnvironmentInput(t.Context(), tenant, created.LaterID, "controlled-later-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Retain pending input."}`)}})
+	if err != nil || later.State != sessions.EnvironmentInputPending || later.IsInitial {
 		t.Fatal("could not establish controlled later reservation", err)
 	}
 	pending := map[string]string{created.InitialID: snapshot(created.InitialID), created.LaterID: snapshot(created.LaterID)}
 	transition := func(id, from, to string) {
 		t.Helper()
-		if _, err := s.TransitionTurn(t.Context(), tenant, created.ID, id, store.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
+		if _, err := s.TransitionTurn(t.Context(), tenant, created.ID, id, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -135,12 +135,12 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		transition(input.TurnID, store.TurnQueued, store.TurnInProgress)
+		transition(input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 		settings["turn_id"] = input.TurnID
 		return input.TurnID
 	}
 	first := start()
-	if err := s.AppendTurnEvents(t.Context(), tenant, created.ID, first, 1, []store.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"controlled-partial","delta":"Retained partial output."}`)}}); err != nil {
+	if err := owner.Sessions.AppendTurnEvents(t.Context(), tenant, created.ID, first, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"controlled-partial","delta":"Retained partial output."}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	before := snapshot(created.ID)
@@ -148,7 +148,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if snapshot(created.ID) != before {
 		t.Fatal("idle cancellation replay or rejected input changed active work")
 	}
-	itemsBefore, err := s.ListItems(t.Context(), tenant, created.ID, "", 100, true)
+	itemsBefore, err := sessionReads(db.pool).ListItems(t.Context(), tenant, created.ID, "", 100, true)
 	if err != nil || len(itemsBefore.Items) != 2 {
 		t.Fatal("controlled partial output was not recorded", err)
 	}
@@ -159,10 +159,10 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	run("active")
 	activeReceipts := receipts(created.ActiveKey, first)
 	turn, err := s.GetTurn(t.Context(), tenant, created.ID, first)
-	if err != nil || turn.Status != store.TurnInProgress || turn.CancelRequestedAt.IsZero() || !turn.CompletedAt.IsZero() {
+	if err != nil || turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.IsZero() || !turn.CompletedAt.IsZero() {
 		t.Fatal("202 must admit cancellation without fabricating native completion", err)
 	}
-	itemsAfter, err := s.ListItems(t.Context(), tenant, created.ID, "", 100, true)
+	itemsAfter, err := sessionReads(db.pool).ListItems(t.Context(), tenant, created.ID, "", 100, true)
 	if err != nil || !reflect.DeepEqual(itemsBefore, itemsAfter) {
 		t.Fatal("cancellation admission changed partial history", err)
 	}
@@ -170,13 +170,15 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if err != nil || afterCursor != cursor {
 		t.Fatal("cancellation admission fabricated an execution event", err)
 	}
-	transition(first, store.TurnInProgress, store.TurnCancelled)
+	transition(first, sessions.TurnInProgress, sessions.TurnCancelled)
 	for _, reopen := range []bool{false, true} {
 		if reopen {
+			awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
 			stop(false)
+			awaitRelease()
 			server.Close()
-			pool.Close()
-			s, pool = store.NewModelTestStore(t)
+			db.pool.Close()
+			s, db = newModelTestStoreDB(t)
 			server, stop = serve()
 			settings["base"] = server.URL
 		}
@@ -191,6 +193,6 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 				t.Fatal("rejected cancellation changed pending reservation, deadline or history", "reopened", reopen)
 			}
 		}
-		transition(next, store.TurnInProgress, store.TurnCompleted)
+		transition(next, sessions.TurnInProgress, sessions.TurnCompleted)
 	}
 }

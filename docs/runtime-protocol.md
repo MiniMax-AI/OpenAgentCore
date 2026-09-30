@@ -60,7 +60,7 @@ The prompt request (`prompt_request`, or the configuration of `execution_prepare
 | `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
 | `disable_execution_environment` | For an Environment of type `none` |
-| `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding |
+| `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
 | `strict_resume`, `require_existing_native_session` | Always strict; the second when a native Session must be recovered |
 | `durable_receipt` on `prompt_steer` | For every active input Core delivers |
 

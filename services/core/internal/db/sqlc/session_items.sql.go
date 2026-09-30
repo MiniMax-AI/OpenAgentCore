@@ -11,6 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const finishSessionItems = `-- name: FinishSessionItems :exec
+WITH observed AS MATERIALIZED (SELECT clock_timestamp() AS at)
+UPDATE session_items SET payload = jsonb_set(payload, '{status}', to_jsonb($1::text)),
+    settled_at = COALESCE(session_items.settled_at, observed.at)
+FROM observed
+WHERE session_id = $2 AND id = ANY($3::uuid[])
+`
+
+type FinishSessionItemsParams struct {
+	Status    string        `json:"status"`
+	SessionID pgtype.UUID   `json:"session_id"`
+	Ids       []pgtype.UUID `json:"ids"`
+}
+
+// The finished Items share one settlement time; an Item keeps a settlement
+// time it already has.
+func (q *Queries) FinishSessionItems(ctx context.Context, arg FinishSessionItemsParams) error {
+	_, err := q.db.Exec(ctx, finishSessionItems, arg.Status, arg.SessionID, arg.Ids)
+	return err
+}
+
 const getSessionItem = `-- name: GetSessionItem :one
 SELECT id, session_id, turn_id, created_at, position, payload, output_index, settled_at FROM session_items WHERE session_id = $1 AND id = $2
 `
@@ -204,6 +225,48 @@ func (q *Queries) ListTurnItemDiagnostics(ctx context.Context, arg ListTurnItemD
 	for rows.Next() {
 		var i ListTurnItemDiagnosticsRow
 		if err := rows.Scan(&i.ID, &i.CreatedAt, &i.SettledAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnfinishedSessionItems = `-- name: ListUnfinishedSessionItems :many
+SELECT id, position, output_index, payload FROM session_items
+WHERE session_id = $1 AND turn_id = $2 AND payload->>'status' = 'in_progress'
+`
+
+type ListUnfinishedSessionItemsParams struct {
+	SessionID pgtype.UUID `json:"session_id"`
+	TurnID    pgtype.UUID `json:"turn_id"`
+}
+
+type ListUnfinishedSessionItemsRow struct {
+	ID          pgtype.UUID `json:"id"`
+	Position    int32       `json:"position"`
+	OutputIndex pgtype.Int4 `json:"output_index"`
+	Payload     []byte      `json:"payload"`
+}
+
+func (q *Queries) ListUnfinishedSessionItems(ctx context.Context, arg ListUnfinishedSessionItemsParams) ([]ListUnfinishedSessionItemsRow, error) {
+	rows, err := q.db.Query(ctx, listUnfinishedSessionItems, arg.SessionID, arg.TurnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnfinishedSessionItemsRow{}
+	for rows.Next() {
+		var i ListUnfinishedSessionItemsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Position,
+			&i.OutputIndex,
+			&i.Payload,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

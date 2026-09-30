@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type EnrollmentStore interface {
-	EnrollRuntime(context.Context, string, string) (store.RuntimeEnrollment, error)
+	EnrollRuntime(context.Context, string, string) (sessions.RuntimeEnrollment, error)
 }
 
 // EnrollmentHandler is part of our daemon connection contract, not an upstream
@@ -45,9 +45,9 @@ func EnrollmentHandler(s EnrollmentStore) http.Handler {
 		defer cancel()
 		binding, err := s.EnrollRuntime(ctx, input.EnvironmentID, runtimedevice.HashCredential(authorization[1]))
 		switch {
-		case errors.Is(err, store.ErrNotFound):
+		case errors.Is(err, sessions.ErrNotFound):
 			fail(http.StatusUnauthorized)
-		case errors.Is(err, store.ErrDeviceBindingConflict):
+		case errors.Is(err, sessions.ErrDeviceBindingConflict):
 			fail(http.StatusConflict)
 		case err != nil:
 			fail(http.StatusServiceUnavailable)

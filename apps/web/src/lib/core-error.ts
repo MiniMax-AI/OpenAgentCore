@@ -9,7 +9,7 @@ const codes = new Set<keyof typeof coreErrors>([
   "invalid_name", "invalid_node_capacity", "invalid_model_provider", "model_configuration_model_invalid", "harness_config_invalid", "model_provider_base_url_invalid",
   "model_provider_protocol_unsupported", "model_provider_api_key_invalid", "model_provider_token_limits_invalid",
   "invalid_sandbox_configuration", "project_archived", "project_exists", "project_api_key_exists",
-  "executor_credential_exists", "credential_storage_unavailable", "diagnostics_unavailable", "internal_error",
+  "executor_credential_exists", "credential_storage_unavailable", "internal_error",
 ]);
 
 /** Only catalogued, correctly typed detail keys can enter localized text. */

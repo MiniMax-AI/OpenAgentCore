@@ -12,16 +12,15 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
 
-type EnvironmentDirectoryReader interface {
-	ReadEnvironmentDirectory(context.Context, store.Environment, string) (proto.WorkspaceDirectoryResult, error)
-}
-
-func WithEnvironmentDirectoryReader(reader EnvironmentDirectoryReader) Option {
-	return func(h *Handler) { h.directoryReader = reader }
+// EnvironmentWorkspaces reads and writes a connected Environment's live
+// workspace through its Runtime.
+type EnvironmentWorkspaces interface {
+	ReadEnvironmentDirectory(context.Context, sessions.Environment, string) (proto.WorkspaceDirectoryResult, error)
+	WriteEnvironmentFile(context.Context, sessions.Environment, string, []byte) (int64, error)
 }
 
 // @Summary List live Environment files
@@ -39,7 +38,7 @@ func WithEnvironmentDirectoryReader(reader EnvironmentDirectoryReader) Option {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/{environment_id}/files [get]
 func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
-	environment, err := h.store.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
+	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -48,7 +47,7 @@ func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok || !environmentFilesAccessible(w, environment) {
 		return
 	}
-	if h.directoryReader == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
+	if h.Execution == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
 		writeStoreError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
@@ -57,7 +56,7 @@ func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
-	result, err := h.directoryReader.ReadEnvironmentDirectory(r.Context(), environment, options.relativeDirectory)
+	result, err := h.Execution.Workspaces.ReadEnvironmentDirectory(r.Context(), environment, options.relativeDirectory)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -98,7 +97,7 @@ var errHostedEnvironmentProvisioning = &fieldError{message: "the hosted environm
 // environmentFilesAccessible rejects Files operations on an openai_hosted
 // Environment whose first connection has not been observed (HE-18). Callers
 // run it after the tenant-scoped lookup, so foreign Environments stay missing.
-func environmentFilesAccessible(w http.ResponseWriter, environment store.Environment) bool {
+func environmentFilesAccessible(w http.ResponseWriter, environment sessions.Environment) bool {
 	var configuration struct {
 		Type string `json:"type"`
 	}

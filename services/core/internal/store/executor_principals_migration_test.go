@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestExecutorPrincipalMigrationRetiresUnknownAuthority(t *testing.T) {
@@ -103,26 +105,27 @@ func TestExecutorPrincipalMigrationRetiresUnknownAuthority(t *testing.T) {
 	t.Cleanup(migrated.Close)
 	s := New(migrated)
 	p := FixtureExecutorPrincipal(t, s, tenant)
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment, digest); !errors.Is(err, ErrNotFound) {
+	credentials := sessionService(t, s)
+	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, environment, digest); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("legacy credential accepted", err)
 	}
-	if _, err := s.IssueExecutorCredential(ctx, p, environment, ""); !errors.Is(err, ErrExecutorCredentialExists) {
+	if _, err := credentials.IssueExecutorCredential(ctx, p, environment, ""); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("legacy key ID claimed", err)
 	}
-	if _, err := s.RotateExecutorCredential(ctx, p, environment); !errors.Is(err, ErrNotFound) {
+	if _, err := credentials.RotateExecutorCredential(ctx, p, environment); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("legacy principal claimed", err)
 	}
-	if err := s.RevokeExecutorCredential(ctx, p, environment); !errors.Is(err, ErrNotFound) {
+	if err := credentials.RevokeExecutorCredential(ctx, p, environment); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("legacy principal manufactured", err)
 	}
-	key, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), "")
+	key, err := credentials.IssueExecutorCredential(ctx, p, uuid.NewString(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := provider.DownTo(ctx, 25); err == nil || !strings.Contains(err.Error(), "Cannot remove durable executor principal identities") {
 		t.Fatal("downgrade lost principal keys", err)
 	}
-	if _, err := s.RotateExecutorCredential(ctx, p, key.KeyID); err != nil {
+	if _, err := credentials.RotateExecutorCredential(ctx, p, key.KeyID); err != nil {
 		t.Fatal("failed downgrade damaged identity", err)
 	}
 }

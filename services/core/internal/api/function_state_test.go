@@ -6,17 +6,17 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestFunctionStateEventsUseTheirOwnSnapshot(t *testing.T) {
-	session := store.Session{ID: "session", CreatedAt: time.Now(), Metadata: map[string]string{},
+	session := sessions.Session{ID: "session", CreatedAt: time.Now(), Metadata: map[string]string{},
 		Configuration:   json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`),
 		RequiredActions: []v1.FunctionCallAction{{CallID: "stale"}},
 	}
 	for _, arguments := range []string{`{"n":9007199254740993}`, `null`, `[1,"value"]`, `"value"`, `false`} {
 		action := v1.FunctionCallAction{Type: "function_call", CallID: "call", Name: "lookup", TurnID: "turn", Arguments: json.RawMessage(arguments)}
-		change := store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.requires_action", EventID: "event", SessionID: "session"}, Turn: &store.Turn{ID: "turn", Status: store.TurnWaiting}, RequiredActions: []v1.FunctionCallAction{action}}
+		change := sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.requires_action", EventID: "event", SessionID: "session"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnWaiting}, RequiredActions: []v1.FunctionCallAction{action}}
 		event, err := streamResponse(session, change, "")
 		if err != nil || event.Session.Status != "requires_action" {
 			t.Fatal(event, err)
@@ -38,7 +38,7 @@ func TestFunctionStateEventsUseTheirOwnSnapshot(t *testing.T) {
 			t.Fatal("unexpected public fields", string(raw))
 		}
 		change.RequiredActions = nil
-		change.Turn.Status = store.TurnInProgress
+		change.Turn.Status = sessions.TurnInProgress
 		change.Event.Type = "agent.session.in_progress"
 		event, err = streamResponse(session, change, "")
 		if err != nil || event.Session.Status != "in_progress" || event.Session.RequiredActions == nil || len(event.Session.RequiredActions) != 0 {

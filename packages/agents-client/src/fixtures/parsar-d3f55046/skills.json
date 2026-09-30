@@ -307,25 +307,6 @@
           "param": null
         }
       }
-    },
-    "error_storage_unavailable": {
-      "request": {
-        "method": "GET",
-        "path": "/v1/skills"
-      },
-      "status": 503,
-      "headers": {
-        "content-type": "application/json",
-        "cache-control": "no-store"
-      },
-      "body": {
-        "error": {
-          "message": "Skill storage is unavailable.",
-          "type": "server_error",
-          "code": "skill_storage_unavailable",
-          "param": null
-        }
-      }
     }
   }
 }

@@ -20,18 +20,18 @@ func (q *Queries) DeleteAgentModelExecution(ctx context.Context, agentID pgtype.
 	return err
 }
 
-const getAgentForSession = `-- name: GetAgentForSession :one
+const getAgentWithModelExecution = `-- name: GetAgentWithModelExecution :one
 SELECT a.id, a.tenant_id, a.metadata, a.configuration, a.created_at, a.updated_at, e.encrypted_config FROM agents a
 LEFT JOIN agent_model_execution e ON e.agent_id = a.id
 WHERE a.tenant_id = $1 AND a.id = $2
 `
 
-type GetAgentForSessionParams struct {
+type GetAgentWithModelExecutionParams struct {
 	TenantID pgtype.UUID `json:"tenant_id"`
 	AgentID  pgtype.UUID `json:"agent_id"`
 }
 
-type GetAgentForSessionRow struct {
+type GetAgentWithModelExecutionRow struct {
 	ID              pgtype.UUID        `json:"id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	Metadata        []byte             `json:"metadata"`
@@ -41,9 +41,9 @@ type GetAgentForSessionRow struct {
 	EncryptedConfig []byte             `json:"encrypted_config"`
 }
 
-func (q *Queries) GetAgentForSession(ctx context.Context, arg GetAgentForSessionParams) (GetAgentForSessionRow, error) {
-	row := q.db.QueryRow(ctx, getAgentForSession, arg.TenantID, arg.AgentID)
-	var i GetAgentForSessionRow
+func (q *Queries) GetAgentWithModelExecution(ctx context.Context, arg GetAgentWithModelExecutionParams) (GetAgentWithModelExecutionRow, error) {
+	row := q.db.QueryRow(ctx, getAgentWithModelExecution, arg.TenantID, arg.AgentID)
+	var i GetAgentWithModelExecutionRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,

@@ -8,29 +8,42 @@ import (
 	"strings"
 	"testing"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 )
 
+// coreProviderValidationStore serves the real model configuration rules over
+// storage that counts the deployment defaults reaching it.
 type coreProviderValidationStore struct {
-	ResourceStore
+	t      testing.TB
 	writes int
 }
 
-func (s *coreProviderValidationStore) ListDeploymentModelProviders(context.Context) ([]store.DeploymentModelProvider, error) {
-	return nil, nil
+func (s *coreProviderValidationStore) Replace(context.Context, modelconfiguration.Record) (modelconfiguration.Configuration, error) {
+	s.writes++
+	return modelconfiguration.Configuration{}, nil
 }
-func (s *coreProviderValidationStore) DeleteDeploymentModelProvider(context.Context, string) error {
+
+func (s *coreProviderValidationStore) Delete(context.Context, string) error {
+	unexpectedCall(s.t, "Delete")
 	return nil
 }
-func (s *coreProviderValidationStore) SetDeploymentModelProvider(context.Context, string, v1.ModelConfigurationInput) (store.DeploymentModelProvider, error) {
-	s.writes++
-	return store.DeploymentModelProvider{}, nil
+
+func (s *coreProviderValidationStore) LoadBundle(context.Context, string) (modelconfiguration.Bundle, error) {
+	unexpectedCall(s.t, "LoadBundle")
+	return modelconfiguration.Bundle{}, nil
+}
+
+func (s *coreProviderValidationStore) configure(d *Dependencies, _ *testFakes) {
+	service, err := modelconfiguration.NewService(s)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	d.ModelProviders = service
 }
 
 func TestCoreModelProviderValidationFields(t *testing.T) {
-	s := &coreProviderValidationStore{}
-	h, _, _ := adminTestHandler(t, func(h *Handler) { h.store = s })
+	s := &coreProviderValidationStore{t: t}
+	h, _, _ := adminTestHandler(t, s.configure)
 	for _, tc := range []struct {
 		name, harness, body, code, param string
 		details                          map[string]any

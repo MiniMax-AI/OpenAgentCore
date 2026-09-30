@@ -10,7 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestAcceptedEnginePlacements(t *testing.T) {
@@ -67,11 +67,11 @@ func TestAdditionalProfileUsesCommonAdmission(t *testing.T) {
 		t.Fatal("additional engine admission failed", err)
 	}
 	snapshot.Agent.Model = "invalid"
-	if err := validateProfileConfiguration(profile, snapshot); !errors.Is(err, store.ErrInvalidInput) {
+	if err := validateProfileConfiguration(profile, snapshot); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("profile configuration lost public error mapping", err)
 	}
-	inputs := []store.Input{{Kind: "tool_result", Payload: json.RawMessage(`{"call_id":"call","result":{"success":true,"output":"response"}}`)}}
-	if err := validateProfileInputs(profile, "none", inputs); !errors.Is(err, store.ErrInvalidInput) || !resultChecked {
+	inputs := []sessions.Input{{Kind: "tool_result", Payload: json.RawMessage(`{"call_id":"call","result":{"success":true,"output":"response"}}`)}}
+	if err := validateProfileInputs(profile, "none", inputs); !errors.Is(err, sessions.ErrInvalidInput) || !resultChecked {
 		t.Fatal("profile result lost public error mapping", err)
 	}
 }
@@ -144,7 +144,7 @@ func TestCommonOnlyValidationPreservesFunctionResults(t *testing.T) {
 	profile := enginetest.Profile(nil)
 	catalog := engine.NewCatalog(map[string]engine.Profile{"fixture": profile})
 	profile, _ = catalog.Lookup("fixture")
-	inputs := []store.Input{{Kind: "tool_result", Payload: json.RawMessage(`{"call_id":"call","result":{"success":true,"output":"response"}}`)}}
+	inputs := []sessions.Input{{Kind: "tool_result", Payload: json.RawMessage(`{"call_id":"call","result":{"success":true,"output":"response"}}`)}}
 	if err := validateProfileInputs(profile, "none", inputs); err != nil {
 		t.Fatal("common-only result acquired a native restriction", err)
 	}

@@ -10,24 +10,11 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
-
-// General wire fixtures do not persist resources; dedicated audit fixtures below
-// check the no-op/replay boundary independently of business Store auditing.
-func (s *recordingStore) AuditSessionOperation(ctx context.Context, tenant, session, action string) error {
-	if auditor, ok := s.ResourceStore.(sessionWriteAuditor); ok {
-		return auditor.AuditSessionOperation(ctx, tenant, session, action)
-	}
-	return nil
-}
-
-func (f *streamFixture) AuditSessionOperation(context.Context, string, string, string) error {
-	return nil
-}
 
 type auditedSessionFixture struct {
 	streamFixture
@@ -36,13 +23,13 @@ type auditedSessionFixture struct {
 	source  writeaudit.Source
 }
 
-func (f *auditedSessionFixture) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (store.SessionCreation, error) {
-	return store.SessionCreation{Session: f.session}, nil
+func (f *auditedSessionFixture) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error) {
+	return sessions.Creation{Session: f.session}, nil
 }
 
 func (f *auditedSessionFixture) AuditSessionOperation(ctx context.Context, tenant, session, action string) error {
 	if tenant != f.session.TenantID || session != f.session.ID {
-		return store.ErrNotFound
+		return sessions.ErrNotFound
 	}
 	f.source, _ = writeaudit.FromContext(ctx)
 	f.actions = append(f.actions, action)
@@ -54,11 +41,19 @@ func TestSessionAuditOnlyRoutesFailClosed(t *testing.T) {
 		for _, fail := range []bool{false, true} {
 			t.Run(route+map[bool]string{false: "/commit", true: "/rollback"}[fail], func(t *testing.T) {
 				tenant, session := uuid.NewString(), uuid.NewString()
-				f := &auditedSessionFixture{streamFixture: streamFixture{session: store.Session{ID: session, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"},"agent":{"id":"agent","model":"test"}}`)}}}
+				f := &auditedSessionFixture{streamFixture: streamFixture{session: sessions.Session{ID: session, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"},"agent":{"id":"agent","model":"test"}}`)}}}
 				if fail {
 					f.err = errors.New("audit unavailable")
 				}
-				h := &Handler{store: f}
+				deps, fakes := testDependencies(t)
+				fakes.sessions.auditSessionOperation = f.AuditSessionOperation
+				if route != "stream-replay" {
+					fakes.sessions.getSession = f.GetSession
+				}
+				if route != "empty-events" {
+					fakes.sessionCreation.findSessionCreation = f.FindSessionCreation
+				}
+				h := &Handler{Dependencies: deps}
 				ctx := context.WithValue(t.Context(), principalContextKey{}, identity.Principal{ProjectScope: identity.ProjectScope{TenantID: tenant}, SubjectKind: "service_account", SubjectID: "test"})
 				ctx = writeaudit.WithSource(ctx, writeaudit.Source{TenantID: tenant, RequestID: "request", TraceID: "trace"})
 				routeContext := chi.NewRouteContext()

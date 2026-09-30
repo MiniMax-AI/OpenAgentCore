@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"net"
@@ -15,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -65,29 +66,56 @@ func TestServerHandlerRoutesCanonicalPaths(t *testing.T) {
 	}
 }
 
-// trapStore panics on every store call, marking a request that reached a handler.
-type trapStore struct{ api.ResourceStore }
+// trapProjectsReader resolves the fixture Project keys; every other call panics.
+type trapProjectsReader struct {
+	api.ProjectsReader
+	keys fixtureKeyResolver
+}
 
-// trapKeys finds no derived project API key; key management calls panic.
-type trapKeys struct{ api.ProjectAPIKeyStore }
-
-func (trapKeys) ResolveProjectAPIKey(context.Context, string) (store.ProjectAPIKeyBinding, error) {
-	return store.ProjectAPIKeyBinding{}, store.ErrNotFound
+func (p trapProjectsReader) ResolveAPIKey(ctx context.Context, digest [sha256.Size]byte) (projects.KeyBinding, error) {
+	return p.keys.ResolveAPIKey(ctx, digest)
 }
 
 // daemonComposition serves the real API handler beside sentinel daemon routes.
+// Every dependency call panics, marking a request that reached a handler.
 func daemonComposition(t testing.TB) http.Handler {
 	t.Helper()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "org", ProjectID: "project", SubjectKind: "service_account",
+	keys := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "org", ProjectID: "project", SubjectKind: "service_account",
 		SubjectID: "runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}})
-	if err != nil {
-		t.Fatal(err)
-	}
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin-key")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	apiHandler, err := api.NewHandler(trapStore{}, auth, "codex", api.WithSandboxManager(&store.Store{}, admin), api.WithProjectAPIKeys(trapKeys{}, admin))
+	apiHandler, err := api.NewHandler(api.Dependencies{
+		Engine: "codex", CoreKeys: admin, InstallationBindings: struct{ api.InstallationBindings }{},
+		Projects: struct{ api.Projects }{}, ProjectsReader: trapProjectsReader{keys: keys},
+		ModelProviders: struct{ api.ModelProviders }{}, ModelProvidersReader: struct{ api.ModelProvidersReader }{},
+		Vaults: struct{ api.Vaults }{}, VaultsReader: struct{ api.VaultsReader }{},
+		Files: struct{ api.Files }{}, FilesReader: struct{ api.FilesReader }{},
+		Skills: struct{ api.Skills }{}, SkillsReader: struct{ api.SkillsReader }{},
+		Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{},
+		EnvironmentTemplates: struct{ api.EnvironmentTemplates }{}, EnvironmentTemplatesReader: struct{ api.EnvironmentTemplatesReader }{},
+		Sessions:        struct{ api.Sessions }{},
+		SessionCreation: struct{ api.SessionCreation }{},
+		SessionEvents:   struct{ api.SessionEvents }{},
+		Turns:           struct{ api.Turns }{},
+		Items:           struct{ api.Items }{},
+		Subagents:       struct{ api.Subagents }{},
+		Artifacts:       struct{ api.Artifacts }{},
+		ArtifactsReader: struct{ api.ArtifactsReader }{},
+		SessionAdmin:    struct{ api.SessionAdmin }{}, Environments: struct{ api.Environments }{}, EnvironmentsReader: struct{ api.EnvironmentsReader }{}, ExecutorConnections: struct{ api.ExecutorConnections }{},
+		Admin: struct{ api.Admin }{}, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{}, Metrics: struct{ api.Metrics }{},
+		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
+		Execution: &api.Execution{
+			ExecutorURL:      "wss://core.example/api/v1/agent-daemon/ws",
+			SessionAdmission: struct{ api.SessionAdmission }{},
+			InputAdmission:   struct{ api.InputAdmission }{},
+			SessionArchive:   struct{ api.SessionArchive }{},
+			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
+		},
+		Sandboxes: &api.Sandboxes{Deployment: struct{ api.Deployment }{}, NodeAllocations: struct{ api.NodeAllocations }{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
+			DeploymentReset: struct{ api.DeploymentReset }{}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

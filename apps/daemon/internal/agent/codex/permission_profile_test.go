@@ -11,13 +11,16 @@ import (
 func TestRuntimeUsesHostPermissions(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	{
-		req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled"}}
+		req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}}
 		plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if plan.Sandbox != "danger-full-access" || plan.Permissions != "" || plan.ApprovalPolicy.String != "never" {
 			t.Fatal("Runtime must bypass inner sandbox", plan)
+		}
+		if plan.Cwd != req.LocalEnvironment.WorkspaceRoot {
+			t.Fatal("native cwd is not the bound workspace root", plan.Cwd)
 		}
 		for _, kv := range plan.ExtraConfig {
 			if kv[0] == "default_permissions" {

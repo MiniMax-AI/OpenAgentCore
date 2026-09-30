@@ -12,7 +12,7 @@ import (
 )
 
 const listDueEnvironmentInputs = `-- name: ListDueEnvironmentInputs :many
-SELECT r.id, r.session_id
+SELECT r.id, r.session_id, s.tenant_id
 FROM environment_input_reservations r
 JOIN sessions s ON s.id = r.session_id
 WHERE r.state = 'pending'
@@ -26,6 +26,7 @@ FOR UPDATE OF s SKIP LOCKED
 type ListDueEnvironmentInputsRow struct {
 	ID        pgtype.UUID `json:"id"`
 	SessionID pgtype.UUID `json:"session_id"`
+	TenantID  pgtype.UUID `json:"tenant_id"`
 }
 
 func (q *Queries) ListDueEnvironmentInputs(ctx context.Context) ([]ListDueEnvironmentInputsRow, error) {
@@ -37,7 +38,7 @@ func (q *Queries) ListDueEnvironmentInputs(ctx context.Context) ([]ListDueEnviro
 	items := []ListDueEnvironmentInputsRow{}
 	for rows.Next() {
 		var i ListDueEnvironmentInputsRow
-		if err := rows.Scan(&i.ID, &i.SessionID); err != nil {
+		if err := rows.Scan(&i.ID, &i.SessionID, &i.TenantID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

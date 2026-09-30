@@ -4,13 +4,13 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
 	h, w, environment := directoryWorker(t)
 	awaitFixtureCapabilities(t, h, workerEnvironmentCapabilities())
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "execute", []store.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}})
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "execute", []sessions.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "finished"})
 	completeEmptyArtifactExport(t, h)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
-	if run.Turn.Status != store.TurnCompleted {
+	if run.Turn.Status != sessions.TurnCompleted {
 		t.Fatal("active read changed Turn outcome")
 	}
 	assertPreparationReleased(t, h, prepare.ID, handle)

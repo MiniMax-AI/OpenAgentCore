@@ -14,22 +14,22 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
+// streamFixture serves one Session and its event stream.
 type streamFixture struct {
-	ResourceStore
-	session store.Session
+	session sessions.Session
 	mu      sync.Mutex
-	changes []store.SessionChange
+	changes []sessions.SessionChange
 	gap     bool
 	cursors []int64
 }
 
-func (f *streamFixture) GetSession(_ context.Context, tenant, id string) (store.Session, error) {
+func (f *streamFixture) GetSession(_ context.Context, tenant, id string) (sessions.Session, error) {
 	if tenant != f.session.TenantID || id != f.session.ID {
-		return store.Session{}, store.ErrNotFound
+		return sessions.Session{}, sessions.ErrNotFound
 	}
 	return f.session, nil
 }
@@ -38,38 +38,40 @@ func (f *streamFixture) SessionEventCursor(context.Context, string, string) (int
 	return 10, nil
 }
 
-func (f *streamFixture) SessionStreamSnapshot(_ context.Context, tenant, id string) (store.Session, int64, error) {
+func (f *streamFixture) SessionStreamSnapshot(_ context.Context, tenant, id string) (sessions.Session, int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if tenant != f.session.TenantID || id != f.session.ID {
-		return store.Session{}, 0, store.ErrNotFound
+		return sessions.Session{}, 0, sessions.ErrNotFound
 	}
 	return f.session, 10, nil
 }
 
-func (f *streamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor int64) ([]store.SessionChange, error) {
+func (f *streamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor int64) ([]sessions.SessionChange, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.cursors = append(f.cursors, cursor)
 	if f.gap {
-		return nil, store.ErrStreamGap
+		return nil, sessions.ErrStreamGap
 	}
 	changes := f.changes
 	f.changes = nil
 	return changes, nil
 }
 
+// serve answers Session reads and the event stream from f.
+func (f *streamFixture) serve(fakes *testFakes) {
+	fakes.sessions.getSession = f.GetSession
+	fakes.sessionEvents.sessionEventCursor, fakes.sessionEvents.sessionStreamSnapshot, fakes.sessionEvents.listSessionEvents = f.SessionEventCursor, f.SessionStreamSnapshot, f.ListSessionEvents
+}
+
 func TestLiveStreamAuthDisconnectRecoveryAndServerDeadline(t *testing.T) {
-	f := &streamFixture{session: store.Session{ID: uuid.NewString(), TenantID: uuid.NewString(), CreatedAt: time.Now(), Metadata: map[string]string{},
+	f := &streamFixture{session: sessions.Session{ID: uuid.NewString(), TenantID: uuid.NewString(), CreatedAt: time.Now(), Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`)}}
-	auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("foreign"), TenantID: uuid.NewString()}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := NewHandler(f, auth, "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("foreign"), TenantID: uuid.NewString()}).ResolveAPIKey
+	f.serve(fakes)
+	h := newTestHandler(t, deps)
 	done := make(chan struct{}, 8)
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() { done <- struct{}{} }()
@@ -139,7 +141,7 @@ func TestLiveStreamAuthDisconnectRecoveryAndServerDeadline(t *testing.T) {
 	response = request("key")
 	f.mu.Lock()
 	text := strings.Repeat("x", 16*1024*1024)
-	f.changes = []store.SessionChange{{Sequence: 11, Event: v1.SessionEvent{Type: "agent.session.turn.output_text.delta", EventID: "large", SessionID: f.session.ID, Delta: &text}}}
+	f.changes = []sessions.SessionChange{{Sequence: 11, Event: v1.SessionEvent{Type: "agent.session.turn.output_text.delta", EventID: "large", SessionID: f.session.ID, Delta: &text}}}
 	f.mu.Unlock()
 	select {
 	case <-done:
@@ -150,19 +152,19 @@ func TestLiveStreamAuthDisconnectRecoveryAndServerDeadline(t *testing.T) {
 }
 
 func TestTerminalTurnEventsMirrorTurnUsage(t *testing.T) {
-	session := store.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`)}
+	session := sessions.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`)}
 	measured := json.RawMessage(`{"input_tokens":7,"input_tokens_details":{"cached_tokens":2},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":10}`)
 	child := &v1.Turn{ID: "child", Status: "cancelled"}
 	for _, test := range []struct {
-		change store.SessionChange
+		change sessions.SessionChange
 		want   string
 	}{
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.completed"}, Turn: &store.Turn{ID: "turn", Status: store.TurnCompleted, Usage: measured}}, string(measured)},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.failed"}, Turn: &store.Turn{ID: "turn", Status: store.TurnFailed}}, "null"},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.completed"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnCompleted, Usage: measured}}, string(measured)},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.failed"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnFailed}}, "null"},
 		// Child Turn snapshots are rendered when recorded.
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.cancelled", Turn: child}}, "null"},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.in_progress"}, Turn: &store.Turn{ID: "turn", Status: store.TurnInProgress, Usage: measured}}, ""},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &store.Turn{ID: "turn", Status: store.TurnCompleted, Usage: measured}, SessionUsage: measured}, ""},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.cancelled", Turn: child}}, "null"},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.in_progress"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnInProgress, Usage: measured}}, ""},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnCompleted, Usage: measured}, SessionUsage: measured}, ""},
 	} {
 		event, err := streamResponse(session, test.change, "")
 		if err != nil {
@@ -192,19 +194,19 @@ func TestTerminalTurnEventsMirrorTurnUsage(t *testing.T) {
 // Item events carry output_index, null for input Items, and Session snapshots
 // carry both reasoning keys (EVT-09, SES-23).
 func TestStreamEventsCarryExplicitNullFields(t *testing.T) {
-	session := store.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[],"reasoning":{}},"environment":{"type":"none"}}`)}
+	session := sessions.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[],"reasoning":{}},"environment":{"type":"none"}}`)}
 	text := "question"
 	user := &v1.Item{ID: "item", TurnID: "turn", Type: "message", Status: "completed", Role: "user", Content: []v1.ItemContent{{Type: "input_text", Text: &text}}}
 	result := &v1.Item{ID: "result", TurnID: "turn", Type: "function_call_output", Status: "completed", CallID: "call", Output: "value"}
 	index := int32(0)
 	for _, test := range []struct {
-		change store.SessionChange
+		change sessions.SessionChange
 		want   map[string]string
 	}{
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: user}}, map[string]string{"output_index": "null"}},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: result}}, map[string]string{"output_index": "null"}},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.done", TurnID: "turn", OutputIndex: &index, Item: &v1.Item{ID: "answer", TurnID: "turn", Type: "message", Status: "completed", Role: "assistant", Content: []v1.ItemContent{{Type: "output_text", Text: &text}}}}}, map[string]string{"output_index": "0"}},
-		{store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &store.Turn{ID: "turn", Status: store.TurnCompleted}}, map[string]string{"output_index": ""}},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: user}}, map[string]string{"output_index": "null"}},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", TurnID: "turn", Item: result}}, map[string]string{"output_index": "null"}},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.done", TurnID: "turn", OutputIndex: &index, Item: &v1.Item{ID: "answer", TurnID: "turn", Type: "message", Status: "completed", Role: "assistant", Content: []v1.ItemContent{{Type: "output_text", Text: &text}}}}}, map[string]string{"output_index": "0"}},
+		{sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.idle"}, Turn: &sessions.Turn{ID: "turn", Status: sessions.TurnCompleted}}, map[string]string{"output_index": ""}},
 	} {
 		event, err := streamResponse(session, test.change, "")
 		if err != nil {

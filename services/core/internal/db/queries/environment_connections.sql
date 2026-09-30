@@ -13,9 +13,15 @@ UPDATE environment_connections SET revision = $2 WHERE environment_id = $1;
 UPDATE environments SET status = $2 WHERE id = $1;
 
 -- name: RecordEnvironmentFailure :one
-UPDATE environments SET status = 'failed', failure_reason = $2, failure_detail = $3, failed_at = clock_timestamp()
-WHERE id = $1 AND status NOT IN ('failed', 'expired')
-RETURNING failed_at;
+UPDATE environments e SET status = 'failed', failure_reason = sqlc.arg(failure_reason), failure_detail = sqlc.arg(failure_detail), failed_at = clock_timestamp()
+WHERE e.id = sqlc.arg(id) AND e.session_id = sqlc.arg(session_id) AND e.status NOT IN ('failed', 'expired')
+AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = e.session_id AND s.tenant_id = sqlc.arg(tenant_id))
+RETURNING e.failed_at;
+
+-- name: ExpireSessionEnvironment :execrows
+UPDATE environments e SET status = 'expired'
+WHERE e.id = sqlc.arg(id) AND e.session_id = sqlc.arg(session_id)
+AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = e.session_id AND s.tenant_id = sqlc.arg(tenant_id));
 
 -- name: DeleteEnvironmentConnection :exec
 DELETE FROM environment_connections WHERE environment_id = $1;

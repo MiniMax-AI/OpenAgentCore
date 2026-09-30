@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
@@ -48,14 +49,14 @@ func TestSessionVaultTypesAndCreationIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 	input, _ := request.validated()
-	first, _ := sessionCreationRequest(input, []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"original"}`)}})
+	first, _ := sessionCreationRequest(input, []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"original"}`)}})
 	input.Stream = true
-	second, _ := sessionCreationRequest(input, []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"original"}`)}})
+	second, _ := sessionCreationRequest(input, []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"original"}`)}})
 	if !reflect.DeepEqual(first, second) {
 		t.Fatal("streaming changed credential-bound creation identity")
 	}
 	input.VaultIDs = []string{"other"}
-	changed, _ := sessionCreationRequest(input, []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"original"}`)}})
+	changed, _ := sessionCreationRequest(input, []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"original"}`)}})
 	if reflect.DeepEqual(first, changed) {
 		t.Fatal("changed attachment reused caller intent")
 	}
@@ -74,8 +75,8 @@ func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
 		encoded, _ := json.Marshal(value)
 		return encoded
 	}
-	binding := func(label, credentialID string) store.MCPCredentialBinding {
-		b := store.MCPCredentialBinding{ServerLabel: label, ServerURL: "https://mcp.example.test/" + label}
+	binding := func(label, credentialID string) vaults.MCPCredentialBinding {
+		b := vaults.MCPCredentialBinding{ServerLabel: label, ServerURL: "https://mcp.example.test/" + label}
 		if credentialID != "" {
 			b.VaultID, b.CredentialID, b.AuthType = vault, credentialID, "static_bearer"
 		}
@@ -85,11 +86,11 @@ func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
 	explicit := uuid.NewString()
 	cfg := configuration{Agent: v1.Agent{ID: "agent", Model: "model", Tools: []json.RawMessage{tool("implicit", ""), tool("anonymous", ""), tool("explicit", strings.ToUpper(explicit)), function}},
 		Environment: v1.Environment{Type: "none"}, VaultIDs: []string{strings.ToUpper(vault)},
-		MCPCredentials: []store.MCPCredentialBinding{binding("implicit", credential), binding("anonymous", ""), binding("explicit", explicit)}}
+		MCPCredentials: []vaults.MCPCredentialBinding{binding("implicit", credential), binding("anonymous", ""), binding("explicit", explicit)}}
 	// The stored caller intent is checked against PostgreSQL by the storedNull
 	// guard in TestMCPCredentialSelectionPublicPostgres.
 	raw, _ := json.Marshal(cfg)
-	response, err := sessionResponse(store.Session{Configuration: raw}, "")
+	response, err := sessionResponse(sessions.Session{Configuration: raw}, "")
 	if err != nil || !reflect.DeepEqual(response.VaultIDs, cfg.VaultIDs) {
 		t.Fatal("public attachments lost", err)
 	}
@@ -128,10 +129,10 @@ func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
 		func(c *configuration) { c.MCPCredentials[0].ServerLabel = "other" },
 	} {
 		changed := cfg
-		changed.MCPCredentials = append([]store.MCPCredentialBinding(nil), cfg.MCPCredentials...)
+		changed.MCPCredentials = append([]vaults.MCPCredentialBinding(nil), cfg.MCPCredentials...)
 		change(&changed)
 		raw, _ := json.Marshal(changed)
-		response, err := sessionResponse(store.Session{Configuration: raw}, "")
+		response, err := sessionResponse(sessions.Session{Configuration: raw}, "")
 		if err != nil || string(response.Agent.Tools[0]) != string(changed.Agent.Tools[0]) {
 			t.Fatalf("unattached or unmatched binding was projected: %s, %v", response.Agent.Tools[0], err)
 		}

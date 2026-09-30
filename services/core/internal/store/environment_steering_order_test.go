@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
@@ -18,7 +20,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 			writer := executionWriter(t, s)
 			tenant, session := environmentInputSession(t, s)
 			original := submitMessage(t, s, tenant, session.ID, "original")
-			transition(t, s, tenant, session.ID, original.TurnID, TurnQueued, TurnInProgress)
+			transition(t, s, tenant, session.ID, original.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			blocker, err := pool.Begin(ctx)
@@ -43,18 +45,18 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 				return 0
 			}
 			type admission struct {
-				value EnvironmentInputReservation
+				value sessions.EnvironmentInputReservation
 				err   error
 			}
 			admitted := make(chan admission, 1)
 			completed := make(chan error, 1)
-			batch := []Input{messageInput("first"), messageInput("second")}
+			batch := []sessions.Input{messageInput("first"), messageInput("second")}
 			input := func() {
 				value, err := s.ReserveEnvironmentInput(ctx, tenant, session.ID, "racing-input", batch)
 				admitted <- admission{value, err}
 			}
 			complete := func() {
-				_, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, TurnCompleted, nil, "", original.Sequence)
+				_, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, sessions.TurnCompleted, nil, "", original.Sequence)
 				completed <- err
 			}
 			first, second := input, complete
@@ -73,7 +75,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 				t.Fatal(got.err)
 			}
 			if completionFirst {
-				if completionErr != nil || got.value.State != EnvironmentInputPending || got.value.ID == "" || len(got.value.Receipts) != 0 || got.value.Deadline.Sub(got.value.CreatedAt) != 5*time.Minute {
+				if completionErr != nil || got.value.State != sessions.EnvironmentInputPending || got.value.ID == "" || len(got.value.Receipts) != 0 || got.value.Deadline.Sub(got.value.CreatedAt) != 5*time.Minute {
 					t.Fatal("completion winner did not leave new input waiting for preparation", completionErr, got.value)
 				}
 				environmentInputHistory(t, pool, session.ID, 1, 1)
@@ -85,15 +87,15 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 				if err != nil || retry.ID != got.value.ID || !retry.Deadline.Equal(got.value.Deadline) || len(retry.Receipts) != 2 || !retry.Receipts[0].Replayed || retry.Receipts[0].TurnID != prepared.Receipts[0].TurnID {
 					t.Fatal("active retry replaced its original reservation", retry, err)
 				}
-				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, prepared.Receipts[0].TurnID, TurnCompleted, nil, "", prepared.Receipts[1].Sequence); err != nil {
+				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, prepared.Receipts[0].TurnID, sessions.TurnCompleted, nil, "", prepared.Receipts[1].Sequence); err != nil {
 					t.Fatal(err)
 				}
 			} else {
-				if !errors.Is(completionErr, ErrUnappliedInputs) || got.value.State != EnvironmentInputAdmitted || got.value.ID != "" || !got.value.Deadline.IsZero() || len(got.value.Receipts) != 2 || got.value.Receipts[0].TurnID != original.TurnID || got.value.Receipts[0].Replayed {
+				if !errors.Is(completionErr, sessions.ErrUnappliedInputs) || got.value.State != sessions.EnvironmentInputAdmitted || got.value.ID != "" || !got.value.Deadline.IsZero() || len(got.value.Receipts) != 2 || got.value.Receipts[0].TurnID != original.TurnID || got.value.Receipts[0].Replayed {
 					t.Fatal("admitted input escaped the original Turn or application fence", completionErr, got.value)
 				}
 				environmentInputHistory(t, pool, session.ID, 1, 3)
-				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, TurnCompleted, nil, "", got.value.Receipts[1].Sequence); err != nil {
+				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, sessions.TurnCompleted, nil, "", got.value.Receipts[1].Sequence); err != nil {
 					t.Fatal("completion after controlled application failed", err)
 				}
 			}

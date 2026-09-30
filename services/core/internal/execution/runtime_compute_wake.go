@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -18,9 +19,9 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Suspension
 			return err
 		}
 	}
-	peer, err := authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
+	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 	if err != nil {
-		if !errors.Is(err, store.ErrNotFound) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(err, runtimegateway.ErrSessionClosed) {
+		if !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(err, runtimegateway.ErrSessionClosed) {
 			return err
 		}
 		// This idempotent control signal is fenced by guest PID/start time and the
@@ -35,7 +36,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Suspension
 		timer := time.NewTicker(100 * time.Millisecond)
 		defer timer.Stop()
 		for {
-			peer, err = authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
+			peer, err = authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 			if err == nil {
 				break
 			}
@@ -71,7 +72,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Suspension
 }
 
 func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.SuspensionProvider, owner store.RuntimeAllocation, state runtimeCompute) error {
-	if err := r.store.CheckExecutionOwnership(ctx); err != nil {
+	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
 	// An uncommitted artifact is found by its persisted attempt, never a directory
@@ -104,12 +105,12 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Suspens
 
 // waitRuntimeAwake is called only for live Environment file operations, before
 // entering the Worker's work queues. Persisted history/artifact reads bypass it.
-func (w *Worker) waitRuntimeAwake(ctx context.Context, environment store.Environment) error {
+func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Environment) error {
 	if w.runtimes == nil {
 		return nil
 	}
 	owner, err := w.admission.GetRuntimeAllocation(ctx, environment.TenantID, environment.ID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, sessions.ErrNotFound) {
 		return nil
 	}
 	if err != nil {

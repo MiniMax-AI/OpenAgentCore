@@ -45,17 +45,12 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 		return result, err
 	}
 	result.DataDir = filepath.Dir(root)
-	result.Dir, err = workDir(req.WorkDir, filepath.Join(result.DataDir, "workspace"))
-	if err != nil {
-		return result, err
-	}
+	result.Dir = filepath.Join(result.DataDir, "workspace")
 	if err := os.MkdirAll(result.DataDir, 0o700); err != nil {
 		return result, err
 	}
-	if req.WorkDir == "" {
-		if err := os.MkdirAll(result.Dir, 0o700); err != nil {
-			return result, err
-		}
+	if err := os.MkdirAll(result.Dir, 0o700); err != nil {
+		return result, err
 	}
 	if managedSkills {
 		installed, err := managedskills.InstallManagedSkills(ctx, log.With("component", "mcode"), root, req.AgentOptions["skills"])
@@ -144,23 +139,6 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 	}
 	result.MCP, err = mcpServers(opts["mcp_servers"])
 	return result, err
-}
-
-func workDir(raw, fallback string) (string, error) {
-	if raw == "" {
-		return fallback, nil
-	}
-	if strings.HasPrefix(raw, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		raw = filepath.Join(home, raw[2:])
-	}
-	if !filepath.IsAbs(raw) {
-		return "", fmt.Errorf("mcode: working directory must be absolute or start with ~/")
-	}
-	return filepath.Clean(raw), nil
 }
 
 func optionString(options map[string]any, key string) string {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -16,8 +17,8 @@ func TestArchivedCancellationMigrationDoesNotAdoptOldRevocations(t *testing.T) {
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, installation)
 	input := submitMessage(t, s, tenant, session.ID, "waiting")
-	transition(t, w, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
-	transition(t, w, tenant, session.ID, input.TurnID, TurnInProgress, TurnWaiting)
+	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnInProgress, sessions.TurnWaiting)
 	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1); err != nil {
 		t.Fatal(err)
 	}

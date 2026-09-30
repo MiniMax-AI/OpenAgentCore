@@ -10,11 +10,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -31,10 +34,10 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", path)
-	if _, err := configureManagedNodes(nil, "", nil); err == nil || !strings.Contains(err.Error(), "OAC_PUBLIC_URL") {
+	if _, err := configureManagedNodes(nil, nil, nil, providers.Builtin(), "", nil); err == nil || !strings.Contains(err.Error(), "OAC_PUBLIC_URL") {
 		t.Fatal("sandbox manager started without a public URL", err)
 	}
-	m, err := configureManagedNodes(nil, "https://core.example", func(context.Context) error { return nil })
+	m, err := configureManagedNodes(nil, nil, nil, providers.Builtin(), "https://core.example", func(context.Context) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,43 +46,111 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
 	}
 	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", "")
-	if _, err := configureManagedNodes(nil, "https://core.example", nil); err == nil {
+	if _, err := configureManagedNodes(nil, nil, nil, providers.Builtin(), "https://core.example", nil); err == nil {
 		t.Fatal("setup accepted without admin authentication")
 	}
 }
 
-type setupStore struct {
-	value store.SandboxSetup
-	err   error
+// fakeDeploymentSetups is a strict deploymentSetups: a call without a set
+// function fails the test.
+type fakeDeploymentSetups struct {
+	t               testing.TB
+	setup           func(context.Context) (deployment.Setup, error)
+	allocationSetup func(context.Context, sandbox.Reference) (deployment.Setup, error)
+	generationPage  func(context.Context, int64) ([]deployment.Setup, error)
+	withCredential  func(owner, candidate deployment.Setup) (deployment.Setup, error)
 }
 
-func (s *setupStore) GetSandboxSetup(context.Context) (store.SandboxSetup, error) {
-	return s.value, s.err
+func (f *fakeDeploymentSetups) Setup(ctx context.Context) (deployment.Setup, error) {
+	if f.setup == nil {
+		return deployment.Setup{}, unexpectedCall(f.t, "Setup")
+	}
+	return f.setup(ctx)
 }
-func (*setupStore) ResolveRuntimeNode(context.Context, string, string) (string, error) {
-	return "", errors.New("unexpected node lookup")
+func (f *fakeDeploymentSetups) AllocationSetup(ctx context.Context, ref sandbox.Reference) (deployment.Setup, error) {
+	if f.allocationSetup == nil {
+		return deployment.Setup{}, unexpectedCall(f.t, "AllocationSetup")
+	}
+	return f.allocationSetup(ctx, ref)
+}
+func (f *fakeDeploymentSetups) GenerationPage(ctx context.Context, after int64) ([]deployment.Setup, error) {
+	if f.generationPage == nil {
+		return nil, unexpectedCall(f.t, "GenerationPage")
+	}
+	return f.generationPage(ctx, after)
+}
+func (f *fakeDeploymentSetups) WithCredential(owner, candidate deployment.Setup) (deployment.Setup, error) {
+	if f.withCredential == nil {
+		return deployment.Setup{}, unexpectedCall(f.t, "WithCredential")
+	}
+	return f.withCredential(owner, candidate)
+}
+
+// fakeGenerationAllocations is a strict generationAllocations.
+type fakeGenerationAllocations struct {
+	t                               testing.TB
+	resolveRuntimeGeneration        func(context.Context, sandbox.Reference) (string, uint64, error)
+	sandboxCredentialAllocationPage func(context.Context, string) ([]store.RuntimeAllocation, error)
+}
+
+func (f *fakeGenerationAllocations) ResolveRuntimeGeneration(ctx context.Context, ref sandbox.Reference) (string, uint64, error) {
+	if f.resolveRuntimeGeneration == nil {
+		return "", 0, unexpectedCall(f.t, "ResolveRuntimeGeneration")
+	}
+	return f.resolveRuntimeGeneration(ctx, ref)
+}
+func (f *fakeGenerationAllocations) SandboxCredentialAllocationPage(ctx context.Context, after string) ([]store.RuntimeAllocation, error) {
+	if f.sandboxCredentialAllocationPage == nil {
+		return nil, unexpectedCall(f.t, "SandboxCredentialAllocationPage")
+	}
+	return f.sandboxCredentialAllocationPage(ctx, after)
+}
+
+// unexpectedCall fails the test from any goroutine and returns the error the
+// caller propagates.
+func unexpectedCall(t testing.TB, method string) error {
+	t.Errorf("unexpected call to %s", method)
+	return errors.New("unexpected call to " + method)
+}
+
+// committedSetup reads *value as the deployment's committed setup.
+func committedSetup(value *deployment.Setup) func(context.Context) (deployment.Setup, error) {
+	return func(context.Context) (deployment.Setup, error) { return *value, nil }
+}
+
+// credentialService gives an owner setup a candidate's credential as the
+// deployment service does. That needs no storage.
+func credentialService(t *testing.T) func(owner, candidate deployment.Setup) (deployment.Setup, error) {
+	t.Helper()
+	service, err := deployment.NewService(deploymentpg.New(nil, nil), deploymentpg.New(nil, nil), providers.Builtin(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service.WithCredential
 }
 
 func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T) {
-	db := &setupStore{value: store.SandboxSetup{InstallationID: "installation", Provider: "docker", Generation: 1}}
-	s := &managedSetup{store: db, installationID: "installation"}
+	value := deployment.Setup{InstallationID: "installation", Provider: "docker", Mode: "nodes", Generation: 1}
+	var loadErr error
+	setups := &fakeDeploymentSetups{t: t, setup: func(context.Context) (deployment.Setup, error) { return value, loadErr }}
+	s := &managedSetup{registry: providers.Builtin(), deployment: setups, allocations: &fakeGenerationAllocations{t: t}, installationID: "installation"}
 	cached := &execution.RuntimeProvider{InstallationID: "installation", ProviderKind: "docker", Generation: 1}
 	s.publish(cached)
 	if got, err := s.load(t.Context()); err != nil || got != cached {
 		t.Fatal("matching immutable selection was not reused")
 	}
-	db.err = errors.New("database unavailable")
+	loadErr = errors.New("database unavailable")
 	if _, err := s.load(t.Context()); err == nil {
 		t.Fatal("stale cached selection hid storage failure")
 	}
-	db.err = nil
-	db.value.Generation = 2
+	loadErr = nil
+	value.Generation = 2
 	// No Hub is installed; a changed generation must construct again and fail.
 	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("changed provider availability must block execution without losing recovery", err)
 	}
-	db.value.InstallationID = "other-installation"
-	db.value.Generation = 1
+	value.InstallationID = "other-installation"
+	value.Generation = 1
 	if _, err := s.load(t.Context()); err == nil {
 		t.Fatal("cache ignored installation identity")
 	}
@@ -87,10 +158,10 @@ func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T)
 
 func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, installationID: id, store: &setupStore{value: store.SandboxSetup{
-		InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
-		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()},
-	}}}
+	committed := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, UsesCredential: true,
+		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}}
+	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, registry: providers.Builtin(), installationID: id,
+		deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&committed)}}
 	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("missing local helper must leave administrative recovery available", err)
 	}
@@ -103,10 +174,10 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 	id := uuid.NewString()
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	s := &managedSetup{installationID: id, hub: hub, store: &setupStore{}, publicURL: "https://core.example"}
+	s := &managedSetup{registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, publicURL: "https://core.example"}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.publish(previous)
-	candidate, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", IdleSeconds: 300, RetentionSeconds: 86400})
+	candidate, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Operations: microsandbox.Operations(), Suspension: &deployment.Suspension{IdleSeconds: 300, RetentionSeconds: 86400}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,45 +194,30 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 
 func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, installationID: id}
+	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, registry: providers.Builtin(), installationID: id}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.publish(previous)
-	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct",
+	_, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true,
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
 	if !errors.Is(err, execution.ErrExecutionUnavailable) || s.selected.Load().Config != previous {
 		t.Fatal("rejected candidate lost the previous selection", err)
 	}
 }
 
-func TestE2BRequiresAPublicURLOutsideTheHost(t *testing.T) {
-	id := uuid.NewString()
-	s := &managedSetup{installationID: id, publicURL: "http://127.0.0.1:8091"}
-	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct",
-		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
-	if !errors.Is(err, store.ErrSandboxPublicURLUnreachable) {
-		t.Fatal("E2B accepted a loopback public URL", err)
-	}
-}
-
-type delayedSetupStore struct {
-	setupStore
-	entered, release chan struct{}
-}
-
-func (s *delayedSetupStore) GetSandboxSetup(ctx context.Context) (store.SandboxSetup, error) {
-	value := s.value
-	close(s.entered)
-	select {
-	case <-s.release:
-		return value, nil
-	case <-ctx.Done():
-		return store.SandboxSetup{}, ctx.Err()
-	}
-}
 func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 	id := uuid.NewString()
-	db := &delayedSetupStore{setupStore: setupStore{value: store.SandboxSetup{InstallationID: id, Provider: "docker", Generation: 1}}, entered: make(chan struct{}), release: make(chan struct{})}
-	s := &managedSetup{installationID: id, store: db}
+	value := deployment.Setup{InstallationID: id, Provider: "docker", Mode: "nodes", Generation: 1}
+	entered, release := make(chan struct{}), make(chan struct{})
+	delayed := func(ctx context.Context) (deployment.Setup, error) {
+		close(entered)
+		select {
+		case <-release:
+			return value, nil
+		case <-ctx.Done():
+			return deployment.Setup{}, ctx.Err()
+		}
+	}
+	s := &managedSetup{registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t, setup: delayed}}
 	done := make(chan error, 1)
 	go func() {
 		provider, err := s.load(t.Context())
@@ -170,9 +226,9 @@ func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 		}
 		done <- err
 	}()
-	<-db.entered
+	<-entered
 	s.publishUnconfigured(2)
-	close(db.release)
+	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
@@ -188,20 +244,6 @@ func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 	if s.selected.Load().Config != next {
 		t.Fatal("reset blocked subsequent configuration")
 	}
-}
-
-func (s *setupStore) GetSandboxAllocationSetup(_ context.Context, _ sandbox.Reference) (store.SandboxSetup, error) {
-	return s.value, nil
-}
-func (s *setupStore) SandboxGenerationPage(context.Context, int64) ([]store.SandboxSetup, error) {
-	return nil, nil
-}
-func (s *setupStore) SandboxCredentialAllocationPage(context.Context, string) ([]store.RuntimeAllocation, error) {
-	return nil, nil
-}
-
-func (s *setupStore) ResolveRuntimeGeneration(context.Context, sandbox.Reference) (string, uint64, error) {
-	return "", 0, errors.New("unexpected node generation lookup")
 }
 
 func testProviderPaths(t *testing.T, helper, state string) sandbox.ProcessPaths {
@@ -225,20 +267,20 @@ func testProviderPaths(t *testing.T, helper, state string) sandbox.ProcessPaths 
 }
 
 func TestManagedObservationSourceKeepsSelectionAcrossReconfiguration(t *testing.T) {
-	db := &setupStore{value: store.SandboxSetup{InstallationID: "installation", Generation: 1}}
-	setup := &managedSetup{store: db, installationID: "installation"}
+	value := deployment.Setup{InstallationID: "installation", Generation: 1}
+	setup := &managedSetup{registry: providers.Builtin(), deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&value)}, installationID: "installation"}
 	if source, err := setup.ResolveObservationSource(t.Context()); source != nil || !errors.Is(err, runtimeobs.ErrUnavailable) {
 		t.Fatal("unconfigured setup did not return typed unavailability", source, err)
 	}
 	first := &docker.Provider{}
-	db.value.Provider, db.value.Generation = "docker", 2
+	value.Provider, value.Mode, value.Generation = "docker", "nodes", 2
 	setup.publish(&execution.RuntimeProvider{Generation: 2, Provider: first})
 	source, err := setup.ResolveObservationSource(t.Context())
 	if err != nil || source != first {
 		t.Fatal(source, err)
 	}
 	next := &microsandbox.Provider{}
-	db.value.Provider, db.value.Generation = "microsandbox", 3
+	value.Provider, value.Mode, value.Generation = "microsandbox", "nodes", 3
 	setup.publish(&execution.RuntimeProvider{Generation: 3, Provider: next})
 	if source.ObservationProviderType() != "docker" {
 		t.Fatal("in-flight identity changed")
@@ -252,9 +294,11 @@ func TestManagedObservationSourceKeepsSelectionAcrossReconfiguration(t *testing.
 func TestObservationGenerationIdentityMustMatchRoutedAllocation(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	db := &setupStore{value: store.SandboxSetup{Provider: "docker"}}
-	setup := &managedSetup{hub: hub, store: db}
-	source := &observedGenerationRouter{&generationRouter{setup: setup, store: db, providerType: "e2b"}}
+	routed := func(context.Context, sandbox.Reference) (deployment.Setup, error) {
+		return deployment.Setup{Provider: "docker", Mode: "nodes"}, nil
+	}
+	setup := &managedSetup{registry: providers.Builtin(), hub: hub, deployment: &fakeDeploymentSetups{t: t, allocationSetup: routed}, allocations: &fakeGenerationAllocations{t: t}}
+	source := &observedGenerationRouter{&generationRouter{setup: setup, providerType: "e2b"}}
 	_, err := source.Observe(t.Context(), runtimeobs.Target{TenantID: "tenant", EnvironmentID: "environment", Instance: runtimeobs.Instance{AllocationID: "allocation"}})
 	if !errors.Is(err, providercontract.ErrContract) {
 		t.Fatal("routed allocation was attributed to another provider", err)

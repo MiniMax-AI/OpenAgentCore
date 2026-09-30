@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,8 +17,9 @@ import (
 func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "ordered"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "ordered"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,11 +27,11 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress})
+	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := s.ListItems(ctx, tenant, session.ID, "", 100, true)
+	page, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatal(page, err)
 	}
@@ -39,41 +41,41 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 	sort.Slice(keys, func(i, j int) bool {
 		return items.Identity(input.TurnID, "message:"+keys[i]) > items.Identity(input.TurnID, "message:"+keys[j])
 	})
-	var batch []store.ExecutionEvent
+	var batch []sessions.ExecutionEvent
 	for _, key := range keys {
 		payload, _ := json.Marshal(map[string]string{"id": key, "status": "in_progress"})
-		batch = append(batch, store.ExecutionEvent{Kind: "output_message", Payload: payload})
+		batch = append(batch, sessions.ExecutionEvent{Kind: "output_message", Payload: payload})
 		want = append(want, items.Identity(input.TurnID, "message:"+key))
 	}
 	for range 2 {
-		if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
+		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if _, err = s.SubmitMessage(ctx, tenant, session.ID, "steer", json.RawMessage(`{"text":"continue"}`)); err != nil {
 		t.Fatal(err)
 	}
-	page, err = s.ListItems(ctx, tenant, session.ID, "", 100, true)
+	page, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 5 {
 		t.Fatal(page, err)
 	}
 	want = append(want, page.Items[4].ID)
 	completion, _ := json.Marshal(map[string]string{"id": keys[0], "status": "completed", "text": "final"})
-	batch = []store.ExecutionEvent{{Kind: "output_message", Payload: completion}, {Kind: "delta", Payload: json.RawMessage(`{"item_id":"last","delta":"partial"}`)}}
+	batch = []sessions.ExecutionEvent{{Kind: "output_message", Payload: completion}, {Kind: "delta", Payload: json.RawMessage(`{"item_id":"last","delta":"partial"}`)}}
 	for range 2 {
-		if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, batch); err != nil {
+		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, batch); err != nil {
 			t.Fatal(err)
 		}
 	}
 	want = append(want, items.Identity(input.TurnID, "message:last"))
-	bad := []store.ExecutionEvent{
+	bad := []sessions.ExecutionEvent{
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"rollback","delta":"discard"}`)},
 		{Kind: "output_message", Payload: json.RawMessage(`{"id":"invalid","status":"invalid"}`)},
 	}
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 6, bad); err == nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 6, bad); err == nil {
 		t.Fatal("invalid batch accepted")
 	}
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 6, []store.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"after-rollback","delta":"retained"}`)}}); err != nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 6, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"after-rollback","delta":"retained"}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	want = append(want, items.Identity(input.TurnID, "message:after-rollback"))
@@ -86,7 +88,7 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 			var got []string
 			cursor := ""
 			for {
-				page, err := store.New(pool).ListItems(ctx, tenant, session.ID, cursor, 2, asc)
+				page, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, cursor, 2, asc)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -126,7 +128,7 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 			t.Fatalf("output index = %d, want %d", output.Int32, index)
 		}
 	}
-	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, store.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence); err != nil {
+	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	checkOrder()
@@ -134,10 +136,10 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TransitionTurn(ctx, tenant, session.ID, next.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err = s.TransitionTurn(ctx, tenant, session.ID, next.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, next.TurnID, 1, []store.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"new","delta":"new turn"}`)}}); err != nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, next.TurnID, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"new","delta":"new turn"}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	var index int

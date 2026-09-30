@@ -169,6 +169,10 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			}
 			defer p.Close()
 			assertPreparationOnly(t, root)
+			home, err := allocCodexHome(req.AgentStateKey)
+			if err != nil {
+				t.Fatal(err)
+			}
 			s, err := p.start(t.Context(), "actual-run", proto.TextInput("actual prompt"), make(chan proto.Envelope, 8))
 			if err != nil {
 				t.Fatal(err)
@@ -191,7 +195,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 					if err := json.Unmarshal(frame.Params, &params); err != nil {
 						t.Fatal(err)
 					}
-					if !checked || params["cwd"] != req.WorkDir || (frame.Method == "thread/resume") != (mode == "resume") {
+					if !checked || params["cwd"] != home || (frame.Method == "thread/resume") != (mode == "resume") {
 						t.Fatal("thread started before the check or with another cwd")
 					}
 				}

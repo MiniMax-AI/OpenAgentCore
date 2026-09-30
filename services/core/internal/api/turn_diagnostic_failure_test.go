@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestDiagnosticFailureWhitelist(t *testing.T) {
@@ -26,18 +26,18 @@ func TestDiagnosticFailureWhitelist(t *testing.T) {
 		}
 		for _, input := range inputs {
 			raw, _ := json.Marshal(map[string]string{"error_code": input, "error": "raw-secret-canary"})
-			got := turnDiagnosticFailure(store.Turn{Status: store.TurnFailed, Outcome: raw})
+			got := turnDiagnosticFailure(sessions.Turn{Status: sessions.TurnFailed, Outcome: raw})
 			encoded, _ := json.Marshal(got)
 			if got.Code != want || strings.Contains(string(encoded), "canary") {
 				t.Fatal(input, got)
 			}
 		}
 	}
-	if got := turnDiagnosticFailure(store.Turn{Status: store.TurnFailed, Outcome: json.RawMessage(`{"error_code":"engine_failed",`)}); got.Code != "internal_error" {
+	if got := turnDiagnosticFailure(sessions.Turn{Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"engine_failed",`)}); got.Code != "internal_error" {
 		t.Fatal("malformed outcome accepted", got)
 	}
-	for _, status := range []string{store.TurnQueued, store.TurnInProgress, store.TurnWaiting, store.TurnCompleted, store.TurnCancelled} {
-		if got := turnDiagnosticFailure(store.Turn{Status: status, Outcome: json.RawMessage(`{"error_code":"engine_failed"}`)}); got != nil {
+	for _, status := range []string{sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnWaiting, sessions.TurnCompleted, sessions.TurnCancelled} {
+		if got := turnDiagnosticFailure(sessions.Turn{Status: status, Outcome: json.RawMessage(`{"error_code":"engine_failed"}`)}); got != nil {
 			t.Fatal("nonfailure classified", status, got)
 		}
 	}
@@ -56,7 +56,7 @@ func TestDiagnosticNativeClassification(t *testing.T) {
 			}
 			for _, status := range []any{nil, 100, 429, 599, 99, 600, 503.5, "503", true, map[string]any{"token": "secret-canary"}} {
 				raw, _ := json.Marshal(map[string]any{"error_code": "engine_failed", "error": "secret-canary", "engine_error_code": code, "engine_http_status": status})
-				got := turnDiagnosticFailure(store.Turn{Status: store.TurnFailed, Outcome: raw})
+				got := turnDiagnosticFailure(sessions.Turn{Status: sessions.TurnFailed, Outcome: raw})
 				encoded, _ := json.Marshal(got)
 				if got.Code != code || strings.Contains(string(encoded), "canary") {
 					t.Fatal(string(encoded))
@@ -77,20 +77,20 @@ func TestDiagnosticNativeClassification(t *testing.T) {
 		})
 	}
 	for _, optional := range []string{``, `,"engine_error_code":null`, `,"engine_error_code":17`, `,"engine_error_code":{"code":"authentication_error"}`, `,"engine_error_code":"secret-canary"`, `,"done":{"engine_error_code":"authentication_error"}`, `,"Engine_Error_Code":"authentication_error"`} {
-		got := turnDiagnosticFailure(store.Turn{Status: store.TurnFailed, Outcome: json.RawMessage(`{"error_code":"engine_failed"` + optional + `}`)})
+		got := turnDiagnosticFailure(sessions.Turn{Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"engine_failed"` + optional + `}`)})
 		if got.Code != "harness_error" || len(got.Params) != 0 {
 			t.Fatal(optional, got)
 		}
 	}
 	for core, want := range map[string]string{"event_persistence_failed": "core_storage_failed", "artifact_capture_failed": "core_storage_failed", "event_stream_incomplete": "runtime_disconnected", "cancel_unconfirmed": "delivery_unconfirmed", "invalid_executor_result": "executor_protocol_error", "secret-canary": "internal_error"} {
 		raw, _ := json.Marshal(map[string]any{"error_code": core, "engine_error_code": "connection_failed", "engine_http_status": 503})
-		got := turnDiagnosticFailure(store.Turn{Status: store.TurnFailed, Outcome: raw})
+		got := turnDiagnosticFailure(sessions.Turn{Status: sessions.TurnFailed, Outcome: raw})
 		if got.Code != want || len(got.Params) != 0 {
 			t.Fatal(got)
 		}
 	}
-	for _, status := range []string{store.TurnQueued, store.TurnInProgress, store.TurnWaiting, store.TurnCompleted, store.TurnCancelled} {
-		if got := turnDiagnosticFailure(store.Turn{Status: status, Outcome: json.RawMessage(`{"error_code":"engine_failed","engine_error_code":"authentication_error"}`)}); got != nil {
+	for _, status := range []string{sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnWaiting, sessions.TurnCompleted, sessions.TurnCancelled} {
+		if got := turnDiagnosticFailure(sessions.Turn{Status: status, Outcome: json.RawMessage(`{"error_code":"engine_failed","engine_error_code":"authentication_error"}`)}); got != nil {
 			t.Fatal(status, got)
 		}
 	}

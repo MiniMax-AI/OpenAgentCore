@@ -14,9 +14,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -27,10 +31,13 @@ type dispatchHarness struct {
 	admissions   map[string]fixtureAdmission
 	t            *testing.T
 	s            *store.Store
+	db           fixtureDB
 	d            *execution.Dispatcher
+	lease        execution.Ownership // held by tests that run execution operations without a Worker
+	owned        *execution.Owner    // the Owner that bound binds, acquired on first use
 	tenant       string
-	session      store.Session
-	device       store.ExecutionDevice
+	session      sessions.Session
+	device       sessions.ExecutionDevice
 	conn         *websocket.Conn
 	registry     *runtimegateway.Registry
 	url          string
@@ -45,11 +52,11 @@ func newDispatchHarness(t *testing.T) *dispatchHarness {
 
 func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool) *dispatchHarness {
 	t.Helper()
-	s, _ := store.NewModelTestStore(t)
-	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
+	s, db := newModelTestStoreDB(t)
+	h := &dispatchHarness{t: t, s: s, db: db, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()
 	var err error
-	h.session, err = s.CreateSession(ctx, h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "session", Configuration: configuration}))
+	h.session, err = s.CreateSession(ctx, h.tenant, store.WithFixtureModelProvider(sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "session", Configuration: configuration}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,26 +69,26 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	}
 	_ = json.Unmarshal(configuration, &snapshot)
 	if snapshot.Environment.Type == "self_hosted" {
-		h.device, h.credential = enrollFixtureSession(t, s, h.tenant, h.session)
+		h.device, h.credential = enrollFixtureSession(t, s, db, h.tenant, h.session)
 		secret = h.credential
 	} else if local {
-		environment, getErr := s.GetSessionEnvironment(ctx, h.tenant, h.session.ID)
+		environment, getErr := fixtureSessionStore(db).GetSessionEnvironment(ctx, h.tenant, h.session.ID)
 		if getErr != nil {
 			t.Fatal(getErr)
 		}
-		h.device, err = s.CreateEnvironmentDevice(ctx, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
+		h.device, err = store.FixtureEnvironmentDevice(ctx, db.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
 	} else {
-		h.device, err = s.CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
+		h.device, err = fixtureSessionService(t, db).CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err = bindSessionDevice(t, db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	server.Config.Handler, h.registry, err = runtime.NewGateway(s, wsURL)
+	server.Config.Handler, h.registry, err = runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,11 +116,15 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	h.d = &execution.Dispatcher{Store: s, Registry: h.registry}
+	sessionStore, sessionService, err := fixtureSessions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.d = &execution.Dispatcher{Store: s, Registry: h.registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher), Sessions: sessionService, SessionsReader: sessionStore}
 	return h
 }
 
-func (h *dispatchHarness) message(key, text string) store.InputReceipt {
+func (h *dispatchHarness) message(key, text string) sessions.InputReceipt {
 	h.t.Helper()
 	body, _ := json.Marshal(map[string]string{"text": text})
 	r, err := h.s.SubmitMessage(context.Background(), h.tenant, h.session.ID, key, body)
@@ -162,17 +173,42 @@ func (h *dispatchHarness) read(kind string) proto.Envelope {
 }
 
 type runResult struct {
-	turn store.Turn
+	turn sessions.Turn
 	err  error
 }
 
+// owner returns the harness's execution Owner. The first call acquires the
+// execution lease, which closes when the test ends. A test that also starts a
+// Worker hands it this Owner through startOwnedWorker.
+func (h *dispatchHarness) owner() execution.Owner {
+	h.t.Helper()
+	if h.owned == nil {
+		owner := executionOwner(h.t, h.db, h.s)
+		h.owned = &owner
+	}
+	return *h.owned
+}
+
+// bound returns h.d bound to the harness's execution Owner, as StartWorker
+// binds a Worker's Dispatcher.
+func (h *dispatchHarness) bound() *execution.Dispatcher {
+	h.t.Helper()
+	d, err := h.d.Bind(h.owner())
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return d
+}
+
 func (h *dispatchHarness) run(ctx context.Context, turn string) <-chan runResult {
+	h.t.Helper()
+	d := h.bound()
 	out := make(chan runResult, 1)
-	go func() { result, err := h.d.Run(ctx, h.tenant, h.session.ID, turn); out <- runResult{result, err} }()
+	go func() { result, err := d.Run(ctx, h.tenant, h.session.ID, turn); out <- runResult{result, err} }()
 	return out
 }
 
-func (h *dispatchHarness) finished(result <-chan runResult, status string) store.Turn {
+func (h *dispatchHarness) finished(result <-chan runResult, status string) sessions.Turn {
 	h.t.Helper()
 	select {
 	case got := <-result:
@@ -183,7 +219,7 @@ func (h *dispatchHarness) finished(result <-chan runResult, status string) store
 	case <-time.After(10 * time.Second):
 		h.t.Fatal("execution did not finish")
 	}
-	return store.Turn{}
+	return sessions.Turn{}
 }
 
 func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
@@ -197,10 +233,10 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.ConversationID != h.session.ID || prompt.AgentOptions["model"] != "test-model" || prompt.AgentOptions["system_prompt"] != "Keep this instruction." {
 		t.Fatalf("wrong resolved request: %+v", prompt)
 	}
-	if _, err := h.d.Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := h.bound().Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign execution: %v", err)
 	}
-	if _, err := h.d.Run(ctx, h.tenant, h.session.ID, first.TurnID); !errors.Is(err, store.ErrTurnConflict) {
+	if _, err := h.bound().Run(ctx, h.tenant, h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("duplicate execution: %v", err)
 	}
 	second := h.message("second", "Follow-up input")
@@ -217,15 +253,20 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	}
 	h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, Accepted: true})
 	h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "Finished", Usage: proto.Usage{InputTokens: 7, OutputTokens: 3}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread-1"}})
-	done := h.finished(result, store.TurnCompleted)
+	done := h.finished(result, sessions.TurnCompleted)
 	var outcome execution.Result
 	_ = json.Unmarshal(done.Outcome, &outcome)
 	if outcome.AppliedThrough != second.Sequence || outcome.Done.Usage.InputTokens != 7 {
 		t.Fatalf("missing result: %+v", outcome)
 	}
-	newStore, pool := store.NewTestStore(t)
-	defer pool.Close()
-	h.s = newStore
+	// Restart Core: a new Store and execution owner continue the native Session.
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, h.db.pool)
+	if err := h.owner().Lease.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	awaitRelease()
+	newStore, db := newTestStoreDB(t)
+	h.s, h.db, h.owned = newStore, db, nil
 	h.d.Store = newStore
 	bound, err := newStore.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "native-thread-1" {
@@ -239,7 +280,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 		t.Fatal("native continuity lost")
 	}
 	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "Continued"})
-	h.finished(result, store.TurnCompleted)
+	h.finished(result, sessions.TurnCompleted)
 }
 
 func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T) {
@@ -260,7 +301,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 				t.Fatal("cancellation has no receipt identity")
 			}
 			current, err := h.s.GetTurn(context.Background(), h.tenant, h.session.ID, first.TurnID)
-			if err != nil || current.Status != store.TurnInProgress {
+			if err != nil || current.Status != sessions.TurnInProgress {
 				t.Fatal("cancel finished before receipt")
 			}
 			if withDone {
@@ -268,7 +309,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 			}
 			outcome := &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-native"}, Usage: proto.Usage{InputTokens: 10}}
 			h.write(first.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: outcome})
-			h.finished(result, store.TurnCancelled)
+			h.finished(result, sessions.TurnCancelled)
 			next := h.message("next", "Continue after cancellation")
 			result = h.run(context.Background(), next.TurnID)
 			env = h.read(testExecutionRequest)
@@ -278,7 +319,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 				t.Fatal("cancellation lost native continuity")
 			}
 			h.write(next.TurnID, proto.TypeDone, proto.DonePayload{})
-			h.finished(result, store.TurnCompleted)
+			h.finished(result, sessions.TurnCompleted)
 		})
 	}
 	h := newDispatchHarness(t)
@@ -287,7 +328,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 	result := h.run(ctx, first.TurnID)
 	h.read(testExecutionRequest)
 	cancel()
-	done := h.finished(result, store.TurnFailed)
+	done := h.finished(result, sessions.TurnFailed)
 	var outcome execution.Result
 	_ = json.Unmarshal(done.Outcome, &outcome)
 	if outcome.ErrorCode != "execution_interrupted" {
@@ -317,7 +358,7 @@ func TestExecutionFailureDoesNotBecomeSuccessOrReplay(t *testing.T) {
 				h.read(proto.TypePromptSteer)
 				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
 			}
-			done := h.finished(result, store.TurnFailed)
+			done := h.finished(result, sessions.TurnFailed)
 			if kind == "engine" {
 				var outcome execution.Result
 				_ = json.Unmarshal(done.Outcome, &outcome)
@@ -326,7 +367,7 @@ func TestExecutionFailureDoesNotBecomeSuccessOrReplay(t *testing.T) {
 				}
 			}
 			if kind != "disconnect" {
-				if _, err := h.d.Run(context.Background(), h.tenant, h.session.ID, first.TurnID); !errors.Is(err, store.ErrTurnConflict) {
+				if _, err := h.bound().Run(context.Background(), h.tenant, h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrTurnConflict) {
 					t.Fatalf("terminal replay: %v", err)
 				}
 			}
@@ -338,12 +379,12 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 	h := newDispatchHarness(t)
 	first := h.message("first", "Run")
 	ctx := context.Background()
-	_, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress})
+	_, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
 	late := h.message("second", "Late")
-	if _, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnCompleted, []byte(`{}`), "native-one", first.Sequence); !errors.Is(err, store.ErrUnappliedInputs) {
+	if _, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), "native-one", first.Sequence); !errors.Is(err, sessions.ErrUnappliedInputs) {
 		t.Fatalf("unapplied completion: %v", err)
 	}
 	bound, _ := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
@@ -356,7 +397,7 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnCompleted, []byte(`{}`), native, late.Sequence)
+			_, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), native, late.Sequence)
 			errs <- err
 		}()
 	}
@@ -366,7 +407,7 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 	for err := range errs {
 		if err == nil {
 			success++
-		} else if !errors.Is(err, store.ErrTurnConflict) {
+		} else if !errors.Is(err, sessions.ErrTurnConflict) {
 			t.Fatal(err)
 		}
 	}
@@ -404,11 +445,11 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 			first := h.message("missing-capability", "Run")
-			if _, err := h.d.Run(context.Background(), h.tenant, h.session.ID, first.TurnID); err == nil || err.Error() != tc.message {
+			if _, err := h.bound().Run(context.Background(), h.tenant, h.session.ID, first.TurnID); err == nil || err.Error() != tc.message {
 				t.Fatalf("Run error = %v, want %q", err, tc.message)
 			}
 			turn, err := h.s.GetTurn(context.Background(), h.tenant, h.session.ID, first.TurnID)
-			if err != nil || turn.Status != store.TurnQueued {
+			if err != nil || turn.Status != sessions.TurnQueued {
 				t.Fatal("Runtime without a required capability claimed work")
 			}
 		})

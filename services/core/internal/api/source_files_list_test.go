@@ -9,12 +9,12 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 )
 
 func TestSourceFileListParametersAndEnvelope(t *testing.T) {
 	f := &sourceFilesFixture{}
-	h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+	h, _ := environmentFileCreateHandler(t, f.wire)
 	server := newSourceFileServer(t, h)
 
 	status, raw := sourceRequest(t, server, http.MethodGet, "/v1/files", "files-key", "", nil)
@@ -27,8 +27,8 @@ func TestSourceFileListParametersAndEnvelope(t *testing.T) {
 		t.Fatalf("default list changed: %s calls=%d after=%q limit=%d asc=%t purpose=%v", raw, f.listCalls, f.listAfter, f.listLimit, f.listAsc, f.listPurpose)
 	}
 
-	file := store.SourceFile{ID: "file-00000000-0000-0000-0000-000000000001", Filename: "one.bin", Purpose: "user_data", SizeBytes: 3, CreatedAt: time.Unix(123, 0)}
-	f.listPage = store.SourceFilePage{Files: []store.SourceFile{file}, NextCursor: file.ID}
+	file := files.File{ID: "file-00000000-0000-0000-0000-000000000001", Filename: "one.bin", Purpose: "user_data", SizeBytes: 3, CreatedAt: time.Unix(123, 0)}
+	f.listPage = files.Page{Files: []files.File{file}, NextCursor: file.ID}
 	status, raw = sourceRequest(t, server, http.MethodGet, "/v1/files?after="+file.ID+"&limit=7&order=asc&purpose=user_data", "files-key", "", nil)
 	var page v1.SourceFileList
 	if status != http.StatusOK || json.Unmarshal(raw, &page) != nil {
@@ -63,7 +63,7 @@ func TestSourceFileListRejectsInvalidQueriesBeforeStorage(t *testing.T) {
 	} {
 		t.Run(test.query, func(t *testing.T) {
 			f := &sourceFilesFixture{}
-			h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+			h, _ := environmentFileCreateHandler(t, f.wire)
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(http.MethodGet, "/v1/files?"+test.query, nil)
 			r.Header.Set("Authorization", "Bearer files-key")
@@ -78,7 +78,7 @@ func TestSourceFileListRejectsInvalidQueriesBeforeStorage(t *testing.T) {
 
 func TestSourceFileListIgnoresUnknownKeysAndEmptyPurpose(t *testing.T) {
 	f := &sourceFilesFixture{}
-	h, env := environmentFileCreateHandler(t, WithSourceFiles(f))
+	h, env := environmentFileCreateHandler(t, f.wire)
 	server := newSourceFileServer(t, h)
 	want, wantBody := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-a&limit=2&order=asc", "files-key", "", nil)
 	for _, query := range []string{"purpose=", "unknown=1", "tenant_id=foreign", "purpose[]=batch", "unknown=1&unknown=2&purpose="} {
@@ -90,8 +90,8 @@ func TestSourceFileListIgnoresUnknownKeysAndEmptyPurpose(t *testing.T) {
 }
 
 func TestSourceFileListMapsStorageErrors(t *testing.T) {
-	f := &sourceFilesFixture{listErr: store.ErrNotFound}
-	h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+	f := &sourceFilesFixture{listErr: files.ErrNotFound}
+	h, _ := environmentFileCreateHandler(t, f.wire)
 	server := newSourceFileServer(t, h)
 	status, _ := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-missing", "files-key", "", nil)
 	if status != http.StatusNotFound || f.listCalls != 1 {
@@ -102,8 +102,8 @@ func TestSourceFileListMapsStorageErrors(t *testing.T) {
 func TestSourceFileListPurposeValidationBeforeCursorLookup(t *testing.T) {
 	for _, purpose := range []string{"", "user_data", "assistants", "batch", "fine-tune", "vision", "evals", "assistants_output", "batch_output", "fine-tune-results", "unknown", "USER_DATA"} {
 		t.Run("purpose="+purpose, func(t *testing.T) {
-			f := &sourceFilesFixture{listErr: store.ErrNotFound}
-			h, _ := environmentFileCreateHandler(t, WithSourceFiles(f))
+			f := &sourceFilesFixture{listErr: files.ErrNotFound}
+			h, _ := environmentFileCreateHandler(t, f.wire)
 			server := newSourceFileServer(t, h)
 			status, raw := sourceRequest(t, server, http.MethodGet, "/v1/files?after=file-missing&purpose="+purpose, "files-key", "", nil)
 			wantStatus, wantParam, wantCalls := http.StatusNotFound, "after", 1

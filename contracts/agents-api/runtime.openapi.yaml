@@ -34,6 +34,83 @@ definitions:
       executor_token:
         type: string
     type: object
+  deployment.Enrollment:
+    properties:
+      backend_fingerprint:
+        type: string
+      core_url:
+        description: The Core origin this node stores and connects to, such as https://core.example. It must equal the installation public URL; otherwise enrollment gets 409 sandbox_node_address_mismatch and the token stays unused.
+        type: string
+      credential:
+        type: string
+      deployment_generation:
+        type: integer
+      name:
+        type: string
+      node_id:
+        type: string
+      provider:
+        type: string
+      specification_digest:
+        type: string
+    type: object
+  deployment.NodeConfiguration:
+    properties:
+      core_url:
+        type: string
+      generation:
+        type: integer
+      installation_id:
+        type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
+      provider:
+        type: string
+      specification:
+        $ref: '#/definitions/sandbox.DeploymentSpec'
+      specification_digest:
+        type: string
+    type: object
+  deployment.NodeIdentity:
+    properties:
+      deployment_generation:
+        type: integer
+      installation_id:
+        type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
+      node_id:
+        type: string
+      provider:
+        type: string
+      specification_digest:
+        type: string
+    type: object
+  deployment.NodeStatus:
+    properties:
+      connected:
+        type: boolean
+      deployment_generation:
+        type: integer
+      installation_id:
+        type: string
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
+      node_id:
+        type: string
+      provider:
+        type: string
+      provider_ready:
+        type: boolean
+      specification_digest:
+        type: string
+    type: object
   sandbox.DeploymentSpec:
     properties:
       resources:
@@ -65,83 +142,6 @@ definitions:
       runtime_sha256:
         type: string
       source_commit:
-        type: string
-    type: object
-  store.RuntimeNodeConfiguration:
-    properties:
-      core_url:
-        type: string
-      generation:
-        type: integer
-      installation_id:
-        type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
-      provider:
-        type: string
-      specification:
-        $ref: '#/definitions/sandbox.DeploymentSpec'
-      specification_digest:
-        type: string
-    type: object
-  store.RuntimeNodeEnrollment:
-    properties:
-      backend_fingerprint:
-        type: string
-      core_url:
-        description: The Core origin this node stores and connects to, such as https://core.example. It must equal the installation public URL; otherwise enrollment gets 409 sandbox_node_address_mismatch and the token stays unused.
-        type: string
-      credential:
-        type: string
-      deployment_generation:
-        type: integer
-      name:
-        type: string
-      node_id:
-        type: string
-      provider:
-        type: string
-      specification_digest:
-        type: string
-    type: object
-  store.RuntimeNodeIdentity:
-    properties:
-      deployment_generation:
-        type: integer
-      installation_id:
-        type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
-      node_id:
-        type: string
-      provider:
-        type: string
-      specification_digest:
-        type: string
-    type: object
-  store.RuntimeNodeStatus:
-    properties:
-      connected:
-        type: boolean
-      deployment_generation:
-        type: integer
-      installation_id:
-        type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
-      node_id:
-        type: string
-      provider:
-        type: string
-      provider_ready:
-        type: boolean
-      specification_digest:
         type: string
     type: object
   v1.APIError:
@@ -268,7 +268,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.RuntimeNodeConfiguration'
+            $ref: '#/definitions/deployment.NodeConfiguration'
         "400":
           description: Bad Request
           schema:
@@ -305,14 +305,14 @@ paths:
           name: body
           required: true
           schema:
-            $ref: '#/definitions/store.RuntimeNodeEnrollment'
+            $ref: '#/definitions/deployment.Enrollment'
       produces:
         - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/store.RuntimeNodeIdentity'
+            $ref: '#/definitions/deployment.NodeIdentity'
         "400":
           description: Bad Request
           schema:
@@ -357,7 +357,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.RuntimeNodeStatus'
+            $ref: '#/definitions/deployment.NodeStatus'
         "400":
           description: Bad Request
           schema:

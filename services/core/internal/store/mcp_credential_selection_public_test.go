@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -31,16 +31,13 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	tenantA, tokenA, tokenB := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-a", TokenSHA256: runtimedevice.HashCredential(tokenA), TenantID: tenantA},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-b", TokenSHA256: runtimedevice.HashCredential(tokenB), TenantID: uuid.NewString()},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := api.NewHandler(s, auth, "codex", api.WithExecution(s))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +203,7 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 		{"M4 foreign tenant", tokenA, inline(tool("records", url, reference(credentialB)), vaults(attachedA)), 400, notAttached(credentialB)},
 		{"M4 unattached", tokenA, inline(tool("records", url, reference(unattachedA)), vaults(attachedA)), 400, notAttached(unattachedA)},
 		{"M4 unattached B", tokenB, inline(tool("records", url, reference(credentialB)), vaults(otherVaultB)), 400, notAttached(credentialB)},
-		{"M4 missing", tokenA, inline(tool("records", url, reference(store.UnknownResourceID)), vaults(attachedA)), 400, notAttached(store.UnknownResourceID)},
+		{"M4 missing", tokenA, inline(tool("records", url, reference(uuid.Max.String())), vaults(attachedA)), 400, notAttached(uuid.Max.String())},
 		{"M4 malformed", tokenA, inline(tool("records", url, reference("not-a-credential")), vaults(attachedA)), 400, notAttached("not-a-credential")},
 		{"M4 unbounded", tokenA, inline(tool("records", url, reference(long)), vaults(attachedA)), 400, invalid("MCP credential_id was not found in an attached vault")},
 		{"M4 unprintable", tokenA, inline(tool("records", url, reference("bad\x01id")), vaults(attachedA)), 400, invalid("MCP credential_id was not found in an attached vault")},
@@ -285,7 +282,7 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT id FROM turns WHERE session_id=$1", streamed).Scan(&turn); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(t.Context(), tenantA, streamed, turn, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnCancelled}); err != nil {
+	if _, err := s.TransitionTurn(t.Context(), tenantA, streamed, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCancelled}); err != nil {
 		t.Fatal(err)
 	}
 	_, tools = snapshot(stream, "agent.session.idle")

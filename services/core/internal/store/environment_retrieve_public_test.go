@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -23,22 +22,19 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewModelTestStore(t)
+	s, db := newModelTestStoreDB(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	principal := store.FixtureExecutorPrincipal(t, s, tenant)
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: principal.OrganizationID, ProjectID: tenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: principal.OrganizationID, ProjectID: tenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: runtimedevice.HashCredential(peer), TenantID: tenant},
 		{OrganizationID: principal.OrganizationID, ProjectID: foreignTenant, SubjectKind: principal.SubjectKind, SubjectID: principal.SubjectID, TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if err := s.EnsureProjectScopes(t.Context(), []identity.ProjectScope{{TenantID: tenant, OrganizationID: principal.OrganizationID, ProjectID: tenant}, {TenantID: foreignTenant, OrganizationID: principal.OrganizationID, ProjectID: foreignTenant}}); err != nil {
 		t.Fatal(err)
 	}
-	executor, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), "")
+	executor, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,12 +43,12 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		if !revoked {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err := s.RevokeExecutorCredential(ctx, principal, executor.KeyID); err != nil {
+			if err := fixtureSessionService(t, db).RevokeExecutorCredential(ctx, principal, executor.KeyID); err != nil {
 				t.Error("owned executor credential cleanup failed", err)
 			}
 		}
 	}()
-	handler, err := api.NewHandler(s, auth, "codex", api.WithExecution(s), api.WithEnvironmentRemoteURL("https://private-registry.example"))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://private-registry.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,18 +76,18 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		return result
 	}
 	result := run()
-	before, err := s.GetEnvironment(t.Context(), tenant, result["environment_id"])
+	before, err := fixtureSessionStore(db).GetEnvironment(t.Context(), tenant, result["environment_id"])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RevokeExecutorCredential(t.Context(), principal, executor.KeyID); err != nil {
+	if err := fixtureSessionService(t, db).RevokeExecutorCredential(t.Context(), principal, executor.KeyID); err != nil {
 		t.Fatal(err)
 	}
 	revoked = true
 	server.Close()
-	pool.Close()
-	reopened, reopenedPool := store.NewModelTestStore(t)
-	handler, err = api.NewHandler(reopened, auth, "codex")
+	db.pool.Close()
+	reopened, reopenedDB := newModelTestStoreDB(t)
+	handler, err = publicHandler(t, reopened, reopenedDB, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,12 +98,12 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		settings[key] = value
 	}
 	run()
-	after, err := reopened.GetEnvironment(t.Context(), tenant, before.ID)
+	after, err := fixtureSessionStore(reopenedDB).GetEnvironment(t.Context(), tenant, before.ID)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("public retrieval changed durable Environment state", err)
 	}
 	var history int
-	if err := reopenedPool.QueryRow(t.Context(), `SELECT
+	if err := reopenedDB.pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM turns WHERE session_id=$1) +
 		(SELECT count(*) FROM environment_input_reservations WHERE session_id=$1) +
 		(SELECT count(*) FROM session_events WHERE session_id=$1)`, before.SessionID).Scan(&history); err != nil || history != 0 {

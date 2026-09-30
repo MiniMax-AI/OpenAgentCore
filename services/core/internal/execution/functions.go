@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -50,6 +51,7 @@ type functionReply struct {
 
 type functionExchange struct {
 	store                 *store.Store
+	sessions              *sessions.ExecutionOperations
 	tenant, session, turn string
 	kind                  string
 	tools                 []proto.FunctionTool
@@ -69,7 +71,7 @@ func (f *functionExchange) record(ctx context.Context, env proto.Envelope) error
 	if !declared {
 		return errors.New("undeclared function callback")
 	}
-	err := f.store.RecordFunctionCall(ctx, f.tenant, f.session, f.turn, store.FunctionCall{
+	err := f.sessions.RecordFunctionCall(ctx, f.tenant, f.session, f.turn, sessions.FunctionCall{
 		CallID: items.Identity(f.turn, "tool:"+call.CallID), ExecutorCallID: call.CallID, Name: call.Name, Arguments: call.Arguments,
 	})
 	return f.unlessCancelling(ctx, err)
@@ -79,7 +81,7 @@ func (f *functionExchange) start(ctx context.Context, peer *runtimegateway.Sessi
 	if f.reply != nil || len(f.tools) == 0 {
 		return nil
 	}
-	calls, err := f.store.PendingFunctionCalls(ctx, f.tenant, f.session, f.turn)
+	calls, err := f.sessions.PendingFunctionCalls(ctx, f.tenant, f.session, f.turn)
 	if err != nil {
 		return err
 	}
@@ -118,11 +120,11 @@ func (f *functionExchange) confirm(ctx context.Context, reply functionReply) err
 	if !reply.ack.Applied {
 		return fmt.Errorf("function result not applied: %s", reply.ack.ErrorCode)
 	}
-	return f.unlessCancelling(ctx, f.store.ConfirmFunctionResult(ctx, f.tenant, f.session, f.turn, id))
+	return f.unlessCancelling(ctx, f.sessions.ConfirmFunctionResult(ctx, f.tenant, f.session, f.turn, id))
 }
 
 func (f *functionExchange) unlessCancelling(ctx context.Context, err error) error {
-	if errors.Is(err, store.ErrTurnConflict) {
+	if errors.Is(err, sessions.ErrTurnConflict) {
 		turn, lookupErr := f.store.GetTurn(ctx, f.tenant, f.session, f.turn)
 		if lookupErr == nil && !turn.CancelRequestedAt.IsZero() {
 			return nil
@@ -135,7 +137,7 @@ func (f *functionExchange) complete(ctx context.Context) error {
 	if len(f.tools) == 0 {
 		return nil
 	}
-	calls, err := f.store.PendingFunctionCalls(ctx, f.tenant, f.session, f.turn)
+	calls, err := f.sessions.PendingFunctionCalls(ctx, f.tenant, f.session, f.turn)
 	if err != nil {
 		return err
 	}
@@ -146,13 +148,13 @@ func (f *functionExchange) complete(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if turn.Status == store.TurnWaiting {
+	if turn.Status == sessions.TurnWaiting {
 		return errors.New("function turn has not resumed")
 	}
 	return nil
 }
 
-func functionResult(call store.FunctionCall) (proto.FunctionResultPayload, error) {
+func functionResult(call sessions.FunctionCall) (proto.FunctionResultPayload, error) {
 	var value struct {
 		Success *bool           `json:"success"`
 		Output  json.RawMessage `json:"output"`

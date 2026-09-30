@@ -7,7 +7,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // ErrWhitespaceOnlyText is a declared native limitation reported before any
@@ -51,7 +51,7 @@ func validateMessageImageProfile(profile engine.Profile, _ string, input proto.M
 		return nil
 	}
 	if !profile.MessageImages.IsSupported() || input.ValidateInlineImages() != nil {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return nil
 }
@@ -63,7 +63,7 @@ func (p Policy) messageInputSupport(peer *runtimegateway.Session, kind string, s
 	}
 	profile, ok := p.Engines.Lookup(kind)
 	if !ok {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	placement := ""
 	if snapshot.Environment != nil {

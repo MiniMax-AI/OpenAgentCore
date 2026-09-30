@@ -19,7 +19,7 @@ import (
 	providerconfig "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
-func runGenerations(ctx context.Context, configFile, stateDir string) error {
+func runGenerations(ctx context.Context, registry *providerconfig.Registry, configFile, stateDir string) error {
 	root := filepath.Dir(configFile)
 	if stateDir != filepath.Join(root, "state", "node") {
 		return errors.New("generation state must belong to the installed node root")
@@ -105,7 +105,7 @@ func runGenerations(ctx context.Context, configFile, stateDir string) error {
 			collection = append(collection, sandbox.GenerationReference{Generation: config.Generation, SpecificationDigest: config.Specification.Digest(config.Provider)})
 			continue
 		}
-		value, err := buildGeneration(config, stateDir)
+		value, err := buildGeneration(registry, config, stateDir)
 		if errors.Is(err, os.ErrNotExist) {
 			recovery = append(recovery, sandbox.GenerationReference{Generation: config.Generation, SpecificationDigest: config.Specification.Digest(config.Provider)})
 			continue
@@ -146,7 +146,7 @@ func runGenerations(ctx context.Context, configFile, stateDir string) error {
 			if config.InstallationID != base.InstallationID || config.Provider != base.Provider || config.Generation != generation || config.Specification.Digest(config.Provider) != digest {
 				return node.GenerationProvider{}, sandbox.ErrOwnership
 			}
-			value, err := buildGeneration(config, stateDir)
+			value, err := buildGeneration(registry, config, stateDir)
 			if err != nil {
 				return value, err
 			}
@@ -166,8 +166,8 @@ func runGenerations(ctx context.Context, configFile, stateDir string) error {
 	return node.Run(ctx, node.AgentConfig{CoreURL: stored.CoreURL, StateDirectory: stateDir, Identity: stored.Identity, Credential: stored.Credential, Generations: manager})
 }
 
-func buildGeneration(config providerconfig.Config, stateDir string) (node.GenerationProvider, error) {
-	built, closeProvider, err := providerconfig.Build(config, providerconfig.LocalOptions{GenerationStateDirectory: stateDir})
+func buildGeneration(registry *providerconfig.Registry, config providerconfig.Config, stateDir string) (node.GenerationProvider, error) {
+	built, closeProvider, err := registry.Build(config, providerconfig.LocalOptions{GenerationStateDirectory: stateDir})
 	if err != nil {
 		return node.GenerationProvider{}, err
 	}

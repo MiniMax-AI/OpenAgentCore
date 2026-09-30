@@ -18,6 +18,10 @@ const (
 	bindingDomain      = "parsar.agents-api.credential"
 )
 
+// ErrUnavailable reports that this service has no credential encryption key,
+// so it can neither store nor read credential secrets.
+var ErrUnavailable = errors.New("credential encryption is not configured")
+
 var (
 	errInvalidKey        = errors.New("credentialcrypto: invalid encryption key")
 	errUnavailable       = errors.New("credentialcrypto: cipher unavailable")

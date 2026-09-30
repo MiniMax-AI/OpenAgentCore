@@ -15,13 +15,13 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 const hostedFailureReason = `Failed to provision environment: script "setup_commands[0]" failed with exit code 3`
 
-func hostedFailureSession() store.Session {
+func hostedFailureSession() sessions.Session {
 	session := environmentSession()
 	session.Configuration = json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"openai_hosted"}}`)
 	session.Environment.Configuration = json.RawMessage(`{"type":"openai_hosted"}`)
@@ -33,10 +33,10 @@ func hostedFailureSession() store.Session {
 // reason and failure time, whether or not pending input was settled with it.
 func TestHostedProvisioningFailureSessionProjection(t *testing.T) {
 	failedAt := time.Unix(1790187038, 0)
-	for _, activity := range []*store.EnvironmentInputActivity{nil, {Status: "failed", Failure: "environment_unavailable", LastActiveAt: failedAt.Add(-time.Second)}} {
+	for _, activity := range []*sessions.EnvironmentInputActivity{nil, {Status: "failed", Failure: "environment_unavailable", LastActiveAt: failedAt.Add(-time.Second)}} {
 		session := hostedFailureSession()
 		session.EnvironmentInputActivity = activity
-		session.EnvironmentFailure = &store.EnvironmentFailure{Reason: hostedFailureReason, FailedAt: failedAt}
+		session.EnvironmentFailure = &sessions.EnvironmentFailure{Reason: hostedFailureReason, FailedAt: failedAt}
 		response, err := sessionResponse(session, "")
 		if err != nil || response.Status != "failed" || response.Error == nil || *response.Error != hostedFailureReason ||
 			response.LastActiveAt != failedAt.Unix() || response.RequiredActions == nil || len(response.RequiredActions) != 0 {
@@ -50,7 +50,7 @@ func TestHostedProvisioningFailureSessionProjection(t *testing.T) {
 		t.Fatal("unrecorded failure changed the projection", response, err)
 	}
 	session = environmentSession()
-	session.EnvironmentFailure = &store.EnvironmentFailure{Reason: hostedFailureReason, FailedAt: failedAt}
+	session.EnvironmentFailure = &sessions.EnvironmentFailure{Reason: hostedFailureReason, FailedAt: failedAt}
 	if value, err := sessionResponse(session, environmentOrigin); err != nil || value.Status != "failed" || value.Error == nil || *value.Error != hostedFailureReason {
 		t.Fatal("self-hosted preparation failure lost its common projection", value, err)
 	}
@@ -60,7 +60,7 @@ func TestHostedProvisioningFailureSessionProjection(t *testing.T) {
 // Environment state error keeps the observed three fields.
 func TestHostedProvisioningFailureEventShapes(t *testing.T) {
 	session := hostedFailureSession()
-	fields := func(change store.SessionChange) map[string]any {
+	fields := func(change sessions.SessionChange) map[string]any {
 		t.Helper()
 		event, err := streamResponse(session, change, "")
 		if err != nil {
@@ -76,14 +76,14 @@ func TestHostedProvisioningFailureEventShapes(t *testing.T) {
 		}
 		return value
 	}
-	got := fields(store.SessionChange{Event: v1.SessionEvent{Type: "error", EventID: "event", SessionID: "session",
+	got := fields(sessions.SessionChange{Event: v1.SessionEvent{Type: "error", EventID: "event", SessionID: "session",
 		Error: &v1.StreamError{Type: "environment_error", Code: "sandbox_error", Message: hostedFailureReason}}})
 	want := map[string]any{"type": "error", "event_id": "event", "session_id": "session",
 		"error": map[string]any{"type": "environment_error", "code": "sandbox_error", "message": hostedFailureReason, "param": nil}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatal("error event", got)
 	}
-	got = fields(store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.environment.failed", EventID: "event", SessionID: "session",
+	got = fields(sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.environment.failed", EventID: "event", SessionID: "session",
 		Environment: &v1.SessionEnvironmentState{ID: "environment", Type: "openai_hosted", Status: "failed",
 			Error: &v1.StreamError{Type: "environment_error", Code: "environment_connection_failed", Message: "The environment failed to connect."}}}})
 	if environment, _ := got["environment"].(map[string]any); !reflect.DeepEqual(environment["error"], map[string]any{
@@ -91,8 +91,8 @@ func TestHostedProvisioningFailureEventShapes(t *testing.T) {
 		t.Fatal("environment.failed event", got)
 	}
 	failedAt := time.Unix(1790187038, 0)
-	got = fields(store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.failed", EventID: "event"},
-		EnvironmentFailure: &store.EnvironmentFailure{Reason: hostedFailureReason, FailedAt: failedAt}})
+	got = fields(sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.failed", EventID: "event"},
+		EnvironmentFailure: &sessions.EnvironmentFailure{Reason: hostedFailureReason, FailedAt: failedAt}})
 	if snapshot, _ := got["session"].(map[string]any); snapshot["status"] != "failed" || snapshot["error"] != hostedFailureReason ||
 		snapshot["last_active_at"] != float64(failedAt.Unix()) || !reflect.DeepEqual(snapshot["required_actions"], []any{}) {
 		t.Fatal("failed snapshot", got)
@@ -107,23 +107,19 @@ func TestGetStreamEndsAfterHostedProvisioningFailure(t *testing.T) {
 			f := &streamFixture{session: hostedFailureSession()}
 			f.session.TenantID = uuid.NewString()
 			f.session.Environment.TenantID = f.session.TenantID
-			auth, err := NewAuthenticator([]APIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			h, err := NewHandler(f, auth, "codex")
-			if err != nil {
-				t.Fatal(err)
-			}
+			deps, fakes := testDependencies(t)
+			fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}).ResolveAPIKey
+			f.serve(fakes)
+			h := newTestHandler(t, deps)
 			server := httptest.NewServer(h)
 			defer server.Close()
-			failed := store.SessionChange{Sequence: 13, Event: v1.SessionEvent{Type: "agent.session.failed", EventID: "failed"}}
+			failed := sessions.SessionChange{Sequence: 13, Event: v1.SessionEvent{Type: "agent.session.failed", EventID: "failed"}}
 			if terminal {
-				failed.EnvironmentFailure = &store.EnvironmentFailure{Reason: hostedFailureReason, FailedAt: time.Unix(1790187038, 0)}
+				failed.EnvironmentFailure = &sessions.EnvironmentFailure{Reason: hostedFailureReason, FailedAt: time.Unix(1790187038, 0)}
 			} else {
-				failed.Turn = &store.Turn{ID: "turn", Status: store.TurnFailed}
+				failed.Turn = &sessions.Turn{ID: "turn", Status: sessions.TurnFailed}
 			}
-			f.changes = []store.SessionChange{
+			f.changes = []sessions.SessionChange{
 				{Sequence: 11, Event: v1.SessionEvent{Type: "agent.session.environment.failed", EventID: "environment", SessionID: "session",
 					Environment: &v1.SessionEnvironmentState{ID: "environment", Type: "openai_hosted", Status: "failed", Error: &v1.StreamError{Type: "environment_error", Code: "environment_connection_failed", Message: "The environment failed to connect."}}}},
 				{Sequence: 12, Event: v1.SessionEvent{Type: "error", EventID: "error", SessionID: "session", Error: &v1.StreamError{Type: "environment_error", Code: "sandbox_error", Message: hostedFailureReason}}},
@@ -182,17 +178,17 @@ func TestGetStreamEndsAfterHostedProvisioningFailure(t *testing.T) {
 // keeps the local environment_unavailable response.
 func TestHostedProvisioningFailureInputConflict(t *testing.T) {
 	for err, want := range map[error]string{
-		fmt.Errorf("reserve: %w", store.ErrHostedEnvironmentFailed): `{"error":{"message":"the hosted environment failed to provision","type":"conflict_error","code":"conflict_error","param":null}}`,
-		store.ErrEnvironmentUnavailable:                             `{"error":{"message":"The environment is no longer available for new input.","type":"conflict_error","code":"environment_unavailable","param":null}}`,
+		fmt.Errorf("reserve: %w", sessions.ErrHostedEnvironmentFailed): `{"error":{"message":"the hosted environment failed to provision","type":"conflict_error","code":"conflict_error","param":null}}`,
+		sessions.ErrEnvironmentUnavailable:                             `{"error":{"message":"The environment is no longer available for new input.","type":"conflict_error","code":"environment_unavailable","param":null}}`,
 	} {
 		response := httptest.NewRecorder()
-		writeStoreError(response, httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session/events", nil), err)
+		writeSessionsError(response, httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session/events", nil), err)
 		body, _ := io.ReadAll(response.Body)
 		if response.Code != http.StatusConflict || strings.TrimSpace(string(body)) != want {
 			t.Fatal(response.Code, string(body))
 		}
 	}
-	if !errors.Is(store.ErrHostedEnvironmentFailed, store.ErrEnvironmentUnavailable) {
+	if !errors.Is(sessions.ErrHostedEnvironmentFailed, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("internal callers no longer see an unavailable Environment")
 	}
 }

@@ -8,10 +8,10 @@ import (
 )
 
 func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	var expected []string
 	for range 5 {
-		_, session, _ := managedSession(t, s)
+		_, session, _ := managedSession(t, s, db)
 		expected = append(expected, session.ID)
 	}
 	slices.Sort(expected)

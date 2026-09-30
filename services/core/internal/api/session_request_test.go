@@ -38,8 +38,7 @@ func TestSessionCreateFieldPresence(t *testing.T) {
 		{"array metadata", `,"metadata":[]`, 400, nil, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			saved := &recordingStore{}
-			handler, _, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: saved}))
+			handler, saved, _ := testHandler(t, admitSessions)
 			body := `{"agent":{"model":"example"},"environment":{"type":"none"},"input":"Confirm the session metadata."` + tc.fields + `}`
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 			request.Header.Set("Authorization", "Bearer test-api-key")

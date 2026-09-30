@@ -14,8 +14,8 @@ type DirectConfig struct {
 	Fence          *sandbox.CallFence
 }
 
-func BuildDirect(c DirectConfig) (sandbox.SandboxProvider, error) {
-	a, e := Lookup(c.Selection.Provider)
+func (r *Registry) BuildDirect(c DirectConfig) (sandbox.SandboxProvider, error) {
+	a, e := r.Lookup(c.Selection.Provider)
 	if e != nil {
 		return nil, e
 	}

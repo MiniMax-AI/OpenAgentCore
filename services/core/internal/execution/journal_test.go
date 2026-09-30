@@ -8,12 +8,12 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type recoveringWriter struct {
 	fail   bool
-	events []store.ExecutionEvent
+	events []sessions.ExecutionEvent
 }
 
 type ambiguousWriter struct {
@@ -21,14 +21,14 @@ type ambiguousWriter struct {
 	written    int
 }
 
-func (w *ambiguousWriter) AppendTurnEvents(_ context.Context, _, _, _ string, first int32, events []store.ExecutionEvent) error {
+func (w *ambiguousWriter) AppendTurnEvents(_ context.Context, _, _, _ string, first int32, events []sessions.ExecutionEvent) error {
 	if w.firstCount == 0 {
 		w.firstCount, w.written = len(events), len(events)
 		return context.DeadlineExceeded
 	}
 	if first == 1 {
 		if len(events) != w.firstCount {
-			return store.ErrIdempotencyConflict
+			return sessions.ErrIdempotencyConflict
 		}
 		return nil
 	}
@@ -41,7 +41,7 @@ func (w *ambiguousWriter) AppendTurnEvents(_ context.Context, _, _, _ string, fi
 
 func TestJournalKeepsBatchIdentityAfterAnUncertainCommit(t *testing.T) {
 	writer := &ambiguousWriter{}
-	j := journal{store: writer, next: 1}
+	j := journal{writer: writer, next: 1}
 	for i := range 3 {
 		env, _ := proto.NewEnvelope(proto.TypeDelta, "run", proto.DeltaPayload{Delta: "text", Sequence: uint64(i + 1)})
 		if err := j.observe(context.Background(), env); err != nil {
@@ -63,7 +63,7 @@ func TestJournalKeepsBatchIdentityAfterAnUncertainCommit(t *testing.T) {
 	}
 }
 
-func (w *recoveringWriter) AppendTurnEvents(_ context.Context, _, _, _ string, first int32, events []store.ExecutionEvent) error {
+func (w *recoveringWriter) AppendTurnEvents(_ context.Context, _, _, _ string, first int32, events []sessions.ExecutionEvent) error {
 	if w.fail {
 		w.fail = false
 		return context.DeadlineExceeded
@@ -79,7 +79,7 @@ func TestJournalRetainsTriggeringFrameAcrossFlushFailure(t *testing.T) {
 	for _, size := range []int{10, 300 * 1024} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
 			writer := &recoveringWriter{fail: true}
-			j := journal{store: writer, next: 1}
+			j := journal{writer: writer, next: 1}
 			var expected []string
 			for i := range 65 {
 				env, _ := proto.NewEnvelope(proto.TypeDelta, "run", proto.DeltaPayload{Delta: strings.Repeat("x", size), Sequence: uint64(i + 1)})
@@ -108,7 +108,7 @@ func TestJournalRetainsTriggeringFrameAcrossFlushFailure(t *testing.T) {
 
 func TestJournalDrainRetainsTerminalContinuityAndUsageOnFailure(t *testing.T) {
 	writer := &recoveringWriter{fail: true}
-	j := journal{store: writer, next: 1}
+	j := journal{writer: writer, next: 1}
 	upstream := make(chan proto.Envelope, 64)
 	for i := range 63 {
 		env, _ := proto.NewEnvelope(proto.TypeDelta, "run", proto.DeltaPayload{Delta: "partial", Sequence: uint64(i + 1)})
@@ -137,7 +137,7 @@ func TestJournalDrainRetainsTerminalContinuityAndUsageOnFailure(t *testing.T) {
 
 func TestCancellationReceiptContinuitySurvivesFlushFailure(t *testing.T) {
 	writer := &recoveringWriter{fail: true}
-	j := &journal{store: writer, next: 1}
+	j := &journal{writer: writer, next: 1}
 	for i := range 63 {
 		env, _ := proto.NewEnvelope(proto.TypeDelta, "run", proto.DeltaPayload{Delta: "partial", Sequence: uint64(i + 1)})
 		if err := j.enqueue(env); err != nil {

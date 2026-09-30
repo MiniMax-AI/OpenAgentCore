@@ -30,48 +30,6 @@ func (q *Queries) AppendSessionEvent(ctx context.Context, arg AppendSessionEvent
 	return err
 }
 
-const finishSessionItems = `-- name: FinishSessionItems :many
-WITH observed AS MATERIALIZED (SELECT clock_timestamp() AS at)
-UPDATE session_items SET payload = jsonb_set(payload, '{status}', '"incomplete"'), settled_at = COALESCE(session_items.settled_at, observed.at)
-FROM observed
-WHERE session_id = $1 AND turn_id = $2 AND payload->>'status' = 'in_progress'
-RETURNING session_items.id, session_items.session_id, session_items.turn_id, session_items.created_at, session_items.position, session_items.payload, session_items.output_index, session_items.settled_at
-`
-
-type FinishSessionItemsParams struct {
-	SessionID pgtype.UUID `json:"session_id"`
-	TurnID    pgtype.UUID `json:"turn_id"`
-}
-
-func (q *Queries) FinishSessionItems(ctx context.Context, arg FinishSessionItemsParams) ([]SessionItem, error) {
-	rows, err := q.db.Query(ctx, finishSessionItems, arg.SessionID, arg.TurnID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []SessionItem{}
-	for rows.Next() {
-		var i SessionItem
-		if err := rows.Scan(
-			&i.ID,
-			&i.SessionID,
-			&i.TurnID,
-			&i.CreatedAt,
-			&i.Position,
-			&i.Payload,
-			&i.OutputIndex,
-			&i.SettledAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSessionEvents = `-- name: ListSessionEvents :many
 SELECT sequence, payload FROM (
     SELECT e.sequence, e.payload,
@@ -121,12 +79,19 @@ WITH retained AS (
     FROM session_events e WHERE e.session_id = $1
 )
 DELETE FROM session_events e WHERE e.session_id = $1 AND e.sequence IN (
-    SELECT sequence FROM retained WHERE n > 256 OR (bytes > 67108864 AND n > 1)
+    SELECT sequence FROM retained
+    WHERE n > $2::bigint OR (bytes > $3::bigint AND n > 1)
 )
 `
 
-func (q *Queries) PruneSessionEvents(ctx context.Context, sessionID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, pruneSessionEvents, sessionID)
+type PruneSessionEventsParams struct {
+	SessionID      pgtype.UUID `json:"session_id"`
+	RetainedEvents int64       `json:"retained_events"`
+	RetainedBytes  int64       `json:"retained_bytes"`
+}
+
+func (q *Queries) PruneSessionEvents(ctx context.Context, arg PruneSessionEventsParams) error {
+	_, err := q.db.Exec(ctx, pruneSessionEvents, arg.SessionID, arg.RetainedEvents, arg.RetainedBytes)
 	return err
 }
 

@@ -166,20 +166,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if err != nil || !filepath.IsAbs(root) || !filepath.IsAbs(config.StateDir) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return fail("SDK state must be in a managed runtime subdirectory")
 	}
-	start.Cwd = req.WorkDir
-	if start.Cwd == "" {
-		start.Cwd = filepath.Join(config.StateDir, "work")
-	}
-	if strings.HasPrefix(start.Cwd, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return startRequest{}, nil, err
-		}
-		start.Cwd = filepath.Join(homeDir, strings.TrimPrefix(start.Cwd, "~/"))
-	}
-	if !filepath.IsAbs(start.Cwd) {
-		return fail("work_dir must be absolute or start with ~/")
-	}
+	start.Cwd = filepath.Join(config.StateDir, "work")
 	for _, dir := range []string{config.StateDir, filepath.Join(config.StateDir, "tmp"), start.Cwd} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return startRequest{}, nil, err

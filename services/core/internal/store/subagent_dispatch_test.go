@@ -1,12 +1,12 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -20,19 +20,13 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 				"environment": map[string]string{"type": "none"},
 			})
 			var err error
-			h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "identity-dispatch", Configuration: configuration})
+			h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "identity-dispatch", Configuration: configuration})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
+			if err = bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 				t.Fatal(err)
 			}
-			writer, err := store.NewExecution(ctx, h.s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
-			h.d.Store = writer
 			input := h.message("first", "root message")
 			running := h.run(ctx, input.TurnID)
 			var request proto.PromptRequestPayload
@@ -42,22 +36,22 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			identity := proto.SubagentIdentityPayload{NativeID: "child", ParentNativeID: "root", NativeCreatedAt: 100, ParentTurnID: "native-turn", SourceItemID: "spawn-item"}
 			h.write(input.TurnID, proto.TypeSubagentIdentity, identity)
 			if !enabled {
-				h.finished(running, store.TurnFailed)
-				if _, err = h.s.GetSubagentIdentity(ctx, h.tenant, h.session.ID, "child"); !errors.Is(err, store.ErrNotFound) {
+				h.finished(running, sessions.TurnFailed)
+				if _, err = h.s.GetSubagentIdentity(ctx, h.tenant, h.session.ID, "child"); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("unsolicited identity committed", err)
 				}
 				return
 			}
 			h.write(input.TurnID, proto.TypeSubagentIdentity, identity)
-			childTurn := proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: store.TurnInProgress, CreatedAtMS: 100000}
+			childTurn := proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnInProgress, CreatedAtMS: 100000}
 			h.write(input.TurnID, proto.TypeSubagentTurn, childTurn)
 			h.write(input.TurnID, proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: "child", TurnID: "child-turn", ItemID: "answer", Position: 0, Kind: proto.TypeOutputMessage, Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"child answer"}`)})
 			completed := int64(101000)
-			childTurn.Status, childTurn.CompletedAtMS = store.TurnCompleted, &completed
+			childTurn.Status, childTurn.CompletedAtMS = sessions.TurnCompleted, &completed
 			h.write(input.TurnID, proto.TypeSubagentTurn, childTurn)
 			h.write(input.TurnID, proto.TypeSubagentLifecycle, proto.SubagentLifecyclePayload{NativeID: "child", EffectID: "native-close", Status: "closed", OccurredAtMS: 102000})
 			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "root result", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "root"}})
-			h.finished(running, store.TurnCompleted)
+			h.finished(running, sessions.TurnCompleted)
 			saved, err := h.s.GetSubagentIdentity(ctx, h.tenant, h.session.ID, "child")
 			if err != nil || saved.NativeID != "child" || saved.ParentNativeID != "root" || saved.FirstTurnID != input.TurnID {
 				t.Fatal(saved, err)

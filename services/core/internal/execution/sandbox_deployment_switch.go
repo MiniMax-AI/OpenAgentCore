@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func (m *runtimeManager) lockMutation(ctx context.Context) (func(), error) {
 	if m == nil || m.loadDeployment == nil {
-		return nil, store.ErrSandboxDeploymentConflict
+		return nil, deployment.ErrConflict
 	}
 	m.mu.Lock()
 	closed := m.closed
@@ -90,7 +90,7 @@ func (m *runtimeManager) drainDeployment(result *deploymentDrain) {
 
 // activateDeployment is serialized with every Web configuration mutation. The
 // loader reads the committed generation and publishes the same server snapshot.
-func (m *runtimeManager) activateDeployment(ctx context.Context, expected store.RuntimeDeploymentView) error {
+func (m *runtimeManager) activateDeployment(ctx context.Context, expected deployment.View) error {
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
@@ -112,7 +112,7 @@ func (m *runtimeManager) activateDeployment(ctx context.Context, expected store.
 		return err
 	}
 	if config == nil && expected.Provider == "" {
-		m.publishEmptyDeployment(expected)
+		m.publishEmptyDeployment(expected.InstallationID, expected.Generation)
 		return nil
 	}
 	if config == nil || config.InstallationID != expected.InstallationID || config.Generation != expected.Generation || config.Mode != expected.Mode || config.ProviderKind != expected.Provider || config.loadDeployment != nil || config.LocalNodeID != "" {
@@ -137,49 +137,48 @@ func (m *runtimeManager) activateDeployment(ctx context.Context, expected store.
 	return nil
 }
 
-func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
+func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input sandbox.Selection) (deployment.View, error) {
 	unlock, err := w.runtimes.lockMutation(ctx)
 	if err != nil {
-		return store.RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	defer unlock()
 	m := w.runtimes
-	input, unchanged, err := m.store.ClassifySandboxDeploymentChange(ctx, m.setupInstallationID, input)
+	input, unchanged, err := m.deployment.ClassifyChange(ctx, m.setupInstallationID, input)
 	if err != nil {
-		return store.RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	if unchanged {
-		return m.store.GetRuntimeDeployment(ctx)
+		return m.deploymentService.View(ctx)
 	}
-	candidate, err := m.prepareCandidate(ctx, input.SandboxDeploymentSetupRequest)
+	candidate, err := m.prepareCandidate(ctx, input)
 	if err != nil {
-		return store.RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	if input.HasCredential() || candidate.VerifyCredential != nil {
 		if candidate.VerifyCredential == nil || candidate.FenceCredential == nil {
-			return store.RuntimeDeploymentView{}, ErrExecutionUnavailable
+			return deployment.View{}, ErrExecutionUnavailable
 		}
 		if err := candidate.VerifyCredential(ctx); err != nil {
-			return store.RuntimeDeploymentView{}, err
+			return deployment.View{}, err
 		}
 		if input.ReplacesCredential() {
 			fenceCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 			release, err := candidate.FenceCredential(fenceCtx)
 			if err != nil {
-				return store.RuntimeDeploymentView{}, err
+				return deployment.View{}, err
 			}
 			defer release()
 			// The final scan includes allocations admitted during preliminary verification.
 			if err := candidate.VerifyCredential(fenceCtx); err != nil {
-				return store.RuntimeDeploymentView{}, err
+				return deployment.View{}, err
 			}
 		}
 	}
-	input.SandboxDeploymentSetupRequest = *candidate.Selection
-	result, err := m.store.UpdateSandboxDeployment(ctx, m.setupInstallationID, input)
+	result, err := m.deployment.Update(ctx, m.setupInstallationID, *candidate.Selection)
 	if err != nil {
-		return store.RuntimeDeploymentView{}, err
+		return deployment.View{}, err
 	}
 	m.publishDeployment(candidate, result)
 	return result, nil
@@ -190,7 +189,7 @@ func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input store.Sandbo
 func (m *runtimeManager) restoreCommittedDeployment() error {
 	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()
-	committed, err := m.store.GetRuntimeDeployment(ctx)
+	committed, err := m.deploymentService.View(ctx)
 	if err == nil {
 		err = m.activateDeployment(ctx, committed)
 	}
@@ -204,14 +203,16 @@ func (m *runtimeManager) restoreCommittedDeployment() error {
 }
 
 // Empty-state publication is infallible after commit, even if the request was
-// cancelled. Loader, preparer and installation ownership stay on the manager.
-func (m *runtimeManager) publishEmptyDeployment(committed store.RuntimeDeploymentView) {
+// cancelled. It needs only the installation and the committed generation, so
+// no read follows the commit before the old configuration is retired. Loader,
+// preparer and installation ownership stay on the manager.
+func (m *runtimeManager) publishEmptyDeployment(installationID string, generation uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.config = RuntimeProvider{InstallationID: committed.InstallationID, Generation: committed.Generation}
+	m.config = RuntimeProvider{InstallationID: installationID, Generation: generation}
 	m.nodes = make(map[string]*runtimeNode)
 	if m.publishUnconfigured != nil {
-		m.publishUnconfigured(committed.Generation)
+		m.publishUnconfigured(generation)
 	}
 	m.switching = false
 	m.switchDrained = nil

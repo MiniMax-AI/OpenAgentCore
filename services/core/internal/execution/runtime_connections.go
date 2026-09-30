@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -20,34 +21,34 @@ type runtimeConnection struct {
 }
 
 func (r *runtimeLifecycle) observeConnection(ctx context.Context, owner store.RuntimeAllocation) error {
-	bound, err := r.store.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.SessionID)
-	if errors.Is(err, store.ErrNotFound) {
+	bound, err := r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.SessionID)
+	if errors.Is(err, sessions.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	if bound.ID != owner.DeviceID || bound.EnvironmentID != owner.EnvironmentID {
-		return store.ErrDeviceBindingConflict
+		return sessions.ErrDeviceBindingConflict
 	}
 	if !owner.CreateSettled || owner.State != "running" {
 		return nil
 	}
-	peer, err := authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
+	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 	connected := err == nil
-	if err != nil && !errors.Is(err, store.ErrNotFound) && !errors.Is(err, runtimegateway.ErrSessionClosed) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
+	if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrSessionClosed) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
 		return err
 	}
-	return observeRuntimeConnection(ctx, r.store, r.connections, owner.TenantID, owner.EnvironmentID, peer, connected)
+	return observeRuntimeConnection(ctx, r.sessionExecution, r.connections, owner.TenantID, owner.EnvironmentID, peer, connected)
 }
 
 // Each Environment has one observer: the hosted lifecycle or the Worker loop for
 // enrolled user compute. Both publish the same durable generation/revision rules.
-func observeRuntimeConnection(ctx context.Context, s *store.Store, connections map[string]*runtimeConnection, tenant, environment string, peer *runtimegateway.Session, connected bool) error {
+func observeRuntimeConnection(ctx context.Context, operations *sessions.ExecutionOperations, connections map[string]*runtimeConnection, tenant, environment string, peer *runtimegateway.Session, connected bool) error {
 	current := connections[environment]
 	if connected && (current == nil || current.peer != peer) {
 		generation := uuid.NewString()
-		if err := s.ReplaceEnvironmentConnection(ctx, tenant, environment, generation); err != nil {
+		if err := operations.ReplaceEnvironmentConnection(ctx, tenant, environment, generation); err != nil {
 			return err
 		}
 		current = &runtimeConnection{peer: peer, generation: generation}
@@ -57,7 +58,7 @@ func observeRuntimeConnection(ctx context.Context, s *store.Store, connections m
 		return nil
 	}
 	current.revision++
-	if err := s.ObserveEnvironmentConnection(ctx, tenant, environment, current.generation, current.revision, connected); err != nil {
+	if err := operations.ObserveEnvironmentConnection(ctx, tenant, environment, current.generation, current.revision, connected); err != nil {
 		return err
 	}
 	current.connected = connected
@@ -65,7 +66,7 @@ func observeRuntimeConnection(ctx context.Context, s *store.Store, connections m
 }
 
 func (w *Worker) observeEnrolledRuntimes(ctx context.Context) error {
-	bindings, err := w.dispatcher.Store.ListEnrolledRuntimeBindings(ctx)
+	bindings, err := w.dispatcher.SessionsReader.ListEnrolledRuntimeBindings(ctx)
 	if err != nil {
 		return err
 	}
@@ -74,11 +75,11 @@ func (w *Worker) observeEnrolledRuntimes(ctx context.Context) error {
 		live[bound.EnvironmentID] = true
 		peer, err := w.dispatcher.authorizedPeer(ctx, bound.DeviceID)
 		connected := err == nil
-		if err != nil && !errors.Is(err, store.ErrNotFound) && !errors.Is(err, runtimegateway.ErrSessionClosed) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
+		if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrSessionClosed) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
 			return err
 		}
-		if err := observeRuntimeConnection(ctx, w.dispatcher.Store, w.enrolledConnections, bound.TenantID, bound.EnvironmentID, peer, connected); err != nil {
-			if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrInvalidInput) {
+		if err := observeRuntimeConnection(ctx, w.dispatcher.sessionExecution, w.enrolledConnections, bound.TenantID, bound.EnvironmentID, peer, connected); err != nil {
+			if errors.Is(err, sessions.ErrNotFound) || errors.Is(err, sessions.ErrInvalidInput) {
 				continue
 			}
 			return err

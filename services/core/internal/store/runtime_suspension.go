@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -31,18 +33,18 @@ func runtimeActivity(row sqlc.GetRuntimeActivityRow) RuntimeActivity {
 // Revision and the existing Session lock fence a stale lifecycle observation.
 func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleTimeout time.Duration) (RuntimeAllocation, error) {
 	if !runtimeComputeTransition(owner.ComputePhase, phase) || !json.Valid(state) || (owner.ComputePhase == "running" && phase == "quiescing" && idleTimeout <= 0) {
-		return RuntimeAllocation{}, ErrInvalidInput
+		return RuntimeAllocation{}, sessions.ErrInvalidInput
 	}
 	if phase != "running" && (retainedUntil == nil || retainedUntil.IsZero()) {
-		return RuntimeAllocation{}, ErrInvalidInput
+		return RuntimeAllocation{}, sessions.ErrInvalidInput
 	}
 	var object map[string]json.RawMessage
 	if json.Unmarshal(state, &object) != nil || object == nil {
-		return RuntimeAllocation{}, ErrInvalidInput
+		return RuntimeAllocation{}, sessions.ErrInvalidInput
 	}
 	return s.mutateRuntimeAllocation(ctx, owner, true, func(ctx context.Context, q *sqlc.Queries, row sqlc.RuntimeAllocation) (sqlc.RuntimeAllocation, error) {
 		if row.ComputeRevision != owner.ComputeRevision || row.ComputePhase != owner.ComputePhase {
-			return sqlc.RuntimeAllocation{}, ErrTurnConflict
+			return sqlc.RuntimeAllocation{}, sessions.ErrTurnConflict
 		}
 		if (phase == "quiescing" && row.ComputePhase == "running") || (phase == "suspending" && row.ComputePhase == "quiescing") {
 			activity, err := q.GetRuntimeActivity(ctx, row.ID)
@@ -50,10 +52,10 @@ func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, 
 				return sqlc.RuntimeAllocation{}, err
 			}
 			if activity.Busy || activity.ComputeWakeRequested {
-				return sqlc.RuntimeAllocation{}, ErrTurnConflict
+				return sqlc.RuntimeAllocation{}, sessions.ErrTurnConflict
 			}
 			if phase == "quiescing" && (!runtimeActivity(activity).ReadyToSuspend(idleTimeout) || row.ComputeActivityAt.Time.After(owner.ComputeActivityAt)) {
-				return sqlc.RuntimeAllocation{}, ErrTurnConflict
+				return sqlc.RuntimeAllocation{}, sessions.ErrTurnConflict
 			}
 		}
 		if row.ComputePhase == "suspended" && phase == "restoring" {
@@ -99,12 +101,12 @@ func (s *Store) RuntimeActivity(ctx context.Context, owner RuntimeAllocation) (R
 	if err != nil {
 		return RuntimeActivity{}, err
 	}
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return RuntimeActivity{}, err
 	}
 	row, err := s.queries.GetRuntimeActivity(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return RuntimeActivity{}, ErrNotFound
+		return RuntimeActivity{}, sessions.ErrNotFound
 	}
 	if err != nil {
 		return RuntimeActivity{}, err
@@ -115,24 +117,24 @@ func (s *Store) RuntimeActivity(ctx context.Context, owner RuntimeAllocation) (R
 // TouchRuntimeActivity is used only by operations requiring live compute.
 // Public history and published-artifact reads do not call it.
 func (s *Store) TouchRuntimeActivity(ctx context.Context, tenant, environment string) error {
-	lookup, err := deviceLookup(tenant, environment)
+	lookup, err := sessionpg.DeviceLookup(tenant, environment)
 	if err != nil {
 		return err
 	}
-	owned, err := s.GetEnvironment(ctx, tenant, environment)
+	owned, err := sessionpg.LoadEnvironment(ctx, s.queries, tenant, environment)
 	if err != nil {
 		return err
 	}
 	return s.withPublicSession(ctx, tenant, owned.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		current, err := q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: lookup.TenantID, ID: lookup.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
 		if current.Environment.SessionID != session {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		return q.TouchRuntimeActivity(ctx, sqlc.TouchRuntimeActivityParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
 	})
@@ -143,7 +145,7 @@ func (s *Store) ClearRuntimeWake(ctx context.Context, owner RuntimeAllocation, o
 	if err != nil {
 		return err
 	}
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return err
 	}
 	return s.queries.ClearRuntimeWake(ctx, sqlc.ClearRuntimeWakeParams{ID: id, ComputeActivityAt: pgtype.Timestamptz{Time: observedActivity, Valid: true}})
@@ -154,7 +156,7 @@ func (s *Store) CountRuntimeComputeReservations(ctx context.Context, provider st
 	if err != nil {
 		return 0, err
 	}
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return 0, err
 	}
 	return s.queries.CountRuntimeComputeReservations(ctx, id)
@@ -165,26 +167,16 @@ func (s *Store) CountRuntimeRetainedAllocations(ctx context.Context, provider st
 	if err != nil {
 		return 0, err
 	}
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return 0, err
 	}
 	return s.queries.CountRuntimeRetainedAllocations(ctx, id)
 }
 
-// checkRuntimeComputeAdmission runs under the Session lock before a new durable
-// execution owner is created. Existing receipts remain readable in every phase.
-func checkRuntimeComputeAdmission(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-	blocked, err := q.RuntimeComputeBlocksAdmission(ctx, session)
-	if err == nil && blocked {
-		return ErrTurnConflict
-	}
-	return err
-}
-
 // CheckRuntimeComputeProtocol blocks activation before incompatible retained state
 // could lose cleanup evidence. The previous executable must drain its resources.
 func (s *Store) CheckRuntimeComputeProtocol(ctx context.Context, version string) error {
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return err
 	}
 	incompatible, err := s.queries.HasIncompatibleRuntimeComputeState(ctx, version)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -11,19 +12,19 @@ func TestNoEnvironmentRejectsUnadvertisedDeviceBeforeClaim(t *testing.T) {
 	h := newDispatchHarness(t)
 	ctx := context.Background()
 	var err error
-	h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "none", Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"none"}}`)})
+	h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "none", Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"none"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err = bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := h.message("first", "Answer")
-	if _, err = h.d.Run(ctx, h.tenant, h.session.ID, input.TurnID); err == nil {
+	if _, err = h.bound().Run(ctx, h.tenant, h.session.ID, input.TurnID); err == nil {
 		t.Fatal("unsupported environment admitted")
 	}
 	turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnQueued {
+	if err != nil || turn.Status != sessions.TurnQueued {
 		t.Fatal(turn, err)
 	}
 }

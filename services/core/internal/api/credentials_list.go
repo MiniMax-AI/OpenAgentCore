@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/go-chi/chi/v5"
 )
 
 // @Summary List safe Vault Credential metadata
@@ -22,14 +23,14 @@ import (
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /vaults/{vault_id}/credentials [get]
 func (h *Handler) listCredentials(w http.ResponseWriter, r *http.Request) {
-	vaultID := credentialPathID(r, "vault_id")
-	options, statuses, ok := readVaultPage(w, r)
+	vaultID := chi.URLParam(r, "vault_id")
+	query, ok := readVaultPage(w, r)
 	if !ok {
 		return
 	}
-	page, err := h.store.ListCredentials(r.Context(), tenantID(r), vaultID, options.after, options.limit, options.ascending, statuses)
+	page, err := h.VaultsReader.ListCredentials(r.Context(), tenantID(r), vaultID, query)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeVaultsError(w, r, err)
 		return
 	}
 	response := v1.CredentialList{Object: "list", Data: make([]v1.Credential, 0, len(page.Credentials)), HasMore: page.NextCursor != ""}

@@ -3,9 +3,10 @@ package execution
 import (
 	"context"
 	"encoding/json"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func messageInput(raw json.RawMessage) (proto.MessageInput, error) {
@@ -14,7 +15,7 @@ func messageInput(raw json.RawMessage) (proto.MessageInput, error) {
 		Input []v1.InputMessage `json:"input"`
 	}
 	if json.Unmarshal(raw, &input) != nil {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	var messages proto.MessageInput
 	if len(input.Input) == 0 && input.Text != nil {
@@ -22,7 +23,7 @@ func messageInput(raw json.RawMessage) (proto.MessageInput, error) {
 	}
 	for _, message := range input.Input {
 		if message.Role != "user" {
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		converted := proto.InputMessage{}
 		for _, part := range message.Content {
@@ -31,7 +32,7 @@ func messageInput(raw json.RawMessage) (proto.MessageInput, error) {
 		messages = append(messages, converted)
 	}
 	if messages.Validate() != nil {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	return messages, nil
 }
@@ -46,7 +47,7 @@ func (d *Dispatcher) initialInput(ctx context.Context, tenant, session, turn str
 	size := 0
 	for _, input := range inputs {
 		if input.Kind != "message" {
-			return nil, 0, store.ErrInvalidInput
+			return nil, 0, sessions.ErrInvalidInput
 		}
 		batch, err := messageInput(input.Payload)
 		if err != nil {
@@ -60,7 +61,7 @@ func (d *Dispatcher) initialInput(ctx context.Context, tenant, session, turn str
 		through = input.Sequence
 	}
 	if len(messages) == 0 {
-		return nil, 0, store.ErrInvalidInput
+		return nil, 0, sessions.ErrInvalidInput
 	}
 	return messages, through, nil
 }

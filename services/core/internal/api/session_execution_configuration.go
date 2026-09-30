@@ -1,17 +1,12 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/go-chi/chi/v5"
 )
-
-type sessionExecutionConfigurationStore interface {
-	GetSessionExecutionConfiguration(context.Context, string, string) (v1.SessionExecutionConfiguration, error)
-}
 
 // Record selection sources at resolution time. Null Agent extensions reset the
 // harness to deployment defaults but do not clear inherited provider bundles.
@@ -69,12 +64,7 @@ func sessionExecutionProjection(input sessionRequest, saved *v1.SavedAgent, inhe
 
 // getSessionExecutionConfiguration serves the administrator per-Session read.
 func (h *Handler) getSessionExecutionConfiguration(w http.ResponseWriter, r *http.Request) {
-	source, ok := h.store.(sessionExecutionConfigurationStore)
-	if !ok {
-		writeError(w, http.StatusServiceUnavailable, "execution_configuration_unavailable", "Session execution configuration is unavailable.")
-		return
-	}
-	configuration, err := source.GetSessionExecutionConfiguration(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
+	configuration, err := h.SessionAdmin.GetSessionExecutionConfiguration(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

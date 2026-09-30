@@ -4,17 +4,17 @@ import (
 	"context"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // authorizedRuntimePeer fences a connected socket against current credential
 // authority. A stable device ID does not keep an old credential alive on rotation.
-func authorizedRuntimePeer(ctx context.Context, s *store.Store, registry *runtimegateway.Registry, id string) (*runtimegateway.Session, error) {
+func authorizedRuntimePeer(ctx context.Context, devices sessions.DeviceReader, registry *runtimegateway.Registry, id string) (*runtimegateway.Session, error) {
 	peer, err := registry.LookupDevice(id)
 	if err != nil {
 		return nil, err
 	}
-	credential, found, err := s.GetDeviceCredential(ctx, id)
+	credential, found, err := devices.GetDeviceCredential(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +24,7 @@ func authorizedRuntimePeer(ctx context.Context, s *store.Store, registry *runtim
 		if drainErr != nil || !draining {
 			peer.Close("Runtime authorization changed")
 		}
-		return nil, store.ErrNotFound
+		return nil, sessions.ErrNotFound
 	}
 	if peer.IsClosed() {
 		return nil, runtimegateway.ErrSessionClosed
@@ -33,5 +33,5 @@ func authorizedRuntimePeer(ctx context.Context, s *store.Store, registry *runtim
 }
 
 func (d *Dispatcher) authorizedPeer(ctx context.Context, id string) (*runtimegateway.Session, error) {
-	return authorizedRuntimePeer(ctx, d.Store, d.Registry, id)
+	return authorizedRuntimePeer(ctx, d.SessionsReader, d.Registry, id)
 }

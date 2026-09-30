@@ -7,23 +7,19 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
 func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {
-	st, _ := store.NewTestStore(t)
+	st, db := newTestStoreDB(t)
 	adminToken := uuid.NewString()
-	auth, err := api.NewDatabaseAuthenticator(st)
-	if err != nil {
-		t.Fatal(err)
-	}
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(adminToken)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := api.NewHandler(st, auth, "codex", api.WithProjectAPIKeys(st, admin))
+	h, err := publicHandler(t, st, db, nil, "codex", storeKeys(st), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,12 +38,12 @@ func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {
 	}
 	base := "/core/v1/projects"
 	response := call("POST", base, adminToken, `{"name":"Default"}`, 201)
-	var p store.Project
+	var p projects.Project
 	if json.Unmarshal(response.Body.Bytes(), &p) != nil || p.ID == "" {
 		t.Fatal("Project response invalid")
 	}
 	keysPath := base + "/" + p.ID + "/keys"
-	var first, second store.IssuedProjectAPIKey
+	var first, second projects.IssuedAPIKey
 	if json.Unmarshal(call("POST", keysPath, adminToken, `{"name":"first"}`, 201).Body.Bytes(), &first) != nil {
 		t.Fatal("key response invalid")
 	}

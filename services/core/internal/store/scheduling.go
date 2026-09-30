@@ -2,18 +2,17 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type ExecutionWork struct{ TenantID, SessionID, TurnID, Status string }
-
-type EnvironmentInputWork struct{ TenantID, SessionID, ReservationID string }
 
 func executionWorkCursor(after string, connectedDevices []string) (pgtype.UUID, []pgtype.UUID, error) {
 	id := pgtype.UUID{Valid: true}
@@ -35,7 +34,7 @@ func executionWorkCursor(after string, connectedDevices []string) (pgtype.UUID, 
 	return id, devices, nil
 }
 
-func (s *Store) ListEnvironmentInputWork(ctx context.Context, after string, connectedDevices []string) ([]EnvironmentInputWork, error) {
+func (s *Store) ListEnvironmentInputWork(ctx context.Context, after string, connectedDevices []string) ([]sessions.EnvironmentInputWork, error) {
 	id, devices, err := executionWorkCursor(after, connectedDevices)
 	if err != nil {
 		return nil, err
@@ -44,14 +43,14 @@ func (s *Store) ListEnvironmentInputWork(ctx context.Context, after string, conn
 	if err != nil {
 		return nil, err
 	}
-	work := make([]EnvironmentInputWork, 0, len(rows))
+	work := make([]sessions.EnvironmentInputWork, 0, len(rows))
 	for _, row := range rows {
-		work = append(work, EnvironmentInputWork{TenantID: uuid.UUID(row.TenantID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), ReservationID: uuid.UUID(row.ID.Bytes).String()})
+		work = append(work, sessions.EnvironmentInputWork{TenantID: uuid.UUID(row.TenantID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), ReservationID: uuid.UUID(row.ID.Bytes).String()})
 	}
 	return work, nil
 }
 
-func (s *Store) ListExecutionWork(ctx context.Context, after string, statuses []string, connectedDevices []string) ([]ExecutionWork, error) {
+func (s *Store) ListExecutionWork(ctx context.Context, after string, statuses []string, connectedDevices []string) ([]sessions.ExecutionWork, error) {
 	id, devices, err := executionWorkCursor(after, connectedDevices)
 	if err != nil {
 		return nil, err
@@ -60,14 +59,14 @@ func (s *Store) ListExecutionWork(ctx context.Context, after string, statuses []
 	if err != nil {
 		return nil, err
 	}
-	work := make([]ExecutionWork, 0, len(rows))
+	work := make([]sessions.ExecutionWork, 0, len(rows))
 	for _, row := range rows {
-		work = append(work, ExecutionWork{TenantID: uuid.UUID(row.TenantID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), TurnID: uuid.UUID(row.ID.Bytes).String(), Status: row.Status})
+		work = append(work, sessions.ExecutionWork{TenantID: uuid.UUID(row.TenantID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), TurnID: uuid.UUID(row.ID.Bytes).String(), Status: row.Status})
 	}
 	return work, nil
 }
 
-func (s *Store) ListExecutionDevices(ctx context.Context, tenantID string) ([]ExecutionDevice, error) {
+func (s *Store) ListExecutionDevices(ctx context.Context, tenantID string) ([]sessions.ExecutionDevice, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
 		return nil, err
@@ -76,16 +75,16 @@ func (s *Store) ListExecutionDevices(ctx context.Context, tenantID string) ([]Ex
 	if err != nil {
 		return nil, err
 	}
-	devices := make([]ExecutionDevice, 0, len(rows))
+	devices := make([]sessions.ExecutionDevice, 0, len(rows))
 	for _, row := range rows {
-		devices = append(devices, ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name})
+		devices = append(devices, sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name})
 	}
 	return devices, nil
 }
 
-func (s *Store) sessionActivity(ctx context.Context, session Session, err error) (Session, error) {
+func (s *Store) sessionActivity(ctx context.Context, session sessions.Session, err error) (sessions.Session, error) {
 	if err != nil {
-		return Session{}, err
+		return sessions.Session{}, err
 	}
 	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var err error
@@ -97,16 +96,16 @@ func (s *Store) sessionActivity(ctx context.Context, session Session, err error)
 
 // SessionStreamSnapshot reads the projection that GetSession returns and the
 // committed Session event cursor from one database snapshot.
-func (s *Store) SessionStreamSnapshot(ctx context.Context, tenantID, sessionID string) (Session, int64, error) {
+func (s *Store) SessionStreamSnapshot(ctx context.Context, tenantID, sessionID string) (sessions.Session, int64, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
-		return Session{}, 0, err
+		return sessions.Session{}, 0, err
 	}
 	id, err := parseID(sessionID)
 	if err != nil {
-		return Session{}, 0, err
+		return sessions.Session{}, 0, err
 	}
-	var session Session
+	var session sessions.Session
 	var cursor int64
 	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
@@ -114,7 +113,7 @@ func (s *Store) SessionStreamSnapshot(ctx context.Context, tenantID, sessionID s
 		if err != nil {
 			return err
 		}
-		if session, err = sessionFromRow(row); err != nil {
+		if session, err = sessionpg.SessionFromRow(row); err != nil {
 			return err
 		}
 		cursor = row.EventSequence
@@ -122,31 +121,32 @@ func (s *Store) SessionStreamSnapshot(ctx context.Context, tenantID, sessionID s
 		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Session{}, 0, ErrNotFound
+		return sessions.Session{}, 0, sessions.ErrNotFound
 	}
 	if err != nil {
-		return Session{}, 0, fmt.Errorf("read session stream snapshot: %w", err)
+		return sessions.Session{}, 0, fmt.Errorf("read session stream snapshot: %w", err)
 	}
 	return session, cursor, nil
 }
 
 // readSessionActivity adds the Environment, reservation activity and latest Turn
 // projection within the caller's snapshot.
-func readSessionActivity(ctx context.Context, q *sqlc.Queries, session Session) (Session, error) {
+func readSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.Session) (sessions.Session, error) {
 	id, _ := parseID(session.ID)
 	tenant, _ := parseID(session.TenantID)
 	environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: id})
 	if err == nil {
-		value, err := environmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, nil)
+		value, err := sessionpg.EnvironmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, nil)
 		if err != nil {
 			return session, err
 		}
 		session.Environment = &value
 		session.EnvironmentFailure = environmentFailure(environment.Environment)
-		session.EnvironmentInputActivity, session.PendingInput, err = environmentInputState(ctx, q, id)
+		state, err := sessionpg.LoadEnvironmentInput(ctx, q, id)
 		if err != nil {
 			return session, err
 		}
+		session.EnvironmentInputActivity, session.PendingInput = sessions.InputActivity(state)
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return session, err
 	}
@@ -157,12 +157,24 @@ func readSessionActivity(ctx context.Context, q *sqlc.Queries, session Session) 
 	if err != nil {
 		return session, err
 	}
-	turn := turnFromRow(row)
+	turn := sessionpg.TurnFromRow(row)
 	session.LastTurn = &turn
-	session.RequiredActions, err = functionActions(ctx, q, row)
+	session.RequiredActions, err = sessionpg.LoadRequiredActions(ctx, q, id, turn)
 	if err != nil {
 		return session, err
 	}
 	session.Usage, err = q.SessionTokenUsage(ctx, id)
 	return session, err
+}
+
+func environmentFailure(row sqlc.Environment) *sessions.EnvironmentFailure {
+	if row.Status != "failed" || !row.FailureReason.Valid || !row.FailedAt.Valid {
+		return nil
+	}
+	failure := &sessions.EnvironmentFailure{Reason: row.FailureReason.String, FailedAt: row.FailedAt.Time}
+	var detail sessions.ProvisioningFailureDetail
+	if json.Unmarshal(row.FailureDetail, &detail) == nil {
+		failure.Detail = sessions.SanitizedProvisioningDetail(detail)
+	}
+	return failure
 }

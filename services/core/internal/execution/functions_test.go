@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestFunctionDefinitionsRejectUnsupportedConfiguration(t *testing.T) {
@@ -40,13 +40,13 @@ func TestFunctionResultPreservesCompleteContent(t *testing.T) {
 		{`{"success":false,"error":"failed"}`, false, []proto.InputContent{text("failed")}},
 		{`{"success":false,"output":[{"type":"input_text","text":"before"},{"type":"input_image","image_url":"data:image/png;base64,test"},{"type":"input_text","text":""}],"error":"failed"}`, false, []proto.InputContent{text("before"), {Type: "input_image", ImageURL: &imageURL}, text(""), text("failed")}},
 	} {
-		result, err := functionResult(store.FunctionCall{CallID: "public", ExecutorCallID: "native", Result: json.RawMessage(test.raw)})
+		result, err := functionResult(sessions.FunctionCall{CallID: "public", ExecutorCallID: "native", Result: json.RawMessage(test.raw)})
 		if err != nil || result.CallID != "native" || result.DeliveryID != "function:public" || result.Success != test.success || !reflect.DeepEqual(result.Content, test.content) {
 			t.Fatal(result, err)
 		}
 	}
 	for _, raw := range []string{`{}`, `{"success":null}`, `{"success":true,"output":{}}`, `{"success":true,"output":[{"type":"input_text"}]}`, `{"success":true,"output":[{"type":"input_audio","audio_url":"a"}]}`} {
-		if _, err := functionResult(store.FunctionCall{Result: json.RawMessage(raw)}); err == nil {
+		if _, err := functionResult(sessions.FunctionCall{Result: json.RawMessage(raw)}); err == nil {
 			t.Fatal("invalid stored result converted", raw)
 		}
 	}

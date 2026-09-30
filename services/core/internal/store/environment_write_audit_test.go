@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
@@ -21,10 +23,12 @@ func TestEnvironmentUploadWriteAuditSurvivesRequestAndLeaseContext(t *testing.T)
 	cancel()
 	sessionAuditCount(t, f.s, f.tenant, 0)
 	// Neither the settlement caller nor the newly acquired execution lease owns the request context.
-	if err := f.writer.CloseExecution(context.Background()); err != nil {
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, f.s.pool)
+	if err := f.lease.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	next := executionWriter(t, f.s)
+	awaitRelease()
+	next := sessionExecution(t, executionWriter(t, f.s).lease)
 	var group sync.WaitGroup
 	for range 4 {
 		group.Go(func() {
@@ -58,7 +62,7 @@ func TestEnvironmentUploadWriteAuditRollbackAndRejection(t *testing.T) {
 			if rejected && err != nil || !rejected && err == nil {
 				t.Fatal("unexpected settlement outcome", err)
 			}
-			got, err := f.s.GetEnvironmentFileWrite(t.Context(), f.tenant, f.env.ID, f.key.ID)
+			got, err := FixtureFileWrite(t.Context(), f.s.pool, f.tenant, f.env.ID, f.key.ID)
 			want := "pending"
 			if rejected {
 				want = "rejected"
@@ -77,11 +81,11 @@ func TestArtifactDeleteWriteAuditAndRollback(t *testing.T) {
 			s, _ := testStore(t)
 			tenant, session, env, turn := artifactTurn(t, s, "self_hosted")
 			archive := artifactArchive(t, map[string][]byte{"outputs/private.txt": []byte("secret-file-body")})
-			if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, env, bytes.NewReader(archive)); err != nil {
+			if err := stageTurnArtifacts(t.Context(), s, tenant, session, turn, env, bytes.NewReader(archive)); err != nil {
 				t.Fatal(err)
 			}
-			transition(t, s, tenant, session, turn, TurnInProgress, TurnCompleted)
-			page, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
+			transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
+			page, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 			if err != nil || len(page.Artifacts) != 1 {
 				t.Fatal(page, err)
 			}
@@ -90,12 +94,12 @@ func TestArtifactDeleteWriteAuditAndRollback(t *testing.T) {
 			if fail {
 				rejectSessionAudit(t, s, ctx)
 			}
-			err = s.DeleteSessionArtifact(ctx, tenant, session, artifact.ID)
+			err = sessionAdapter(s).DeleteSessionArtifact(ctx, tenant, session, artifact.ID)
 			if fail {
 				if err == nil {
 					t.Fatal("artifact deletion bypassed audit failure")
 				}
-				if err := s.ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ SessionArtifact, r io.Reader) error {
+				if err := sessionAdapter(s).ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ sessions.Artifact, r io.Reader) error {
 					body, err := io.ReadAll(r)
 					if string(body) != "secret-file-body" {
 						t.Error("large object did not roll back")

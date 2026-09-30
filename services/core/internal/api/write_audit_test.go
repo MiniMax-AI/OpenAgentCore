@@ -11,8 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 )
@@ -20,42 +19,36 @@ import (
 type auditQueryFixture struct {
 	tenant, resourceType string
 	ids                  []string
-	filter               store.WriteOperationFilter
+	filter               writeaudit.Filter
 	calls                int
 }
 
-func (s *auditQueryFixture) GetResourceOwners(_ context.Context, tenant, kind string, ids []string) ([]store.ResourceOwner, error) {
+func (s *auditQueryFixture) GetResourceOwners(_ context.Context, tenant, kind string, ids []string) ([]writeaudit.ResourceOwner, error) {
 	s.calls++
 	s.tenant = tenant
 	s.resourceType = kind
 	s.ids = ids
-	result := make([]store.ResourceOwner, len(ids))
+	result := make([]writeaudit.ResourceOwner, len(ids))
 	for i, id := range ids {
 		result[i].ResourceID = id
 	}
 	return result, nil
 }
-func (s *auditQueryFixture) ListWriteOperations(_ context.Context, tenant string, filter store.WriteOperationFilter) (store.WriteOperationPage, error) {
+func (s *auditQueryFixture) ListWriteOperations(_ context.Context, tenant string, filter writeaudit.Filter) (writeaudit.Page, error) {
 	s.calls++
 	s.tenant = tenant
 	s.filter = filter
-	return store.WriteOperationPage{}, nil
+	return writeaudit.Page{}, nil
 }
 func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 	key := callerBinding()
-	auth, err := NewAuthenticator([]APIKey{key})
-	if err != nil {
-		t.Fatal(err)
-	}
-	admin, err := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
-	if err != nil {
-		t.Fatal(err)
-	}
+	deps, fakes := testDependencies(t)
 	queries := &auditQueryFixture{}
-	h, err := NewHandler(&recordingStore{}, auth, "codex", WithWriteAudit(queries, admin), WithProjectAPIKeys(&projectKeyStoreFixture{project: store.ProjectBinding{Project: store.Project{ID: key.ProjectID}, Principal: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID}}}}, admin))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fakes.writeAudit.getResourceOwners, fakes.writeAudit.listWriteOperations = queries.GetResourceOwners, queries.ListWriteOperations
+	project := &projectKeyStoreFixture{project: projects.Binding{Project: projects.Project{ID: key.ProjectID}, Principal: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID}}}}
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
+	fakes.projectsReader.getProject = project.GetProject
+	h := newTestHandler(t, deps)
 	owners := "/core/v1/projects/" + key.ProjectID + "/resource-owners?resource_type=agent&resource_ids=first,second"
 	for _, token := range []string{"", "caller", "foreign"} {
 		w := projectKeyHTTP(h, "GET", owners, token, "")
@@ -100,18 +93,18 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 
 func TestAuthenticatedWriteProvenance(t *testing.T) {
 	key := callerBinding()
-	fixture, _ := NewAuthenticator([]APIKey{key})
-	binding, _ := fixture.keys.ResolveProjectAPIKey(t.Context(), key.TokenSHA256)
-	binding.Key = store.ProjectAPIKey{ID: uuid.NewString(), Name: "SDK", Prefix: "pc_12345678"}
+	binding := projectKeyBinding(t, key)
+	binding.Key = projects.APIKey{ID: uuid.NewString(), Name: "SDK", Prefix: "pc_12345678"}
 	keys := &projectKeyStoreFixture{binding: binding}
-	auth, _ := NewDatabaseAuthenticator(keys)
-	h := &Handler{auth: auth}
+	deps, fakes := testDependencies(t)
+	fakes.projectsReader.resolveAPIKey = keys.ResolveAPIKey
+	h := &Handler{Dependencies: deps}
 	var source writeaudit.Source
 	var got bool
-	handler := agentsResponseHeaders(log.HTTPMiddleware(h.authenticateCaller(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := responseHeadersWithErrors(log.HTTPMiddleware(h.authenticateCaller(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		source, got = writeaudit.FromContext(r.Context())
 		w.WriteHeader(204)
-	}), true)))
+	}), true)), func(string) {})
 	for _, test := range []struct {
 		method, path string
 		present      bool
@@ -129,7 +122,7 @@ func TestAuthenticatedWriteProvenance(t *testing.T) {
 			t.Fatalf("source %+v", source)
 		}
 	}
-	keys.resolve = store.ErrNotFound
+	keys.resolve = projects.ErrNotFound
 	if w := projectKeyHTTP(handler, "POST", "/v1/agents", "issued-project-key", ""); w.Code != 401 {
 		t.Fatalf("revoked key %d", w.Code)
 	}
@@ -137,7 +130,7 @@ func TestAuthenticatedWriteProvenance(t *testing.T) {
 
 func TestAuditQueryJSONSafeFields(t *testing.T) {
 	now := time.Now().UTC()
-	raw, err := json.Marshal(ResourceOwnerList{Data: []store.ResourceOwner{{ResourceID: "r", APIKey: &store.AuditAPIKey{ID: "key", Name: "sdk", Prefix: "pc_prefix", Kind: "issued", RevokedAt: &now}}}})
+	raw, err := json.Marshal(ResourceOwnerList{Data: []writeaudit.ResourceOwner{{ResourceID: "r", APIKey: &writeaudit.APIKey{ID: "key", Name: "sdk", Prefix: "pc_prefix", Kind: "issued", RevokedAt: &now}}}})
 	if err != nil {
 		t.Fatal(err)
 	}

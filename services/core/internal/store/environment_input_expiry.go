@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -21,13 +23,13 @@ func (s *Store) ExpireEnvironmentInputs(ctx context.Context) (int64, error) {
 			return err
 		}
 		for _, row := range rows {
-			err := withEnvironmentInputActivity(ctx, q, row.SessionID, func() error {
+			err := sessions.TrackInputActivity(ctx, sessionpg.BindSession(q, row.TenantID, row.SessionID), func(ctx context.Context) error {
 				return q.ExpireEnvironmentInputReservation(ctx, sqlc.ExpireEnvironmentInputReservationParams{SessionID: row.SessionID, ID: row.ID})
 			})
 			if err != nil {
 				return err
 			}
-			if err := q.PruneSessionEvents(ctx, row.SessionID); err != nil {
+			if err := sessionpg.PruneChanges(ctx, q, row.SessionID); err != nil {
 				return err
 			}
 			expired++

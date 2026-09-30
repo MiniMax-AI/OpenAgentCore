@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
-func (f *credentialFixture) DeleteCredential(_ context.Context, tenant, vault, id string) (string, error) {
-	f.tenant, f.vault, f.id, f.calls = tenant, vault, id, f.calls+1
+func (f *credentialFixture) DeleteCredential(_ context.Context, command vaults.DeleteCredential) (string, error) {
+	f.tenant, f.vault, f.id, f.calls = command.TenantID, command.VaultID, command.CredentialID, f.calls+1
 	return f.credential.ID, f.err
 }
 
@@ -74,7 +74,7 @@ func TestCredentialDeletionRejectsBeforeMutation(t *testing.T) {
 	for _, tc := range []struct {
 		err    error
 		status int
-	}{{store.ErrNotFound, 404}, {errors.New("credential-canary"), 500}} {
+	}{{vaults.ErrNotFound, 404}, {errors.New("credential-canary"), 500}} {
 		h, f, _ := credentialHandler(t)
 		f.err = tc.err
 		w := credentialRequest(h, "DELETE", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID, "")

@@ -39,14 +39,14 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			}
 			t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", filepath.Join(t.TempDir(), "capabilities"))
 			t.Setenv("OAC_TEST_EXECUTOR_MODE", "complete")
-			environment, session := uuid.NewString(), uuid.NewString()
-			if err := os.MkdirAll(req.WorkDir, 0700); err != nil {
+			environment, session, workspace := uuid.NewString(), uuid.NewString(), filepath.Join(root, "harness")
+			if err := os.MkdirAll(workspace, 0700); err != nil {
 				t.Fatal(err)
 			}
 			for key, value := range map[string]string{
 				"OAC_RUNTIME_ENVIRONMENT_ID": environment,
 				"OAC_RUNTIME_SESSION_ID":     session,
-				"OAC_RUNTIME_WORKSPACE":      req.WorkDir,
+				"OAC_RUNTIME_WORKSPACE":      workspace,
 				"OAC_RUNTIME_NETWORK_ACCESS": "enabled",
 			} {
 				t.Setenv(key, value)
@@ -55,7 +55,6 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req.WorkDir = ""
 			req.AgentStateKey = "agents-api-" + session
 			req.DisableExecutionEnvironment = false
 			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}}

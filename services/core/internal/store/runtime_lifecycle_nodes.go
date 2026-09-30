@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -15,7 +19,7 @@ import (
 func (s *Store) ListRuntimeLifecycleNodes(ctx context.Context) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	rows, err := s.queries.ListRuntimeLifecycleNodes(ctx)
@@ -53,7 +57,7 @@ func (s *Store) ListRuntimeAllocationsForNode(ctx context.Context, node, after s
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	rows, err := s.queries.ListRuntimeAllocationsForNode(ctx, sqlc.ListRuntimeAllocationsForNodeParams{NodeID: nodeID, AfterID: afterID})
@@ -76,7 +80,7 @@ func (s *Store) ListUnallocatedHostedEnvironmentsForNode(ctx context.Context, no
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	rows, err := s.queries.ListUnallocatedHostedEnvironmentsForNode(ctx, sqlc.ListUnallocatedHostedEnvironmentsForNodeParams{NodeID: nodeID, AfterID: afterID})
@@ -93,30 +97,30 @@ func (s *Store) ListUnallocatedHostedEnvironmentsForNode(ctx context.Context, no
 // ResolveRuntimeLifecycleNode routes direct provisioning before an allocation
 // exists. An existing allocation must agree with its immutable placement.
 func (s *Store) ResolveRuntimeLifecycleNode(ctx context.Context, tenant, environment string) (string, error) {
-	lookup, err := deviceLookup(tenant, environment)
+	lookup, err := sessionpg.DeviceLookup(tenant, environment)
 	if err != nil {
 		return "", err
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return "", err
 	}
 	row, err := s.queries.GetRuntimeLifecyclePlacement(ctx, sqlc.GetRuntimeLifecyclePlacementParams{TenantID: lookup.TenantID, ID: lookup.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", ErrNotFound
+		return "", sessions.ErrNotFound
 	}
 	if err != nil {
 		return "", err
 	}
 	if row.ProviderKind == "" || row.Mode == "direct" {
 		if row.PlacementNodeID.Valid || row.AllocationNodeID.Valid {
-			return "", ErrRuntimeNodeUnavailable
+			return "", deployment.ErrNodeUnavailable
 		}
 		return "", nil
 	}
 	if !row.PlacementNodeID.Valid || (row.AllocationID.Valid && row.AllocationNodeID != row.PlacementNodeID) || (!row.AllocationID.Valid && row.ReleasedAt.Valid) {
-		return "", ErrRuntimeNodeUnavailable
+		return "", deployment.ErrNodeUnavailable
 	}
 	return runtimeUUID(row.PlacementNodeID), nil
 }

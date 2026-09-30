@@ -2,10 +2,10 @@ package api
 
 import (
 	"context"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
-	"github.com/google/uuid"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
+	"github.com/google/uuid"
 )
 
 // Hosted and self-hosted Sessions must freeze a model provider. Tests that
@@ -19,11 +19,10 @@ func fixtureModelProvider(harness string) *v1.ModelProviderInput {
 	return &v1.ModelProviderInput{Protocol: "anthropic", BaseURL: "https://model.fixture.example/anthropic", APIKey: "fixture-model-key", ContextWindow: 200000, MaxOutputTokens: 8000}
 }
 
-// withFixtureDeploymentProvider configures a deployment default for every harness.
-func withFixtureDeploymentProvider() Option {
-	return WithModelProviderDefaults(func(_ context.Context, harness string) (*store.DeploymentModelProviderSnapshot, error) {
-		return &store.DeploymentModelProviderSnapshot{Model: "fixture", Provider: fixtureModelProvider(harness), Revision: uuid.New()}, nil
-	})
+// fixtureDeploymentProvider is a deployment default for every harness, for
+// fakeModelProviders.resolve.
+func fixtureDeploymentProvider(_ context.Context, harness string) (*modelconfiguration.Snapshot, error) {
+	return &modelconfiguration.Snapshot{Model: "fixture", Provider: fixtureModelProvider(harness), Revision: uuid.New()}, nil
 }
 
 // fixtureSessionProvider is a top-level Session request member for Codex.

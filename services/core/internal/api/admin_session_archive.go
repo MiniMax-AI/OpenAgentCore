@@ -4,13 +4,14 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
 
-// WithSessionArchive binds the execution owner; management reads use the ordinary Store.
-func WithSessionArchive(archive func(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)) Option {
-	return func(h *Handler) { h.adminArchive = archive }
+// SessionArchive archives a managed Session through the execution owner;
+// SessionAdmin reads its archive state.
+type SessionArchive interface {
+	ArchiveManagedSession(context.Context, string, string, uint64) (sessions.ManagedArchive, error)
 }
 
 type AdminSessionArchiveRequest struct {
@@ -26,7 +27,7 @@ type AdminSessionArchiveRequest struct {
 // @Param project_id path string true "Project ID"
 // @Param session_id path string true "Session ID"
 // @Param body body api.AdminSessionArchiveRequest true "Current deployment generation"
-// @Success 200 {object} store.ManagedSessionArchive
+// @Success 200 {object} sessions.ManagedArchive
 // @Failure 400,401,404,409,413,500,503 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/archive [post]
 func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
@@ -36,14 +37,14 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 	}
 	var input AdminSessionArchiveRequest
 	if decodeInputObject(raw, &input, "expected_generation") != nil || input.ExpectedGeneration == 0 {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
-	if h.adminArchive == nil {
-		writeStoreError(w, r, store.ErrEnvironmentUnavailable)
+	if h.Execution == nil {
+		writeStoreError(w, r, sessions.ErrEnvironmentUnavailable)
 		return
 	}
-	result, err := h.adminArchive(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
+	result, err := h.Execution.SessionArchive.ArchiveManagedSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -58,11 +59,11 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 // @Security DeploymentAdminAuth
 // @Param project_id path string true "Project ID"
 // @Param session_id path string true "Session ID"
-// @Success 200 {object} store.ManagedSessionArchive
+// @Success 200 {object} sessions.ManagedArchive
 // @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/archive [get]
 func (h *Handler) adminGetSessionArchive(w http.ResponseWriter, r *http.Request) {
-	result, err := h.adminManagement.GetManagedSessionArchive(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
+	result, err := h.SessionAdmin.GetManagedSessionArchive(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

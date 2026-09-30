@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/postgresreader"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,14 +28,14 @@ func historyBackend(t *testing.T, s *store.Store) *postgresreader.Reader {
 	}
 	return r
 }
-func historyOwner(t *testing.T, s *store.Store) runtimehistory.Scope {
+func historyOwner(t *testing.T, s *store.Store, pool *pgxpool.Pool) runtimehistory.Scope {
 	t.Helper()
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"fixture-model"},"environment":{"type":"openai_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"fixture-model"},"environment":{"type":"openai_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
+	environment, err := sessionReads(pool).GetSessionEnvironment(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,8 +57,8 @@ func historyQuery(scope runtimehistory.Scope, start, end time.Time, points int) 
 
 func TestPostgresRuntimeHistoryAcceptance(t *testing.T) {
 	s, pool := store.NewTestStore(t)
-	scope := historyOwner(t, s)
-	foreign := historyOwner(t, s)
+	scope := historyOwner(t, s, pool)
+	foreign := historyOwner(t, s, pool)
 	reader := historyBackend(t, s)
 	end := time.Now().UTC().Truncate(time.Second)
 	start := end.Add(-3 * time.Minute)
@@ -137,7 +138,7 @@ func TestPostgresRuntimeHistoryAcceptance(t *testing.T) {
 
 func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
 	s, pool := store.NewTestStore(t)
-	scope := historyOwner(t, s)
+	scope := historyOwner(t, s, pool)
 	reader := historyBackend(t, s)
 	end := time.Now().UTC().Truncate(time.Second)
 	start := end.Add(-24 * time.Hour)
@@ -205,8 +206,8 @@ func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
 }
 
 func TestPostgresRuntimeHistoryKeepsProviderReportedUtilization(t *testing.T) {
-	s, _ := store.NewTestStore(t)
-	scope := historyOwner(t, s)
+	s, pool := store.NewTestStore(t)
+	scope := historyOwner(t, s, pool)
 	reader := historyBackend(t, s)
 	allocation := uuid.NewString()
 	start := time.Now().UTC().Truncate(time.Minute).Add(-10 * time.Minute)

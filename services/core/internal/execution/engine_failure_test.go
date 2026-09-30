@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestEngineClassificationSurvivesDrainWithoutChangingSettlement(t *testing.T) {
 	for _, prior := range []string{"", "event_persistence_failed", "cancel_unconfirmed", "event_stream_incomplete"} {
 		result := Result{ErrorCode: prior}
 		writer := &recoveringWriter{}
-		j := journal{store: writer, next: 1}
+		j := journal{writer: writer, next: 1}
 		events := make(chan proto.Envelope, 3)
 		failure, _ := proto.NewEnvelope(proto.TypeError, "run", proto.ErrorPayload{Error: "raw native text", Code: "authentication_error"})
 		usage, _ := proto.NewEnvelope(proto.TypeUsage, "run", proto.Usage{InputTokens: 7})
@@ -50,7 +50,7 @@ func TestEngineClassificationSurvivesDrainWithoutChangingSettlement(t *testing.T
 func TestClassifiedErrorCannotOverrideCancellationReceipt(t *testing.T) {
 	for _, drainFirst := range []bool{true, false} {
 		result := Result{ErrorCode: "engine_failed"}
-		j := journal{store: &recoveringWriter{}, next: 1}
+		j := journal{writer: &recoveringWriter{}, next: 1}
 		failure, _ := proto.NewEnvelope(proto.TypeError, "run", proto.ErrorPayload{Code: "rate_limit_exceeded"})
 		events := make(chan proto.Envelope, 1)
 		events <- failure
@@ -68,7 +68,7 @@ func TestClassifiedErrorCannotOverrideCancellationReceipt(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if status != store.TurnCancelled || result.Done.Usage.InputTokens != 9 || result.Done.Metadata[proto.DoneMetaAgentSessionID] != "native" || result.EngineErrorCode != "rate_limit_exceeded" {
+		if status != sessions.TurnCancelled || result.Done.Usage.InputTokens != 9 || result.Done.Metadata[proto.DoneMetaAgentSessionID] != "native" || result.EngineErrorCode != "rate_limit_exceeded" {
 			t.Fatalf("receipt lost authority: %s %+v", status, result)
 		}
 	}

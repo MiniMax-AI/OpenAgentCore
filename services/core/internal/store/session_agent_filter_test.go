@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestSessionAgentFilterPaginationAndIsolation(t *testing.T) {
@@ -16,9 +18,9 @@ func TestSessionAgentFilterPaginationAndIsolation(t *testing.T) {
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	root := "agent_inline-root"
 	var expected []string
-	create := func(tenant, key, agent string) Session {
+	create := func(tenant, key, agent string) sessions.Session {
 		configuration, _ := json.Marshal(map[string]any{"agent": map[string]string{"id": agent, "model": "test-model"}, "environment": map[string]string{"type": "none"}})
-		value, err := s.CreateSession(t.Context(), tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: key, Configuration: configuration})
+		value, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: key, Configuration: configuration})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,7 +85,7 @@ func TestSessionAgentFilterPaginationAndIsolation(t *testing.T) {
 			t.Fatal(page, err)
 		}
 	}
-	if _, err := s.ListSessions(t.Context(), tenant, other.ID, 2, true, &root); !errors.Is(err, ErrNotFound) {
+	if _, err := s.ListSessions(t.Context(), tenant, other.ID, 2, true, &root); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign cursor", err)
 	}
 	page, err := s.ListSessions(t.Context(), foreign, "", 100, false, &root)

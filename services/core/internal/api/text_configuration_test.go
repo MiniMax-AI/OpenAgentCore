@@ -19,8 +19,7 @@ func TestTextConfigurationHTTP(t *testing.T) {
 		{`,"text":{"verbosity":"high","format":{"type":"text"}}`, "high"},
 	} {
 		t.Run(tc.text, func(t *testing.T) {
-			s := &recordingStore{}
-			h, _, _ := testHandler(t, WithExecution(&inputRecorder{ResourceStore: s}))
+			h, s, _ := testHandler(t, admitSessions)
 			req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"example"`+tc.text+`},"environment":{"type":"none"},"input":"Describe the configured response format."}`))
 			req.Header.Set("Authorization", "Bearer test-api-key")
 			req.Header.Set("OpenAI-Beta", "agents=v1")

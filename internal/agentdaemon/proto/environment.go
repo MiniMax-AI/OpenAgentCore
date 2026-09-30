@@ -12,6 +12,9 @@ type LocalEnvironment struct {
 	ID                 string                   `json:"id"`
 	WorkspaceDirectory string                   `json:"workspace_directory"`
 	CapabilitySources  *agentcapabilities.Input `json:"capability_sources"`
+	// WorkspaceRoot is the bound local root the daemon supplies for execution;
+	// wire input cannot supply it. Read-only preparation leaves it empty.
+	WorkspaceRoot string `json:"-"`
 	// Capabilities is derived from the frozen selection for engine qualification;
 	// Runtime still ensures and loads the protected installation before execution.
 	Capabilities bool `json:"capabilities,omitempty"`

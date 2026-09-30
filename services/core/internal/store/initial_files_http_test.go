@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -21,14 +20,11 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	tenant, token := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	// Exercise HTTP parsing and durable storage without starting a Runtime.
-	handler, err := api.NewHandler(s, auth, "codex", api.WithHostedEnvironments(), api.WithExecution(s), fixtureDeploymentProvider())
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), managedSandboxes(t, s, db), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +59,7 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 			id = response.ID
 		}
 		for position := range files {
-			_, actual, err := s.ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
+			_, actual, err := fixtureSessionStore(db).ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
 			if err != nil || !bytes.Equal(actual, data) {
 				t.Fatal("large HTTP snapshot differs", err)
 			}

@@ -2,6 +2,7 @@
 import contextlib
 import io
 import os
+import threading
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -16,6 +17,28 @@ class Terminal(io.StringIO):
 
 
 class OutputTests(unittest.TestCase):
+    def test_busy_indicator_stops_after_failure_and_keeps_logs_plain(self):
+        for stream in (Terminal(), io.StringIO()):
+            wrote = threading.Event()
+            original = stream.write
+            def write(value):
+                result = original(value)
+                if "Loading" in value:
+                    wrote.set()
+                return result
+            with mock.patch.object(stream, "write", side_effect=write), \
+                    mock.patch.dict(os.environ, {"TERM": "xterm"}), contextlib.redirect_stderr(stream):
+                with self.assertRaises(RuntimeError):
+                    with display.busy("Loading"):
+                        if stream.isatty():
+                            self.assertTrue(wrote.wait(2))
+                        raise RuntimeError("stop")
+            if stream.isatty():
+                self.assertIn("Loading (", stream.getvalue())
+                self.assertTrue(stream.getvalue().endswith("\r\033[K"))
+            else:
+                self.assertEqual(stream.getvalue(), "")
+
     def test_color_only_in_capable_terminals_and_no_color_wins(self):
         for stream, environment, colored in ((Terminal(), {"TERM": "xterm"}, True),
                                               (Terminal(), {"TERM": "dumb"}, False),

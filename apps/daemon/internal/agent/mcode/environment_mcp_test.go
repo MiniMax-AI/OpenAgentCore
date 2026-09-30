@@ -54,8 +54,8 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 				t.Fatal("environment MCP displaced workspace tools")
 			}
 			cwd, err := os.ReadFile(record + ".cwd")
-			workspace, pathErr := filepath.EvalSymlinks(req.WorkDir)
-			if err != nil || pathErr != nil || string(cwd) != workspace || params.Cwd != req.WorkDir {
+			workspace, pathErr := filepath.EvalSymlinks(req.LocalEnvironment.WorkspaceRoot)
+			if err != nil || pathErr != nil || string(cwd) != workspace || params.Cwd != req.LocalEnvironment.WorkspaceRoot {
 				t.Fatalf("native process and ACP Session must use the declared workspace: process=%q ACP=%q", cwd, params.Cwd)
 			}
 			server := params.MCP[1]

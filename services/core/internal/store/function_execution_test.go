@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -20,11 +21,11 @@ func newFunctionHarness(t *testing.T) *dispatchHarness {
 	t.Helper()
 	h := newDispatchHarness(t)
 	var err error
-	h.session, err = h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(functionConfiguration)})
+	h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(functionConfiguration)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.s.BindSessionDevice(t.Context(), h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})}}})
@@ -42,7 +43,7 @@ func newFunctionHarness(t *testing.T) *dispatchHarness {
 	}
 }
 
-func functionState(t *testing.T, h *dispatchHarness, count int) store.Session {
+func functionState(t *testing.T, h *dispatchHarness, count int) sessions.Session {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for {
@@ -75,12 +76,12 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 		}
 	}
 	state := functionState(t, h, 2)
-	if state.LastTurn.Status != store.TurnWaiting {
+	if state.LastTurn.Status != sessions.TurnWaiting {
 		t.Fatal(state.LastTurn)
 	}
 	for _, id := range []string{"a", "b"} {
 		public := items.Identity(input.TurnID, "tool:"+id)
-		if err := h.s.SubmitFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, public, json.RawMessage(`{"success":true,"output":"saved"}`)); err != nil {
+		if err := store.SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, public, json.RawMessage(`{"success":true,"output":"saved"}`)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -88,7 +89,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 		var reply proto.FunctionResultPayload
 		_ = h.read(proto.TypeFunctionResult).DecodePayload(&reply)
 		public := items.Identity(input.TurnID, "tool:"+reply.CallID)
-		saved, err := h.s.GetFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, public)
+		saved, err := store.FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, public)
 		if err != nil || saved.Applied || reply.DeliveryID != "function:"+public || len(reply.Content) != 1 || *reply.Content[0].Text != "saved" {
 			t.Fatal(saved, reply, err)
 		}
@@ -104,7 +105,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 			h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: reply.DeliveryID, Applied: true})
 		}
 	}
-	h.finished(result, store.TurnCompleted)
+	h.finished(result, sessions.TurnCompleted)
 	functionState(t, h, 0)
 	next := h.message("next", "Resume")
 	result = h.run(t.Context(), next.TurnID)
@@ -113,7 +114,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 		t.Fatal(prompt)
 	}
 	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "resumed"})
-	h.finished(result, store.TurnCompleted)
+	h.finished(result, sessions.TurnCompleted)
 }
 
 func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
@@ -126,7 +127,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 			h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "a", Name: "lookup_ticket", Arguments: json.RawMessage(`{}`)})
 			state := functionState(t, h, 1)
 			id := state.RequiredActions[0].CallID
-			if err := h.s.SubmitFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, id, json.RawMessage(`{"success":false,"error":"tool failed"}`)); err != nil {
+			if err := store.SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, id, json.RawMessage(`{"success":false,"error":"tool failed"}`)); err != nil {
 				t.Fatal(err)
 			}
 			var reply proto.FunctionResultPayload
@@ -134,7 +135,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 			if reply.Success || len(reply.Content) != 1 || *reply.Content[0].Text != "tool failed" {
 				t.Fatal(reply)
 			}
-			status := store.TurnFailed
+			status := sessions.TurnFailed
 			if cancel {
 				if _, err := h.s.RequestCancel(t.Context(), h.tenant, h.session.ID, "cancel"); err != nil {
 					t.Fatal(err)
@@ -148,7 +149,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 				case <-time.After(40 * time.Millisecond):
 				}
 				h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-cancelled-functions"}}})
-				status = store.TurnCancelled
+				status = sessions.TurnCancelled
 			} else {
 				h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: reply.DeliveryID, ErrorCode: "not_pending"})
 			}
@@ -159,11 +160,11 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 					t.Fatal(bound, err)
 				}
 			}
-			saved, err := h.s.GetFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, id)
+			saved, err := store.FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, id)
 			if err != nil || saved.Applied || len(saved.Result) == 0 {
 				t.Fatal(saved, err)
 			}
-			if err := h.s.ConfirmFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, id); !errors.Is(err, store.ErrTurnConflict) {
+			if err := h.owner().Sessions.ConfirmFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, id); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal(err)
 			}
 			functionState(t, h, 0)
@@ -182,19 +183,19 @@ func TestExecutionFunctionsRejectUndeclaredCallsAndPrematureDone(t *testing.T) {
 			h.read(testExecutionRequest)
 			h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "a", Name: name, Arguments: json.RawMessage(`{}`)})
 			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{})
-			h.finished(result, store.TurnFailed)
+			h.finished(result, sessions.TurnFailed)
 		})
 	}
 }
 
 func TestExecutionFunctionsRequireAdvertisedCapability(t *testing.T) {
 	h := newDispatchHarness(t)
-	session, err := h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(functionConfiguration)})
+	session, err := h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(functionConfiguration)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	h.session = session
-	if err := h.s.BindSessionDevice(t.Context(), h.tenant, session.ID, h.device.ID); err != nil {
+	if err := bindSessionDevice(t, h.db, h.tenant, session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := h.message("start", "Run")
@@ -203,7 +204,7 @@ func TestExecutionFunctionsRequireAdvertisedCapability(t *testing.T) {
 		t.Fatal(result)
 	}
 	turn, err := h.s.GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnQueued {
+	if err != nil || turn.Status != sessions.TurnQueued {
 		t.Fatal(turn, err)
 	}
 }

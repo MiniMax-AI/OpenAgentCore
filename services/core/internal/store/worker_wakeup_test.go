@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,10 +48,7 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 			h.d.Store = store.NewWithCredentialCipher(instrumented, store.FixtureCipher())
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker, err := execution.StartWorker(ctx, h.d)
-			if err != nil {
-				t.Fatal(err)
-			}
+			worker := startWorker(t, ctx, fixtureDB{pool: instrumented, cipher: store.FixtureCipher()}, h.d)
 			done := make(chan error, 1)
 			started := false
 			defer func() {
@@ -65,12 +62,12 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 					t.Error("worker did not stop")
 				}
 			}()
-			input := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}}
+			input := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}}
 			switch operation {
 			case "submit":
 				_, err = worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", input)
 			case "create", "stream":
-				creation := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "wake", Configuration: h.session.Configuration, InitialInputs: input}
+				creation := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "wake", Configuration: h.session.Configuration, InitialInputs: input}
 				if operation == "create" {
 					_, err = worker.CreateSession(ctx, h.tenant, creation)
 				} else {
@@ -112,7 +109,7 @@ func TestWorkerSchedulerHintBypassesEnvironmentScanThrottle(t *testing.T) {
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
 	enableWorkerEnvironment(t, h)
 	frames := workerFrames(t, h)
-	worker, stop := startEnvironmentExpiryWorker(t, h.d)
+	worker, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	defer stop()
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "initial empty scheduler scan", func() bool {
 		return worker.MetricsSnapshot().Scheduler.LastRunAt != nil
@@ -122,7 +119,7 @@ func TestWorkerSchedulerHintBypassesEnvironmentScanThrottle(t *testing.T) {
 	admitted := make(chan error, 1)
 	started := time.Now()
 	go func() {
-		_, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}})
+		_, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}})
 		admitted <- err
 	}()
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)

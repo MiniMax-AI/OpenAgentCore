@@ -8,7 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestFunctionImageAdmission(t *testing.T) {
@@ -27,8 +27,8 @@ func TestFunctionImageAdmission(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			output := []any{map[string]any{"type": "input_text", "text": "before"}, map[string]any{"type": "input_image", "image_url": tc.url}, map[string]any{"type": "input_text", "text": "after"}}
 			raw, _ := json.Marshal(map[string]any{"call_id": "call", "result": map[string]any{"success": tc.success, "output": output}})
-			err := validateProfileInputs(profile, "none", []store.Input{{Kind: "tool_result", Payload: raw}})
-			if tc.valid && err != nil || !tc.valid && !errors.Is(err, store.ErrInvalidInput) {
+			err := validateProfileInputs(profile, "none", []sessions.Input{{Kind: "tool_result", Payload: raw}})
+			if tc.valid && err != nil || !tc.valid && !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal(err)
 			}
 		})

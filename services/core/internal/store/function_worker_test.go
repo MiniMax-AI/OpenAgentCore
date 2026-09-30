@@ -12,7 +12,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
 
@@ -35,13 +37,13 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				}
 				if !prebound || isMCP {
 					var err error
-					h.session, err = h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "unbound", Configuration: []byte(configuration)})
+					h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "unbound", Configuration: []byte(configuration)})
 					if err != nil {
 						t.Fatal(err)
 					}
 				}
 				if prebound && isMCP {
-					if err := h.s.BindSessionDevice(t.Context(), h.tenant, h.session.ID, h.device.ID); err != nil {
+					if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -65,10 +67,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				input := h.message("queued", "Look up ticket")
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
-				worker, err := execution.StartWorker(ctx, h.d)
-				if err != nil {
-					t.Fatal(err)
-				}
+				worker := startWorker(t, ctx, h.db, h.d)
 				done := make(chan error, 1)
 				go func() { done <- worker.Run(ctx) }()
 				defer func() {
@@ -81,11 +80,11 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				}()
 				time.Sleep(650 * time.Millisecond)
 				current, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
-				if err != nil || current.Status != store.TurnQueued {
+				if err != nil || current.Status != sessions.TurnQueued {
 					t.Fatal(current, err)
 				}
 				if !prebound {
-					if _, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, store.ErrNotFound) {
+					if _, err := fixtureSessionStore(h.db).GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("bound an incapable device", err)
 					}
 				}
@@ -112,7 +111,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 					t.Fatal(prompt)
 				}
 				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
-				waitTurn(t, h, input.TurnID, store.TurnCompleted)
+				waitTurn(t, h, input.TurnID, sessions.TurnCompleted)
 			})
 		}
 	}
@@ -127,14 +126,18 @@ func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, str
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.s = store.NewWithCredentialCipher(pool, cipher)
+	h.s, h.db = store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	h.d.Store = h.s
-	vault, err := h.s.CreateVault(t.Context(), h.tenant, store.CreateVaultInput{})
+	_, service, err := fixtureVaults(h.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault, err := service.CreateVault(t.Context(), vaults.CreateVault{TenantID: h.tenant})
 	if err != nil {
 		t.Fatal(err)
 	}
 	token, endpoint := uuid.NewString(), "https://mcp.example/tools"
-	_, err = h.s.CreateStaticCredential(t.Context(), h.tenant, vault.ID, store.CreateStaticCredentialInput{Name: "worker", MCPServerURL: endpoint, Token: token})
+	_, err = service.CreateStaticCredential(t.Context(), vaults.CreateStaticCredential{TenantID: h.tenant, VaultID: vault.ID, Name: "worker", MCPServerURL: endpoint, Token: token})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +146,8 @@ func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, str
 		t.Fatal("invalid worker fixture")
 	}
 	snapshot.VaultIDs = []string{vault.ID}
-	snapshot.MCPCredentials, err = h.s.ResolveMCPCredentials(t.Context(), h.tenant, snapshot.VaultIDs, []store.MCPCredentialRequest{{ServerLabel: "tickets", ServerURL: endpoint}})
+	snapshot.MCPCredentials, err = service.ResolveMCPCredentials(t.Context(), vaults.ResolveMCPCredentials{TenantID: h.tenant, VaultIDs: snapshot.VaultIDs,
+		Requests: []vaults.MCPCredentialRequest{{ServerLabel: "tickets", ServerURL: endpoint}}})
 	if err != nil {
 		t.Fatal(err)
 	}

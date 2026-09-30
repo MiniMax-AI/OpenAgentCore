@@ -17,12 +17,11 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -50,10 +49,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	started, write, declaration := startOnboardingPeer(t, h)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	stopped := make(chan error, 1)
 	go func() { stopped <- worker.Run(ctx) }()
 	defer func() {
@@ -65,11 +61,8 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		}
 	}()
 	token := uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler, err := api.NewHandler(h.s, auth, "fixture_harness", api.WithExecution(worker), api.WithExecutionPolicy(policy))
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
+	handler, err := publicHandler(t, h.s, h.db, auth, "fixture_harness", workerExecution(worker), withPolicy(policy))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +98,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		t.Fatal(first)
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"finish"}]}]}]}`, 202)
-	waitTurn(t, h, first.RunID, store.TurnCompleted)
+	waitTurn(t, h, first.RunID, sessions.TurnCompleted)
 	turn, err := h.s.GetTurn(ctx, h.tenant, created.ID, first.RunID)
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +121,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		t.Fatal(next)
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.cancel"}]}`, 202)
-	waitTurn(t, h, next.RunID, store.TurnCancelled)
+	waitTurn(t, h, next.RunID, sessions.TurnCancelled)
 	// A missing mandatory receipt capability must prevent claiming queued work.
 	peer, _ := h.registry.LookupDevice(h.device.ID)
 	// Mutate the actual wire declaration, not its lossy persisted boolean projection.
@@ -159,7 +152,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	case <-time.After(700 * time.Millisecond):
 	}
 	queued, err := h.s.GetSession(ctx, h.tenant, created.ID)
-	if err != nil || queued.LastTurn == nil || queued.LastTurn.Status != store.TurnQueued {
+	if err != nil || queued.LastTurn == nil || queued.LastTurn.Status != sessions.TurnQueued {
 		t.Fatal(queued, err)
 	}
 }
