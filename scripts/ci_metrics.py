@@ -19,6 +19,7 @@ def measure(run, jobs):
         raise ValueError("Rerun start is unavailable; cannot separate reused jobs")
     origin = timestamp(attempt_start)
     intervals = []
+    completions = []
     platform_seconds = defaultdict(float)
     outcomes = Counter()
     reused_outcomes = Counter()
@@ -34,6 +35,10 @@ def measure(run, jobs):
         start, end = timestamp(job["started_at"]), timestamp(job["completed_at"])
         if end < start:
             raise ValueError("Job completed before it started")
+        completions.append(end)
+        # Jobs cancelled in the queue have timestamps but no assigned runner.
+        if not job.get("runner_id") and not job.get("runner_name"):
+            continue
         if end > start:
             intervals.extend(((start, 1), (end, -1)))
         labels = ",".join(job.get("labels", []))
@@ -44,14 +49,13 @@ def measure(run, jobs):
         active += delta
         peak = max(peak, active)
     starts = [time for time, delta in intervals if delta == 1]
-    ends = [time for time, delta in intervals if delta == -1]
     finished = sum(outcomes[c] for c in ("success", "failure", "timed_out", "cancelled", "action_required", "startup_failure"))
     return {
         "run_id": run["id"], "attempt": run.get("run_attempt", 1), "head": run["head_sha"],
         "status": run["status"], "conclusion": run.get("conclusion"),
         "runner_minutes": round(sum(platform_seconds.values()) / 60, 2),
         "platform_minutes": {p: round(seconds / 60, 2) for p, seconds in sorted(platform_seconds.items())},
-        "elapsed_minutes": round((max(ends) - origin) / 60, 2) if ends else None,
+        "elapsed_minutes": round((max(completions) - origin) / 60, 2) if completions else None,
         "initial_queue_seconds": min(starts) - origin if starts else None,
         "peak_parallel_jobs": peak, "job_outcomes": dict(outcomes),
         "reused_job_outcomes": dict(reused_outcomes),
