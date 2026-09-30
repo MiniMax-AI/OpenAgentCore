@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -31,7 +32,7 @@ func TestConfigurationDiscoveryUsesSuppliedProcessPaths(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(binary), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(binary, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":1,\"Templates\":[]}'\n"), 0700); err != nil {
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":"+strconv.Itoa(ProtocolVersion)+",\"Templates\":[]}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	input := sandbox.ConfigurationDiscoveryInput{Credential: json.RawMessage(`{"api_key":"synthetic-key"}`)}

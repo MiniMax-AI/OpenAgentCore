@@ -82,12 +82,17 @@ func main() {
 	identity = append(identity, "InstallationID")
 	values := map[string]any{
 		"PROTOCOL_VERSION": e2b.ProtocolVersion, "SDK_VERSION": sdk,
-		"MAX_REQUEST": e2b.MaxRequestBytes, "MAX_RESPONSE": e2b.MaxResponseBytes,
+		"SUSPEND_CONTROL_FILE": runtimebootstrap.SuspendControlFile,
+		"MAX_REQUEST":          e2b.MaxRequestBytes, "MAX_RESPONSE": e2b.MaxResponseBytes,
 		"MAX_OUTPUT": e2b.MaxOutputBytes, "MAX_COMMAND_INPUT": e2b.MaxCommandInputBytes,
 		"MAX_OBSERVATION_REFERENCES": e2b.MaxObservationReferences, "MAX_CREDENTIAL_REFERENCES": e2b.MaxCredentialReferences,
 		"OPERATIONS": e2b.HelperOperations(), "ERROR_CODES": e2b.HelperErrors(),
 		"REQUEST_FIELDS": fields(reflect.TypeFor[e2b.Request]()), "RESPONSE_FIELDS": fields(reflect.TypeFor[e2b.Response]()),
 		"REFERENCE_FIELDS":         fields(reflect.TypeFor[sandbox.Reference]()),
+		"COMPUTE_FIELDS":           fields(reflect.TypeFor[sandbox.Compute]()),
+		"RETAINED_FIELDS":          fields(reflect.TypeFor[sandbox.RetainedState]()),
+		"SUSPEND_FIELDS":           fields(reflect.TypeFor[sandbox.SuspendRequest]()),
+		"RESUME_FIELDS":            fields(reflect.TypeFor[sandbox.ResumeRequest]()),
 		"MANAGED_BOOTSTRAP_FIELDS": bootstrap, "MANAGED_IDENTITY_FIELDS": identity,
 		"NETWORK_ACCESS": networkValues(filepath.Join(root, "internal/agentnetwork/policy.go")),
 	}
@@ -130,7 +135,24 @@ func fixtures() []byte {
 	}
 	for _, operation := range e2b.HelperOperations() {
 		copy := q
+
 		copy.Operation = operation
+		c := sandbox.Compute{Name: r.AllocationID, ID: "native-fixture"}
+		retained := sandbox.RetainedState{Reference: r.AllocationID, ID: installation, OperationID: installation, SourceName: c.Name, SourceID: c.ID, Data: "opaque"}
+		switch operation {
+		case "compute_info", "compute_renew", "compute_kill", "compute_command", "resume_compute":
+			copy.Compute = &c
+			if operation == "compute_command" {
+				copy.Command = &sandbox.Command{Args: []string{"true"}}
+			}
+		case "suspend":
+			copy.Suspend = &sandbox.SuspendRequest{Reference: r, OperationID: installation, Source: c}
+		case "resume":
+			target := sandbox.Compute{Generation: 1, Name: c.Name, ID: c.ID, RestoredFrom: &retained}
+			copy.Resume = &sandbox.ResumeRequest{Reference: r, OperationID: installation, Retained: retained, Target: target}
+		case "delete_retained":
+			copy.Retained = &retained
+		}
 		if operation == "observe" || operation == "verify_credential" {
 			copy.References = []sandbox.Reference{r}
 		}

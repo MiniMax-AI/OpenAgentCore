@@ -50,6 +50,7 @@ var adapters = map[string]Adapter{
 	},
 	"e2b": {
 		Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: buildE2B,
+		IdleSeconds: 300, RetentionSeconds: 86400,
 		Configuration:         e2b.ConfigurationAdapter{},
 		ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
 	},

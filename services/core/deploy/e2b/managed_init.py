@@ -47,6 +47,13 @@ def initialize():
     binding = identity(payload)
     shared.write_private(root / 'managed-launch.json', binding)
     environment = shared.prepare_runtime()
+    control_file = Path(environment['OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE'])
+    if not control_file.is_absolute() or '..' in control_file.parts:
+        raise ValueError('Absolute private suspend control file required')
+    control_directory = control_file.parent
+    control_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chown(control_directory, 1000, 1000)
+    control_directory.chmod(0o700)
     environment.update(OAC_RUNTIME_ENVIRONMENT_ID=payload['EnvironmentID'],
                        OAC_RUNTIME_SESSION_ID=payload['SessionID'],
                        OAC_RUNTIME_NETWORK_ACCESS=payload['NetworkAccess'],

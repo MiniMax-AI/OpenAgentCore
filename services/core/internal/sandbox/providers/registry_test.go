@@ -17,7 +17,7 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 	}{
 		{"docker", "nodes", "nodes", 0, 0, false},
 		{"microsandbox", "nodes", "nodes", 300, 86400, true},
-		{"e2b", "direct", "e2b", 0, 0, false},
+		{"e2b", "direct", "e2b", 300, 86400, true},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			d, err := Describe(tc.kind, installation)

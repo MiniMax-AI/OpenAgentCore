@@ -168,12 +168,20 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 		}
 		connection = &value
 	}
-	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, RuntimeBootstrap: connection, Command: command, Deadline: deadline})
+	return p.callRequest(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, RuntimeBootstrap: connection, Command: command, Deadline: deadline})
+}
+
+func (p *Provider) callRequest(ctx context.Context, q Request) (Response, error) {
+	operation, r := q.Operation, q.Reference
+	if q.Validate() != nil {
+		return Response{}, sandbox.ErrInvalid
+	}
+	out, err := p.caller.Call(ctx, q)
 	if errors.Is(err, errHelperNotStarted) {
 		return unstarted(operation, r), sandbox.ErrComputeUnconfirmed
 	}
 	if err != nil || out.Version != ProtocolVersion {
-		if operation == "command" {
+		if operation == "command" || operation == "compute_command" {
 			return Response{}, sandbox.ErrCommandUnconfirmed
 		}
 		return Response{}, sandbox.ErrComputeUnconfirmed

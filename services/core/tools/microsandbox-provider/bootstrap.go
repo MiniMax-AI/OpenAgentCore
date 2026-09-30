@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
@@ -18,7 +19,7 @@ import (
 const bootstrapScript = `
 import ctypes,json,os,stat,subprocess,sys
 b=json.load(sys.stdin)
-for p in ['/home/runtime','/home/runtime/.oac','/environment','/environment/workspace','/environment/staging','/environment/initialization','/environment/packages','/run/oac']:
+for p in ['/home/runtime','/home/runtime/.oac','/environment','/environment/workspace','/environment/staging','/environment/initialization','/environment/packages',os.path.dirname(os.environ['OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE'])]:
     os.makedirs(p,mode=0o700,exist_ok=True)
     if not stat.S_ISDIR(os.lstat(p).st_mode): raise RuntimeError('invalid bootstrap directory')
     os.chmod(p,0o700);os.chown(p,1000,1000)
@@ -64,7 +65,7 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 			"HOME": "/home/runtime", "OAC_RUNTIME_HOME": "/home/runtime/.oac",
 			"OAC_RUNTIME_ENVIRONMENT_ID": bootstrap.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bootstrap.SessionID,
 			"OAC_RUNTIME_NETWORK_ACCESS": policy.Access, "OAC_RUNTIME_ALLOWED_DOMAINS": string(domains),
-			"OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE": "/run/oac/daemon-suspend.json",
+			"OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE": runtimebootstrap.SuspendControlFile,
 		}))
 	if e != nil {
 		return wire.Response{}, e
