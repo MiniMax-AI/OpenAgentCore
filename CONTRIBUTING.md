@@ -168,6 +168,7 @@ Public project branding uses OpenAgentCore. The canonical vector mark is `docs/a
 
 - An exception covers only its matched text: an allowed repository import cannot hide a retired setting elsewhere on the line.
 - Keep exceptions narrow and explain the preserved contract or historical input.
+- The guard also fails on an exception that excuses no retired identifier. Remove an exception together with the last text it covered.
 
 These identities stay unchanged:
 
