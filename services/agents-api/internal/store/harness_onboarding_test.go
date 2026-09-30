@@ -42,7 +42,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	h.d.Policy = policy
 	// The fixture only supplies an adapter and registration to the real daemon router.
 	// Core sees its ordinary authenticated gateway connection and neutral frames.
-	started, write := startOnboardingPeer(t, h)
+	started, write, declaration := startOnboardingPeer(t, h)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	worker, err := execution.StartWorker(ctx, h.d)
@@ -126,14 +126,10 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	waitTurn(t, h, next.RunID, store.TurnCancelled)
 	// A missing mandatory receipt capability must prevent claiming queued work.
 	peer, _ := h.registry.LookupDevice(h.device.ID)
-	info, _, _ := peer.AgentKindStatus("fixture_harness")
-	info.Capabilities.DurableInputReceipts = false
+	// Mutate the actual wire declaration, not its lossy persisted boolean projection.
+	changed := declaration
+	changed.Capabilities.DurableInputReceipts = proto.CapabilityUnsupported
 	// A separate unbound Session is used, without changing public handler behavior.
-	wire, _ := json.Marshal(info)
-	var changed proto.SupportedAgentKind
-	if err := json.Unmarshal(wire, &changed); err != nil {
-		t.Fatal(err)
-	}
 	update, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{changed}})
 	if err := write(update); err != nil {
 		t.Fatal(err)
@@ -174,7 +170,7 @@ func awaitOnboardingPrompt(t *testing.T, c <-chan proto.PromptRequestPayload) pr
 	}
 }
 
-func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptRequestPayload, func(proto.Envelope) error) {
+func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptRequestPayload, func(proto.Envelope) error, proto.SupportedAgentKind) {
 	t.Helper()
 	root, err := filepath.Abs("../../../..")
 	if err != nil {
@@ -201,6 +197,7 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 		t.Fatal(err)
 	}
 	started := make(chan proto.PromptRequestPayload, 4)
+	declarations := make(chan proto.SupportedAgentKind, 1)
 	up := make(chan error, 1)
 	down := make(chan error, 1)
 	var writeMu sync.Mutex
@@ -212,6 +209,21 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 			if err := dec.Decode(&e); err != nil {
 				up <- err
 				return
+			}
+			if e.Type == proto.TypeHeartbeat {
+				var heartbeat proto.HeartbeatPayload
+				if err := e.DecodePayload(&heartbeat); err != nil {
+					up <- err
+					return
+				}
+				for _, info := range heartbeat.SupportedAgentKinds {
+					if info.Kind == "fixture_harness" {
+						select {
+						case declarations <- info:
+						default:
+						}
+					}
+				}
 			}
 			if err := write(e); err != nil {
 				up <- err
@@ -290,7 +302,7 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 		if err == nil {
 			_, found, known := peer.AgentKindStatus("fixture_harness")
 			if found && known {
-				return started, write
+				return started, write, <-declarations
 			}
 		}
 		if time.Now().After(deadline) {
