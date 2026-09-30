@@ -19,9 +19,13 @@ import (
 // Strict fakes: one per Dependencies area, with a func field per method. A
 // test sets only the funcs it expects; calling any other method fails the test.
 
+// unexpectedCall fails the test and panics. net/http recovers the panic on an
+// httptest server goroutine, where t.Fatalf cannot stop the test, and a direct
+// ServeHTTP call fails loudly.
 func unexpectedCall(t testing.TB, method string) {
 	t.Helper()
-	t.Fatalf("unexpected call to %s", method)
+	t.Errorf("unexpected call to %s", method)
+	panic("unexpected call to " + method)
 }
 
 type fakeAdmin struct {

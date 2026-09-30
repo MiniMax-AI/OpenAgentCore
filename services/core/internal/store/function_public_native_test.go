@@ -78,10 +78,7 @@ func nativePublicFunctionServer(t *testing.T, h *dispatchHarness, ctx context.Co
 		}
 	})
 	token := uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
 	handler, err := publicHandler(t, h.s, auth, "codex", workerExecution(worker), nativeDeploymentDefaults(h.s, "gpt-5.5", provider))
 	if err != nil {
 		t.Fatal(err)

@@ -79,11 +79,8 @@ func (p trapProjects) ResolveProjectAPIKey(ctx context.Context, digest string) (
 // Every dependency call panics, marking a request that reached a handler.
 func daemonComposition(t testing.TB) http.Handler {
 	t.Helper()
-	keys, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "org", ProjectID: "project", SubjectKind: "service_account",
+	keys := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "org", ProjectID: "project", SubjectKind: "service_account",
 		SubjectID: "runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}})
-	if err != nil {
-		t.Fatal(err)
-	}
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin-key")})
 	if err != nil {
 		t.Fatal(err)

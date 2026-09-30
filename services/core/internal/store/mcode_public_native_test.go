@@ -46,13 +46,10 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 		}
 	}()
 	token, foreign := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{
+	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	handler, err := publicHandler(t, h.s, auth, "mcode", workerExecution(worker), acceptUnavailable(t), nativeDeploymentDefaults(h.s, model, provider))
 	if err != nil {
 		t.Fatal(err)

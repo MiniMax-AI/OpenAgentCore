@@ -18,10 +18,7 @@ func TestModelExecutionHTTPWriteOnlyAndStrictAdmission(t *testing.T) {
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{6}, 32))
 	st := store.NewWithCredentialCipher(pool, cipher)
 	tenant, token := uuid.NewString(), uuid.NewString()
-	auth, err := newTestAuthenticator([]testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "catalog-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "catalog-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st))
 	if err != nil {
 		t.Fatal(err)

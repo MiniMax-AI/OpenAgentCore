@@ -69,11 +69,11 @@ func (s *routingStore) UpdateAgent(_ context.Context, tenant, id string, input s
 	return s.agent, nil
 }
 
-// trapTB turns an unexpected call to a strict fake into a panic, which
-// outcome reports as "handler reached".
+// trapTB turns an unexpected call to a strict fake into a panic without failing
+// the test, which outcome reports as "handler reached".
 type trapTB struct{ testing.TB }
 
-func (trapTB) Fatalf(format string, args ...any) { panic(fmt.Sprintf(format, args...)) }
+func (trapTB) Errorf(format string, args ...any) { panic(fmt.Sprintf(format, args...)) }
 
 // routingFixture returns the served handler and, for route enumeration, a
 // router built from the same Dependencies. They answer only Agent reads and
