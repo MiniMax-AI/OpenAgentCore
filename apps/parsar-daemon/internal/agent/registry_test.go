@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -158,5 +159,33 @@ func TestRegistryExecutorRequiresExplicitRegistration(t *testing.T) {
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("replacement"))
 	if _, err := registry.ResolveExecutor("native"); err == nil {
 		t.Fatal("replacing a kind retained its old executor capability")
+	}
+}
+
+func TestRegistryRejectsEveryOmittedCapabilityBeforeReplacement(t *testing.T) {
+	valid := prototest.Capabilities(proto.AgentKindCapabilities{})
+	for i := 0; i < reflect.TypeOf(valid).NumField(); i++ {
+		t.Run(reflect.TypeOf(valid).Field(i).Name, func(t *testing.T) {
+			registry := agent.NewRegistry()
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: valid}, harnessconfig.Configuration{}, stubFactory("original"))
+			missing := valid
+			reflect.ValueOf(&missing).Elem().Field(i).Set(reflect.ValueOf(proto.CapabilityUnspecified))
+			func() {
+				defer func() {
+					if recover() == nil {
+						t.Error("incomplete declaration registered")
+					}
+				}()
+				registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: false, Capabilities: missing}, harnessconfig.Configuration{}, stubFactory("replacement"))
+			}()
+			factory, err := registry.Resolve("fixture")
+			if err != nil {
+				t.Fatal(err)
+			}
+			session, err := factory(t.Context(), proto.PromptRequestPayload{}, nil)
+			if err != nil || session.(stubSession).marker != "original" {
+				t.Fatal("failed declaration changed registry")
+			}
+		})
 	}
 }

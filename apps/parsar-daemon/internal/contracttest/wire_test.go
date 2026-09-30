@@ -375,3 +375,8 @@ func TestWireContractDisconnectIsUnknownAndReconnectDoesNotReplay(t *testing.T) 
 		t.Fatal("reconnect replayed input")
 	}
 }
+
+// These fixtures exercise settlement only; active input is deliberately rejected.
+func (*controlledTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
+	return agent.ErrSteeringRejected
+}
