@@ -13,6 +13,7 @@ type fakeResidentProvider struct {
 	*fakeCheckpointProvider
 	pauses, resumes int
 	losePause       bool
+	loseResume      bool
 }
 
 func (p *fakeResidentProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
@@ -58,6 +59,10 @@ func (p *fakeResidentProvider) Resume(ctx context.Context, r sandbox.Reference) 
 	p.resumes++
 	info.State = "running"
 	p.resources[r.AllocationID] = info
+	if p.loseResume {
+		p.loseResume = false
+		return sandbox.Info{}, sandbox.ErrComputeUnconfirmed
+	}
 	return info, nil
 }
 func (p *fakeResidentProvider) RunCommand(ctx context.Context, r sandbox.Reference, command sandbox.Command) (sandbox.CommandResult, error) {
@@ -122,6 +127,35 @@ func TestResidentUnknownPauseUsesObservationWithoutReplay(t *testing.T) {
 	f.phase(tenant, environment.ID, "suspended")
 	if resident.pauses != 1 {
 		t.Fatal("unknown pause was replayed", resident.pauses)
+	}
+}
+
+func TestResidentUnknownResumeUsesObservationWithoutReplay(t *testing.T) {
+	var resident *fakeResidentProvider
+	f := newComputeLifecycleFixtureWithProvider(t, 2, 4, func(p *fakeCheckpointProvider) sandbox.SandboxProvider {
+		resident = &fakeResidentProvider{fakeCheckpointProvider: p, loseResume: true}
+		return resident
+	})
+
+	tenant, _, environment, owner := f.create()
+	f.complete(owner)
+	owner = f.phase(tenant, environment.ID, "suspended")
+	f.queued(owner)
+	for range 100 {
+		if err := f.worker.ReconcileManagedRuntimes(t.Context()); err != nil && !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
+			t.Fatal("resident resume reconciliation failed", err)
+		}
+		if resident.resumes == 1 {
+			break
+		}
+	}
+	uncertain, err := f.store.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+	if err != nil || resident.resumes != 1 || uncertain.ComputePhase != "restoring" {
+		t.Fatal("unknown resume was not retained for observation", resident.resumes, uncertain.ComputePhase, err)
+	}
+	f.phase(tenant, environment.ID, "running")
+	if resident.resumes != 1 {
+		t.Fatal("unknown resume was replayed", resident.resumes)
 	}
 }
 

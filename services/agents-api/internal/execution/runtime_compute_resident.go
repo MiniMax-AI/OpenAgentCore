@@ -44,7 +44,10 @@ func (r *runtimeLifecycle) observeResidentCompute(ctx context.Context, p sandbox
 		}
 		return r.wakeResidentCompute(ctx, p, next, state)
 	case "suspending":
-		info, err := p.Pause(ctx, runtimeReference(owner))
+		// The pause receipt precedes the external call. After an uncertain
+		// result, even a running observation cannot prove that the original
+		// request will not pause later, so never issue Pause a second time.
+		info, err := p.GetInfo(ctx, runtimeReference(owner))
 		if err != nil {
 			return err
 		}
@@ -66,9 +69,9 @@ func (r *runtimeLifecycle) observeResidentCompute(ctx context.Context, p sandbox
 		if err != nil {
 			return err
 		}
-		return r.restoreResidentCompute(ctx, p, next, state)
+		return r.restoreResidentCompute(ctx, p, next, state, true)
 	case "restoring":
-		return r.restoreResidentCompute(ctx, p, owner, state)
+		return r.restoreResidentCompute(ctx, p, owner, state, false)
 	case "waking":
 		return r.wakeResidentCompute(ctx, p, owner, state)
 	default:
@@ -160,8 +163,16 @@ func (r *runtimeLifecycle) idleResidentCompute(ctx context.Context, p sandbox.Re
 	return err
 }
 
-func (r *runtimeLifecycle) restoreResidentCompute(ctx context.Context, p sandbox.ResidentPauseProvider, owner store.RuntimeAllocation, state runtimeCompute) error {
-	info, err := p.Resume(ctx, runtimeReference(owner))
+func (r *runtimeLifecycle) restoreResidentCompute(ctx context.Context, p sandbox.ResidentPauseProvider, owner store.RuntimeAllocation, state runtimeCompute, issue bool) error {
+	var info sandbox.Info
+	var err error
+	if issue {
+		info, err = p.Resume(ctx, runtimeReference(owner))
+	} else {
+		// A lost Resume response may have restored the original VM. Observe
+		// the durable restoring receipt without sending another Resume.
+		info, err = p.GetInfo(ctx, runtimeReference(owner))
+	}
 	if err != nil {
 		return err
 	}
