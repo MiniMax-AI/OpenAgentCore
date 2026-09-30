@@ -192,3 +192,20 @@ test("workspace uploads allow bounded inline files and artifact downloads preser
   const denied = await fetch(`${url}/v1/agents/sessions/${id}/artifacts/${id}/content`, { headers: { origin: "https://other.example" } });
   assert.equal(denied.status, 403);
 });
+
+test("file writes can finish beyond the ordinary proxy timeout", async (t) => {
+  const url = await serve(t, async (_target, init) => {
+    await new Promise((resolve) => setTimeout(resolve, 31_000));
+    assert.equal(init.signal.aborted, false);
+    return Response.json({ path: "/workspace/inputs/file.txt" });
+  });
+  const response = await fetch(
+    `${url}/v1/agents/environments/00000000-0000-4000-8000-000000000001/files`,
+    {
+      method: "POST",
+      headers: { origin: url },
+      body: "{}",
+    },
+  );
+  assert.equal(response.status, 200);
+});

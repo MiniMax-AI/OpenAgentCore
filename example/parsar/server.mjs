@@ -195,7 +195,12 @@ export function createHandler(
       const streaming =
         req.method === "GET" && url.pathname.endsWith("/events");
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 30_000);
+      const fileWrite =
+        req.method === "POST" && url.pathname.endsWith("/files");
+      const timer = setTimeout(
+        () => controller.abort(),
+        fileWrite ? 240_000 : 30_000,
+      );
       res.on("close", () => controller.abort());
       try {
         const chunks = [];

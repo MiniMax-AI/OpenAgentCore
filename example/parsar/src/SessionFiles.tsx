@@ -16,9 +16,16 @@ const maxUploadBytes = 5 * 1024 * 1024;
 
 async function upload(environmentId: string, file: File) {
   if (file.size > maxUploadBytes) throw new Error("文件不能超过 5 MiB。");
-  const name =
-    file.name.replace(/[\\/:*?"<>|\x00-\x1f\x7f]/g, "_").slice(0, 100) ||
-    "file";
+  let name = "";
+  const encoder = new TextEncoder();
+  for (const character of file.name.replace(
+    /[\\/:*?"<>|\x00-\x1f\x7f]/g,
+    "_",
+  )) {
+    if (encoder.encode(name + character).length > 200) break;
+    name += character;
+  }
+  name ||= "file";
   const path = `/workspace/inputs/${crypto.randomUUID()}-${name}`;
   const data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -26,11 +33,18 @@ async function upload(environmentId: string, file: File) {
     reader.onerror = () => reject(new Error("无法读取文件，请重新选择。"));
     reader.readAsDataURL(file);
   });
-  await api.createEnvironmentFile(environmentId, {
-    type: "inline",
-    path,
-    data,
-  });
+  try {
+    await api.createEnvironmentFile(environmentId, {
+      type: "inline",
+      path,
+      data,
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "请求失败";
+    throw new Error(
+      `${reason} 上传未确认，文件可能已写入 ${path.replace(/^\/workspace\//, "./")}。请先检查该路径再重新上传。`,
+    );
+  }
   return path;
 }
 

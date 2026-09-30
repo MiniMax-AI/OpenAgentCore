@@ -477,6 +477,13 @@ test("Session uploads insert a file path and download binary artifacts without l
   await page.getByLabel("选择上传文件").setInputFiles({ name: "numbers.csv", mimeType: "text/csv", buffer: Buffer.from("a,b\n1,2") });
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByLabel("继续对话")).toHaveValue(/请处理文件：\.\/inputs\/.*numbers.csv/);
+  await page.getByRole("button", { name: "文件", exact: true }).click();
+  const uploaded = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/files"));
+  await page.getByLabel("选择上传文件").setInputFiles({ name: "中".repeat(80) + ".txt", mimeType: "text/plain", buffer: Buffer.from("small") });
+  const uploadedPath = (await uploaded).postDataJSON().path;
+  expect(Buffer.byteLength(uploadedPath.split("/").at(-1), "utf8")).toBeLessThanOrEqual(255);
+  expect(uploadedPath).not.toContain("�");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   const draft = await page.getByLabel("继续对话").inputValue();
   const originalSessionURL = page.url();
   await page.reload();
