@@ -1,0 +1,24 @@
+name: ci-web
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Immutable source commit to check
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: ./.github/actions/node
+      - name: Typecheck, test and build Web and clients
+        run: make check-web-unit

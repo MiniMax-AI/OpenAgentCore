@@ -1,0 +1,39 @@
+name: ci-example
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Immutable source commit to check
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  example:
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: ./.github/actions/node
+      - name: Install dependencies and example acceptance browser
+        run: |
+          make node-deps
+          pnpm exec playwright install --with-deps chrome
+      - name: Test and build optional example with browser acceptance
+        run: make check-example
+      - name: Upload browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: example-acceptance-${{ github.run_attempt }}
+          path: |
+            example/*/playwright-report/
+            example/*/test-results/
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: ignore

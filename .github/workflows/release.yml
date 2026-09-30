@@ -30,6 +30,7 @@ jobs:
     uses: ./.github/workflows/check.yml
     with:
       ref: ${{ inputs.ref || github.sha }}
+      scope: full
       native-artifacts: true
 
   build:
