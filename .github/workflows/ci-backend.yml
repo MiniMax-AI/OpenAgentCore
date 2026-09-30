@@ -1,0 +1,77 @@
+name: ci-backend
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Immutable source commit to check
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: oac_core_ci_tests
+          POSTGRES_USER: agents_api
+          POSTGRES_PASSWORD: core_test_only
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U agents_api -d oac_core_ci_tests"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Select Go caches
+        id: source
+        run: |
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "GOCACHE=$HOME/.oac/cache/go-build" >> "$GITHUB_ENV"
+          echo "GOMODCACHE=$HOME/.oac/cache/go-mod" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.oac/cache/go-build
+            ~/.oac/cache/go-mod
+          key: core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-backend-${{ steps.source.outputs.revision }}
+          restore-keys: |
+            core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-backend-
+            core-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install native Go prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev
+      - name: Verify dedicated test database
+        env:
+          OAC_TEST_DATABASE_URL: postgres://agents_api:core_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_core_ci_tests?sslmode=disable
+        run: |
+          echo "OAC_TEST_DATABASE_URL=$OAC_TEST_DATABASE_URL" >> "$GITHUB_ENV"
+          make check-database
+      - name: Verify generated SQL queries
+        run: make check-sqlc
+      - name: Test Runtime and shared Go contracts
+        run: make check-go
+      - name: Test microsandbox provider and Linux helper
+        run: make check-microsandbox-provider
+      - name: Build and test standalone Core and persistence
+        run: make check-core
+      - name: Build execution daemon
+        run: make build-daemon

@@ -1,93 +1,14 @@
 #!/usr/bin/env python3
-"""Select PR checks from the tested merge diff; unknown inputs select the full gate."""
+"""Plan checks for a verified PR diff or an explicit full run; enforce their results."""
 
 import argparse
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
+import re
 import subprocess
 
-JOBS = ("hygiene", "distribution", "backend", "harness", "example", "web", "web-acceptance", "api", "native", "lint")
-# Rules accumulate: shared inputs exercise every declared consumer. This is the
-# only authored path map; workflows consume the resulting plan.
-RULES = (
-    ((".github/", "scripts/ci_"), JOBS),
-    (("apps/web/", "playwright.config.ts"), ("web", "web-acceptance")),
-    (("services/web/",), ("distribution", "web", "web-acceptance")),
-    (("example/",), ("example",)),
-    (("services/core/",), ("backend", "api")),
-    (("services/core/internal/sandbox/testdata/node-diagnostics.json",), ("web", "web-acceptance", "example")),
-    (("services/core/internal/sandbox/testdata/deployment-contract.json",
-      "services/core/internal/sandbox/e2b/testdata/configuration-selectors.json"), ("distribution",)),
-    (("services/core/internal/nativeinstaller/",), ("native", "distribution")),
-    (("services/core/deploy/", "services/core/tools/"), ("distribution",)),
-    (("apps/daemon/",), ("backend", "native")),
-    (("internal/",), ("backend", "api", "native", "distribution")),
-    (("internal/harnessconfig/",), ("web", "web-acceptance", "example", "harness")),
-    (("contracts/",), ("backend", "api", "native", "web", "web-acceptance", "example", "distribution")),
-    (("packages/agents-client/",), ("backend", "api", "web", "web-acceptance", "example")),
-    (("packages/claude-sdk-adapter/", "packages/mcode-harness/"), ("harness", "native", "backend", "distribution")),
-    (("packages/tsconfig/",), JOBS),
-    (("deploy/install/", "deploy/install-release.sh", "scripts/install-release.", "scripts/publish-core-release.",
-      "scripts/core-distribution-manifest.", "scripts/build-core-distribution.sh", "scripts/config-reference.py",
-      "scripts/build-web.sh"), ("distribution",)),
-    (("scripts/build-native-", "scripts/native-"), ("native", "backend", "distribution")),
-    (("scripts/build-core.sh", "scripts/build-core-image-context.sh", "deploy/distribution/"), ("backend", "api", "distribution", "native")),
-    (("scripts/build-e2b-provider.sh",), ("backend", "api", "distribution")),
-    (("scripts/build-claude", "scripts/check-claude", "scripts/build-mcode", "scripts/prepare-release-runtimes.sh"),
-     ("harness", "native", "backend", "distribution")),
-    (("scripts/build-agents-runtime.sh",), ("backend", "native", "distribution")),
-    (("scripts/generate-harness-catalog", "scripts/harness-catalog/", "scripts/openapi-split/", "scripts/patch-agents-openapi.py",
-      "scripts/extract-agents-api-upstream.py"), JOBS),
-    (("scripts/check-sqlc.py",), ("backend",)),
-    (("scripts/check-names", "scripts/name-allowlist.json"), ("hygiene",)),
-)
-FULL_INPUTS = {"Makefile", "go.mod", "go.sum", "go.work", "go.work.sum", "package.json", "pnpm-lock.yaml",
-               "pnpm-workspace.yaml", "tsconfig.base.json", ".npmrc", ".gitignore", ".gitattributes", ".dockerignore"}
-IMAGE_INPUTS = ("scripts/build-core", "scripts/build-e2b-provider", "deploy/distribution/", "services/core/tools/e2b-provider/",
-                "services/core/deploy/e2b/")
-# Generated outputs retain freshness checks even when the file is documentation.
-GENERATED_OUTPUTS = {"contracts/agents-api/harness-catalog.md", "packages/agents-client/src/harness-catalog.ts",
-                     "services/core/internal/engine/catalog_generated.go", "docs/configuration.md",
-                     "docs/getting-started/install-options.md"}
-
-
-def documentation(path):
-    p = PurePosixPath(path)
-    if p.name in {"README.md", "README.zh-CN.md", "AGENTS.md", "CONTRIBUTING.md", "LICENSE"}:
-        return True
-    return (path.startswith(("docs/", "contracts/")) and p.suffix in {".md", ".png", ".jpg", ".jpeg", ".svg", ".webp"}) or path in {
-        "apps/web/PRODUCT.md", "apps/web/DESIGN.md", "services/core/IMPLEMENTATION.md"}
-
-
-def full(reason):
-    return {"version": 1, "jobs": list(JOBS), "image": True, "reasons": [reason]}
-
-
-def select(paths):
-    if not paths:
-        return full("Empty diff; run the full gate")
-    jobs = {"hygiene"}
-    image = False
-    reasons = []
-    for path in paths:
-        if not path or path.startswith("/") or ".." in PurePosixPath(path).parts:
-            return full("Invalid path in diff")
-        if path in FULL_INPUTS or path.startswith(".github/"):
-            return full(f"Shared build or CI input: {path}")
-        matches = {"hygiene"} if documentation(path) else {
-            job for prefixes, targets in RULES if path.startswith(prefixes) for job in targets}
-        if path in GENERATED_OUTPUTS:
-            matches.add("distribution")
-        if not matches:
-            return full(f"Unclassified input: {path}")
-        if not documentation(path) and path.startswith(IMAGE_INPUTS):
-            matches.add("api")
-            image = True
-        jobs.update(matches)
-        image = image or matches == set(JOBS)
-        reasons.append(f"{path}: {', '.join(sorted(matches))}")
-    return {"version": 1, "jobs": [job for job in JOBS if job in jobs], "image": image, "reasons": reasons}
+from ci_policy import JOBS, expand, full, select
 
 
 def git(*args):
@@ -104,22 +25,28 @@ def changed_paths(base, head):
     return fields[1::2]
 
 
-def event_plan(event_name, event, requested_ref=""):
-    if event_name != "pull_request" or requested_ref:
-        return full("Main, manual or reusable run: full gate")
+def event_plan(event_name, event, requested_ref="", scope="impact"):
+    if scope == "full":
+        if not re.fullmatch(r"[0-9a-f]{40}", requested_ref) or git("rev-parse", "HEAD").decode().strip() != requested_ref:
+            raise ValueError("Full checks require the checked-out immutable source SHA")
+        return full("Explicit full verification")
+    if scope != "impact" or event_name != "pull_request" or requested_ref:
+        raise ValueError("Impact checks require a pull_request merge checkout")
     try:
         pr = event["pull_request"]
         base, head = pr["base"]["sha"], pr["head"]["sha"]
-        # Checkout tests the event's merge commit, not an arbitrary head or ref.
-        # Its first-parent diff includes the integrated PR changes, with no API
-        # pagination/truncation or merge-base assumptions in a shallow clone.
         commit = git("cat-file", "-p", "HEAD").decode("utf-8")
         parents = [line[7:] for line in commit.split("\n\n", 1)[0].splitlines() if line.startswith("parent ")]
         if parents != [base, head]:
             raise ValueError("Checkout does not match the PR merge parents")
         return select(changed_paths(base, "HEAD"))
     except (KeyError, TypeError, ValueError, UnicodeError, subprocess.CalledProcessError) as err:
-        return full(f"Diff unavailable ({type(err).__name__}); full gate")
+        raise ValueError(f"Cannot plan affected checks: {err}. Repair the diff or policy; no full run was started.") from err
+
+
+def check_attempt(planned, current):
+    if not planned or not planned.isdecimal() or int(planned) < 1 or planned != current:
+        raise ValueError("The plan belongs to another attempt. Use Re-run all jobs to repeat the selected checks together.")
 
 
 def validate_plan(plan):
@@ -132,6 +59,9 @@ def validate_plan(plan):
         raise ValueError("Invalid selected jobs")
     if plan["image"] and "api" not in selected:
         raise ValueError("Image checks require API acceptance")
+    checks = set(selected) | ({"image"} if plan["image"] else set())
+    if expand(checks) != checks:
+        raise ValueError("Plan omits an execution prerequisite")
     return set(selected)
 
 
@@ -149,24 +79,29 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     plan_parser = sub.add_parser("plan")
     plan_parser.add_argument("--base")
+    plan_parser.add_argument("--full", action="store_true", help="Explicitly select all checks locally")
     plan_parser.add_argument("--head", default="HEAD")
     sub.add_parser("gate")
     args = parser.parse_args()
     if args.command == "gate":
+        check_attempt(os.environ.get("PLAN_ATTEMPT"), os.environ.get("GITHUB_RUN_ATTEMPT"))
         check_results(json.loads(os.environ["PLAN"]), json.loads(os.environ["RESULTS"]))
         print("All checks selected by the plan passed.")
         return
-    if args.base:
+    if args.full:
+        plan = full("Explicit local full verification")
+    elif args.base:
         plan = select(changed_paths(args.base, args.head))
     else:
         try:
             event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
         except (OSError, ValueError, KeyError):
             event = {}
-        plan = event_plan(os.environ.get("GITHUB_EVENT_NAME"), event, os.environ.get("REQUESTED_REF", ""))
+        plan = event_plan(os.environ.get("GITHUB_EVENT_NAME"), event, os.environ.get("REQUESTED_REF", ""), os.environ.get("CHECK_SCOPE", "impact"))
     print(json.dumps(plan, indent=2))
     if output := os.environ.get("GITHUB_OUTPUT"):
         with open(output, "a") as f:
+            f.write("attempt=" + os.environ.get("GITHUB_RUN_ATTEMPT", "1") + "\n")
             f.write("plan=" + json.dumps(plan, separators=(",", ":")) + "\n")
             f.write("jobs=" + json.dumps(plan["jobs"]) + "\n")
             f.write("image=" + json.dumps(plan["image"]) + "\n")

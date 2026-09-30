@@ -145,6 +145,7 @@ jobs:
         if: inputs.upload-artifacts
         with:
           name: oac-native-installer-${{ runner.os }}-${{ runner.arch }}
+          overwrite: true
           path: ${{ runner.temp }}/oac-native-installer-*.tar.gz
           if-no-files-found: error
           retention-days: 7

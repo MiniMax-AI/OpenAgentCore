@@ -1,0 +1,24 @@
+name: ci-harness
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Immutable source commit to check
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  harness:
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: ./.github/actions/node
+      - name: Test and package Harness adapters
+        run: make check-claude-sdk check-mcode-harness
