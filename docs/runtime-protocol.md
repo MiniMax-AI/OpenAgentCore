@@ -1,247 +1,94 @@
 # Core–Runtime protocol
 
-This is the integration entry point for a Runtime that executes work for Core.
-The wire definitions live once in
-[`internal/agentdaemon/proto`](../internal/agentdaemon/proto);
-Core's [gateway](../internal/agentdaemon/gateway) and the reference Runtime's
-[dispatcher](../apps/daemon/internal/dispatch) both use them.
-The [machine HTTP API](../contracts/agents-api/runtime.openapi.yaml) describes
-registration and connection endpoints. This document defines the meaning and
-ordering of the messages after connection; it does not replace the typed payloads.
+This protocol connects Core to a Runtime daemon after the daemon has its machine credential. It defines the meaning and order of the messages on the daemon connection. The wire types, limits and validators live once in [`internal/agentdaemon/proto`](../internal/agentdaemon/proto); Core's [gateway](../internal/agentdaemon/gateway) and the reference Runtime's [dispatcher](../apps/daemon/internal/dispatch) both use them, so there is no second payload schema to keep in sync. The HTTP routes that issue credentials and open the connection are in the [machine connection API](../contracts/agents-api/machine-api.md).
 
-Use this protocol for hosted and self-hosted Runtime implementations. A new
-Harness implements the [adapter contract](../contracts/agents-api/harness-onboarding.md)
-behind the Runtime registry. Do not add a Core orchestration branch named after
-the Harness, operating system or Sandbox Provider.
+Hosted and self-hosted Runtimes use the same protocol. A Harness joins through the [Harness adapter contract](../contracts/agents-api/harness-onboarding.md), which owns the Executor and Turn lifecycle obligations behind the Runtime registry.
 
 ## Ownership and connection
 
-Core owns durable Session, Turn, input and Environment records, scheduling and
-reconciliation. Runtime owns native Executors, active Turns, transfer state and
-cleanup until settlement. A Sandbox Provider owns placement and the surrounding
-compute lifecycle. Releasing an execution admission or closing an Executor does
-not delete, suspend or reclaim a sandbox.
+Core owns durable Session, Turn, input and Environment records, scheduling and reconciliation. Runtime owns native Executors, active Turns, transfer state and cleanup until settlement. A Sandbox Provider owns placement and the surrounding compute. Releasing an execution admission or closing an Executor never deletes, suspends or reclaims a sandbox. The daemon is not an isolation boundary; see [Runtime and outer isolation](design-principles.md#runtime-and-outer-isolation).
 
-An installed daemon runs with the authority of the user who starts it. The
-protocol does not make the daemon a tool, filesystem or network isolation
-boundary. Core-managed Docker, E2B or other sandboxes provide the outer isolation.
-A logical workspace, native tool configuration, advertised capability or successful
-preparation is not proof of containment.
+A Runtime connects in this order:
 
-1. Obtain the appropriate machine credential using the documented registration
-   flow. Applications use Project API keys; operators use Core keys. Neither is
-   a Runtime connection credential.
-2. Bootstrap through `/api/v1/agent-daemon/bootstrap` with an Authorization Bearer
-   header and device identity. Use its authenticated connection URL.
-3. Dial the reverse WebSocket at `/api/v1/agent-daemon/ws`, supplying `device_id`
-   and `version` query parameters and the Bearer header. Never put credentials
-   in a URL, payload log or trace.
-4. Send an immediate heartbeat, then continue at the configured interval.
-   Declare `supported_agent_kinds`, availability and capabilities explicitly.
-   An absent first heartbeat means capabilities are unknown; an omitted kind in
-   a received heartbeat means it is not advertised. Neither permits inference.
-5. Dispatch ordered JSON envelopes over the connection. Heartbeats establish
-   liveness only, not execution progress or a receipt for earlier messages.
+1. Obtain a daemon credential and device ID. The [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists the credential kinds; Project API keys and the Core key are never Runtime credentials.
+2. Call `POST /api/v1/agent-daemon/bootstrap` with the credential as a Bearer header and the device ID. Use the connection URL it returns.
+3. Dial the WebSocket at `/api/v1/agent-daemon/ws` with `device_id` and `version` query parameters and the Bearer header. Never put a credential in a URL, a payload log or a trace.
+4. Send a heartbeat at once, then at the interval bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
+5. Exchange ordered JSON [envelopes](#envelope-and-identity). Heartbeats establish liveness only, never execution progress or a receipt for an earlier message.
 
-The wire version is [`proto.Version`](../internal/agentdaemon/proto/version.go),
-independent of the Runtime build version reported in heartbeats. Core accepts
-only an exact match, including the patch component. A mismatch returns HTTP 426
-`incompatible_version` before dispatch; the daemon treats it as permanent and
-stops reconnecting. Deploy matching peers together. Removed fields, inferred
-Claude availability and old interaction shapes have no compatibility path.
+The wire version is [`proto.Version`](../internal/agentdaemon/proto/version.go), independent of the Runtime build version that heartbeats report. Core accepts only an exact match, including the patch component. A mismatch returns HTTP 426 `incompatible_version` before any dispatch; the daemon treats it as permanent and stops reconnecting. Deploy matching peers together.
 
-Each physical connection has fresh routing, admission handles and transfer state.
-A newer connection replaces the previous device connection. Core fences owner
-leases and evicts old Run/interaction routes; the new connection does not inherit
-them. A valid credential and connection are not authority to choose another
-Session or Environment binding.
+Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core fences the owner lease and evicts the old Run and interaction routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
 
-### Explicit capability declarations
+## Capability declarations
 
-`AgentKindCapabilities` describes the composed Runtime and Harness, independently
-of `Available` and the Core model profile. Every field uses `CapabilitySupport`:
-`CapabilitySupported` or `CapabilityUnsupported`. Zero means unspecified and is
-invalid even for an unavailable Harness. Registration validates the complete
-struct before changing the registry; there is no implicit basic descriptor.
+`AgentKindCapabilities` in [`inbound.go`](../internal/agentdaemon/proto/inbound.go) describes one composed Runtime and Harness, independently of `available` and of Core's engine profile. Every field is a `CapabilitySupport`: supported or unsupported. The zero value is unspecified and invalid, even for an unavailable Harness. Registration validates the complete declaration before changing the registry; there is no implicit basic descriptor.
 
-The wire still uses JSON booleans and includes every field, including `false`.
-Encoding incomplete declarations fails; decoding rejects omitted, null, invalid
-or unknown capability fields, including a missing capability object. An invalid
-heartbeat clears the connection's admission snapshot and closes its transport.
-That establishes no native completion or cancellation result. Both peers use the
-same exact wire version; no historical declaration format is accepted.
+On the wire each field is a JSON boolean, and every field is present, including `false`. Encoding an incomplete declaration fails. Decoding rejects omitted, null, invalid and unknown fields, and a missing capability object. An invalid heartbeat clears the connection's admission snapshot and closes its transport; that establishes no native completion or cancellation result.
 
-Each admitted Executor and Turn retains its declaration. Rediscovery cannot add
-operations to an existing owner. Optional operations check this snapshot before
-native calls; interface presence alone never grants support. A declared operation
-returning `agent.ErrUnsupportedOperation` is a contract violation, distinct from
-unavailability, a failed native call or an uncertain write. Uncertain operations
-keep their existing receipts and ownership; they are never automatically replayed.
-Workspace support includes the common Runtime workspace implementation, so a
-native adapter's unsupported workspace method does not disable that composition.
+Each admitted Executor and Turn keeps the declaration it was admitted with. A later heartbeat cannot add operations to an existing owner. Optional operations check this snapshot before any native call; the presence of a Go interface never grants support. A declared operation that returns `agent.ErrUnsupportedOperation` is a contract violation, distinct from unavailability, a failed native call or an uncertain write. Uncertain operations keep their receipts and ownership and are never replayed automatically. Workspace support includes the common Runtime workspace implementation, so a native adapter's unsupported workspace method does not disable that composition.
 
-New fields require an explicit decision in each production declaration. Contract
-tests enumerate every field for registration, wire round trips and the persisted
-boolean projection. The shared test fixture lists current fields individually;
-it does not supply defaults for future fields. The Harness interface inventory
-also requires a role decision and compile assertions for every public adapter;
-see [Harness onboarding](../contracts/agents-api/harness-onboarding.md).
+A new field requires an explicit decision in every production declaration. Contract tests enumerate every field for registration, wire round trips and the persisted boolean projection; the shared test fixture lists fields individually and supplies no defaults for future ones. [Harness onboarding](../contracts/agents-api/harness-onboarding.md) owns the adapter side of each declaration.
 
-### Executor and Turn lifetimes
+A declaration describes what the Runtime can do. Core admits a public feature only when the Harness's engine profile also qualifies it, and checks the declaration of the selected device during device selection and again at the final check before it claims a Turn:
 
-This section owns the separation of execution and resource lifetimes.
+| Capability | Core requires it when |
+| --- | --- |
+| `streaming`, `steering`, `durable_turns`, `durable_input_receipts`, `preparation`, `execution_controls`, `tool_observations` | Always, for every execution on that Harness (with `available` true) |
+| `environment_none` | The Environment type is `none` |
+| `local_environment`, `workspace_read_preparation`, `workspace_output_export` | The Environment type is `openai_hosted` or `self_hosted` |
+| `workspace_read_preparation` | An idle Files directory read needs a read-only preparation |
+| `native_session_recovery` | A Session with a started Turn has no recorded native Session ID |
+| `web_search_control`, `text_verbosity` | The Harness's engine profile declares that control |
+| `structured_output` and `message_items` | The Agent requests `json_schema` output |
+| `subagent_observations` | `multi_agent.enabled` is true |
+| `subagent_control` | `multi_agent.enabled` is false |
+| `tool_search` | The Agent enables tool search or defers function loading |
+| `programmatic_tool_calling_disable` | The Agent explicitly disables programmatic tool calling |
+| `function_tools` | The Agent declares function tools |
+| `message_images`, `function_result_images` | A message, or a function result, carries an image |
+| `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
 
-| Lifetime | Owner | Ends when |
-| --- | --- | --- |
-| Environment allocation | Resource management (Sandbox Provider) | Explicit reclamation, coordinated with Runtime execution |
-| Runtime connection | Runtime transport | Disconnection or replacement by a newer connection |
-| Installed capability snapshot | Runtime | Its Environment is reclaimed; never on Executor close |
-| Session Executor | Runtime | `Executor.Close` on idle expiry, shutdown or confirmed invalidation |
-| Turn | Adapter `Turn`, tracked by Runtime | `AwaitSettlement` confirms settlement |
+`permissions` gates permission decisions inside the Runtime, and `workspace_authoring` gates the daemon's authoring command. Core has no admission rule for `usage` and `resume`.
 
-A Session owns one reusable Executor in its connected Runtime. A Turn owns one
-input execution, its output stream and its cancellation. `agent.ExecutorFactory`
-prepares the fixed configuration; `Executor.StartTurn` creates a new `agent.Turn`
-without replacing healthy native resources. Normal completion settles only the
-Turn. `Executor.Close` releases native resources on idle expiry, environment
-shutdown or confirmed invalidation. Core does not keep a second Executor cache.
-The same lifecycle applies after managed or user-managed environments connect,
-and to the qualified no-environment profiles. Resource management owns machine
-selection, allocation and Environment creation/reclamation. Closing an Executor
-does not release the Environment allocation or delete its workspace. Environment
-reclamation explicitly coordinates with Runtime execution. Connection, installed
-capability snapshot, Session Executor and Turn retain separate lifetimes.
+The prompt request (`prompt_request`, or the configuration of `execution_prepare`) carries the opt-ins Core sets for each Run:
 
-The Runtime binds its Executor record to Session, Environment, connection and
-immutable execution configuration. Resume identity and prior-Turn recovery flags
-are continuity assertions, not configuration changes. A supplied native identity
-must match the retained owner; exact-history recovery never starts a new root
-when existing history is required. A configuration conflict is an error, not a
-hot switch. Lost connections retire their owners and handles. Old timers, output
-and cancellation cannot affect replacements.
+| Field | Set by Core |
+| --- | --- |
+| `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
+| `observe_tool_observations` | Always. Tool-call frames then carry the engine-neutral `observation` |
+| `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
+| `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
+| `disable_execution_environment` | For an Environment of type `none` |
+| `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding |
+| `strict_resume`, `require_existing_native_session` | Always strict; the second when a native Session must be recovered |
+| `durable_receipt` on `prompt_steer` | For every active input Core delivers |
 
-Each Turn receives a fresh wrapper, output channel and receipt state. Optional
-steering, functions, permissions and user-choice interfaces belong to that fixed
-Turn. Native callbacks capture the originating Turn before asynchronous work;
-late events cannot be assigned to whichever Turn happens to be active. Native
-processes, query/transport connections, fixed capability configuration and native
-Session identity belong to the Executor. Do not reset completed `sync.Once`
-values or repurpose an old Turn object.
-
-`StartTurn` returning nil guarantees that no native input was submitted and the
-output channel was not retained. The Runtime then closes that channel. Once input
-may have been submitted, return a non-nil Turn even with an error: the Turn owns
-exactly-once output closure and remains tracked until settlement. Unknown input
-is never replayed. A definite `executor_unavailable` Start rejection permits one
-common recovery attempt only after the previous Executor has been closed and no
-input was submitted. Recheck the same physical peer and current authorization.
-
-`Turn.Cancel` targets only that Turn and does not close a healthy Executor.
-`AwaitSettlement` applies after both natural completion and cancellation. Success
-means output can no longer be written and the Turn's native events, input,
-functions, interactions and child work have settled. Native completion or
-cancellation confirmation is independent of resource retirement: closing a
-transport cannot supply missing native terminal or operation receipts.
-`Reusable=true` additionally
-confirms that the native owner can accept the next Turn. `Reusable=false` requires
-a reason and subsequent confirmed Executor close. An error means settlement is
-unconfirmed; it cannot free ownership or capacity. Caller deadlines stop waiting,
-not tracked cleanup. Retry the same cleanup target serially. Failed cleanup
-blocks replacement and retains its resource slot. Executor Close confirms resource
-retirement independently of the Turn outcome: an immutable Turn error must not
-prevent closing the native transport and releasing resources once their work and
-output have stopped.
-
-One output consumer starts before native Start, drains the bounded 64-frame
-channel, and retains the terminal observation until Start publication, Turn
-settlement and admitted operation receipts finish. Natural Done never calls
-Cancel. Input, function and interaction admission close before settlement, and
-operations already admitted hold their barrier through native receipts and
-outbound acknowledgement. Send cancellation to the fixed Turn before waiting
-for that barrier: a written input may need native interruption to produce its
-receipt. Join native settlement, any required confirmed Executor close, output
-drain and all admitted operations before an applied acknowledgement or reuse.
-A failed Close may report failure while retaining the same Run and outstanding
-operations for retry. Closing a caller wait cannot manufacture an applied input receipt. Only then forward Done or an applied cancellation
-receipt. Commit native continuity and release the old Run admission before
-publishing Done, since the receiver may immediately start another Turn. A late
-terminal-send failure belongs to the old Run; it cannot invalidate a successor
-that already owns the Executor. Connection shutdown owns transport-loss cleanup.
-Preserve the ten-second settlement wait and separate five-second receipt
-send budget; timeout is not proof of quiescence. The observed cancellation outcome
-retains native identity, Usage and output without fabricating missing evidence.
-Adapters must include owned background work in settlement and retain the exact
-native cleanup target after failure. Native termination mechanisms belong to the
-adapter; a bulk cleanup acknowledgement alone cannot establish quiescence.
-
-Private preparation controls reserve a per-Turn admission, not a new Executor.
-They carry an explicit Session identity and immutable configuration without model
-input or Run identity. A fresh request returns a connection-local admission handle
-and the owning Executor ID. Start supplies both identities and its actual Run ID
-and ordered MessageInput. Per-admission revisions order status observations;
-rejections describe control errors without inventing Run events. A reused healthy
-Executor returns ready without native preparation. An admission release abandons
-that admission; it does not close the Session's healthy idle Executor or cancel a
-later Turn. Cancellation uses the exact Run identity.
-
-Preparations and Start execute outside the receive loop and Router lock. Admission
-expires after five minutes; retries do not extend that deadline. Bound active
-preparation and execution separately from idle retained resources, and count
-closing or uncertain resources until cleanup succeeds. A definite
-`execution_prepare` rejection with `preparation_capacity` leaves an unclaimed
-queued Turn for the existing Worker scheduler to retry, including capacity held
-by cleanup. Other errors and uncertain input delivery do not authorize replay.
-At most 64 admission records are retained; old handles never consume replacement
-admissions. Idle expiry
-is a Runtime resource policy, not Core active-Turn concurrency. Shutdown tracks and
-closes active and idle Executors, retains failed close targets, and allows a later
-serialized retry. Ordinary disconnection closes the failed transport and keeps
-the exact Router until shutdown succeeds. A wait timeout or failed cleanup cannot
-authorize reconnect; process shutdown also keeps waiting rather than silently
-discarding owned native resources. These records are connection-local, not durable
-input replay.
-
-Read-only workspace preparations remain separate bounded filesystem operations;
-they cannot start model work. Workspace operations retain exact binding and
-settlement rules across Turn boundaries and Executor closure.
+Requests without an opt-in keep the frames and fields they had without it.
 
 ## Envelope and identity
 
-Every data frame is one JSON
-[`Envelope`](../internal/agentdaemon/proto/envelope.go):
-`type`, type-dependent `id`, typed `payload`, and optional W3C `trace`.
-Trace is diagnostic correlation only; missing or invalid trace data creates a
-local trace and never changes ownership. Do not use a trace ID as a request ID.
+Every data frame is one JSON [`Envelope`](../internal/agentdaemon/proto/envelope.go): `type`, a type-dependent `id`, a typed `payload` and an optional W3C `trace`. The trace is diagnostic correlation only; missing or invalid trace data creates a local trace and never changes ownership. Never use a trace ID as a request ID.
 
 | Identity | Scope and meaning |
 | --- | --- |
 | Device ID and connection | Authenticated Runtime routing and connection ownership |
-| Session ID / Environment ID | Core-owned configuration and workspace binding; canonical UUIDs where required by the payload validator |
-| Executor ID | Runtime-owned native resource, potentially retained across settled Turns with identical configuration |
-| Preparation request ID | `Envelope.id` for prepare/start/release/status; distinct from a Run |
-| Admission handle | Runtime-generated reservation, valid only on its accepting connection |
-| Run ID | Execution attempt; `Envelope.id` for output, cancellation, active input and functions |
+| Session ID / Environment ID | Core-owned configuration and workspace binding; canonical UUIDs where the payload validator requires them |
+| Executor ID | Runtime-owned native resource, possibly retained across settled Turns with identical configuration |
+| Preparation request ID | `Envelope.id` for prepare, start, release and status; distinct from a Run |
+| Admission handle | Runtime-generated reservation, valid only on the connection that accepted it |
+| Run ID | One execution attempt; `Envelope.id` for output, cancellation, active input and functions |
 | Interaction ID | `permission_request.payload.request_id` or `prompt_for_user_choice.payload.ask_id`; these request envelopes still carry the Run ID |
-| Delivery ID / input ID / call ID | Resolve attempt, active-input receipt and native function identity respectively; never interchangeable |
+| Delivery ID / input ID / call ID | Resolve attempt, active-input receipt and native function identity; never interchangeable |
 | Transfer ID / suspension ID | Connection-local transfer correlation / persisted suspension-attempt fencing |
 
-Decision and permission-cancel envelopes use the interaction ID. Cancellation and
-function-result acknowledgements use the Run ID. All application decision
-receipts additionally match the delivery ID. A reply without the required
-correlation cannot establish acceptance.
+Decision and permission-cancel envelopes use the interaction ID. Cancellation and function-result acknowledgements use the Run ID. Every application decision receipt also matches the delivery ID. A reply without the required correlation cannot establish acceptance.
 
-User-choice decisions carry `question_answers` with an explicit `question_id`
-and an `answers` array for each provided answer. The IDs must belong to the emitted
-questions and cannot repeat. Question order and display headers do not identify
-answers; omitted questions remain unanswered and an empty array is an explicit
-non-answer. Cancellation carries `cancelled: true` without answers. Shared
-validation rejects other shapes before native submission. Adapters translate the
-identified values into their native response without changing question identity.
+User-choice decisions carry `question_answers`: an explicit `question_id` and an `answers` array for each provided answer. The IDs must belong to the emitted questions and cannot repeat. Question order and display headers do not identify answers; an omitted question stays unanswered, and an empty array is an explicit non-answer. Cancellation carries `cancelled: true` without answers. Shared validation rejects other shapes before native submission.
 
 ## Message families
 
-Use the linked source definitions for required fields, validators, limits and
-finite error categories. There is no parallel payload schema to keep in sync.
+The linked source files define the required fields, validators, limits and finite error categories.
 
 | Core → Runtime | Runtime → Core | Definition |
 | --- | --- | --- |
@@ -254,313 +101,106 @@ finite error categories. There is no parallel payload schema to keep in sync.
 | `workspace_read`, `workspace_write`, `workspace_export` | Matching `*_result` | [Read](../internal/agentdaemon/proto/workspace_read.go), [write](../internal/agentdaemon/proto/workspace_write.go), [export](../internal/agentdaemon/proto/workspace_export.go) |
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [Suspension fencing](../internal/agentdaemon/proto/suspend.go) |
 
-Initial and active input share [ordered MessageInput](../internal/agentdaemon/proto/message_input.go).
-Adapters preserve message/content order and explicitly reject unsupported content.
-Usage frames and the final usage snapshot replace earlier cumulative snapshots;
-do not add them. An absent measurement is unknown, not zero.
+Initial, prepared and active input use the same [ordered MessageInput](../internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-input.md) owns the public image profile, whitespace rules and each Harness's native conversion.
 
-The wire version is `proto.Version` (see above). Initial, prepared and active input use
-the same ordered MessageInput contract, replacing scalar prompts and attachments.
-User-message boundaries and text/image order remain intact through Core and the
-Runtime wire; adapters own native conversion and receipt aggregation. Text-only
-transports reject image content rather than dropping it. Text is never trimmed:
-engine profiles declare whether whitespace-only messages are qualified, and
-unqualified harnesses (Claude SDK, MiniMax Code) reject them at admission rather than having
-their input rewritten. Codex has a flat native
-input list and uses blank-line separators between messages; this does not preserve
-independent native user-message boundaries.
-The independently packaged Claude bridge uses protocol 3 for a prepared Executor
-and separately identified Turns; readiness rejects other protocol versions.
-Image-bearing messages require a qualified operation profile before persistence
-and image support from the selected Runtime before native delivery. These checks
-apply to that operation only; ordinary text retains offline queueing. Initial,
-prepared and active paths use the same content and preserve receipt ownership.
-The qualified public profile is inline PNG/JPEG on Codex/Claude `none` and
-Core-managed Docker `openai_hosted` and user-managed `self_hosted`. MiniMax
-images and remote URLs remain explicit implementation gaps. Workspace images reuse
-the existing preparation, active-input and workspace authority; they do not add
-a downloader, a mount or a separate execution lifecycle. Core
-does not fetch or transform media. See [message input coverage](../contracts/agents-api/message-content.md#images).
+Usage frames and the final usage snapshot each carry the cumulative measurement of the current execution and replace the previous snapshot; never add them. An absent measurement is unknown, not zero.
 
 ## Preparation and execution order
 
-Hosted and self-hosted execution use the same preparation semantics. Placement
-selects a connection and Runtime-owned workspace; Harness adapters perform native
-configuration. The existing `prompt_request` message remains a direct execution
-operation, not a fallback after failed prepared execution.
+Environment initialization uses `runtime_prepare` on every connection, managed or user-owned; the [Environment contract](../contracts/agents-api/environments.md#runtime-capability-preparation) owns what is prepared and when. For a file or archive, send `begin`, wait for `ready`, send ordered chunks and await each matching `received` offset, then send `commit` and await `completed`. Initialization and finalization have typed headers without file data. Validate the expected outcome, offset, size and finite error code with the shared validator. One transfer is allowed per connection. A chunk receipt confirms staged bytes, not installation; a completed commit confirms that operation, not that a later Turn ran.
 
-Environment initialization uses `runtime_prepare`. For files or archives, send
-`begin`, wait for `ready`, send ordered chunks and await matching `received`
-offsets, then `commit` and await `completed`. Initialization and finalization
-have typed headers without file data. Validate the expected outcome, offset,
-size and finite error code with the shared validator. Only one transfer is
-allowed per connection. A chunk receipt confirms staged bytes, not installation.
-A completed commit confirms that operation, not that a future Turn has executed.
+An execution Turn runs in five steps:
 
-For an execution Turn:
+1. Subscribe to preparation status, then send `execution_prepare` with the immutable Session configuration and no Run input.
+2. `preparing` means the Runtime owns preparation. `ready` supplies the Executor ID, admission handle, revision and expiry. Neither submits user input.
+3. Subscribe to the Run, then send `execution_start` with that Executor ID, handle, Run ID and ordered input. A valid start transfers the reservation once. `started` confirms the transfer to the Turn, not its completion; output can race the status, so it must already have a subscriber.
+4. Consume Run events until a native terminal outcome or loss of observation. An execution error is followed by `done`, which closes the stream; the preceding errors remain part of its outcome.
+5. To abandon before start, send `execution_release`. After ownership passes to a Run, use `prompt_cancel`; releasing the old handle cannot cancel its successor.
 
-1. Subscribe to preparation status before sending `execution_prepare` with
-   immutable Session configuration and no Run input.
-2. `preparing` means the Runtime owns preparation; `ready` supplies the Executor
-   ID, admission handle, revision and expiry. Neither submits user input.
-3. Subscribe to the Run before sending `execution_start` with that Executor,
-   handle, Run ID and ordered input. A valid start transfers the reservation
-   once. `started` confirms transfer to the Turn, not Turn completion; output
-   can race status delivery and must already have a subscriber.
-4. Consume Run events until a native terminal outcome or loss of observation.
-   An execution error is followed by `done` to close that execution stream.
-   `done` closes the stream; preceding errors remain part of its outcome.
-5. On abandonment before start, send `execution_release`. After ownership
-   transfers to a Run, use `prompt_cancel`; releasing the old handle cannot
-   cancel its successor.
+A preparation reserves a per-Turn admission, not a new Executor. It carries an explicit Session identity and immutable configuration without model input or a Run ID. A fresh request returns a connection-local handle and the owning Executor ID; a reused healthy Executor returns `ready` without native preparation. Per-handle revisions order status observations: ignore older or repeated revisions and never apply a status to another handle. Typical transitions are `preparing → ready → starting → started`, or termination by `released`, `expired` or `failed`. A `rejected` control operation carries an `operation` and error code and does not replace the handle's current revision. Releasing an admission abandons only that admission; it does not close the Session's idle Executor or cancel a later Turn.
 
-Preparation observations use monotonically increasing revisions per handle.
-Ignore older or repeated revisions; do not apply a status for a different handle.
-Typical transitions are `preparing → ready → starting → started`, or termination
-by `released`, `expired`, or `failed`. A `rejected` control operation has an
-`operation` and error code but does not replace the resource's current revision.
-Read-only workspace preparation cannot start a Turn. Expiry does not remove the
-Runtime's obligation to settle cleanup.
+Preparation and start run outside the receive loop and router lock. An admission expires five minutes after it is granted, and retries do not extend that deadline; expiry does not remove the Runtime's obligation to settle cleanup. The Runtime bounds active preparation and execution separately from idle retained resources and counts closing or uncertain resources until their cleanup succeeds. A definite `execution_prepare` rejection with `preparation_capacity` leaves the queued Turn unclaimed for the Worker to retry, including when cleanup holds the capacity; any other error or uncertain delivery authorizes no replay. The Runtime retains at most 64 admission records, and an old handle never consumes a replacement's admission. These records are connection-local, not durable input replay.
 
-Core and Runtime use common preparation, start, input-receipt, cancellation,
-release and recovery semantics for Codex, Claude Code and MiniMax Code. Retain each
-harness's native implementation behind its adapter. Core acts on verified capabilities and runtime
-conditions; a capability declaration alone never grants public feature admission.
-Extend existing interfaces during related functional work without introducing a
-second framework or a broad rewrite. Codex, Claude Code and MiniMax Code have
-qualified dedicated Docker profiles and historical Core-managed E2B evidence.
-New user-managed enrollment requires separate real acceptance. Each harness has equal standing;
-qualify each image/template with the common full-loop acceptance before deploying.
-Additional engines remain separate work; V1 has no separate remote executor.
-Later engines must satisfy the same applicable acceptance contract while keeping
-their suitable native deployment layout.
+Idle expiry of an Executor is a Runtime resource policy, separate from Core's active-Turn concurrency. On shutdown the Runtime closes active and idle Executors, keeps any target whose close failed and allows a later serialized retry. An ordinary disconnection closes the failed transport and keeps the exact router until shutdown succeeds; a wait timeout or failed cleanup never authorizes reconnection, and process shutdown keeps waiting rather than discarding owned native resources. Workspace operations keep their binding and settlement rules across Turn boundaries and Executor closure.
 
-Workspace reads may request the private `workspace_read_only` preparation profile
-through the existing preparation factory and verified `workspace_read_preparation`
-capability. It accepts only the bound Environment and resource identity; execution
-options, model/MCP credentials, native Session continuation and model/tool input are excluded.
-A read-only owner rejects Start and excludes model input, execution configuration
-and plugin startup. A Runtime may satisfy this contract through its bound local
-filesystem implementation; starting a native Harness process is not required.
-Adapters that use native filesystem controls retain their own initialization rules.
-For this read profile, `released` is published only after local Close succeeds;
-cleanup errors retain ownership and report `cleanup_unconfirmed`. A failed factory
-must return its resource with the error if cleanup remains unconfirmed; wrappers
-must preserve both values. Successful cleanup retries publish confirmed release,
-and stale status snapshots cannot publish success. Failed terminal status delivery
-does not retry cleanup; ownership remains until an explicit release or shutdown retry.
-A release request,
-HTTP disconnect or remote socket closure alone is not cleanup confirmation. This
-profile does not establish remote mutation quiescence or public Files admission.
+`prompt_request` starts a Run directly, without an admission handle. It is not a fallback after a failed prepared start.
 
-Core directory reads reuse the Worker's Session scheduling reservation for idle
-preparation and target the exact Run for active execution. Device selection uses
-operation-specific capabilities; reading files never resolves model/MCP options
-or creates a Turn. HTTP cancellation ends observation, not an admitted native read.
-Keep the idle reservation through the bounded read and release attempt. Return
-directory data only after confirmed Close; incomplete reads or uncertain cleanup
-return unavailable without data. Release the Worker's scheduling reservation before
-delivering the result so the caller can immediately request the next page.
-Revoke the scoped read transport credential on
-completion or failure. Runtime retains uncertain cleanup ownership and capacity;
-this does not require a second durable Core owner registry or establish remote
-write retirement. Public Files.list delegates workspace access to this reader;
-the API owns tenant authorization, path validation and protocol pagination. Only
-the reader's distinct `not_directory` result (a missing path, a regular file or an
-unfollowed symlink) becomes an empty page; root, permission, transport and
-uncertain failures keep their errors. Keep partial directory coverage and
-unverified defaults explicit in the Files contract.
+## Active input receipts
 
-Local inline file delivery uses the same authenticated daemon connection and exact
-Environment/Session binding. All platforms use the daemon's Go implementation
-for bounded file reads, directory listing, file creation and output export.
-Files operations require no external helper executable or staging directory.
-The Files API keeps workspace-relative paths and no-overwrite creation semantics;
-it does not restrict native Harness tools' host permissions.
+Core delivers active input as `prompt_steer` with `durable_receipt: true`, one input at a time per Run, and waits for its receipt before sending the next:
 
-Transfer a complete bounded body in acknowledged 64 KiB frames before invoking
-the native file writer, verify the declared digest, and run no model for upload.
-Keep the private 50 MiB transfer bound distinct from the official 5 MiB decoded
-inline bound, which the API checks before any Runtime work. Files.create uses the
-native writer's no-overwrite operation. Initial Session files retain their separate
-atomic replacement behavior; do not change one caller's semantics for another.
-The dedicated Runtime excludes execution while receiving or applying a write;
-malformed, incomplete or expired transfers cannot reach the installer. Exact
-commit/rejection receipts release the mutation owner. Missing or ambiguous
-receipts retain uncertainty; observer cancellation and local process exit cannot
-prove non-mutation. Before public admission, Core must durably reserve the write
-under the Session lock and prevent successor mutation across restart until exact
-settlement. Do not replay the request or introduce general replacement machinery.
-Read-only operations retain their own authority and bounded ownership requirements.
+| Phase | Timer |
+| --- | --- |
+| Native write | The Runtime bounds the adapter's native write at 10 seconds; the timer stops once the write is complete |
+| `written` acknowledgement | Core waits at most 30 seconds from delivery for `written`; otherwise the input outcome is unknown |
+| Receipt send | Each receipt send has its own 5-second, shutdown-aware budget |
+| Native acceptance | `accepted` arrives under the Turn lifetime, with no automatic redelivery |
+| Done | Before `done`, the Runtime waits at most 15 seconds (the write and send budgets) for an in-flight input |
+
+Neither `written` nor a send failure advances Core's input cursor. Once cancellation is sent, its receipt owns the terminal outcome even if an input becomes unknown first; Core records `cancel_unconfirmed` when no cancellation confirmation arrives within 15 seconds. A cancellation receipt carries the stopped Turn's confirmed continuity snapshot when no `done` is emitted.
 
 ## What each acknowledgement proves
 
 | Observation | Proven fact |
 | --- | --- |
-| Core gateway `Send` returns nil | Envelope entered the local send queue |
-| Runtime transport `Send` returns nil | WebSocket write completed locally |
-| Transfer `received`, active-input `written` | Defined receive/write phase occurred; native execution or consumption is unconfirmed |
-| Preparation `preparing` / `ready` | Preparation accepted / reservation ready, with no submitted Run input |
+| Core gateway `Send` returns nil | The envelope entered the local send queue |
+| Runtime transport `Send` returns nil | The WebSocket write completed locally |
+| Transfer `received`, active-input `written` | The defined receive or write phase occurred; native execution or consumption is unconfirmed |
+| Preparation `preparing` / `ready` | Preparation accepted / reservation ready, with no Run input submitted |
 | Preparation `started` | Admission transferred to the identified Turn |
-| Active-input `accepted` | Adapter confirmed native consumption under its declared receipt semantics |
-| `interaction_decision_ack.applied=true` | Identified operation settled; cancellation additionally requires native settlement |
-| `done` and preceding execution events | Execution stream completed with its observed outcome |
+| Active-input `accepted` | The adapter confirmed native consumption under its declared receipt semantics |
+| `interaction_decision_ack.applied=true` | The identified operation settled; a cancellation also requires native settlement |
+| `done` and the preceding execution events | The execution stream completed with its observed outcome |
 
-There is no generic receipt for every envelope. A successful send is not proof
-that the peer received, accepted or completed a request. Process exit, a stop
-signal and a canceled local context do not prove successful cancellation.
-A `done` frame may also close a settled cancellation stream; it does not
-override the cancellation receipt or imply successful execution. Cancellation
-receipts may retain partial content, native identity and usage in `outcome`
-even when no `done` is published. Failure to obtain settlement must
-remain failed or unknown; it cannot become `applied=true`.
+No generic receipt exists for every envelope. A successful send does not prove that the peer received, accepted or completed a request. Process exit, a stop signal or a canceled local context does not prove cancellation. A `done` frame may also close a settled cancellation stream; it does not override the cancellation receipt or imply success. A cancellation receipt may keep partial content, native identity and usage in `outcome` even when no `done` is published. A failure to obtain settlement stays failed or unknown; it never becomes `applied=true`.
 
 ## Failures, retries and cleanup
 
-Transport and execution outcomes are separate. Core's only Run subscription
-entry point is `SubscribeDurable`; inspect `Subscription.Err()` when its event
-channel closes. Disconnection and subscriber overflow close it with an explicit
-observation error, without fabricating `error` or `done`. Core retains durable
-truth and reconciles from confirmed facts. Runtime retains cleanup ownership
-until native work, input receipts, interactions and child work have settled.
+Transport and execution outcomes are separate. Core's only Run subscription entry point is `SubscribeDurable`; inspect `Subscription.Err()` when its event channel closes. Disconnection and subscriber overflow close it with an explicit observation error and fabricate no `error` or `done`. Core keeps the durable truth and reconciles from confirmed facts. The Runtime keeps cleanup ownership until native work, input receipts, interactions and child work have settled.
 
-The public Turn status is a separate, existing projection:
-[`execution/delivery.go`](../services/core/internal/execution/delivery.go)
-records an unsuccessful orchestration attempt as `failed`, including
-`delivery_unknown` after an unconfirmed send and `event_stream_incomplete`
-after subscription failure. A closed subscription can replace the send reason
-with `event_stream_incomplete`; both retain an unknown native effect.
-This public `failed` status is not proof that the Harness failed, that no side
-effect occurred or that cleanup completed. Native error classification comes
-only from observed Runtime error frames. Consumers must keep the observation
-reason and any native evidence distinct; this contract does not add a public
-`unknown` status or change the existing Turn state machine.
+The public Turn status is a separate projection. [`execution/delivery.go`](../services/core/internal/execution/delivery.go) records an unsuccessful orchestration attempt as `failed`, including `delivery_unknown` after an unconfirmed send and `event_stream_incomplete` after a subscription failure; a closed subscription can replace the send reason with `event_stream_incomplete`. Both mean the native effect is unknown: a public `failed` status does not prove that the Harness failed, that no side effect occurred or that cleanup completed. Keep the observation reason and any native evidence distinct.
 
-| Condition | Required responsibility |
+| Condition | Responsibility |
 | --- | --- |
-| Unsupported capability or invalid binding | Reject explicitly before starting the unsupported operation; do not select another Harness |
-| Confirmed preparation/execution failure | Preserve the finite error category and any observed result; Runtime settles its resources |
-| Deadline or connection loss after dispatch | Caller has an unknown effect unless an application receipt proves otherwise; do not convert it to execution failure |
-| Reconnection | Reestablish transport and capability advertisement; do not replay input, initialization, transfers or unresolved mutations |
-| Duplicate preparation/start | Existing connection-local identity and fingerprint rules apply; a conflicting request rejects and an old handle cannot start replacement work |
-| Duplicate input/function/decision | Use that family's existing receipt identity and conflict rules; no transport-wide deduplication or exactly-once promise exists |
-| Cleanup failure | Retain resource ownership and report unconfirmed cleanup; a resource is not reusable merely because a waiter timed out |
-| Lost cancellation receipt | Cancellation may have happened; lack of receipt cannot establish success or authorize another execution |
+| Unsupported capability or invalid binding | Reject before starting the operation; never select another Harness |
+| Confirmed preparation or execution failure | Keep the finite error category and any observed result; the Runtime settles its resources |
+| Deadline or connection loss after dispatch | The effect is unknown unless an application receipt proves otherwise; do not convert it to an execution failure |
+| Reconnection | Reestablish the transport and the capability declaration; never replay input, initialization, transfers or unresolved mutations |
+| Duplicate preparation or start | Connection-local identity and fingerprint rules apply; a conflicting request rejects, and an old handle cannot start replacement work |
+| Duplicate input, function result or decision | That family's receipt identity and conflict rules apply; there is no transport-wide deduplication or exactly-once promise |
+| Cleanup failure | Keep resource ownership and report unconfirmed cleanup; a waiter's timeout does not make a resource reusable |
+| Lost cancellation receipt | Cancellation may have happened; the missing receipt neither establishes success nor authorizes another execution |
 
-Only retry operations whose own contract establishes that retry is safe. Retired
-preparation request IDs may eventually allocate a new handle, so they are not
-durable idempotency keys. Native-session resume is an explicit operation with
-verified identity, not a response to a socket failure. A transient connection
-error permits reconnecting the channel; authentication/version rejection requires
-operator correction. Cleanup of an Executor remains separate from the Sandbox
-Provider's confirmed reclamation of compute.
+Retry only an operation whose own contract makes retry safe. A retired preparation request ID may eventually allocate a new handle, so request IDs are not durable idempotency keys. Resuming a native Session is an explicit operation with verified identity, never a response to a socket failure. A transient connection error permits reconnecting; an authentication or version rejection requires operator correction. Executor cleanup is separate from the Sandbox Provider's confirmed reclamation of compute.
 
-## Workspace operations and connection observations
+## Native failure classification
 
-The private daemon `workspace_read` control targets an existing preparation handle
-or its transferred active Run on the same authenticated device connection. Require
-the exact frozen Environment identity; callers cannot supply sockets, credentials
-or workspace roots. Shared routing uses the optional `agent.WorkspaceReader`
-interface, without selecting an engine by name.
-The same control accepts `operation: directory` through the optional
-`agent.WorkspaceDirectoryLister`, with mutually exclusive byte/entry limits and
-typed directory metadata. Directory responses carry at most 1024 single-component
-UTF-8 names of at most 255 bytes, so escaped metadata stays below the existing
-frame bound. These are private transport limits, not public Files parameters.
-Byte and directory operations share target checks, correlation, capacity and
-retained operation waits; neither creates a Run or selects an engine by name.
-This control does not itself authorize a public Files endpoint or placement.
+An adapter may add `code` and `http_status` to a Run's `error` frame. They are optional neutral metadata, not a terminal event or a public error contract; the frame's text, Usage, `done`, native Session identity and cancellation receipts keep their order and meaning.
 
-The separate optional `agent.WorkspaceDirectoryLister` observes one workspace-relative
-directory on the existing Prepared/Session owner; empty path selects its root.
-Return single-component names, entry kind, regular-file byte size and explicit
-truncation only after directory/metadata access and handle cleanup settle. Reuse
-byte-read admission, uncertainty and caller-detach ownership where applicable.
-Do not promise a snapshot, recursive traversal or public pagination through this
-private interface. The Runtime binds access to the frozen local workspace,
-prevents path escape, bounds enumeration and requires a complete validated result.
-Filesystem readiness alone does not enable public Files admission.
+The accepted codes are `authentication_error`, `rate_limit_exceeded`, `usage_limit_exceeded`, `server_overloaded`, `server_error`, `invalid_request`, `resource_not_found`, `request_timeout`, `context_length_exceeded`, `cyber_policy` and `connection_failed` ([`engine_failure.go`](../internal/agentdaemon/proto/engine_failure.go)). Only `connection_failed` keeps `http_status`, and only an integer from 100 to 599; every other status is discarded. A missing, malformed or unknown value leaves the error unclassified without discarding Usage or `done`.
 
-Bound encoded request payloads to 8 KiB and correlation IDs to 128 bytes before
-admission. Do not echo oversized IDs; omit oversized trace metadata in replies.
-Bound raw control results to 1 MiB within the existing 4 MiB transport frame; the
-limits are local policies, not pinned public protocol limits. Successful reads require complete bytes/truncation and acknowledged native
-close. Safe native rejections carry no bytes; interrupted or ambiguous reads remain
-unknown and stop further reads on that owner. Local RPC reap never establishes file
-settlement. Retain a dispatched read's original bounded waiter across observer
-cancellation and resource transfer/release; stop new admission on resource closure.
-The gateway bounds subscriptions and never retries or replays on reconnect. Duplicate
-pending operation IDs cannot start another read; this control does not promise durable
-idempotency or result recovery. Preparation/Run ownership, public path authorization,
-public file authorization and native cleanup retain their separate requirements.
+Core stores accepted values in the Turn outcome as `engine_error_code` and `engine_http_status`. The classification is subordinate to the terminal status and Core's `error_code`: it cannot turn a completed or cancelled Turn into a failure, hide an incomplete event stream, or override a persistence or cancellation-receipt failure. Normal delivery and terminal journal draining use the same extraction. [Session diagnostics](../contracts/agents-api/session-diagnostics.md) expose the category only for a failed Turn whose Core error is `engine_failed`. The [Codex](../services/core/deploy/codex/README.md) and [Claude Code](../services/core/deploy/claude/README.md) adapter guides give each Harness's mapping; an adapter never classifies error prose.
 
-Connection observations use the existing execution lease and Session lock. A
-separate `environment_connections` row retains the current generation and revision;
-`environments.status` and its Session Environment-event snapshot commit together.
-The producer serializes replacements, then numbers socket observations within each
-generation. Duplicate or older revisions and superseded generations are inert.
-Replacement retires a previously connected observation before publishing its new
-registration. Registration alone creates no connected event. Event payloads contain
-only public Environment identity/type/status and nullable error, never configuration,
-credentials, registration IDs or revisions. Transport observations have no asserted
-Turn association. `connected`/`disconnected` are distinct from native preparation
-readiness; do not cast resource `expired` into the event vocabulary or emit `ready`
-for a self-hosted connection.
+## Workspace operations
 
-The existing Worker observes authenticated daemon peers for enrolled Environments,
-using durable generation/revision fencing under its execution lease. On restart it
-reconciles old connection observations before admitting new ones. A connection or
-heartbeat does not prove native readiness or process quiescence. Failed or stale
-observations cannot establish a current connection.
+A workspace read that needs no running Turn uses the read-only preparation profile: `execution_prepare` with `workspace_read_only`, which requires the `workspace_read_preparation` capability. It accepts only the bound Environment and resource identity; execution options, model and MCP credentials, native Session continuation and model or tool input are excluded, and the owner rejects `execution_start`. A Runtime may serve it from its bound local filesystem without starting a Harness process. The profile publishes `released` only after local close succeeds; a cleanup error keeps ownership and reports `cleanup_unconfirmed`. A failed factory returns its resource with the error while cleanup is unconfirmed, and wrappers keep both values. A successful cleanup retry publishes the confirmed release; a stale status snapshot never publishes success. A release request, HTTP disconnect or remote socket closure alone does not confirm cleanup.
+
+`workspace_read` targets an existing preparation handle, or the Run it was transferred to, on the same authenticated device connection, with the exact frozen Environment identity; callers cannot supply sockets, credentials or workspace roots. `operation: directory` lists one workspace-relative directory (an empty path selects the root) with mutually exclusive byte and entry limits. A result carries at most 1024 single-component UTF-8 names of at most 255 bytes each, the entry kind, regular-file sizes and explicit truncation, and is returned only after directory access and handle cleanup settle. There is no snapshot, recursion or pagination at this layer. Byte and directory reads share target checks, correlation, capacity and retained operation waits.
+
+Request payloads are bounded at 8 KiB and correlation IDs at 128 bytes before admission; oversized IDs are not echoed, and oversized trace metadata is omitted from replies. Raw read results are bounded at 1 MiB within the 4 MiB transport frame. These are private transport limits, not public Files parameters. A successful read requires complete bytes or explicit truncation and an acknowledged native close. A safe native rejection carries no bytes; an interrupted or ambiguous read stays unknown and stops further reads on that owner. A dispatched read keeps its bounded waiter across observer cancellation and resource transfer or release, and resource closure stops new admission. The gateway bounds subscriptions and never retries or replays a read on reconnect; a duplicate pending operation ID cannot start another read.
+
+Core runs an idle directory read on the Worker's Session scheduling reservation and targets the exact Run during active execution. It keeps the reservation through the bounded read and release, returns data only after a confirmed close (an incomplete read or uncertain cleanup returns unavailable without data), releases the reservation before delivering the result, and revokes the scoped read credential on completion or failure. The Runtime keeps uncertain cleanup ownership and capacity. The [Environment Files contract](../contracts/agents-api/environment-files.md) owns public authorization, paths and pagination.
+
+`workspace_write` transfers a complete bounded body in acknowledged 64 KiB frames before the native writer runs, verifies the declared digest and runs no model. The private transfer bound is 50 MiB, separate from the public 5 MiB decoded inline bound that the API checks before any Runtime work. The Runtime excludes execution while it receives or applies a write; a malformed, incomplete or expired transfer never reaches the installer. An exact commit or rejection receipt releases the mutation owner. A missing or ambiguous receipt keeps the uncertainty: observer cancellation and local process exit cannot prove that nothing changed. Before public admission Core durably reserves the write under the Session lock and blocks successor mutations across restarts until exact settlement; the request is never replayed. Every platform uses the daemon's Go implementation for bounded reads, directory listing, file creation and output export, with no external helper or staging directory.
+
+## MCP connection authority
+
+Every public `MCPHTTPServer` in a prompt request carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
 
 ## Contract verification
 
-Run `make check-runtime-contract` from the repository root. It exercises the
-shared wire validators, gateway, transport and dispatcher, plus
-[real WebSocket contract scenarios](../apps/daemon/internal/contracttest/wire_test.go)
-using a controlled Harness adapter, plus the [observation-result regression](../services/core/internal/execution/runtime_protocol_test.go). It requires no model credentials or external
-sandbox. These tests are also included in `make check` through `check-go` and
-`check-core`.
+Run `make check-runtime-contract` from the repository root. It exercises the shared wire validators, gateway, transport and dispatcher, the [real WebSocket contract scenarios](../apps/daemon/internal/contracttest/wire_test.go) with a controlled Harness adapter, the [observation-result regression](../services/core/internal/execution/runtime_protocol_test.go) and the Harness declaration tests. It needs no model credentials or external sandbox, and `make check` runs the same tests through `check-go` and `check-core`.
 
-The suite checks incompatible versions, preparation failure, cancellation
-settlement, connection loss without invented terminal events, reconnect without
-replay, stale/duplicate handles and receipts, cleanup failures, bounded transfer
-validation and resource ownership after timeout. Existing detailed fault
-injection remains next to the owning gateway/dispatcher implementation.
+The suite covers incompatible versions, preparation failure, cancellation settlement, connection loss without invented terminal events, reconnection without replay, stale or duplicate handles and receipts, cleanup failures, bounded transfer validation and resource ownership after a timeout. Detailed fault injection stays next to the gateway and dispatcher code it tests.
 
-For another Runtime or Harness, reuse these protocol sequences and assertions,
-then run its own native acceptance for the capabilities it advertises. A passing
-controlled-adapter test establishes the transport contract, not native Harness
-behavior, OS support, provider authentication or sandbox isolation. Update the
-shared types, this guide and the contract checks together when semantics change.
-
-The reusable [Harness text assertions](../apps/daemon/internal/agent/contracttest/text.go)
-accept any prepared Executor and a small fixture supplying deterministic normal,
-active and steering inputs. They check independent Turn streams, native owner and
-history continuity, durable write/application receipts, stale cancellation and
-healthy continuation after cancellation. The Claude Go adapter runs them against
-its controlled native subprocess fixture. New adapters can call the same assertions;
-no optional feature is implied. Native failures, uncertain cleanup and exact-history
-recovery still require the adapter's fault and real-provider acceptance tests.
-
-### Environment preparation ownership
-
-Core tracks initialization on the Environment, independently of a managed
-allocation. After authentication, both managed and user-owned Runtime connections
-receive the same `runtime_prepare` operations and resource snapshots. Core never
-replays a running initialization whose owner or confirmation was lost. Preparation
-failure settles Environment input without destroying the machine or workspace.
-The public `connected` state describes transport; initialization completion and
-native executor readiness remain separate prerequisites for execution. Input
-sources and frozen metadata follow the [Environment contract](../contracts/agents-api/environments.md#runtime-capability-preparation).
-
-
-### MCP connection authority
-
-Public `MCPHTTPServer` messages carry an explicit `connection_origin`; missing or
-unknown values reject rather than selecting a default. Core freezes the public
-default before dispatch. Both peers require the exact wire version. Runtime uses
-the common origin validator before selecting a factory and resolves public and
-installed MCP into transient effective bindings. See the
-[origin and credential contract](../contracts/agents-api/environments.md#public-mcp-connection-origin)
-for supported combinations, native limits and failure ownership.
+Another Runtime reuses these protocol sequences and assertions, then runs native acceptance for every capability it declares. A controlled-adapter test establishes the transport contract, not native Harness behavior, operating-system support, provider authentication or sandbox isolation. Change the shared types, this document and the contract checks together. Harness adapters also run the shared text assertions described in [Harness onboarding](../contracts/agents-api/harness-onboarding.md).
