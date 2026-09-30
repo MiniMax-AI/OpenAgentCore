@@ -12,7 +12,7 @@ import (
 
 func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 	s, _ := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	installation := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 		t.Fatal(err)

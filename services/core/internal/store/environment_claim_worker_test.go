@@ -16,12 +16,12 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 		t.Run(map[bool]string{false: "unbound", true: "deleted"}[deleted], func(t *testing.T) {
 			s, pool := store.NewTestStore(t)
 			tenant, pending := newEnvironmentExpiryReservation(t, s)
-			lease, err := s.AcquireExecutionLease(t.Context())
+			writer, err := store.NewExecution(t.Context(), s)
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = lease.Close(context.Background()) })
-			got, err := lease.Store().PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
+			t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
+			got, err := writer.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if err != nil || len(got.Receipts) != 1 || got.Receipts[0].Replayed {
 				t.Fatal(got, err)
 			}
@@ -40,7 +40,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			}
 			// Simulate owner loss after commit, without sending any daemon Start.
 			awaitRelease := observeExecutionLeaseRelease(t, pool)
-			if err := lease.Close(t.Context()); err != nil {
+			if err := writer.CloseExecution(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			awaitRelease()
@@ -70,12 +70,12 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			if err != nil || turns != 1 || inputs != 1 || queued != 0 {
 				t.Fatal("restart duplicated or requeued prepared work", turns, inputs, queued, err)
 			}
-			successor, err := s.AcquireExecutionLease(t.Context())
+			successor, err := store.NewExecution(t.Context(), s)
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = successor.Close(context.Background()) })
-			retry, err := successor.Store().PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
+			t.Cleanup(func() { _ = successor.CloseExecution(context.Background()) })
+			retry, err := successor.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if deleted {
 				if !errors.Is(err, store.ErrNotFound) {
 					t.Fatal("deleted reservation was exposed", err)

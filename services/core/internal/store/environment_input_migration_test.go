@@ -98,26 +98,25 @@ func TestEnvironmentInputPromotionUsesCurrentExecutionWriter(t *testing.T) {
 	if _, err := s.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); err == nil {
 		t.Fatal("pooled Store promoted input without execution ownership")
 	}
-	closed := executionLease(t, s)
-	if err := closed.Close(t.Context()); err != nil {
+	closed := executionWriter(t, s)
+	if err := closed.CloseExecution(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := closed.Store().PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); err == nil {
+	if _, err := closed.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); err == nil {
 		t.Fatal("closed execution writer promoted pending input")
 	}
 	environmentInputHistory(t, pool, session.ID, 0, 0)
-	old := executionLease(t, s)
-	writer := old.Store()
+	writer := executionWriter(t, s)
 	var killed bool
-	if err := pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", old.conn.Conn().PgConn().PID()).Scan(&killed); err != nil || !killed {
+	if err := pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", executionOwnerPID(t, pool)).Scan(&killed); err != nil || !killed {
 		t.Fatal(killed, err)
 	}
-	successor := executionLease(t, s)
+	successor := executionWriter(t, s)
 	if _, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); err == nil {
 		t.Fatal("stale execution writer promoted pending input")
 	}
 	environmentInputHistory(t, pool, session.ID, 0, 0)
-	got, err := successor.Store().PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID)
+	got, err := successor.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID)
 	if err != nil || got.State != EnvironmentInputAdmitted {
 		t.Fatal("successor could not promote", got, err)
 	}

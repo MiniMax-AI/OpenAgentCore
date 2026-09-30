@@ -21,7 +21,7 @@ func (s *Store) ConnectRuntimeNode(ctx context.Context, nodeID, connectionID str
 	}
 	// A canceled autocommit UPDATE may still finish on PostgreSQL after pgx
 	// returns. An explicit transaction cannot publish that late write.
-	return pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		changed, err := s.queries.WithTx(tx).ConnectRuntimeNode(ctx, sqlc.ConnectRuntimeNodeParams{ID: id, ConnectionID: connection, OwnerEpoch: int64(epoch)})
 		if err != nil {
 			return err
@@ -93,7 +93,7 @@ func (s *Store) DisconnectRuntimeNode(ctx context.Context, nodeID, connectionID 
 	if err != nil {
 		return err
 	}
-	return pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		// A Connect COMMIT may be uncertain. Wait on the node regardless of
 		// the visible connection, then fence cleanup in a fresh statement snapshot.

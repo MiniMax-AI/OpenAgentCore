@@ -18,7 +18,7 @@ import traceback
 import uuid
 import zipfile
 
-import httpx
+import httpx2
 import openai
 from openai import DefaultHttpxClient, OpenAI
 
@@ -62,7 +62,7 @@ def main():
         secret_values.append(settings["model_provider"]["api_key"])
     owned, keys, clients, projects, revoked = set(), [], [], [], set()
     session_id = None
-    with httpx.Client(trust_env=False, timeout=30) as http:
+    with httpx2.Client(trust_env=False, timeout=30) as http:
         def request(method, path, expected=200, token=None, headers=None, **kwargs):
             response = http.request(method, base + path, headers={
                 **(admin if token is None else {"Authorization": "Bearer " + token, "OpenAI-Beta": "agents=v1"}),
@@ -370,7 +370,7 @@ def main():
                             state = http.get(session_path, headers=admin).json()["status"]
                         if state == "in_progress":
                             failures.append("session_stop")
-                except (httpx.HTTPError, KeyError, ValueError, RuntimeError):
+                except (httpx2.HTTPError, KeyError, ValueError, RuntimeError):
                     failures.append("session_stop")
             # Sessions must finish before deletion; never remove another run's assets.
             priority = {kind: index for index, kind in enumerate(("session", "agent", "environment_template", "skill", "vault", "file"))}
@@ -379,7 +379,7 @@ def main():
                     response = http.delete(base + f"/core/v1/projects/{project_id}/{ADMIN_PATHS[kind]}/{resource}", headers=admin)
                     if response.status_code not in (200, 204, 404):
                         failures.append(kind)
-                except httpx.HTTPError:
+                except httpx2.HTTPError:
                     failures.append(kind)
             for project in projects:
                 if project["archived_at"] is None:

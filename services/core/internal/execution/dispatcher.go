@@ -14,18 +14,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-// Snapshot is resolved internally; Daemon is not a public environment wire type.
+// Snapshot is the Session configuration frozen at creation.
 type Snapshot struct {
 	ModelProviderConfigured bool                         `json:"model_provider_configured,omitempty"`
 	Agent                   v1.Agent                     `json:"agent"`
-	Daemon                  *DaemonConfig                `json:"daemon"`
 	Environment             *v1.Environment              `json:"environment"`
 	VaultIDs                []string                     `json:"vault_ids,omitempty"`
 	MCPCredentials          []store.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
-}
-
-type DaemonConfig struct {
-	WorkDir string `json:"work_dir"`
 }
 
 type Dispatcher struct {
@@ -33,12 +28,6 @@ type Dispatcher struct {
 	Policy
 	Store    *store.Store
 	Registry *runtimegateway.Registry
-	// Options optionally supplies native adapter options for Sessions that need
-	// no frozen model provider (environment none and legacy daemon Sessions).
-	// The server command leaves it nil since the operator options file was
-	// retired; native tests use it to reach synthetic model servers. It is never
-	// consulted for openai_hosted or self_hosted Sessions.
-	Options func(context.Context, store.Session) (map[string]any, error)
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
 	ManagedRuntimes *RuntimeProvider
 	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.
@@ -77,9 +66,8 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if err != nil {
 		return store.Turn{}, err
 	}
-	workDir, noEnvironment, err := resolveExecutionEnvironment(snapshot)
-	if err != nil {
-		return store.Turn{}, err
+	if !environmentNone(snapshot) {
+		return store.Turn{}, store.ErrInvalidInput
 	}
 	text, through, err := d.initialInput(ctx, tenantID, sessionID, turnID)
 	if err != nil {
@@ -92,7 +80,7 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if err != nil {
 		return store.Turn{}, err
 	}
-	req.WorkDir, req.DisableExecutionEnvironment = workDir, noEnvironment
+	req.DisableExecutionEnvironment = true
 	prepared, err := d.prepareTurnExecutor(ctx, peer, tenantID, sessionID, turnID, req, store.TurnQueued)
 	if err != nil {
 		return store.Turn{}, err

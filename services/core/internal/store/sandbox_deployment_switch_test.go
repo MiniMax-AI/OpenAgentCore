@@ -26,7 +26,7 @@ func TestSandboxE2BEndpointPersistenceAndOnlineSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := NewWithCredentialCipher(pool, cipher)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := NewWithCredentialCipher(pool, cipher)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	installation := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := NewWithCredentialCipher(pool, cipher)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -175,7 +175,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{5}, 32))
 	s := NewWithCredentialCipher(pool, cipher)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -248,7 +248,7 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{6}, 32))
 	s := NewWithCredentialCipher(pool, cipher)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -291,7 +291,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
 	s := NewWithCredentialCipher(pool, cipher)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	installation := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 		t.Fatal(err)
@@ -375,7 +375,7 @@ func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
 	s := NewWithCredentialCipher(pool, cipher)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)

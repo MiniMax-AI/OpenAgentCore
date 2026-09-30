@@ -21,7 +21,7 @@ func (s *Store) DeleteAgent(ctx context.Context, tenantID, agentID string) (stri
 		return "", err
 	}
 	var deletedID string
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		deleted, err := q.DeleteAgent(ctx, sqlc.DeleteAgentParams{TenantID: tenant, ID: id})
 		if err != nil {

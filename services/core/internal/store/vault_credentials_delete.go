@@ -24,7 +24,7 @@ func (s *Store) DeleteCredential(ctx context.Context, tenantID, vaultID, credent
 		return "", ErrNotFound
 	}
 	var deletedID string
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		deleted, err := q.DeleteCredential(ctx, sqlc.DeleteCredentialParams{TenantID: tenant, VaultID: vault, ID: id})
 		if err != nil {

@@ -86,12 +86,11 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	lease, err := s.AcquireExecutionLease(t.Context())
+	writer, err := store.NewExecution(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = lease.Close(t.Context()) }()
-	writer := lease.Store()
+	defer func() { _ = writer.CloseExecution(t.Context()) }()
 	ctx := t.Context()
 
 	created := openStream(t, server, token, http.MethodPost, "/v1/agents/sessions",

@@ -14,7 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -25,20 +24,8 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 	if python == "" || binary == "" || root == "" || optionsFile == "" {
 		t.Skip("native daemon, fixed SDK, private real-model options and proof directory required")
 	}
-	raw, err := os.ReadFile(optionsFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var options map[string]any
-	if json.Unmarshal(raw, &options) != nil {
-		t.Fatal("invalid private options")
-	}
-	model, _ := options["model"].(string)
-	if model == "" {
-		t.Fatal("real model required")
-	}
+	model, provider := readNativeModelDefaults(t, optionsFile)
 	h := newDispatchHarness(t)
-	h.d.Options = func(context.Context, store.Session) (map[string]any, error) { return options, nil }
 	home, err := os.MkdirTemp(root, "mcode-public-")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +54,7 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(h.s, auth, "mcode", api.WithExecution(worker))
+	handler, err := api.NewHandler(h.s, auth, "mcode", api.WithExecution(worker), nativeDeploymentDefaults(model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,12 +73,7 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 			_ = json.Unmarshal(data, &identity)
 			if page, e := h.s.ListTurns(ctx, h.tenant, identity.Session, "", 100, true); e == nil {
 				diagnostic, _ := json.Marshal(page)
-				text := string(diagnostic)
-				if provider, ok := options["model_provider"].(map[string]any); ok {
-					if key, ok := provider["api_key"].(string); ok && key != "" {
-						text = strings.ReplaceAll(text, key, "[REDACTED]")
-					}
-				}
+				text := strings.ReplaceAll(string(diagnostic), provider.APIKey, "[REDACTED]")
 				_ = os.WriteFile(filepath.Join(home, "failed-turns.json"), []byte(text), 0600)
 			}
 			t.Fatalf("public mcode %s failed: %v %s; evidence %s", stage, err, log, home)

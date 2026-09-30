@@ -33,7 +33,7 @@ func (s *Store) GetSessionDiagnosticsSnapshot(ctx context.Context, tenantID, ses
 		return Session{}, err
 	}
 	var session Session
-	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: parsePathID(sessionID)})
 		if err != nil {
@@ -60,7 +60,7 @@ func (s *Store) GetTurnDiagnosticsSnapshot(ctx context.Context, tenantID, sessio
 		return TurnDiagnosticsSnapshot{}, err
 	}
 	result := TurnDiagnosticsSnapshot{Items: []ItemDiagnosticTiming{}}
-	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		turn, err := q.GetTurn(ctx, params)
 		if err != nil {

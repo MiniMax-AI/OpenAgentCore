@@ -43,7 +43,7 @@ func (s *Store) CreateSkill(ctx context.Context, tenantID string, archive []byte
 		return Skill{}, ErrInvalidInput
 	}
 	var result Skill
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		id := pgtype.UUID{Bytes: uuid.New(), Valid: true}
 		row, err := q.CreateSkill(ctx, sqlc.CreateSkillParams{ID: id, TenantID: tenant, Name: metadata.Name, Description: metadata.Description})
@@ -84,7 +84,7 @@ func (s *Store) UpdateSkillDefault(ctx context.Context, tenantID, skillID, versi
 		return Skill{}, err
 	}
 	var result Skill
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		if _, err := q.LockSkill(ctx, sqlc.LockSkillParams{TenantID: tenant, ID: id}); err != nil {
 			return err
@@ -111,7 +111,7 @@ func (s *Store) DeleteSkill(ctx context.Context, tenantID, skillID string) error
 	if err != nil {
 		return err
 	}
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		if _, err := q.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: id}); err != nil {
 			return err

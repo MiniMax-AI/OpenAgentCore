@@ -1,54 +1,41 @@
-package store
+package pgunit
 
 import (
 	"context"
 	"errors"
 	"net"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 )
 
-func TestExecutionLeaseCloseWaitsForCancelledConnectionCleanup(t *testing.T) {
-	dsn := os.Getenv("OAC_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("dedicated PostgreSQL required")
-	}
-	cfg, err := testDatabaseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	observer, err := pgxpool.NewWithConfig(t.Context(), cfg.Copy())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(observer.Close)
+func TestLeaseCloseWaitsForCancelledConnectionCleanup(t *testing.T) {
+	observer := pgtest.Open(t)
 	var armed atomic.Bool
 	blocked, release := make(chan struct{}), make(chan struct{})
 	var signal, unblocked sync.Once
 	unblock := func() { unblocked.Do(func() { close(release) }) }
-	dial := cfg.ConnConfig.DialFunc
-	cfg.ConnConfig.DialFunc = func(ctx context.Context, network, address string) (net.Conn, error) {
-		if armed.Load() {
-			signal.Do(func() { close(blocked) })
-			select {
-			case <-release:
-			case <-ctx.Done():
-				return nil, ctx.Err()
+	pool := pgtest.OpenIsolated(t, func(cfg *pgxpool.Config) {
+		dial := cfg.ConnConfig.DialFunc
+		cfg.ConnConfig.DialFunc = func(ctx context.Context, network, address string) (net.Conn, error) {
+			if armed.Load() {
+				signal.Do(func() { close(blocked) })
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
 			}
+			return dial(ctx, network, address)
 		}
-		return dial(ctx, network, address)
-	}
-	pool, err := pgxpool.NewWithConfig(t.Context(), cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	lease, err := New(pool).AcquireExecutionLease(t.Context())
+	})
+	lease, err := AcquireLease(t.Context(), pool)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,8 +53,8 @@ func TestExecutionLeaseCloseWaitsForCancelledConnectionCleanup(t *testing.T) {
 	defer cancelQuery()
 	queryDone := make(chan error, 1)
 	go func() {
-		queryDone <- lease.withConn(queryCtx, func(conn *pgxpool.Conn) error {
-			_, err := conn.Exec(queryCtx, "SELECT pg_sleep(10)")
+		queryDone <- lease.Transaction(queryCtx, func(ctx context.Context, tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, "SELECT pg_sleep(10)")
 			return err
 		})
 	}()
@@ -101,7 +88,7 @@ func TestExecutionLeaseCloseWaitsForCancelledConnectionCleanup(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal("Close returned before blocked cleanup or ignored its deadline", err)
 	}
-	if err := lease.Store().CheckExecutionOwnership(t.Context()); err == nil {
+	if err := lease.CheckOwnership(t.Context()); err == nil {
 		t.Fatal("timed-out cleanup restored writer authority")
 	}
 	closed := make(chan error, 1)

@@ -26,14 +26,14 @@ func (p Policy) ValidateSessionConfiguration(engine string, configuration json.R
 		return err
 	}
 	if snapshot.Environment != nil && snapshot.Environment.Type == "self_hosted" {
-		if snapshot.Daemon != nil || strings.TrimSpace(snapshot.Agent.Model) == "" || !validSelfHostedPlacement(environmentPlacement{WorkspaceDirectory: snapshot.Environment.WorkspaceDirectory, CapabilityDirectories: snapshot.Environment.CapabilityDirectories}) {
+		if strings.TrimSpace(snapshot.Agent.Model) == "" || !validSelfHostedPlacement(environmentPlacement{WorkspaceDirectory: snapshot.Environment.WorkspaceDirectory, CapabilityDirectories: snapshot.Environment.CapabilityDirectories}) {
 			return store.ErrInvalidInput
 		}
 	}
 	if snapshot.Environment != nil && snapshot.Environment.Type == "openai_hosted" {
 		// Only this placement/engine combination has current native qualification.
 		// Runtime capability checks still apply before any execution claim.
-		if snapshot.Daemon != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
+		if strings.TrimSpace(snapshot.Agent.Model) == "" {
 			return store.ErrInvalidInput
 		}
 		configuration, err := json.Marshal(snapshot.Environment)
@@ -54,7 +54,7 @@ func (p Policy) ValidateSessionConfiguration(engine string, configuration json.R
 
 func (p Policy) canAdmitInputs(engine string, configuration json.RawMessage) bool {
 	var snapshot Snapshot
-	if json.Unmarshal(configuration, &snapshot) != nil || snapshot.Environment == nil || snapshot.Environment.Type != "none" || snapshot.Daemon != nil {
+	if json.Unmarshal(configuration, &snapshot) != nil || !environmentNone(snapshot) {
 		return false
 	}
 	return p.ValidateSessionConfiguration(engine, configuration) == nil
@@ -139,7 +139,7 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 			return fail("device must advertise local preparation, workspace reads and output export")
 		}
 	}
-	if snapshot.Environment != nil && snapshot.Environment.Type == "none" && !caps.EnvironmentNone {
+	if environmentNone(snapshot) && !caps.EnvironmentNone {
 		return fail("device must advertise environment_none")
 	}
 	return caps, nil

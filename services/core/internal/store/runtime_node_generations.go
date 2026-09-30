@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
@@ -51,7 +52,7 @@ func (s *Store) RuntimeNodeRetention(ctx context.Context, nodeID, connectionID s
 	if len(refs) > 8 {
 		return deployment, nil, ErrInvalidInput
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
+	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
 	err := s.runtimeDeploymentTransaction(ctx, func(q *sqlc.Queries, d sqlc.RuntimeDeployment) error {
 		n, err := nodeConnection(ctx, q, d, nodeID, connectionID, epoch)

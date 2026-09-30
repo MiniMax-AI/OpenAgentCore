@@ -14,8 +14,7 @@ func TestEnvironmentInputTerminalReservationsCannotRestart(t *testing.T) {
 	for _, terminal := range []string{EnvironmentInputCancelled, EnvironmentInputExpired} {
 		t.Run(terminal, func(t *testing.T) {
 			s, pool := testStore(t)
-			lease := executionLease(t, s)
-			writer := lease.Store()
+			writer := executionWriter(t, s)
 			tenant, session := environmentInputSession(t, s)
 			ctx := context.Background()
 			pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
@@ -67,8 +66,7 @@ func TestEnvironmentInputPromotionRollsBackHistoryAndSettlement(t *testing.T) {
 	for _, phase := range []string{"input", "settlement", "claim", "claim-event"} {
 		t.Run(phase, func(t *testing.T) {
 			s, pool := testStore(t)
-			lease := executionLease(t, s)
-			writer := lease.Store()
+			writer := executionWriter(t, s)
 			tenant, session := environmentInputSession(t, s)
 			ctx := context.Background()
 			pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
@@ -115,8 +113,7 @@ func TestEnvironmentInputDeadlineIsCheckedAfterSessionLock(t *testing.T) {
 	for _, action := range []string{"promote", "fail"} {
 		t.Run(action, func(t *testing.T) {
 			s, pool := testStore(t)
-			lease := executionLease(t, s)
-			writer := lease.Store()
+			writer := executionWriter(t, s)
 			tenant, session := environmentInputSession(t, s)
 			pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -186,8 +183,7 @@ func TestEnvironmentInputDeadlineIsCheckedAfterSessionLock(t *testing.T) {
 
 func TestEnvironmentInputCancelAndPromotionShareOneOutcome(t *testing.T) {
 	s, pool := testStore(t)
-	lease := executionLease(t, s)
-	writer := lease.Store()
+	writer := executionWriter(t, s)
 	other, _ := testStore(t)
 	tenant, session := environmentInputSession(t, s)
 	ctx := context.Background()
@@ -226,8 +222,7 @@ func TestEnvironmentInputDeletionSettlesPendingAndFencesPromotion(t *testing.T) 
 	for _, concurrent := range []bool{false, true} {
 		t.Run(map[bool]string{false: "pending", true: "racing-promotion"}[concurrent], func(t *testing.T) {
 			s, pool := testStore(t)
-			lease := executionLease(t, s)
-			writer := lease.Store()
+			writer := executionWriter(t, s)
 			tenant, session := environmentInputSession(t, s)
 			ctx := context.Background()
 			pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")

@@ -59,9 +59,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 			t.Fatal("unconnected work selected", work, err)
 		}
 	}
-	foreign := *h
-	foreign.tenant = uuid.NewString()
-	unboundWorkerEnvironmentReservation(t, &foreign)
+	unboundWorkerEnvironmentReservation(t, &dispatchHarness{s: h.s, tenant: uuid.NewString()})
 	seen, cursor := 0, ""
 	for _, count := range []int{100, 4, 0} {
 		devices := []string{h.device.ID}

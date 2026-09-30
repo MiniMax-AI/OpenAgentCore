@@ -35,14 +35,14 @@ func TestAdditionalProfileUsesCommonAdmission(t *testing.T) {
 	profile.ConfigurationValidation = engine.AdditionalValidation
 	profile.ToolsValidation = engine.AdditionalValidation
 	profile.FunctionResultValidation = engine.AdditionalValidation
-	profile.ValidateConfiguration = func(agent v1.Agent, environment *v1.Environment, hasDaemon bool) error {
+	profile.ValidateConfiguration = func(agent v1.Agent, environment *v1.Environment) error {
 		configurationChecked = true
-		if agent.Model != "fixture" || environment == nil || hasDaemon {
+		if agent.Model != "fixture" || environment == nil {
 			return engine.ErrInvalidInput
 		}
 		return nil
 	}
-	profile.ValidateTools = func(_ *v1.Environment, _ bool, tools []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
+	profile.ValidateTools = func(_ *v1.Environment, tools []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
 		toolsChecked = true
 		if len(tools) != 1 || tools[0].Name != "echo" || len(mcp) != 0 {
 			t.Fatal("common tool decoding did not reach profile")
@@ -105,7 +105,7 @@ func TestExplicitValidationPoliciesPreserveErrorPrecedence(t *testing.T) {
 				profile := enginetest.Profile(func(p *engine.Profile) {
 					p.ConfigurationValidation = configuration
 					if configuration == engine.AdditionalValidation {
-						p.ValidateConfiguration = func(v1.Agent, *v1.Environment, bool) error {
+						p.ValidateConfiguration = func(v1.Agent, *v1.Environment) error {
 							if rejectConfiguration {
 								return configurationErr
 							}
@@ -113,7 +113,7 @@ func TestExplicitValidationPoliciesPreserveErrorPrecedence(t *testing.T) {
 						}
 					}
 					p.ToolsValidation = engine.AdditionalValidation
-					p.ValidateTools = func(*v1.Environment, bool, []proto.FunctionTool, []proto.MCPHTTPServer) error {
+					p.ValidateTools = func(*v1.Environment, []proto.FunctionTool, []proto.MCPHTTPServer) error {
 						toolsCalled = true
 						return toolsErr
 					}

@@ -35,8 +35,7 @@ func TestSandboxCoreURLValidation(t *testing.T) {
 func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 	s, pool := newManagedTestStore(t)
 	s.SetPublicURL("https://core.example")
-	lease := executionLease(t, s)
-	w := lease.Store()
+	w := executionWriter(t, s)
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -71,10 +70,10 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT (SELECT count(*) FROM sessions)+(SELECT count(*) FROM runtime_nodes)+(SELECT count(*) FROM runtime_allocations)+(SELECT count(*) FROM runtime_placements)").Scan(&sideEffects); err != nil || sideEffects != 0 {
 		t.Fatal("setup or rejected admission created execution state", sideEffects, err)
 	}
-	if err := lease.Close(context.Background()); err != nil {
+	if err := w.CloseExecution(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	restarted := executionLease(t, s).Store()
+	restarted := executionWriter(t, s)
 	if err := restarted.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +92,7 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 
 func TestSandboxDeploymentSetupConcurrentSelection(t *testing.T) {
 	s, _ := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -142,7 +141,7 @@ func TestSandboxDeploymentSetupConcurrentSelection(t *testing.T) {
 func TestSandboxDeploymentSetupRejectsFileManagedAndUnleasedWrites(t *testing.T) {
 	s, w, selection := managerFixture(t, 4, 16)
 	input := SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}
-	if _, err := s.InitializeSandboxDeployment(t.Context(), selection.InstallationID, input); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.InitializeSandboxDeployment(t.Context(), selection.InstallationID, input); !errors.Is(err, ErrExecutionAuthority) {
 		t.Fatal("unleased setup accepted", err)
 	}
 	if _, err := w.InitializeSandboxDeployment(t.Context(), selection.InstallationID, input); !errors.Is(err, ErrSandboxDeploymentConflict) {

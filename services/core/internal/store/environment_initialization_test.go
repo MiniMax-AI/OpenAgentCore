@@ -197,12 +197,11 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		return store.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
 	}
 	revoked, other := create(), create()
-	lease, err := s.AcquireExecutionLease(t.Context())
+	owned, err := store.NewExecution(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lease.Close(context.Background())
-	owned := lease.Store()
+	defer owned.CloseExecution(context.Background())
 	if err := s.RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
 		t.Fatal(err)
 	}

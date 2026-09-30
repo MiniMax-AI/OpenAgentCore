@@ -8,7 +8,7 @@ import (
 )
 
 func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
-	h, w, environment := directoryWorker(t, true)
+	h, w, environment := directoryWorker(t)
 	awaitFixtureCapabilities(t, h, workerEnvironmentCapabilities())
 	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "execute", []store.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}})
 	if err != nil {

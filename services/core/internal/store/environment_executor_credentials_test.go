@@ -122,11 +122,11 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Provisioning remains control-plane work while the execution owner is active.
-	lease, err := s.AcquireExecutionLease(ctx)
+	writer, err := NewExecution(ctx, s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lease.Close(ctx)
+	defer writer.CloseExecution(ctx)
 	const attempts = 8
 	var wg sync.WaitGroup
 	tokens := make(chan string, attempts)

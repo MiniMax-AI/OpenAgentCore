@@ -21,7 +21,7 @@ func managedArchiveFixture(t *testing.T) (*Store, *Store, string) {
 		t.Fatal(err)
 	}
 	s := NewWithCredentialCipher(pool, cipher)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	installation := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 			t.Fatal("archive accepted wrong generation", generation, err)
 		}
 	}
-	if _, err := s.ArchiveManagedSession(ctx, tenant, session.ID, 1); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.ArchiveManagedSession(ctx, tenant, session.ID, 1); !errors.Is(err, ErrExecutionAuthority) {
 		t.Fatal("unleased archive accepted", err)
 	}
 	for _, other := range []string{uuid.NewString(), "malformed"} {

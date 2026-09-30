@@ -9,13 +9,14 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
-func verifyNativePublicExecution(t *testing.T, h *dispatchHarness, parent context.Context, evidence string) {
+func verifyNativePublicExecution(t *testing.T, h *dispatchHarness, parent context.Context, evidence string, provider *v1.ModelProviderInput) {
 	t.Helper()
 	python := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON")
 	if python == "" {
@@ -43,7 +44,7 @@ func verifyNativePublicExecution(t *testing.T, h *dispatchHarness, parent contex
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := api.NewHandler(h.s, auth, "codex", api.WithExecution(worker))
+	handler, err := api.NewHandler(h.s, auth, "codex", api.WithExecution(worker), nativeDeploymentDefaults("gpt-5.5", provider))
 	if err != nil {
 		t.Fatal(err)
 	}

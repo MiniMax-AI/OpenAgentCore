@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
@@ -32,7 +33,7 @@ type SandboxSetup struct {
 }
 
 func (s *Store) GetSandboxSetup(ctx context.Context) (SandboxSetup, error) {
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
+	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
 	d, err := s.queries.GetRuntimeDeployment(ctx)
 	if err != nil {
@@ -76,13 +77,14 @@ func (s *Store) sandboxSetup(d sqlc.RuntimeDeployment) (SandboxSetup, error) {
 // ClaimWebSandboxDeployment runs exactly once per execution-owner startup. It
 // reserves the installation before selection and fences previous node presence.
 func (s *Store) ClaimWebSandboxDeployment(ctx context.Context, installationID string) error {
+	if err := s.checkExecutionAuthority(); err != nil {
+		return err
+	}
 	id, err := parseConnectionGeneration(installationID)
-	if err != nil || s.executionLease == nil {
+	if err != nil {
 		return ErrInvalidInput
 	}
-	ctx, cancel := context.WithTimeout(ctx, executionTransactionTimeout)
-	defer cancel()
-	return s.executionLease.transaction(ctx, func(tx pgx.Tx) error {
+	return s.writer.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		d, err := q.LockRuntimeDeployment(ctx)
 		if err != nil {

@@ -59,7 +59,7 @@ func (s *Store) CreateStaticCredential(ctx context.Context, tenantID, vaultID st
 		return Credential{}, errors.New("credential encryption failed")
 	}
 	var created Credential
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.CreateStaticCredential(ctx, sqlc.CreateStaticCredentialParams{
 			ID: pgtype.UUID{Bytes: id, Valid: true}, TenantID: tenant, VaultID: vault,

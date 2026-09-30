@@ -73,7 +73,7 @@ func (s *Store) ReadCoreExecutionHistory(ctx context.Context, start, end time.Ti
 		result.Buckets[i].Start = start.Add(time.Duration(i) * resolution).UTC()
 	}
 	first, last := pgtype.Timestamptz{Time: start, Valid: true}, pgtype.Timestamptz{Time: end, Valid: true}
-	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err := s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		var err error
 		result.Interrupted, err = q.CoreInterruptedTurns(ctx, sqlc.CoreInterruptedTurnsParams{RangeStart: first, RangeEnd: last})

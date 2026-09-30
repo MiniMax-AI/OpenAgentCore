@@ -15,7 +15,7 @@ const environmentOrigin = "wss://core.example/api/v1/agent-daemon/ws"
 func environmentSession() store.Session {
 	return store.Session{
 		ID: "session", TenantID: "tenant", CreatedAt: time.Unix(1700000000, 0), Metadata: map[string]string{},
-		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"self_hosted"},"daemon":{"credential":"private"}}`),
+		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"self_hosted"}}`),
 		Environment: &store.Environment{
 			ID: "environment", SessionID: "session", TenantID: "tenant", Status: "pending",
 			Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/remote/workspace","capability_directories":["/remote/capabilities"],"id":"forged","remote_url":"https://secret@private","env":{"SECRET":"private"},"setup_commands":["private"]}`),

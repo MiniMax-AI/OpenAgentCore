@@ -135,12 +135,11 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 		handler.ServeHTTP(w, r)
 	}))
 	defer server.Close()
-	lease, err := s.AcquireExecutionLease(t.Context())
+	writer, err := store.NewExecution(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = lease.Close(context.Background()) }()
-	writer := lease.Store()
+	defer func() { _ = writer.CloseExecution(context.Background()) }()
 	connect := func(environment string) {
 		t.Helper()
 		generation := uuid.NewString()

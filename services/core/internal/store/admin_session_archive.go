@@ -35,8 +35,8 @@ func (s *Store) ArchiveSandboxResetSession(ctx context.Context, tenantID, sessio
 var ErrSandboxResetSessionBusy = errors.New("the hosted Session is busy")
 
 func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID string, expectedGeneration uint64, resetRequestedAt *time.Time) (ManagedSessionArchive, error) {
-	if s.executionLease == nil {
-		return ManagedSessionArchive{}, ErrInvalidInput
+	if err := s.checkExecutionAuthority(); err != nil {
+		return ManagedSessionArchive{}, err
 	}
 	tenant, err := parseID(tenantID)
 	if err != nil {

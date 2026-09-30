@@ -53,7 +53,7 @@ func (s *Store) runtimeManagerTransaction(ctx context.Context, apply func(*sqlc.
 // initialized. Node machine routes use it to authenticate their credential
 // before reporting any deployment state, including an uninitialized one.
 func (s *Store) runtimeDeploymentTransaction(ctx context.Context, apply func(*sqlc.Queries, sqlc.RuntimeDeployment) error) error {
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		deployment, err := q.LockRuntimeDeployment(ctx)
 		if err != nil {

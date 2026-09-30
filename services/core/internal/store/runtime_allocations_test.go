@@ -13,8 +13,7 @@ import (
 
 func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	s, pool := testStore(t)
-	lease := executionLease(t, s)
-	w := lease.Store()
+	w := executionWriter(t, s)
 	tenant, provider := uuid.NewString(), uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
 	secret := uuid.NewString()
@@ -32,14 +31,14 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(secret)); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatalf("provider target changed: %v", err)
 	}
-	if err := lease.Close(t.Context()); err != nil {
+	if err := w.CloseExecution(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.ObserveRuntimeRunning(t.Context(), owner); err == nil {
 		t.Fatal("lost writer changed allocation")
 	}
 	reopened, _ := testStore(t)
-	next := executionLease(t, reopened).Store()
+	next := executionWriter(t, reopened)
 	retry, err := next.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, provider, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || !retry.Replayed || retry.ID != owner.ID || retry.DeviceID != owner.DeviceID {
 		t.Fatalf("restart replaced unknown allocation: %+v %v", retry, err)
@@ -96,7 +95,7 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 
 func TestRuntimeAllocationOneWinnerAndRollback(t *testing.T) {
 	s, pool := testStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	tenant, provider := uuid.NewString(), uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
 	var wg sync.WaitGroup
@@ -153,7 +152,7 @@ func TestRuntimeAllocationOneWinnerAndRollback(t *testing.T) {
 
 func TestRuntimeAllocationExpiryAndRevocation(t *testing.T) {
 	s, pool := testStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
 	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))

@@ -1,7 +1,6 @@
 package execution
 
 import (
-	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -13,25 +12,24 @@ import (
 )
 
 func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
-	called := false
-	d := Dispatcher{Options: func(context.Context, store.Session) (map[string]any, error) {
-		called = true
-		return map[string]any{"model_provider": map[string]any{"base_url": "http://127.0.0.1:1/v1"}}, nil
-	}}
-	if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); err == nil || called {
+	var d Dispatcher
+	if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); err == nil {
 		t.Fatal("missing Session credentials fell back")
 	}
 	// Hosted and self-hosted Runtimes have no model configuration of their own.
 	for _, environment := range []string{"openai_hosted", "self_hosted"} {
 		snapshot := Snapshot{Environment: &v1.Environment{Type: environment}}
-		if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); !errors.Is(err, store.ErrModelProviderRequired) || called {
+		if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); !errors.Is(err, store.ErrModelProviderRequired) {
 			t.Fatal("provider-free Session dispatched", environment, err)
 		}
 	}
-	// A none device may supply its own provider environment.
-	request, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, Snapshot{Environment: &v1.Environment{Type: "none"}}, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{})
-	if err != nil || !called || request.AgentOptions["model_provider"] == nil {
-		t.Fatal("none Session lost its adapter options", err)
+	// A none device without a frozen provider uses its own provider environment:
+	// Core sends only the Agent's model and instructions.
+	instructions := "Keep this instruction."
+	snapshot := Snapshot{Agent: v1.Agent{Model: "device-model", Instructions: &instructions}, Environment: &v1.Environment{Type: "none"}}
+	request, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{})
+	if err != nil || !reflect.DeepEqual(request.AgentOptions, map[string]any{"model": "device-model", "system_prompt": &instructions}) {
+		t.Fatal("none Session received adapter options Core does not own", request.AgentOptions, err)
 	}
 }
 

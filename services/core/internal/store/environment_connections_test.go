@@ -52,7 +52,7 @@ func connectionChanges(t *testing.T, s *Store, tenant, session string) []Session
 func TestEnvironmentConnectionOrdersGenerationsAndImmutableEvents(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session, environment := connectionFixture(t, s)
-	writer := executionLease(t, s).Store()
+	writer := executionWriter(t, s)
 	first, second := uuid.NewString(), uuid.NewString()
 	replace := func(gen string) {
 		t.Helper()
@@ -135,8 +135,7 @@ func TestEnvironmentConnectionRequiresOwnerAndRollsBackWithEvent(t *testing.T) {
 	if err := s.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err == nil {
 		t.Fatal("unleased observation accepted")
 	}
-	lease := executionLease(t, s)
-	writer := lease.Store()
+	writer := executionWriter(t, s)
 	if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +168,7 @@ func TestEnvironmentConnectionRequiresOwnerAndRollsBackWithEvent(t *testing.T) {
 	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := lease.Close(t.Context()); err != nil {
+	if err := writer.CloseExecution(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	before = connectionSnapshot(t, pool, environment.ID)
@@ -186,7 +185,7 @@ func TestEnvironmentConnectionDoesNotReviveDeletedOrTerminalResources(t *testing
 		t.Run(status, func(t *testing.T) {
 			s, pool := testStore(t)
 			tenant, session, environment := connectionFixture(t, s)
-			writer := executionLease(t, s).Store()
+			writer := executionWriter(t, s)
 			generation := uuid.NewString()
 			if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 				t.Fatal(err)

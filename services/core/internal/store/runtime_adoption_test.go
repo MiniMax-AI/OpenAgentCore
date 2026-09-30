@@ -12,7 +12,7 @@ import (
 func legacyAdoptionFixture(t *testing.T) (*Store, *Store, RuntimeDeployment, RuntimeAllocation) {
 	t.Helper()
 	s, _ := newManagedTestStore(t)
-	w := executionLease(t, s).Store()
+	w := executionWriter(t, s)
 	d := deploymentSelection()
 	deploymentConfigure(t, w, &d)
 	tenant := uuid.NewString()

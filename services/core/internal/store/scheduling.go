@@ -87,7 +87,7 @@ func (s *Store) sessionActivity(ctx context.Context, session Session, err error)
 	if err != nil {
 		return Session{}, err
 	}
-	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var err error
 		session, err = readSessionActivity(ctx, s.queries.WithTx(tx), session)
 		return err
@@ -108,7 +108,7 @@ func (s *Store) SessionStreamSnapshot(ctx context.Context, tenantID, sessionID s
 	}
 	var session Session
 	var cursor int64
-	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: id})
 		if err != nil {

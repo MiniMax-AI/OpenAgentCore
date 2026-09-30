@@ -35,7 +35,7 @@ func (s *Store) CreateOAuthCredential(ctx context.Context, tenantID, vaultID str
 		return Credential{}, err
 	}
 	var created Credential
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.CreateOAuthCredential(ctx, sqlc.CreateOAuthCredentialParams{
 			ID: pgtype.UUID{Bytes: uuid.MustParse(credential.ID), Valid: true}, TenantID: tenant, VaultID: vault,
@@ -67,92 +67,103 @@ func (s *Store) UpdateOAuthCredential(ctx context.Context, tenantID, vaultID, cr
 	if current.AuthType != "mcp_oauth" {
 		return Credential{}, ErrInvalidInput
 	}
-	tx, credential, secret, err := s.lockOAuth(ctx, tenantID, vaultID, credentialID, "")
-	if err != nil {
-		return Credential{}, err
-	}
-	defer tx.Rollback(context.Background())
-	if input.AccessToken != nil {
-		secret.AccessToken = *input.AccessToken
-		secret.Metadata.ExpiresAt = nil
-	}
-	if input.ExpiresAtSet {
-		secret.Metadata.ExpiresAt = input.ExpiresAt
-	}
-	if update := input.Refresh; update != nil {
-		refresh := secret.Metadata.Refresh
-		if refresh == nil {
-			return Credential{}, ErrInvalidInput
+	var updated Credential
+	err = s.withOAuth(ctx, tenantID, vaultID, credentialID, "", "credential update failed", func(ctx context.Context, tx pgx.Tx, credential Credential, secret oauthSecret) error {
+		if input.AccessToken != nil {
+			secret.AccessToken = *input.AccessToken
+			secret.Metadata.ExpiresAt = nil
 		}
-		if update.TokenEndpointAuthType != "" && update.TokenEndpointAuthType != refresh.TokenEndpointAuth {
-			return Credential{}, ErrInvalidInput
+		if input.ExpiresAtSet {
+			secret.Metadata.ExpiresAt = input.ExpiresAt
 		}
-		if update.ClientSecret != nil {
-			if refresh.TokenEndpointAuth == "none" {
-				return Credential{}, ErrInvalidInput
+		if update := input.Refresh; update != nil {
+			refresh := secret.Metadata.Refresh
+			if refresh == nil {
+				return ErrInvalidInput
 			}
-			secret.ClientSecret = *update.ClientSecret
+			if update.TokenEndpointAuthType != "" && update.TokenEndpointAuthType != refresh.TokenEndpointAuth {
+				return ErrInvalidInput
+			}
+			if update.ClientSecret != nil {
+				if refresh.TokenEndpointAuth == "none" {
+					return ErrInvalidInput
+				}
+				secret.ClientSecret = *update.ClientSecret
+			}
+			if update.RefreshToken != nil {
+				secret.RefreshToken = *update.RefreshToken
+			}
+			if update.ScopeSet {
+				refresh.Scope = update.Scope
+			}
 		}
-		if update.RefreshToken != nil {
-			secret.RefreshToken = *update.RefreshToken
+		var err error
+		updated, err = s.saveOAuth(ctx, tx, tenantID, credential, secret)
+		if err != nil {
+			return err
 		}
-		if update.ScopeSet {
-			refresh.Scope = update.Scope
+		if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "update", "credential", updated.ID, updated.VaultID); err != nil {
+			return errors.New("credential update failed")
 		}
-	}
-	updated, err := s.saveOAuth(ctx, tx, tenantID, credential, secret)
+		return nil
+	})
 	if err != nil {
 		return Credential{}, err
-	}
-	if err := recordWriteAudit(ctx, s.queries.WithTx(tx), tenantID, "update", "credential", updated.ID, updated.VaultID); err != nil {
-		return Credential{}, errors.New("credential update failed")
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Credential{}, errors.New("credential update failed")
 	}
 	return updated, nil
 }
 
-// Row ownership lasts through refresh or manual replacement. PostgreSQL serializes
-// competing updates and deletes, including a parent Vault's cascading deletion.
-func (s *Store) lockOAuth(ctx context.Context, tenantID, vaultID, credentialID, destination string) (pgx.Tx, Credential, oauthSecret, error) {
+// withOAuth locks the credential row for the whole of apply, including an
+// external refresh, and commits only when apply succeeds. Row ownership lasts
+// through refresh or manual replacement. PostgreSQL serializes competing updates
+// and deletes, including a parent Vault's cascading deletion. A failure to begin
+// or commit is reported as failure, never with database error text.
+func (s *Store) withOAuth(ctx context.Context, tenantID, vaultID, credentialID, destination, failure string, apply func(context.Context, pgx.Tx, Credential, oauthSecret) error) error {
 	tenant, e1 := parseID(tenantID)
 	vault, e2 := parseID(vaultID)
 	id, e3 := parseID(credentialID)
 	if e1 != nil || e2 != nil || e3 != nil {
-		return nil, Credential{}, oauthSecret{}, ErrNotFound
+		return ErrNotFound
 	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, Credential{}, oauthSecret{}, errors.New("credential transaction failed")
+	var applied error
+	err := s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		credential, secret, err := s.lockOAuth(ctx, tx, tenant, vault, id, destination)
+		if err == nil {
+			err = apply(ctx, tx, credential, secret)
+		}
+		applied = err
+		return err
+	})
+	if err != nil && applied == nil {
+		return errors.New(failure)
 	}
-	fail := func(err error) (pgx.Tx, Credential, oauthSecret, error) {
-		_ = tx.Rollback(context.Background())
-		return nil, Credential{}, oauthSecret{}, err
-	}
+	return err
+}
+
+func (s *Store) lockOAuth(ctx context.Context, tx pgx.Tx, tenant, vault, id pgtype.UUID, destination string) (Credential, oauthSecret, error) {
 	row, err := sqlc.New(tx).GetOAuthCredentialForUpdate(ctx, sqlc.GetOAuthCredentialForUpdateParams{
 		TenantID: tenant, VaultID: vault, ID: id,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fail(ErrNotFound)
+		return Credential{}, oauthSecret{}, ErrNotFound
 	}
 	if err != nil {
-		return fail(errors.New("credential lookup failed"))
+		return Credential{}, oauthSecret{}, errors.New("credential lookup failed")
 	}
 	credential, err := credentialFromRow(sqlc.GetCredentialRow{ID: row.ID, VaultID: row.VaultID,
 		Name: row.Name, AuthType: row.AuthType, McpServerUrl: row.McpServerUrl,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, OauthMetadata: row.OauthMetadata})
 	if err != nil {
-		return fail(err)
+		return Credential{}, oauthSecret{}, err
 	}
 	if destination != "" && credential.MCPServerURL != destination {
-		return fail(ErrNotFound)
+		return Credential{}, oauthSecret{}, ErrNotFound
 	}
 	secret, err := s.openOAuth(uuid.UUID(tenant.Bytes).String(), credential, row.TokenCiphertext)
 	if err != nil {
-		return fail(err)
+		return Credential{}, oauthSecret{}, err
 	}
-	return tx, credential, secret, nil
+	return credential, secret, nil
 }
 
 func (s *Store) saveOAuth(ctx context.Context, tx pgx.Tx, tenantID string, credential Credential, secret oauthSecret) (Credential, error) {

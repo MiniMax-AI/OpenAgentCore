@@ -23,7 +23,7 @@ func (s *Store) CreateSkillVersion(ctx context.Context, tenantID, skillID string
 		return SkillVersion{}, ErrInvalidInput
 	}
 	var result SkillVersion
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		owner, err := q.LockSkill(ctx, sqlc.LockSkillParams{TenantID: tenant, ID: id})
 		if err != nil {
@@ -98,7 +98,7 @@ func (s *Store) DeleteSkillVersion(ctx context.Context, tenantID, skillID, versi
 	}
 	number := skillPathVersion(version)
 	var result SkillVersion
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		owner, err := q.LockSkill(ctx, sqlc.LockSkillParams{TenantID: tenant, ID: id})
 		if err != nil {

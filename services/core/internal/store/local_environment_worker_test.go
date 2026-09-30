@@ -31,11 +31,6 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 		caps.Streaming, caps.Steering, caps.DurableTurns, caps.DurableInputReceipts = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
 		caps.WebSearchControl, caps.TextVerbosity, caps.ExecutionControls = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
 		caps.SubagentControl, caps.ToolObservations = proto.CapabilitySupported, proto.CapabilitySupported
-	} else {
-		h.d.Options = func(context.Context, store.Session) (map[string]any, error) {
-			t.Error("directory read requested model credentials")
-			return nil, errors.New("model unavailable")
-		}
 	}
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "local capability", func() bool {

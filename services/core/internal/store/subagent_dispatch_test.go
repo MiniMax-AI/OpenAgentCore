@@ -16,8 +16,8 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			h := newDispatchHarness(t)
 			ctx := t.Context()
 			configuration, _ := json.Marshal(map[string]any{
-				"agent":  map[string]any{"id": "agent_root", "model": "test-model", "multi_agent": map[string]any{"enabled": enabled, "max_concurrent_subagents": 3}},
-				"daemon": map[string]string{"work_dir": "/tmp"},
+				"agent":       map[string]any{"id": "agent_root", "model": "test-model", "multi_agent": map[string]any{"enabled": enabled, "max_concurrent_subagents": 3}},
+				"environment": map[string]string{"type": "none"},
 			})
 			var err error
 			h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "identity-dispatch", Configuration: configuration})
@@ -27,12 +27,12 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			if err = h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
 				t.Fatal(err)
 			}
-			lease, err := h.s.AcquireExecutionLease(ctx)
+			writer, err := store.NewExecution(ctx, h.s)
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = lease.Close(context.Background()) })
-			h.d.Store = lease.Store()
+			t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
+			h.d.Store = writer
 			input := h.message("first", "root message")
 			running := h.run(ctx, input.TurnID)
 			var request proto.PromptRequestPayload
