@@ -205,11 +205,6 @@
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
-    "path": "docs/design-principles.md",
-    "regex": "Parsar is an ordinary API-key holder",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
     "path": "apps/web/PRODUCT.md",
     "regex": "and Parsar itself",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."

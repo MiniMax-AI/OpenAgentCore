@@ -50,7 +50,6 @@ BUNDLED_DOCS = (
 BUNDLED_FILES = (
     "docs/assets/openagentcore-banner.jpeg",
     "docs/assets/architecture.png",
-    "docs/assets/development-architecture.png",
     "docs/assets/console-overview-en.webp",
     "docs/assets/console-overview-zh.webp",
     "docs/assets/console-agent-metrics-en.webp",

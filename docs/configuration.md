@@ -139,14 +139,15 @@ Core reads only its environment. The installer renders `generated/core.env` from
 | Variable | Set from |
 | --- | --- |
 | `OAC_PUBLIC_URL` | `public_url`, or Core's loopback origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers. Without it, Core runs no Runtime gateway and executes no Sessions |
-| `OAC_ADDR` | `ports.core` (native Core) or `:8091` in the container |
+| `OAC_ADDR` | The installer derives the native listener from `ports.core` and sets `:8091` in the container. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
 | `OAC_DATABASE_URL` | The installation's PostgreSQL without a password, plus `core.database_pool` as `pool_*` query parameters |
 | `OAC_DATABASE_PASSWORD_FILE` | `secrets/database.password`. The URL must then carry no password; migrations and the maintenance commands read the file too |
 | `OAC_CREDENTIAL_KEY_FILE` | `secrets/credential.key` |
 | `OAC_CORE_KEY_DIGESTS_FILE` | `generated/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
 | `OAC_INSTALLATION_ID` | The installation ID from `state.json`, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL` and `OAC_CORE_KEY_DIGESTS_FILE`. Core refuses an ID other than the one its database recorded, so keep the two together |
 | `OAC_SETTINGS_FILE` | `generated/settings.json`, the snapshot Core serves at `GET /core/v1/installation`; Core does not act on it |
-| `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching `core.*` settings |
+| `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching [process settings](#settings); omitted or empty default Harness uses `core.default_harness`’s documented default |
+| `OAC_HARNESSES` | `core.harnesses` with the installer. Independently started Core enables only the default Harness when unset; comma-separated explicit names supplement it. Entries are trimmed and deduplicated; unknown names stop startup |
 | `OAC_HISTORY_SETTINGS_FILE` | `generated/runtime-history.json`: the [`core.runtime_history`](#settings) object, when it is set |
 | `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
 | `OAC_PROVIDER_ROOT` | Absolute adapter artifact root: `native/` for native Core, `/opt/oac` in the Core image. Each adapter owns its helper paths beneath this root |
@@ -155,4 +156,21 @@ Core reads only its environment. The installer renders `generated/core.env` from
 
 Core logs the file paths it loads, never environment values or file contents.
 
-A Web you run without the installer reads the variables in [Console server settings](web/console-server.md#settings), plus `OAC_WEB_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's node payload (the installer's `node-payload/`). Without it, Add node is unavailable.
+Invalid explicit OAuth trusted origins stop Core at startup. Entries must be HTTPS origins without credentials, query or a non-root path; the installer validates `core.oauth_trusted_origins` before generating them. [Vaults](../contracts/agents-api/vaults.md) owns refresh and network policy. A private issuer also needs a trusted CA: independently managed Unix Core can use Go’s `SSL_CERT_FILE` PEM CA-bundle override, which preserves certificate verification. Managed installation has no custom-CA setting or mount; do not edit `generated/core.env`.
+
+## Appendix: Web environment without the installer
+
+The installer sets these variables from `config.json`; set them yourself only when you run the console without the installer. Of the installation's secrets, the installer gives the console only `secrets/core.key`.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `OAC_WEB_ADDR` | `:8080` | Listener address |
+| `OAC_WEB_ORIGIN` | `http://127.0.0.1:8080` | The exact browser-facing origin, HTTP or HTTPS, without a path. Host and origin checks use it; HTTPS makes the session cookie `Secure` |
+| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core's origin, HTTP or HTTPS, without credentials, query or path |
+| `OAC_WEB_CORE_KEY_FILE` | `/admin/core.key` | Absolute path of a regular file with no group or other permissions, holding the Core key: at least 32 characters, no whitespace, at most 4 KiB |
+| `OAC_WEB_DIST` | `/www` | Absolute directory of the built console; must contain `index.html` |
+| `OAC_WEB_NODE_PAYLOAD_DIR` | unset | Absolute path of the matched distribution's node payload (the installer's `node-payload/`). Unset, `/node-install/*` is not served and Add node is unavailable |
+| `OAC_WEB_INSTALLATION_SOCKET` | unset | Absolute path of the installer's domain socket. Unset, domain setup reports unsupported |
+| `OAC_WEB_BOOTSTRAP` | `0` | `1` accepts literal-IP hosts before a domain is configured. Requires an `http://` origin and `OAC_WEB_INSTALLATION_SOCKET` |
+
+Defaults apply when a variable is absent; an explicitly empty value is validated as supplied. An invalid `OAC_WEB_*` value stops the console at startup with a message naming the variable. The console also reads `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT` and `OAC_LOG_ADD_SOURCE` ([Core environment](#appendix-core-environment-without-the-installer)); unknown values fall back to their defaults. Use HTTPS for any browser that is not on the same machine.

@@ -67,7 +67,7 @@ The console runs beside the administrator's own Core, with execution, files and 
 ## Brand Commitments
 
 - Product name: OpenAgentCore. OpenAgentCore mark assets in `apps/web/public/`.
-- Keep the OpenAgentCore visual identity shared with the public landing (`site/`): neutral grays and a quiet indigo accent. The console uses Inter and Geist Mono on Beautiful UI's foundation tokens and structure; `DESIGN.md` records the system.
+- Use the OpenAgentCore visual identity: neutral grays and a quiet indigo accent. The console uses Inter and Geist Mono on Beautiful UI's foundation tokens and structure; `DESIGN.md` records the system.
 
 ## Evidence on Hand
 
