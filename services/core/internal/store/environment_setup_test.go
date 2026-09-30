@@ -9,6 +9,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 )
 
@@ -20,7 +21,7 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 	}
 	s := NewWithCredentialCipher(pool, cipher)
 	tenant, foreign := uuid.NewString(), uuid.NewString()
-	setup := EnvironmentSetup{Env: map[string]string{"SECRET": "template-env-canary"}, Commands: []SetupCommand{{Command: "printf template-command-canary > result"}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}}}
+	setup := environmentconfig.Setup{Env: map[string]string{"SECRET": "template-env-canary"}, Commands: []environmentconfig.SetupCommand{{Command: "printf template-command-canary > result"}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}}}
 	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{Initialization: setup, SetEnv: true, SetSetup: true, SetPackages: true})
 	if err != nil {
 		t.Fatal(err)
@@ -84,16 +85,5 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 	}
 	if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal("uninitialized execution admitted", err)
-	}
-}
-
-func TestEnvironmentSetupReservesOpenAgentCoreNames(t *testing.T) {
-	for _, name := range []string{"OAC_ADDR", "OAC_RUNTIME_HOME", "OAC_WEB_ORIGIN", "OAC_LOG_LEVEL", "OAC_DEV_HOME", "OAC_TEST_DATABASE_URL"} {
-		if err := (EnvironmentSetup{Env: map[string]string{name: "value"}}).Validate(); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("reserved name %s accepted: %v", name, err)
-		}
-	}
-	if err := (EnvironmentSetup{Env: map[string]string{"APPLICATION_VALUE": "ok"}}).Validate(); err != nil {
-		t.Fatalf("ordinary application settings rejected: %v", err)
 	}
 }

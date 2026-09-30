@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 )
 
 type InputReceipt struct {
@@ -131,9 +132,9 @@ func validateInputs(inputs []Input) ([]Input, json.RawMessage, error) {
 		if size > 512*1024 || len(input.Payload) == 0 || (input.Kind != "message" && input.Kind != "cancel" && input.Kind != "tool_result") {
 			return nil, nil, fmt.Errorf("%w: input payloads must be nonempty and total at most 512 KiB", ErrInvalidInput)
 		}
-		payload, err := canonicalJSONObject(input.Payload)
+		payload, err := jsonobject.Normalize(input.Payload)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 		}
 		if input.Kind == "cancel" && string(payload) != "{}" {
 			return nil, nil, fmt.Errorf("%w: cancel payload must be empty", ErrInvalidInput)

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/google/uuid"
 )
 
@@ -29,11 +30,11 @@ func TestSavedAgentsPersistIndependentlyAndStayTenantScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedConfig, err := canonicalJSONObject(input.Configuration)
+	expectedConfig, err := jsonobject.Normalize(input.Configuration)
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotConfig, err := canonicalJSONObject(first.Configuration)
+	gotConfig, err := jsonobject.Normalize(first.Configuration)
 	if err != nil || string(gotConfig) != string(expectedConfig) {
 		t.Fatalf("configuration changed: %s, %v", first.Configuration, err)
 	}

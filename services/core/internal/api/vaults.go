@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -75,7 +76,7 @@ func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 	var err error
 	input.Metadata, err = stringMetadata(request.Metadata)
 	if err == nil {
-		err = metadataCharacterError(input.Metadata)
+		err = metadataFieldError(metadata.ValidateStorable(input.Metadata))
 	}
 	if err != nil {
 		if !writeFieldError(w, err) {

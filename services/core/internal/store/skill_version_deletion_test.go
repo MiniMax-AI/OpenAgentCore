@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -45,7 +46,7 @@ func TestSoleSkillVersionDeletionRemovesSkill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reference := EnvironmentSetup{Skills: []EnvironmentSkill{{Metadata: EnvironmentSkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}
+	reference := environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}
 	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetSkills: true, Initialization: reference})
 	if err != nil {
 		t.Fatal(err)

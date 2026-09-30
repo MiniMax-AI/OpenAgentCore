@@ -9,6 +9,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
@@ -306,7 +307,7 @@ func (f *fakeDeploymentChanges) CancelSandboxReset(a0 context.Context, a1 uint64
 
 type fakeEnvironmentTemplates struct {
 	t                          testing.TB
-	resolveEnvironmentTemplate func(context.Context, string, string) (store.EnvironmentTemplate, []store.InitialFile, error)
+	resolveEnvironmentTemplate func(context.Context, string, string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error)
 	createEnvironmentTemplate  func(context.Context, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error)
 	getEnvironmentTemplate     func(context.Context, string, string) (store.EnvironmentTemplate, error)
 	updateEnvironmentTemplate  func(context.Context, string, string, store.EnvironmentTemplateInput) (store.EnvironmentTemplate, error)
@@ -314,7 +315,7 @@ type fakeEnvironmentTemplates struct {
 	listEnvironmentTemplates   func(context.Context, string, string, int, bool) (store.EnvironmentTemplatePage, error)
 }
 
-func (f *fakeEnvironmentTemplates) ResolveEnvironmentTemplate(a0 context.Context, a1 string, a2 string) (store.EnvironmentTemplate, []store.InitialFile, error) {
+func (f *fakeEnvironmentTemplates) ResolveEnvironmentTemplate(a0 context.Context, a1 string, a2 string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error) {
 	if f.resolveEnvironmentTemplate == nil {
 		unexpectedCall(f.t, "ResolveEnvironmentTemplate")
 	}

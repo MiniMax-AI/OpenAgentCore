@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -23,8 +24,8 @@ type decodedSessionRequest struct {
 }
 
 type sessionRequest struct {
-	initialFiles          []store.InitialFile
-	initialization        store.EnvironmentSetup
+	initialFiles          []environmentconfig.InitialFile
+	initialization        environmentconfig.Setup
 	originalEnvironment   json.RawMessage
 	modelProviderNull     bool
 	deploymentDefaults    *store.DeploymentModelProviderSnapshot

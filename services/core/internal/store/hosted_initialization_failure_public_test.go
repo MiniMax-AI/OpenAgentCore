@@ -19,6 +19,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -34,7 +35,7 @@ func failedInitialization(exitCode int) proto.RuntimePrepareResultPayload {
 	return proto.RuntimePrepareResultPayload{Outcome: "failed", ErrorCode: "runtime_preparation_failed", ExitCode: exitCode}
 }
 
-func hostedFailureSkill(t *testing.T) store.EnvironmentSkill {
+func hostedFailureSkill(t *testing.T) environmentconfig.Skill {
 	t.Helper()
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
@@ -48,7 +49,7 @@ func hostedFailureSkill(t *testing.T) store.EnvironmentSkill {
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	return store.EnvironmentSkill{Metadata: store.EnvironmentSkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}
+	return environmentconfig.Skill{Metadata: environmentconfig.SkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}
 }
 
 // hostedFailureProvider fails one initialization step with a controlled result.
@@ -139,7 +140,7 @@ func failHostedInitialization(t *testing.T, s *store.Store, tenant string, envir
 // with the safe reason and agent.session.failed; reads and events agree, and a
 // confirmed step names only its label and exit status.
 func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
-	commands := []store.SetupCommand{{Command: "echo " + hostedFailureCanary + "; exit 0"}, {Command: "echo " + hostedFailureCanary + "; exit 3"}, {Command: "touch never"}}
+	commands := []environmentconfig.SetupCommand{{Command: "echo " + hostedFailureCanary + "; exit 0"}, {Command: "echo " + hostedFailureCanary + "; exit 3"}, {Command: "touch never"}}
 	type failure struct {
 		fail   string
 		skip   int
@@ -153,28 +154,28 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 		reason string
 		steps  []string
 	}{
-		{"setup exit status", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands[1:]}},
+		{"setup exit status", store.CreateSessionInput{Initialization: environmentconfig.Setup{Commands: commands[1:]}},
 			failure{fail: "setup", result: failedInitialization(3)},
 			`Failed to provision environment: script "setup_commands[0]" failed with exit code 3`, []string{"configure", "setup"}},
-		{"later setup command", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands}},
+		{"later setup command", store.CreateSessionInput{Initialization: environmentconfig.Setup{Commands: commands}},
 			failure{fail: "setup", skip: 1, result: failedInitialization(3)},
 			`Failed to provision environment: script "setup_commands[1]" failed with exit code 3`, []string{"configure", "setup", "setup"}},
-		{"python package", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Packages: v1.EnvironmentPackages{Python: []string{"oac-nonexistent-zz"}}, Commands: commands[2:]}},
+		{"python package", store.CreateSessionInput{Initialization: environmentconfig.Setup{Packages: v1.EnvironmentPackages{Python: []string{"oac-nonexistent-zz"}}, Commands: commands[2:]}},
 			failure{fail: "python", result: failedInitialization(1)},
 			`Failed to provision environment: script "Python package installation" failed with exit code 1`, []string{"configure", "python"}},
-		{"failure without exit status", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands[1:]}},
+		{"failure without exit status", store.CreateSessionInput{Initialization: environmentconfig.Setup{Commands: commands[1:]}},
 			failure{fail: "setup", result: failedInitialization(0)},
 			"Failed to provision environment: initialization did not complete", []string{"configure", "setup"}},
-		{"unknown effect", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands[1:]}},
+		{"unknown effect", store.CreateSessionInput{Initialization: environmentconfig.Setup{Commands: commands[1:]}},
 			failure{fail: "setup", err: sandbox.ErrCommandUnconfirmed},
 			"Failed to provision environment: initialization did not complete", []string{"configure", "setup"}},
-		{"invalid failure code", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Commands: commands[1:]}},
+		{"invalid failure code", store.CreateSessionInput{Initialization: environmentconfig.Setup{Commands: commands[1:]}},
 			failure{fail: "setup", result: proto.RuntimePrepareResultPayload{Outcome: "failed", ErrorCode: hostedFailureCanary}},
 			"Failed to provision environment: initialization did not complete", []string{"configure", "setup"}},
-		{"initial file", store.CreateSessionInput{InitialFiles: []store.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte(hostedFailureCanary)}}},
+		{"initial file", store.CreateSessionInput{InitialFiles: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte(hostedFailureCanary)}}},
 			failure{fail: "file", result: failedInitialization(0)},
 			"Failed to provision environment: initial file installation failed", []string{"file"}},
-		{"Skill", store.CreateSessionInput{Initialization: store.EnvironmentSetup{Skills: []store.EnvironmentSkill{hostedFailureSkill(t)}, Commands: commands[2:]}},
+		{"Skill", store.CreateSessionInput{Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{hostedFailureSkill(t)}, Commands: commands[2:]}},
 			failure{fail: "skill", result: failedInitialization(0)},
 			"Failed to provision environment: Skill installation failed", []string{"configure", "skill"}},
 	} {
@@ -247,7 +248,7 @@ func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
 	s := hostedFailureStore(t)
 	tenant := uuid.NewString()
 	session, environment := hostedFailureSession(t, s, tenant, store.CreateSessionInput{
-		Initialization: store.EnvironmentSetup{Commands: []store.SetupCommand{{Command: "exit 3"}}},
+		Initialization: environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "exit 3"}}},
 		InitialInputs:  []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"initial"}`)}},
 	})
 	p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, fail: "setup",
@@ -281,7 +282,7 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 	s := hostedFailureStore(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	session, environment := hostedFailureSession(t, s, tenant, store.CreateSessionInput{
-		Initialization: store.EnvironmentSetup{Commands: []store.SetupCommand{{Command: "echo " + hostedFailureCanary + "; exit 3"}}},
+		Initialization: environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "echo " + hostedFailureCanary + "; exit 3"}}},
 		Metadata:       map[string]string{"case": "setup-exit3"},
 	})
 	key := uuid.NewString()

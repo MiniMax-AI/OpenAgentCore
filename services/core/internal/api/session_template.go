@@ -9,6 +9,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -114,7 +115,7 @@ func (h *Handler) resolveTemplateEnvironment(ctx context.Context, tenant string,
 	if err := setup.Validate(); err != nil {
 		return err
 	}
-	if err := store.ValidateInitialFiles(files); err != nil {
+	if err := environmentconfig.ValidateInitialFiles(files); err != nil {
 		return err
 	}
 	input.initialization = setup

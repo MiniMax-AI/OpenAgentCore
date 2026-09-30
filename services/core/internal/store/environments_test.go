@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/google/uuid"
 )
 
@@ -135,7 +136,7 @@ func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
 		if err := json.Unmarshal(got.creation.Session.Configuration, &snapshot); err != nil {
 			t.Fatal(err)
 		}
-		canonical, err := canonicalJSONObject(snapshot.Environment)
+		canonical, err := jsonobject.Normalize(snapshot.Environment)
 		if err != nil || string(canonical) != string(got.environment.Configuration) {
 			t.Fatal("configuration diverged", err)
 		}

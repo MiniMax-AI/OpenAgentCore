@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 )
 
 // Vault is a tenant-owned resource, independent of Sessions and engine execution.
@@ -43,16 +44,16 @@ func (s *Store) CreateVault(ctx context.Context, tenantID string, input CreateVa
 		}
 		name = pgtype.Text{String: *input.Name, Valid: true}
 	}
-	metadata, err := encodeMetadata(input.Metadata)
+	encodedMetadata, err := metadata.Encode(input.Metadata)
 	if err != nil {
-		return Vault{}, err
+		return Vault{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	var created Vault
 	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.CreateVault(ctx, sqlc.CreateVaultParams{
 			ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant,
-			Name: name, Metadata: metadata,
+			Name: name, Metadata: encodedMetadata,
 		})
 		if err != nil {
 			return err

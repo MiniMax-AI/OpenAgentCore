@@ -13,6 +13,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -89,9 +90,9 @@ func (s *Store) creationRequestHash(raw json.RawMessage) (pgtype.Text, error) {
 	if err != nil {
 		return pgtype.Text{}, err
 	}
-	canonical, err := canonicalJSONObject(raw)
+	canonical, err := jsonobject.Normalize(raw)
 	if err != nil {
-		return pgtype.Text{}, err
+		return pgtype.Text{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	hash := sha256.Sum256(canonical)
 	return pgtype.Text{String: hex.EncodeToString(hash[:]), Valid: true}, nil

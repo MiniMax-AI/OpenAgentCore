@@ -20,7 +20,10 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 )
@@ -63,8 +66,8 @@ type CreateSessionInput struct {
 	ExecutionConfiguration     *v1.SessionExecutionConfiguration
 	ModelProvider              *v1.ModelProviderInput
 	ModelProviderSource        string // session, agent or deployment; empty allows only openai_hosted
-	Initialization             EnvironmentSetup
-	InitialFiles               []InitialFile
+	Initialization             environmentconfig.Setup
+	InitialFiles               []environmentconfig.InitialFile
 	Creator                    identity.Subject
 	CreationRequest            json.RawMessage
 	Engine                     string
@@ -126,16 +129,16 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 	if input.Metadata == nil {
 		input.Metadata = map[string]string{}
 	}
-	metadata, err := encodeMetadata(input.Metadata)
+	encodedMetadata, err := metadata.Encode(input.Metadata)
 	if err != nil {
-		return SessionCreation{}, err
+		return SessionCreation{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	if len(input.Configuration) > 512*1024 {
 		return SessionCreation{}, fmt.Errorf("%w: configuration exceeds 512 KiB", ErrInvalidInput)
 	}
-	configuration, err := canonicalJSONObject(input.Configuration)
+	configuration, err := jsonobject.Normalize(input.Configuration)
 	if err != nil {
-		return SessionCreation{}, err
+		return SessionCreation{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	var batch []Input
 	var encodedInput json.RawMessage
@@ -167,7 +170,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 			return SessionCreation{}, err
 		}
 	}
-	var initialization *EnvironmentSetup
+	var initialization *environmentconfig.Setup
 	if !input.Initialization.Empty() {
 		initialization = &input.Initialization
 	}
@@ -187,10 +190,10 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 		ModelProvider  *v1.ModelProviderInput `json:",omitempty"`
 		Engine         string
 		Metadata       map[string]string
-		Configuration  json.RawMessage   `json:",omitempty"`
-		InitialInputs  json.RawMessage   `json:",omitempty"`
-		InitialFiles   []InitialFile     `json:",omitempty"`
-		Initialization *EnvironmentSetup `json:",omitempty"`
+		Configuration  json.RawMessage                 `json:",omitempty"`
+		InitialInputs  json.RawMessage                 `json:",omitempty"`
+		InitialFiles   []environmentconfig.InitialFile `json:",omitempty"`
+		Initialization *environmentconfig.Setup        `json:",omitempty"`
 	}{fingerprinted, input.Engine, input.Metadata, hashed, encodedInput, input.InitialFiles, initialization})
 	if err != nil {
 		return SessionCreation{}, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
@@ -202,7 +205,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input Create
 	hash := sha256.Sum256(canonical)
 	params := sqlc.CreateSessionParams{
 		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant, Engine: input.Engine,
-		Metadata: metadata, IdempotencyKey: input.IdempotencyKey, RequestHash: hex.EncodeToString(hash[:]),
+		Metadata: encodedMetadata, IdempotencyKey: input.IdempotencyKey, RequestHash: hex.EncodeToString(hash[:]),
 		Configuration: configuration, CreationRequestHash: creationHash,
 		CreatorKind: pgtype.Text{String: input.Creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: input.Creator.ID, Valid: true},
 	}
@@ -309,9 +312,9 @@ func sessionFromRow(row sqlc.Session) (Session, error) {
 		return Session{}, err
 	}
 	session.Creator = creator
-	configuration, err := canonicalJSONObject(row.Configuration)
+	configuration, err := jsonobject.Normalize(row.Configuration)
 	if err != nil {
-		return Session{}, fmt.Errorf("decode session configuration: %w", err)
+		return Session{}, fmt.Errorf("decode session configuration: %w: %w", ErrInvalidInput, err)
 	}
 	session.Configuration = configuration
 	if err := json.Unmarshal(row.Metadata, &session.Metadata); err != nil {

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/google/uuid"
 )
 
@@ -48,8 +49,8 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 		}
 	}
 	call, err := s.GetFunctionCall(t.Context(), tenant, session.ID, turn, "a")
-	got, _ := canonicalJSONObject(call.Result)
-	want, _ := canonicalJSONObject(json.RawMessage(full))
+	got, _ := jsonobject.Normalize(call.Result)
+	want, _ := jsonobject.Normalize(json.RawMessage(full))
 	if err != nil || call.Applied || string(got) != string(want) {
 		t.Fatal(call, err)
 	}

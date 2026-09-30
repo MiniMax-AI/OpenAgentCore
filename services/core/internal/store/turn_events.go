@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -48,9 +50,9 @@ func (s *Store) AppendTurnEvents(ctx context.Context, tenantID, sessionID, turnI
 		if len(event.Payload) > 512*1024 || !enginePattern.MatchString(event.Kind) {
 			return ErrInvalidInput
 		}
-		payload, err := canonicalJSONObject(event.Payload)
+		payload, err := jsonobject.Normalize(event.Payload)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: %w", ErrInvalidInput, err)
 		}
 		normalized[i] = ExecutionEvent{Kind: event.Kind, Payload: payload}
 		payloadBytes += len(payload)

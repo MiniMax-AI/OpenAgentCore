@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -235,7 +236,7 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusConflict, "turn_conflict", "The Turn cannot accept this input in its current state.")
 	case errors.Is(err, store.ErrIdempotencyConflict):
 		writeError(w, http.StatusConflict, "idempotency_conflict", "This idempotency key was used with different input.")
-	case errors.Is(err, store.ErrInvalidInput):
+	case errors.Is(err, store.ErrInvalidInput), errors.Is(err, environmentconfig.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid resource identifier or request limits.")
 	case store.UnstorableText(err):
 		// A documented local limit: PostgreSQL text and jsonb cannot store U+0000,

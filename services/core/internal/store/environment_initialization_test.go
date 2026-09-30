@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -56,8 +57,8 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
 				Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 				Configuration:  json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/home/user/work"}}`),
-				InitialFiles:   []store.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
-				Initialization: store.EnvironmentSetup{Skills: []store.EnvironmentSkill{hostedFailureSkill(t)}, Env: map[string]string{"EXPLICIT": "value"}, Commands: []store.SetupCommand{{Command: "touch setup"}}, CapabilityDirectories: []string{"/home/user/capabilities"}},
+				InitialFiles:   []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
+				Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{hostedFailureSkill(t)}, Env: map[string]string{"EXPLICIT": "value"}, Commands: []environmentconfig.SetupCommand{{Command: "touch setup"}}, CapabilityDirectories: []string{"/home/user/capabilities"}},
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -177,7 +178,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
 			Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 			Configuration: json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/home/user/work"}}`),
-			InitialFiles:  []store.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
+			InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
 		})
 		if err != nil {
 			t.Fatal(err)

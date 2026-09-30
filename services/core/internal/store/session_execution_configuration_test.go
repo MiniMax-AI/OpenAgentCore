@@ -11,6 +11,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
@@ -182,7 +183,7 @@ func TestSessionExecutionConfigurationRollbackAndValidation(t *testing.T) {
 			input.ExecutionConfiguration.ModelProvider = v1.ExecutionProviderSelection{Source: "session", Status: "available", Configuration: input.ModelProvider.SafeView()}
 			input.ExecutionConfiguration.ModelProvider.Configuration.BaseURL = "https://different.example/v1"
 		case "post_projection_failure":
-			input.InitialFiles = []InitialFile{{Type: "inline", Path: "invalid-path"}}
+			input.InitialFiles = []environmentconfig.InitialFile{{Type: "inline", Path: "invalid-path"}}
 		}
 		if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("%s: invalid projection/creation accepted: %v", kind, err)

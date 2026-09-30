@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -79,9 +80,9 @@ func (s *Store) UpdateSkillDefault(ctx context.Context, tenantID, skillID, versi
 	if err != nil {
 		return Skill{}, err
 	}
-	number, err := skillVersionNumber(version)
+	number, err := skills.ParseVersion(version)
 	if err != nil {
-		return Skill{}, err
+		return Skill{}, ErrInvalidInput
 	}
 	var result Skill
 	err = s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
@@ -155,14 +156,6 @@ func skillResourceID(value, prefix string) (pgtype.UUID, error) {
 	return pgtype.UUID{Bytes: id, Valid: true}, nil
 }
 
-func skillVersionNumber(value string) (int64, error) {
-	number, err := strconv.ParseInt(value, 10, 64)
-	if err != nil || number < 1 || strconv.FormatInt(number, 10) != value {
-		return 0, ErrInvalidInput
-	}
-	return number, nil
-}
-
 // skillPathIDs resolves a Skill path identifier. Like parsePathID, a malformed
 // value resolves to an identifier that never exists, so the request follows the
 // missing-Skill path. Request-body references keep skillIDs.
@@ -176,9 +169,9 @@ func skillPathIDs(tenantID, skillID string) (pgtype.UUID, pgtype.UUID, error) {
 
 // skillPathVersion resolves a version path segment. Versions start at 1, so a
 // malformed segment resolves to the never-assigned version 0 and follows the
-// missing-version path. Request-body selectors keep skillVersionNumber.
+// missing-version path. Request-body selectors keep skills.ParseVersion.
 func skillPathVersion(value string) int64 {
-	number, err := skillVersionNumber(value)
+	number, err := skills.ParseVersion(value)
 	if err != nil {
 		return 0
 	}

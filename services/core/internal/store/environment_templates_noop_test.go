@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 )
 
@@ -20,10 +21,10 @@ func TestTemplateEmptyUpdateTouchesTimeWithoutDecryptingOrChangingContents(t *te
 	tenant, name := uuid.NewString(), "Retained template"
 	original, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{
 		Name:  &name,
-		Files: []InitialFile{{Type: "inline", Path: "/workspace/input.txt", Data: []byte("file-canary")}},
-		Initialization: EnvironmentSetup{
+		Files: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input.txt", Data: []byte("file-canary")}},
+		Initialization: environmentconfig.Setup{
 			Env:      map[string]string{"PRIVATE_SETUP": "env-canary"},
-			Commands: []SetupCommand{{Command: "echo setup-canary"}},
+			Commands: []environmentconfig.SetupCommand{{Command: "echo setup-canary"}},
 		},
 	})
 	if err != nil {

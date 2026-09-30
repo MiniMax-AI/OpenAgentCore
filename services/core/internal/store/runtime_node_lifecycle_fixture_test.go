@@ -15,6 +15,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -173,7 +174,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, st
 	tenant := uuid.NewString()
 	input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage("{\"agent\":{\"model\":\"test\"},\"environment\":{\"type\":\"openai_hosted\"}}")}
 	if initialize {
-		input.InitialFiles = []store.InitialFile{{Type: "inline", Path: "/workspace/seed", Data: []byte("retained")}}
+		input.InitialFiles = []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/seed", Data: []byte("retained")}}
 	}
 	// Placement is automatic and generation readiness is current-connection
 	// authority. Do not merely change the legacy provider_ready projection.

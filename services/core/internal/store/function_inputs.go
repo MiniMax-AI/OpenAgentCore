@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -35,9 +37,9 @@ func functionInput(raw json.RawMessage) (FunctionResultInput, error) {
 	if json.Unmarshal(raw, &input) != nil || input.TurnID == "" || !validFunctionIdentity(input.CallID) || len(input.Result) == 0 {
 		return input, ErrInvalidInput
 	}
-	result, err := canonicalJSONObject(input.Result)
+	result, err := jsonobject.Normalize(input.Result)
 	if err != nil {
-		return input, err
+		return input, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	input.Result = result
 	return input, nil

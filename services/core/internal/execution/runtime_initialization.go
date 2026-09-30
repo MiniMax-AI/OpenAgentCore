@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -112,7 +113,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner store.Environment
 		return err
 	}
 	var cfg struct {
-		Files []store.InitialFileMetadata `json:"files"`
+		Files []environmentconfig.InitialFileMetadata `json:"files"`
 	}
 	if json.Unmarshal(environment.Configuration, &cfg) != nil || len(cfg.Files) > 50 {
 		return store.ErrInvalidInput
@@ -139,7 +140,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner store.Environment
 		}
 		candidate := store.ProvisioningFailure{Step: store.ProvisioningInitialFile}
 		if err == nil && index < len(cfg.Files) {
-			var metadata store.InitialFileMetadata
+			var metadata environmentconfig.InitialFileMetadata
 			var body []byte
 			metadata, body, err = w.dispatcher.Store.ReadInitialEnvironmentFile(step, owner.TenantID, owner.SessionID, index)
 			if err == nil {

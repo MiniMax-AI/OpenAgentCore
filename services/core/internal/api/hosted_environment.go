@@ -7,6 +7,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -123,8 +124,8 @@ func storedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 			return nil, store.ErrInvalidInput
 		}
 		for _, entry := range files {
-			var metadata store.InitialFileMetadata
-			if decodeInputObject(entry, &metadata, "id", "type", "path", "file_id", "size_bytes") != nil || metadata.ID == "" || metadata.SizeBytes == nil || *metadata.SizeBytes < 0 || *metadata.SizeBytes > store.MaxInitialFileBytes {
+			var metadata environmentconfig.InitialFileMetadata
+			if decodeInputObject(entry, &metadata, "id", "type", "path", "file_id", "size_bytes") != nil || metadata.ID == "" || metadata.SizeBytes == nil || *metadata.SizeBytes < 0 || *metadata.SizeBytes > environmentconfig.MaxInitialFileBytes {
 				return nil, store.ErrInvalidInput
 			}
 			if metadata.Type != "inline" && metadata.Type != "file_id" {

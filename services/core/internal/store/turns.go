@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 )
 
 var ErrTurnConflict = errors.New("turn state changed or cancellation was requested")
@@ -76,9 +77,9 @@ func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID 
 	if !validTransition(input.ExpectedStatus, input.Status) || len(input.Outcome) > 512*1024 {
 		return Turn{}, fmt.Errorf("%w: invalid turn transition or outcome size", ErrInvalidInput)
 	}
-	outcome, err := canonicalJSONObject(input.Outcome)
+	outcome, err := jsonobject.Normalize(input.Outcome)
 	if err != nil {
-		return Turn{}, err
+		return Turn{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	if !terminalStatus(input.Status) && string(outcome) != "{}" {
 		return Turn{}, fmt.Errorf("%w: outcome requires a terminal status", ErrInvalidInput)

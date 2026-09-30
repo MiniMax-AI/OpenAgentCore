@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 )
 
@@ -32,7 +33,7 @@ func TestSkillsEncryptedTemplateAndFrozenSession(t *testing.T) {
 	if err = writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	setup := EnvironmentSetup{Skills: []EnvironmentSkill{{Metadata: EnvironmentSkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}}}
+	setup := environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}}}
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetSkills: true, Initialization: setup})
 	if err != nil {

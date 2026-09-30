@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -132,7 +133,7 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 					if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_templates WHERE tenant_id=$1", tenant).Scan(&id); err != nil {
 						t.Fatal(err)
 					}
-					if _, err := s.UpdateEnvironmentTemplate(t.Context(), tenant, id, EnvironmentTemplateInput{SetEnv: true, SetSetup: true, SetFiles: true, Initialization: EnvironmentSetup{Env: map[string]string{"PRIVATE": "admin-private-env"}, Commands: []SetupCommand{{Command: "printf admin-private-env"}}}, Files: []InitialFile{{Type: "inline", Path: "/workspace/private", Data: []byte("admin-private-body")}}}); err != nil {
+					if _, err := s.UpdateEnvironmentTemplate(t.Context(), tenant, id, EnvironmentTemplateInput{SetEnv: true, SetSetup: true, SetFiles: true, Initialization: environmentconfig.Setup{Env: map[string]string{"PRIVATE": "admin-private-env"}, Commands: []environmentconfig.SetupCommand{{Command: "printf admin-private-env"}}}, Files: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/private", Data: []byte("admin-private-body")}}}); err != nil {
 						t.Fatal(err)
 					}
 				}

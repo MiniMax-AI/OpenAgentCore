@@ -3,13 +3,13 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
 	"slices"
-	"strings"
-	"unicode/utf8"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -44,14 +44,14 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "At least one update field is required")
 		return
 	}
-	var values map[string]*string
-	if err := json.Unmarshal(request.Metadata, &values); err != nil {
+	var pairs map[string]*string
+	if err := json.Unmarshal(request.Metadata, &pairs); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "metadata must be null or an object with string values.")
 		return
 	}
-	metadata, err := stringMetadata(values)
+	values, err := stringMetadata(pairs)
 	if err == nil {
-		err = validateMetadata(metadata)
+		err = metadataFieldError(metadata.Validate(values))
 	}
 	if err != nil {
 		if !writeFieldError(w, err) {
@@ -59,7 +59,7 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	session, err := h.Sessions.UpdateSessionMetadata(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), metadata)
+	session, err := h.Sessions.UpdateSessionMetadata(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), values)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -124,33 +124,26 @@ func stringMetadata(values map[string]*string) (map[string]string, error) {
 	return metadata, nil
 }
 
-// validateMetadata applies the pinned pair and character limits, then the
-// local U+0000 storage limit. Sorted keys keep repeated errors stable.
-func validateMetadata(metadata map[string]string) error {
-	if len(metadata) > 16 {
-		return &fieldError{param: "metadata", message: fmt.Sprintf("Invalid 'metadata': too many properties. Expected an object with at most 16 properties, but got an object with %d properties instead.", len(metadata))}
+// metadataFieldError renders a metadata violation with the pinned messages
+// and params. U+0000 is a documented local limit; the official service
+// accepts it.
+func metadataFieldError(err error) error {
+	var violation *metadata.Violation
+	if !errors.As(err, &violation) {
+		return err
 	}
-	for _, key := range slices.Sorted(maps.Keys(metadata)) {
-		if length := utf8.RuneCountInString(key); length > 64 {
-			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid property name in 'metadata': '%s' is too long. Expected a string with maximum length 64, but got a string with length %d instead.", key, length)}
-		}
-		if length := utf8.RuneCountInString(metadata[key]); length > 512 {
-			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid 'metadata.%s': string too long. Expected a string with maximum length 512, but got a string with length %d instead.", key, length)}
-		}
+	key := violation.Key
+	switch violation.Kind {
+	case metadata.TooManyPairs:
+		return &fieldError{param: "metadata", message: fmt.Sprintf("Invalid 'metadata': too many properties. Expected an object with at most 16 properties, but got an object with %d properties instead.", violation.Length)}
+	case metadata.KeyTooLong:
+		return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid property name in 'metadata': '%s' is too long. Expected a string with maximum length 64, but got a string with length %d instead.", key, violation.Length)}
+	case metadata.ValueTooLong:
+		return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid 'metadata.%s': string too long. Expected a string with maximum length 512, but got a string with length %d instead.", key, violation.Length)}
+	case metadata.KeyUnstorable:
+		return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid property name in 'metadata': '%s' contains U+0000, which this service cannot store.", key)}
+	case metadata.ValueUnstorable:
+		return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid 'metadata.%s': string contains U+0000, which this service cannot store.", key)}
 	}
-	return metadataCharacterError(metadata)
-}
-
-// metadataCharacterError rejects U+0000, which PostgreSQL text and jsonb cannot
-// store. The official service accepts it; this is a documented local limit.
-func metadataCharacterError(metadata map[string]string) error {
-	for _, key := range slices.Sorted(maps.Keys(metadata)) {
-		if strings.ContainsRune(key, 0) {
-			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid property name in 'metadata': '%s' contains U+0000, which this service cannot store.", key)}
-		}
-		if strings.ContainsRune(metadata[key], 0) {
-			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid 'metadata.%s': string contains U+0000, which this service cannot store.", key)}
-		}
-	}
-	return nil
+	return err
 }

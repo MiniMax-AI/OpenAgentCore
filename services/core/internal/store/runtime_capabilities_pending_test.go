@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -23,7 +24,7 @@ func TestManagedCapabilitiesWaitBeforeInitializationClaim(t *testing.T) {
 	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{
 		Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration:  json.RawMessage(`{"environment":{"type":"openai_hosted"}}`),
-		Initialization: store.EnvironmentSetup{CapabilityDirectories: []string{"/workspace/generated"}},
+		Initialization: environmentconfig.Setup{CapabilityDirectories: []string{"/workspace/generated"}},
 	})
 	if err != nil {
 		t.Fatal(err)

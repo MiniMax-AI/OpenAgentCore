@@ -9,15 +9,16 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type compositionTemplateStore struct {
 	template store.EnvironmentTemplate
-	files    []store.InitialFile
+	files    []environmentconfig.InitialFile
 }
 
-func (s *compositionTemplateStore) ResolveEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, []store.InitialFile, error) {
+func (s *compositionTemplateStore) ResolveEnvironmentTemplate(context.Context, string, string) (store.EnvironmentTemplate, []environmentconfig.InitialFile, error) {
 	return s.template, s.files, nil
 }
 
@@ -37,39 +38,39 @@ func compositionRequest(t *testing.T, fields string) sessionRequest {
 
 func compositionFixture() *compositionTemplateStore {
 	return &compositionTemplateStore{
-		template: store.EnvironmentTemplate{NetworkAccess: "enabled", Initialization: store.EnvironmentSetup{
+		template: store.EnvironmentTemplate{NetworkAccess: "enabled", Initialization: environmentconfig.Setup{
 			Env:      map[string]string{"TEMPLATE": "private-template-env", "SHARED": "private-old-value"},
-			Commands: []store.SetupCommand{{Command: "printf private-template-command"}},
+			Commands: []environmentconfig.SetupCommand{{Command: "printf private-template-command"}},
 			Packages: v1.EnvironmentPackages{NPM: []string{"semver@7.7.2"}, Python: []string{"packaging==25.0"}},
 		}},
-		files: []store.InitialFile{{Type: "inline", Path: "/workspace/template", Data: []byte("private-template-bytes")}},
+		files: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/template", Data: []byte("private-template-bytes")}},
 	}
 }
 
 func TestTemplateInlineCompositionRules(t *testing.T) {
 	for _, test := range []struct {
 		name, fields string
-		change       func(*store.EnvironmentSetup, *[]store.InitialFile)
+		change       func(*environmentconfig.Setup, *[]environmentconfig.InitialFile)
 	}{
 		{name: "omitted"},
 		{name: "null", fields: `,"env":null,"setup_commands":null,"files":null,"packages":null`},
 		{name: "empty objects", fields: `,"env":{},"packages":{}`},
 		{name: "manager null", fields: `,"packages":{"npm":null,"python": null }`},
-		{name: "clear lists", fields: `,"setup_commands":[],"files":[],"packages":{"npm":[],"python":[]}`, change: func(s *store.EnvironmentSetup, f *[]store.InitialFile) {
+		{name: "clear lists", fields: `,"setup_commands":[],"files":[],"packages":{"npm":[],"python":[]}`, change: func(s *environmentconfig.Setup, f *[]environmentconfig.InitialFile) {
 			s.Commands, *f = nil, nil
 			s.Packages = v1.EnvironmentPackages{}
 		}},
-		{name: "populated", fields: `,"env":{"SHARED":"private-inline-env","INLINE":"private-new-value"},"setup_commands":[{"command":"printf private-first"},{"command":"printf private-second","cwd":"/workspace"}],"files":[{"type":"inline","path":"/workspace/inline","data":"cHJpdmF0ZS1pbmxpbmUtYnl0ZXM="}],"packages":{"python":["idna==3.10"],"npm":[]}`, change: func(s *store.EnvironmentSetup, f *[]store.InitialFile) {
+		{name: "populated", fields: `,"env":{"SHARED":"private-inline-env","INLINE":"private-new-value"},"setup_commands":[{"command":"printf private-first"},{"command":"printf private-second","cwd":"/workspace"}],"files":[{"type":"inline","path":"/workspace/inline","data":"cHJpdmF0ZS1pbmxpbmUtYnl0ZXM="}],"packages":{"python":["idna==3.10"],"npm":[]}`, change: func(s *environmentconfig.Setup, f *[]environmentconfig.InitialFile) {
 			s.Env["SHARED"], s.Env["INLINE"] = "private-inline-env", "private-new-value"
-			s.Commands = []store.SetupCommand{{Command: "printf private-first"}, {Command: "printf private-second", CWD: "/workspace"}}
-			*f = []store.InitialFile{{Type: "inline", Path: "/workspace/inline", Data: []byte("private-inline-bytes")}}
+			s.Commands = []environmentconfig.SetupCommand{{Command: "printf private-first"}, {Command: "printf private-second", CWD: "/workspace"}}
+			*f = []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/inline", Data: []byte("private-inline-bytes")}}
 			s.Packages.NPM, s.Packages.Python = nil, []string{"idna==3.10"}
 		}},
-		{name: "mixed managers", fields: `,"packages":{"npm":null,"python":["idna==3.10"]}`, change: func(s *store.EnvironmentSetup, _ *[]store.InitialFile) {
+		{name: "mixed managers", fields: `,"packages":{"npm":null,"python":["idna==3.10"]}`, change: func(s *environmentconfig.Setup, _ *[]environmentconfig.InitialFile) {
 			s.Packages.Python = []string{"idna==3.10"}
 		}},
-		{name: "overlapping path replaces whole list", fields: `,"files":[{"type":"inline","path":"/workspace/template","data":"bmV3"}]`, change: func(_ *store.EnvironmentSetup, f *[]store.InitialFile) {
-			*f = []store.InitialFile{{Type: "inline", Path: "/workspace/template", Data: []byte("new")}}
+		{name: "overlapping path replaces whole list", fields: `,"files":[{"type":"inline","path":"/workspace/template","data":"bmV3"}]`, change: func(_ *environmentconfig.Setup, f *[]environmentconfig.InitialFile) {
+			*f = []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/template", Data: []byte("new")}}
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -186,9 +187,9 @@ func TestTemplateInlineCompositionRetainsFieldValidation(t *testing.T) {
 
 func TestTemplateFilesReplacementDoesNotCombineCounts(t *testing.T) {
 	lookup := compositionFixture()
-	files := make([]store.InitialFile, 30)
+	files := make([]environmentconfig.InitialFile, 30)
 	for i := range files {
-		files[i] = store.InitialFile{Type: "inline", Path: "/workspace/" + strings.Repeat("a", i+1)}
+		files[i] = environmentconfig.InitialFile{Type: "inline", Path: "/workspace/" + strings.Repeat("a", i+1)}
 	}
 	lookup.files = files
 	wire := make([]map[string]string, len(files))

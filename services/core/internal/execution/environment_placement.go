@@ -9,18 +9,19 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type environmentPlacement struct {
-	Plugins               []agentplugin.Metadata           `json:"plugins,omitempty"`
-	Skills                []store.EnvironmentSkillMetadata `json:"skills,omitempty"`
-	Type                  string                           `json:"type"`
-	ToolEnvironment       bool                             `json:"initialization,omitempty"`
-	NetworkAccess         string                           `json:"-"`
-	AllowedDomains        []string                         `json:"-"`
-	WorkspaceDirectory    string                           `json:"workspace_directory"`
-	CapabilityDirectories []string                         `json:"capability_directories"`
+	Plugins               []agentplugin.Metadata            `json:"plugins,omitempty"`
+	Skills                []environmentconfig.SkillMetadata `json:"skills,omitempty"`
+	Type                  string                            `json:"type"`
+	ToolEnvironment       bool                              `json:"initialization,omitempty"`
+	NetworkAccess         string                            `json:"-"`
+	AllowedDomains        []string                          `json:"-"`
+	WorkspaceDirectory    string                            `json:"workspace_directory"`
+	CapabilityDirectories []string                          `json:"capability_directories"`
 }
 
 // LocalWorkspaceConfiguration recognizes the qualified stored V1 profile. It
@@ -36,15 +37,15 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 		return placement, store.ErrInvalidInput
 	}
 	var local struct {
-		Plugins               []agentplugin.Metadata           `json:"plugins,omitempty"`
-		Skills                []store.EnvironmentSkillMetadata `json:"skills,omitempty"`
-		Files                 []store.InitialFileMetadata      `json:"files"`
-		Packages              *v1.EnvironmentPackages          `json:"packages,omitempty"`
-		Initialization        bool                             `json:"initialization,omitempty"`
-		Type                  string                           `json:"type"`
-		WorkspaceDirectory    string                           `json:"workspace_directory,omitempty"`
-		CapabilityDirectories []string                         `json:"capability_directories"`
-		Network               *v1.EnvironmentNetworkInput      `json:"network"`
+		Plugins               []agentplugin.Metadata                  `json:"plugins,omitempty"`
+		Skills                []environmentconfig.SkillMetadata       `json:"skills,omitempty"`
+		Files                 []environmentconfig.InitialFileMetadata `json:"files"`
+		Packages              *v1.EnvironmentPackages                 `json:"packages,omitempty"`
+		Initialization        bool                                    `json:"initialization,omitempty"`
+		Type                  string                                  `json:"type"`
+		WorkspaceDirectory    string                                  `json:"workspace_directory,omitempty"`
+		CapabilityDirectories []string                                `json:"capability_directories"`
+		Network               *v1.EnvironmentNetworkInput             `json:"network"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(configuration))
 	decoder.DisallowUnknownFields()
@@ -89,10 +90,10 @@ func (d *Dispatcher) configurePreparedEnvironment(session store.Session, environ
 	}
 	sources := &agentcapabilities.Input{Plugins: append([]agentplugin.Metadata(nil), placement.Plugins...), Directories: append([]string(nil), placement.CapabilityDirectories...)}
 	for _, metadata := range placement.Skills {
-		if store.ValidateInstalledSkillMetadata(metadata) != nil {
+		if metadata.ValidateInstalled() != nil {
 			return store.ErrInvalidInput
 		}
-		sources.Skills = append(sources.Skills, (store.EnvironmentSkill{Metadata: metadata}).InstallationMetadata())
+		sources.Skills = append(sources.Skills, (environmentconfig.Skill{Metadata: metadata}).InstallationMetadata())
 	}
 	req.LocalEnvironment = &proto.LocalEnvironment{
 		ID: environment.ID, WorkspaceDirectory: placement.WorkspaceDirectory,

@@ -7,15 +7,17 @@ import (
 	"strconv"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/jackc/pgx/v5"
 )
 
 // freezeEnvironmentSkills runs only for a newly inserted Session, in its transaction.
 // Resource locks serialize selection with pointer changes, version deletion and
 // resource deletion. The returned copy no longer depends on any source resource.
-func (s *Store) freezeEnvironmentSkills(ctx context.Context, q *sqlc.Queries, tenantID string, setup EnvironmentSetup) (EnvironmentSetup, error) {
-	if err := setup.Validate(); err != nil {
-		return EnvironmentSetup{}, err
+func (s *Store) freezeEnvironmentSkills(ctx context.Context, q *sqlc.Queries, tenantID string, setup environmentconfig.Setup) (environmentconfig.Setup, error) {
+	if setup.Validate() != nil {
+		return environmentconfig.Setup{}, ErrInvalidInput
 	}
 	owners := make(map[string]sqlc.Skill)
 	for _, skill := range setup.Skills {
@@ -32,19 +34,19 @@ func (s *Store) freezeEnvironmentSkills(ctx context.Context, q *sqlc.Queries, te
 	for _, id := range ids {
 		tenant, skill, err := skillIDs(tenantID, id)
 		if err != nil {
-			return EnvironmentSetup{}, err
+			return environmentconfig.Setup{}, err
 		}
 		owner, err := q.LockSkill(ctx, sqlc.LockSkillParams{TenantID: tenant, ID: skill})
 		if errors.Is(err, pgx.ErrNoRows) {
 			err = ErrNotFound
 		}
 		if err != nil {
-			return EnvironmentSetup{}, err
+			return environmentconfig.Setup{}, err
 		}
 		owners[id] = owner
 	}
 	result := setup
-	result.Skills = append([]EnvironmentSkill(nil), setup.Skills...)
+	result.Skills = append([]environmentconfig.Skill(nil), setup.Skills...)
 	for i, skill := range result.Skills {
 		if skill.Metadata.Type != "skill_reference" {
 			continue
@@ -57,9 +59,9 @@ func (s *Store) freezeEnvironmentSkills(ctx context.Context, q *sqlc.Queries, te
 			number = owner.LatestVersion
 		default:
 			var err error
-			number, err = skillVersionNumber(skill.Metadata.Version)
+			number, err = skills.ParseVersion(skill.Metadata.Version)
 			if err != nil {
-				return EnvironmentSetup{}, err
+				return environmentconfig.Setup{}, ErrInvalidInput
 			}
 		}
 		row, err := q.ReadSkillVersion(ctx, sqlc.ReadSkillVersionParams{TenantID: owner.TenantID, SkillID: owner.ID, Version: number})
@@ -67,13 +69,16 @@ func (s *Store) freezeEnvironmentSkills(ctx context.Context, q *sqlc.Queries, te
 			err = ErrNotFound
 		}
 		if err != nil {
-			return EnvironmentSetup{}, err
+			return environmentconfig.Setup{}, err
 		}
 		version, archive, err := s.openSkillVersion(row)
 		if err != nil {
-			return EnvironmentSetup{}, err
+			return environmentconfig.Setup{}, err
 		}
-		result.Skills[i] = EnvironmentSkill{Metadata: EnvironmentSkillMetadata{Type: "skill_reference", SkillID: version.SkillID, Version: strconv.FormatInt(version.Version, 10), Name: version.Name, Description: version.Description}, Archive: archive}
+		result.Skills[i] = environmentconfig.Skill{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: version.SkillID, Version: strconv.FormatInt(version.Version, 10), Name: version.Name, Description: version.Description}, Archive: archive}
 	}
-	return result, result.validate(true)
+	if result.ValidateInstalled() != nil {
+		return environmentconfig.Setup{}, ErrInvalidInput
+	}
+	return result, nil
 }

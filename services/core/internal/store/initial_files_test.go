@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 )
 
@@ -28,7 +29,7 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files := []InitialFile{{Type: "inline", Path: "/workspace/a/data", Data: canary}, {Type: "file_id", Path: "/workspace/b", FileID: upload.ID}}
+	files := []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a/data", Data: canary}, {Type: "file_id", Path: "/workspace/b", FileID: upload.ID}}
 	template, err := s.CreateEnvironmentTemplate(t.Context(), tenant, EnvironmentTemplateInput{SetFiles: true, Files: files})
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +86,7 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 		}
 	}
 	changed := input
-	changed.InitialFiles = append([]InitialFile(nil), files...)
+	changed.InitialFiles = append([]environmentconfig.InitialFile(nil), files...)
 	changed.InitialFiles[0].Data = []byte("changed")
 	if _, err := s.CreateSession(t.Context(), tenant, changed); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatal("changed bytes retried", err)

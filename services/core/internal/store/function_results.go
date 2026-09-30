@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -19,9 +21,9 @@ func (s *Store) SubmitFunctionResult(ctx context.Context, tenantID, sessionID, t
 	if len(result) == 0 || len(result) > 512*1024 {
 		return ErrInvalidInput
 	}
-	result, err := canonicalJSONObject(result)
+	result, err := jsonobject.Normalize(result)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	return s.withFunctionCall(ctx, tenantID, sessionID, turnID, callID, func(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn, call sqlc.FunctionCall) error {
 		return storeFunctionResult(ctx, q, turn, call.CallID, result)
