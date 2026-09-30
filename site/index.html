@@ -75,7 +75,7 @@ client = OpenAI()
           <h2 id="install-title">Install. Sign in.<br> Add a node.</h2>
           <p>Install Core and Web together with one command. Add nodes when you need them.</p>
           <a class="text-link" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Read the installation guide <span aria-hidden="true">→</span></a>
-          <div class="install-prerequisites"><span class="note-label">BEFORE YOU START</span><p>A Linux amd64 host with Docker and Python 3.9+. For nodes, a DNS name for HTTPS; you can set it in Web after installing.</p><p>The command downloads and verifies the latest stable release. Add <code>--version v1.2.3</code> to select a version. For unreleased changes, <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/maintainers.md#build-a-distribution">build a distribution</a>.</p></div>
+          <div class="install-prerequisites"><span class="note-label">BEFORE YOU START</span><p>A Linux amd64 host with Docker and Python 3.9+. For nodes, an HTTPS address behind your reverse proxy; you can add it after installing.</p><p>The command downloads and verifies the latest stable release. Add <code>--version v1.2.3</code> to select a version. For unreleased changes, <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/maintainers.md#build-a-distribution">build a distribution</a>.</p></div>
         </div>
         <div class="setup-path">
           <ol class="setup-steps">
@@ -83,7 +83,7 @@ client = OpenAI()
             <li class="setup-step"><span class="step-number" aria-hidden="true">02</span><div class="step-content"><h3>Sign in and issue a key</h3><p>Open the address printed by the installer. Sign in with the Core key in this private file:</p><div class="file-path"><code>~/.oac/core/secrets/core.key</code></div><p class="step-detail">Set a default model on <strong>System</strong>, then create a project and issue a key on <strong>Projects and keys</strong>.</p></div></li>
             <li class="setup-step"><span class="step-number" aria-hidden="true">03</span><div class="step-content"><h3>Add a node</h3><p>Open <strong>Nodes</strong>, choose <strong>Add node</strong>, then <strong>Generate command</strong>. Paste the command on a Linux host with sudo; it prepares the host itself.</p><div class="provider-options"><span>Docker</span><span>microsandbox</span></div><p class="step-detail">Web shows when the node is online and ready. All nodes use the same provider.</p></div></li>
           </ol>
-          <p class="setup-footnote">Installation and enrollment do not call a model. <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install-options.md">Other installation options <span aria-hidden="true">↗</span></a></p>
+          <p class="setup-footnote">Installation and enrollment do not call a model. <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md#installer-options">Other installation options <span aria-hidden="true">↗</span></a></p>
         </div>
       </section>
 
