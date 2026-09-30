@@ -43,6 +43,10 @@ FULL_INPUTS = {"Makefile", "go.mod", "go.sum", "go.work", "go.work.sum", "packag
                "pnpm-workspace.yaml", "tsconfig.base.json", ".npmrc", ".gitignore", ".gitattributes", ".dockerignore"}
 IMAGE_INPUTS = ("scripts/build-core", "scripts/build-e2b-provider", "deploy/distribution/", "services/core/tools/e2b-provider/",
                 "services/core/deploy/e2b/")
+# Generated outputs retain freshness checks even when the file is documentation.
+GENERATED_OUTPUTS = {"contracts/agents-api/harness-catalog.md", "packages/agents-client/src/harness-catalog.ts",
+                     "services/core/internal/engine/catalog_generated.go", "docs/configuration.md",
+                     "docs/getting-started/install-options.md"}
 
 
 def documentation(path):
@@ -68,14 +72,17 @@ def select(paths):
             return full("Invalid path in diff")
         if path in FULL_INPUTS or path.startswith(".github/"):
             return full(f"Shared build or CI input: {path}")
-        if documentation(path):
-            reasons.append(f"{path}: hygiene")
-            continue
-        matches = {job for prefixes, targets in RULES if path.startswith(prefixes) for job in targets}
+        matches = {"hygiene"} if documentation(path) else {
+            job for prefixes, targets in RULES if path.startswith(prefixes) for job in targets}
+        if path in GENERATED_OUTPUTS:
+            matches.add("distribution")
         if not matches:
             return full(f"Unclassified input: {path}")
+        if not documentation(path) and path.startswith(IMAGE_INPUTS):
+            matches.add("api")
+            image = True
         jobs.update(matches)
-        image = image or path.startswith(IMAGE_INPUTS) or matches == set(JOBS)
+        image = image or matches == set(JOBS)
         reasons.append(f"{path}: {', '.join(sorted(matches))}")
     return {"version": 1, "jobs": [job for job in JOBS if job in jobs], "image": image, "reasons": reasons}
 

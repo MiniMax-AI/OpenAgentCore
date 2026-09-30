@@ -146,6 +146,7 @@ jobs:
           key: core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-distribution-${{ steps.source.outputs.revision }}
           restore-keys: |
             core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-distribution-
+            core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-tooling-
             core-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-
       - uses: actions/setup-node@v6
         with:

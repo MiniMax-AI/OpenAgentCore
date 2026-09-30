@@ -136,7 +136,6 @@ jobs:
           fi
           node scripts/native-harness-smoke.mjs --codex-binary "$RUNNER_TEMP/native-installer/components/codex/bin/codex${{ runner.os == 'Windows' && '.exe' || '' }}" --claude-runtime "$RUNNER_TEMP/native-installer/components/claude"
       - name: Archive the native distribution
-        if: inputs.upload-artifacts
         run: |
           cd "$RUNNER_TEMP"
           tar -C native-installer -czf "oac-native-installer-${{ runner.os }}-${{ runner.arch }}.tar.gz" .

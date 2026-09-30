@@ -23,6 +23,21 @@ class MetricsTests(unittest.TestCase):
         self.assertIsNone(report["elapsed_minutes"])
         self.assertEqual(report["job_outcomes"], {"unfinished": 1})
 
+    def test_rerun_uses_its_own_start_and_only_its_jobs(self):
+        run = {"id": 1, "head_sha": "a", "run_attempt": 2, "created_at": "2026-09-29T00:00:00Z",
+               "run_started_at": "2026-09-30T00:00:00Z", "status": "completed", "conclusion": "success"}
+        jobs = [{"started_at": "2026-09-30T00:01:00Z", "completed_at": "2026-09-30T00:03:00Z",
+                 "labels": ["ubuntu-22.04"], "conclusion": "success"}]
+        report = measure(run, jobs)
+        self.assertEqual(report["attempt"], 2)
+        self.assertEqual(report["runner_minutes"], 2)
+        self.assertEqual(report["elapsed_minutes"], 3)
+        self.assertEqual(report["initial_queue_seconds"], 60)
+        del run["run_started_at"]
+        report = measure(run, jobs)
+        self.assertIsNone(report["elapsed_minutes"])
+        self.assertIsNone(report["initial_queue_seconds"])
+
 
 if __name__ == "__main__":
     unittest.main()

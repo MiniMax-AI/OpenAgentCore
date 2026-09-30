@@ -1,3 +1,4 @@
+import importlib.util
 import re
 import os
 from pathlib import Path
@@ -31,6 +32,29 @@ class SelectionTests(unittest.TestCase):
         self.assertTrue(ci.select(["services/core/tools/e2b-provider/requirements.txt"])["image"])
         self.assertIn("native", self.jobs("services/core/internal/nativeinstaller/catalog.go"))
         self.assertIn("native", self.jobs("scripts/build-native-installer.mjs"))
+
+    def test_every_tracked_path_produces_a_valid_plan(self):
+        root = Path(__file__).resolve().parents[1]
+        paths = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
+        for path in filter(None, paths):
+            with self.subTest(path=path):
+                ci.validate_plan(ci.select([path]))
+
+    def test_generated_outputs_keep_freshness_checks(self):
+        spec = importlib.util.spec_from_file_location("catalog_generator", Path(__file__).with_name("generate-harness-catalog.py"))
+        generator = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(generator)
+        with patch.object(generator, "go", side_effect=lambda source: source):
+            outputs = generator.render(generator.load_catalog(generator.ROOT / generator.CATALOG))
+        for path in [*map(str, outputs), "deploy/install/harness_catalog.py", "docs/configuration.md",
+                     "docs/getting-started/install-options.md"]:
+            with self.subTest(path=path):
+                self.assertIn("distribution", self.jobs(path))
+
+    def test_distribution_image_build_keeps_api_acceptance(self):
+        plan = ci.select(["scripts/build-core-distribution.sh"])
+        self.assertTrue(plan["image"])
+        self.assertEqual(set(plan["jobs"]), {"hygiene", "distribution", "api"})
 
     def test_shared_protocol_and_catalog_propagate_to_consumers(self):
         for path in ("contracts/agents-api/v1/session.go", "internal/harnessconfig/builtin/catalog.json"):

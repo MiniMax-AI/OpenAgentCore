@@ -13,6 +13,8 @@ def timestamp(value):
 
 
 def measure(run, jobs):
+    # created_at belongs to the original run; run_started_at resets on reruns.
+    attempt_start = run.get("run_started_at") or (run["created_at"] if run.get("run_attempt", 1) == 1 else None)
     intervals = []
     platform_seconds = defaultdict(float)
     outcomes = Counter()
@@ -40,8 +42,8 @@ def measure(run, jobs):
         "status": run["status"], "conclusion": run.get("conclusion"),
         "runner_minutes": round(sum(platform_seconds.values()) / 60, 2),
         "platform_minutes": {p: round(seconds / 60, 2) for p, seconds in sorted(platform_seconds.items())},
-        "elapsed_minutes": round((max(ends) - timestamp(run["created_at"])) / 60, 2) if ends else None,
-        "initial_queue_seconds": min(starts) - timestamp(run["created_at"]) if starts else None,
+        "elapsed_minutes": round((max(ends) - timestamp(attempt_start)) / 60, 2) if ends and attempt_start else None,
+        "initial_queue_seconds": min(starts) - timestamp(attempt_start) if starts and attempt_start else None,
         "peak_parallel_jobs": peak, "job_outcomes": dict(outcomes),
         "failed_job_fraction": (outcomes["failure"] + outcomes["timed_out"] + outcomes["startup_failure"]) / finished if finished else None,
     }
@@ -60,6 +62,7 @@ def main():
     for ident in args.runs:
         root = f"repos/{args.repo}/actions/runs/{ident}"
         run = api(root)
+        run = api(f"{root}/attempts/{run['run_attempt']}")
         jobs = []
         page = 1
         while True:
