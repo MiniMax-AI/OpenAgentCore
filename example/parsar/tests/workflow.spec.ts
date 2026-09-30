@@ -15,6 +15,11 @@ async function resources(page: Page) {
   await page.getByLabel("kimi-k2.6", { exact: true }).check();
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "编辑 Provider Moonshot" }).click();
+  await page.getByLabel("Base URL").fill("https://provider.example/v1");
+  await page.getByRole("button", { name: "手动选择", exact: true }).click();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page
     .getByRole("button", { name: "编辑 kimi-k2.6", exact: true })
     .click();
@@ -93,7 +98,10 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:18181/reset");
 });
 
-test("self-hosted Session shows native connection instructions and waits before sending", async ({
+for (const platform of [
+  { label: "macOS", path: "/Users/example/project", command: "bash fixture-native-bootstrap.sh" },
+  { label: "Windows", path: "C:\\Users\\example\\project", command: "& fixture-native-bootstrap.ps1" },
+]) test(`self-hosted ${platform.label} uses Core's command and waits before sending`, async ({
   page,
   request,
 }) => {
@@ -110,10 +118,10 @@ test("self-hosted Session shows native connection instructions and waits before 
   await page.getByLabel("环境类型").click();
   await page.getByRole("option", { name: "用户机器", exact: true }).click();
   await page.getByLabel("机器平台").click();
-  await page.getByRole("option", { name: "macOS", exact: true }).click();
+  await page.getByRole("option", { name: platform.label, exact: true }).click();
   await page
     .getByLabel("工作目录", { exact: true })
-    .fill("/Users/example/project");
+    .fill(platform.path);
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await navigate(page, "Agents");
@@ -138,10 +146,21 @@ test("self-hosted Session shows native connection instructions and waits before 
     page.getByRole("button", { name: "发送", exact: true }),
   ).toBeDisabled();
   await page.getByRole("button", { name: "连接用户机器", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("oac-daemon install");
+  await expect(page.getByRole("dialog")).toContainText(platform.command);
   await expect(page.getByRole("dialog")).toContainText(
-    "/Users/example/project",
+    platform.path,
   );
+  const sessionRoute = "**/v1/agents/sessions/*";
+  await page.route(sessionRoute, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.x_agents_core.installation.expires_at = 1;
+    await route.fulfill({ response, json: body });
+  });
+  await expect(page.getByRole("dialog")).toContainText("安装命令暂不可用");
+  await expect(page.getByRole("button", { name: "复制命令", exact: true })).toHaveCount(0);
+  await page.unroute(sessionRoute);
+  await expect(page.getByRole("dialog")).toContainText(platform.command);
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await request.post("http://127.0.0.1:18181/connect-executor");
   await expect(page.getByText("已连接", { exact: true })).toBeVisible();
@@ -280,6 +299,7 @@ test("Provider groups contain multiple models and retain manual names", async ({
   await resources(page);
   await navigate(page, "模型");
   await page.getByRole("button", { name: "编辑 Provider Moonshot" }).click();
+  await page.getByLabel("Base URL").fill("http://127.0.0.1:18181");
   await page.getByRole("button", { name: "获取模型", exact: true }).click();
   await expect(page.getByLabel("kimi-k2.6", { exact: true })).toBeChecked();
   await page.getByLabel("kimi-k2", { exact: true }).check();
@@ -441,4 +461,106 @@ test("an active reply without a replayed item baseline refreshes immediately on 
       .getByRole("article", { name: "Agent 回复" })
       .filter({ hasText: "断线前，断线后仍在生成" }),
   ).toBeVisible({ timeout: 1500 });
+});
+
+
+test("Session uploads insert a file path and download binary artifacts without leaving the conversation", async ({ page }) => {
+  await page.goto("/");
+  await resources(page);
+  await agent(page);
+  await page.getByRole("link", { name: "打开", exact: true }).click();
+  await session(page);
+  await expect(page.getByLabel("继续对话")).toBeVisible();
+  await page.getByRole("button", { name: "文件", exact: true }).click();
+  await page.getByLabel("选择上传文件").setInputFiles({ name: "large.bin", mimeType: "application/octet-stream", buffer: Buffer.alloc(5 * 1024 * 1024 + 1) });
+  await expect(page.getByRole("alert")).toContainText("文件不能超过 5 MiB");
+  await page.getByLabel("选择上传文件").setInputFiles({ name: "numbers.csv", mimeType: "text/csv", buffer: Buffer.from("a,b\n1,2") });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByLabel("继续对话")).toHaveValue(/请处理文件：\.\/inputs\/.*numbers.csv/);
+  await page.getByRole("button", { name: "文件", exact: true }).click();
+  const uploaded = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/files"));
+  await page.getByLabel("选择上传文件").setInputFiles({ name: "中".repeat(80) + ".txt", mimeType: "text/plain", buffer: Buffer.from("small") });
+  const uploadedPath = (await uploaded).postDataJSON().path;
+  expect(Buffer.byteLength(uploadedPath.split("/").at(-1), "utf8")).toBeLessThanOrEqual(255);
+  expect(uploadedPath).not.toContain("�");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const draft = await page.getByLabel("继续对话").inputValue();
+  const originalSessionURL = page.url();
+  await page.reload();
+  await expect(page.getByLabel("继续对话")).toHaveValue(draft);
+  await page.getByRole("link", { name: "返回 Agent" }).click();
+  await session(page, "第二个文件会话");
+  await expect(page.getByLabel("继续对话")).toHaveValue("");
+  await page.goto(originalSessionURL);
+  await expect(page.getByLabel("继续对话")).toHaveValue(draft);
+  await page.getByRole("button", { name: "文件", exact: true }).click();
+  const contentRoute = "**/artifacts/*/content";
+  await page.route(contentRoute, (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { message: "文件暂不可用" } }) }));
+  await page.getByRole("button", { name: "下载 report.bin" }).click();
+  await expect(page.getByRole("alert")).toContainText("文件暂不可用");
+  await page.unroute(contentRoute);
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "下载 report.bin" }).click();
+  const download = await downloading;
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream!) chunks.push(chunk);
+  expect(Buffer.concat(chunks)).toEqual(Buffer.from([0, 255, 128, 13, 10]));
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByLabel("继续对话")).toHaveValue(/numbers.csv/);
+  await page.route(/\/v1\/agents\/sessions\/[a-f0-9-]+$/, async (route) => {
+    const response = await route.fetch();
+    const value = await response.json();
+    await route.fulfill({ json: { ...value, status: "failed", error: "运行环境准备失败，请检查配置。" } });
+  });
+  await expect(page.getByRole("alert")).toContainText("运行环境准备失败，请检查配置。");
+});
+
+
+test("unsupported runtime bindings are explained before Session creation", async ({ page, request }) => {
+  await resources(page);
+  await agent(page);
+  const runtime = await request.put("http://127.0.0.1:18180/app/runtimes/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
+    headers: { origin: "http://127.0.0.1:18180" },
+    data: { name: "用户机器", environment: "self_hosted", platform: "linux", workspace_directory: "/home/user/project" },
+  });
+  expect(runtime.ok()).toBe(true);
+  await page.getByRole("link", { name: "打开", exact: true }).click();
+  await page.getByRole("button", { name: "开始会话", exact: true }).click();
+  await page.getByLabel("会话名称").fill("Blocked");
+  await page.getByLabel("运行时", { exact: true }).click();
+  await page.getByRole("option", { name: "用户机器", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("不能绑定托管 Skill");
+  await expect(page.getByRole("button", { name: "开始", exact: true })).toBeDisabled();
+  const counts = await (await request.get("http://127.0.0.1:18181/counts")).json();
+  expect(counts.sessions).toHaveLength(0);
+});
+
+
+test("a send completed after leaving the Session does not restore a sent draft", async ({ page }) => {
+  await resources(page);
+  await agent(page);
+  await page.getByRole("link", { name: "打开", exact: true }).click();
+  await session(page);
+  await expect(page.getByLabel("继续对话")).toBeVisible();
+  const sessionURL = page.url();
+  let release!: () => void;
+  let arrived!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const received = new Promise<void>((resolve) => { arrived = resolve; });
+  await page.route("**/events", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    arrived();
+    await gate;
+    await route.fulfill({ response });
+  });
+  await page.getByLabel("继续对话").fill("Stream reply");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+  await received;
+  await page.getByRole("link", { name: "返回 Agent" }).click();
+  release();
+  await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith("oac-example-message-")).length)).toBe(0);
+  await page.goto(sessionURL);
+  await expect(page.getByLabel("继续对话")).toHaveValue("");
 });

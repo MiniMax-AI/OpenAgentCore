@@ -83,7 +83,7 @@
             "modes": ["all", "web-only"],
             "restarts": ["web"],
             "derives": ["Web port mapping or OAC_WEB_ADDR"],
-            "install_flag": "--port"
+            "install_flag": "--web-port"
           }
         },
         "database": {

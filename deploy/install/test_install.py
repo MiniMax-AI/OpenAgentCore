@@ -212,7 +212,7 @@ class InstallerTests(unittest.TestCase):
     def test_fresh_install_writes_config_json_and_the_layout(self):
         previous = os.umask(0)
         try:
-            self.install("--public-url", "https://core.example", "--port", "8181")
+            self.install("--public-url", "https://core.example", "--web-port", "8181")
         finally:
             os.umask(previous)
         config = self.document("config.json")
@@ -239,6 +239,36 @@ class InstallerTests(unittest.TestCase):
                      "Local-only API on this host: http://127.0.0.1:8091/v1",
                      f"Settings: {self.root / 'config.json'}", f"Apply settings: {self.root / 'oac'} apply"):
             self.assertIn("  " + line + "\n", output)
+
+    def test_a_taken_explicit_port_fails_before_the_bundle_is_hashed(self):
+        self.host.busy.update({("127.0.0.1", 18080), ("127.0.0.1", 8080)})
+        # A loopback public URL names Web's port, so that port cannot move either.
+        for flags, port, name in ((("--web-port", "18080"), 18080, "--web-port"),
+                                  (("--public-url", "http://localhost:8080"), 8080, "--web-port and --public-url")):
+            with self.subTest(flags=flags), \
+                    mock.patch.object(install, "verify_bundle", side_effect=AssertionError("bundle hashed")), \
+                    self.assertRaisesRegex(install.InstallError, rf"^Port {port} \({name}\) is already in use on 127.0.0.1. "
+                                           rf"Free it or choose another port; find the process with: sudo ss -ltnp 'sport = :{port}'$"):
+                self.install(*flags)
+            self.assertFalse(self.root.exists())
+
+    def test_taken_default_ports_move_to_the_next_free_port(self):
+        self.host.busy.update({("0.0.0.0", 8080), ("0.0.0.0", 8091)})
+        self.install()
+        self.assertEqual(self.document("config.json")["ports"], {"core": 8092, "web": 8081})
+        output = self.output.getvalue()
+        self.assertIn("  Console: http://127.0.0.1:8081 (local only)\n", output)
+        self.assertIn("  Port 8080 was in use; Web uses 8081.\n", output)
+        self.assertIn("  Port 8091 was in use; Core uses 8092.\n", output)
+
+    def test_managed_https_needs_ports_80_and_443(self):
+        self.host.busy.add(("0.0.0.0", 80))
+        with contextlib.redirect_stdout(self.output), self.assertRaisesRegex(
+                install.InstallError, "^Automatic HTTPS needs ports 80 and 443, and port 80 is already in use on 0.0.0.0. "
+                "Free it, or use an existing reverse proxy with --ingress external; find the process with: "
+                "sudo ss -ltnp 'sport = :80'$"):
+            run_installer(install, self.bundle, ["--install-dir", self.root])
+        self.assertFalse(self.root.exists())
 
     def test_output_labels_public_and_local_addresses(self):
         cases = {
@@ -282,7 +312,7 @@ class InstallerTests(unittest.TestCase):
         self.install()
         before = self.snapshot()
         with self.assertRaisesRegex(install.InstallError, "config.json. Edit it and run .*oac apply"):
-            self.install("--port", "8081")
+            self.install("--web-port", "8081")
         self.assertEqual(self.snapshot(), before)
         (self.root / "oac").unlink()
         config = self.document("config.json")

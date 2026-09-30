@@ -20,7 +20,7 @@ The installer writes every setting that applies to the installation's [mode](get
 
 ### How oac apply works
 
-1. It validates `config.json` and changes nothing if a value is invalid. `mode`, `native_core` and `ingress` are fixed after installation; to change them, install into a new directory.
+1. It validates `config.json` and changes nothing if a value is invalid. `mode`, `native_core` and `ingress` are fixed after installation; to change them, install into a new directory. It also checks the listeners that a changed `host` or port adds, and changes nothing if `host` is not an address of this machine or another program holds one of their ports; the installation's own listeners do not count.
 2. It writes the files Core, Web and Compose read into `generated/`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json` and, when used, `runtime-history.json`, the managed `Caddyfile` and the native Core unit. Don't edit them. A generated file edited by hand stops `apply` until you move the change into `config.json` and run `oac apply --discard-edits`, which keeps the edited copy as `generated/<file>.edited-<time>`.
 3. It compares what it wrote with what actually runs. Each container carries a digest of its inputs (the `io.oac.inputs` label; native Core carries `OAC_INPUTS`), and `apply` recreates or restarts exactly the services whose inputs differ: Core first, then Web. The **Restarts** column below says which services a setting affects; see [stop and restart](getting-started/operations.md#stop-and-restart) for what a restart interrupts.
 4. While any service runs, `apply` also starts the stopped ones. After `oac stop`, it only writes the files and the installation stays stopped.

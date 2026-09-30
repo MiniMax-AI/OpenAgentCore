@@ -1,3 +1,4 @@
+import { sessionRestriction } from "../shared/session-profile.mjs";
 import { zipSync, strToU8 } from "fflate";
 import { AppError, text, uuid } from "./store.mjs";
 
@@ -14,41 +15,28 @@ function requestFor(store, id, body) {
     throw new AppError(400, "绑定的 MCP 服务标识不能重复。");
   const environment = { type: runtime.environment };
   const selfHosted = environment.type === "self_hosted";
+  const restriction = sessionRestriction(agent, runtime);
+  if (restriction) throw new AppError(400, restriction);
   let modelProvider;
-  if (selfHosted) {
-    if (agent.skill_ids.length)
-      throw new AppError(
-        400,
-        "此示例的用户机器只使用本地能力目录，暂不传递托管 Skill。请使用未绑定托管 Skill 的 Agent，并在运行时填写本地能力目录。",
-      );
-    if (mcps.length)
-      throw new AppError(
-        400,
-        "用户机器的 MCP 请通过本地 Plugin 能力目录配置。当前 Core 不接受此处的 MCP 服务绑定，请使用未绑定 MCP 的 Agent。",
-      );
-    if (agent.harness === "mcode")
-      throw new AppError(
-        400,
-        "此示例的用户机器接入先支持 Codex 和 Claude Code，请选择其中一个执行引擎。",
-      );
+  if (environment.type !== "none" && agent.harness !== "mcode") {
     const provider = store.get("providers", model.provider_id);
     if (!provider?.base_url?.startsWith("https://") || !provider.api_key)
       throw new AppError(
         400,
-        "用户机器需要模型 Provider 的 HTTPS Base URL 和 API Key，请先在模型页面配置。",
+        "请先在模型页面配置所选 Provider 的 HTTPS Base URL 和 API Key。",
       );
     modelProvider = {
       protocol: agent.harness === "codex" ? "responses" : "anthropic",
       base_url: provider.base_url,
       api_key: provider.api_key,
     };
+  }
+  if (selfHosted) {
     environment.workspace_directory = runtime.workspace_directory;
     environment.capability_directories = runtime.capability_directories || [];
   }
   const tools = [{ type: "web_search", mode: "disabled" }];
   if (environment.type === "none" || selfHosted) {
-    if (agent.skill_ids.length)
-      throw new AppError(400, "Skills 需要托管运行环境。");
     tools.push(
       ...mcps.map((mcp) => ({
         type: "mcp",
@@ -64,11 +52,6 @@ function requestFor(store, id, body) {
       skill_id,
     }));
     if (mcps.length) {
-      if (agent.harness === "mcode")
-        throw new AppError(
-          400,
-          "MiniMax Code 暂不支持托管环境中的 HTTP MCP，请选择 Claude Code 或 Codex。",
-        );
       const name = "agent-mcp";
       const description = "Agent HTTP MCP bindings";
       const archive = zipSync({

@@ -14,10 +14,14 @@ export function Composer({
   session,
   turnId,
   connectionPending = false,
+  attachment = "",
+  onPendingChange,
 }: {
   session: AgentSession;
   turnId?: string;
   connectionPending?: boolean;
+  attachment?: string;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const cache = useQueryClient();
   const storageKey = `oac-example-message-${session.id}`;
@@ -30,7 +34,24 @@ export function Composer({
       }
     },
   );
-  const [text, setText] = useState(pending?.text || "");
+  useEffect(() => {
+    onPendingChange?.(Boolean(pending));
+  }, [pending, onPendingChange]);
+  const draftKey = `oac-example-draft-${session.id}`;
+  const [text, setText] = useState(
+    () => pending?.text || sessionStorage.getItem(draftKey) || "",
+  );
+  useEffect(() => {
+    if (text) sessionStorage.setItem(draftKey, text);
+    else sessionStorage.removeItem(draftKey);
+  }, [draftKey, text]);
+  useEffect(() => {
+    if (attachment)
+      setText(
+        (previous) =>
+          `${previous}${previous ? "\n" : ""}请处理文件：${attachment}`,
+      );
+  }, [attachment]);
   const [cancelKey, setCancelKey] = useState(createIdempotencyKey);
   const [cancelRequested, setCancelRequested] = useState(false);
   useEffect(() => {
@@ -62,6 +83,7 @@ export function Composer({
       requestReturned(session.id, operation.key);
     },
     onSuccess: () => {
+      sessionStorage.removeItem(draftKey);
       setText("");
       setPending(null);
       sessionStorage.removeItem(storageKey);

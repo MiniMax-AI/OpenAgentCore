@@ -201,7 +201,7 @@ async function setup(store, core) {
   const api = productAPI(store, core);
   const put = (kind, body, id = randomUUID()) =>
     api("PUT", `/app/${kind}/${id}`, body);
-  const provider = await put("providers", { name: "Moonshot" });
+  const provider = await put("providers", { name: "Moonshot", base_url: "https://provider.example/v1", api_key: "provider-secret" });
   const model = await put("models", {
     name: "Kimi",
     model: "kimi-k2.6",
@@ -263,6 +263,10 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
   assert.deepEqual(calls[0].body.environment.skills, [
     { type: "skill_reference", skill_id: "skill_review" },
   ]);
+  assert.deepEqual(calls[0].body.x_agents_core.model_provider, {
+    protocol: "anthropic", base_url: "https://provider.example/v1", api_key: "provider-secret",
+  });
+  assert.equal(JSON.stringify(first).includes("provider-secret"), false);
   assert.equal(calls[0].body.agent.tools.length, 1);
   const zip = unzipSync(
     Buffer.from(calls[0].body.environment.plugins[0].source.data, "base64"),
@@ -434,4 +438,18 @@ test("model editing and moving retain unique IDs within each Provider", async (t
     model: " three ",
   });
   assert.equal(renamed.model, "three");
+});
+
+
+test("MiniMax MCP bindings reject before Core for text-only and hosted placements", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  let calls = 0;
+  const { put, agent } = await setup(store, async () => { calls++; return { id: randomUUID() }; });
+  const config = await put("agents", { ...agent, harness: "mcode", skill_ids: [] }, agent.id);
+  for (const environment of ["none", "openai_hosted"]) {
+    const runtime = await put("runtimes", { name: environment, environment });
+    await assert.rejects(put("sessions", { name: "Rejected", input: "hello", agent_id: config.id, runtime_id: runtime.id }), /MiniMax Code.*MCP/);
+  }
+  assert.equal(calls, 0);
 });
