@@ -13,15 +13,20 @@ shared = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(shared)
 
 
+_contract_spec = importlib.util.spec_from_file_location('helper_contract', Path(__file__).with_name('helper_contract_generated.py'))
+contract = importlib.util.module_from_spec(_contract_spec)
+_contract_spec.loader.exec_module(contract)
+
+
 def identity(payload):
-    fields = ['InstallationID', 'TenantID', 'EnvironmentID', 'AllocationID', 'SessionID', 'DeviceID']
-    if not isinstance(payload, dict) or set(payload) != set(fields + ['NetworkAccess', 'AllowedDomains', 'RuntimeBootstrap']):
+    fields = contract.MANAGED_IDENTITY_FIELDS
+    if not isinstance(payload, dict) or set(payload) != set(contract.MANAGED_BOOTSTRAP_FIELDS):
         raise ValueError('Invalid managed bootstrap fields')
     for field in fields:
         value = payload[field]
         if not isinstance(value, str) or str(UUID(value)) != value or UUID(value).int == 0:
             raise ValueError('Invalid managed bootstrap identity')
-    if (payload['NetworkAccess'] not in ('enabled', 'disabled', 'restricted') or
+    if (payload['NetworkAccess'] not in contract.NETWORK_ACCESS or
             payload['AllowedDomains'] is not None and
             (not isinstance(payload['AllowedDomains'], list) or
              any(not isinstance(domain, str) for domain in payload['AllowedDomains']))):

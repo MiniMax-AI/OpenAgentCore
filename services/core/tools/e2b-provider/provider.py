@@ -13,9 +13,11 @@ from e2b.exceptions import AuthenticationException, FileNotFoundException, Sandb
 
 from sdk import connection_material, definitely_rejected, list_builds, list_templates, read_metrics, restore, run, sdk_options, validate_deployment, verify_team_template
 from state import Failure, Receipt, private_root, read_receipt
+from helper_contract_generated import (PROTOCOL_VERSION, OPERATIONS, REQUEST_FIELDS, REFERENCE_FIELDS,
+    MAX_OBSERVATION_REFERENCES, MAX_CREDENTIAL_REFERENCES, MANAGED_BOOTSTRAP_FIELDS)
 
 PREFIX = 'oac_'
-FIELDS = ('InstallationID', 'TenantID', 'EnvironmentID', 'AllocationID')
+FIELDS = ('InstallationID', *REFERENCE_FIELDS)
 
 
 def valid_id(value):
@@ -63,20 +65,32 @@ def observed(reference, cloud, point):
 
 class Provider:
     def __init__(self, request):
+        if (not isinstance(request, dict) or
+                any(key not in request for key in ('Version', 'Operation', 'Config', 'Reference', 'Deadline')) or
+                not isinstance(request['Config'], dict) or not isinstance(request['Reference'], dict)):
+            raise Failure('invalid')
         self.q = request
         self.config = request['Config']
         self.reference = request['Reference']
-        self.references = request.get('References') or []
-        if (request['Version'] != 1 or request['Operation'] not in
-                ('create', 'inspect', 'renew', 'kill', 'command', 'validate_deployment', 'observe', 'list_templates', 'list_builds', 'verify_credential') or
+        self.references = request.get('References')
+        if self.references is None:
+            self.references = []
+        if not isinstance(self.references, list):
+            raise Failure('invalid')
+        if (type(request['Version']) is not int or request['Version'] != PROTOCOL_VERSION or
+                not isinstance(request['Operation'], str) or request['Operation'] not in OPERATIONS or
+                set(request) - set(REQUEST_FIELDS) or
                 (request['Operation'] not in ('validate_deployment', 'observe', 'list_templates', 'list_builds', 'verify_credential') and
                  not valid_reference(self.reference)) or
                 (request['Operation'] == 'observe' and
-                 (not 1 <= len(self.references) <= 100 or
+                 (not 1 <= len(self.references) <= MAX_OBSERVATION_REFERENCES or
                   not all(valid_reference(r) for r in self.references) or
                   len({tuple(sorted(r.items())) for r in self.references}) != len(self.references))) or
+                (request['Operation'] == 'verify_credential' and
+                 (len(self.references) > MAX_CREDENTIAL_REFERENCES or
+                  not all(valid_reference(r) for r in self.references))) or
                 (request['Operation'] not in ('list_templates', 'list_builds') and
-                 not valid_id(self.config['InstallationID']))):
+                 not valid_id(self.config.get('InstallationID')))):
             raise Failure('invalid')
         deadline = datetime.fromisoformat(request['Deadline'].replace('Z', '+00:00'))
         self.deadline = time.monotonic() + (deadline - datetime.now(timezone.utc)).total_seconds()
@@ -229,6 +243,8 @@ class Provider:
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
                        RuntimeBootstrap=self.q['RuntimeBootstrap'])
         del payload['CoreURL'], payload['Credential']
+        if set(payload) != set(MANAGED_BOOTSTRAP_FIELDS):
+            raise Failure('invalid')
         cloud.files.write('/root/.oac/e2b/managed-bootstrap.json', json.dumps(payload),
                           user='root', request_timeout=self.remaining())
         self.receipt.save(status='bootstrap_pending')
@@ -331,8 +347,6 @@ class Provider:
     def verify_credential(self):
         verify_team_template(self.config, self.remaining)
         validate_deployment(self.config, self.remaining)
-        if not isinstance(self.references, list) or len(self.references) > 32 or not all(valid_reference(r) for r in self.references):
-            raise Failure('invalid')
         root = private_root(self.config)
         wanted = {}
         for reference in self.references:
@@ -376,41 +390,41 @@ class Provider:
         if self.q['Operation'] in ('validate_deployment', 'observe', 'verify_credential', 'list_templates', 'list_builds'):
             try:
                 if self.q['Operation'] == 'list_templates':
-                    return {'Version': 1, 'Templates': list_templates(self.config, self.remaining), 'ErrorCode': ''}
+                    return {'Version': PROTOCOL_VERSION, 'Templates': list_templates(self.config, self.remaining), 'ErrorCode': ''}
                 if self.q['Operation'] == 'list_builds':
-                    return {'Version': 1, 'Builds': list_builds(self.config, self.remaining), 'ErrorCode': ''}
+                    return {'Version': PROTOCOL_VERSION, 'Builds': list_builds(self.config, self.remaining), 'ErrorCode': ''}
                 if self.q['Operation'] == 'verify_credential':
                     self.verify_credential()
-                    return {'Version': 1, 'DeploymentValid': True, 'ErrorCode': ''}
+                    return {'Version': PROTOCOL_VERSION, 'DeploymentValid': True, 'ErrorCode': ''}
                 if self.q['Operation'] == 'observe':
-                    return {'Version': 1, 'Observations': self.observe(), 'ErrorCode': ''}
+                    return {'Version': PROTOCOL_VERSION, 'Observations': self.observe(), 'ErrorCode': ''}
                 verify_team_template(self.config, self.remaining)
                 build = validate_deployment(self.config, self.remaining)
-                return {'Version': 1, 'DeploymentValid': True, 'TemplateBuild': build, 'ErrorCode': ''}
+                return {'Version': PROTOCOL_VERSION, 'DeploymentValid': True, 'TemplateBuild': build, 'ErrorCode': ''}
             except AuthenticationException:
-                return {'Version': 1, 'ErrorCode': 'unauthorized'}
+                return {'Version': PROTOCOL_VERSION, 'ErrorCode': 'unauthorized'}
             except Failure as error:
-                return {'Version': 1, 'ErrorCode': error.code}
+                return {'Version': PROTOCOL_VERSION, 'ErrorCode': error.code}
             except Exception:
-                return {'Version': 1, 'ErrorCode': 'unconfirmed'}
+                return {'Version': PROTOCOL_VERSION, 'ErrorCode': 'unconfirmed'}
         with Receipt(self.q, self.remaining) as self.receipt:
             try:
                 operation = self.q['Operation']
                 if operation == 'kill':
                     self.kill()
-                    return {'Version': 1, 'Info': self.info(absent=True), 'ErrorCode': ''}
+                    return {'Version': PROTOCOL_VERSION, 'Info': self.info(absent=True), 'ErrorCode': ''}
                 if operation == 'command':
                     cloud = self.inspect()
                     if cloud.state != 'running' or not self.receipt.data.get('bootstrap_complete'):
                         raise Failure('unconfirmed')
                     result = run(self.client(cloud), self.q['Command'], self.remaining)
-                    return {'Version': 1, 'Command': result, 'ErrorCode': ''}
+                    return {'Version': PROTOCOL_VERSION, 'Command': result, 'ErrorCode': ''}
                 cloud = {'create': self.create, 'inspect': self.inspect, 'renew': self.renew}[operation]()
-                return {'Version': 1, 'Info': self.info(cloud, absent=cloud is None), 'ErrorCode': ''}
+                return {'Version': PROTOCOL_VERSION, 'Info': self.info(cloud, absent=cloud is None), 'ErrorCode': ''}
             except Failure as error:
                 info = self.info()
                 if error.code == 'not_found':
                     info = dict(self.reference, ProviderID='', State='absent', BootstrapComplete=False, CreateSettled=False)
-                return {'Version': 1, 'Info': info, 'ErrorCode': error.code}
+                return {'Version': PROTOCOL_VERSION, 'Info': info, 'ErrorCode': error.code}
             except Exception:
-                return {'Version': 1, 'Info': self.info(), 'ErrorCode': 'unconfirmed'}
+                return {'Version': PROTOCOL_VERSION, 'Info': self.info(), 'ErrorCode': 'unconfirmed'}

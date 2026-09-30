@@ -7,10 +7,15 @@ import os
 import sys
 
 from provider import Provider
-from sdk import SDK_VERSION
+from helper_contract_generated import (SDK_VERSION, PROTOCOL_VERSION, MAX_REQUEST, MAX_RESPONSE,
+                                       RESPONSE_FIELDS, ERROR_CODES)
 from state import Failure
 
-MAX_REQUEST = 72 * 1024 * 1024
+
+def valid_response(result):
+    return (isinstance(result, dict) and not set(result) - set(RESPONSE_FIELDS) and
+            type(result.get('Version')) is int and result['Version'] == PROTOCOL_VERSION and
+            result.get('ErrorCode', '') in ERROR_CODES)
 
 
 def main():
@@ -29,7 +34,7 @@ def main():
             # freezing; importing e2b alone does not exercise that boundary.
             from pyqwest import SyncHTTPTransport
             SyncHTTPTransport(tls_include_system_certs=True)
-            print(json.dumps({'Version': 1, 'SDKVersion': SDK_VERSION}))
+            print(json.dumps({'Version': PROTOCOL_VERSION, 'SDKVersion': SDK_VERSION}))
             return
         if len(sys.argv) != 1:
             raise Failure('invalid')
@@ -38,10 +43,13 @@ def main():
             raise Failure('invalid')
         result = Provider(json.loads(data)).execute()
     except Failure as error:
-        result = {'Version': 1, 'ErrorCode': error.code}
+        result = {'Version': PROTOCOL_VERSION, 'ErrorCode': error.code}
     except BaseException:
-        result = {'Version': 1, 'ErrorCode': 'unconfirmed'}
-    sys.stdout.write(json.dumps(result) + '\n')
+        result = {'Version': PROTOCOL_VERSION, 'ErrorCode': 'unconfirmed'}
+    output = json.dumps(result) + '\n'
+    if not valid_response(result) or len(output.encode('utf-8')) > MAX_RESPONSE:
+        output = json.dumps({'Version': PROTOCOL_VERSION, 'ErrorCode': 'unconfirmed'}) + '\n'
+    sys.stdout.write(output)
 
 
 if __name__ == '__main__':

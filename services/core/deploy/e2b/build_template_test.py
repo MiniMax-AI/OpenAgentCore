@@ -73,6 +73,12 @@ class BundlePermissionsTest(unittest.TestCase):
                         self.assertEqual(modes[prefix + path], mode)
                     self.assertEqual(stat.S_IMODE((context / 'runtime.tar.gz').stat().st_mode), 0o666 & ~mask)
                     self.assertEqual(stat.S_IMODE(key.stat().st_mode), 0o600)
+                    projection = 'helper_contract_generated.py'
+                    self.assertEqual((context / projection).read_bytes(), Path(__file__).with_name(projection).read_bytes())
+                    for source in ('init.py', 'managed_init.py', projection):
+                        template.copy.assert_any_call(source, '/opt/oac-e2b/' + source, user='root')
+                    self.assertTrue(any('chmod 0555' in call.args[0] and '/opt/oac-e2b/' + projection in call.args[0]
+                                        for call in template.run_cmd.call_args_list))
                     return SimpleNamespace(template_id='fixture', build_id='build')
 
                 factory = Mock(return_value=template)

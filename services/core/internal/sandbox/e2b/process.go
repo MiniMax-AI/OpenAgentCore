@@ -20,6 +20,9 @@ var errHelperNotStarted = errors.New("helper did not start")
 type ProcessCaller struct{ Fence *sandbox.CallFence }
 
 func (p *ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
+	if q.Validate() != nil {
+		return Response{}, errHelperNotStarted
+	}
 	data, err := json.Marshal(q)
 	if err != nil || len(data) > MaxRequestBytes {
 		return Response{}, errHelperNotStarted
@@ -58,7 +61,7 @@ func (p *ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 	var out Response
 	decoder := json.NewDecoder(bytes.NewReader(stdout.Bytes()))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&out) != nil {
+	if decoder.Decode(&out) != nil || out.Validate() != nil {
 		return Response{}, errors.New("invalid helper response")
 	}
 	var extra any

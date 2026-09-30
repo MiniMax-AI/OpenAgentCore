@@ -7,9 +7,13 @@ from pathlib import Path
 import stat
 import time
 
+from helper_contract_generated import ERROR_CODES
+
 
 class Failure(Exception):
     def __init__(self, code):
+        if code not in ERROR_CODES or not code:
+            raise ValueError('Unknown helper error code')
         self.code = code
 
 
