@@ -49,14 +49,14 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	}
 	caps := r.availableCapabilities(req.AgentKind)
 	factory, err := r.registry.ResolveExecutor(req.AgentKind)
-	if err != nil || !caps.Preparation {
+	if err != nil || !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
 	req, err = r.localWorkspace.Configure(req)
 	if err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools {
+	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_configuration")
 	}
 	fingerprint, err := executorFingerprint(req)

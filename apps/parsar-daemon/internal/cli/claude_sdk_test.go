@@ -79,7 +79,7 @@ func TestClaudeSDKDiscoveryAndRegistration(t *testing.T) {
 			}
 			info := discovery.ClaudeSDK.Info
 			if info.Available {
-				info.Capabilities.Preparation = true
+				info.Capabilities.Preparation = proto.CapabilitySupported
 			}
 			if info.Available != tc.ready {
 				t.Fatal(info)
@@ -88,12 +88,12 @@ func TestClaudeSDKDiscoveryAndRegistration(t *testing.T) {
 				if registered.Kind == "claude_sdk" && registered != info {
 					t.Fatalf("SDK descriptor changed: %+v", registered)
 				}
-				if registered.Kind != "claude_sdk" && !registered.Capabilities.WorkspaceAuthoring {
+				if registered.Kind != "claude_sdk" && !registered.Capabilities.WorkspaceAuthoring.IsSupported() {
 					t.Fatalf("product authoring lost: %+v", registered)
 				}
 			}
 			caps := info.Capabilities
-			if caps.WorkspaceAuthoring || caps.Permissions || caps.WebSearchControl || caps.TextVerbosity || !caps.DurableTurns || !caps.DurableInputReceipts || !caps.FunctionTools || !caps.EnvironmentNone {
+			if caps.WorkspaceAuthoring.IsSupported() || caps.Permissions.IsSupported() || caps.WebSearchControl.IsSupported() || caps.TextVerbosity.IsSupported() || !caps.DurableTurns.IsSupported() || !caps.DurableInputReceipts.IsSupported() || !caps.FunctionTools.IsSupported() || !caps.EnvironmentNone.IsSupported() {
 				t.Fatalf("incorrect SDK capability scope: %+v", caps)
 			}
 			// Even a ready SDK must not acquire product write access through the wrapper.
@@ -142,13 +142,13 @@ func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 			return info, nil
 		})
 		supported := len(features) > 0 && features[0] == "mcp_http_tools"
-		if out == nil || !out.Info.Available || out.Info.Capabilities.MCPHTTPTools != supported || out.Info.Capabilities.MCPHTTPBearerAuth != (supported && slices.Contains(features, "mcp_http_bearer_auth")) || out.Info.Capabilities.MCPHTTPRequired != (supported && slices.Contains(features, "mcp_http_required")) {
+		if out == nil || !out.Info.Available || out.Info.Capabilities.MCPHTTPTools.IsSupported() != supported || out.Info.Capabilities.MCPHTTPBearerAuth.IsSupported() != (supported && slices.Contains(features, "mcp_http_bearer_auth")) || out.Info.Capabilities.MCPHTTPRequired.IsSupported() != (supported && slices.Contains(features, "mcp_http_required")) {
 			t.Fatal("MCP feature discovery widened the runtime profile")
 		}
-		if out.Info.Capabilities.StructuredOutput != slices.Contains(features, "structured_output") {
+		if out.Info.Capabilities.StructuredOutput.IsSupported() != slices.Contains(features, "structured_output") {
 			t.Fatal("structured output feature does not match the installed runtime")
 		}
-		if out.Info.Capabilities.SubagentObservations != slices.Contains(features, "subagent_resources") {
+		if out.Info.Capabilities.SubagentObservations.IsSupported() != slices.Contains(features, "subagent_resources") {
 			t.Fatal("Subagent feature discovery does not match the runtime contract")
 		}
 	}

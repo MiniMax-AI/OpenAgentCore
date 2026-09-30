@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 	if err != nil {
 		t.Fatal(err)
 	}
-	caps := proto.AgentKindCapabilities{LocalEnvironment: true, Preparation: true, WorkspaceReadPreparation: true}
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})
 	if execute {
 		caps.WorkspaceOutputExport = true
 		caps.Streaming, caps.Steering, caps.DurableTurns, caps.DurableInputReceipts = true, true, true, true

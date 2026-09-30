@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"image"
 	"image/color"
 	"image/png"
@@ -37,7 +38,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	reg := agent.NewRegistry()
 	sender := &recSender{}
 	sessions := map[string]*functionSession{}
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: proto.AgentKindCapabilities{FunctionTools: true}}, harnessconfig.Configuration{}, func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		s := &functionSession{fakeSession: &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}}
 		sessions[p.RunID] = s
 		return s, nil
@@ -137,7 +138,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 func TestFunctionToolsRequireAdvertisedSupport(t *testing.T) {
 	reg := agent.NewRegistry()
 	called := false
-	reg.Register("unsupported", harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "unsupported", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		called = true
 		return nil, nil
 	})
@@ -165,7 +166,7 @@ func functionResultContent(text string) []proto.InputContent {
 func TestDiscoveryCannotReachAnEagerOnlyAdapter(t *testing.T) {
 	reg := agent.NewRegistry()
 	called := false
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "eager-only", Available: true, Capabilities: proto.AgentKindCapabilities{FunctionTools: true}}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "eager-only", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		called = true
 		return nil, nil
 	})

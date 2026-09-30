@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ func claudeSession(t *testing.T, h *dispatchHarness, configuration string, prebo
 
 func claudeHeartbeat(t *testing.T, h *dispatchHarness, ready bool) {
 	t.Helper()
-	caps := proto.AgentKindCapabilities{Streaming: true, Steering: true, DurableTurns: true, DurableInputReceipts: ready, ExecutionControls: true, EnvironmentNone: true, SubagentControl: true, FunctionTools: true, ToolObservations: true, Preparation: true}
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilityFromBool(ready), ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {

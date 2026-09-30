@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"strings"
 	"testing"
 
@@ -16,7 +17,7 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 	configuration := harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "responses"}}}
 	calls := 0
 	expected := errors.New("native entry reached")
-	registry.Register("fixture", configuration, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, configuration, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		calls++
 		return nil, expected
 	})
@@ -73,5 +74,5 @@ func TestRegistryRejectsInvalidConfigurationDeclaration(t *testing.T) {
 			t.Fatal("invalid configuration registered")
 		}
 	}()
-	agent.NewRegistry().Register("fixture", harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "unknown"}}}, stubFactory("fixture"))
+	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "unknown"}}}, stubFactory("fixture"))
 }

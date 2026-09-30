@@ -203,6 +203,9 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 	if err := configuration.ValidateDeclaration(); err != nil {
 		panic(err)
 	}
+	if err := info.ValidateDeclaration(); err != nil {
+		panic(err)
+	}
 	configuration = configuration.Clone()
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -215,8 +218,8 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 	}
 	delete(r.preparers, kind)
 	delete(r.executors, kind)
-	info.Capabilities.Preparation = false
-	info.Capabilities.WorkspaceReadPreparation = false
+	info.Capabilities.Preparation = proto.CapabilityUnsupported
+	info.Capabilities.WorkspaceReadPreparation = proto.CapabilityUnsupported
 	r.kinds[kind] = info
 }
 
@@ -239,7 +242,7 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 		}
 		return factory(ctx, req)
 	}
-	info.Capabilities.Preparation = true
+	info.Capabilities.Preparation = proto.CapabilitySupported
 	r.kinds[kind] = info
 }
 
@@ -262,13 +265,7 @@ func (r *Registry) RegisterPreparation(kind string, workspaceRead bool, prepare 
 		}
 		return prepare(ctx, req)
 	}
-	info.Capabilities.Preparation = true
-	info.Capabilities.WorkspaceReadPreparation = workspaceRead
+	info.Capabilities.Preparation = proto.CapabilitySupported
+	info.Capabilities.WorkspaceReadPreparation = proto.CapabilityFromBool(workspaceRead)
 	r.kinds[kind] = info
-}
-
-// Register installs f as the factory for kind with a basic available
-// descriptor. Panics on empty kind or nil factory.
-func (r *Registry) Register(kind string, configuration harnessconfig.Configuration, f Factory) {
-	r.RegisterKind(proto.SupportedAgentKind{Kind: kind, Available: true}, configuration, f)
 }

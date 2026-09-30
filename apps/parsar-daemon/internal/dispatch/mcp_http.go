@@ -16,16 +16,16 @@ func validateMCPHTTP(req proto.PromptRequestPayload, caps proto.AgentKindCapabil
 		if err := server.ValidateConnectionOrigin(req); err != nil {
 			return err
 		}
-		if !caps.MCPHTTPTools {
+		if !caps.MCPHTTPTools.IsSupported() {
 			return errors.New("engine does not support HTTP MCP")
 		}
-		if server.Required && !caps.MCPHTTPRequired {
+		if server.Required && !caps.MCPHTTPRequired.IsSupported() {
 			return errors.New("engine does not support required HTTP MCP initialization")
 		}
 		if server.BearerToken == nil {
 			continue
 		}
-		if !caps.MCPHTTPTools || !caps.MCPHTTPBearerAuth {
+		if !caps.MCPHTTPTools.IsSupported() || !caps.MCPHTTPBearerAuth.IsSupported() {
 			return errors.New("engine does not support authenticated HTTP MCP")
 		}
 		endpoint, err := url.Parse(server.ServerURL)

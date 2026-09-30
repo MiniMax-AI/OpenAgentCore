@@ -5,6 +5,7 @@ import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"slices"
 	"sync"
 	"testing"
@@ -153,7 +154,7 @@ func newHarnessWithIdleTimeout(t *testing.T, idleTimeout time.Duration) *harness
 		gotReq:  make(chan proto.PromptRequestPayload, 16),
 		gotSess: make(chan *fakeSession, 16),
 	}
-	h.reg.Register("claude_code", harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		sess := &fakeSession{out: out, ctx: ctx}
 		h.gotReq <- req
 		h.gotSess <- sess

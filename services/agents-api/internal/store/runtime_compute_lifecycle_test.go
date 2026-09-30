@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -183,7 +184,7 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 	if err != nil {
 		return err
 	}
-	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true}}})
+	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
 	if err := conn.WriteJSON(heartbeat); err != nil {
 		conn.Close()
 		return err

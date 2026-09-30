@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"strings"
 	"testing"
 	"time"
@@ -22,24 +23,24 @@ func TestMCPHTTPBearerRejectsUnsupportedRequestsBeforeFactory(t *testing.T) {
 			token := "synthetic-private-token"
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
 			req := proto.PromptRequestPayload{AgentKind: "codex", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
-			caps := proto.AgentKindCapabilities{EnvironmentNone: true, MCPHTTPTools: true, MCPHTTPBearerAuth: true}
+			caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})
 			switch mode {
 			case "claude", "claude old peer", "claude local":
 				req.AgentKind = "claude_sdk"
-				caps.MCPHTTPBearerAuth = mode != "claude old peer"
+				caps.MCPHTTPBearerAuth = proto.CapabilityFromBool(mode != "claude old peer")
 				if mode == "claude local" {
 					req.DisableExecutionEnvironment = false
 				}
 			case "required", "required old peer", "optional old peer":
 				servers[0].Required = mode != "optional old peer"
 				servers[0].BearerToken = nil
-				caps.MCPHTTPRequired = mode == "required"
+				caps.MCPHTTPRequired = proto.CapabilityFromBool(mode == "required")
 			case "no bearer capability", "credential-free", "product":
-				caps.MCPHTTPBearerAuth = false
+				caps.MCPHTTPBearerAuth = proto.CapabilityUnsupported
 			case "no MCP capability":
-				caps.MCPHTTPTools = false
+				caps.MCPHTTPTools = proto.CapabilityUnsupported
 			case "no none capability":
-				caps.EnvironmentNone = false
+				caps.EnvironmentNone = proto.CapabilityUnsupported
 			case "local":
 				req.DisableExecutionEnvironment = false
 			case "other engine":
@@ -104,7 +105,7 @@ func TestLocalMCPOriginAndCapabilityAdmission(t *testing.T) {
 				req.Configuration.MCPHTTPServers = nil
 			}
 			entered := make(chan struct{}, 1)
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: proto.AgentKindCapabilities{LocalEnvironment: true, MCPHTTPTools: mode != "environment missing capability", MCPHTTPBearerAuth: true, MCPHTTPRequired: true}}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilityFromBool(mode != "environment missing capability"), MCPHTTPBearerAuth: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 				t.Error("ordinary factory called")
 				return nil, errors.New("unexpected")
 			})

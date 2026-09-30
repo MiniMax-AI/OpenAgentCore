@@ -50,10 +50,10 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	}
 	caps := r.availableCapabilities(req.AgentKind)
 	prepare, err := r.registry.ResolvePreparation(req.AgentKind)
-	if err != nil || !caps.Preparation {
+	if err != nil || !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
-	if req.WorkspaceReadOnly && (!caps.WorkspaceReadPreparation || !proto.ValidWorkspaceReadPreparation(req)) {
+	if req.WorkspaceReadOnly && (!caps.WorkspaceReadPreparation.IsSupported() || !proto.ValidWorkspaceReadPreparation(req)) {
 		return r.rejectPreparation(env, "unsupported_read_preparation")
 	}
 	if req, err = r.localWorkspace.Configure(req); err != nil {
@@ -62,7 +62,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.WorkspaceAuthoring || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" || !req.StrictResume || !req.ReleaseOnCompletion {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if validateExecutionEnvironment(req, caps) != nil || (len(req.FunctionTools) > 0 && !caps.FunctionTools) {
+	if validateExecutionEnvironment(req, caps) != nil || (len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported()) {
 		return r.rejectPreparation(env, "unsupported_configuration")
 	}
 	if req.LocalEnvironment != nil && req.WorkspaceReadOnly {

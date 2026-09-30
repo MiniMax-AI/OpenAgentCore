@@ -15,10 +15,10 @@ func TestMCodeExecutionOptInIsVersionBound(t *testing.T) {
 			t.Setenv("OAC_RUNTIME_MCODE_AGENTS_API", tc.enabled)
 			rc := &runContext{stdout: io.Discard, stderr: io.Discard}
 			info := discoverMCode(t.Context(), rc, func(context.Context, string) (string, error) { return tc.version, nil })
-			if !info.Available || info.Capabilities.EnvironmentNone != tc.qualified || info.Capabilities.DurableInputReceipts != tc.qualified || info.Capabilities.SubagentObservations != tc.qualified {
+			if !info.Available || info.Capabilities.EnvironmentNone.IsSupported() != tc.qualified || info.Capabilities.DurableInputReceipts.IsSupported() != tc.qualified || info.Capabilities.SubagentObservations.IsSupported() != tc.qualified {
 				t.Fatalf("capabilities=%+v", info.Capabilities)
 			}
-			if info.Capabilities.NativeSessionRecovery || info.Capabilities.LocalEnvironment || info.Capabilities.FunctionTools {
+			if info.Capabilities.NativeSessionRecovery.IsSupported() || info.Capabilities.LocalEnvironment.IsSupported() || info.Capabilities.FunctionTools.IsSupported() {
 				t.Fatal("unqualified capability advertised")
 			}
 		})

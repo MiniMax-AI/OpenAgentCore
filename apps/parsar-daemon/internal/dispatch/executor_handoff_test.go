@@ -5,6 +5,7 @@ import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -92,7 +93,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 			}
 			owner := &terminalHandoffExecutor{turns: make(chan *terminalHandoffTurn, 3)}
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: proto.AgentKindCapabilities{EnvironmentNone: true}},
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
 				harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 					return nil, errors.New("legacy path forbidden")
 				})

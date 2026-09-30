@@ -7,6 +7,7 @@ import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -85,7 +86,7 @@ func connectFixture(t *testing.T, factory agent.ExecutorFactory) *wireFixture {
 		t.Fatal(err)
 	}
 	kinds := agent.NewRegistry()
-	kinds.RegisterKind(proto.SupportedAgentKind{Kind: "contract", Available: true, Capabilities: proto.AgentKindCapabilities{EnvironmentNone: true}},
+	kinds.RegisterKind(proto.SupportedAgentKind{Kind: "contract", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
 		harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 			return nil, errors.New("prepared execution must not use prompt_request")
 		})

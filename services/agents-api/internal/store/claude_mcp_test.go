@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				}
 				claudeSession(t, h, configuration, prebound)
 				// Base MCP support does not imply authentication or required initialization.
-				caps := proto.AgentKindCapabilities{Streaming: true, Steering: true, DurableTurns: true, DurableInputReceipts: true, ExecutionControls: true, EnvironmentNone: true, SubagentControl: true, ToolObservations: true, MCPHTTPTools: authenticated || required, Preparation: true}
+				caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilityFromBool(authenticated || required), Preparation: proto.CapabilitySupported})
 				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
 				awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "Claude MCP heartbeat", func() bool {
 					peer, _ := h.registry.LookupDevice(h.device.ID)
@@ -104,7 +105,7 @@ func TestClaudeMCPUnsupportedSnapshotRejectedBeforeClaim(t *testing.T) {
 				configuration = strings.Replace(configuration, `"tickets"`, `"functions"`, 1)
 			}
 			claudeSession(t, h, configuration, true)
-			caps := proto.AgentKindCapabilities{Streaming: true, Steering: true, DurableTurns: true, DurableInputReceipts: true, ExecutionControls: true, EnvironmentNone: true, SubagentControl: true, ToolObservations: true, MCPHTTPTools: true, MCPHTTPRequired: true, MCPHTTPBearerAuth: true, Preparation: true}
+			caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
 			if profile == "missing required capability" {
 				caps.MCPHTTPRequired = false
 			}

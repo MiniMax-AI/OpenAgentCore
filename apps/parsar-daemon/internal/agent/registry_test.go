@@ -5,6 +5,7 @@ import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"slices"
 	"testing"
 
@@ -30,7 +31,7 @@ func (stubSession) SubmitPromptForUserChoice(context.Context, string, proto.Prom
 
 func TestRegistryResolveReturnsRegisteredFactory(t *testing.T) {
 	reg := agent.NewRegistry()
-	reg.Register("claude_code", harnessconfig.Configuration{}, stubFactory("cc"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
 
 	f, err := reg.Resolve("claude_code")
 	if err != nil {
@@ -48,7 +49,7 @@ func TestRegistryResolveReturnsRegisteredFactory(t *testing.T) {
 
 func TestRegistryResolveUnknownKindReturnsTypedError(t *testing.T) {
 	reg := agent.NewRegistry()
-	reg.Register("claude_code", harnessconfig.Configuration{}, stubFactory("cc"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
 
 	_, err := reg.Resolve("opencode")
 	if !errors.Is(err, agent.ErrUnsupportedKind) {
@@ -58,8 +59,8 @@ func TestRegistryResolveUnknownKindReturnsTypedError(t *testing.T) {
 
 func TestRegistryRegisterOverwrites(t *testing.T) {
 	reg := agent.NewRegistry()
-	reg.Register("k", harnessconfig.Configuration{}, stubFactory("v1"))
-	reg.Register("k", harnessconfig.Configuration{}, stubFactory("v2"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "k", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("v1"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "k", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("v2"))
 
 	f, err := reg.Resolve("k")
 	if err != nil {
@@ -73,8 +74,8 @@ func TestRegistryRegisterOverwrites(t *testing.T) {
 
 func TestRegistryKindsReportsRegistered(t *testing.T) {
 	reg := agent.NewRegistry()
-	reg.Register("claude_code", harnessconfig.Configuration{}, stubFactory("cc"))
-	reg.Register("opencode", harnessconfig.Configuration{}, stubFactory("oc"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "opencode", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("oc"))
 
 	got := reg.Kinds()
 	slices.Sort(got)
@@ -90,7 +91,7 @@ func TestRegistryRegisterPanicsOnEmptyKind(t *testing.T) {
 			t.Fatal("Register(\"\", ...) did not panic")
 		}
 	}()
-	agent.NewRegistry().Register("", harnessconfig.Configuration{}, stubFactory("x"))
+	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("x"))
 }
 
 func TestRegistryRegisterPanicsOnNilFactory(t *testing.T) {
@@ -99,7 +100,7 @@ func TestRegistryRegisterPanicsOnNilFactory(t *testing.T) {
 			t.Fatal("Register(kind, nil) did not panic")
 		}
 	}()
-	agent.NewRegistry().Register("k", harnessconfig.Configuration{}, nil)
+	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "k", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, nil)
 }
 
 func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
@@ -108,20 +109,20 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 		Kind:      "opencode",
 		Available: false,
 		Version:   "missing",
-		Capabilities: proto.AgentKindCapabilities{
-			Streaming: true,
-		},
+		Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+			Streaming: proto.CapabilitySupported,
+		}),
 	}, harnessconfig.Configuration{}, stubFactory("oc"))
 	reg.RegisterKind(proto.SupportedAgentKind{
 		Kind:      "claude_code",
 		Available: true,
 		Version:   "1.2.3",
-		Capabilities: proto.AgentKindCapabilities{
-			Streaming:   true,
-			Permissions: true,
-			Usage:       true,
-			Resume:      true,
-		},
+		Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+			Streaming:   proto.CapabilitySupported,
+			Permissions: proto.CapabilitySupported,
+			Usage:       proto.CapabilitySupported,
+			Resume:      proto.CapabilitySupported,
+		}),
 	}, harnessconfig.Configuration{}, stubFactory("cc"))
 
 	got := reg.SupportedAgentKinds()
@@ -131,17 +132,17 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 	if got[0].Kind != "claude_code" || got[1].Kind != "opencode" {
 		t.Fatalf("SupportedAgentKinds sort = %#v, want claude_code then opencode", got)
 	}
-	if !got[0].Available || got[0].Version != "1.2.3" || !got[0].Capabilities.Permissions || !got[0].Capabilities.Resume {
+	if !got[0].Available || got[0].Version != "1.2.3" || !got[0].Capabilities.Permissions.IsSupported() || !got[0].Capabilities.Resume.IsSupported() {
 		t.Fatalf("claude_code descriptor not preserved: %#v", got[0])
 	}
-	if got[1].Available || got[1].Version != "missing" || !got[1].Capabilities.Streaming {
+	if got[1].Available || got[1].Version != "missing" || !got[1].Capabilities.Streaming.IsSupported() {
 		t.Fatalf("opencode descriptor not preserved: %#v", got[1])
 	}
 }
 
 func TestRegistryExecutorRequiresExplicitRegistration(t *testing.T) {
 	registry := agent.NewRegistry()
-	registry.Register("native", harnessconfig.Configuration{}, stubFactory("native"))
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("native"))
 	if _, err := registry.ResolveExecutor("native"); err == nil {
 		t.Fatal("legacy factory implied reusable execution")
 	}
@@ -154,7 +155,7 @@ func TestRegistryExecutorRequiresExplicitRegistration(t *testing.T) {
 	if _, err := factory(t.Context(), proto.PromptRequestPayload{}); !errors.Is(err, expected) {
 		t.Fatal(err)
 	}
-	registry.Register("native", harnessconfig.Configuration{}, stubFactory("replacement"))
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("replacement"))
 	if _, err := registry.ResolveExecutor("native"); err == nil {
 		t.Fatal("replacing a kind retained its old executor capability")
 	}

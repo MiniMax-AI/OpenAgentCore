@@ -28,7 +28,7 @@ func registerAgentKinds(registry *agent.Registry, agentCLIs agentCLIDiscovery, s
 	if agentCLIs.Codex.Available {
 		registry.RegisterExecutor("codex", withExecutorCapabilities(codex.NewExecutorFactory(), serverURL))
 	}
-	if agentCLIs.Codex.Available && agentCLIs.Codex.Capabilities.LocalEnvironment {
+	if agentCLIs.Codex.Available && agentCLIs.Codex.Capabilities.LocalEnvironment.IsSupported() {
 		registry.RegisterPreparation("codex", true, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Prepared, error) {
 			prepared, err := codex.Prepare(ctx, req)
 			if prepared == nil {
@@ -51,6 +51,6 @@ func registerAgentKinds(registry *agent.Registry, agentCLIs agentCLIDiscovery, s
 }
 
 func registerProductAgentKind(registry *agent.Registry, info proto.SupportedAgentKind, configuration harnessconfig.Configuration, factory agent.Factory) {
-	info.Capabilities.WorkspaceAuthoring = true
+	info.Capabilities.WorkspaceAuthoring = proto.CapabilitySupported
 	registry.RegisterKind(info, configuration, factory)
 }
