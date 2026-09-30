@@ -87,7 +87,7 @@ const defaults = await admin.retrieveHarnessModelConfiguration("codex");
 console.log(defaults.model, defaults.harness_config, defaults.model_provider.api_key_configured);
 ```
 
-[Execution configuration queries](../../contracts/agents-api/execution-configuration.md) and [deployment defaults](../../contracts/agents-api/model-execution.md#deployment-defaults) define these reads and writes.
+[Execution configuration queries](../../contracts/agents-api/admin-api.md#execution-configuration) and [deployment defaults](../../contracts/agents-api/model-execution.md#deployment-defaults) define these reads and writes.
 
 ### Checks
 

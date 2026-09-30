@@ -1,143 +1,77 @@
 # Core administration errors
 
-Errors on `/core/v1` retain the envelope below. `message` is safe English text;
-`code` and `param` are nullable. Clients use stable `code` values and the optional
-field `param`, and fall back to `message` for an unknown code. They do not parse
-messages or retry rejected mutations automatically.
+Errors on `/core/v1` use this envelope. `message` is safe English text; `code` and `param` are nullable. Clients act on the stable `code` and the optional `param`, show `message` for an unknown code, never parse messages and never retry a rejected write automatically.
 
 ```json
 {"error":{"message":"A valid Core key is required as the bearer credential.","type":"invalid_request_error","code":"invalid_admin_key","param":null}}
 ```
 
+Errors on `/v1` and `/api/v1` keep their own envelopes and never carry `details`.
+
 ## Optional details
 
-`error.details`, when present, is a nonempty flat object. Its values may only be
-strings, finite numbers, booleans, null or arrays of strings (including empty
-arrays). It contains documented Core-owned facts, never submitted names, URLs,
-keys, echoed request values, native error text or provider response bodies. Each
-operation that adds details must document its exact keys alongside its error
-code. Operation-specific validation details are listed below; this contract does not
-add diagnostics endpoints.
+`error.details`, when present, is a nonempty flat object. Its values are strings, finite numbers, booleans, null or arrays of strings (possibly empty). It holds only Core-owned facts: never submitted names, URLs or keys, echoed request values, native error text or provider response bodies. Each code that has details lists its exact keys below.
 
-The typed Go `CoreErrorDetails` values have string, number, boolean, null and
-string-array constructors. `writeCoreError` emits them only through the marked
-Core router; empty or invalid details are omitted as a whole. The mark preserves
-error observation, flushing and `http.ResponseController` access. A shared
-handler or a Core-looking request path alone cannot change a public or machine
-error envelope. Core authentication still runs before operation configuration
-checks, and unknown paths retain their existing status and admission rules.
+| Code | Details |
+| --- | --- |
+| `sandbox_generation_stale` | `current_generation` |
+| `sandbox_in_use` | `allocations`, `pending` |
+| `sandbox_reset_required` | `current_provider`, `requested_provider` |
+| Operation validation codes | See [operation validation](#operation-validation) |
 
-`AgentCoreError.details` is optional `CoreErrorDetails` in the TypeScript client.
-The Core clients accept only the flat value types above, snapshot string arrays,
-and ignore malformed or empty details without changing the error's message,
-status, code, param or type. The public `OpenAIAgentsClient` does not read this
-Core-only field. `/v1` and `/api/v1` response shapes remain unchanged.
+In the TypeScript client, `AgentCoreError.details` is the optional `CoreErrorDetails`. The Core clients accept only the value types above, copy string arrays, and ignore malformed or empty details without changing the error's message, status, code, param or type. The public `OpenAIAgentsClient` does not read `details`.
 
 ## Console-generated failures
 
-The console uses the same envelope for its sign-in, origin, unsafe-request and
-transport failures in the `/core` namespace. It does not expose request values
-or transport exceptions. Core responses pass
-through the proxy; the console does not reinterpret their codes or details.
+Web's console server uses this envelope for its own failures on `/core` paths ([request boundary](../../docs/web/console-server.md#request-boundary)). It never exposes request values or transport exceptions, and it passes Core's responses through unchanged.
 
-| HTTP status | Code | Meaning | Param / details |
+| HTTP status | Code | Meaning | `type` |
 | --- | --- | --- | --- |
-| 401 | `console_sign_in_required` | Console session is missing or expired | null / omitted |
-| 403 | `console_origin_rejected` | Host, Origin or Fetch Metadata checks failed | null / omitted |
-| 400 | `console_request_invalid` | Request path, method or upgrade is unsafe | null / omitted |
-| 502 | `core_unreachable` | Core transport failed or Core tried to redirect | null / omitted |
+| 401 | `console_sign_in_required` | The console session is missing or expired | `invalid_request_error` |
+| 403 | `console_origin_rejected` | Host, Origin or Fetch Metadata checks failed | `invalid_request_error` |
+| 400 | `console_request_invalid` | The path, method or upgrade is unsafe | `invalid_request_error` |
+| 502 | `core_unreachable` | Core could not be reached, or Core answered with a redirect | `server_error` |
 
-The first three use `type: "invalid_request_error"`; the last uses
-`type: "server_error"`. A Core `401 invalid_admin_key` remains distinguishable
-from a missing console sign-in. `/console/auth` keeps its existing
-`{"error":"…"}` errors. Bare, retired and direct public/machine paths do not
-become proxyable operations. Host, origin, authentication, credential stripping,
-path checks and the no-retry rule are unchanged.
+These have null `param` and no `details`. A Core `401 invalid_admin_key` therefore stays distinguishable from a missing console sign-in. Console sign-in routes keep their `{"error":"…"}` errors ([sign-in](../../docs/web/console-server.md#sign-in)).
 
-Existing operation-specific codes remain documented in the
-[administrator contract](admin-api.md), [sandbox deployment contract](sandbox-deployment.md),
-[executor credential contract](environment-executor-credentials.md) and related
-resource contracts. The following validators refine Core operation failures only.
+## Sandbox provider verification
 
-## E2B online changes
+A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](sandbox-deployment.md#initialization-same-provider-changes-and-reset)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
 
-The same-provider deployment PUT uses fixed safe errors. No provider response
-message, template name, key or unlisted-resource count is returned in details.
-
-| HTTP | Code | Meaning | Param |
+| HTTP | Code | Meaning | `param` |
 | --- | --- | --- | --- |
-| 400 | `sandbox_credential_invalid` | Provider explicitly rejected authentication | `credential` |
-| 400 | `sandbox_configuration_invalid` | Candidate immutable build is invalid or does not match resources | `configuration` |
-| 409 | `sandbox_credential_ownership` | Candidate key does not prove ownership/manageability of the retained deployment | `credential` |
-| 503 | `sandbox_verification_unconfirmed` | Verification, receipt settlement or bounded credential fencing could not be confirmed | null |
+| 400 | `sandbox_credential_invalid` | The provider rejected the candidate credential | `credential` |
+| 400 | `sandbox_configuration_invalid` | The candidate configuration, such as an E2B template build, is not ready and immutable or does not match the resources | `configuration` |
+| 409 | `sandbox_credential_ownership` | The candidate credential cannot manage the retained deployment; reset before changing accounts | `credential` |
+| 503 | `sandbox_verification_unconfirmed` | Verification, receipt settlement or the credential fence could not be confirmed | null |
 
-Missing or unsettled Create receipts are uncertainty, never evidence of a different
-team or released compute. The typed client projects these codes to fixed local
-messages. It preserves the three nonnull fields above only when the response
-status, code and param exactly match the table; all other params on these fixed
-errors become null. Numeric details remain limited to `current_generation` for
-`sandbox_generation_stale` and `allocations`/`pending` for `sandbox_in_use`. Unknown
-credential-bearing errors become `sandbox_configuration_unconfirmed` without replay.
-It also projects `409 sandbox_configuration_error` to fixed public-URL
-guidance, even when a PUT omitted its key; arbitrary upstream text is never echoed.
+On every deployment write, the typed client replaces the message of these codes and of the other `sandbox_*` deployment codes with fixed local text. It keeps only the `current_generation`, `allocations`, `pending`, `min` and `max` details, and keeps `param` only when status, code and param match the table or the `invalid_sandbox_configuration` rows below exactly. `409 sandbox_configuration_error` becomes fixed public-URL guidance with a null `param`, even for a `PUT` without a key. Any other error becomes `sandbox_configuration_unconfirmed` and is not resent, because a rejection could echo the key.
 
 ## Operation validation
 
-All entries below return HTTP 400 with type `invalid_request_error`. Missing,
-malformed or incorrectly typed model-provider bundles use `invalid_model_provider`
-before field validation. JSON body parsing retains its existing errors. Other
-malformed administration requests retain `invalid_request`.
+Each code returns HTTP 400 with `type: "invalid_request_error"`. A missing, malformed or wrongly typed model-provider bundle returns `invalid_model_provider` before any field check. JSON body parsing keeps its own errors, and other malformed administration requests return `invalid_request`.
 
 | Code | Param | Details | Meaning |
 | --- | --- | --- | --- |
-| `invalid_name` | `name` | `max_length`: 128 for Projects/nodes, 80 for Project keys | Name failed the resource's existing validator |
+| `invalid_name` | `name` | `max_length`: 128 for Projects and nodes, 80 for Project keys | The name failed the resource's validator |
 | `invalid_node_capacity` | `max_active` or `max_retained` | `min`: 1, `max`: 1000000 | Capacity is invalid; retained capacity must also be at least active capacity |
 | `invalid_model_provider` | null | omitted | A complete model-provider bundle is required |
 | `model_provider_base_url_invalid` | `base_url` | omitted | Requires HTTPS without credentials, query or fragment |
-| `model_provider_protocol_unsupported` | `protocol` | `harness` and `allowed_protocols`, from the build's adapter catalog | Protocol is unknown or unsupported by the selected harness |
-| `model_provider_api_key_invalid` | `api_key` | `max_length`: 16384 | Key is empty, too long or contains a prohibited character |
-| `model_provider_token_limits_invalid` | `context_window` or `max_output_tokens` | omitted | Limits are invalid or required positive limits are missing |
-| `invalid_sandbox_configuration` | `resources.cpus` | `min`: 1, `max`: 255 | CPU count is outside the supported bounds |
+| `model_provider_protocol_unsupported` | `protocol` | `harness` and `allowed_protocols`, from the build's adapter catalog | The protocol is unknown or unsupported by the selected Harness |
+| `model_provider_api_key_invalid` | `api_key` | `max_length`: 16384 | The key is empty, too long or contains a prohibited character |
+| `model_provider_token_limits_invalid` | `context_window` or `max_output_tokens` | omitted | Limits are invalid, or the Harness requires positive limits that are missing |
+| `model_configuration_model_invalid` | `model` | omitted | The deployment default's model is not a nonempty model identifier |
+| `harness_config_invalid` | `harness_config` | omitted | The deployment default's native parameters are unsupported or invalid |
+| `invalid_sandbox_configuration` | `resources.cpus` | `min`: 1, `max`: 255 | The CPU count is outside the supported bounds |
 | `invalid_sandbox_configuration` | `resources.memory_mib` | `min`: 512, `max`: 1048576 | Memory is outside the supported bounds |
-| `invalid_sandbox_configuration` | `resources.root_disk_mib` or `resources.environment_disk_mib` | `min`: 1024 for microsandbox; `min`: 0, `max`: 0 for Docker/E2B | Disk capacity is missing or unsupported by the provider |
-| `invalid_sandbox_configuration` | `runtime` | omitted | Runtime release is missing, mutable, invalid or prohibited for E2B |
+| `invalid_sandbox_configuration` | `resources.root_disk_mib` or `resources.environment_disk_mib` | `min`: 1024 for microsandbox; `min`: 0, `max`: 0 for Docker and E2B | Disk capacity is missing or unsupported by the provider |
+| `invalid_sandbox_configuration` | `runtime` | omitted | The Runtime release is missing, mutable, invalid or not allowed for E2B |
 
-Bounds describe validation constants, never submitted values. Node names retain
-their existing byte limit and character rules; Project/key names retain their
-trimmed Unicode character limit and control-character rules. No name rules are
-widened or unified. Numeric checks retain their existing order, including
-provider-dependent retained capacity validation inside the existing transaction.
-Model-provider checks retain URL, protocol, key, general limits, harness protocol,
-then required harness limits precedence. Resource checks retain CPU, memory, disk,
-then Runtime precedence.
-
-Shared validators preserve their original error strings and sentinel identity.
-Only the marked Core router maps their typed field metadata to this catalog;
-public `/v1` and machine routes retain their previous complete error bodies.
-Unknown sandbox providers retain the existing untyped error. E2B provider errors
-above retain their fixed redaction contract with no echoed template or key.
-
-Core administration error details are scoped by the `/core/v1` router writer mark,
-not a request path test. Use `writeCoreError` with typed `CoreErrorDetails` values
-and document fixed keys in `contracts/agents-api/core-errors.md` when adding a
-code. Include only safe Core-owned facts; never pass submitted values, secrets,
-native text or provider bodies. Invalid/empty details are omitted. Preserve the
-public and machine error serializers, observer callbacks and streaming interfaces.
-The Core client ignores malformed optional details and never retries a mutation.
-
-Core operation validators preserve the original error text, sentinel identity,
-and validation precedence. Package-owned typed errors carry fixed field metadata;
-only the marked Core error mapper translates it to operation codes and safe
-bounds/catalog details. Preserve Project/key rune limits and node byte limits
-separately. Keep sandbox validation metadata through its existing store wrapper
-without changing transaction or provider authority. Public Session provider
-validation remains byte-compatible; cover it with handler-level golden responses.
+Bounds are validation constants, never submitted values. Node names are limited in bytes; Project and key names in trimmed Unicode characters without control characters. Only the first failure is reported, in this order: model provider URL, protocol, key, general limits, the Harness's protocol, then the Harness's required limits; sandbox resources CPU, memory, disk, then Runtime. Model-provider field errors inside a `model_provider` object keep that object's field as `param`. An unknown sandbox provider returns an error without these fields.
 
 ## Diagnostic failure categories
 
-The [root diagnostics reads](session-diagnostics.md) return these categories
-inside a successful HTTP 200 snapshot, not the operation error envelope. Public
-`/v1` Turn errors remain unchanged. `params` is `{}` unless specified.
+The [Session and Turn diagnostics reads](session-diagnostics.md) return these categories inside a successful 200 snapshot, not as an error envelope. Public `/v1` Turn errors do not change. `params` is `{}` unless the table says otherwise.
 
 | Code | Stored cause or safe meaning |
 | --- | --- |
@@ -167,21 +101,6 @@ inside a successful HTTP 200 snapshot, not the operation error envelope. Public
 | `environment_unavailable` | Environment unavailable for initial input |
 | `environment_provisioning_failed` | Hosted provisioning failure; params contain nullable `step`, `index`, `exit_code` from a sanitized receipt |
 
-`diagnostics_unavailable` is the HTTP 503 operation error when the diagnostic
-reader is not configured; it has no details. A database failure remains an error,
-never a healthy or empty diagnostic snapshot. Historical provisioning reasons and
-private native messages are not parsed for categories or parameters.
+When the diagnostics reader is not configured, the reads return 503 `diagnostics_unavailable` without details. A database failure is an error, never an empty or healthy snapshot. Provisioning reasons and native messages are never parsed for categories or parameters.
 
-Native categories apply only to a failed Turn with top-level
-`error_code: engine_failed`. Only the finite `engine_error_code` allowlist is
-accepted; unknown,
-malformed and absent metadata retains `harness_error`. Only `connection_failed`
-uses `engine_http_status`. Nested metadata and provider prose never classify a
-failure. Core persistence, incomplete-stream and cancellation failures retain
-priority, and cancelled/completed Turns have no failure. See
-[native classification](native-error-classification.md) for adapter coverage.
-
-Model configuration writes additionally return `model_configuration_model_invalid`
-with `param: model`, or `harness_config_invalid` with `param: harness_config`.
-Both carry fixed messages without submitted values. Existing provider field errors
-retain their field params within the `model_provider` object.
+Native categories apply only to a failed Turn whose outcome has `error_code: engine_failed`. Core accepts only the listed `engine_error_code` values; an unknown, malformed or absent value stays `harness_error`. Only `connection_failed` uses `engine_http_status`. Nested metadata and provider text never classify a failure. Core storage, incomplete-stream and cancellation failures take precedence, and cancelled or completed Turns have no failure. [Native error classification](native-error-classification.md) lists which adapters report each category.
