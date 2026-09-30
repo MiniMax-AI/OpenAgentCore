@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -65,7 +66,17 @@ type Built struct {
 	Probe                              func(context.Context) error
 }
 
-func Build(config Config) (*Built, func(), error) {
+// LocalOptions supplies process-local context without changing persisted configuration.
+type LocalOptions struct {
+	// Standalone selects registration or execution without a generation manager.
+	Standalone bool
+	// GenerationStateDirectory is the node state directory when constructing a
+	// retained generation. It must be canonical and absolute, and Standalone
+	// must be false.
+	GenerationStateDirectory string
+}
+
+func Build(config Config, options LocalOptions) (*Built, func(), error) {
 	closeProvider := func() {}
 	if err := validateSpecification(config); err != nil {
 		return nil, closeProvider, err
@@ -78,8 +89,15 @@ func Build(config Config) (*Built, func(), error) {
 	if err != nil || adapter.BuildLocal == nil {
 		return nil, closeProvider, errors.New("sandbox provider is not node-local")
 	}
+	if options.Standalone {
+		if options.GenerationStateDirectory != "" {
+			return nil, closeProvider, sandbox.ErrInvalid
+		}
+	} else if !filepath.IsAbs(options.GenerationStateDirectory) || filepath.Clean(options.GenerationStateDirectory) != options.GenerationStateDirectory {
+		return nil, closeProvider, sandbox.ErrInvalid
+	}
 	result := &Built{InstallationID: config.InstallationID, SpecificationDigest: config.Specification.Digest(config.Provider)}
-	closeProvider, err = adapter.BuildLocal(config, result)
+	closeProvider, err = adapter.BuildLocal(config, options, result)
 	if err != nil {
 		return nil, closeProvider, err
 	}

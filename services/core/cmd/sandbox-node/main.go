@@ -80,7 +80,7 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	built, closeProvider, err := providerconfig.Build(config)
+	built, closeProvider, err := providerconfig.Build(config, providerconfig.LocalOptions{Standalone: true})
 	if err != nil {
 		return err
 	}

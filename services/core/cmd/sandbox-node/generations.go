@@ -167,50 +167,11 @@ func runGenerations(ctx context.Context, configFile, stateDir string) error {
 }
 
 func buildGeneration(config providerconfig.Config, stateDir string) (node.GenerationProvider, error) {
-	if config.Microsandbox != nil {
-		directory := filepath.Join(stateDir, "generations")
-		if err := os.MkdirAll(directory, 0700); err != nil {
-			return node.GenerationProvider{}, err
-		}
-		info, err := os.Lstat(directory)
-		if err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
-			return node.GenerationProvider{}, sandbox.ErrOwnership
-		}
-		config.Microsandbox.HelperLeaseGeneration = config.Generation
-		config.Microsandbox.HelperLeasePath = filepath.Join(directory, strconv.FormatUint(config.Generation, 10)+".lease")
-	}
-	built, closeProvider, err := providerconfig.Build(config)
+	built, closeProvider, err := providerconfig.Build(config, providerconfig.LocalOptions{GenerationStateDirectory: stateDir})
 	if err != nil {
 		return node.GenerationProvider{}, err
 	}
-	probe := built.Probe
-	if micro := config.Microsandbox; micro != nil {
-		probe = func(ctx context.Context) error {
-			if err := built.Probe(ctx); err != nil {
-				return err
-			}
-			command := exec.CommandContext(ctx, micro.RuntimePath, "image", "inspect", micro.Image, "--format", "json")
-			command.Env = append([]string{"PATH=/usr/local/bin:/usr/bin:/bin", "HOME=" + os.Getenv("HOME")}, "MSB_BACKEND=local", "MSB_HOME="+micro.RuntimeHome, "MSB_PATH="+micro.RuntimePath, "MSB_LIBKRUNFW_PATH="+micro.FirmwarePath)
-			reader, err := command.StdoutPipe()
-			if err != nil {
-				return sandbox.ErrRuntimeImageUnavailable
-			}
-			if err := command.Start(); err != nil {
-				return sandbox.ErrRuntimeImageUnavailable
-			}
-			raw, readErr := io.ReadAll(io.LimitReader(reader, 64*1024+1))
-			if len(raw) > 64*1024 {
-				_ = command.Process.Kill()
-			}
-			waitErr := command.Wait()
-			var image struct{ Digest, Architecture, OS string }
-			if readErr != nil || waitErr != nil || len(raw) > 64*1024 || json.Unmarshal(raw, &image) != nil || image.Digest != strings.SplitN(micro.Image, "@", 2)[1] || image.Architecture != "amd64" || image.OS != "linux" {
-				return sandbox.ErrRuntimeImageUnavailable
-			}
-			return nil
-		}
-	}
-	return node.GenerationProvider{Generation: config.Generation, SpecificationDigest: built.SpecificationDigest, Provider: built.Provider, Probe: probe, Close: closeProvider}, nil
+	return node.GenerationProvider{Generation: config.Generation, SpecificationDigest: built.SpecificationDigest, Provider: built.Provider, Probe: built.Probe, Close: closeProvider}, nil
 }
 
 type generationJournal struct {

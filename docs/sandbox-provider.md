@@ -115,6 +115,8 @@ A new provider takes these steps:
 
 **Known design gap:** the installer's `--sandbox` choices and Web's setup views carry provider-specific options, such as E2B's installer flags and Web views. Exposing another provider through these surfaces currently requires shared installer and Web edits. This coupling does not meet [Complexity stays in the adapter](../AGENTS.md#complexity-stays-in-the-adapter); new integrations must express their configuration through the protocol and keep vendor-specific behavior in the adapter. Never add a Session or Turn scheduling path, a vendor column or API field, or a vendor switch in the store.
 
+`providers.Build` passes persisted node configuration and ephemeral `LocalOptions` to `BuildLocal`. The caller explicitly selects standalone registration or single-provider execution with `Standalone`, or generation-owned execution with a canonical absolute node state directory in `GenerationStateDirectory`. Missing or mixed contexts are rejected. The adapter owns generation-specific native preparation and readiness checks. Microsandbox binds helper leases to the installation, generation and specification digest, then checks the pinned image after platform, capacity and artifact readiness.
+
 ### Registration validation
 
 `providers.ValidateRegistration` is the single wiring check. Lookup, constructor binding and the installer projection run it before any configuration callback or constructor. An unknown provider name stays invalid input; a malformed registration returns a safe `providercontract.ErrContract` that includes no submitted configuration or native diagnostics.

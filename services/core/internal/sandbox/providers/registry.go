@@ -22,7 +22,7 @@ type Adapter struct {
 	NodeArtifacts                 []providerassets.Artifact
 	Policy                        sandbox.DeploymentPolicy
 	Configuration                 sandbox.ConfigurationAdapter
-	BuildLocal                    func(Config, *Built) (func(), error)
+	BuildLocal                    func(Config, LocalOptions, *Built) (func(), error)
 	BuildDirect                   func(DirectConfig) (sandbox.SandboxProvider, error)
 	Mode                          string
 	Operations                    func() providercontract.Operations

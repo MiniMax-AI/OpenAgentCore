@@ -12,7 +12,7 @@ import (
 	"github.com/moby/moby/client"
 )
 
-func buildDocker(config Config, result *Built) (func(), error) {
+func buildDocker(config Config, _ LocalOptions, result *Built) (func(), error) {
 	closeProvider := func() {}
 	if config.Docker == nil || config.Microsandbox != nil {
 		return closeProvider, errors.New("managed Docker requires only the docker configuration object")
