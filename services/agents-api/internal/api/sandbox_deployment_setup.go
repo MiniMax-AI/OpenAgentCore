@@ -134,6 +134,7 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 		writeStoreError(w, r, store.ErrSandboxDeploymentConflict)
 		return
 	}
+	setAdminAuditSource(r, "")
 	result, err := h.sandboxUpdate(r.Context(), store.SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input.request(), ExpectedGeneration: *input.ExpectedGeneration})
 	if err != nil {
 		writeStoreError(w, r, err)

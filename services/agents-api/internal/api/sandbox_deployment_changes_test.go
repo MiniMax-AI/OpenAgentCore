@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 
@@ -15,8 +16,12 @@ func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 	project, _ := NewAuthenticator([]APIKey{callerBinding()})
 	admin, _ := NewDeploymentAuthenticator([]string{device.HashCredential("administrator")})
 	updates, resets := 0, 0
-	update := func(_ context.Context, in store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
+	update := func(ctx context.Context, in store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error) {
 		updates++
+		source, ok := adminaudit.FromContext(ctx)
+		if !ok || source.ProjectID != "" || source.CredentialID == "" || source.RequestID == "" || source.TraceID == "" {
+			t.Fatal("deployment mutation lost administrator audit source")
+		}
 		if in.Provider != "e2b" || in.ExpectedGeneration != 2 || in.E2B == nil || in.E2B.APIKey != "synthetic-private-key" {
 			t.Fatal("write-only fields were lost")
 		}
