@@ -6,7 +6,7 @@ description: "Set up a checkout and choose the right extension boundary."
 This guide is for contributors changing Core, Runtime, adapters, the Web console
 or the documentation site. For using a deployment, start with the
 [getting started guide](/). Read the
-[contributor rules](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md) before changing code.
+[contributor rules](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md) before changing code.
 
 ![OpenAgentCore architecture: applications and the Web console connect to Core through separate APIs; Sandbox Providers, Runtime, Harnesses and model providers connect through shared protocols.](/images/source/docs/assets/development-architecture.png)
 
@@ -20,8 +20,8 @@ git worktree add ../openagentcore-change -b codex/my-change main
 cd ../openagentcore-change
 ```
 
-Install Go at the version in [go.mod](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/go.mod), Node 22, pnpm at the version
-in [package.json](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/package.json), and Python 3.9 or newer. The complete gate
+Install Go at the version in [go.mod](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/go.mod), Node 22, pnpm at the version
+in [package.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/package.json), and Python 3.9 or newer. The complete gate
 runs on Linux and needs a dedicated PostgreSQL database, OpenSSL development
 libraries for the microsandbox helper, and a Playwright browser. Provider and
 Runtime builds have additional prerequisites in their component guides.
@@ -29,7 +29,7 @@ Runtime builds have additional prerequisites in their component guides.
 ```sh
 pnpm install --frozen-lockfile
 python3 -m venv .venv
-.venv/bin/python -m pip install -r services/agents-api/tests/requirements.txt
+.venv/bin/python -m pip install -r services/core/tests/requirements.txt
 .venv/bin/python - <<'PYTHON'
 import json
 import subprocess
@@ -47,7 +47,7 @@ export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 
 Set `OAC_TEST_DATABASE_URL` privately to a dedicated PostgreSQL test database.
 Never point the test suite at an installation or product database. The
-[test database rules](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#test-database) list the required role
+[test database rules](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#test-database) list the required role
 permission.
 
 Third-party native packages are pinned build inputs; changing a pin requires the
@@ -58,7 +58,7 @@ relevant native qualification as well as compilation.
 From the repository root:
 
 ```sh
-make build-agents-api
+make build-core
 make build-daemon
 ```
 
@@ -67,37 +67,37 @@ under `~/.oac/build/daemon/` by default. `OAC_DEV_HOME` selects another build ro
 `OAC_DEV_CORE_BUILD_DIR` selects an absolute Core output directory. Building does
 not configure a database, start a deployment or qualify native execution.
 
-Use the [service guide](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/README.md#build-standalone-binaries)
+Use the [service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/README.md#build-standalone-binaries)
 to run the Core migrator and server with a separate development database. The
 [configuration appendix](/configure#appendix-core-environment-without-the-installer)
 owns standalone process settings. For a complete operator installation, use the
 [installation guide](/install); building Core alone is a
 separate contributor workflow.
 
-The [Web package guide](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/web/README.md) describes console development and
+The [Web package guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/web/README.md) describes console development and
 its management-only integration. `pnpm dev:web` starts the frontend development
 server; it does not install Core, issue keys or start native execution. The
-[docs app guide](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/docs/README.md) describes the independent documentation
+[docs app guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/docs/README.md) describes the independent documentation
 site; `pnpm dev:docs` starts its development server.
 
 ## Repository map
 
 | Location | Responsibility | Read next |
 | --- | --- | --- |
-| `services/agents-api/internal/api` | Public, administrator and machine HTTP boundaries | [API index](/public-api) |
-| `services/agents-api/internal/store` and `internal/db` | Core persistence, transactions, queries and migrations | [Service guide](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/README.md#database-ownership) |
-| `services/agents-api/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](/runtime-protocol) |
-| `services/agents-api/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](/harness-onboarding) |
+| `services/core/internal/api` | Public, administrator and machine HTTP boundaries | [API index](/public-api) |
+| `services/core/internal/store` and `internal/db` | Core persistence, transactions, queries and migrations | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/README.md#database-ownership) |
+| `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](/runtime-protocol) |
+| `services/core/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](/harness-onboarding) |
 | `internal/agentdaemon/proto` and `gateway` | Shared wire types, validators and authenticated Runtime connections | [Runtime protocol](/runtime-protocol) |
 | `internal/runtimebootstrap` | Provider-to-Runtime startup input | [Runtime bootstrap](/runtime-bootstrap) |
-| `apps/parsar-daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](/harness-onboarding#required-adapter-interfaces) |
-| `apps/parsar-daemon/internal/agent` | Native harness adapters | [Native references](/harness-onboarding#native-references) |
-| `services/agents-api/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](/sandbox-provider) |
-| `services/core-console` | Console login and the server-side management proxy | [Console server](/bootstrap-projects-keys) |
-| `apps/web` and `packages/agents-client` | Console UI and typed clients | [Web guide](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/web/README.md) |
-| `deploy/install` and `scripts` | Distribution, installation and validation tools | [Maintainers](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/maintainers.md) |
-| `contracts/agents-api` | Pinned schema, local semantic contracts and qualification evidence | [Coverage ledger](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md) |
-| `apps/docs` | Generated guide and API-reference website | [Generation workflow](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/docs/README.md) |
+| `apps/daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](/harness-onboarding#required-adapter-interfaces) |
+| `apps/daemon/internal/agent` | Native harness adapters | [Native references](/harness-onboarding#native-references) |
+| `services/core/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](/sandbox-provider) |
+| `services/web` | Console login and the server-side management proxy | [Console server](/bootstrap-projects-keys) |
+| `apps/web` and `packages/agents-client` | Console UI and typed clients | [Web guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/web/README.md) |
+| `deploy/install` and `scripts` | Distribution, installation and validation tools | [Maintainers](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/maintainers.md) |
+| `contracts/agents-api` | Pinned schema, local semantic contracts and qualification evidence | [Coverage ledger](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md) |
+| `apps/docs` | Generated guide and API-reference website | [Generation workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/docs/README.md) |
 
 Core owns durable execution facts. Runtime owns local execution and cleanup.
 Adapters translate native operations. Providers own outer compute. These boundaries
@@ -115,21 +115,21 @@ only helps you pick the right one.
 | Sandbox Provider | Outer compute that creates and reclaims Environments | [Sandbox Provider guide](/sandbox-provider) |
 | Runtime bootstrap | Starting a managed Runtime with its connection identity | [Runtime bootstrap](/runtime-bootstrap) |
 | Core–Runtime protocol | A message, receipt or lifecycle rule between Core and the daemon | [Core–Runtime protocol](/runtime-protocol) |
-| Public API operation | A `/v1`, `/core/v1` or `/api/v1` route | [API index](/public-api) and [contracts](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md) |
+| Public API operation | A `/v1`, `/core/v1` or `/api/v1` route | [API index](/public-api) and [contracts](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md) |
 | Environment capability | Skills, Plugins, MCP or `packages.system` preparation | [Environments](/environments-and-files#runtime-capability-preparation) |
 
 ### Add a Harness adapter
 
 Implement the shared `ExecutorFactory`, `Executor` and `Turn` interfaces in
-[`agent/harness.go`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/parsar-daemon/internal/agent/harness.go), register
+[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/daemon/internal/agent/harness.go), register
 the adapter and add its profile/configuration entry to the shared catalog. Follow the numbered steps in
 [Harness onboarding](/harness-onboarding); qualification
-evidence belongs in [Harness integration](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/harnesses.md).
+evidence belongs in [Harness integration](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/harnesses.md).
 
 ### Add a Sandbox Provider
 
 Implement the five required `SandboxProvider` operations in
-[`sandbox_provider.go`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/internal/sandbox/sandbox_provider.go),
+[`sandbox_provider.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/internal/sandbox/sandbox_provider.go),
 register the provider kind and pass `make check-sandbox-provider-contract`. Follow
 the numbered steps in the [Sandbox Provider guide](/sandbox-provider).
 
@@ -143,12 +143,12 @@ ownership; `make check-runtime-contract` is its focused gate.
 ## Validate a change
 
 Run checks for the affected boundary while developing. The repository
-[required checks](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#required-checks) define completion, including
+[required checks](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#required-checks) define completion, including
 `make check` and any changed native component's real acceptance.
 
 | Change | Focused validation |
 | --- | --- |
-| Core handlers, persistence or clients | `make check-agents-api` |
+| Core handlers, persistence or clients | `make check-core` |
 | SQL queries | `make sqlc-generate`, inspect generated files, then `make check-sqlc` |
 | Handler annotations or API contract | `make openapi`, inspect all three namespace schemas |
 | Shared Runtime protocol | `make check-runtime-contract` |
@@ -169,13 +169,13 @@ with `AGENTS_FIXTURE_PORT` and `AGENTS_WEB_PORT` when running parallel validatio
 Keep databases, ports and containers separate between validation workers.
 Compilation, fixture success and live model/provider acceptance establish different
 facts; report skipped or unavailable checks explicitly. Follow the
-[independent blind review workflow](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#review)
+[independent blind review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#review)
 after validation.
 
 ## Change documentation
 
 Edit the source that owns the subject, using the
-[documentation ownership map](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#documentation-ownership).
+[documentation ownership map](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#documentation-ownership).
 User guides explain a workflow and link to detailed contracts. Contributor rules
 explain ownership and required checks. Semantic contracts document exact behavior,
 implementation gaps and evidence. Avoid copying the same rule into all three.
@@ -183,9 +183,9 @@ implementation gaps and evidence. Avoid copying the same rule into all three.
 Update authored sources before regenerating the docs site. Adding a site page
 also requires a source entry and navigation entry; source/output hashes verify
 freshness. API references render the namespace-specific generated schemas. Follow
-[the docs app workflow](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/docs/README.md) for link, type, build and browser
+[the docs app workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/docs/README.md) for link, type, build and browser
 checks. The release bundle has a separate explicit documentation list in
 `scripts/core-distribution-manifest.py`; changing a bundled path or heading must
 also pass its relative-link and anchor checks.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/development.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/development.md)

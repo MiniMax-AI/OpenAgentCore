@@ -1,4 +1,4 @@
-import type { SandboxDeployment } from "@agents-core-web/agents-client";
+import type { SandboxDeployment } from "@oac/agents-client";
 import type { QueryClient } from "@tanstack/react-query";
 import { sandboxWriteUncertain } from "../../lib/sandbox-labels";
 import { sandboxDeploymentQuery, sandboxScope } from "./sandbox-queries";

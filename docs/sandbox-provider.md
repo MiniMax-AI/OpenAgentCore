@@ -3,7 +3,7 @@
 A **Sandbox Provider** supplies the outer compute (an *Environment*) that a Core
 Runtime daemon runs in, plus the bounded bootstrap that starts it. This guide is
 the single start-to-finish path for adding one. The canonical interface is
-[`SandboxProvider`](../services/agents-api/internal/sandbox/sandbox_provider.go).
+[`SandboxProvider`](../services/core/internal/sandbox/sandbox_provider.go).
 
 ## Before you start
 
@@ -34,10 +34,10 @@ connectivity; see [Runtime and outer isolation](design-principles.md#runtime-and
 
 1. **Read the contract.** Implement the five required operations and explicitly handle all
    extension interfaces in [Implement the interface](#implement-the-interface).
-2. **Write the adapter package** under `services/agents-api/internal/sandbox/<kind>`
+2. **Write the adapter package** under `services/core/internal/sandbox/<kind>`
    (native SDK calls, ownership checks, identity translation, private config).
    Assert `var _ sandbox.SandboxProvider = (*YourAdapter)(nil)` at compile time.
-   Out-of-process helpers live in `services/agents-api/tools/<kind>-provider`.
+   Out-of-process helpers live in `services/core/tools/<kind>-provider`.
 3. **Register the kind** once using
    [Register the provider kind](#register-the-provider-kind). Registration is
    explicit construction, not an init-time plugin registry.
@@ -181,7 +181,7 @@ Persist operation IDs and provider-returned snapshot provenance unchanged.
 another capture or restore. `ResumeCompute` only thaws the retained source; it
 must not cold-start a stopped one. Cleanup targets the exact compute incarnation
 and snapshot, not whichever instance currently has the same display name. See
-[the lifecycle implementation](../services/agents-api/internal/execution/runtime_compute.go)
+[the lifecycle implementation](../services/core/internal/execution/runtime_compute.go)
 and its failure tests before advertising this capability.
 
 ### Four distinct readiness facts
@@ -220,7 +220,7 @@ For a new implementation:
    Node proxy identity and checkpoint advertisement consume this same entry.
    The installer projection uses those registered policies and the common field
    bounds in `sandbox/deployment_contract.go`; regenerate it with
-   `go run ./services/agents-api/cmd/specification-contract -write`.
+   `go run ./services/core/cmd/specification-contract -write`.
 4. If new configuration fields are necessary, extend the typed `sandbox.Selection`
    envelope and its dedicated encrypted persistence fields, API DTO and operator
    client. Do not replace typed configuration with unrestricted JSON. Field codecs
@@ -281,7 +281,7 @@ cleanup can verify the `Reference` and installation.
 ## Validate the integration
 
 Run `make check-sandbox-provider-contract` while developing. It runs the shared
-[`contracttest`](../services/agents-api/internal/sandbox/contracttest) suite through
+[`contracttest`](../services/core/internal/sandbox/contracttest) suite through
 real adapter boundaries using controlled native failures, plus existing adapter
 and node transport tests. The same packages are included in `make check`.
 New adapters should call the public failure runner with native-side fixtures,
@@ -313,9 +313,9 @@ Environment provides isolation.
 
 | Kind | Adapter | Helper | Operator guide |
 | --- | --- | --- | --- |
-| Docker (node) | [`sandbox/docker`](../services/agents-api/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/agents-api/internal/sandbox/node) | [Nodes](getting-started/nodes.md) |
-| microsandbox (node) | [`sandbox/microsandbox`](../services/agents-api/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](../services/agents-api/tools/microsandbox-provider) | [`deploy/microsandbox`](../services/agents-api/deploy/microsandbox/README.md) |
-| E2B (direct) | [`sandbox/e2b`](../services/agents-api/internal/sandbox/e2b) | [`tools/e2b-provider`](../services/agents-api/tools/e2b-provider/README.md) | [`deploy/e2b`](../services/agents-api/deploy/e2b/README.md) |
+| Docker (node) | [`sandbox/docker`](../services/core/internal/sandbox/docker) | Node proxy in [`sandbox/node`](../services/core/internal/sandbox/node) | [Nodes](getting-started/nodes.md) |
+| microsandbox (node) | [`sandbox/microsandbox`](../services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](../services/core/tools/microsandbox-provider) | [`deploy/microsandbox`](../services/core/deploy/microsandbox/README.md) |
+| E2B (direct) | [`sandbox/e2b`](../services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](../services/core/tools/e2b-provider/README.md) | [`deploy/e2b`](../services/core/deploy/e2b/README.md) |
 
 Provider selection and E2B setup are owned by
 [Sandbox deployment](../contracts/agents-api/sandbox-deployment.md).

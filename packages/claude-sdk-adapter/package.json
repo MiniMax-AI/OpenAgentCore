@@ -1,5 +1,5 @@
 {
-  "name": "@parsar/claude-sdk-adapter",
+  "name": "@oac/claude-sdk-adapter",
   "private": true,
   "version": "0.0.0",
   "type": "module",

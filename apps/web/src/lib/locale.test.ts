@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveLocale } from "./locale";
-import { AgentCoreError } from "@agents-core-web/agents-client";
+import { AgentCoreError } from "@oac/agents-client";
 import { sandboxRequestError, sandboxStateLabel } from "./sandbox-labels";
 import { sandboxDiagnosticMessage } from "./sandbox-diagnostic";
 

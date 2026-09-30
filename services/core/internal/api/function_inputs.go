@@ -1,0 +1,148 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"reflect"
+	"slices"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+)
+
+type decodedInputEvent struct {
+	v1.SessionInput
+	Output json.RawMessage `json:"output,omitempty"`
+}
+
+func decodeInputEvent(raw json.RawMessage) (decodedInputEvent, error) {
+	var event decodedInputEvent
+	if err := json.Unmarshal(raw, &event); err != nil {
+		return event, store.ErrInvalidInput
+	}
+	fields := []string{"type"}
+	switch event.Type {
+	case "agent.session.input.message":
+		fields = append(fields, "input")
+		var messages struct {
+			Input []struct {
+				Type    json.RawMessage `json:"type"`
+				Content json.RawMessage `json:"content"`
+			} `json:"input"`
+		}
+		if json.Unmarshal(raw, &messages) != nil {
+			return event, store.ErrInvalidInput
+		}
+		for _, message := range messages.Input {
+			if len(message.Type) > 0 {
+				var kind string
+				if json.Unmarshal(message.Type, &kind) != nil || kind != "message" {
+					return event, store.ErrInvalidInput
+				}
+			}
+			if err := validateInputContent(message.Content); err != nil {
+				return event, err
+			}
+		}
+	case "agent.session.input.cancel":
+	case "agent.session.input.tool_result":
+		fields = append(fields, "call_id", "turn_id", "success", "error", "output")
+	default:
+		return event, store.ErrInvalidInput
+	}
+	return event, decodeInputObject(raw, &event, fields...)
+}
+
+func decodeInputObject(raw json.RawMessage, value any, allowed ...string) error {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || fields == nil {
+		return store.ErrInvalidInput
+	}
+	for field := range fields {
+		if !slices.Contains(allowed, field) {
+			return store.ErrInvalidInput
+		}
+	}
+	// Nested members match exactly too; see inexactMember. The raw value is
+	// valid JSON here, as Unmarshal accepted it.
+	if inexactMember(raw, reflect.TypeOf(value)) {
+		return store.ErrInvalidInput
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(value) != nil {
+		return store.ErrInvalidInput
+	}
+	return nil
+}
+
+func functionResultInput(event decodedInputEvent) (store.Input, error) {
+	if event.CallID == "" || event.TurnID == "" || event.Success == nil {
+		return store.Input{}, store.ErrInvalidInput
+	}
+	if len(event.Error) > 0 && !bytes.Equal(bytes.TrimSpace(event.Error), []byte("null")) {
+		var message string
+		if json.Unmarshal(event.Error, &message) != nil {
+			return store.Input{}, store.ErrInvalidInput
+		}
+	}
+	if err := validateFunctionOutput(event.Output); err != nil {
+		return store.Input{}, err
+	}
+	result, err := json.Marshal(struct {
+		Success bool            `json:"success"`
+		Error   json.RawMessage `json:"error,omitempty"`
+		Output  json.RawMessage `json:"output,omitempty"`
+	}{*event.Success, event.Error, event.Output})
+	if err != nil {
+		return store.Input{}, err
+	}
+	payload, err := json.Marshal(store.FunctionResultInput{TurnID: event.TurnID, CallID: event.CallID, Result: result})
+	return store.Input{Kind: "tool_result", Payload: payload}, err
+}
+
+func validateFunctionOutput(raw json.RawMessage) error {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return nil
+	}
+	return validateInputContent(raw)
+}
+
+func validateInputContent(raw json.RawMessage) error {
+	var parts []json.RawMessage
+	if json.Unmarshal(raw, &parts) != nil {
+		return store.ErrInvalidInput
+	}
+	for _, part := range parts {
+		var value struct {
+			Type     string  `json:"type"`
+			Text     *string `json:"text"`
+			ImageURL *string `json:"image_url"`
+		}
+		if json.Unmarshal(part, &value) != nil {
+			return store.ErrInvalidInput
+		}
+		field := "text"
+		switch value.Type {
+		case "input_text":
+			if value.Text == nil {
+				return store.ErrInvalidInput
+			}
+		case "input_image":
+			field = "image_url"
+			if value.ImageURL == nil {
+				return store.ErrInvalidInput
+			}
+		default:
+			return store.ErrInvalidInput
+		}
+		if err := decodeInputObject(part, &value, "type", field); err != nil {
+			return err
+		}
+	}
+	return nil
+}

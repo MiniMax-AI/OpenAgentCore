@@ -2,7 +2,7 @@
 
 This package holds the typed clients that OpenAgentCore code uses to call Core:
 
-- a TypeScript client, `@agents-core-web/agents-client` (`src/index.ts`), for the Agents API (`/v1`) and the Core API (`/core/v1`). The console (`apps/web`) and the example application under `example/` use it; it is a private workspace package;
+- a TypeScript client, `@oac/agents-client` (`src/index.ts`), for the Agents API (`/v1`) and the Core API (`/core/v1`). The console (`apps/web`) and the example application under `example/` use it; it is a private workspace package;
 - a Go client, `v1`, that configures the official openai-go SDK for the Agents API.
 
 [API namespaces and credentials](../../docs/api/README.md) explains which credential each namespace takes.
@@ -31,7 +31,7 @@ Behavior shared by the clients:
 A saved Agent can carry a harness, native harness parameters and a complete model provider. Keep the provider key in private application configuration:
 
 ```ts
-import { OpenAIAgentsClient } from "@agents-core-web/agents-client";
+import { OpenAIAgentsClient } from "@oac/agents-client";
 
 // apiBaseURL is the installation's API base URL, ending in /v1.
 const client = new OpenAIAgentsClient({ baseUrl: apiBaseURL, token: projectAPIKey });
@@ -67,7 +67,7 @@ Reads return `ModelProviderView`, which has `api_key_configured` and never `api_
 With the Core key, `AdminClient` reads the configuration a Session froze at creation and sets each harness's deployment default:
 
 ```ts
-import { AdminClient } from "@agents-core-web/agents-client";
+import { AdminClient } from "@oac/agents-client";
 
 // On the Core host; keep the Core key out of application code.
 const admin = new AdminClient({ baseUrl: "http://127.0.0.1:8091/core/v1", adminToken: coreKey });
@@ -92,8 +92,8 @@ console.log(defaults.model, defaults.harness_config, defaults.model_provider.api
 ### Checks
 
 ```sh
-pnpm --filter @agents-core-web/agents-client typecheck
-pnpm --filter @agents-core-web/agents-client test
+pnpm --filter @oac/agents-client typecheck
+pnpm --filter @oac/agents-client test
 ```
 
 `pnpm test:web` and `make check-web` include them.
@@ -104,7 +104,7 @@ pnpm --filter @agents-core-web/agents-client test
 
 ```go
 import (
-    agentsclient "github.com/MiniMax-AI-Dev/parsar/packages/agents-client/v1"
+    agentsclient "github.com/MiniMax-AI/OpenAgentCore/packages/agents-client/v1"
     "github.com/openai/openai-go/v3"
     "github.com/openai/openai-go/v3/option"
 )
@@ -135,4 +135,4 @@ session, err := sessions.New(ctx, openai.BetaAgentSessionNewParams{
 
 The SDK has more methods than Core supports. The [Agents API contract](../../contracts/agents-api/README.md) lists the implemented routes; other methods receive explicit errors.
 
-`make check-agents-api` runs the Go client's tests. The real-service harness, `services/agents-api/tests/official_client.py`, also runs `TestService` against a Core with fresh Projects and a dedicated PostgreSQL database, and checks the Go-created Sessions through the official Python SDK. It calls no model.
+`make check-core` runs the Go client's tests. The real-service harness, `services/core/tests/official_client.py`, also runs `TestService` against a Core with fresh Projects and a dedicated PostgreSQL database, and checks the Go-created Sessions through the official Python SDK. It calls no model.

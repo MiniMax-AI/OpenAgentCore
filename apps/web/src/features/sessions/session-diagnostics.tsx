@@ -1,4 +1,4 @@
-import type { AgentSession, AgentTurn } from "@agents-core-web/agents-client";
+import type { AgentSession, AgentTurn } from "@oac/agents-client";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 import { useTranslation } from "react-i18next";

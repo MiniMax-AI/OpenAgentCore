@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AgentCoreError, type AgentSession, type AgentTurn, type ListPage, type SessionItem } from "@agents-core-web/agents-client";
+import { AgentCoreError, type AgentSession, type AgentTurn, type ListPage, type SessionItem } from "@oac/agents-client";
 
 import { retryTransient } from "../resources/detail-queries";
 import { SESSION_POLL_MS } from "./session-history";

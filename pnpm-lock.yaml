@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@agents-core-web/agents-client': workspace:@oac/agents-client@*
+
 importers:
 
   .:
@@ -72,9 +75,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@agents-core-web/agents-client':
-        specifier: workspace:*
-        version: link:../../packages/agents-client
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -87,6 +87,9 @@ importers:
       '@number-flow/react':
         specifier: ^0.6.2
         version: 0.6.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@oac/agents-client':
+        specifier: workspace:*
+        version: link:../../packages/agents-client
       '@tanstack/react-query':
         specifier: ^5.103.2
         version: 5.103.2(react@19.3.0)
@@ -158,7 +161,7 @@ importers:
   example/parsar:
     dependencies:
       '@agents-core-web/agents-client':
-        specifier: workspace:*
+        specifier: workspace:@oac/agents-client@*
         version: link:../../packages/agents-client
       '@radix-ui/react-dialog':
         specifier: ^1.1.18

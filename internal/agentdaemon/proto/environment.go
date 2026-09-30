@@ -1,8 +1,8 @@
 package proto
 
 import (
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 // LocalEnvironment names a frozen workspace selection. Runtime must verify it

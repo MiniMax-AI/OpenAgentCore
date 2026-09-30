@@ -34,8 +34,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI-Dev/parsar/internal/modelprovider"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 // Provider is deliberately limited to configuration compatibility. Core owns

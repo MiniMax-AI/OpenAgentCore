@@ -1,4 +1,4 @@
-import type { ExecutorCredentialList } from "@agents-core-web/agents-client";
+import type { ExecutorCredentialList } from "@oac/agents-client";
 
 export type ExecutorConnectionState = "never_enrolled" | "connected" | "disconnected" | "revoked" | "unknown";
 

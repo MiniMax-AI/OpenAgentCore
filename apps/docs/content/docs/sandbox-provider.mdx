@@ -6,7 +6,7 @@ description: "Environment allocation, bootstrap and reclamation."
 A **Sandbox Provider** supplies the outer compute (an *Environment*) that a Core
 Runtime daemon runs in, plus the bounded bootstrap that starts it. This guide is
 the single start-to-finish path for adding one. The canonical interface is
-[`SandboxProvider`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/internal/sandbox/sandbox_provider.go).
+[`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/internal/sandbox/sandbox_provider.go).
 
 ## Before you start
 
@@ -15,7 +15,7 @@ the single start-to-finish path for adding one. The canonical interface is
 | Environment | Durable execution place owned by Core; see [Environments](/environments-and-files) |
 | Allocation | One Core-owned compute lease for an Environment, identified by `Reference` |
 | Runtime | The daemon inside the Environment; it prepares capabilities and executes Turns |
-| Deployment | The single deployment-wide provider selection; see [Sandbox deployment](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md) |
+| Deployment | The single deployment-wide provider selection; see [Sandbox deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md) |
 
 Core owns durable Environment, allocation, placement and cleanup state. The
 Provider supplies compute and bootstrap only. Runtime prepares capabilities and
@@ -37,10 +37,10 @@ connectivity; see [Runtime and outer isolation](/concepts#runtime-and-outer-isol
 
 1. **Read the contract.** Implement the five required operations and explicitly handle all
    extension interfaces in [Implement the interface](#implement-the-interface).
-2. **Write the adapter package** under `services/agents-api/internal/sandbox/<kind>`
+2. **Write the adapter package** under `services/core/internal/sandbox/<kind>`
    (native SDK calls, ownership checks, identity translation, private config).
    Assert `var _ sandbox.SandboxProvider = (*YourAdapter)(nil)` at compile time.
-   Out-of-process helpers live in `services/agents-api/tools/<kind>-provider`.
+   Out-of-process helpers live in `services/core/tools/<kind>-provider`.
 3. **Register the kind** once using
    [Register the provider kind](#register-the-provider-kind). Registration is
    explicit construction, not an init-time plugin registry.
@@ -49,7 +49,7 @@ connectivity; see [Runtime and outer isolation](/concepts#runtime-and-outer-isol
 5. **Run the contract suite** with `make check-sandbox-provider-contract`. See
    [Validate the integration](#validate-the-integration).
 6. **Run native acceptance** against real compute, then `make check`. Record
-   evidence and limits in [Sandbox deployment](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md).
+   evidence and limits in [Sandbox deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md).
 7. **Document operator setup** next to the adapter, like the
    [reference adapters](#reference-adapters).
 
@@ -110,7 +110,7 @@ only; callers use the declaration to decide whether an operation is supported.
 safe `UnsupportedError` for `ObserveBatch` permits per-target `Observe` calls.
 An unavailable service, timeout or other failure never triggers that fallback.
 Observation never renews, starts, prepares or stops compute; see the
-[observation contract](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/runtime-observability.md).
+[observation contract](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/runtime-observability.md).
 
 Contract tests call every declared unsupported native method with no configured
 native client, require its matching error and zero result, and reject incomplete
@@ -184,7 +184,7 @@ Persist operation IDs and provider-returned snapshot provenance unchanged.
 another capture or restore. `ResumeCompute` only thaws the retained source; it
 must not cold-start a stopped one. Cleanup targets the exact compute incarnation
 and snapshot, not whichever instance currently has the same display name. See
-[the lifecycle implementation](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/internal/execution/runtime_compute.go)
+[the lifecycle implementation](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/internal/execution/runtime_compute.go)
 and its failure tests before advertising this capability.
 
 ### Four distinct readiness facts
@@ -223,7 +223,7 @@ For a new implementation:
    Node proxy identity and checkpoint advertisement consume this same entry.
    The installer projection uses those registered policies and the common field
    bounds in `sandbox/deployment_contract.go`; regenerate it with
-   `go run ./services/agents-api/cmd/specification-contract -write`.
+   `go run ./services/core/cmd/specification-contract -write`.
 4. If new configuration fields are necessary, extend the typed `sandbox.Selection`
    envelope and its dedicated encrypted persistence fields, API DTO and operator
    client. Do not replace typed configuration with unrestricted JSON. Field codecs
@@ -279,12 +279,12 @@ cleanup can verify the `Reference` and installation.
 - Use the `io.oac.` prefix, for example `io.oac.installation` and `io.oac.tenant`.
 - Where the vendor rejects dotted keys, use `oac_` metadata keys (E2B).
 - Never accept older label names as a fallback; see
-  [Runtime names](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#openagentcore-runtime-names).
+  [Runtime names](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#openagentcore-runtime-names).
 
 ## Validate the integration
 
 Run `make check-sandbox-provider-contract` while developing. It runs the shared
-[`contracttest`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/internal/sandbox/contracttest) suite through
+[`contracttest`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/internal/sandbox/contracttest) suite through
 real adapter boundaries using controlled native failures, plus existing adapter
 and node transport tests. The same packages are included in `make check`.
 New adapters should call the public failure runner with native-side fixtures,
@@ -299,7 +299,7 @@ binary migration. Direct in-process interfaces have no independent wire version.
 Node generation management is an explicit current hello capability, not another
 wire version. Fixed-configuration manual nodes use the same protocol and only
 serve their enrolled deployment generation. See the
-[node contract](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/node-generation-protocol.md).
+[node contract](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/node-generation-protocol.md).
 
 Run `make check` with its dedicated database before completion. Retain native
 acceptance for SDK behavior that fixtures cannot prove: creation, lease behavior,
@@ -316,11 +316,11 @@ Environment provides isolation.
 
 | Kind | Adapter | Helper | Operator guide |
 | --- | --- | --- | --- |
-| Docker (node) | [`sandbox/docker`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/internal/sandbox/docker) | Node proxy in [`sandbox/node`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/internal/sandbox/node) | [Nodes](/hosted-providers) |
-| microsandbox (node) | [`sandbox/microsandbox`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/tools/microsandbox-provider) | [`deploy/microsandbox`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/deploy/microsandbox/README.md) |
-| E2B (direct) | [`sandbox/e2b`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/internal/sandbox/e2b) | [`tools/e2b-provider`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/tools/e2b-provider/README.md) | [`deploy/e2b`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/agents-api/deploy/e2b/README.md) |
+| Docker (node) | [`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/internal/sandbox/docker) | Node proxy in [`sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/internal/sandbox/node) | [Nodes](/hosted-providers) |
+| microsandbox (node) | [`sandbox/microsandbox`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/tools/microsandbox-provider) | [`deploy/microsandbox`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/deploy/microsandbox/README.md) |
+| E2B (direct) | [`sandbox/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/tools/e2b-provider/README.md) | [`deploy/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/services/core/deploy/e2b/README.md) |
 
 Provider selection and E2B setup are owned by
-[Sandbox deployment](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md).
+[Sandbox deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md).
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/sandbox-provider.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/sandbox-provider.md)

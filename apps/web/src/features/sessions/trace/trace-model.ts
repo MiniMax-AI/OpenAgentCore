@@ -3,7 +3,7 @@ import type {
   AgentTurn,
   ItemStatus,
   SessionItem,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 
 export type TraceValueState = "available" | "unavailable" | "unknown";
 

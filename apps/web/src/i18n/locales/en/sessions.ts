@@ -1,4 +1,4 @@
-import { coreHarnessNames } from "@agents-core-web/agents-client";
+import { coreHarnessNames } from "@oac/agents-client";
 
 /**
  * Session log and one Session's read-only history (Monitor › Session log).

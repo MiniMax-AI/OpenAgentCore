@@ -13,7 +13,7 @@ bash scripts/prepare-release-runtimes.sh
 inputs="$HOME/.oac/build/release-inputs/inputs.json"
 export AGENTS_RUNTIME_CODEX_PACKAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
 export MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
-export CORE_DISTRIBUTION_RELEASE_BASE_URL=https://github.com/MiniMax-AI/parsar-core/releases/download/v1.2.3
+export CORE_DISTRIBUTION_RELEASE_BASE_URL=https://github.com/MiniMax-AI/OpenAgentCore/releases/download/v1.2.3
 make build-core-distribution
 ```
 
@@ -60,7 +60,7 @@ make build-agents-runtime
 docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/agents-runtime"
 ```
 
-The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified native executable, its resources and `services/agents-api/deploy/codex/Dockerfile`.
+The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified native executable, its resources and `services/core/deploy/codex/Dockerfile`.
 
 **Claude Code Runtime image.** Node 20 or newer and pnpm are required.
 
@@ -92,7 +92,7 @@ The distribution combines the three Harness images into one Runtime image (`depl
 make build-e2b-provider
 ```
 
-Docker builds the Linux amd64 helper with the pinned CPython and Debian 12 image. The Python dependency closure, including PyInstaller, is hash-locked in `services/agents-api/tools/e2b-provider/requirements.lock`; no E2B account key is needed. Set `E2B_PROVIDER_BUILD_DIR` for another output directory and `E2B_SOURCE_REVISION` when building from an exported source tree. The output is `oac-e2b-provider-linux-amd64.tar.gz` with its `.sha256`; it extracts to `oac-e2b-provider/` with the executable, `_internal/`, `licenses/`, `requirements.lock` and `manifest.json`. The Core image and native Core use the same tree; the host needs a compatible glibc and CA certificates, not Python.
+Docker builds the Linux amd64 helper with the pinned CPython and Debian 12 image. The Python dependency closure, including PyInstaller, is hash-locked in `services/core/tools/e2b-provider/requirements.lock`; no E2B account key is needed. Set `E2B_PROVIDER_BUILD_DIR` for another output directory and `E2B_SOURCE_REVISION` when building from an exported source tree. The output is `oac-e2b-provider-linux-amd64.tar.gz` with its `.sha256`; it extracts to `oac-e2b-provider/` with the executable, `_internal/`, `licenses/`, `requirements.lock` and `manifest.json`. The Core image and native Core use the same tree; the host needs a compatible glibc and CA certificates, not Python.
 
 **microsandbox helper.** Linux only, with a C compiler:
 
@@ -107,11 +107,11 @@ The helper is written to `~/.oac/build/microsandbox-provider/oac-microsandbox-pr
 
 ### Standalone Core builds
 
-`make build-agents-api` builds `oac-core`, `oac-core-migrate`, `oac-core-device`, `oac-core-environment-key` and `oac-node` into `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core` (`OAC_DEV_CORE_BUILD_DIR` selects another absolute directory). The build copies only the source set listed in `scripts/build-agents-api.sh` (the Core service, its contracts, the shared packages it needs and the root Go module files) into a temporary context and builds with CGO disabled, read-only modules and trimmed paths. It needs no Node, Docker or other application. When Core gains a shared dependency, add that package to the list; never copy the whole repository to make it compile.
+`make build-core` builds `oac-core`, `oac-core-migrate`, `oac-core-device`, `oac-core-environment-key` and `oac-node` into `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core` (`OAC_DEV_CORE_BUILD_DIR` selects another absolute directory). The build copies only the source set listed in `scripts/build-core.sh` (the Core service, its contracts, the shared packages it needs and the root Go module files) into a temporary context and builds with CGO disabled, read-only modules and trimmed paths. It needs no Node, Docker or other application. When Core gains a shared dependency, add that package to the list; never copy the whole repository to make it compile.
 
-`make docker-build-agents-api` builds the image `oac-core:dev` (`OAC_DEV_CORE_IMAGE` selects another name) from those five commands and the E2B helper. The base is the digest-pinned `debian:bookworm-slim` with CA certificates and the glibc runtime the helper needs; the default user is UID/GID 65532 and Core listens on `:8091`. The image is Linux amd64 only and is not pushed to a registry. Changes to the image or its build need `make check-agents-api-container` in addition to `make check`: it runs the official-client suite against the image with a read-only root filesystem and needs Linux Docker, a non-root user, and the [test database and pinned SDK](../services/agents-api/README.md#official-client-verification) of the service checks (`OAC_TEST_DATABASE_URL` naming an `oac_*_tests` database with the migrations applied, and `OAC_TEST_OFFICIAL_SDK_PYTHON`).
+`make docker-build-core` builds the image `oac-core:dev` (`OAC_DEV_CORE_IMAGE` selects another name) from those five commands and the E2B helper. The base is the digest-pinned `debian:bookworm-slim` with CA certificates and the glibc runtime the helper needs; the default user is UID/GID 65532 and Core listens on `:8091`. The image is Linux amd64 only and is not pushed to a registry. Changes to the image or its build need `make check-core-container` in addition to `make check`: it runs the official-client suite against the image with a read-only root filesystem and needs Linux Docker, a non-root user, and the [test database and pinned SDK](../services/core/README.md#official-client-verification) of the service checks (`OAC_TEST_DATABASE_URL` naming an `oac_*_tests` database with the migrations applied, and `OAC_TEST_OFFICIAL_SDK_PYTHON`).
 
-`make build-agents-api-release` packages the same five commands into `oac-core-<commit>-linux-amd64.tar.gz` and its `.sha256` under `~/.oac/build/oac-core-release` (`OAC_DEV_RELEASE_DIR`). Beside `bin/`, the archive holds the [archive README](../services/agents-api/RELEASE.md), the license, `manifest.json` (commit, tree, platform, Go version, upstream protocol and binary hashes) and `SHA256SUMS`, which lists every packaged file. The build needs clean committed source and Python 3.9 or newer, and packages deterministically. It carries no configuration, credentials, Web or Runtime. Test archive changes by extracting a fresh copy and running its commands.
+`make build-core-release` packages the same five commands into `oac-core-<commit>-linux-amd64.tar.gz` and its `.sha256` under `~/.oac/build/oac-core-release` (`OAC_DEV_RELEASE_DIR`). Beside `bin/`, the archive holds the [archive README](../services/core/RELEASE.md), the license, `manifest.json` (commit, tree, platform, Go version, upstream protocol and binary hashes) and `SHA256SUMS`, which lists every packaged file. The build needs clean committed source and Python 3.9 or newer, and packages deterministically. It carries no configuration, credentials, Web or Runtime. Test archive changes by extracting a fresh copy and running its commands.
 
 ## Publish a version
 
@@ -138,7 +138,7 @@ A manual run takes a full commit SHA, runs the same checks and builds, defaults 
 
 ```sh
 revision=$(git rev-parse HEAD)
-gh workflow run core-release --repo MiniMax-AI/parsar-core --ref main \
+gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
   -f ref="$revision" -f offline=true -f draft_release=true
 ```
 
@@ -164,8 +164,8 @@ Changes limited to Web or to documentation outside `contracts/agents-api` do not
 
 The standalone archive and container give you Core alone: no Web, no `oac` command and no `config.json`. They suit development, testing and operators who supervise Core themselves. Core reads only its environment; the [configuration appendix](configuration.md#appendix-core-environment-without-the-installer) lists the variables. `OAC_DATABASE_URL` and `OAC_CORE_KEY_DIGESTS_FILE` are required; set `OAC_PUBLIC_URL` to the origin machines use to reach Core, or Core runs without the daemon transport.
 
-- The [archive README](../services/agents-api/RELEASE.md) covers the standalone archive.
-- The [service guide](../services/agents-api/README.md) covers building and running Core from source.
+- The [archive README](../services/core/RELEASE.md) covers the standalone archive.
+- The [service guide](../services/core/README.md) covers building and running Core from source.
 
 To run the container, create a private directory (mode 0700) with `api.env` (`OAC_DATABASE_URL` for a dedicated database, reachable from the container, `OAC_CORE_KEY_DIGESTS_FILE=/run/core-key-digests.json`, and `OAC_PUBLIC_URL`) and `core-key-digests.json`, a JSON array with the lowercase hex SHA-256 digest of your Core key. Keep both files mode 0600 and the Core key itself elsewhere. Run the migrations, then start Core:
 
@@ -186,4 +186,4 @@ curl --fail http://127.0.0.1:8091/healthz
 
 `--user` lets the container read the key digest file as your non-root host user; alternatively grant UID 65532 read access and omit it. Put a TLS reverse proxy in front for remote clients. `/healthz` reports liveness only. Keep credentials out of the image. All state is in PostgreSQL, so the container needs no writable volume; stop and start it with `docker stop` and `docker start`, and never remove the database to replace it. One Core process serves each database; replicas add no availability. After startup, use the Core key with the [administrator API](../contracts/agents-api/admin-api.md) to create Projects and issue application keys.
 
-The image also contains `oac-core-device` for an [internal execution device](../services/agents-api/README.md#internal-execution-device-connection) and `oac-core-environment-key`, the [break-glass credential command](../contracts/agents-api/environment-executor-credentials.md#break-glass-command).
+The image also contains `oac-core-device` for an [internal execution device](../services/core/README.md#internal-execution-device-connection) and `oac-core-environment-key`, the [break-glass credential command](../contracts/agents-api/environment-executor-credentials.md#break-glass-command).

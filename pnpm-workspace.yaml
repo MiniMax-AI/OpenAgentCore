@@ -3,3 +3,7 @@ packages:
   - "apps/docs"
   - "packages/*"
   - "example/parsar"
+# example/parsar stays unchanged and still imports the client under its former
+# package name; resolve that name to the workspace client.
+overrides:
+  "@agents-core-web/agents-client": "workspace:@oac/agents-client@*"

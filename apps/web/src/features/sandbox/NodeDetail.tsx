@@ -1,4 +1,4 @@
-import type { SandboxAllocation, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxAllocation, SandboxDeployment, SandboxNode } from "@oac/agents-client";
 import { suspendedSandboxes } from "../fleet/fleet-model";
 import { useTranslation } from "react-i18next";
 

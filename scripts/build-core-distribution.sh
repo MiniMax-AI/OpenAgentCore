@@ -109,13 +109,13 @@ python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoc
 # The bundled docs (BUNDLED_DOCS); links that leave them point at this commit on GitHub.
 python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
 mkdir -p "$bundle/runtime"
-cp services/agents-api/deploy/codex/seccomp.json "$bundle/runtime/"
+cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"
 cp -R site "$bundle/site"
 
-OAC_DEV_BUILD_REVISION="$revision" OAC_DEV_CORE_BUILD_DIR="$stage/core/bin" scripts/build-agents-api.sh
+OAC_DEV_BUILD_REVISION="$revision" OAC_DEV_CORE_BUILD_DIR="$stage/core/bin" scripts/build-core.sh
 (
-  cd services/agents-api/tools/microsandbox-provider
+  cd services/core/tools/microsandbox-provider
   GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath \
     -o "$stage/core/bin/oac-microsandbox-provider" .
 )
@@ -152,16 +152,16 @@ docker run --rm --network none --entrypoint /bin/sh \
   "$core_image" -ec \
   'for p in /opt/provider /opt/microsandbox/msb /opt/microsandbox/libkrunfw.so.5.6.1; do ! ldd "$p" | grep "not found"; done; /opt/microsandbox/msb --version'
 
-OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-core-console.sh
+OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-web.sh
 pnpm install --frozen-lockfile
 OAC_WEB_OPENAI_HOSTED_SESSIONS=1 OAC_WEB_ENVIRONMENT_FILES=1 pnpm build:web
 cp -R apps/web/dist "$stage/web/dist"
-cp services/core-console/Dockerfile "$stage/web/Dockerfile"
+cp services/web/Dockerfile "$stage/web/Dockerfile"
 build_image web "$stage/web"
 
 build_image ingress -f deploy/distribution/Ingress.Dockerfile deploy/distribution
 
-CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
+CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/oac-daemon" ./apps/daemon/cmd/oac-daemon
 cp "$stage/oac-daemon" "$bundle/native/bin/oac-daemon"
 codex_image="${CORE_DISTRIBUTION_CODEX_IMAGE:-}"
 claude_image="${CORE_DISTRIBUTION_CLAUDE_IMAGE:-}"

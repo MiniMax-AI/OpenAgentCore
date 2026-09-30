@@ -7,8 +7,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentbundle"
-	"github.com/MiniMax-AI-Dev/parsar/internal/runtimefs"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
 // ReadTree stays inside an already-owned root and rejects aliases/special files.

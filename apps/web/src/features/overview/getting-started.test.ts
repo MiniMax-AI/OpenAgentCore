@@ -1,4 +1,4 @@
-import type { CoreHarness, SandboxDeployment } from "@agents-core-web/agents-client";
+import type { CoreHarness, SandboxDeployment } from "@oac/agents-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { FleetState } from "../fleet/use-sandbox-fleet";

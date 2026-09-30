@@ -2,7 +2,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, Search, TerminalSquare, Wrenc
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { SessionItem } from "@agents-core-web/agents-client";
+import type { SessionItem } from "@oac/agents-client";
 
 import { Monogram } from "../../../components/atoms/EntityChip";
 import { Shimmer } from "../../../components/atoms/Shimmer";

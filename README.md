@@ -36,7 +36,7 @@ OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents
 On a Linux amd64 host with Docker and Python 3.9+:
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
 ```
 
 Then:

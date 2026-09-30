@@ -1,28 +1,8 @@
 [
   {
     "path": "*",
-    "regex": "github\\.com/(?:MiniMax-AI(?:-Dev)?)/parsar(?:-core)?(?:/[A-Za-z0-9_./-]*)?",
-    "reason": "The repository and Go module paths are deferred public identities; their spelling does not select a runtime setting."
-  },
-  {
-    "path": "*",
-    "regex": "(?:services/agents-api|services/core-console|apps/parsar-daemon)(?:/[A-Za-z0-9_.*{}-]+)*",
-    "reason": "The three source directory names and their command directories remain unchanged."
-  },
-  {
-    "path": "*",
     "regex": "contracts/agents-api(?:/[A-Za-z0-9_.*-]+)*",
     "reason": "The Agents API contract directory is an existing source path, not an installed executable."
-  },
-  {
-    "path": "*",
-    "regex": "(?:scripts/)?build-agents-api(?:-[A-Za-z0-9-]+)?\\.sh",
-    "reason": "Build script filenames are explicitly deferred."
-  },
-  {
-    "path": "*",
-    "regex": "@(?:parsar|agents-core-web)/[a-z0-9-]+",
-    "reason": "Existing npm package names are deferred; imports must continue resolving."
   },
   {
     "path": "*",
@@ -61,12 +41,12 @@
   },
   {
     "path": "scripts/name-allowlist.json",
-    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b",
+    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b|@agents-core-web/",
     "reason": "The reviewed guard policy must spell the names it explains; entries are checked for nonempty reasons."
   },
   {
     "path": "scripts/check-names.test.py",
-    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b",
+    "regex": "(?i)parsar|\\bAGENTS_CORE_WEB_[A-Z][A-Z0-9_]*|\\bAGENTS_API_[A-Z][A-Z0-9_]*|\\bCORE_CONSOLE_[A-Z][A-Z0-9_]*|\\bagents-api(?:-(?:migrate|device|environment-key|e2b-provider|microsandbox-provider|tool-root|codex-directory|codex-write|workspace-export|runtime-initialize|claude-shell-prefix))?\\b|\\bcore-console\\b|\\bagents-runtime-|\\bAgents? Core(?: Web)?\\b|@agents-core-web/",
     "reason": "Guard regression fixtures intentionally contain retired identifiers, including rejected examples."
   },
   {
@@ -75,54 +55,39 @@
     "reason": "This existing HTTP header is explicitly retained; it is a wire contract, not the Web binary name."
   },
   {
-    "path": "README.md",
-    "regex": "MiniMax-AI/parsar-core",
-    "reason": "The GitHub CLI repository argument retains the repository identity."
-  },
-  {
-    "path": "README.md",
-    "regex": "make build-agents-api",
-    "reason": "This existing Make target calls the deferred build script name."
-  },
-  {
     "path": "*",
     "regex": "\\bPARSAR_(?:CAPABILITY_UPLOAD_TOKEN|SERVER_URL|MASTER_KEY|PROTOCOL_BASELINE_REVISION)\\b",
     "reason": "These four settings belong to the separate product integration; Core does not rename their protocol."
   },
   {
-    "path": "apps/parsar-daemon/internal/cli/retired_configuration.go",
+    "path": "apps/daemon/internal/cli/retired_configuration.go",
     "regex": "PARSAR_[A-Z0-9_]*\\*?",
     "reason": "This file only rejects retired Runtime settings, maps their replacements and exempts the separate product hooks."
   },
   {
-    "path": "apps/parsar-daemon/internal/cli/retired_configuration_test.go",
+    "path": "apps/daemon/internal/cli/retired_configuration_test.go",
     "regex": "PARSAR_[A-Z0-9_]*",
     "reason": "These fixtures assert rejection and replacement messages for retired Runtime settings."
   },
   {
-    "path": "services/agents-api/cmd/server/process_configuration.go",
+    "path": "services/core/cmd/server/process_configuration.go",
     "regex": "AGENTS_API_[A-Z0-9_]+",
     "reason": "The Core startup retirement table must identify every rejected old setting and its replacement."
   },
   {
-    "path": "services/agents-api/cmd/server/process_configuration_test.go",
+    "path": "services/core/cmd/server/process_configuration_test.go",
     "regex": "AGENTS_API_[A-Z0-9_]+",
     "reason": "These fixtures assert Core startup rejection of retired settings."
   },
   {
-    "path": "services/agents-api/migrations/000078_oac_runtime_names.sql",
+    "path": "services/core/migrations/000078_oac_runtime_names.sql",
     "regex": "parsar-core-runtime@",
     "reason": "The guarded up/down data migration must recognize and restore the historical stored Runtime reference prefix."
   },
   {
     "path": "*",
-    "regex": "(?<![A-Za-z0-9-])(?:build|docker-build|check)-agents-api(?:-release|-container)?\\b",
-    "reason": "Existing Make target names remain paired with the explicitly deferred build-agents-api scripts; installed outputs use oac names."
-  },
-  {
-    "path": "*",
-    "regex": "(?:scripts/)?(?:extract-agents-api-upstream|agents-api-subagents-acceptance)\\.py|(?:scripts/)?build-core-console\\.sh",
-    "reason": "Repository helper filenames are retained source entry points; they do not name installed commands."
+    "regex": "(?:scripts/)?extract-agents-api-upstream\\.py",
+    "reason": "The upstream contract extraction helper names the pinned OpenAI Agents API protocol, not an installed command."
   },
   {
     "path": ".github/workflows/api-acceptance.yml",
@@ -136,121 +101,101 @@
   },
   {
     "path": "*",
-    "regex": "MiniMax-AI/parsar-core",
-    "reason": "The existing GitHub repository identity is deferred, including gh CLI repository arguments."
-  },
-  {
-    "path": "*",
     "regex": "~?/\\.parsar/remediation/",
     "reason": "Historical remediation evidence paths are retained."
   },
   {
     "path": ".gitignore",
-    "regex": "(?m)^/\\.parsar/$|^/core-console$",
-    "reason": "Ignore legacy private state and the default output of go build ./services/core-console; neither is a supported installed command."
+    "regex": "(?m)^/\\.parsar/$",
+    "reason": "Ignore legacy private state; it is not a supported installed command."
   },
   {
-    "path": "services/agents-api/internal/credentialcrypto/*.go",
+    "path": "services/core/internal/credentialcrypto/*.go",
     "regex": "parsar\\.agents-api\\.(?:agent-model-execution\\.v1|credential(?:-fingerprint\\.v1)?|deployment-model-provider\\.v1|environment-file|environment-setup|session-model-execution\\.v1|sandbox-deployment\\.v1|skill)",
     "reason": "These exact authenticated encryption domain/AAD strings must remain stable to decrypt existing stored credentials and assets."
   },
   {
-    "path": "services/agents-api/internal/store/session_creation_identity.go",
+    "path": "services/core/internal/store/session_creation_identity.go",
     "regex": "parsar\\.agents-api\\.model-provider-api-key\\.v1",
     "reason": "This persisted model-provider key fingerprint purpose remains stable across upgrade and request replay."
   },
   {
-    "path": "package.json",
-    "regex": "\"(?:parsar-core|parsar-mcode-harness)\"",
-    "reason": "npm package names are deferred package identities, not runtime command names."
-  },
-  {
-    "path": "packages/mcode-harness/package.json",
-    "regex": "\"(?:parsar-core|parsar-mcode-harness)\"",
-    "reason": "npm package names are deferred package identities, not runtime command names."
-  },
-  {
-    "path": "packages/mcode-harness/package-lock.json",
-    "regex": "\"(?:parsar-core|parsar-mcode-harness)\"",
-    "reason": "npm package names are deferred package identities, not runtime command names."
-  },
-  {
-    "path": "apps/parsar-daemon/internal/agent/codex/preparation_router_test.go",
+    "path": "apps/daemon/internal/agent/codex/preparation_router_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "apps/parsar-daemon/internal/dispatch/local_directory_test.go",
+    "path": "apps/daemon/internal/dispatch/local_directory_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "apps/parsar-daemon/internal/dispatch/preparation_test.go",
+    "path": "apps/daemon/internal/dispatch/preparation_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "apps/parsar-daemon/internal/localworkspace/binding.go",
+    "path": "apps/daemon/internal/localworkspace/binding.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "apps/parsar-daemon/internal/localworkspace/native_binding.go",
+    "path": "apps/daemon/internal/localworkspace/native_binding.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "apps/parsar-daemon/internal/localworkspace/binding_test.go",
+    "path": "apps/daemon/internal/localworkspace/binding_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "apps/parsar-daemon/internal/localworkspace/write.go",
+    "path": "apps/daemon/internal/localworkspace/write.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/agents-api/internal/execution/directory_preparation.go",
+    "path": "services/core/internal/execution/directory_preparation.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/agents-api/internal/execution/request.go",
+    "path": "services/core/internal/execution/request.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/agents-api/internal/execution/recovery_test.go",
+    "path": "services/core/internal/execution/recovery_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/agents-api/internal/store/dispatch_test.go",
+    "path": "services/core/internal/store/dispatch_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/agents-api/internal/store/environment_directory_test.go",
+    "path": "services/core/internal/store/environment_directory_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/agents-api/internal/store/environment_worker_helpers_test.go",
+    "path": "services/core/internal/store/environment_worker_helpers_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/agents-api/internal/store/environment_worker_test.go",
+    "path": "services/core/internal/store/environment_worker_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core-console/config.go",
+    "path": "services/web/config.go",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
     "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
   },
   {
-    "path": "services/core-console/config_test.go",
+    "path": "services/web/config_test.go",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
     "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
   },
@@ -265,27 +210,27 @@
     "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
   },
   {
-    "path": "services/agents-api/cmd/sandbox-node/main_test.go",
+    "path": "services/core/cmd/sandbox-node/main_test.go",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
     "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
   },
   {
-    "path": "services/agents-api/cmd/server/process_configuration_test.go",
+    "path": "services/core/cmd/server/process_configuration_test.go",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
     "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
   },
   {
-    "path": "services/agents-api/internal/databaseurl/databaseurl_test.go",
+    "path": "services/core/internal/databaseurl/databaseurl_test.go",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
     "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
   },
   {
-    "path": "services/agents-api/cmd/server/managed_nodes.go",
+    "path": "services/core/cmd/server/managed_nodes.go",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
     "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
   },
   {
-    "path": "services/agents-api/cmd/server/managed_setup_test.go",
+    "path": "services/core/cmd/server/managed_setup_test.go",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
     "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
   },
@@ -300,42 +245,42 @@
     "reason": "R0 deliberately rejects the old test database variable with an actionable replacement message."
   },
   {
-    "path": "scripts/build-agents-api-release.sh",
+    "path": "scripts/build-core-release.sh",
     "regex": "AGENTS_API_RELEASE_RUNTIME_IMAGE",
     "reason": "The incomplete old Docker release mode is explicitly rejected with a distribution-build replacement."
   },
   {
-    "path": "services/agents-api/internal/api/sandbox_node_configuration.go",
+    "path": "services/core/internal/api/sandbox_node_configuration.go",
     "regex": "X-Parsar-Node-ID",
     "reason": "R4 explicitly rejects this retired header even when the current header is also present."
   },
   {
-    "path": "services/agents-api/internal/api/sandbox_node_configuration_test.go",
+    "path": "services/core/internal/api/sandbox_node_configuration_test.go",
     "regex": "X-Parsar-Node-ID",
     "reason": "R4 explicitly rejects this retired header even when the current header is also present."
   },
   {
-    "path": "services/core-console/auth_test.go",
+    "path": "services/web/auth_test.go",
     "regex": "/?parsar-mark-(?:light|dark)\\.png",
     "reason": "Anonymous access to these retired asset routes must fail after the active logo filenames change."
   },
   {
-    "path": "services/agents-api/internal/store/oac_runtime_names_migration_test.go",
+    "path": "services/core/internal/store/oac_runtime_names_migration_test.go",
     "regex": "parsar-core-runtime@sha256:|parsar_worker /home/runtime/\\.parsar",
     "reason": "Migration input and historical Session content assertions prove only the Runtime reference changes, never stored conversation data."
   },
   {
-    "path": "services/agents-api/internal/store/environment_setup_test.go",
+    "path": "services/core/internal/store/environment_setup_test.go",
     "regex": "PARSAR_APPLICATION_VALUE",
     "reason": "This test proves the old reservation no longer blocks application-provided product variables."
   },
   {
-    "path": "services/agents-api/tools/e2b-provider/provider.py",
+    "path": "services/core/tools/e2b-provider/provider.py",
     "regex": "/opt/parsar-e2b",
     "reason": "The provider detects an old E2B template and refuses it before writing credentials."
   },
   {
-    "path": "services/agents-api/migrations/000075_public_url_binding.sql",
+    "path": "services/core/migrations/000075_public_url_binding.sql",
     "regex": "AGENTS_API_PUBLIC_URL",
     "reason": "Historical migration commentary records the environment name used when this migration was written."
   },
@@ -370,37 +315,37 @@
     "reason": "These old default paths and command names are used only by conversion refusal or the explicit retired-command stub."
   },
   {
-    "path": "apps/parsar-daemon/internal/agent/pi/provider_config.go",
+    "path": "apps/daemon/internal/agent/pi/provider_config.go",
     "regex": "parsar(?:/[A-Za-z0-9<>_-]+)?|Parsar Anthropic",
     "reason": "The dormant Pi adapter consumes the separate product model-provider slug and catalog display name; Core does not rename that external protocol."
   },
   {
-    "path": "apps/parsar-daemon/internal/agent/pi/provider_config_test.go",
+    "path": "apps/daemon/internal/agent/pi/provider_config_test.go",
     "regex": "parsar(?:/[A-Za-z0-9<>_-]+)?|Parsar Anthropic",
     "reason": "The dormant Pi adapter consumes the separate product model-provider slug and catalog display name; Core does not rename that external protocol."
   },
   {
-    "path": "apps/parsar-daemon/internal/agent/pi/session_provider_test.go",
+    "path": "apps/daemon/internal/agent/pi/session_provider_test.go",
     "regex": "parsar(?:/[A-Za-z0-9<>_-]+)?|Parsar Anthropic",
     "reason": "The dormant Pi adapter consumes the separate product model-provider slug and catalog display name; Core does not rename that external protocol."
   },
   {
-    "path": "apps/parsar-daemon/internal/cli/skill_upload.go",
+    "path": "apps/daemon/internal/cli/skill_upload.go",
     "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
     "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
   },
   {
-    "path": "apps/parsar-daemon/internal/cli/skill_upload_test.go",
+    "path": "apps/daemon/internal/cli/skill_upload_test.go",
     "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
     "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
   },
   {
-    "path": "apps/parsar-daemon/internal/cli/companion_path_test.go",
+    "path": "apps/daemon/internal/cli/companion_path_test.go",
     "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
     "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
   },
   {
-    "path": "apps/parsar-daemon/internal/cli/capability_downloads_test.go",
+    "path": "apps/daemon/internal/cli/capability_downloads_test.go",
     "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
     "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
   },
@@ -426,13 +371,13 @@
   },
   {
     "path": "scripts/core-doctor.mjs",
-    "regex": "parsarPath|validateParsarCheckout|--parsar|private-parsar-checkout|fixture\\.invalid/parsar|\"parsar-daemon\"|Parsar (?:protocol baseline|protocol compatibility|Agents API contract)",
-    "reason": "The optional doctor checkout argument and baseline compare the separate product source/protocol; the daemon command itself uses oac-daemon."
+    "regex": "parsarPath|validateParsarCheckout|--parsar|private-parsar-checkout|fixture\\.invalid/parsar|Parsar (?:protocol baseline|protocol compatibility|Agents API contract)",
+    "reason": "The optional --parsar argument names an OpenAgentCore checkout whose daemon status command the doctor runs; the installed daemon is oac-daemon. The protocol baseline names the pinned Parsar protocol revision."
   },
   {
     "path": "scripts/core-doctor.test.mjs",
-    "regex": "parsarPath|validateParsarCheckout|--parsar|private-parsar-checkout|fixture\\.invalid/parsar|\"parsar-daemon\"|Parsar (?:protocol baseline|protocol compatibility|Agents API contract)",
-    "reason": "The optional doctor checkout argument and baseline compare the separate product source/protocol; the daemon command itself uses oac-daemon."
+    "regex": "parsarPath|validateParsarCheckout|--parsar|private-parsar-checkout|fixture\\.invalid/parsar|Parsar (?:protocol baseline|protocol compatibility|Agents API contract)",
+    "reason": "The optional --parsar argument names an OpenAgentCore checkout whose daemon status command the doctor runs; the installed daemon is oac-daemon. The protocol baseline names the pinned Parsar protocol revision."
   },
   {
     "path": "scripts/core-doctor.mjs",
@@ -540,17 +485,17 @@
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
-    "path": "services/agents-api/README.md",
+    "path": "services/core/README.md",
     "regex": "Parsar's product|Parsar\\sworkspace|Parsar Skill/SP",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
-    "path": "services/agents-api/credentials.md",
+    "path": "services/core/credentials.md",
     "regex": "Parsar approval",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
-    "path": "services/agents-api/deploy/claude/README.md",
+    "path": "services/core/deploy/claude/README.md",
     "regex": "Parsar is not a dependency",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
@@ -580,17 +525,17 @@
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
   },
   {
-    "path": "services/agents-api/README.md",
+    "path": "services/core/README.md",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
   },
   {
-    "path": "services/agents-api/deploy/codex/README.md",
+    "path": "services/core/deploy/codex/README.md",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
   },
   {
-    "path": "services/agents-api/deploy/microsandbox/README.md",
+    "path": "services/core/deploy/microsandbox/README.md",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
   },
@@ -610,7 +555,7 @@
     "reason": "The source-copy boundary rejects the separate product application directory."
   },
   {
-    "path": "services/agents-api/tests/official_environment_plugin_mcp.py",
+    "path": "services/core/tests/official_environment_plugin_mcp.py",
     "regex": "'PARSAR_'",
     "reason": "The external-client credential-leak test rejects product-secret prefixes in observed model tool output; this is a leak detector, not a runtime setting."
   },
@@ -690,43 +635,63 @@
     "reason": "The explicitly named Parsar application example retains product branding; it does not rename the Core runtime."
   },
   {
-    "path": "apps/parsar-daemon/internal/cli/connect_cleanup_test.go",
+    "path": "apps/daemon/internal/cli/connect_cleanup_test.go",
     "regex": "\"agents-api-cleanup\"",
     "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
   },
   {
-    "path": "apps/parsar-daemon/internal/dispatch/executor.go",
+    "path": "apps/daemon/internal/dispatch/executor.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
   },
   {
-    "path": "apps/parsar-daemon/internal/dispatch/executor_handoff_test.go",
+    "path": "apps/daemon/internal/dispatch/executor_handoff_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
   },
   {
-    "path": "apps/parsar-daemon/internal/dispatch/executor_test.go",
+    "path": "apps/daemon/internal/dispatch/executor_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
   },
   {
-    "path": "apps/parsar-daemon/internal/localworkspace/capabilities.go",
+    "path": "apps/daemon/internal/localworkspace/capabilities.go",
     "regex": "\"agents-api-\"",
     "reason": "AgentStateKey retains the existing daemon/native-session resume identity; capability snapshots bind to the Session UUID carried in that identity."
   },
   {
-    "path": "apps/parsar-daemon/internal/localworkspace/capability_preparation_test.go",
+    "path": "apps/daemon/internal/localworkspace/capability_preparation_test.go",
     "regex": "\"agents-api-\"",
     "reason": "AgentStateKey retains the existing daemon/native-session resume identity; capability snapshots bind to the Session UUID carried in that identity."
   },
   {
-    "path": "apps/parsar-daemon/internal/contracttest/wire_test.go",
+    "path": "apps/daemon/internal/contracttest/wire_test.go",
     "regex": "agents-api-session",
     "reason": "The controlled Runtime fixture uses the existing Core Session state-key prefix required by execution admission."
   },
   {
-    "path": "apps/parsar-daemon/internal/agent/mcode/tool_environment_test.go",
+    "path": "apps/daemon/internal/agent/mcode/tool_environment_test.go",
     "regex": "agents-api-",
     "reason": "The regression fixture uses the existing persisted Session state-key namespace required by Runtime binding validation."
+  },
+  {
+    "path": "contracts/agents-api/README.md",
+    "regex": "https://github\\.com/MiniMax-AI-Dev/parsar/pull/[0-9]+",
+    "reason": "Historical acceptance evidence links to pull requests in the separate upstream Parsar repository."
+  },
+  {
+    "path": "scripts/verify-source-copy.py",
+    "regex": "(?:services/agents-api|apps/parsar-daemon)/[A-Za-z0-9_./-]*",
+    "reason": "Source-copy records keep their upstream paths; the verifier maps them to the current directories."
+  },
+  {
+    "path": "services/core/migrations/000015_retire_item_backfill.sql",
+    "regex": "services/agents-api/README\\.md",
+    "reason": "Landed migrations keep their original text."
+  },
+  {
+    "path": "packages/agents-client/src/fixtures/parsar-*",
+    "regex": "services/agents-api/internal/api/",
+    "reason": "Historical Parsar protocol snapshots record the upstream source path they were captured from."
   }
 ]

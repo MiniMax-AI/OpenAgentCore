@@ -2,10 +2,10 @@
 package builtin
 
 import (
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/claudesdk"
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/codex"
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/mcode"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 var registry = harnessconfig.NewRegistry(map[string]harnessconfig.Configuration{

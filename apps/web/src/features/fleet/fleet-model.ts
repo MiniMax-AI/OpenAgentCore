@@ -1,4 +1,4 @@
-import type { SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxNode } from "@oac/agents-client";
 
 /**
  * Pure projections of the deployment fleet. Missing inputs stay null, never zero.

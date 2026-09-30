@@ -6,7 +6,7 @@ existing gh authentication and SSH. It never builds: pass the candidate's flat
 files, and it creates the unpublished build-<SHA> draft itself. Produce the files
 with make build-core-distribution for that commit, with
 CORE_DISTRIBUTION_RELEASE_BASE_URL set to
-https://github.com/MiniMax-AI/parsar-core/releases/download/build-<SHA>,
+https://github.com/MiniMax-AI/OpenAgentCore/releases/download/build-<SHA>,
 CORE_DISTRIBUTION_OFFLINE=1 and the native installer catalog, or take the Actions
 artifact of a manual core-release run with draft_release=false and remove
 install.sh and install.sh.sha256. A draft that core-release created holds
@@ -96,7 +96,7 @@ spec = importlib.util.spec_from_file_location(
 distribution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(distribution)
 
-REPO = "MiniMax-AI/parsar-core"
+REPO = "MiniMax-AI/OpenAgentCore"
 SOURCE = TAG = BASE = STEM = None
 
 

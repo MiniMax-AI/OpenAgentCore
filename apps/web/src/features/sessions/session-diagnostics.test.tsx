@@ -1,4 +1,4 @@
-import type { AgentSession, AgentTurn, DiagnosticFailure, SessionDiagnostics, TurnDiagnostics } from "@agents-core-web/agents-client";
+import type { AgentSession, AgentTurn, DiagnosticFailure, SessionDiagnostics, TurnDiagnostics } from "@oac/agents-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";

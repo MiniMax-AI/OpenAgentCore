@@ -1,4 +1,4 @@
-import type { CoreInstallationConfiguration, CoreInstallationSetting } from "@agents-core-web/agents-client";
+import type { CoreInstallationConfiguration, CoreInstallationSetting } from "@oac/agents-client";
 import { Trans, useTranslation } from "react-i18next";
 
 import { ValuePill } from "../../components/atoms/ValuePill";

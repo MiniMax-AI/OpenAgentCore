@@ -19,11 +19,11 @@ cd "$repo_root"
 # Validate source manifests before deploy derives its dedicated frozen lockfile.
 test -f pnpm-lock.yaml
 pnpm install --frozen-lockfile
-pnpm --filter @parsar/claude-sdk-adapter build --outDir "$build_context/compiled"
+pnpm --filter @oac/claude-sdk-adapter build --outDir "$build_context/compiled"
 # This package has registry dependencies only. Keep injection local to export;
 # the ordinary workspace and product installs retain their current settings.
 pnpm --config.inject-workspace-packages=true --config.extend-node-path=false \
-  --filter @parsar/claude-sdk-adapter \
+  --filter @oac/claude-sdk-adapter \
   deploy --prod "$build_context/runtime"
 # Discard any incremental checkout output copied by the package exporter.
 rm -rf "$build_context/runtime/dist"

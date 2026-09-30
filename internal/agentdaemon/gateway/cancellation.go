@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // ArchivedCancellationStore is deliberately separate from RuntimeStore: a

@@ -1,4 +1,4 @@
-import type { EnvironmentTemplateResource } from "@agents-core-web/agents-client";
+import type { EnvironmentTemplateResource } from "@oac/agents-client";
 import { Boxes } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

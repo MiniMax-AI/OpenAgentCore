@@ -1,4 +1,4 @@
-import type { SandboxNodeDetail } from "@agents-core-web/agents-client";
+import type { SandboxNodeDetail } from "@oac/agents-client";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 

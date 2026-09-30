@@ -1,6 +1,6 @@
 package harnessconfig
 
-import "github.com/MiniMax-AI-Dev/parsar/internal/modelprovider"
+import "github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 
 func (c Configuration) AcceptsHarnessConfig() bool { return c.ValidateNativeConfig != nil }
 

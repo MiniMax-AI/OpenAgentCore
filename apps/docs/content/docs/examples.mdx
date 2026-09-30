@@ -16,7 +16,7 @@ A small single-user product built on Core. You save model providers, Skills and 
 servers, combine them into Agents, then start Sessions in a managed sandbox, with
 no workspace, or on your own machine.
 
-Source: [`example/parsar`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/README.md).
+Source: [`example/parsar`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/README.md).
 
 ### Run it
 
@@ -30,7 +30,7 @@ pnpm install --frozen-lockfile
 pnpm --filter @oac/parsar-example dev
 ```
 
-Open &lt;http://127.0.0.1:18180>. The example [README](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/README.md) covers
+Open &lt;http://127.0.0.1:18180>. The example [README](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/README.md) covers
 storage, a production build, tests and connecting your own machine.
 
 ### What to look at
@@ -39,15 +39,15 @@ Each feature maps to one part of the API. Read the code next to the guide sectio
 
 | Feature | API used | Guide | Code |
 | --- | --- | --- | --- |
-| Server-side key and headers | Bearer key, `OpenAI-Beta`, route allowlist | [Before you start](/sessions#before-you-start) | [`server.mjs`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/server.mjs) |
-| Agents with a harness and model | `x_agents_core.harness`, `model_provider` | [Core extensions](/sessions#core-extensions-x_agents_core) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/server/sessions.mjs) |
-| Sessions on three runtimes | `openai_hosted`, `none`, `self_hosted` with `workspace_directory` | [Create a Session](/sessions#create-a-session) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/server/sessions.mjs) |
-| Crash-safe Session creation | `Idempotency-Key`, recovery from a lost response | [Idempotency](/sessions#idempotency) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/server/sessions.mjs) |
-| Live replies | Event stream, text deltas, reconnect and reconcile | [Stream events](/sessions#stream-events) | [`src/lib/live-session.ts`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/lib/live-session.ts) |
-| Follow-ups and cancel | Input events with idempotency keys | [Send input](/sessions#send-input) | [`src/Composer.tsx`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/Composer.tsx) |
-| History | Paging Turns and Items | [Pagination](/sessions#pagination) | [`src/lib/api.ts`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/lib/api.ts) |
-| Skills and versions | `/skills`, default version | [Skills](/sessions#skills) | [`src/Skills.tsx`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/Skills.tsx) |
-| Connect your own machine | Environment status, executor credential | [Self-hosted execution](/self-hosted-execution) | [`src/ConnectMachine.tsx`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/ConnectMachine.tsx) |
+| Server-side key and headers | Bearer key, `OpenAI-Beta`, route allowlist | [Before you start](/sessions#before-you-start) | [`server.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/server.mjs) |
+| Agents with a harness and model | `x_agents_core.harness`, `model_provider` | [Core extensions](/sessions#core-extensions-x_agents_core) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/server/sessions.mjs) |
+| Sessions on three runtimes | `openai_hosted`, `none`, `self_hosted` with `workspace_directory` | [Create a Session](/sessions#create-a-session) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/server/sessions.mjs) |
+| Crash-safe Session creation | `Idempotency-Key`, recovery from a lost response | [Idempotency](/sessions#idempotency) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/server/sessions.mjs) |
+| Live replies | Event stream, text deltas, reconnect and reconcile | [Stream events](/sessions#stream-events) | [`src/lib/live-session.ts`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/lib/live-session.ts) |
+| Follow-ups and cancel | Input events with idempotency keys | [Send input](/sessions#send-input) | [`src/Composer.tsx`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/Composer.tsx) |
+| History | Paging Turns and Items | [Pagination](/sessions#pagination) | [`src/lib/api.ts`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/lib/api.ts) |
+| Skills and versions | `/skills`, default version | [Skills](/sessions#skills) | [`src/Skills.tsx`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/Skills.tsx) |
+| Connect your own machine | Environment status, executor credential | [Self-hosted execution](/self-hosted-execution) | [`src/ConnectMachine.tsx`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/parsar/src/ConnectMachine.tsx) |
 
 ### Not covered
 
@@ -57,10 +57,10 @@ machine, and managed Skills or templates on your own machine
 
 ## Add an example
 
-Put it in its own directory under [`example/`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/README.md) with a README
+Put it in its own directory under [`example/`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/example/README.md) with a README
 covering how to run it and which API features it shows, then add a row to the
 table above. Keep examples on the public API with a Project API key: never the Core
 key or private routes. Repository rules for examples are in
-[CONTRIBUTING.md](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#repository-boundary).
+[CONTRIBUTING.md](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/CONTRIBUTING.md#repository-boundary).
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/examples.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/examples.md)

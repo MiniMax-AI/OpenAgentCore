@@ -10,7 +10,7 @@ source, paths and tested capability scope.
 For hosted compute, the deployment selects E2B, Docker or microsandbox through
 [sandbox deployment](sandbox-deployment.md).
 For the separate caller-managed E2B path, the user owns allocation, renewal and
-cleanup through the official SDK and [Runtime packaging](../../services/agents-api/deploy/e2b/README.md).
+cleanup through the official SDK and [Runtime packaging](../../services/core/deploy/e2b/README.md).
 [Templates](environment-templates.md) provide reusable preparation; the Core extension also applies their execution configuration to user-managed machines;
 [Files](environment-files.md) reuse the exact authorized local workspace.
 
@@ -30,7 +30,7 @@ readiness. Rotation/revocation, Session deletion and ownership loss deny further
 access without promising immediate cessation of native effects. Native history
 remains local to the bound Runtime and cannot be replaced on retry. There is no
 registry/Noise relay or transient service-side harness credential.
-See the [enrollment guide](../../services/agents-api/README.md#user-managed-runtime-enrollment).
+See the [enrollment guide](../../services/core/README.md#user-managed-runtime-enrollment).
 
 ## Basic public Docker-hosted profile
 
@@ -39,7 +39,7 @@ for the qualified Codex, Claude Code and MiniMax Code profiles. Each uses the sa
 Runtime lifecycle and workspace interfaces with its native adapter. The outer
 Environment provides managed isolation; the daemon adds no inner sandbox.
 See the [engine profile guides](README.md#public-engine-profiles) for setup and limits.
-The standalone [operator configuration](../../services/agents-api/deploy/codex/README.md#standalone-operator-configuration)
+The standalone [operator configuration](../../services/core/deploy/codex/README.md#standalone-operator-configuration)
 selects the qualified immutable Runtime image; advertised capabilities alone do
 not enable admission. An idle or initial-text creation commits Session, Environment
 and retry identity before the existing leased Worker provisions its allocation.
@@ -80,7 +80,7 @@ semantics; this profile does not establish complete Environment compatibility.
 The application creates, renews and destroys its E2B sandbox through the official
 SDK. It deploys the shared Runtime, then enrolls that Runtime into a `self_hosted`
 Session. Core neither keeps an E2B allocation nor issues Provider renew/kill calls.
-The [E2B guide](../../services/agents-api/deploy/e2b/README.md) owns packaging and
+The [E2B guide](../../services/core/deploy/e2b/README.md) owns packaging and
 user-side lifecycle instructions. Expiry or lost workspace/history must not trigger
 transparent replacement or replay. The [new enrollment qualification](user-managed-runtime-v1.md)
 records its own real deployment evidence.
@@ -693,7 +693,7 @@ silently expanding it. Codex and Claude preserve native allowlists and initializ
 required servers before releasing native input, including cold recovery.
 Public MCP with native Subagents remains unqualified. Nonempty literal HTTP
 headers, request metadata and public stdio declarations remain unsupported.
-See [public MCP qualification](https://github.com/MiniMax-AI/parsar-core/blob/e974a7f880a2eb799f0dd39e6ba0870462854a53/contracts/agents-api/public-mcp-qualification.md) for actual model,
+See [public MCP qualification](https://github.com/MiniMax-AI/OpenAgentCore/blob/e974a7f880a2eb799f0dd39e6ba0870462854a53/contracts/agents-api/public-mcp-qualification.md) for actual model,
 platform and infrastructure coverage; admission support is not a claim of
 complete cross-platform/provider qualification.
 

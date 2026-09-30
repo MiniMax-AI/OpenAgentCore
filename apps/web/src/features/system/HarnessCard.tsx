@@ -1,4 +1,4 @@
-import type { CoreHarness } from "@agents-core-web/agents-client";
+import type { CoreHarness } from "@oac/agents-client";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { StatusDot } from "../../components/console-ui";

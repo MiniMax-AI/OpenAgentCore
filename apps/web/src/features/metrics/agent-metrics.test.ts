@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, AgentTurn, ListPage, PageOptions, SessionItem } from "@agents-core-web/agents-client";
+import type { AgentSession, AgentTurn, ListPage, PageOptions, SessionItem } from "@oac/agents-client";
 
 import {
   aggregateAgentMetrics,

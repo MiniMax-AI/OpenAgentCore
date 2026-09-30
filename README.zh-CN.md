@@ -34,7 +34,7 @@ OpenAgentCore 在你自己的基础设施上运行 AI Agent，对外提供 OpenA
 在已准备 Docker 和 Python 3.9+ 的 Linux amd64 主机上：
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
 ```
 
 然后：

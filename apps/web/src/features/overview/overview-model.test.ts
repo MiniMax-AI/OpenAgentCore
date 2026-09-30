@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AgentCoreError } from "@agents-core-web/agents-client";
+import { AgentCoreError } from "@oac/agents-client";
 
 import { capacitySummary } from "../fleet/fleet-model";
 import { project, session, summary } from "./test-fixtures";

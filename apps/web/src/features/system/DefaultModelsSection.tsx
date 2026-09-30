@@ -1,4 +1,4 @@
-import { type CoreHarnessKind } from "@agents-core-web/agents-client";
+import { type CoreHarnessKind } from "@oac/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";

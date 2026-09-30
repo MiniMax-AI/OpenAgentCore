@@ -23,7 +23,7 @@ import type {
   AgentSession,
   AgentTurn,
   SessionItem,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 
 import { TraceTimingPanel } from "./TraceTimingPanel";
 import { TurnFailure } from "../session-diagnostics";

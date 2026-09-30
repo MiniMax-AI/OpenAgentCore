@@ -95,7 +95,7 @@ core() {  # core METHOD PATH [JSON body]
 | Set Codex's default model | `core PUT /harnesses/codex/model-configuration '{"model": "your-model-id", "model_provider": {"protocol": "responses", "base_url": "https://provider.example/v1", "api_key": "sk-..."}}'` |
 | Installation facts, including the API base URL | `core GET /installation` |
 
-The [API index](/public-api#core-api) lists every route; errors use the [Core error envelope](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/core-errors.md).
+The [API index](/public-api#core-api) lists every route; errors use the [Core error envelope](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/core-errors.md).
 
 ### Rotate the Core key
 
@@ -184,4 +184,4 @@ Web signs administrators in with the Core key, checks the origin of every reques
 
 Sandboxes are the isolation boundary ([Runtime and outer isolation](/concepts#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and a Docker node is [root-equivalent](/hosted-providers#what-the-installer-sets-up) on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](/hosted-providers#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/operations.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/getting-started/operations.md)

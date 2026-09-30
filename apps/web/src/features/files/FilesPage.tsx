@@ -1,4 +1,4 @@
-import type { PageOrder, SourceFileListEntry } from "@agents-core-web/agents-client";
+import type { PageOrder, SourceFileListEntry } from "@oac/agents-client";
 import { FileText } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

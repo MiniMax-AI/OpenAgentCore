@@ -13,16 +13,16 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Developer setup, repository map and focused checks | [Develop OpenAgentCore](docs/development.md) |
 | API callers, credentials and route inventory | [API index](docs/api/README.md) |
 | Public wire types and qualified behavior | [Agents API contracts](contracts/agents-api/README.md), [pinned upstream](contracts/agents-api/upstream.json), and linked operation contracts |
-| Core service implementation constraints | [Agents API implementation constraints](services/agents-api/IMPLEMENTATION.md) and [service README](services/agents-api/README.md) |
+| Core service implementation constraints | [Agents API implementation constraints](services/core/IMPLEMENTATION.md) and [service README](services/core/README.md) |
 | Environment ownership and capability preparation (Skills, Plugins, MCP, `packages.system`) | [Environments](contracts/agents-api/environments.md) |
 | Built-in Harness identifiers, configuration/profile bindings and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
-| Effective MCP bindings and credential authority | [Environment MCP](contracts/agents-api/environments.md#skills-plugins-and-environment-mcp) and `apps/parsar-daemon/internal/agent/mcp_binding.go` |
+| Effective MCP bindings and credential authority | [Environment MCP](contracts/agents-api/environments.md#skills-plugins-and-environment-mcp) and `apps/daemon/internal/agent/mcp_binding.go` |
 | Harness qualification and acceptance | [Harness integration](contracts/agents-api/harnesses.md) |
 | Harness selection and Agent defaults | [Harness selection](contracts/agents-api/harness-selection.md) |
 | Provider selection, sandbox deployment and E2B setup | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
 | Hosted sandbox nodes | [Nodes guide](docs/getting-started/nodes.md) and [sandbox deployment contract](contracts/agents-api/sandbox-deployment.md) |
 | Claude private bridge and Runtime artifact | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |
-| MiniMax Code and Claude Runtime adapter rules | [MiniMax Code Runtime](services/agents-api/deploy/mcode/README.md), [Claude Runtime](services/agents-api/deploy/claude/README.md) |
+| MiniMax Code and Claude Runtime adapter rules | [MiniMax Code Runtime](services/core/deploy/mcode/README.md), [Claude Runtime](services/core/deploy/claude/README.md) |
 | CI, distribution builds, installer lifecycle and managed HTTPS, release publication | [Maintainer guide](docs/maintainers.md) |
 | Operator installation, installation layout and configuration | [Installation](docs/getting-started/install.md), [installation options](docs/getting-started/install-options.md), [configuration](docs/configuration.md), [operations](docs/getting-started/operations.md) |
 | Core Web console server and sign-in | [Console server](docs/web/console-server.md) |
@@ -35,7 +35,7 @@ This repository is the standalone execution substrate copied from Parsar at the 
 
 Product users, workspaces, model catalogs, business assets, the Parsar product Web, product API and product migrations remain in Parsar. Do not import `server/`, `apps/parsar/`, product CLI/plugin packages or their deployment stack.
 
-Preserve copied Runtime and protocol behavior. Existing Go import paths stay unchanged and do not require fetching the original repository. The source snapshot and per-file hashes are an audit trail; future Core development need not preserve them. Do not automatically sync or delete the original repository's Core.
+Preserve copied Runtime and protocol behavior. Go import paths use this repository's module and do not require fetching the original repository. The source snapshot and per-file hashes are an audit trail; future Core development need not preserve them. Do not automatically sync or delete the original repository's Core.
 
 ### Product and execution service separation
 
@@ -120,8 +120,8 @@ The role needs `CREATE DATABASE`: managed-provider tests create and drop isolate
 
 - `internal/harnessconfig/builtin/catalog.json` is the single authored public Harness registration list. `make generate-harness-catalog` generates Go configuration/profile registration, client identifiers/names and the reference; `make openapi` derives the matching enums. `make check-harness-catalog` verifies freshness in the full gate. Native configuration rules stay in their adapter declarations; Core qualification and Runtime availability stay separate.
 
-- `make sqlc-generate` owns only `services/agents-api/internal/db/sqlc` (sqlc v1.29.0). Do not rewrite landed migrations.
-- `make check-runtime-contract` is the focused Core–Runtime contract entry point; see [Contract verification](docs/runtime-protocol.md#contract-verification). It also runs through `check-go` and `check-agents-api`.
+- `make sqlc-generate` owns only `services/core/internal/db/sqlc` (sqlc v1.29.0). Do not rewrite landed migrations.
+- `make check-runtime-contract` is the focused Core–Runtime contract entry point; see [Contract verification](docs/runtime-protocol.md#contract-verification). It also runs through `check-go` and `check-core`.
 
 ### Compatibility evidence
 
@@ -158,7 +158,7 @@ Build the MiniMax companion from this revision's pinned patched native sources.
 
 ## Branding
 
-Public project branding uses OpenAgentCore. The canonical vector mark is `docs/assets/openagentcore-logo.svg`; Core Web, docs and landing-page assets use the same outline, with transparent margins cropped, theme-aware favicon colors and dark-surface inversion. The canonical SVG preserves the reference PNG canvas. The README hero uses the supplied `docs/assets/openagentcore-banner.jpeg`. The `example/parsar/` workbench retains its own name, logo and favicon. Historical provenance, external repository URLs, import paths and existing data identifiers retain their original spelling; do not rename those as display copy.
+Public project branding uses OpenAgentCore. The canonical vector mark is `docs/assets/openagentcore-logo.svg`; Core Web, docs and landing-page assets use the same outline, with transparent margins cropped, theme-aware favicon colors and dark-surface inversion. The canonical SVG preserves the reference PNG canvas. The README hero uses the supplied `docs/assets/openagentcore-banner.jpeg`. The `example/parsar/` workbench retains its own name, logo and favicon. Historical provenance, external repository URLs and existing data identifiers retain their original spelling; do not rename those as display copy.
 
 ## OpenAgentCore name guard
 
@@ -169,7 +169,6 @@ Public project branding uses OpenAgentCore. The canonical vector mark is `docs/a
 
 These identities stay unchanged:
 
-- Go module and source directory paths, npm and Cargo package identities;
 - public `AgentCoreError`, upstream contract fields and the separate Parsar product;
 - persisted credential encryption domains and native-session resume keys, so existing data can be decrypted and Sessions can resume.
 

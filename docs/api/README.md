@@ -88,7 +88,7 @@ the Core key or a Project API key.
 | `GET sandbox-node/configuration` | Node installer and node | Enrollment token, or node credential with `X-OAC-Node-ID` | [Sandbox deployment](../../contracts/agents-api/sandbox-deployment.md), [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) |
 | `GET sandbox-node/identity`, WebSocket `GET sandbox-node/connect` | Node | Node credential registered at enrollment | [Node routes](../../contracts/agents-api/sandbox-deployment.md#authority-and-routes) |
 | `POST agent-daemon/enroll`, `GET agent-daemon/connection` | Self-hosted executor and its installer | Executor credential from `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) |
-| WebSocket `GET agent-daemon/ws`, `POST agent-daemon/bootstrap`, `GET agent-daemon/device-status` | Runtime daemons | Daemon credential: Core writes one into each hosted sandbox it prepares; a self-hosted executor uses its executor credential | [Runtime enrollment](../../services/agents-api/README.md#user-managed-runtime-enrollment) |
+| WebSocket `GET agent-daemon/ws`, `POST agent-daemon/bootstrap`, `GET agent-daemon/device-status` | Runtime daemons | Daemon credential: Core writes one into each hosted sandbox it prepares; a self-hosted executor uses its executor credential | [Runtime enrollment](../../services/core/README.md#user-managed-runtime-enrollment) |
 
 ## Contract sources
 

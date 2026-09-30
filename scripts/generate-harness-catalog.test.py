@@ -33,7 +33,7 @@ class HarnessCatalogTests(unittest.TestCase):
             for old in ("codex", "claude_sdk", "mcode"):
                 self.assertNotIn(old, content)
         self.assertIn('"example": example.Configuration()', generated[Path("internal/harnessconfig/builtin/registry.go")])
-        self.assertIn('"example": exampleProfile()', generated[Path("services/agents-api/internal/engine/catalog_generated.go")])
+        self.assertIn('"example": exampleProfile()', generated[Path("services/core/internal/engine/catalog_generated.go")])
 
     def test_checked_in_openapi_enums_match_catalog(self):
         expected = [entry["kind"] for entry in catalog.load_catalog(catalog.ROOT / catalog.CATALOG)]

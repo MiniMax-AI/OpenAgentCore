@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
-import type { SandboxDeployment } from "@agents-core-web/agents-client";
+import type { SandboxDeployment } from "@oac/agents-client";
 
 import { sandboxDeploymentQuery } from "../sandbox/sandbox-queries";
 import { consoleConfigQuery, fleetQuery, type FleetSnapshot } from "./fleet-queries";

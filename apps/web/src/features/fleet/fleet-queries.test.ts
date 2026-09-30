@@ -1,4 +1,4 @@
-import type { SandboxDeployment } from "@agents-core-web/agents-client";
+import type { SandboxDeployment } from "@oac/agents-client";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

@@ -1,0 +1,310 @@
+// Package store persists execution state independently of the Parsar product.
+package store
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
+)
+
+var (
+	ErrInvalidInput           = errors.New("invalid session input")
+	ErrEnvironmentUnavailable = errors.New("environment is no longer available")
+	ErrNotFound               = errors.New("session not found")
+	ErrIdempotencyConflict    = errors.New("idempotency key was already used with different input")
+	enginePattern             = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+)
+
+// Session is a durable execution context, separate from product conversations
+// and from live daemon connections. Engine session IDs will be bound at execution.
+type Session struct {
+	ID                       string
+	TenantID                 string
+	Creator                  *identity.Subject
+	Engine                   string
+	Metadata                 map[string]string
+	CreatedAt                time.Time
+	Configuration            json.RawMessage
+	LastTurn                 *Turn
+	Usage                    json.RawMessage
+	RequiredActions          []v1.FunctionCallAction
+	Environment              *Environment
+	EnvironmentInputActivity *EnvironmentInputActivity
+	// EnvironmentFailure is the recorded provisioning failure of a failed hosted
+	// Environment. It makes the Session failed and is terminal.
+	EnvironmentFailure *EnvironmentFailure
+	// PendingInput reports that the latest input reservation, read once no Turn
+	// is active or newer, can still start a Turn. It only supports settlement
+	// checks and is never rendered.
+	PendingInput bool
+}
+
+type CreateSessionInput struct {
+	// DeploymentProviderRevision is private creation metadata, never retry identity.
+	DeploymentProviderRevision uuid.UUID `json:"-"`
+	ExecutionConfiguration     *v1.SessionExecutionConfiguration
+	ModelProvider              *v1.ModelProviderInput
+	ModelProviderSource        string // session, agent or deployment; empty allows only openai_hosted
+	Initialization             EnvironmentSetup
+	InitialFiles               []InitialFile
+	Creator                    identity.Subject
+	CreationRequest            json.RawMessage
+	Engine                     string
+	Metadata                   map[string]string
+	IdempotencyKey             string
+	Configuration              json.RawMessage
+	InitialInputs              []Input
+}
+
+type SessionPage struct {
+	Sessions   []Session
+	NextCursor string
+}
+
+type Store struct {
+	queries          *sqlc.Queries
+	pool             *pgxpool.Pool
+	executionLease   *ExecutionLease
+	credentialCipher *credentialcrypto.Cipher
+	oauthRefresher   oauthrefresh.Refresher
+	// publicURL is OAC_PUBLIC_URL. Core derives every address it gives
+	// nodes, sandboxes and administrators from it.
+	publicURL string
+}
+
+func New(pool *pgxpool.Pool) *Store { return &Store{queries: sqlc.New(pool), pool: pool} }
+
+func ValidEngine(engine string) bool { return enginePattern.MatchString(engine) }
+
+// CreateSession uses a project-scoped key to make retries safe, including
+// concurrent submissions. Different input or creator with the same key conflicts.
+func (s *Store) CreateSession(ctx context.Context, tenantID string, input CreateSessionInput) (Session, error) {
+	result, err := s.createSession(ctx, tenantID, input)
+	return s.sessionActivity(ctx, result.Session, err)
+}
+
+func (s *Store) createSession(ctx context.Context, tenantID string, input CreateSessionInput) (SessionCreation, error) {
+	if err := input.Creator.Validate(); err != nil {
+		return SessionCreation{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	tenant, err := parseID(tenantID)
+	if err != nil {
+		return SessionCreation{}, err
+	}
+	input.Engine = strings.TrimSpace(input.Engine)
+	if !ValidEngine(input.Engine) || strings.TrimSpace(input.IdempotencyKey) == "" || len(input.IdempotencyKey) > 128 {
+		return SessionCreation{}, fmt.Errorf("%w: engine and idempotency key are required", ErrInvalidInput)
+	}
+	if input.Metadata == nil {
+		input.Metadata = map[string]string{}
+	}
+	metadata, err := encodeMetadata(input.Metadata)
+	if err != nil {
+		return SessionCreation{}, err
+	}
+	if len(input.Configuration) > 512*1024 {
+		return SessionCreation{}, fmt.Errorf("%w: configuration exceeds 512 KiB", ErrInvalidInput)
+	}
+	configuration, err := canonicalJSONObject(input.Configuration)
+	if err != nil {
+		return SessionCreation{}, err
+	}
+	var batch []Input
+	var encodedInput json.RawMessage
+	if len(input.InitialInputs) > 0 {
+		batch, encodedInput, err = validateInitialInputs(input.InitialInputs)
+		if err != nil {
+			return SessionCreation{}, err
+		}
+	}
+	// The retry identity covers the configuration as requested; the marker added
+	// for a deployment default below is not caller input.
+	requested := configuration
+	if input.ModelProvider != nil {
+		if err := input.ModelProvider.ValidateHarness(input.Engine); err != nil {
+			return SessionCreation{}, fmt.Errorf("%w: %s", ErrInvalidInput, err)
+		}
+		var fields map[string]any
+		if json.Unmarshal(configuration, &fields) != nil {
+			return SessionCreation{}, ErrInvalidInput
+		}
+		environment, _ := fields["environment"].(map[string]any)
+		environmentType, _ := environment["type"].(string)
+		if !v1.ModelProviderAllowed(environmentType, input.ModelProviderSource) {
+			return SessionCreation{}, fmt.Errorf("%w: this model provider source is not supported for the Session environment", ErrInvalidInput)
+		}
+		fields["model_provider_configured"] = true
+		configuration, err = json.Marshal(fields)
+		if err != nil {
+			return SessionCreation{}, err
+		}
+	}
+	var initialization *EnvironmentSetup
+	if !input.Initialization.Empty() {
+		initialization = &input.Initialization
+	}
+	// The retry identity carries a caller's provider key only as a keyed
+	// fingerprint. A deployment default is not caller input: leaving it and its
+	// configuration marker out keeps retries equivalent when the default is set,
+	// replaced or removed.
+	var fingerprinted *v1.ModelProviderInput
+	hashed := configuration
+	if input.ModelProviderSource == v1.ModelProviderSourceDeployment {
+		hashed = requested
+	} else if fingerprinted, err = s.fingerprintedProvider(input.ModelProvider); err != nil {
+		return SessionCreation{}, err
+	}
+	// JSON map keys are sorted by encoding/json, so key order does not affect retries.
+	canonical, err := json.Marshal(struct {
+		ModelProvider  *v1.ModelProviderInput `json:",omitempty"`
+		Engine         string
+		Metadata       map[string]string
+		Configuration  json.RawMessage   `json:",omitempty"`
+		InitialInputs  json.RawMessage   `json:",omitempty"`
+		InitialFiles   []InitialFile     `json:",omitempty"`
+		Initialization *EnvironmentSetup `json:",omitempty"`
+	}{fingerprinted, input.Engine, input.Metadata, hashed, encodedInput, input.InitialFiles, initialization})
+	if err != nil {
+		return SessionCreation{}, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
+	}
+	creationHash, err := s.creationRequestHash(input.CreationRequest)
+	if err != nil {
+		return SessionCreation{}, err
+	}
+	hash := sha256.Sum256(canonical)
+	params := sqlc.CreateSessionParams{
+		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenant, Engine: input.Engine,
+		Metadata: metadata, IdempotencyKey: input.IdempotencyKey, RequestHash: hex.EncodeToString(hash[:]),
+		Configuration: configuration, CreationRequestHash: creationHash,
+		CreatorKind: pgtype.Text{String: input.Creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: input.Creator.ID, Valid: true},
+	}
+	row, environment, err := s.createSessionResources(ctx, tenantID, params, batch, encodedInput, input.InitialFiles, input.Initialization, input.ModelProvider, input.ExecutionConfiguration, input.ModelProviderSource, input.DeploymentProviderRevision)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SessionCreation{}, ErrIdempotencyConflict
+	}
+	if err != nil {
+		return SessionCreation{}, fmt.Errorf("create session: %w", err)
+	}
+	session, err := sessionFromRow(row)
+	session.Environment = environment
+	return SessionCreation{Session: session, Created: row.ID == params.ID, Cursor: row.EventSequence}, err
+}
+
+// GetSession always scopes lookup to the authenticated caller's tenant.
+func (s *Store) GetSession(ctx context.Context, tenantID, sessionID string) (Session, error) {
+	tenant, err := parseID(tenantID)
+	if err != nil {
+		return Session{}, err
+	}
+	id := parsePathID(sessionID)
+	row, err := s.queries.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Session{}, ErrNotFound
+	}
+	if err != nil {
+		return Session{}, fmt.Errorf("get session: %w", err)
+	}
+	session, decodeErr := sessionFromRow(row)
+	return s.sessionActivity(ctx, session, decodeErr)
+}
+
+// ListSessions orders by creation time and ID. The cursor is the last returned
+// session ID and must belong to the same tenant; it grants no additional access.
+func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit int, ascending bool, agentID *string) (SessionPage, error) {
+	tenant, err := parseID(tenantID)
+	if err != nil {
+		return SessionPage{}, err
+	}
+	if limit < 1 || limit > 100 {
+		return SessionPage{}, fmt.Errorf("%w: page size must be 1..100", ErrInvalidInput)
+	}
+	params := sqlc.ListSessionsParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
+	if agentID != nil {
+		params.AgentID = pgtype.Text{String: *agentID, Valid: true}
+	}
+	if cursor != "" {
+		after, err := s.GetSession(ctx, tenantID, lookupCursor(cursor))
+		if err != nil {
+			return SessionPage{}, err
+		}
+		params.AfterCreated = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
+		params.AfterID, _ = parseID(after.ID)
+	}
+	rows, err := s.queries.ListSessions(ctx, params)
+	if err != nil {
+		return SessionPage{}, fmt.Errorf("list sessions: %w", err)
+	}
+	page := SessionPage{Sessions: make([]Session, 0, min(limit, len(rows)))}
+	if len(rows) > limit {
+		page.NextCursor = uuid.UUID(rows[limit-1].ID.Bytes).String()
+		rows = rows[:limit]
+	}
+	for _, row := range rows {
+		session, err := sessionFromRow(row)
+		session, err = s.sessionActivity(ctx, session, err)
+		if err != nil {
+			return SessionPage{}, err
+		}
+		page.Sessions = append(page.Sessions, session)
+	}
+	return page, nil
+}
+
+func parseID(value string) (pgtype.UUID, error) {
+	id, err := uuid.Parse(value)
+	if err != nil || id == uuid.Nil {
+		return pgtype.UUID{}, fmt.Errorf("%w: nonzero UUID required", ErrInvalidInput)
+	}
+	return pgtype.UUID{Bytes: id, Valid: true}, nil
+}
+
+// UnknownResourceID never names a stored resource: Core assigns version 4 or 5
+// UUIDs, and the maximum UUID is neither.
+var UnknownResourceID = uuid.Max.String()
+
+// parsePathID parses a caller-supplied resource path identifier. A value that
+// cannot name a resource resolves to UnknownResourceID, so the request follows
+// exactly the path of a well-formed missing identifier, including validation
+// order. Request-body references keep parseID; see lookupCursor for cursors.
+func parsePathID(value string) pgtype.UUID {
+	id, err := parseID(value)
+	if err != nil {
+		return pgtype.UUID{Bytes: uuid.Max, Valid: true}
+	}
+	return id
+}
+
+func sessionFromRow(row sqlc.Session) (Session, error) {
+	session := Session{ID: uuid.UUID(row.ID.Bytes).String(), TenantID: uuid.UUID(row.TenantID.Bytes).String(), Engine: row.Engine, CreatedAt: row.CreatedAt.Time, RequiredActions: []v1.FunctionCallAction{}}
+	creator, err := sessionCreator(row.CreatorKind, row.CreatorID)
+	if err != nil {
+		return Session{}, err
+	}
+	session.Creator = creator
+	configuration, err := canonicalJSONObject(row.Configuration)
+	if err != nil {
+		return Session{}, fmt.Errorf("decode session configuration: %w", err)
+	}
+	session.Configuration = configuration
+	if err := json.Unmarshal(row.Metadata, &session.Metadata); err != nil {
+		return Session{}, fmt.Errorf("decode session metadata: %w", err)
+	}
+	return session, nil
+}

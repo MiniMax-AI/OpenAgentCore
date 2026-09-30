@@ -84,7 +84,7 @@ When nodes, hosted sandboxes or self-hosted executors are bound to the current a
 | `ingress` | `"managed"` \| `"external"` | `"external"` | all | fixed | none | managed provides automatic HTTPS and Web domain setup for a combined Docker installation; install.sh selects it by default. external uses your existing proxy. Fixed after installation. |
 
 
-The schema is [`deploy/install/config.schema.json`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/deploy/install/config.schema.json); each installation keeps a copy in `generated/config.schema.json` for editors. Core serves the non-secret settings snapshot, with the path of `config.json` and the apply command, at `GET /core/v1/installation`. How Core collects and keeps Runtime history is in [retained history](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/runtime-observability.md#retained-history-and-optional-export).
+The schema is [`deploy/install/config.schema.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/deploy/install/config.schema.json); each installation keeps a copy in `generated/config.schema.json` for editors. Core serves the non-secret settings snapshot, with the path of `config.json` and the apply command, at `GET /core/v1/installation`. How Core collects and keeps Runtime history is in [retained history](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/runtime-observability.md#retained-history-and-optional-export).
 
 ## Runtime settings: Web
 
@@ -93,13 +93,13 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Setting | Where in Web | Core API | Notes |
 | --- | --- | --- | --- |
 | Sandbox backend: Docker, microsandbox or E2B | **System** → **Manage sandbox configuration**: the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per installation. `install.sh --sandbox` saves the first choice. Another backend needs **Reset deployment** first; see [change the sandbox configuration](/hosted-providers#change-the-sandbox-configuration) |
-| Sandbox size, Runtime release, E2B key and template build | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the sizes in [`standard-sizes.json`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/web/src/features/sandbox/standard-sizes.json). Existing sandboxes keep their size and release. The E2B key is write-only and encrypted |
+| Sandbox size, Runtime release, E2B key and template build | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the sizes in [`standard-sizes.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/apps/web/src/features/sandbox/standard-sizes.json). Existing sandboxes keep their size and release. The E2B key is write-only and encrypted |
 | Nodes and their capacity | **Nodes**: **Add node**; **Edit node** and **Remove node** on a node's page | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and the [nodes guide](/hosted-providers) |
 | Projects and API keys | **Projects and keys**: **Create project**, **Rename**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
 | Default model per harness | **System** → **Default model configuration**: **Set** | `/core/v1/harnesses/{harness}/model-configuration` | See [Default models](#default-models) |
 | Executor credentials of a self-hosted Session | **Session log**, then the **Session** page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](/self-hosted-execution) |
 
-Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); System shows them read-only. The [API index](/public-api#core-api) lists every Core API route, and the [deployment contract](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
+Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); System shows them read-only. The [API index](/public-api#core-api) lists every Core API route, and the [deployment contract](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
 
 ### Node capacity
 
@@ -109,7 +109,7 @@ Core approves a node's capacity when you generate its Add node command: **Sandbo
 
 ### Default models
 
-Set a default in **System** → **Default model configuration**, or use `PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys with `secrets/credential.key` and never returns them. [Model execution](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/model-execution.md#deployment-defaults) owns the request fields and replacement rules, and [precedence](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which Sessions use a default.
+Set a default in **System** → **Default model configuration**, or use `PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys with `secrets/credential.key` and never returns them. [Model execution](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/model-execution.md#deployment-defaults) owns the request fields and replacement rules, and [precedence](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which Sessions use a default.
 
 ## Installation directory
 
@@ -137,7 +137,7 @@ In Docker, the Compose project is named `oac-<10 hex digits>` (`project` in `sta
 
 ## Appendix: Core environment without the installer
 
-Core reads only its environment. The installer renders `generated/core.env` from `config.json`; if you run Core yourself (see [Maintainers and advanced deployments](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/maintainers.md)), set these variables. Compose loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose must be 2.26.0 or newer.
+Core reads only its environment. The installer renders `generated/core.env` from `config.json`; if you run Core yourself (see [Maintainers and advanced deployments](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/maintainers.md)), set these variables. Compose loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose must be 2.26.0 or newer.
 
 | Variable | Set from |
 | --- | --- |
@@ -160,4 +160,4 @@ Core logs the file paths it loads, never environment values or file contents.
 
 A Web you run without the installer reads the variables in [Console server settings](/bootstrap-projects-keys#settings), plus `OAC_WEB_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's node payload (the installer's `node-payload/`). Without it, Add node is unavailable.
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/configuration.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/configuration.md)

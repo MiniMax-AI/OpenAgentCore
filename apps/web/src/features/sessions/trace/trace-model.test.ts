@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentTurn, SessionItem } from "@agents-core-web/agents-client";
+import type { AgentTurn, SessionItem } from "@oac/agents-client";
 
 import { buildTraceModel, filterTraceModel, type TraceAgentSnapshot } from "./trace-model";
 

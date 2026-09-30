@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentCoreError, type CoreProjectReader, type Skill, type SkillList, type SkillVersion, type SkillVersionList } from "@agents-core-web/agents-client";
+import { AgentCoreError, type CoreProjectReader, type Skill, type SkillList, type SkillVersion, type SkillVersionList } from "@oac/agents-client";
 
 import i18n from "../../i18n";
 import {

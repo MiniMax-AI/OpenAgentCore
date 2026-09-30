@@ -1,4 +1,4 @@
-import { coreHarnessNames } from "@agents-core-web/agents-client";
+import { coreHarnessNames } from "@oac/agents-client";
 
 import { sessions as english } from "../en/sessions";
 

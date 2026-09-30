@@ -1,0 +1,122 @@
+package store
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+func projectItemSource(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID, kind string, sequence int64, raw json.RawMessage, created pgtype.Timestamptz) error {
+	updates, err := items.Project(uuid.UUID(turn.Bytes).String(), kind, sequence, raw)
+	if err != nil {
+		return fmt.Errorf("project execution item: %w", err)
+	}
+	for _, update := range updates {
+		id, _ := parseID(update.Item.ID)
+		if update.LegacyFinal {
+			native, err := q.HasNativeMessageItem(ctx, sqlc.HasNativeMessageItemParams{TurnID: turn, ID: id})
+			if err != nil {
+				return err
+			}
+			if native {
+				continue
+			}
+		}
+		old, err := q.GetSessionItem(ctx, sqlc.GetSessionItemParams{SessionID: session, ID: id})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		var previous v1.Item
+		if err == nil {
+			if err = json.Unmarshal(old.Payload, &previous); err != nil {
+				return err
+			}
+		}
+		item, err := items.Merge(update, previous)
+		if err != nil {
+			return err
+		}
+		if err := restoreFunctionItemResult(ctx, q, session, turn, &item); err != nil {
+			return err
+		}
+		payload, err := item.MarshalStored()
+		if err != nil {
+			return err
+		}
+		stored, err := q.PutSessionItem(ctx, sqlc.PutSessionItemParams{ID: id, SessionID: session, TurnID: turn, CreatedAt: created, Payload: payload, IsOutput: kind != "message" && item.Type != "function_call_output"})
+		if err != nil {
+			return err
+		}
+		var delta *string
+		if kind == "delta" {
+			delta = update.Item.Content[0].Text
+		} else if kind == "command_output" {
+			delta = update.CommandOutputDelta
+		}
+		if err := recordItemChange(ctx, q, session, stored.OutputIndex, previous, item, delta); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func indexInput(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, sequence int64) error {
+	row, err := q.ItemInputSource(ctx, sqlc.ItemInputSourceParams{SessionID: session, Sequence: sequence})
+	if err != nil {
+		return err
+	}
+	if row.Kind != "message" {
+		return nil
+	}
+	return projectSource(ctx, q, session, row.TurnID, row.Kind, row.Sequence, row.Payload, row.CreatedAt)
+}
+
+func indexEvents(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID, first int32) error {
+	rows, err := q.ItemEventSources(ctx, sqlc.ItemEventSourcesParams{SessionID: session, TurnID: turn, Ordinal: first})
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if err = projectSource(ctx, q, session, turn, row.Kind, int64(row.Ordinal), row.Payload, row.CreatedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func restoreFunctionItemResult(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID, item *v1.Item) error {
+	if item.Type != "function_call_output" {
+		return nil
+	}
+	result, err := q.FunctionItemResult(ctx, sqlc.FunctionItemResultParams{SessionID: session, TurnID: turn, CallID: item.CallID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(result, &fields); err != nil {
+		return err
+	}
+	// Native results may normalize content; public Items retain the saved submission.
+	item.Output, item.Error = nil, nil
+	if value, ok := fields["output"]; ok {
+		item.Output = value
+	}
+	if value, ok := fields["error"]; ok {
+		item.Error = value
+	}
+	return nil
+}

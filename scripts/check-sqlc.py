@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 
 root = Path(__file__).resolve().parent.parent
-generated = root / "services/agents-api/internal/db/sqlc"
+generated = root / "services/core/internal/db/sqlc"
 
 
 def snapshot():

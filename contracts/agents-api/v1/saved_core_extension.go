@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 )
 
 // SavedAgentCoreInput carries defaults for future Sessions. The provider bundle

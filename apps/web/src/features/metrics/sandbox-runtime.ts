@@ -1,4 +1,4 @@
-import type { AgentSession, CoreProjectReader, SandboxAllocation, SandboxNode } from "@agents-core-web/agents-client";
+import type { AgentSession, CoreProjectReader, SandboxAllocation, SandboxNode } from "@oac/agents-client";
 
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { type OwnedRuntimeObservation } from "../../lib/admin-view";

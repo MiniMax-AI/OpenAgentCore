@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	client "github.com/MiniMax-AI-Dev/parsar/packages/agents-client/v1"
+	client "github.com/MiniMax-AI/OpenAgentCore/packages/agents-client/v1"
 	"github.com/openai/openai-go/v3"
 )
 

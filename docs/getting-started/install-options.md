@@ -63,7 +63,7 @@ Docker and microsandbox start at the Standard size in Web's [`standard-sizes.jso
 
 **Docker** shares each node's kernel with its sandboxes, and its node service account is [root-equivalent](nodes.md#what-the-installer-sets-up). Choose it only for trusted workloads or hosts without KVM. The installer asks for confirmation (default No); without a terminal, pass `--accept-docker-risks`.
 
-**E2B** needs a public HTTPS URL that is not loopback, because E2B's sandboxes call Core from E2B's cloud, so pass `--public-url`. Prepare the template build with the [E2B guide](../../services/agents-api/deploy/e2b/README.md), then:
+**E2B** needs a public HTTPS URL that is not loopback, because E2B's sandboxes call Core from E2B's cloud, so pass `--public-url`. Prepare the template build with the [E2B guide](../../services/core/deploy/e2b/README.md), then:
 
 ```sh
 ./install.sh --public-url https://core.example --sandbox e2b \

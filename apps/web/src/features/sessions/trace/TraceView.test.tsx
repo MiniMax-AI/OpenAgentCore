@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, AgentTurn, SessionItem } from "@agents-core-web/agents-client";
+import type { AgentSession, AgentTurn, SessionItem } from "@oac/agents-client";
 
 import { TraceView } from "./TraceView";
 
